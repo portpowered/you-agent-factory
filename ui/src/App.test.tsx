@@ -2057,7 +2057,9 @@ describe("App shell import and export flows", () => {
     expect(
       await screen.findByRole("region", { name: "dashboard summary" }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Change language" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Change language" }),
+    ).toBeTruthy();
     expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Work totals" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "切换语言" })).toBeNull();
@@ -2375,9 +2377,8 @@ describe("App shell import and export flows", () => {
 
   it("does not download after cancelling an export that is still in flight", async () => {
     const exportProbe = installExportDownloadProbe();
-    const factoryPngExportModule = await import(
-      "./features/export/factory-png-export"
-    );
+    const factoryPngExportModule =
+      await import("./features/export/factory-png-export");
     const pendingExport =
       createDeferredPromise<
         Awaited<ReturnType<typeof factoryPngExportModule.writeFactoryExportPng>>
@@ -2540,9 +2541,8 @@ describe("App shell import and export flows", () => {
 
   it("exports the current named-factory API payload instead of the event timeline projection", async () => {
     const exportProbe = installExportDownloadProbe();
-    const factoryPngExportModule = await import(
-      "./features/export/factory-png-export"
-    );
+    const factoryPngExportModule =
+      await import("./features/export/factory-png-export");
     const writeFactoryExportPngSpy = vi
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")
       .mockResolvedValue({
@@ -2750,11 +2750,17 @@ describe("App timeline reconstruction flows", () => {
             name: "Response details",
           }),
         ).toBeTruthy();
+        const responseBody = within(currentSelection).getByRole("region", {
+          name: "Response body",
+        });
         expect(
-          within(currentSelection).getAllByText(
-            "Ready for the next workstation.",
-          ).length,
-        ).toBeGreaterThan(0);
+          within(responseBody)
+            .getByRole("button", { name: "Expand" })
+            .getAttribute("aria-expanded"),
+        ).toBe("false");
+        expect(
+          within(responseBody).queryByText("Ready for the next workstation."),
+        ).toBeNull();
       },
     },
     {
@@ -2773,10 +2779,14 @@ describe("App timeline reconstruction flows", () => {
       requestProjection: dashboardWorkstationRequestFixtures.rejected,
       verify: (currentSelection: HTMLElement) => {
         expect(
-          within(currentSelection).getAllByText(
+          within(
+            within(currentSelection).getByRole("region", {
+              name: "Response body",
+            }),
+          ).queryByText(
             "The active story needs revision before it can continue.",
-          ).length,
-        ).toBeGreaterThan(0);
+          ),
+        ).toBeNull();
         expect(
           within(currentSelection).getByRole("heading", {
             name: "Response details",
@@ -2836,35 +2846,35 @@ describe("App timeline reconstruction flows", () => {
         ).toBeTruthy();
       },
     },
-  ])("selects a workstation dispatch and routes $label request context through work-item details", async ({
-    requestProjection,
-    verify,
-  }) => {
-    renderApp({
-      snapshot: activeSnapshot,
-      workstationRequestsByDispatchID: {
-        [requestProjection.dispatch_id]: requestProjection,
-      },
-    });
-
-    await selectWorkstationRequest(requestProjection.dispatch_id);
-
-    await waitFor(() => {
-      const currentSelection = screen.getByRole("article", {
-        name: "Current selection",
+  ])(
+    "selects a workstation dispatch and routes $label request context through work-item details",
+    async ({ requestProjection, verify }) => {
+      renderApp({
+        snapshot: activeSnapshot,
+        workstationRequestsByDispatchID: {
+          [requestProjection.dispatch_id]: requestProjection,
+        },
       });
-      expect(
-        within(currentSelection).getAllByText(requestProjection.dispatch_id)
-          .length,
-      ).toBeGreaterThan(0);
-      expect(
-        within(currentSelection).queryByRole("heading", {
-          name: "Active work",
-        }),
-      ).toBeNull();
-      verify(currentSelection);
-    });
-  });
+
+      await selectWorkstationRequest(requestProjection.dispatch_id);
+
+      await waitFor(() => {
+        const currentSelection = screen.getByRole("article", {
+          name: "Current selection",
+        });
+        expect(
+          within(currentSelection).getAllByText(requestProjection.dispatch_id)
+            .length,
+        ).toBeGreaterThan(0);
+        expect(
+          within(currentSelection).queryByRole("heading", {
+            name: "Active work",
+          }),
+        ).toBeNull();
+        verify(currentSelection);
+      });
+    },
+  );
 });
 
 describe("App streamed replay smoke flows", () => {
@@ -2934,9 +2944,7 @@ describe("App streamed replay smoke flows", () => {
       expect(
         screen.getByRole("button", { name: "Blocked Analysis Story" }),
       ).toBeTruthy();
-      expect(
-        screen.getAllByText("Failed at Review").length,
-      ).toBeGreaterThan(0);
+      expect(screen.getAllByText("Failed at Review").length).toBeGreaterThan(0);
     });
 
     fireEvent.click(
@@ -3295,11 +3303,20 @@ describe("App streamed replay smoke flows", () => {
         name: "Inference attempts",
       }),
     ).toBeTruthy();
+    const inferenceResponseBody = within(inferenceSelection).getByRole(
+      "region",
+      { name: "Response body" },
+    );
     expect(
-      within(inferenceSelection).getAllByText(
+      within(inferenceResponseBody)
+        .getByRole("button", { name: "Expand" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+    expect(
+      within(inferenceResponseBody).queryByText(
         scriptDashboardIntegrationFixtureIDs.inferenceResponseText,
-      ).length,
-    ).toBeGreaterThan(0);
+      ),
+    ).toBeNull();
   });
 
   it("smoke tests graph state across event replay, terminal selection, and tick changes", async () => {

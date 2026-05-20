@@ -44,6 +44,20 @@ function expandDispatchSection(
   return section;
 }
 
+function expandInferenceBody(
+  container: HTMLElement,
+  title: string,
+): HTMLElement {
+  const section = within(container).getByRole("region", { name: title });
+  const toggle = within(section).getByRole("button", { name: "Expand" });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return section;
+}
+
 function buildSelectedTrace(workItem: DashboardWorkItemRef): DashboardTrace {
   return {
     dispatches: [],
@@ -106,7 +120,9 @@ describe("WorkItemDetailCard summary", () => {
         })}
         onSelectProviderSession={onSelectProviderSession}
         selectedNode={selectedNode}
-        selectedProviderSessionKey={providerSessionSelectionKey(selectedSession)}
+        selectedProviderSessionKey={providerSessionSelectionKey(
+          selectedSession,
+        )}
         selection={{
           dispatchId: dispatchID,
           execution,
@@ -240,8 +256,12 @@ describe("WorkItemDetailCard summary", () => {
         name: "Select provider session codex / path / sess-unsupported for dispatch dispatch-review-active",
       }),
     ).toBeNull();
-    expect(inferenceAttempts.getByText("Session details unavailable")).toBeTruthy();
-    expect(inferenceAttempts.getByText("codex / path / sess-unsupported")).toBeTruthy();
+    expect(
+      inferenceAttempts.getByText("Session details unavailable"),
+    ).toBeTruthy();
+    expect(
+      inferenceAttempts.getByText("codex / path / sess-unsupported"),
+    ).toBeTruthy();
   });
 
   it("renders selected work item detail with safe execution details", () => {
@@ -1065,7 +1085,8 @@ describe("WorkItemDetailCard localization", () => {
                   attempt: 1,
                   inference_request_id: `${dispatchID}/inference-request/1`,
                   outcome: "FAILED",
-                  prompt: "Review the active story and return a concise result.",
+                  prompt:
+                    "Review the active story and return a concise result.",
                   provider_session: {
                     id: "sess-ja-unsupported",
                     kind: "path",
@@ -1091,7 +1112,9 @@ describe("WorkItemDetailCard localization", () => {
     ).getAllByRole("article")[0];
 
     if (!(dispatchCard instanceof HTMLElement)) {
-      throw new Error("expected localized dispatch history card with inference attempts");
+      throw new Error(
+        "expected localized dispatch history card with inference attempts",
+      );
     }
 
     const inferenceAttempts = within(
@@ -1198,15 +1221,30 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
 
     expect(activeToggle.getAttribute("aria-expanded")).toBe("false");
     expect(historicalToggle.getAttribute("aria-expanded")).toBe("false");
-    expect(within(activeSection).queryByText("Active attempt prompt.")).toBeNull();
-    expect(within(historicalSection).queryByText("Historical attempt prompt.")).toBeNull();
+    expect(
+      within(activeSection).queryByText("Active attempt prompt."),
+    ).toBeNull();
+    expect(
+      within(historicalSection).queryByText("Historical attempt prompt."),
+    ).toBeNull();
 
     fireEvent.click(activeToggle);
 
     expect(activeToggle.getAttribute("aria-expanded")).toBe("true");
     expect(historicalToggle.getAttribute("aria-expanded")).toBe("false");
-    expect(within(activeSection).getByText("Active attempt prompt.")).toBeTruthy();
-    expect(within(historicalSection).queryByText("Historical attempt prompt.")).toBeNull();
+    expect(
+      within(activeSection).queryByText("Active attempt prompt."),
+    ).toBeNull();
+    const activeRequestBody = expandInferenceBody(
+      activeSection,
+      "Request body",
+    );
+    expect(
+      within(activeRequestBody).getByText("Active attempt prompt."),
+    ).toBeTruthy();
+    expect(
+      within(historicalSection).queryByText("Historical attempt prompt."),
+    ).toBeNull();
   });
 
   it("renders nested inference attempts in order and preserves dispatch drilldowns", () => {
@@ -1346,13 +1384,38 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeTruthy();
     expect(within(attemptCards[1]).getByText("740ms")).toBeTruthy();
+    const secondAttemptRequestBody = expandInferenceBody(
+      attemptCards[1],
+      "Request body",
+    );
+    const secondAttemptResponseBody = within(attemptCards[1]).getByRole(
+      "region",
+      { name: "Response body" },
+    );
     expect(
-      within(attemptCards[1]).getByText(
+      within(secondAttemptRequestBody).getByText(
         "Retry the review with the latest context.",
       ),
     ).toBeTruthy();
     expect(
-      within(attemptCards[1]).getByText("Ready for the next workstation."),
+      within(secondAttemptResponseBody).queryByText(
+        "Ready for the next workstation.",
+      ),
+    ).toBeNull();
+    expect(
+      within(secondAttemptResponseBody)
+        .getByRole("button", { name: "Expand" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+    fireEvent.click(
+      within(secondAttemptResponseBody).getByRole("button", {
+        name: "Expand",
+      }),
+    );
+    expect(
+      within(secondAttemptResponseBody).getByText(
+        "Ready for the next workstation.",
+      ),
     ).toBeTruthy();
 
     const traceLink = within(dispatchCard).getByRole("link", {
@@ -1581,7 +1644,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       throw new Error("expected ready dispatch history card");
     }
 
-    expect(within(dispatchCard).getByText("Active Story", { selector: "strong" })).toBeTruthy();
+    expect(
+      within(dispatchCard).getByText("Active Story", { selector: "strong" }),
+    ).toBeTruthy();
     expect(
       within(dispatchCard).getByText(
         dashboardWorkstationRequestFixtures.ready.dispatch_id,
@@ -1590,7 +1655,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeTruthy();
     expect(within(dispatchCard).getByText("Started at")).toBeTruthy();
     expect(
-      within(getDetailRow(dispatchCard, "Started at")).getByText("2026-04-08T12:00:01Z"),
+      within(getDetailRow(dispatchCard, "Started at")).getByText(
+        "2026-04-08T12:00:01Z",
+      ),
     ).toBeTruthy();
     expect(within(dispatchCard).queryByText("dispatchedCount")).toBeNull();
     expect(within(dispatchCard).queryByText("respondedCount")).toBeNull();
@@ -1722,16 +1789,25 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(within(dispatchCard).getByText("ワークステーション")).toBeTruthy();
     expect(within(dispatchCard).getByText("遷移 ID")).toBeTruthy();
     expect(within(dispatchCard).getByText("開始時刻")).toBeTruthy();
-    expect(within(dispatchCard).getAllByText("保留中").length).toBeGreaterThan(0);
+    expect(within(dispatchCard).getAllByText("保留中").length).toBeGreaterThan(
+      0,
+    );
     expect(within(dispatchCard).queryByText("ディスパッチ数")).toBeNull();
     expect(within(dispatchCard).queryByText("応答数")).toBeNull();
     expect(within(dispatchCard).queryByText("エラー数")).toBeNull();
-    expect(within(localizedRequestDetails).queryByText("解決済み引数")).toBeNull();
-    const localizedSelectedWorkButton = within(dispatchCard).getByRole("button", {
-      name: "作業項目 Active Story を選択",
-    });
+    expect(
+      within(localizedRequestDetails).queryByText("解決済み引数"),
+    ).toBeNull();
+    const localizedSelectedWorkButton = within(dispatchCard).getByRole(
+      "button",
+      {
+        name: "作業項目 Active Story を選択",
+      },
+    );
     expect(localizedSelectedWorkButton.textContent).toContain("Active Story");
-    expect(localizedSelectedWorkButton.getAttribute("aria-pressed")).toBe("true");
+    expect(localizedSelectedWorkButton.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
     expect(within(dispatchCard).queryByText("作業を選択中")).toBeNull();
     expect(within(dispatchCard).getByText("トレース ID")).toBeTruthy();
     expect(
@@ -1797,9 +1873,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(
-        expandDispatchSection(dispatchCard, "Script attempts"),
-      ).getByText("No script response attempt has been recorded yet."),
+      within(expandDispatchSection(dispatchCard, "Script attempts")).getByText(
+        "No script response attempt has been recorded yet.",
+      ),
     ).toBeTruthy();
     expect(
       within(dispatchCard).queryByText(
@@ -1807,14 +1883,18 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeNull();
     expect(within(dispatchCard).getByText("Workstation")).toBeTruthy();
-    expect(within(fallbackRequestDetails).queryByText("Resolved args")).toBeNull();
+    expect(
+      within(fallbackRequestDetails).queryByText("Resolved args"),
+    ).toBeNull();
     const selectedWorkButton = within(dispatchCard).getByRole("button", {
       name: "Select work item Active Story",
     });
     expect(selectedWorkButton).toBeTruthy();
     expect(selectedWorkButton.textContent).toContain("Active Story");
     expect(selectedWorkButton.getAttribute("aria-pressed")).toBe("true");
-    expect(within(fallbackRequestDetails).queryByText("Work selected")).toBeNull();
+    expect(
+      within(fallbackRequestDetails).queryByText("Work selected"),
+    ).toBeNull();
     expect(selectedWorkButton.className).toContain("text-on-foreground");
     expect(within(dispatchCard).getByText("Trace IDs")).toBeTruthy();
     const selectedTraceLink = within(dispatchCard).getByRole("link", {
@@ -1823,7 +1903,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(selectedTraceLink).toBeTruthy();
     expect(selectedTraceLink.className).toContain("text-on-foreground");
   });
+});
 
+describe("WorkItemDetailCard script dispatch diagnostics", () => {
   it("renders selected-work script success details from the dispatch-history row", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
@@ -2017,13 +2099,18 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     const inferenceAttempts = within(
       expandDispatchSection(dispatchCard, "Inference attempts"),
     );
+    const attemptCard = inferenceAttempts.getByRole("article", {
+      name: "Inference attempt 1",
+    });
+    const requestBody = expandInferenceBody(attemptCard, "Request body");
+    const responseBody = expandInferenceBody(attemptCard, "Response body");
     expect(
-      inferenceAttempts.getByText(
+      within(requestBody).getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeTruthy();
     expect(
-      within(dispatchCard).getAllByText(
+      within(responseBody).getAllByText(
         "The active story needs revision before it can continue.",
       ).length,
     ).toBeGreaterThan(0);
@@ -2069,7 +2156,9 @@ describe("WorkItemDetailCard localized script attempts", () => {
             nodeId: selectedNode.node_id,
             workItem,
           }}
-          workstationRequests={[dashboardWorkstationRequestFixtures.scriptSuccess]}
+          workstationRequests={[
+            dashboardWorkstationRequestFixtures.scriptSuccess,
+          ]}
         />
       </CurrentSelectionLocaleProvider>,
     );
@@ -2082,7 +2171,9 @@ describe("WorkItemDetailCard localized script attempts", () => {
       .closest("article");
 
     if (!(dispatchCard instanceof HTMLElement)) {
-      throw new Error("expected localized script-success dispatch history card");
+      throw new Error(
+        "expected localized script-success dispatch history card",
+      );
     }
 
     const scriptAttempts = within(
@@ -2091,8 +2182,12 @@ describe("WorkItemDetailCard localized script attempts", () => {
 
     expect(scriptAttempts.getByText("リクエスト試行 1")).toBeTruthy();
     expect(scriptAttempts.getByText("応答試行 1")).toBeTruthy();
-    expect(scriptAttempts.getAllByText("スクリプトリクエスト ID").length).toBeGreaterThan(0);
-    expect(scriptAttempts.getAllByText("スクリプト試行").length).toBeGreaterThan(0);
+    expect(
+      scriptAttempts.getAllByText("スクリプトリクエスト ID").length,
+    ).toBeGreaterThan(0);
+    expect(
+      scriptAttempts.getAllByText("スクリプト試行").length,
+    ).toBeGreaterThan(0);
     expect(scriptAttempts.getByText("コマンド")).toBeTruthy();
     expect(scriptAttempts.getByText("解決済み引数")).toBeTruthy();
     expect(scriptAttempts.getByText("結果")).toBeTruthy();

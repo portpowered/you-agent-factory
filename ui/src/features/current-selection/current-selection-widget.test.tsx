@@ -577,9 +577,13 @@ describe("CurrentSelectionWidget", () => {
 
     await user.click(secondButton);
 
-    expect(within(currentSelection).getByText("Loading session details...")).toBeTruthy();
     expect(
-      within(currentSelection).queryByText("2026/05/18/rollout-sess_first.jsonl"),
+      within(currentSelection).getByText("Loading session details..."),
+    ).toBeTruthy();
+    expect(
+      within(currentSelection).queryByText(
+        "2026/05/18/rollout-sess_first.jsonl",
+      ),
     ).toBeNull();
 
     resolveSecondResponse?.(
@@ -995,12 +999,26 @@ describe("CurrentSelectionWidget", () => {
       }),
     ).toBeTruthy();
     const inferenceAttempts = within(
-      within(currentSelection).getByRole("region", { name: "Inference attempts" }),
+      within(currentSelection).getByRole("region", {
+        name: "Inference attempts",
+      }),
     );
     const requestBody = within(
       inferenceAttempts.getByRole("region", { name: "Request body" }),
     );
 
+    expect(
+      requestBody
+        .getByRole("button", { name: "Expand" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+    expect(requestBody.queryByText("Check the latest diff")).toBeNull();
+    fireEvent.click(requestBody.getByRole("button", { name: "Expand" }));
+    expect(
+      requestBody
+        .getByRole("button", { name: "Collapse" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
     expect(
       requestBody.getByRole("heading", {
         level: 2,
@@ -1009,9 +1027,7 @@ describe("CurrentSelectionWidget", () => {
     ).toBeTruthy();
     expect(requestBody.getByRole("list")).toBeTruthy();
     expect(requestBody.getByText("Check the latest diff")).toBeTruthy();
-    expect(
-      requestBody.queryByText("## Review checklist"),
-    ).toBeNull();
+    expect(requestBody.queryByText("## Review checklist")).toBeNull();
     expect(requestBody.queryByText("```text")).toBeNull();
     expect(requestBody.getAllByText(/bun test/)).toHaveLength(2);
     expect(

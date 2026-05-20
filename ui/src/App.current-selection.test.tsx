@@ -427,6 +427,17 @@ function expandDispatchAttemptSection(
   return section;
 }
 
+function expandInferenceBody(section: HTMLElement, title: string): HTMLElement {
+  const body = within(section).getByRole("region", { name: title });
+  const toggle = within(body).getByRole("button", { name: "Expand" });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return body;
+}
+
 function expectDefinitionValue(
   section: HTMLElement,
   label: string,
@@ -746,20 +757,66 @@ describe("App current selection", () => {
         "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
-    expect(within(readyRequestDetails).queryByText(
-      "Review the active story and decide whether it is ready.",
-    )).toBeNull();
-    expect(within(readyAttempt).getByText("Retry the review with the latest context.")).toBeTruthy();
-    expect(within(readyAttempt).getByText("Ready for the next workstation.")).toBeTruthy();
-    expect(within(readyAttempt).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();
+    expect(
+      within(readyRequestDetails).queryByText(
+        "Review the active story and decide whether it is ready.",
+      ),
+    ).toBeNull();
+    expect(
+      within(readyAttempt).queryByText(
+        "Retry the review with the latest context.",
+      ),
+    ).toBeNull();
+    const readyRequestBody = expandInferenceBody(readyAttempt, "Request body");
+    const readyResponseBody = within(readyAttempt).getByRole("region", {
+      name: "Response body",
+    });
+    expect(
+      within(readyResponseBody).queryByText("Ready for the next workstation."),
+    ).toBeNull();
+    expect(
+      within(readyRequestBody).getByText(
+        "Retry the review with the latest context.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(readyResponseBody)
+        .getByRole("button", { name: "Expand" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+    fireEvent.click(
+      within(readyResponseBody).getByRole("button", { name: "Expand" }),
+    );
+    expect(
+      within(readyResponseBody).getByText("Ready for the next workstation."),
+    ).toBeTruthy();
+    expect(
+      within(readyAttempt).getByText(
+        "codex / session_id / dispatch-review-ready/session/1",
+      ),
+    ).toBeTruthy();
     expect(within(readyAttempt).getByText("gpt-5.4")).toBeTruthy();
     expect(within(readyAttempt).getByText("C:\\work\\portos")).toBeTruthy();
-    expect(within(readyAttempt).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();
-    expect(within(readyCard).queryByText("Provider", { selector: "dt" })).toBeNull();
-    expect(within(readyCard).queryByText("Model", { selector: "dt" })).toBeNull();
-    expect(within(readyCard).queryByText("Provider session", { selector: "dt" })).toBeNull();
-    expect(within(readyCard).queryByText("Working directory", { selector: "dt" })).toBeNull();
-    expect(within(readyCard).queryByText("Worktree", { selector: "dt" })).toBeNull();
+    expect(
+      within(readyAttempt).getByText(
+        "C:\\work\\portos\\.worktrees\\active-story",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(readyCard).queryByText("Provider", { selector: "dt" }),
+    ).toBeNull();
+    expect(
+      within(readyCard).queryByText("Model", { selector: "dt" }),
+    ).toBeNull();
+    expect(
+      within(readyCard).queryByText("Provider session", { selector: "dt" }),
+    ).toBeNull();
+    expect(
+      within(readyCard).queryByText("Working directory", { selector: "dt" }),
+    ).toBeNull();
+    expect(
+      within(readyCard).queryByText("Worktree", { selector: "dt" }),
+    ).toBeNull();
 
     const rejectedCard = getDispatchHistoryCard(
       dispatchHistory,
@@ -769,16 +826,27 @@ describe("App current selection", () => {
       rejectedCard,
       "Inference attempts",
     );
-    const rejectedAttempt = within(rejectedInferenceAttempts).getByRole("article", {
-      name: "Inference attempt 1",
-    });
+    const rejectedAttempt = within(rejectedInferenceAttempts).getByRole(
+      "article",
+      {
+        name: "Inference attempt 1",
+      },
+    );
+    const rejectedRequestBody = expandInferenceBody(
+      rejectedAttempt,
+      "Request body",
+    );
+    const rejectedResponseBody = expandInferenceBody(
+      rejectedAttempt,
+      "Response body",
+    );
     expect(
-      within(rejectedAttempt).getByText(
+      within(rejectedRequestBody).getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeTruthy();
     expect(
-      within(rejectedAttempt).getByText(
+      within(rejectedResponseBody).getByText(
         "The active story needs revision before it can continue.",
       ),
     ).toBeTruthy();
@@ -794,9 +862,12 @@ describe("App current selection", () => {
       erroredCard,
       "Inference attempts",
     );
-    const erroredAttempt = within(erroredInferenceAttempts).getByRole("article", {
-      name: "Inference attempt 1",
-    });
+    const erroredAttempt = within(erroredInferenceAttempts).getByRole(
+      "article",
+      {
+        name: "Inference attempt 1",
+      },
+    );
     expect(
       within(erroredCard).getByText(
         "Provider rate limit exceeded while reviewing the story.",
@@ -819,8 +890,13 @@ describe("App current selection", () => {
       scriptSuccessCard,
       "Script attempts",
     );
-    expect(within(scriptSuccessAttempts).getAllByText("script-tool").length).toBeGreaterThan(0);
-    expect(within(scriptSuccessAttempts).getAllByText("script success stdout").length).toBeGreaterThan(0);
+    expect(
+      within(scriptSuccessAttempts).getAllByText("script-tool").length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(scriptSuccessAttempts).getAllByText("script success stdout")
+        .length,
+    ).toBeGreaterThan(0);
     expect(
       within(scriptSuccessCard).getAllByText("SUCCEEDED").length,
     ).toBeGreaterThan(0);
@@ -1572,62 +1648,63 @@ describe("App current selection layout", () => {
     ).toBeNull();
   });
 
-  it.each([
-    1366, 1024, 640,
-  ])("keeps the widget cards readable at %ipx viewport width", async (viewportWidth) => {
-    resizeDashboardViewport(viewportWidth);
-    renderApp({
-      snapshot: terminalSnapshot,
-      traceFixtures: {
-        [activeWorkID]: reworkTraceSnapshot,
-      },
-    });
+  it.each([1366, 1024, 640])(
+    "keeps the widget cards readable at %ipx viewport width",
+    async (viewportWidth) => {
+      resizeDashboardViewport(viewportWidth);
+      renderApp({
+        snapshot: terminalSnapshot,
+        traceFixtures: {
+          [activeWorkID]: reworkTraceSnapshot,
+        },
+      });
 
-    fireEvent.click(getActiveStorySelectionButton());
+      fireEvent.click(getActiveStorySelectionButton());
 
-    const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
-    });
+      const dashboardGrid = screen.getByRole("region", {
+        name: "Infinite You bento board",
+      });
 
-    const widgets = within(dashboardGrid).getAllByRole("article");
-    const widgetNames = widgets.map(
-      (widget) => widget.getAttribute("aria-label") ?? "",
-    );
+      const widgets = within(dashboardGrid).getAllByRole("article");
+      const widgetNames = widgets.map(
+        (widget) => widget.getAttribute("aria-label") ?? "",
+      );
 
-    expect(widgetNames).toContain("Work outcome chart");
-    expect(widgetNames).toContain("Submit work");
-    expect(widgetNames).not.toContain("Completion trend");
-    expect(widgetNames).not.toContain("Failure trend");
-    expect(widgetNames).not.toContain("Retry and rework trend");
-    expect(widgetNames).not.toContain("Timing trend");
-    expect(widgetNames).toContain("Completed and failed work");
-    expect(widgetNames).toContain("Current selection");
-    expect(widgetNames).toContain("Trace drill-down");
-    const bentoItems = Array.from(
-      dashboardGrid.querySelectorAll<HTMLElement>("[data-bento-card-id]"),
-    );
-    const cardIds = bentoItems.map((item) => item.dataset.bentoCardId);
-    expect(cardIds).toContain("work-outcome-chart");
-    expect(cardIds).toContain("submit-work");
-    expect(cardIds).not.toContain("completion-trend");
-    expect(cardIds).not.toContain("failure-trend");
-    expect(cardIds).not.toContain("rework-trend");
-    expect(cardIds).not.toContain("timing-trend");
-    expect(cardIds).toContain("terminal-work");
-    expect(cardIds).toContain("trace");
-    expect(cardIds).toContain("current-selection");
+      expect(widgetNames).toContain("Work outcome chart");
+      expect(widgetNames).toContain("Submit work");
+      expect(widgetNames).not.toContain("Completion trend");
+      expect(widgetNames).not.toContain("Failure trend");
+      expect(widgetNames).not.toContain("Retry and rework trend");
+      expect(widgetNames).not.toContain("Timing trend");
+      expect(widgetNames).toContain("Completed and failed work");
+      expect(widgetNames).toContain("Current selection");
+      expect(widgetNames).toContain("Trace drill-down");
+      const bentoItems = Array.from(
+        dashboardGrid.querySelectorAll<HTMLElement>("[data-bento-card-id]"),
+      );
+      const cardIds = bentoItems.map((item) => item.dataset.bentoCardId);
+      expect(cardIds).toContain("work-outcome-chart");
+      expect(cardIds).toContain("submit-work");
+      expect(cardIds).not.toContain("completion-trend");
+      expect(cardIds).not.toContain("failure-trend");
+      expect(cardIds).not.toContain("rework-trend");
+      expect(cardIds).not.toContain("timing-trend");
+      expect(cardIds).toContain("terminal-work");
+      expect(cardIds).toContain("trace");
+      expect(cardIds).toContain("current-selection");
 
-    expect(
-      within(dashboardGrid).getByRole("img", {
-        name: "Work outcome chart for Session",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(dashboardGrid).queryByRole("img", {
-        name: `Timing trend for ${activeWorkID}`,
-      }),
-    ).toBeNull();
-  });
+      expect(
+        within(dashboardGrid).getByRole("img", {
+          name: "Work outcome chart for Session",
+        }),
+      ).toBeTruthy();
+      expect(
+        within(dashboardGrid).queryByRole("img", {
+          name: `Timing trend for ${activeWorkID}`,
+        }),
+      ).toBeNull();
+    },
+  );
 
   it("smoke tests the composed bento dashboard at a narrow viewport", async () => {
     resizeDashboardViewport(640);

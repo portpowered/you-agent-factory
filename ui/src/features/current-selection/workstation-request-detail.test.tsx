@@ -1,8 +1,26 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
-import { inferenceAttempt, workstationRequest } from "./detail-card-test-helpers";
+import {
+  inferenceAttempt,
+  workstationRequest,
+} from "./detail-card-test-helpers";
 import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "./detail-card-shared";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
+
+function expandInferenceBody(region: HTMLElement): ReturnType<typeof within> {
+  const body = within(region);
+  expect(
+    body.getByRole("button", { name: "Expand" }).getAttribute("aria-expanded"),
+  ).toBe("false");
+  fireEvent.click(body.getByRole("button", { name: "Expand" }));
+  expect(
+    body
+      .getByRole("button", { name: "Collapse" })
+      .getAttribute("aria-expanded"),
+  ).toBe("true");
+
+  return body;
+}
 
 describe("WorkstationRequestDetailCard", () => {
   it("keeps inference-backed request and response detail inside inference attempts", () => {
@@ -61,28 +79,70 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const currentSelection = screen.getByRole("article", { name: "Current selection" });
-    const requestDetails = within(screen.getByRole("region", { name: "Request details" }));
-    const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
-    const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    const requestDetails = within(
+      screen.getByRole("region", { name: "Request details" }),
+    );
+    const responseDetails = within(
+      screen.getByRole("region", { name: "Response details" }),
+    );
+    const inferenceAttempts = within(
+      screen.getByRole("region", { name: "Inference attempts" }),
+    );
 
-    expect(within(currentSelection).getByRole("heading", { name: "Current selection" })).toBeTruthy();
-    expect(within(currentSelection).getAllByText("request-ready-story").length).toBeGreaterThan(0);
-    expect(within(currentSelection).getByText("Dispatch ID")).toBeTruthy();
-    expect(within(currentSelection).getByRole("heading", { name: "Request counts" })).toBeTruthy();
-    expect(responseDetails.getByText("trace-active-story")).toBeTruthy();
-    expect(inferenceAttempts.getByText("Retry the review with the latest context.")).toBeTruthy();
-    expect(inferenceAttempts.getByText("Ready for the next workstation.")).toBeTruthy();
-    expect(inferenceAttempts.getByText("codex / session_id / sess-ready-request")).toBeTruthy();
-    expect(requestDetails.queryByText(/Inference attempts when available/)).toBeNull();
-    expect(responseDetails.queryByText(/Inference attempts when available/)).toBeNull();
     expect(
-      within(currentSelection).getByText("Dispatch ID").closest("dl")?.className,
+      within(currentSelection).getByRole("heading", {
+        name: "Current selection",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(currentSelection).getAllByText("request-ready-story").length,
+    ).toBeGreaterThan(0);
+    expect(within(currentSelection).getByText("Dispatch ID")).toBeTruthy();
+    expect(
+      within(currentSelection).getByRole("heading", { name: "Request counts" }),
+    ).toBeTruthy();
+    expect(responseDetails.getByText("trace-active-story")).toBeTruthy();
+    const successfulAttempt = within(
+      inferenceAttempts.getByRole("article", { name: "Inference attempt 2" }),
+    );
+    const requestBody = expandInferenceBody(
+      successfulAttempt.getByRole("region", { name: "Request body" }),
+    );
+    const responseBody = expandInferenceBody(
+      successfulAttempt.getByRole("region", { name: "Response body" }),
+    );
+    expect(
+      requestBody.getByText("Retry the review with the latest context."),
+    ).toBeTruthy();
+    expect(
+      responseBody.getByText("Ready for the next workstation."),
+    ).toBeTruthy();
+    expect(
+      inferenceAttempts.getByText("codex / session_id / sess-ready-request"),
+    ).toBeTruthy();
+    expect(
+      requestDetails.queryByText(/Inference attempts when available/),
+    ).toBeNull();
+    expect(
+      responseDetails.queryByText(/Inference attempts when available/),
+    ).toBeNull();
+    expect(
+      within(currentSelection).getByText("Dispatch ID").closest("dl")
+        ?.className,
     ).toContain(INFERENCE_ATTEMPT_DETAIL_CLASS);
     expect(within(currentSelection).getByText("1m 3s")).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "Request metadata" })).toBeNull();
-    expect(screen.queryByRole("region", { name: "Response metadata" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Workstation summary" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Request metadata" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Response metadata" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Workstation summary" }),
+    ).toBeNull();
     expect(screen.queryByText("Runtime labels")).toBeNull();
   });
 
@@ -90,7 +150,8 @@ describe("WorkstationRequestDetailCard", () => {
     render(
       <WorkstationRequestDetailCard
         request={workstationRequest("dispatch-review-pending", {
-          prompt: "Review the active story while the provider response is still pending.",
+          prompt:
+            "Review the active story while the provider response is still pending.",
           request_id: "request-pending-story",
           request_metadata: {
             prompt_source: "factory-renderer",
@@ -101,15 +162,25 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    expect(screen.getAllByText("request-pending-story").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("request-pending-story").length).toBeGreaterThan(
+      0,
+    );
     expect(
-      screen.getByText("Total duration is not available for this workstation request yet."),
+      screen.getByText(
+        "Total duration is not available for this workstation request yet.",
+      ),
     ).toBeTruthy();
     expect(
-      screen.getByText("No inference events are available for this selected work item."),
+      screen.getByText(
+        "No inference events are available for this selected work item.",
+      ),
     ).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "Request metadata" })).toBeNull();
-    expect(screen.queryByRole("region", { name: "Response metadata" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Request metadata" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Response metadata" }),
+    ).toBeNull();
     expect(screen.queryByRole("heading", { name: "Error details" })).toBeNull();
   });
 
@@ -125,10 +196,16 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const currentSelection = screen.getByRole("article", { name: "Current selection" });
-    const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    const responseDetails = within(
+      screen.getByRole("region", { name: "Response details" }),
+    );
 
-    expect(within(currentSelection).getAllByText("dispatch-review-sparse").length).toBeGreaterThan(0);
+    expect(
+      within(currentSelection).getAllByText("dispatch-review-sparse").length,
+    ).toBeGreaterThan(0);
     expect(within(currentSelection).queryByText("Request ID")).toBeNull();
     expect(within(currentSelection).queryByText("Transition ID")).toBeNull();
     expect(
@@ -156,8 +233,12 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const currentSelection = screen.getByRole("article", { name: "Current selection" });
-    const outcomeRow = within(currentSelection).getByText("Outcome").closest("div");
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    const outcomeRow = within(currentSelection)
+      .getByText("Outcome")
+      .closest("div");
 
     expect(outcomeRow?.textContent).toContain("FAILED");
     expect(outcomeRow?.textContent).toContain(
@@ -178,8 +259,12 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const currentSelection = screen.getByRole("article", { name: "Current selection" });
-    const outcomeRow = within(currentSelection).getByText("Outcome").closest("div");
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    const outcomeRow = within(currentSelection)
+      .getByText("Outcome")
+      .closest("div");
 
     expect(outcomeRow?.textContent).toContain("FAILED");
     expect(outcomeRow?.textContent).not.toContain("Failure reason:");
@@ -209,7 +294,9 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const requestDetails = within(screen.getByRole("region", { name: "Request details" }));
+    const requestDetails = within(
+      screen.getByRole("region", { name: "Request details" }),
+    );
     const selectedWorkButton = requestDetails.getByRole("button", {
       name: "Select work item Blocked Story",
     });
@@ -218,9 +305,7 @@ describe("WorkstationRequestDetailCard", () => {
     expect(selectedWorkButton.getAttribute("aria-pressed")).toBe("true");
     expect(requestDetails.queryByText("Work item selected")).toBeNull();
 
-    fireEvent.click(
-      selectedWorkButton,
-    );
+    fireEvent.click(selectedWorkButton);
 
     expect(onSelectWorkID).toHaveBeenCalledWith(selectedWorkID);
   });
@@ -232,7 +317,8 @@ describe("WorkstationRequestDetailCard", () => {
           inference_attempts: [
             inferenceAttempt("dispatch-review-markdown", {
               attempt: 1,
-              inference_request_id: "dispatch-review-markdown/inference-request/1",
+              inference_request_id:
+                "dispatch-review-markdown/inference-request/1",
               prompt: [
                 "## Review checklist",
                 "",
@@ -260,19 +346,34 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
+    const inferenceAttempts = within(
+      screen.getByRole("region", { name: "Inference attempts" }),
+    );
 
-    const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
-    const responseBody = within(inferenceAttempts.getByRole("region", { name: "Response body" }));
+    const requestBody = expandInferenceBody(
+      inferenceAttempts.getByRole("region", { name: "Request body" }),
+    );
+    const responseBody = expandInferenceBody(
+      inferenceAttempts.getByRole("region", { name: "Response body" }),
+    );
     const requestListItems = requestBody.getAllByRole("listitem");
     const responseListItems = responseBody.getAllByRole("listitem");
 
-    expect(requestBody.getByRole("heading", { level: 2, name: "Review checklist" })).toBeTruthy();
+    expect(
+      requestBody.getByRole("heading", { level: 2, name: "Review checklist" }),
+    ).toBeTruthy();
     expect(requestBody.getByRole("list")).toBeTruthy();
     expect(requestBody.getByText("Check the latest diff")).toBeTruthy();
-    expect(requestListItems[1]?.textContent).toBe("Run bun test before approval");
+    expect(requestListItems[1]?.textContent).toBe(
+      "Run bun test before approval",
+    );
     expect(requestBody.getAllByText(/bun test/)).toHaveLength(2);
-    expect(responseBody.getByRole("heading", { level: 3, name: "Reviewer response" })).toBeTruthy();
+    expect(
+      responseBody.getByRole("heading", {
+        level: 3,
+        name: "Reviewer response",
+      }),
+    ).toBeTruthy();
     expect(responseBody.getByRole("list")).toBeTruthy();
     expect(responseListItems[0]?.textContent).toBe("Run bun run lint");
     expect(responseBody.getByText("Confirm the diff is limited")).toBeTruthy();
@@ -286,11 +387,11 @@ describe("WorkstationRequestDetailCard", () => {
           inference_attempts: [
             inferenceAttempt("dispatch-review-ordered", {
               attempt: 1,
-              inference_request_id: "dispatch-review-ordered/inference-request/1",
-              prompt: [
-                "1. Run `bun run lint`",
-                "2. `bun run test:unit`",
-              ].join("\n"),
+              inference_request_id:
+                "dispatch-review-ordered/inference-request/1",
+              prompt: ["1. Run `bun run lint`", "2. `bun run test:unit`"].join(
+                "\n",
+              ),
             }),
           ],
           request_id: "request-ordered-story",
@@ -298,8 +399,12 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
-    const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
+    const inferenceAttempts = within(
+      screen.getByRole("region", { name: "Inference attempts" }),
+    );
+    const requestBody = expandInferenceBody(
+      inferenceAttempts.getByRole("region", { name: "Request body" }),
+    );
     const requestListItems = requestBody.getAllByRole("listitem");
 
     expect(requestBody.getByRole("list")).toBeTruthy();
@@ -314,7 +419,8 @@ describe("WorkstationRequestDetailCard", () => {
           inference_attempts: [
             inferenceAttempt("dispatch-review-plain-text", {
               attempt: 1,
-              inference_request_id: "dispatch-review-plain-text/inference-request/1",
+              inference_request_id:
+                "dispatch-review-plain-text/inference-request/1",
               prompt: [
                 "Review the current story before approval.",
                 "Keep the existing response rendering unchanged.",
@@ -326,22 +432,32 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const inferenceAttemptsRegion = screen.getByRole("region", { name: "Inference attempts" });
+    const inferenceAttemptsRegion = screen.getByRole("region", {
+      name: "Inference attempts",
+    });
     const inferenceAttempts = within(inferenceAttemptsRegion);
 
-    const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
+    const requestBody = expandInferenceBody(
+      inferenceAttempts.getByRole("region", { name: "Request body" }),
+    );
 
     expect(requestBody.queryByRole("heading", { level: 1 })).toBeNull();
     expect(requestBody.queryByRole("heading", { level: 2 })).toBeNull();
     expect(requestBody.queryByRole("heading", { level: 3 })).toBeNull();
     expect(requestBody.queryByRole("list")).toBeNull();
     expect(
-      requestBody.getByText(/Review the current story before approval\./).closest("p"),
+      requestBody
+        .getByText(/Review the current story before approval\./)
+        .closest("p"),
     ).not.toBeNull();
     expect(inferenceAttemptsRegion.querySelectorAll("pre")).toHaveLength(0);
-    expect(inferenceAttempts.getByText(/Review the current story before approval\./)).toBeTruthy();
     expect(
-      inferenceAttempts.getByText(/Keep the existing response rendering unchanged\./),
+      inferenceAttempts.getByText(/Review the current story before approval\./),
+    ).toBeTruthy();
+    expect(
+      inferenceAttempts.getByText(
+        /Keep the existing response rendering unchanged\./,
+      ),
     ).toBeTruthy();
   });
 
@@ -353,7 +469,8 @@ describe("WorkstationRequestDetailCard", () => {
             inferenceAttempt("dispatch-review-html", {
               attempt: 1,
               inference_request_id: "dispatch-review-html/inference-request/1",
-              prompt: '<button>danger</button>\n\n<script>alert("xss")</script>',
+              prompt:
+                '<button>danger</button>\n\n<script>alert("xss")</script>',
             }),
           ],
           request_id: "request-html-story",
@@ -361,12 +478,21 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
+    const inferenceAttempts = within(
+      screen.getByRole("region", { name: "Inference attempts" }),
+    );
 
-    expect(inferenceAttempts.queryByRole("button", { name: "danger" })).toBeNull();
+    expect(
+      inferenceAttempts.queryByRole("button", { name: "danger" }),
+    ).toBeNull();
     expect(container.querySelector("script")).toBeNull();
-    expect(inferenceAttempts.getByText(/<button>danger<\/button>/)).toBeTruthy();
-    expect(inferenceAttempts.getByText(/<script>alert\("xss"\)<\/script>/)).toBeTruthy();
+    const requestBody = expandInferenceBody(
+      inferenceAttempts.getByRole("region", { name: "Request body" }),
+    );
+    expect(requestBody.getByText(/<button>danger<\/button>/)).toBeTruthy();
+    expect(
+      requestBody.getByText(/<script>alert\("xss"\)<\/script>/),
+    ).toBeTruthy();
   });
 
   it("keeps explicit pending and unavailable inference response states readable", () => {
@@ -376,14 +502,16 @@ describe("WorkstationRequestDetailCard", () => {
           inference_attempts: [
             inferenceAttempt("dispatch-review-response-states", {
               attempt: 1,
-              inference_request_id: "dispatch-review-response-states/inference-request/1",
+              inference_request_id:
+                "dispatch-review-response-states/inference-request/1",
               outcome: "FAILED",
               prompt: "Summarize the review findings.",
               response_time: "2026-04-08T12:00:02Z",
             }),
             inferenceAttempt("dispatch-review-response-states", {
               attempt: 2,
-              inference_request_id: "dispatch-review-response-states/inference-request/2",
+              inference_request_id:
+                "dispatch-review-response-states/inference-request/2",
               prompt: "Retry after the failure.",
             }),
           ],
@@ -392,14 +520,18 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const inferenceAttemptsRegion = screen.getByRole("region", { name: "Inference attempts" });
+    const inferenceAttemptsRegion = screen.getByRole("region", {
+      name: "Inference attempts",
+    });
 
     expect(
       within(inferenceAttemptsRegion).getByText(
         "Provider response text is not available for this inference attempt.",
       ),
     ).toBeTruthy();
-    expect(within(inferenceAttemptsRegion).getByText("Awaiting provider response.")).toBeTruthy();
+    expect(
+      within(inferenceAttemptsRegion).getByText("Awaiting provider response."),
+    ).toBeTruthy();
   });
 
   it("renders errored workstation-request details from projected failure fields", () => {
@@ -407,7 +539,8 @@ describe("WorkstationRequestDetailCard", () => {
       <WorkstationRequestDetailCard
         request={workstationRequest("dispatch-review-error", {
           errored_request_count: 1,
-          failure_message: "Provider rate limit exceeded while reviewing the story.",
+          failure_message:
+            "Provider rate limit exceeded while reviewing the story.",
           failure_reason: "provider_rate_limit",
           inference_attempts: [
             inferenceAttempt("dispatch-review-error", {
@@ -425,11 +558,17 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const errorDetails = within(screen.getByRole("region", { name: "Error details" }));
+    const errorDetails = within(
+      screen.getByRole("region", { name: "Error details" }),
+    );
 
     expect(screen.getByRole("heading", { name: "Error details" })).toBeTruthy();
     expect(errorDetails.getByText("provider_rate_limit")).toBeTruthy();
-    expect(errorDetails.getByText("Provider rate limit exceeded while reviewing the story.")).toBeTruthy();
+    expect(
+      errorDetails.getByText(
+        "Provider rate limit exceeded while reviewing the story.",
+      ),
+    ).toBeTruthy();
     expect(screen.getAllByText("FAILED").length).toBeGreaterThan(0);
   });
 
@@ -444,21 +583,30 @@ describe("WorkstationRequestDetailCard", () => {
             args: ["--work", "work-active-story"],
             attempt: 1,
             command: "script-tool",
-            script_request_id: "dispatch-review-script-pending/script-request/1",
+            script_request_id:
+              "dispatch-review-script-pending/script-request/1",
           },
         })}
       />,
     );
 
-    const requestDetails = within(screen.getByRole("region", { name: "Request details" }));
-    const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
+    const requestDetails = within(
+      screen.getByRole("region", { name: "Request details" }),
+    );
+    const responseDetails = within(
+      screen.getByRole("region", { name: "Response details" }),
+    );
 
-    expect(screen.getAllByText("request-script-pending-story").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("request-script-pending-story").length,
+    ).toBeGreaterThan(0);
     expect(requestDetails.getByText("script-tool")).toBeTruthy();
     expect(requestDetails.getByText("--work")).toBeTruthy();
     expect(requestDetails.getByText("work-active-story")).toBeTruthy();
     expect(
-      requestDetails.getByText("dispatch-review-script-pending/script-request/1"),
+      requestDetails.getByText(
+        "dispatch-review-script-pending/script-request/1",
+      ),
     ).toBeTruthy();
     expect(
       responseDetails.getByText(
@@ -466,9 +614,13 @@ describe("WorkstationRequestDetailCard", () => {
       ),
     ).toBeTruthy();
     expect(
-      responseDetails.queryByText("Provider session details are not available for this workstation request."),
+      responseDetails.queryByText(
+        "Provider session details are not available for this workstation request.",
+      ),
     ).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Inference attempts" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Inference attempts" }),
+    ).toBeNull();
   });
 
   it("renders script-backed request fallbacks when projected script metadata is incomplete", () => {
@@ -488,15 +640,21 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const requestDetails = within(screen.getByRole("region", { name: "Request details" }));
-    const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
+    const requestDetails = within(
+      screen.getByRole("region", { name: "Request details" }),
+    );
+    const responseDetails = within(
+      screen.getByRole("region", { name: "Response details" }),
+    );
 
     expect(
       requestDetails.getByText(
         "Script request details are not available for this workstation request.",
       ),
     ).toBeTruthy();
-    expect(requestDetails.getByText("Script attempt is not available yet.")).toBeTruthy();
+    expect(
+      requestDetails.getByText("Script attempt is not available yet."),
+    ).toBeTruthy();
     expect(
       requestDetails.getByText(
         "Script command details are not available for this workstation request.",
@@ -524,12 +682,14 @@ describe("WorkstationRequestDetailCard", () => {
             args: ["--work", "work-active-story"],
             attempt: 1,
             command: "script-tool",
-            script_request_id: "dispatch-review-script-success/script-request/1",
+            script_request_id:
+              "dispatch-review-script-success/script-request/1",
           },
           script_response: {
             duration_millis: 222,
             outcome: "SUCCEEDED",
-            script_request_id: "dispatch-review-script-success/script-request/1",
+            script_request_id:
+              "dispatch-review-script-success/script-request/1",
             stderr: "",
             stdout: "script success stdout\n",
           },
@@ -537,18 +697,30 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
+    const responseDetails = within(
+      screen.getByRole("region", { name: "Response details" }),
+    );
 
-    expect(screen.getAllByText("request-script-success-story").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("request-script-success-story").length,
+    ).toBeGreaterThan(0);
     expect(screen.getAllByText("SUCCEEDED").length).toBeGreaterThan(0);
     expect(screen.getAllByText("222ms").length).toBeGreaterThan(0);
     expect(
-      responseDetails.getByText("dispatch-review-script-success/script-request/1"),
+      responseDetails.getByText(
+        "dispatch-review-script-success/script-request/1",
+      ),
     ).toBeTruthy();
     expect(responseDetails.getByText("script success stdout")).toBeTruthy();
-    expect(responseDetails.getByText("No stderr was recorded for this script response.")).toBeTruthy();
     expect(
-      screen.getByText("Response metadata is not available for this script-backed workstation request."),
+      responseDetails.getByText(
+        "No stderr was recorded for this script response.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Response metadata is not available for this script-backed workstation request.",
+      ),
     ).toBeTruthy();
   });
 
@@ -579,15 +751,25 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
-    const errorDetails = within(screen.getByRole("region", { name: "Error details" }));
+    const responseDetails = within(
+      screen.getByRole("region", { name: "Response details" }),
+    );
+    const errorDetails = within(
+      screen.getByRole("region", { name: "Error details" }),
+    );
 
-    expect(screen.getAllByText("request-script-failed-story").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("request-script-failed-story").length,
+    ).toBeGreaterThan(0);
     expect(screen.getAllByText("TIMED_OUT").length).toBeGreaterThan(0);
     expect(screen.getAllByText("500ms").length).toBeGreaterThan(0);
     expect(responseDetails.getByText("TIMEOUT")).toBeTruthy();
     expect(responseDetails.getByText("script timed out")).toBeTruthy();
-    expect(responseDetails.getByText("No stdout was recorded for this script response.")).toBeTruthy();
+    expect(
+      responseDetails.getByText(
+        "No stdout was recorded for this script response.",
+      ),
+    ).toBeTruthy();
     expect(errorDetails.getByText("script_timeout")).toBeTruthy();
     expect(errorDetails.getByText("Script timed out.")).toBeTruthy();
   });
@@ -602,7 +784,8 @@ describe("WorkstationRequestDetailCard", () => {
             args: ["--work", "work-active-story"],
             attempt: 1,
             command: "script-tool",
-            script_request_id: "dispatch-review-script-minimal/script-request/1",
+            script_request_id:
+              "dispatch-review-script-minimal/script-request/1",
           },
           script_response: {
             duration_millis: undefined,
@@ -617,7 +800,9 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
+    const responseDetails = within(
+      screen.getByRole("region", { name: "Response details" }),
+    );
 
     expect(
       responseDetails.getByText(
@@ -625,13 +810,27 @@ describe("WorkstationRequestDetailCard", () => {
       ),
     ).toBeTruthy();
     expect(
-      responseDetails.getByText("Duration details are not available for this script response yet."),
+      responseDetails.getByText(
+        "Duration details are not available for this script response yet.",
+      ),
     ).toBeTruthy();
     expect(
-      responseDetails.getByText("Failure type is not available for this script response."),
+      responseDetails.getByText(
+        "Failure type is not available for this script response.",
+      ),
     ).toBeTruthy();
-    expect(responseDetails.getByText("Outcome details are not available yet.")).toBeTruthy();
-    expect(responseDetails.getByText("No stdout was recorded for this script response.")).toBeTruthy();
-    expect(responseDetails.getByText("No stderr was recorded for this script response.")).toBeTruthy();
+    expect(
+      responseDetails.getByText("Outcome details are not available yet."),
+    ).toBeTruthy();
+    expect(
+      responseDetails.getByText(
+        "No stdout was recorded for this script response.",
+      ),
+    ).toBeTruthy();
+    expect(
+      responseDetails.getByText(
+        "No stderr was recorded for this script response.",
+      ),
+    ).toBeTruthy();
   });
 });

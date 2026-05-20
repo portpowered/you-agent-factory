@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useId, useState } from "react";
 import type { ReactNode } from "react";
 import type { DashboardPlaceRef } from "../../api/dashboard/types";
 import { cx } from "../../lib/cx";
@@ -11,6 +11,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
+import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
 import type {
   InferenceAttemptDetailProps,
   InferenceAttemptTextSectionProps,
@@ -70,7 +71,8 @@ export const REQUEST_HISTORY_TEXT_CLASS = cx(
   DASHBOARD_BODY_CODE_CLASS,
 );
 
-const NO_CURRENT_WORK_IN_PLACE_COPY = "No current work is occupying this place.";
+const NO_CURRENT_WORK_IN_PLACE_COPY =
+  "No current work is occupying this place.";
 const NO_WORK_RECORDED_AT_SELECTED_TICK_COPY =
   "No work is recorded for this place at the selected tick.";
 const SELECTED_TICK_WORK_UNAVAILABLE_COPY =
@@ -108,10 +110,36 @@ export function InferenceAttemptTextSection({
   label,
   value,
 }: InferenceAttemptTextSectionProps) {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
+  const [expanded, setExpanded] = useState(false);
+  const sectionId = useId();
+  const panelId = `${sectionId}-panel`;
+  const headingId = `${sectionId}-heading`;
+
   return (
-    <section aria-label={label} className="grid gap-1">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <AuthoredBodyText className={INFERENCE_ATTEMPT_TEXT_CLASS} value={value} />
+    <section aria-labelledby={headingId} className="grid gap-1.5">
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2">
+        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS} id={headingId}>
+          {label}
+        </span>
+        <button
+          aria-controls={panelId}
+          aria-expanded={expanded}
+          className={HISTORY_TOGGLE_CLASS}
+          onClick={() => setExpanded((current) => !current)}
+          type="button"
+        >
+          {expanded ? messages.collapseAction : messages.expandAction}
+        </button>
+      </div>
+      {expanded ? (
+        <div id={panelId}>
+          <AuthoredBodyText
+            className={INFERENCE_ATTEMPT_TEXT_CLASS}
+            value={value}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -129,7 +157,11 @@ export function InferenceAttemptDetail({
     <div>
       <dt>{label}</dt>
       <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-        {code ? <code className={RUNTIME_DETAIL_CODE_CLASS}>{value}</code> : value}
+        {code ? (
+          <code className={RUNTIME_DETAIL_CODE_CLASS}>{value}</code>
+        ) : (
+          value
+        )}
       </dd>
     </div>
   );
@@ -137,12 +169,24 @@ export function InferenceAttemptDetail({
 
 export function RequestCountSection({ request }: RequestCountSectionProps) {
   return (
-    <section aria-label="Request counts" className={RUNTIME_DETAILS_SECTION_CLASS}>
+    <section
+      aria-label="Request counts"
+      className={RUNTIME_DETAILS_SECTION_CLASS}
+    >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Request counts</h4>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
-        <InferenceAttemptDetail label="dispatchedCount" value={request.dispatched_request_count} />
-        <InferenceAttemptDetail label="respondedCount" value={request.responded_request_count} />
-        <InferenceAttemptDetail label="erroredCount" value={request.errored_request_count} />
+        <InferenceAttemptDetail
+          label="dispatchedCount"
+          value={request.dispatched_request_count}
+        />
+        <InferenceAttemptDetail
+          label="respondedCount"
+          value={request.responded_request_count}
+        />
+        <InferenceAttemptDetail
+          label="erroredCount"
+          value={request.errored_request_count}
+        />
       </dl>
     </section>
   );
@@ -179,7 +223,9 @@ export function MetadataSection({
 }
 
 export function isTerminalOrFailedPlace(place: DashboardPlaceRef): boolean {
-  return place.state_category === "TERMINAL" || place.state_category === "FAILED";
+  return (
+    place.state_category === "TERMINAL" || place.state_category === "FAILED"
+  );
 }
 
 export function emptyStatePlaceMessage(
@@ -197,7 +243,9 @@ export function emptyStatePlaceMessage(
   return NO_WORK_RECORDED_AT_SELECTED_TICK_COPY;
 }
 
-export function normalizeDetailText(value: string | undefined): string | undefined {
+export function normalizeDetailText(
+  value: string | undefined,
+): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
 }
@@ -226,7 +274,7 @@ function parseRequestAuthoredBlocks(value: string): RequestAuthoredBlock[] {
   const lines = value.split(/\r?\n/);
   const blocks: RequestAuthoredBlock[] = [];
 
-  for (let lineIndex = 0; lineIndex < lines.length;) {
+  for (let lineIndex = 0; lineIndex < lines.length; ) {
     const line = lines[lineIndex];
 
     if (!line.trim()) {
@@ -305,7 +353,10 @@ function parseRequestAuthoredBlocks(value: string): RequestAuthoredBlock[] {
 
     const paragraphLines: string[] = [];
 
-    while (lineIndex < lines.length && shouldContinueParagraph(lines[lineIndex])) {
+    while (
+      lineIndex < lines.length &&
+      shouldContinueParagraph(lines[lineIndex])
+    ) {
       paragraphLines.push(lines[lineIndex]);
       lineIndex += 1;
     }
@@ -324,13 +375,18 @@ function shouldContinueParagraph(line: string): boolean {
     return false;
   }
 
-  return !/^(#{1,6})\s+/.test(line)
-    && !/^[-*+]\s+/.test(line)
-    && !/^\d+\.\s+/.test(line)
-    && !/^```([^\s`]+)?\s*$/.test(line);
+  return (
+    !/^(#{1,6})\s+/.test(line) &&
+    !/^[-*+]\s+/.test(line) &&
+    !/^\d+\.\s+/.test(line) &&
+    !/^```([^\s`]+)?\s*$/.test(line)
+  );
 }
 
-function renderRequestAuthoredBlock(block: RequestAuthoredBlock, index: number) {
+function renderRequestAuthoredBlock(
+  block: RequestAuthoredBlock,
+  index: number,
+) {
   switch (block.type) {
     case "code-block":
       return (
@@ -350,7 +406,10 @@ function renderRequestAuthoredBlock(block: RequestAuthoredBlock, index: number) 
       return (
         <ol key={`ordered-list-${index}`}>
           {stableListKeys(block.items).map(({ item, key }) => (
-            <li className="whitespace-pre-wrap" key={`ordered-list-item-${index}-${key}`}>
+            <li
+              className="whitespace-pre-wrap"
+              key={`ordered-list-item-${index}-${key}`}
+            >
               {renderInlineMarkdown(item)}
             </li>
           ))}
@@ -360,7 +419,10 @@ function renderRequestAuthoredBlock(block: RequestAuthoredBlock, index: number) 
       return (
         <ul key={`unordered-list-${index}`}>
           {stableListKeys(block.items).map(({ item, key }) => (
-            <li className="whitespace-pre-wrap" key={`unordered-list-item-${index}-${key}`}>
+            <li
+              className="whitespace-pre-wrap"
+              key={`unordered-list-item-${index}-${key}`}
+            >
               {renderInlineMarkdown(item)}
             </li>
           ))}
@@ -386,9 +448,7 @@ function renderInlineMarkdown(value: string): ReactNode[] {
       segments.push(value.slice(lastIndex, match.index));
     }
 
-    segments.push(
-      <code key={`inline-code-${match.index}`}>{match[1]}</code>,
-    );
+    segments.push(<code key={`inline-code-${match.index}`}>{match[1]}</code>);
     lastIndex = inlineCodePattern.lastIndex;
     match = inlineCodePattern.exec(value);
   }
@@ -402,7 +462,11 @@ function renderInlineMarkdown(value: string): ReactNode[] {
     if (typeof segment === "string") {
       const occurrence = (seenStringSegments.get(segment) ?? 0) + 1;
       seenStringSegments.set(segment, occurrence);
-      return <Fragment key={`inline-text-${segment}-${occurrence}`}>{segment}</Fragment>;
+      return (
+        <Fragment key={`inline-text-${segment}-${occurrence}`}>
+          {segment}
+        </Fragment>
+      );
     }
 
     return segment;
