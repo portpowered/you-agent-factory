@@ -138,6 +138,16 @@ describe("DashboardHeader", () => {
     expect(slider.closest("div")?.parentElement?.className).toContain(
       "justify-end",
     );
+    const controls = Array.from(
+      toolbar.querySelectorAll(
+        `[aria-label="${headerMessages.sliderAriaLabel}"], [aria-label="${headerMessages.languageMenuButtonLabel}"], [aria-label="${messages.triggerLabel}"], [role="status"]`,
+      ),
+    );
+    expect(controls).toHaveLength(4);
+    expect(controls[0]).toBe(slider);
+    expect(controls[1]).toBe(languageButton);
+    expect(controls[2]).toBe(exportButton);
+    expect(controls[3]).toBe(streamStatus);
     expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");
     expect(languageButton.getAttribute("aria-expanded")).toBe("false");
@@ -192,7 +202,9 @@ describe("DashboardHeader", () => {
     expect(
       screen.getByRole("heading", { name: messages.brandWordmark }),
     ).toBeTruthy();
-    expect(screen.getByText(messages.sliderLabel)).toBeTruthy();
+    expect(screen.getByText(messages.sliderLabel).className).toContain(
+      "sr-only",
+    );
     expect(
       screen.getByRole("slider", { name: messages.sliderAriaLabel }),
     ).toBeTruthy();
@@ -318,7 +330,7 @@ describe("DashboardHeader", () => {
       name: englishMessages.languageMenuButtonLabel,
     });
 
-    expect(screen.getByText("Tick 1 of 2")).toBeTruthy();
+    expect(screen.getByText("1/2")).toBeTruthy();
     expect(
       screen.getByRole("button", {
         name: englishExportMessages.triggerLabel,
@@ -341,7 +353,7 @@ describe("DashboardHeader", () => {
         }),
       ).toBeTruthy();
     });
-    expect(screen.getByText("틱 1 / 2")).toBeTruthy();
+    expect(screen.getByText("1/2")).toBeTruthy();
     expect(
       screen.getByRole("region", {
         name: koreanMessages.dashboardSummaryLabel,
@@ -395,7 +407,7 @@ describe("DashboardHeader", () => {
         name: englishMessages.languageMenuButtonLabel,
       }),
     ).toBeTruthy();
-    expect(screen.getByText("Tick 1 of 2")).toBeTruthy();
+    expect(screen.getByText("1/2")).toBeTruthy();
     expect(
       screen.getByRole("button", {
         name: englishMessages.returnToCurrentTickLabel,
