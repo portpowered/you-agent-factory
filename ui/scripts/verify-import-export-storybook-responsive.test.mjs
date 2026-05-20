@@ -6,6 +6,7 @@ import {
   expectVisible,
   verifyExportDialog,
   verifyImportDialog,
+  verifyProviderSessionDetailSuccess,
   verifyStory,
   waitForDialog,
   waitForStoryRegion,
@@ -367,6 +368,80 @@ describe("story assertions", () => {
     expect(dialog.getByText).toHaveBeenCalledWith("factory-import.png");
     expect(dialog.getByRole).toHaveBeenCalledWith("button", {
       name: "Activate factory",
+    });
+  });
+
+  test("verifyProviderSessionDetailSuccess checks the provider-session success panel", async () => {
+    const selectedSessionHeading = {
+      waitFor: vi.fn().mockResolvedValue(undefined),
+    };
+    const sourceHeading = {
+      waitFor: vi.fn().mockResolvedValue(undefined),
+    };
+    const sourcePath = {
+      waitFor: vi.fn().mockResolvedValue(undefined),
+    };
+    const tokenUsageHeading = {
+      waitFor: vi.fn().mockResolvedValue(undefined),
+    };
+    const providerSessionDetails = {
+      getByRole: vi.fn((role, options) => {
+        if (
+          role === "heading" &&
+          options?.name === "Selected session details"
+        ) {
+          return selectedSessionHeading;
+        }
+        if (role === "heading" && options?.name === "Source file") {
+          return sourceHeading;
+        }
+        if (role === "heading" && options?.name === "Token usage") {
+          return tokenUsageHeading;
+        }
+        throw new Error(`unexpected current selection role lookup ${role}`);
+      }),
+      getByText: vi.fn((text) => {
+        if (
+          text ===
+          "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl"
+        ) {
+          return sourcePath;
+        }
+        throw new Error(`unexpected current selection text lookup ${text}`);
+      }),
+      waitFor: vi.fn().mockResolvedValue(undefined),
+    };
+    const page = {
+      evaluate: vi
+        .fn()
+        .mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
+      getByRole: vi.fn((role, options) => {
+        if (
+          role === "region" &&
+          options?.name === "Selected session details"
+        ) {
+          return providerSessionDetails;
+        }
+        throw new Error(
+          `unexpected page role lookup ${role} ${options?.name ?? ""}`,
+        );
+      }),
+    };
+
+    await verifyProviderSessionDetailSuccess(page, null, {
+      height: 844,
+      label: "mobile",
+      width: 390,
+    });
+
+    expect(providerSessionDetails.getByRole).toHaveBeenCalledWith("heading", {
+      name: "Selected session details",
+    });
+    expect(providerSessionDetails.getByRole).toHaveBeenCalledWith("heading", {
+      name: "Source file",
+    });
+    expect(providerSessionDetails.getByRole).toHaveBeenCalledWith("heading", {
+      name: "Token usage",
     });
   });
 });
