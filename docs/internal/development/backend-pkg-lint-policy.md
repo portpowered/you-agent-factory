@@ -72,3 +72,5 @@ The following analyzers are intentionally deferred to later phases instead of bl
 - `gocyclo` or `gocognit`: useful for flagging complex control flow, but they need evidence-backed thresholds and a clear exception policy before they become blocking signals.
 
 Later phases can widen beyond `pkg/` to `cmd/`, `internal/`, and relevant backend tests after the phase-1 correctness lane proves stable and the exception policy is understood.
+
+Promotion of later-phase maintainability analyzers to blocking CI should be based on post-rollout evidence about signal quality, false positives, and reviewer value in this repository. Backend standards can justify evaluating those analyzers, but standards text alone is not enough reason to make them blocking without repository-specific rollout evidence.
