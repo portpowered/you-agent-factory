@@ -16,15 +16,16 @@ type docsSmokeTopic struct {
 	name    string
 	heading string
 	markers []string
+	absent  []string
 }
 
 var docsSmokeTopics = []docsSmokeTopic{
 	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "docs/reference/config.md", "docs/reference/work.md"}},
-	{name: "workstation", heading: "# Workstation", markers: []string{"inputs", "outputs", "LOGICAL_MOVE", "docs/reference/workstations.md"}},
-	{name: "workers", heading: "# Workers", markers: []string{"MODEL_WORKER", "SCRIPT_WORKER", "modelProvider", "docs/reference/workers.md"}},
+	{name: "workstation", heading: "# Workstation", markers: []string{"inputs", "outputs", "LOGICAL_MOVE", "docs/reference/workstations.md"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
+	{name: "workers", heading: "# Workers", markers: []string{"MODEL_WORKER", "SCRIPT_WORKER", "modelProvider", "docs/reference/workers.md"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
 	{name: "resources", heading: "# Resources", markers: []string{"capacity", "workstations", "agent-slot", "docs/reference/resources.md"}},
-	{name: "batch-work", heading: "# Batch Work", markers: []string{"FACTORY_REQUEST_BATCH", "DEPENDS_ON", "docs/reference/batch-inputs.md"}},
-	{name: "templates", heading: "# Templates", markers: []string{".Context.Project", ".Context.WorkDir", "docs/reference/templates.md", "text/template"}},
+	{name: "batch-work", heading: "# Batch Work", markers: []string{"FACTORY_REQUEST_BATCH", "DEPENDS_ON", "docs/reference/batch-inputs.md"}, absent: []string{"docs/reference/batch-work.md"}},
+	{name: "templates", heading: "# Templates", markers: []string{".Context.Project", ".Context.WorkDir", "docs/reference/templates.md", "text/template"}, absent: []string{"docs/reference/prompt-variables.md"}},
 }
 
 func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *testing.T) {
@@ -51,6 +52,11 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 			for _, marker := range topic.markers {
 				if !strings.Contains(output, marker) {
 					t.Fatalf("agent-factory docs %s missing marker %q", topic.name, marker)
+				}
+			}
+			for _, unwanted := range topic.absent {
+				if strings.Contains(output, unwanted) {
+					t.Fatalf("agent-factory docs %s still references retired path %q:\n%s", topic.name, unwanted, output)
 				}
 			}
 			for _, oldInvocation := range []string{
