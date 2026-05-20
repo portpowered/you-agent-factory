@@ -1404,6 +1404,37 @@ func TestUpsertWorkRequest_ConflictingCurrentChainingTraceIDReturnsBadRequest(t 
 	}
 }
 
+func TestUpsertWorkRequest_RequestLevelConflictingCurrentChainingTraceIDReturnsBadRequest(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{
+		"requestId": "request-api-root-chaining-conflict",
+		"type": "FACTORY_REQUEST_BATCH",
+		"currentChainingTraceId": "chain-a",
+		"traceId": "trace-b",
+		"works": [
+			{"name": "draft", "workTypeName": "task", "payload": {"title": "Draft"}}
+		]
+	}`
+	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-api-root-chaining-conflict", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "currentChainingTraceId and traceId must match when both are provided")
+	if len(mf.WorkRequests) != 0 {
+		t.Fatalf("work request submissions = %d, want 0", len(mf.WorkRequests))
+	}
+	if len(mf.Submitted) != 0 {
+		t.Fatalf("normalized submissions = %#v, want none", mf.Submitted)
+	}
+}
+
 func TestUpsertWorkRequest_InvalidExplicitStateReturnsBadRequest(t *testing.T) {
 	mf := &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
