@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
 import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
 import {
@@ -142,6 +142,15 @@ describe("WorkflowActivityBentoCard", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "工厂图" })).toBeTruthy();
+    const graphCard = screen.getByRole("article", { name: "工厂图" });
+    const graphHeader = graphCard.querySelector("header");
+
+    expect(graphHeader).toBeTruthy();
+    expect(
+      within(graphCard).getByRole("button", { name: "进入工厂图编辑器" }),
+    ).toBeTruthy();
+    expect(within(graphCard).getByText("观察模式")).toBeTruthy();
+    expect(graphHeader?.textContent).toContain("观察模式");
     expect(
       screen.getByRole("region", { name: messages.viewportLabel }),
     ).toBeTruthy();
