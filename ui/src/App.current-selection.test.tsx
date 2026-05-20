@@ -779,9 +779,11 @@ describe("App current selection", () => {
         "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
-    expect(within(readyRequestDetails).queryByText(
-      "Review the active story and decide whether it is ready.",
-    )).toBeNull();
+    expect(
+      within(readyRequestDetails).queryByText(
+        "Review the active story and decide whether it is ready.",
+      ),
+    ).toBeNull();
     expect(within(readyRequestBody).getByText("Retry the review with the latest context.")).toBeTruthy();
     expect(within(readyResponseBody).getByText("Ready for the next workstation.")).toBeTruthy();
     expect(within(readyAttemptDetails).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();

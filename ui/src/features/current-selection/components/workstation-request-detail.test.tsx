@@ -69,7 +69,11 @@ describe("WorkstationRequestDetailCard", () => {
     const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
 
     expect(within(currentSelection).getByRole("heading", { name: "Current selection" })).toBeTruthy();
-    expect(within(currentSelection).getByText("Active Story")).toBeTruthy();
+    expect(
+      within(currentSelection).getByText("Active Story", {
+        selector: "p",
+      }),
+    ).toBeTruthy();
     expect(within(currentSelection).getAllByText("request-ready-story")).toHaveLength(1);
     expect(within(currentSelection).getAllByText("Dispatch ID").length).toBeGreaterThan(0);
     expect(
@@ -130,7 +134,7 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    expect(screen.getByText("Active Story")).toBeTruthy();
+    expect(screen.getByText("Active Story", { selector: "p" })).toBeTruthy();
     expect(screen.getAllByText("request-pending-story")).toHaveLength(1);
     expect(
       screen.getByText("Total duration is not available for this workstation request yet."),
@@ -242,6 +246,9 @@ describe("WorkstationRequestDetailCard", () => {
     );
 
     const requestDetails = within(screen.getByRole("region", { name: "Request details" }));
+    expect(
+      requestDetails.getByRole("button", { name: "Select work item Blocked Story" }).textContent,
+    ).toBe("Blocked Story");
     fireEvent.click(
       requestDetails.getByRole("button", {
         name: "Select work item Blocked Story",
@@ -297,8 +304,10 @@ describe("WorkstationRequestDetailCard", () => {
       inferenceAttempts.getByRole("button", { name: "Expand response body" }),
     );
 
-    const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
-    const responseBody = within(inferenceAttempts.getByRole("region", { name: "Response body" }));
+    const requestBodyRegion = inferenceAttempts.getByRole("region", { name: "Request body" });
+    const responseBodyRegion = inferenceAttempts.getByRole("region", { name: "Response body" });
+    const requestBody = within(requestBodyRegion);
+    const responseBody = within(responseBodyRegion);
     const requestListItems = requestBody.getAllByRole("listitem");
     const responseListItems = responseBody.getAllByRole("listitem");
 
@@ -376,7 +385,8 @@ describe("WorkstationRequestDetailCard", () => {
       inferenceAttempts.getByRole("button", { name: "Expand request body" }),
     );
 
-    const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
+    const requestBodyRegion = inferenceAttempts.getByRole("region", { name: "Request body" });
+    const requestBody = within(requestBodyRegion);
 
     expect(requestBody.queryByRole("heading", { level: 1 })).toBeNull();
     expect(requestBody.queryByRole("heading", { level: 2 })).toBeNull();

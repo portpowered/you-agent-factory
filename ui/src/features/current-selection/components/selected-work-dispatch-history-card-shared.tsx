@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../components/ui/dashboard-typography";
 import { formatWorkItemLabel } from "../../../components/ui/formatters";
+import { cn } from "../../../lib/cn";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   REQUEST_HISTORY_TEXT_CLASS,
@@ -106,19 +107,15 @@ export function DispatchDetailList({
 export function WorkItemActionGroup({
   items,
   label,
-  openWorkItemActionLabel,
   onSelectWorkID,
   selectedWorkID,
   selectWorkItemAccessibleLabel,
-  workSelectedActionLabel,
 }: {
   items: ReturnType<typeof dedupeWorkItems>;
   label: string;
-  openWorkItemActionLabel: (workItemLabel: string) => string;
   onSelectWorkID?: (workID: string) => void;
   selectedWorkID: string;
   selectWorkItemAccessibleLabel: (workItemLabel: string) => string;
-  workSelectedActionLabel: string;
 }) {
   if (items.length === 0) {
     return null;
@@ -134,14 +131,16 @@ export function WorkItemActionGroup({
               formatWorkItemLabel(workItem),
             )}
             aria-pressed={selectedWorkID === workItem.work_id}
-            className={WORK_SELECTION_BUTTON_CLASS}
+            className={cn(
+              WORK_SELECTION_BUTTON_CLASS,
+              selectedWorkID === workItem.work_id &&
+                "border-af-accent/35 bg-af-accent/10 text-af-accent",
+            )}
             key={`${label}-${workItem.work_id}`}
             onClick={() => onSelectWorkID?.(workItem.work_id)}
             type="button"
           >
-            {selectedWorkID === workItem.work_id
-              ? workSelectedActionLabel
-              : openWorkItemActionLabel(formatWorkItemLabel(workItem))}
+            {formatWorkItemLabel(workItem)}
           </button>
         ))}
       </div>

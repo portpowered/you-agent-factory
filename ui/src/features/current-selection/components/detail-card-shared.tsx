@@ -16,7 +16,7 @@ import type {
   InferenceAttemptTextSectionProps,
   MetadataSectionProps,
 } from "../detail-card-types";
-import type { useCurrentSelectionDetailMessages } from "./current-selection-locale";
+import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
 
 export const EXECUTION_PILL_CLASS = cn(
   "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
@@ -165,10 +165,8 @@ export function isTerminalOrFailedPlace(place: DashboardPlaceRef): boolean {
 
 export function emptyStatePlaceMessage(
   messages: Pick<
-    ReturnType<typeof useCurrentSelectionDetailMessages>,
-    | "noCurrentWorkInPlace"
-    | "noWorkRecordedAtSelectedTick"
-    | "selectedTickWorkUnavailable"
+    CurrentSelectionDetailMessages,
+    "noCurrentWorkInPlace" | "noWorkRecordedAtSelectedTick" | "selectedTickWorkUnavailable"
   >,
   usesRetainedWorkItems: boolean,
   tokenCount: number,

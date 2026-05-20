@@ -84,7 +84,6 @@ export interface CurrentSelectionDispatchHistoryMessages {
   transitionIdLabel: string;
   unknownDispatchId: string;
   unknownDispatchTitle: string;
-  openWorkItemActionLabel: (workItemLabel: string) => string;
   workIdLabel: string;
   workTypeLabel: string;
   selectedWorkHeading: string;
@@ -93,7 +92,6 @@ export interface CurrentSelectionDispatchHistoryMessages {
   workstationDispatchesLabel: string;
   workstationLabel: string;
   workstationUnavailableValue: string;
-  workSelectedActionLabel: string;
 }
 
 const singularPlural = (count: number, singular: string, plural: string) =>
@@ -197,7 +195,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     transitionIdLabel: "Transition ID",
     unknownDispatchId: "unknown-dispatch",
     unknownDispatchTitle: "Unknown dispatch",
-    openWorkItemActionLabel: (workItemLabel: string) => `Open ${workItemLabel}`,
     workIdLabel: "Work ID",
     workTypeLabel: "Work type",
     selectedWorkHeading: "Selected work",
@@ -207,7 +204,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workstationDispatchesLabel: "Workstation dispatches",
     workstationLabel: "Workstation",
     workstationUnavailableValue: "Unavailable",
-    workSelectedActionLabel: "Work selected",
   },
   ja: {
     dispatchHistoryCountLabel: (count: number) => `${count} 件のディスパッチ`,
@@ -304,8 +300,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     transitionIdLabel: "遷移 ID",
     unknownDispatchId: "unknown-dispatch",
     unknownDispatchTitle: "不明なディスパッチ",
-    openWorkItemActionLabel: (workItemLabel: string) =>
-      `${workItemLabel} を開く`,
     workIdLabel: "作業 ID",
     workTypeLabel: "作業タイプ",
     selectedWorkHeading: "選択中の作業",
@@ -315,7 +309,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workstationDispatchesLabel: "ワークステーションのディスパッチ",
     workstationLabel: "ワークステーション",
     workstationUnavailableValue: "利用不可",
-    workSelectedActionLabel: "作業を選択中",
   },
   ko: {
     dispatchHistoryCountLabel: (count: number) => `${count}개 디스패치`,
@@ -411,7 +404,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     transitionIdLabel: "전환 ID",
     unknownDispatchId: "unknown-dispatch",
     unknownDispatchTitle: "알 수 없는 디스패치",
-    openWorkItemActionLabel: (workItemLabel: string) => `${workItemLabel} 열기`,
     workIdLabel: "작업 ID",
     workTypeLabel: "작업 유형",
     selectedWorkHeading: "선택한 작업",
@@ -421,7 +413,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workstationDispatchesLabel: "워크스테이션 디스패치",
     workstationLabel: "워크스테이션",
     workstationUnavailableValue: "사용할 수 없음",
-    workSelectedActionLabel: "작업 선택됨",
   },
   "zh-CN": {
     dispatchHistoryCountLabel: (count: number) => `${count} 次分派`,
@@ -509,7 +500,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     transitionIdLabel: "转换 ID",
     unknownDispatchId: "unknown-dispatch",
     unknownDispatchTitle: "未知分派",
-    openWorkItemActionLabel: (workItemLabel: string) => `打开 ${workItemLabel}`,
     workIdLabel: "工作 ID",
     workTypeLabel: "工作类型",
     selectedWorkHeading: "已选工作",
@@ -518,7 +508,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workstationDispatchesLabel: "工作站分派",
     workstationLabel: "工作站",
     workstationUnavailableValue: "不可用",
-    workSelectedActionLabel: "已选中工作项",
   },
 } satisfies LocalizedMessages<CurrentSelectionDispatchHistoryMessages>;
 
