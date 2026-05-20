@@ -275,6 +275,91 @@ describe("factory graph draft state", () => {
     );
   });
 
+  it("reports missing required draft names before save-building", () => {
+    const draft = createEmptyFactoryGraphDraft();
+    draft.additions.workers.push({
+      model: "gpt-5-mini",
+      name: "",
+      type: "MODEL_WORKER",
+    });
+    draft.additions.workStates.push({
+      state: {
+        name: "",
+        type: "TERMINAL",
+      },
+      workTypeName: "",
+    });
+
+    const validationErrors = validateFactoryGraphDraft(
+      baseFactoryDefinition,
+      draft,
+    );
+
+    expect(validationErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "MISSING_REQUIRED_FIELD",
+          field: "name",
+          target: {
+            kind: "field",
+            field: "worker.name",
+          },
+        }),
+        expect.objectContaining({
+          code: "MISSING_REQUIRED_FIELD",
+          field: "name",
+          target: {
+            kind: "field",
+            field: "work-state.name",
+          },
+        }),
+        expect.objectContaining({
+          code: "MISSING_REQUIRED_FIELD",
+          field: "name",
+          target: {
+            kind: "field",
+            field: "work-type.name",
+          },
+        }),
+      ]),
+    );
+    expect(buildPendingFactoryDefinition(baseFactoryDefinition, draft)).toBeNull();
+  });
+
+  it("reports unknown edge nodes when a draft edge references a workstation outside the supported draft state", () => {
+    const draft = createEmptyFactoryGraphDraft();
+    draft.edgeChanges.additions.push({
+      kind: "workstation-input",
+      source: {
+        kind: "work-state",
+        stateName: "queued",
+        workTypeName: "story",
+      },
+      target: {
+        kind: "workstation",
+        name: "missing",
+      },
+    });
+
+    const validationErrors = validateFactoryGraphDraft(
+      baseFactoryDefinition,
+      draft,
+    );
+
+    expect(validationErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "UNKNOWN_NODE",
+          target: {
+            kind: "edge",
+            id: "workstation-input:work-state:story:queued->workstation:missing",
+          },
+        }),
+      ]),
+    );
+    expect(buildPendingFactoryDefinition(baseFactoryDefinition, draft)).toBeNull();
+  });
+
   it("replaces workstation worker assignments in the pending definition without introducing validation errors", () => {
     const draft = createEmptyFactoryGraphDraft();
     draft.additions.workers.push({
