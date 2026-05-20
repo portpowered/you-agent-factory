@@ -32,6 +32,9 @@ func NewLoadedFactoryConfig(factoryDir string, factoryCfg *interfaces.FactoryCon
 	if err != nil {
 		return nil, fmt.Errorf("clone factory config: %w", err)
 	}
+	if err := applyRuntimeDefinitionsToClonedFactoryConfig(effectiveFactory, runtimeCfg); err != nil {
+		return nil, err
+	}
 
 	loaded := &LoadedFactoryConfig{
 		factoryDir: factoryDir,
@@ -40,29 +43,12 @@ func NewLoadedFactoryConfig(factoryDir string, factoryCfg *interfaces.FactoryCon
 	}
 
 	for i := range effectiveFactory.Workers {
-		worker := CloneWorkerConfig(effectiveFactory.Workers[i])
-		if runtimeCfg != nil {
-			if def, ok := runtimeCfg.Worker(worker.Name); ok && def != nil {
-				applyWorkerRuntimeDefinition(&worker, def)
-			}
-		}
-		effectiveFactory.Workers[i] = worker
-		workerCopy := CloneWorkerConfig(worker)
+		workerCopy := CloneWorkerConfig(effectiveFactory.Workers[i])
 		loaded.lookup.workers[workerCopy.Name] = &workerCopy
 	}
 
 	for i := range effectiveFactory.Workstations {
-		workstation := CloneWorkstationConfig(effectiveFactory.Workstations[i])
-		normalizeCanonicalWorkstationRuntime(&workstation)
-		if runtimeCfg != nil {
-			if def, ok := runtimeCfg.Workstation(workstation.Name); ok && def != nil {
-				if err := applyWorkstationRuntimeDefinition(&workstation, def); err != nil {
-					return nil, fmt.Errorf("normalize workstation %q config: %w", workstation.Name, err)
-				}
-			}
-		}
-		effectiveFactory.Workstations[i] = workstation
-		workstationCopy := CloneWorkstationConfig(workstation)
+		workstationCopy := CloneWorkstationConfig(effectiveFactory.Workstations[i])
 		loaded.lookup.workstations[workstationCopy.Name] = &workstationCopy
 	}
 

@@ -173,21 +173,8 @@ func FactoryConfigWithRuntimeDefinitions(cfg *interfaces.FactoryConfig, runtimeC
 		return nil, fmt.Errorf("clone factory config: %w", err)
 	}
 
-	for i := range inlined.Workers {
-		def, ok := runtimeCfg.Worker(inlined.Workers[i].Name)
-		if !ok || def == nil {
-			continue
-		}
-		applyWorkerRuntimeDefinition(&inlined.Workers[i], def)
-	}
-	for i := range inlined.Workstations {
-		def, ok := runtimeCfg.Workstation(inlined.Workstations[i].Name)
-		if !ok || def == nil {
-			continue
-		}
-		if err := applyWorkstationRuntimeDefinition(&inlined.Workstations[i], def); err != nil {
-			return nil, fmt.Errorf("normalize workstation %q config: %w", inlined.Workstations[i].Name, err)
-		}
+	if err := applyRuntimeDefinitionsToClonedFactoryConfig(inlined, runtimeCfg); err != nil {
+		return nil, err
 	}
 	return inlined, nil
 }
