@@ -5,6 +5,8 @@ This document defines the repository-owned phase-1 Go lint policy for backend pa
 ## Scope
 
 - The owned command path is `go run ./cmd/pkglintcheck`.
+- The root lint workflow path is `make lint`, which delegates backend `pkg/` linting to `make pkg-lint`.
+- `make pkg-lint` runs the same owned command, `go run ./cmd/pkglintcheck`.
 - The command always runs `golangci-lint` against `./pkg/...`.
 - The checked-in config lives at `.golangci.pkg.yml`.
 
@@ -35,7 +37,12 @@ Those files contain runtime bootstrap and hot-swap orchestration helpers that de
 ## Verification
 
 - Clean pass path: run `go run ./cmd/pkglintcheck`.
+- Root workflow path: run `make lint` to execute UI lint, UI deadcode, the owned backend `pkg` lint lane, and the backend deadcode baseline gate in the same order CI uses for repository linting.
 - Intentional failure path: temporarily add an ignored error inside a `pkg/` test or helper, rerun `go run ./cmd/pkglintcheck`, confirm `errcheck` fails, then remove the seed before normal verification.
+
+## Workflow Integration
+
+The repository standardizes `govet` through `golangci-lint` for the first backend lint wave instead of running a separate `go vet ./...` step in the root lint workflow. That keeps the `govet` configuration, package scope, and future backend analyzer additions behind one repo-owned command surface while phase 1 remains intentionally limited to `./pkg/...`.
 
 ## Phase-1 Non-Goals
 
