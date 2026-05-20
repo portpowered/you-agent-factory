@@ -181,6 +181,8 @@ func modelProviderForRunnerSelection(workerModelProvider, runnerID string) strin
 	switch interfaces.NormalizeRunnerID(runnerID) {
 	case interfaces.RunnerIDCodex:
 		return string(ModelProviderCodex)
+	case interfaces.RunnerIDGemini:
+		return string(ModelProviderGemini)
 	default:
 		return ""
 	}

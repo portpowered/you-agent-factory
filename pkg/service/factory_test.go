@@ -6253,6 +6253,80 @@ func TestLoadWorkersFromConfig_DefaultCodexRunnerPreservesLegacyProviderlessWork
 	}
 }
 
+func TestLoadWorkersFromConfig_GeminiRunnerExecutesBaselineWorkstationFlow(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: gemini-2.5-flash
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+			Runner:         interfaces.RunnerIDGemini,
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, nil, runner, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-gemini-default",
+		TransitionID:    "t-gemini-default",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-gemini-default",
+			Color: interfaces.TokenColor{
+				WorkID: "work-gemini-default",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if runner.request.Command != string(workers.ModelProviderGemini) {
+		t.Fatalf("command = %q, want %q", runner.request.Command, workers.ModelProviderGemini)
+	}
+	if len(runner.request.Args) < 2 || runner.request.Args[0] != "--prompt" {
+		t.Fatalf("args = %#v, want gemini --prompt invocation", runner.request.Args)
+	}
+}
+
 func TestLoadWorkersFromConfig_CanonicalRuntimeLookupDrivesScriptExecutionWorkingDirectory(t *testing.T) {
 	dir := t.TempDir()
 	runtimeBaseDir := t.TempDir()

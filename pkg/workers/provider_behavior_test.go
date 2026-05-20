@@ -113,6 +113,59 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 	}
 }
 
+func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
+	testCases := []struct {
+		name            string
+		req             interfaces.ProviderInferenceRequest
+		skipPermissions bool
+		want            []string
+	}{
+		{
+			name: "BasicPrompt",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderGemini),
+				UserMessage:   "summarize the workspace",
+			},
+			want: []string{"--prompt", "summarize the workspace"},
+		},
+		{
+			name: "WithModelAndSkipPermissions",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderGemini),
+				Model:         "gemini-2.5-flash",
+				UserMessage:   "run the tests",
+			},
+			skipPermissions: true,
+			want:            []string{"--prompt", "run the tests", "--model", "gemini-2.5-flash", "--approval-mode", "yolo", "--sandbox", "false"},
+		},
+	}
+
+	behavior := geminiProviderBehavior{logger: logging.NoopLogger{}}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			if err != nil {
+				t.Fatalf("BuildArgs returned error: %v", err)
+			}
+			assertStringSlicesEqual(t, tc.want, args)
+		})
+	}
+}
+
+func TestGeminiProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
+	behavior := geminiProviderBehavior{logger: logging.NoopLogger{}}
+	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(ModelProviderGemini),
+		UserMessage:   "summarize the workspace",
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
+			interfaces.RunnerOptionalCapabilityStructuredOutput,
+		},
+	}, false)
+	if err == nil || err.Error() != "structured output is not supported by the gemini runner in v1" {
+		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
+	}
+}
+
 func TestClaudeProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
 

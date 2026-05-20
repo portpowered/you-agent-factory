@@ -214,6 +214,7 @@ type ModelProvider string
 const (
 	ModelProviderClaude ModelProvider = "claude"
 	ModelProviderCodex  ModelProvider = "codex"
+	ModelProviderGemini ModelProvider = "gemini"
 )
 
 // ContainsStopToken checks whether the output text contains the given stop token.

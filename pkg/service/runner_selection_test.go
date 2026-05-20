@@ -52,7 +52,7 @@ Review.
 	}
 }
 
-func TestLoadWorkersFromConfig_RejectsUnavailableFactoryRunner(t *testing.T) {
+func TestLoadWorkersFromConfig_AcceptsAvailableGeminiFactoryRunner(t *testing.T) {
 	dir := t.TempDir()
 
 	writeWorkerAgentsMD(t, dir, "worker-a")
@@ -70,9 +70,8 @@ func TestLoadWorkersFromConfig_RejectsUnavailableFactoryRunner(t *testing.T) {
 		},
 	)
 
-	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "gemini runner is registered but not yet available in this build") {
-		t.Fatalf("loadWorkersFromConfig error = %v, want unavailable gemini runner", err)
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil); err != nil {
+		t.Fatalf("loadWorkersFromConfig error = %v, want available gemini runner", err)
 	}
 }
 

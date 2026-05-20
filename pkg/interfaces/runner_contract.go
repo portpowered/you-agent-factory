@@ -104,12 +104,6 @@ type RunnerMetadata struct {
 	Capabilities RunnerCapabilities `json:"capabilities"`
 }
 
-// CloneRunnerExecutionRequest returns a detached copy of the shared runner
-// execution request contract.
-func CloneRunnerExecutionRequest(request RunnerExecutionRequest) RunnerExecutionRequest {
-	return CloneProviderInferenceRequest(request)
-}
-
 func cloneRunnerOptionalCapabilitySupport(values []RunnerOptionalCapabilitySupport) []RunnerOptionalCapabilitySupport {
 	if len(values) == 0 {
 		return nil

@@ -16,8 +16,8 @@ var builtInRunnerStatus = map[string]RunnerStatus{
 		Available: true,
 	},
 	interfaces.RunnerIDGemini: {
-		Metadata:          mustBuiltInRunnerMetadata(interfaces.RunnerIDGemini),
-		UnavailableReason: "gemini runner is registered but not yet available in this build",
+		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDGemini),
+		Available: true,
 	},
 	interfaces.RunnerIDKiro: {
 		Metadata:          mustBuiltInRunnerMetadata(interfaces.RunnerIDKiro),

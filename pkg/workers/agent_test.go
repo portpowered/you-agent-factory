@@ -456,6 +456,37 @@ func TestAgentExecutor_InferenceRequestDefaultsCodexProviderFromRunnerSelection(
 	}
 }
 
+func TestAgentExecutor_InferenceRequestDefaultsGeminiProviderFromRunnerSelection(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "gemini ok"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Model: "gemini-2.5-flash",
+			},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-gemini-default",
+			TransitionID: "t-gemini-default",
+			WorkerType:   "worker-a",
+		},
+		withAgentRunnerID(interfaces.RunnerIDGemini),
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderGemini) {
+		t.Fatalf("model provider = %q, want %q", provider.lastReq.ModelProvider, ModelProviderGemini)
+	}
+	if provider.lastReq.RunnerID != interfaces.RunnerIDGemini {
+		t.Fatalf("runner id = %q, want %q", provider.lastReq.RunnerID, interfaces.RunnerIDGemini)
+	}
+}
+
 func TestAgentExecutor_InferenceRequestMarksImageInputCapabilityWhenPresent(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{

@@ -1,6 +1,7 @@
 package workers
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,10 +58,16 @@ type codexProviderBehavior struct {
 	logger logging.Logger
 }
 
+type geminiProviderBehavior struct {
+	logger logging.Logger
+}
+
 func providerBehaviorFor(provider string, logger logging.Logger) providerBehavior {
 	switch provider {
 	case string(ModelProviderCodex):
 		return codexProviderBehavior{logger: logger}
+	case string(ModelProviderGemini):
+		return geminiProviderBehavior{logger: logger}
 	default:
 		return claudeProviderBehavior{logger: logger}
 	}
@@ -70,6 +77,8 @@ func providerBehaviorForErrorClassification(provider string) providerBehavior {
 	switch provider {
 	case string(ModelProviderClaude):
 		return claudeProviderBehavior{}
+	case string(ModelProviderGemini):
+		return geminiProviderBehavior{}
 	default:
 		return codexProviderBehavior{}
 	}
@@ -208,6 +217,72 @@ func (b codexProviderBehavior) FormatTimeoutFailure(result CommandResult) string
 		return codexError
 	}
 	return formatProviderOutputOrDefault(result, "execution timeout")
+}
+
+func (b geminiProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+	if err := validateGeminiOptionalCapabilities(req); err != nil {
+		return nil, err
+	}
+	args := []string{"--prompt", req.UserMessage}
+	if req.Model != "" {
+		args = append(args, "--model", req.Model)
+	}
+	if req.SessionID != "" {
+		args = append(args, "--resume", req.SessionID)
+	}
+	if skipPermissions {
+		args = append(args, "--approval-mode", "yolo", "--sandbox", "false")
+	}
+	return args, nil
+}
+
+func (b geminiProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+	return buildBaseProviderCommandRequest(req, args)
+}
+
+func (b geminiProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
+	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
+}
+
+func (b geminiProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
+	switch {
+	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
+		return interfaces.ProviderErrorTypeAuthFailure
+	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
+		return interfaces.ProviderErrorTypePermanentBadRequest
+	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
+		return interfaces.ProviderErrorTypeThrottled
+	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
+		return interfaces.ProviderErrorTypeInternalServerError
+	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
+		return interfaces.ProviderErrorTypeTimeout
+	default:
+		return interfaces.ProviderErrorTypeUnknown
+	}
+}
+
+func (b geminiProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
+	return formatProviderOutputOrDefault(result, "execution timeout")
+}
+
+func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
+	unsupported := map[interfaces.RunnerOptionalCapability]string{
+		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
+		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the gemini runner in v1",
+		interfaces.RunnerOptionalCapabilitySessionResume:    "session resume is not supported by the gemini runner in v1",
+		interfaces.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the gemini runner in v1",
+		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the gemini runner in v1",
+	}
+	for _, capability := range req.RequiredOptionalCapabilities {
+		if message, blocked := unsupported[capability]; blocked {
+			return errors.New(message)
+		}
+	}
+	if req.SessionID != "" {
+		return errors.New("session resume is not supported by the gemini runner in v1")
+	}
+	return nil
 }
 
 func buildBaseProviderCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
