@@ -22,6 +22,7 @@ import {
   InferenceAttemptTextSection,
   PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
+  normalizeDetailText,
 } from "./detail-card-shared";
 import type { InferenceAttemptCardProps } from "./detail-card-types";
 import {
@@ -140,12 +141,56 @@ function AttemptExpandedContent({
         onSelectProviderSession={onSelectProviderSession}
         state={providerSessionState}
       />
-      <InferenceAttemptTextSection
+      <AttemptTextBodyDisclosure
+        expandAction={detailMessages.expandRequestBodyAction}
+        collapseAction={detailMessages.collapseRequestBodyAction}
         label={detailMessages.requestBodyLabel}
-        value={attempt.prompt}
+        value={normalizeDetailText(attempt.prompt)}
       />
       <AttemptResponseDetails attempt={attempt} />
     </>
+  );
+}
+
+function AttemptTextBodyDisclosure({
+  collapseAction,
+  expandAction,
+  label,
+  value,
+}: {
+  collapseAction: string;
+  expandAction: string;
+  label: string;
+  value?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const panelId = useId();
+  const labelId = `${panelId}-label`;
+
+  if (!value) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-1.5">
+      <div className={HISTORY_HEADER_CLASS}>
+        <strong id={labelId}>{label}</strong>
+        <button
+          aria-controls={panelId}
+          aria-expanded={expanded}
+          className={HISTORY_TOGGLE_CLASS}
+          onClick={() => setExpanded((current) => !current)}
+          type="button"
+        >
+          {expanded ? collapseAction : expandAction}
+        </button>
+      </div>
+      {expanded ? (
+        <div id={panelId}>
+          <InferenceAttemptTextSection label={label} value={value} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -290,12 +335,15 @@ function AttemptResponseDetails({
   attempt: DashboardInferenceAttempt;
 }) {
   const detailMessages = useCurrentSelectionDetailMessages();
+  const response = normalizeDetailText(attempt.response);
 
-  if (attempt.response !== undefined) {
+  if (response) {
     return (
-      <InferenceAttemptTextSection
+      <AttemptTextBodyDisclosure
+        collapseAction={detailMessages.collapseResponseBodyAction}
+        expandAction={detailMessages.expandResponseBodyAction}
         label={detailMessages.responseBodyLabel}
-        value={attempt.response}
+        value={response}
       />
     );
   }

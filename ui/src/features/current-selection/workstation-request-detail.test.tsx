@@ -103,6 +103,12 @@ describe("WorkstationRequestDetailCard", () => {
     fireEvent.click(
       inferenceAttempts.getByRole("button", { name: "Expand attempt 2" }),
     );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand response body" }),
+    );
 
     expect(inferenceAttempts.getByText("Retry the review with the latest context.")).toBeTruthy();
     expect(inferenceAttempts.getByText("Ready for the next workstation.")).toBeTruthy();
@@ -284,6 +290,12 @@ describe("WorkstationRequestDetailCard", () => {
     fireEvent.click(
       inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
     );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand response body" }),
+    );
 
     const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
     const responseBody = within(inferenceAttempts.getByRole("region", { name: "Response body" }));
@@ -325,6 +337,9 @@ describe("WorkstationRequestDetailCard", () => {
     fireEvent.click(
       inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
     );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    );
     const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
     const requestListItems = requestBody.getAllByRole("listitem");
 
@@ -356,6 +371,9 @@ describe("WorkstationRequestDetailCard", () => {
     const inferenceAttempts = within(inferenceAttemptsRegion);
     fireEvent.click(
       inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
     );
 
     const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
@@ -393,6 +411,9 @@ describe("WorkstationRequestDetailCard", () => {
     const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
     fireEvent.click(
       inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
     );
 
     expect(inferenceAttempts.queryByRole("button", { name: "danger" })).toBeNull();

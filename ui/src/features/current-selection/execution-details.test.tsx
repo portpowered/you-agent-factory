@@ -259,6 +259,7 @@ describe("InferenceAttemptsSection", () => {
       within(section).queryByText("dispatch-review/inference-request/1"),
     ).toBeNull();
     expect(within(section).queryByText("Review the story.")).toBeNull();
+    expect(within(section).queryByText("Looks good.")).toBeNull();
     expect(within(section).queryByText("Retry the story.")).toBeNull();
 
     fireEvent.click(expandAttempt1);
@@ -267,7 +268,26 @@ describe("InferenceAttemptsSection", () => {
     expect(
       within(section).getByText("dispatch-review/inference-request/1"),
     ).toBeTruthy();
+    const expandRequestBody = within(section).getByRole("button", {
+      name: "Expand request body",
+    });
+    const expandResponseBody = within(section).getByRole("button", {
+      name: "Expand response body",
+    });
+    expect(expandRequestBody.getAttribute("aria-expanded")).toBe("false");
+    expect(expandResponseBody.getAttribute("aria-expanded")).toBe("false");
+    expect(within(section).queryByText("Review the story.")).toBeNull();
+    expect(within(section).queryByText("Looks good.")).toBeNull();
+
+    fireEvent.click(expandRequestBody);
+
+    expect(expandRequestBody.getAttribute("aria-expanded")).toBe("true");
     expect(within(section).getByText("Review the story.")).toBeTruthy();
+    expect(within(section).queryByText("Looks good.")).toBeNull();
+
+    fireEvent.click(expandResponseBody);
+
+    expect(expandResponseBody.getAttribute("aria-expanded")).toBe("true");
     expect(within(section).getByText("Looks good.")).toBeTruthy();
     expect(within(section).queryByText("Retry the story.")).toBeNull();
 
@@ -275,12 +295,60 @@ describe("InferenceAttemptsSection", () => {
 
     expect(expandAttempt2.getAttribute("aria-expanded")).toBe("true");
     expect(within(section).getByText("dispatch-review/inference-request/2")).toBeTruthy();
-    expect(within(section).getByText("Retry the story.")).toBeTruthy();
-    expect(within(section).getByText("Needs more evidence.")).toBeTruthy();
+    expect(within(section).queryByText("Retry the story.")).toBeNull();
+    expect(within(section).queryByText("Needs more evidence.")).toBeNull();
     expect(
       within(section).queryByText(
         "No inference events are available for this selected work item.",
       ),
     ).toBeNull();
+  });
+
+  it("keeps unavailable and pending response states explicit instead of rendering empty disclosure controls", () => {
+    render(
+      <InferenceAttemptsSection
+        attempts={[
+          inferenceAttempt("dispatch-review", {
+            attempt: 1,
+            outcome: "FAILED",
+            prompt: "Investigate the failure.",
+            response: "   ",
+          }),
+          inferenceAttempt("dispatch-review", {
+            attempt: 2,
+            outcome: undefined,
+            prompt: "Wait for completion.",
+            response: undefined,
+          }),
+        ]}
+      />,
+    );
+
+    const section = screen.getByRole("region", { name: "Inference attempts" });
+    fireEvent.click(
+      within(section).getByRole("button", {
+        name: "Expand attempt 1",
+      }),
+    );
+    fireEvent.click(
+      within(section).getByRole("button", {
+        name: "Expand attempt 2",
+      }),
+    );
+
+    expect(
+      within(section).getAllByRole("button", { name: "Expand request body" }),
+    ).toHaveLength(2);
+    expect(
+      within(section).queryByRole("button", { name: "Expand response body" }),
+    ).toBeNull();
+    expect(
+      within(section).getByText(
+        "Provider response text is not available for this inference attempt.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(section).getByText("Awaiting provider response."),
+    ).toBeTruthy();
   });
 });
