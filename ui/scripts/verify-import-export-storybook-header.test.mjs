@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import { verifyDashboardHeader } from "./verify-import-export-storybook-responsive.mjs";
+import { verifyDashboardSessionTabs } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
 
 describe("verifyDashboardHeader", () => {
   test("verifyDashboardHeader exercises keyboard and desktop ordering checks", async () => {
@@ -112,5 +113,100 @@ describe("verifyDashboardHeader", () => {
     ).rejects.toThrow(
       "Dashboard heading wordmark was not hidden with sr-only styling.",
     );
+  });
+});
+
+describe("verifyDashboardSessionTabs", () => {
+  test("verifyDashboardSessionTabs exercises the open-session flow", async () => {
+    const reviewTab = {
+      getAttribute: vi.fn().mockResolvedValue("true"),
+      isVisible: vi.fn().mockResolvedValue(true),
+    };
+    const targetButton = {
+      click: vi.fn().mockResolvedValue(undefined),
+    };
+    const targetPicker = {
+      getByRole: vi.fn().mockReturnValue(targetButton),
+      getByText: vi.fn().mockReturnValue({
+        isVisible: vi.fn().mockResolvedValue(true),
+      }),
+      isVisible: vi.fn().mockResolvedValue(true),
+    };
+    const folderField = {
+      fill: vi.fn().mockResolvedValue(undefined),
+    };
+    const inspectButton = {
+      click: vi.fn().mockResolvedValue(undefined),
+    };
+    const dialog = {
+      getByRole: vi.fn((role, options) => {
+        if (role === "textbox") {
+          return folderField;
+        }
+        if (role === "button" && options?.name === "Inspect folder") {
+          return inspectButton;
+        }
+        throw new Error(`unexpected dialog role ${role}`);
+      }),
+      waitFor: vi.fn().mockResolvedValue(undefined),
+    };
+    const openButton = {
+      click: vi.fn().mockResolvedValue(undefined),
+      isVisible: vi.fn().mockResolvedValue(true),
+    };
+    const page = {
+      evaluate: vi.fn().mockResolvedValue({ clientWidth: 768, scrollWidth: 768 }),
+      getByRole: vi.fn((role, options) => {
+        if (role === "navigation") {
+          return { isVisible: vi.fn().mockResolvedValue(true) };
+        }
+        if (role === "button" && options?.name === "Open another session") {
+          return openButton;
+        }
+        if (role === "dialog") {
+          return dialog;
+        }
+        if (role === "region") {
+          return targetPicker;
+        }
+        if (role === "tab" && options?.name === "catalog / review catalog") {
+          return reviewTab;
+        }
+        return { isVisible: vi.fn().mockResolvedValue(true) };
+      }),
+      getByText: vi.fn().mockReturnValue({
+        isVisible: vi.fn().mockResolvedValue(true),
+      }),
+    };
+
+    await verifyDashboardSessionTabs(
+      {
+        expectNoHorizontalOverflow: async () => {},
+        expectVisible: async (locator) => {
+          if (typeof locator.waitFor === "function") {
+            await locator.waitFor();
+            return;
+          }
+          if (!(await locator.isVisible())) {
+            throw new Error("Locator was not visible.");
+          }
+        },
+        waitForDialog: async () => dialog,
+      },
+      page,
+      {
+        height: 1024,
+        label: "tablet",
+        width: 768,
+      },
+    );
+
+    expect(openButton.click).toHaveBeenCalledTimes(1);
+    expect(folderField.fill).toHaveBeenCalledWith("/workspace/catalog");
+    expect(inspectButton.click).toHaveBeenCalledTimes(1);
+    expect(targetPicker.getByRole).toHaveBeenCalledWith("button", {
+      name: "Catalog / review catalog",
+    });
+    expect(targetButton.click).toHaveBeenCalledTimes(1);
   });
 });

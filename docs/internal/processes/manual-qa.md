@@ -69,3 +69,8 @@ Date: `2026-05-20`
 - `cd ui && bunx vitest run src/features/current-selection/current-selection-widget.save.test.tsx scripts/verify-import-export-storybook-responsive.schedule.test.mjs scripts/verify-import-export-storybook-responsive.test.mjs scripts/dashboard-shell-storybook-responsive.test.mjs` passed.
 - `cd ui && bun run build-storybook` passed.
 - `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6012 bun run test-storybook` passed, including the new current-selection prompt hinting Storybook interaction and responsive browser verification for prompt help, inline squiggle diagnostics, keyboard interaction, and mobile/tablet/desktop overflow checks.
+
+Date: `2026-05-21`
+
+- `cd ui && bun x vitest run --config vitest.storybook.config.ts --project=storybook src/features/header/dashboard-session-tabs.stories.tsx` passed in a browser-backed runner, covering the visible session tab strip, the folder-first open-session dialog, the multi-target picker step, and activation of the newly opened session tab.
+- `cd ui && bun run storybook:responsive-check` passed against built Storybook `iframe.html` stories for the dashboard session tabs in addition to the existing dialog and header checks, confirming the session tab strip, open-session trigger, target picker, and active-folder summary remain visible without horizontal overflow at mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) widths in headless Chromium.

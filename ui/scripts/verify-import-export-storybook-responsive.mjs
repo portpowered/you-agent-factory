@@ -1,6 +1,7 @@
 import process from "node:process";
 import { chromium } from "playwright";
 import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
+import { verifyDashboardSessionTabs as verifyDashboardSessionTabsImpl } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
 import {
   createLocalizedExportDialogVerifier,
   createLocalizedImportDialogVerifier,
@@ -53,6 +54,11 @@ export const storyChecks = [
     assertions: verifyDashboardHeader,
     id: "infinite-you-workflow-dashboard--header-action-buttons-verification",
     label: "dashboard header",
+  },
+  {
+    assertions: verifyDashboardSessionTabs,
+    id: "infinite-you-dashboard-session-tabs--open-flow-verification",
+    label: "dashboard session tabs",
   },
   {
     assertions: verifyDashboardShellConsolidation,
@@ -352,6 +358,14 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectNoHorizontalOverflow(
     page,
     `Dashboard header at ${viewport.label}`,
+  );
+}
+
+export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
+  return verifyDashboardSessionTabsImpl(
+    { expectNoHorizontalOverflow, expectVisible, waitForDialog },
+    page,
+    viewport,
   );
 }
 
