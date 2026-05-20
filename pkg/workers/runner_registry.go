@@ -28,8 +28,8 @@ var builtInRunnerStatus = map[string]RunnerStatus{
 		Available: true,
 	},
 	interfaces.RunnerIDOpenCode: {
-		Metadata:          mustBuiltInRunnerMetadata(interfaces.RunnerIDOpenCode),
-		UnavailableReason: "opencode runner is registered but not yet available in this build",
+		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDOpenCode),
+		Available: true,
 	},
 }
 

@@ -212,11 +212,12 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 type ModelProvider string
 
 const (
-	ModelProviderClaude ModelProvider = "claude"
-	ModelProviderCodex  ModelProvider = "codex"
-	ModelProviderGemini ModelProvider = "gemini"
-	ModelProviderKiro   ModelProvider = "kiro-cli"
-	ModelProviderCursor ModelProvider = "cursor-agent"
+	ModelProviderClaude   ModelProvider = "claude"
+	ModelProviderCodex    ModelProvider = "codex"
+	ModelProviderGemini   ModelProvider = "gemini"
+	ModelProviderKiro     ModelProvider = "kiro-cli"
+	ModelProviderCursor   ModelProvider = "cursor-agent"
+	ModelProviderOpenCode ModelProvider = "opencode"
 )
 
 // ContainsStopToken checks whether the output text contains the given stop token.
@@ -358,7 +359,7 @@ func effectiveProviderSession(req interfaces.ProviderInferenceRequest, result Co
 	if session != nil {
 		return session
 	}
-	if (req.ModelProvider == string(ModelProviderClaude) || req.ModelProvider == string(ModelProviderCursor)) && req.SessionID != "" {
+	if (req.ModelProvider == string(ModelProviderClaude) || req.ModelProvider == string(ModelProviderCursor) || req.ModelProvider == string(ModelProviderOpenCode)) && req.SessionID != "" {
 		return &interfaces.ProviderSessionMetadata{
 			Provider: req.ModelProvider,
 			Kind:     providerSessionKindSessionID,

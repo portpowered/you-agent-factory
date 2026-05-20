@@ -281,6 +281,61 @@ func TestCursorProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities
 	}
 }
 
+func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
+	testCases := []struct {
+		name            string
+		req             interfaces.ProviderInferenceRequest
+		skipPermissions bool
+		want            []string
+	}{
+		{
+			name: "BasicPrompt",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderOpenCode),
+				UserMessage:   "summarize the workspace",
+			},
+			want: []string{"run", "summarize the workspace"},
+		},
+		{
+			name: "WithModelSessionWorkingDirectoryAndSkipPermissions",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider:    string(ModelProviderOpenCode),
+				Model:            "openai/gpt-5",
+				SessionID:        "opencode-session-123",
+				WorkingDirectory: "/tmp/project",
+				UserMessage:      "run the tests",
+			},
+			skipPermissions: true,
+			want:            []string{"run", "--model", "openai/gpt-5", "--session", "opencode-session-123", "--dir", "/tmp/project", "--dangerously-skip-permissions", "run the tests"},
+		},
+	}
+
+	behavior := openCodeProviderBehavior{logger: logging.NoopLogger{}}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			if err != nil {
+				t.Fatalf("BuildArgs returned error: %v", err)
+			}
+			assertStringSlicesEqual(t, tc.want, args)
+		})
+	}
+}
+
+func TestOpenCodeProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
+	behavior := openCodeProviderBehavior{logger: logging.NoopLogger{}}
+	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(ModelProviderOpenCode),
+		UserMessage:   "summarize the workspace",
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
+			interfaces.RunnerOptionalCapabilityStructuredOutput,
+		},
+	}, false)
+	if err == nil || err.Error() != "structured output is not supported by the opencode runner in v1" {
+		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
+	}
+}
+
 func TestClaudeProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
 

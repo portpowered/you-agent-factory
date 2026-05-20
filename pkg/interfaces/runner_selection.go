@@ -74,9 +74,15 @@ var builtInRunnerMetadata = map[string]RunnerMetadata{
 		),
 	},
 	RunnerIDOpenCode: {
-		ID:           RunnerIDOpenCode,
-		DisplayName:  "OpenCode",
-		Capabilities: NewRunnerCapabilities(),
+		ID:          RunnerIDOpenCode,
+		DisplayName: "OpenCode",
+		Capabilities: NewRunnerCapabilities(
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityImageInput, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilitySessionResume, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityStructuredOutput, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorkingDirectory, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorktree, Status: RunnerOptionalCapabilityStatusUnsupported},
+		),
 	},
 }
 

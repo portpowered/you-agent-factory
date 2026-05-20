@@ -70,6 +70,10 @@ type cursorProviderBehavior struct {
 	logger logging.Logger
 }
 
+type openCodeProviderBehavior struct {
+	logger logging.Logger
+}
+
 func providerBehaviorFor(provider string, logger logging.Logger) providerBehavior {
 	switch provider {
 	case string(ModelProviderCodex):
@@ -80,6 +84,8 @@ func providerBehaviorFor(provider string, logger logging.Logger) providerBehavio
 		return kiroProviderBehavior{logger: logger}
 	case string(ModelProviderCursor):
 		return cursorProviderBehavior{logger: logger}
+	case string(ModelProviderOpenCode):
+		return openCodeProviderBehavior{logger: logger}
 	default:
 		return claudeProviderBehavior{logger: logger}
 	}
@@ -95,6 +101,8 @@ func providerBehaviorForErrorClassification(provider string) providerBehavior {
 		return kiroProviderBehavior{}
 	case string(ModelProviderCursor):
 		return cursorProviderBehavior{}
+	case string(ModelProviderOpenCode):
+		return openCodeProviderBehavior{}
 	default:
 		return codexProviderBehavior{}
 	}
@@ -362,6 +370,57 @@ func (b cursorProviderBehavior) FormatTimeoutFailure(result CommandResult) strin
 	return formatProviderOutputOrDefault(result, "execution timeout")
 }
 
+func (b openCodeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+	if err := validateOpenCodeOptionalCapabilities(req); err != nil {
+		return nil, err
+	}
+	args := []string{"run"}
+	if req.Model != "" {
+		args = append(args, "--model", req.Model)
+	}
+	if req.SessionID != "" {
+		args = append(args, "--session", req.SessionID)
+	}
+	if req.WorkingDirectory != "" {
+		args = append(args, "--dir", req.WorkingDirectory)
+	}
+	if skipPermissions {
+		args = append(args, "--dangerously-skip-permissions")
+	}
+	args = append(args, req.UserMessage)
+	return args, nil
+}
+
+func (b openCodeProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+	return buildBaseProviderCommandRequest(req, args)
+}
+
+func (b openCodeProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
+	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
+}
+
+func (b openCodeProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
+	switch {
+	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
+		return interfaces.ProviderErrorTypeAuthFailure
+	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
+		return interfaces.ProviderErrorTypePermanentBadRequest
+	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
+		return interfaces.ProviderErrorTypeThrottled
+	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
+		return interfaces.ProviderErrorTypeInternalServerError
+	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
+		return interfaces.ProviderErrorTypeTimeout
+	default:
+		return interfaces.ProviderErrorTypeUnknown
+	}
+}
+
+func (b openCodeProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
+	return formatProviderOutputOrDefault(result, "execution timeout")
+}
+
 func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
 	unsupported := map[interfaces.RunnerOptionalCapability]string{
 		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
@@ -401,6 +460,20 @@ func validateCursorOptionalCapabilities(req interfaces.ProviderInferenceRequest)
 		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the cursor-cli runner in v1",
 		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the cursor-cli runner in v1",
 		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the cursor-cli runner in v1",
+	}
+	for _, capability := range req.RequiredOptionalCapabilities {
+		if message, blocked := unsupported[capability]; blocked {
+			return errors.New(message)
+		}
+	}
+	return nil
+}
+
+func validateOpenCodeOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
+	unsupported := map[interfaces.RunnerOptionalCapability]string{
+		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the opencode runner in v1",
+		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the opencode runner in v1",
+		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the opencode runner in v1",
 	}
 	for _, capability := range req.RequiredOptionalCapabilities {
 		if message, blocked := unsupported[capability]; blocked {
