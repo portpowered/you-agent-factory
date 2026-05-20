@@ -48,20 +48,20 @@ import {
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "./components/ui/dashboard-typography";
 import { formatDurationMillis } from "./components/ui/formatters";
-import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
-import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
+import { reloadDashboardLayoutFromStorage } from "./features/bento";
+import { useDashboardBentoStore } from "./features/bento/state";
 import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
-import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
+import { resetSelectionHistoryStore } from "./features/current-selection/state";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
-} from "./features/dashboard/state/dashboardStreamStore";
+} from "./features/dashboard/state";
 import * as factoryPngExportModule from "./features/export/factory-png-export";
-import { useExportDialogStore } from "./features/export/state/exportDialogStore";
+import { useExportDialogStore } from "./features/export/state";
 import type { FactoryPngImportValue } from "./features/import";
 import * as factoryPngImportModule from "./features/import/factory-png-import";
-import type { WorldState } from "./features/timeline/state/factoryTimelineStore";
-import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
+import type { WorldState } from "./features/timeline/state";
+import { useFactoryTimelineStore } from "./features/timeline/state";
 import {
   TraceDrilldownWidget,
   useTraceDrilldown,
@@ -3069,8 +3069,8 @@ describe("App streamed replay smoke flows", () => {
       within(currentPositionDetail).getByText("Queued Analysis Story"),
     ).toBeTruthy();
     expect(
-      within(currentPositionDetail).queryByText("work-queued-analysis"),
-    ).toBeNull();
+      within(currentPositionDetail).getByText("work-queued-analysis"),
+    ).toBeTruthy();
     expect(
       within(currentPositionDetail).queryByText(/^Started at /),
     ).toBeNull();
@@ -3447,11 +3447,11 @@ describe("App streamed replay smoke flows", () => {
       within(completedDetail).getByText("Completed Smoke Story Two"),
     ).toBeTruthy();
     expect(
-      within(completedDetail).queryByText("work-smoke-complete-one"),
-    ).toBeNull();
+      within(completedDetail).getByText("work-smoke-complete-one"),
+    ).toBeTruthy();
     expect(
-      within(completedDetail).queryByText("work-smoke-complete-two"),
-    ).toBeNull();
+      within(completedDetail).getByText("work-smoke-complete-two"),
+    ).toBeTruthy();
     expect(within(completedDetail).queryAllByText(/^Started at /)).toHaveLength(
       2,
     );
@@ -3467,7 +3467,7 @@ describe("App streamed replay smoke flows", () => {
 
       expect(within(failedDetail).getByText("Current work")).toBeTruthy();
       expect(within(failedDetail).getByText("Failed Smoke Story")).toBeTruthy();
-      expect(within(failedDetail).queryByText("work-smoke-failed")).toBeNull();
+      expect(within(failedDetail).getByText("work-smoke-failed")).toBeTruthy();
       expect(within(failedDetail).queryAllByText(/^Started at /)).toHaveLength(
         1,
       );

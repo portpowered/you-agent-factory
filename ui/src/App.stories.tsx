@@ -1131,7 +1131,7 @@ export const DashboardImprovementsSmoke = {
     expect(within(summaryDetails ?? canvasElement).queryByText("Work type")).toBeNull();
     expect(within(summaryDetails ?? canvasElement).queryByText("State")).toBeNull();
     expect(within(summaryDetails ?? canvasElement).queryByText("State node ID")).toBeNull();
-    expect(currentSelection.queryByText("work-active-story")).toBeNull();
+    await expect(currentSelection.getByText("work-active-story")).toBeVisible();
     expect(currentSelection.queryByText("trace-active-story")).toBeNull();
     const traceDrilldownCard = await canvas.findByRole("article", {
       name: "Trace drill-down",

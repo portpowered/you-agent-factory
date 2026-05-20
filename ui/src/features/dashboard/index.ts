@@ -1,2 +1,2 @@
-export * from "./dashboard-screen";
-export * from "./useDashboardSnapshot";
+export * from "./components/dashboard-screen";
+export * from "./hooks/useDashboardSnapshot";
