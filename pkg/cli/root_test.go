@@ -1219,6 +1219,7 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 		"--next-token", "cursor-1",
 		"--json",
 		"--port", "9090",
+		"--session", "session-beta",
 	})
 
 	if err := root.Execute(); err != nil {
@@ -1243,11 +1244,37 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	if got.NextToken != "cursor-1" {
 		t.Fatalf("next token = %q, want cursor-1", got.NextToken)
 	}
+	if got.SessionID != "session-beta" {
+		t.Fatalf("session id = %q, want session-beta", got.SessionID)
+	}
 	if !got.JSON {
 		t.Fatal("expected json output flag")
 	}
 	if got.Output == nil {
 		t.Fatal("expected output writer")
+	}
+}
+
+func TestWorkListCommand_HelpDocumentsSessionTargeting(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"work", "list", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work list --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"List work from a running infinite-you service.",
+		"--session",
+		"default compatibility session",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("work list help missing %q:\n%s", want, help)
+		}
 	}
 }
 
@@ -1480,7 +1507,7 @@ func TestSubmitCommand_HelpAdvertisesRequiredFlags(t *testing.T) {
 		t.Fatalf("find submit: %v", err)
 	}
 
-	for _, name := range []string{"name", "work-type-name", "payload"} {
+	for _, name := range []string{"name", "work-type-name", "payload", "session"} {
 		f := submitCmd.Flags().Lookup(name)
 		if f == nil {
 			t.Errorf("expected --%s flag on submit command", name)
@@ -1514,6 +1541,9 @@ func TestSubmitCommand_HelpAdvertisesRequiredFlags(t *testing.T) {
 	}
 	if !strings.Contains(help, "work type name to submit to") {
 		t.Fatalf("submit help should describe work type names:\n%s", help)
+	}
+	if !strings.Contains(help, "--session") || !strings.Contains(help, "default compatibility session") {
+		t.Fatalf("submit help should describe session targeting:\n%s", help)
 	}
 	for _, disallowed := range []string{"--work-type-id", "--factory-id", "--factory"} {
 		if strings.Contains(help, disallowed) {
@@ -1663,6 +1693,7 @@ func TestSubmitCommand_WorkTypeNameFlagMapsToSubmitConfig(t *testing.T) {
 		"--work-type-name", "tasks",
 		"--payload", "request.md",
 		"--port", "7437",
+		"--session", "session-beta",
 	})
 
 	if err := root.Execute(); err != nil {
@@ -1680,5 +1711,8 @@ func TestSubmitCommand_WorkTypeNameFlagMapsToSubmitConfig(t *testing.T) {
 	}
 	if got.Port != 7437 {
 		t.Fatalf("port = %d, want 7437", got.Port)
+	}
+	if got.SessionID != "session-beta" {
+		t.Fatalf("session id = %q, want session-beta", got.SessionID)
 	}
 }

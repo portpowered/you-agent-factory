@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
 // SubmitConfig holds parameters for the submit command.
@@ -19,6 +20,7 @@ type SubmitConfig struct {
 	WorkTypeName string
 	Payload      string
 	Port         int
+	SessionID    string
 }
 
 // Submit posts work to a running factory via HTTP.
@@ -68,7 +70,7 @@ func Submit(cfg SubmitConfig) error {
 	}
 
 	// POST to running factory.
-	url := fmt.Sprintf("http://localhost:%d/work", cfg.Port)
+	url := fmt.Sprintf("http://localhost:%d%s", cfg.Port, sessionpath.ScopedPath("/work", cfg.SessionID))
 	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("factory not reachable at %s: %w", url, err)
