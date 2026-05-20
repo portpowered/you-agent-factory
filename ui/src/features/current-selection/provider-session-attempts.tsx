@@ -32,36 +32,16 @@ import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
 } from "./provider-session-details";
+import { getWorkstationDetailMessages } from "./messages";
 
-const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = {
-  currentDispatchLabel: "Current dispatch",
-  openNamedWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
-  openRequestDetailsAction: "Open request details",
-  providerSessionLogAction: "Codex session log",
-  providerSessionLogUnavailable: "Session log unavailable",
-  providerSessionSelectedAction: "Session selected",
-  providerSessionSelectAction: "Inspect session details",
-  providerSessionSelectionUnavailable: "Session details unavailable",
-  requestDetailsUnavailable: (dispatchId: string) =>
-    `Request details unavailable for dispatch ${dispatchId}.`,
-  requestSelectedAction: "Request selected",
-  selectProviderSessionLabel: (sessionLabel: string, dispatchId: string) =>
-    `Select provider session ${sessionLabel} for dispatch ${dispatchId}`,
-  selectWorkItemLabel: (workItemLabel: string) =>
-    `Select work item ${workItemLabel}`,
-  selectWorkstationRequestLabel: (dispatchId: string) =>
-    `Select workstation request ${dispatchId}`,
-  workDetailsUnavailable: (dispatchId: string) =>
-    `Work details unavailable for dispatch ${dispatchId}.`,
-  workSelectedAction: "Work selected",
-} satisfies NonNullable<ProviderSessionAttemptsProps["messages"]>;
+const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = getWorkstationDetailMessages(undefined);
 
 export function CollapsibleProviderSessionAttempts({
   attempts,
-  collapseActionLabel = "Collapse",
+  collapseActionLabel,
   currentDispatchID,
   emptyMessage,
-  expandActionLabel = "Expand",
+  expandActionLabel,
   historyItemCountLabel,
   messages = DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES,
   onSelectProviderSession,
@@ -72,7 +52,7 @@ export function CollapsibleProviderSessionAttempts({
   selectedProviderSessionKey,
   selectedRequestDispatchID,
   selectedWorkID,
-  title = "Run history",
+  title,
   workstationKind,
   workstationRequestsByDispatchID,
 }: CollapsibleProviderSessionAttemptsProps) {
@@ -80,7 +60,11 @@ export function CollapsibleProviderSessionAttempts({
   const historyID = `workstation-run-history-${resetKey}`;
   const itemCountLabel = historyItemCountLabel
     ? historyItemCountLabel(attempts.length)
-    : `${attempts.length} ${attempts.length === 1 ? "run" : "runs"}`;
+    : messages.historyRunCountLabel(attempts.length);
+  const resolvedCollapseActionLabel =
+    collapseActionLabel ?? messages.collapseAction;
+  const resolvedExpandActionLabel = expandActionLabel ?? messages.expandAction;
+  const resolvedTitle = title ?? messages.runHistoryHeading;
 
   useEffect(() => {
     setExpanded(false);
@@ -91,7 +75,7 @@ export function CollapsibleProviderSessionAttempts({
       <div className={HISTORY_HEADER_CLASS}>
         <div className="grid min-w-0 gap-1">
           <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={`${historyID}-heading`}>
-            {title}
+            {resolvedTitle}
           </h4>
           <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
             {itemCountLabel}
@@ -104,7 +88,7 @@ export function CollapsibleProviderSessionAttempts({
           onClick={() => setExpanded((current) => !current)}
           type="button"
         >
-          {expanded ? collapseActionLabel : expandActionLabel}
+          {expanded ? resolvedCollapseActionLabel : resolvedExpandActionLabel}
         </button>
       </div>
       {expanded ? (
@@ -142,13 +126,15 @@ export function ProviderSessionAttempts({
   selectedProviderSessionKey,
   selectedRequestDispatchID,
   selectedWorkID,
-  title = "Workstation dispatches",
+  title,
   workstationKind,
   workstationRequestsByDispatchID,
 }: ProviderSessionAttemptsProps) {
+  const resolvedTitle = title ?? messages.requestHistoryHeading;
+
   return (
     <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{title}</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{resolvedTitle}</h4>
       <ProviderSessionAttemptList
         attempts={attempts}
         currentDispatchID={currentDispatchID}

@@ -4,9 +4,11 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
+import { getWorkstationDetailMessages } from "./messages";
 import type {
   SelectedWorkDispatchHistorySectionProps,
 } from "./detail-card-types";
+import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
 import { ProviderSessionAttempts } from "./provider-session-attempts";
 import { DispatchHistoryCard } from "./selected-work-dispatch-history-card";
 
@@ -14,6 +16,7 @@ export function SelectedWorkDispatchHistorySection({
   activeTraceID,
   currentDispatchID,
   fallbackProviderSessions,
+  locale,
   onSelectProviderSession,
   onSelectTraceID,
   onSelectWorkID,
@@ -23,18 +26,22 @@ export function SelectedWorkDispatchHistorySection({
   traceTargetId,
   workstationKind,
 }: SelectedWorkDispatchHistorySectionProps) {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
+  const providerSessionMessages = getWorkstationDetailMessages(locale);
+
   if (requests.length === 0 && fallbackProviderSessions.length > 0) {
     return (
       <ProviderSessionAttempts
         attempts={fallbackProviderSessions}
         currentDispatchID={currentDispatchID}
-        emptyMessage="No workstation dispatch has been recorded yet for this work item."
+        emptyMessage={messages.dispatchHistoryEmpty}
+        messages={providerSessionMessages}
         onSelectProviderSession={onSelectProviderSession}
         onSelectWorkID={onSelectWorkID}
         renderHeading={(attempt) => attempt.workstation_name || attempt.transition_id}
         selectedProviderSessionKey={selectedProviderSessionKey}
         selectedWorkID={selectedWorkID}
-        title="Workstation dispatches"
+        title={messages.dispatchHistoryHeading}
         workstationKind={workstationKind}
       />
     );
@@ -50,10 +57,10 @@ export function SelectedWorkDispatchHistorySection({
           className={DASHBOARD_SECTION_HEADING_CLASS}
           id="selected-work-dispatch-history-heading"
         >
-          Workstation dispatches
+          {messages.dispatchHistoryHeading}
         </h4>
         <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-          {requests.length} {requests.length === 1 ? "dispatch" : "dispatches"}
+          {messages.dispatchHistoryCountLabel(requests.length)}
         </p>
       </div>
       {requests.length > 0 ? (
@@ -74,9 +81,7 @@ export function SelectedWorkDispatchHistorySection({
           ))}
         </div>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>
-          No workstation dispatch has been recorded yet for this work item.
-        </p>
+        <p className={DETAIL_COPY_CLASS}>{messages.dispatchHistoryEmpty}</p>
       )}
     </section>
   );
