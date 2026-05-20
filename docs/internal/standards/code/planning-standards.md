@@ -12,6 +12,8 @@ This document defines the baseline standards for planning work into PRDs, accept
 
 Every contributor or agent who creates or updates a PRD, `prd.json`, or work-story breakdown **MUST** review this standard before planning.
 
+For cross-surface feature work, also use `docs/internal/processes/new-plan-surface-checklist.md` so plans explicitly consider backend runtime, API, event stream, CLI, website, config, observability, tests, documentation, and compatibility surfaces.
+
 ## Quick Rules
 
 - Plan around observable behavior, not around source files, layers, or refactor impulses.
