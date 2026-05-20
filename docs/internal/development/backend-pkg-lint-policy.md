@@ -41,4 +41,15 @@ Those files contain runtime bootstrap and hot-swap orchestration helpers that de
 
 Phase 1 does not block on stylistic or code-shape rules such as naming preferences, comment-style requirements, function length, file length, or complexity thresholds.
 
-Future stories can widen the correctness analyzer set and later document the maintainability roadmap after the repo-owned command and config path are in place.
+This boundary is intentional. The first blocking rollout should catch likely bugs without forcing repository-wide cleanup of legacy code shape before ordinary backend work can merge. Backend standards still prefer smaller modules and simpler code, but phase 1 defers those maintainability gates until the repo has evidence about analyzer noise, false positives, and reviewer value.
+
+## Deferred Maintainability Candidates
+
+The following analyzers are intentionally deferred to later phases instead of blocking phase-1 CI:
+
+- Selective `gocritic`: useful for maintainability and readability cleanups, but broad defaults can produce high review churn until the team narrows which checks are valuable in this codebase.
+- Selective `revive`: useful for documentation and readability policy, but many rules are style-oriented or require repository-specific tuning before they should block backend delivery.
+- `funlen`: useful for highlighting oversized functions, but promoting it too early would force broad shape cleanup across historical code rather than catching correctness defects first.
+- `gocyclo` or `gocognit`: useful for flagging complex control flow, but they need evidence-backed thresholds and a clear exception policy before they become blocking signals.
+
+Later phases can widen beyond `pkg/` to `cmd/`, `internal/`, and relevant backend tests after the phase-1 correctness lane proves stable and the exception policy is understood.
