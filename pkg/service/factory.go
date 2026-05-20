@@ -88,8 +88,9 @@ type liveRuntimeHandle struct {
 }
 
 type serviceRunState struct {
-	ctx     context.Context
-	runtime *liveRuntimeHandle
+	ctx       context.Context
+	sessionID string
+	runtime   *liveRuntimeHandle
 }
 
 // FactoryService is an instantiation of a factory along with its runtime
@@ -100,6 +101,7 @@ type FactoryService struct {
 	activationMu   sync.RWMutex
 	runMu          sync.RWMutex
 	runState       *serviceRunState
+	sessions       *liveRuntimeSessionManager
 	factoryRootDir string
 	factory        factory.Factory
 	listener       *listeners.FileWatcher
@@ -368,6 +370,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	serviceBuilt = true
 	return &FactoryService{
 		factoryRootDir: factoryRootDir,
+		sessions:       newLiveRuntimeSessionManager(),
 		eventHistory:   eventHistory,
 		factory:        f,
 		listener:       listener,
@@ -600,15 +603,18 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	}
 
 	currentRuntime = fs.startLiveRuntime(runCtx, fs.currentRuntimeBundle())
-	fs.setRunState(runCtx, currentRuntime)
+	fs.registerLiveSession(defaultFactorySessionID, currentRuntime, true)
+	fs.setRunState(runCtx, defaultFactorySessionID, currentRuntime)
 	if err := fs.waitForLiveRuntimeStart(ctx, currentRuntime); err != nil {
 		fs.clearRunState()
+		fs.unregisterLiveSession(defaultFactorySessionID)
 		_ = fs.stopLiveRuntime(currentRuntime)
 		return fmt.Errorf("start runtime: %w", err)
 	}
 	if serviceMode {
 		if err := fs.startLiveRuntimeSidecars(runCtx, currentRuntime); err != nil {
 			fs.clearRunState()
+			fs.unregisterLiveSession(defaultFactorySessionID)
 			_ = fs.stopLiveRuntime(currentRuntime)
 			return err
 		}
@@ -716,8 +722,8 @@ func (fs *FactoryService) activateReplacementRuntime(
 
 	fs.publishFactoryChangeEvent(ctx, runState.runtime, replacement)
 	restoreCurrentSidecars = false
-	fs.swapActiveRuntime(replacement)
-	fs.setRunState(runState.ctx, replacementHandle)
+	fs.registerLiveSession(runState.sessionID, replacementHandle, true)
+	fs.setRunState(runState.ctx, runState.sessionID, replacementHandle)
 	if err := fs.stopLiveRuntime(runState.runtime); err != nil && err != context.Canceled {
 		fs.logger.Warn("prior runtime shutdown failed", zap.Error(err))
 	}
@@ -763,6 +769,9 @@ func snapshotHasActiveWork(snapshot *interfaces.EngineStateSnapshot[petri.Markin
 func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
 	if fs == nil {
 		return nil
+	}
+	if currentSession := fs.currentSession(); currentSession != nil && currentSession.handle != nil {
+		return currentSession.handle.runtime
 	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
@@ -1023,21 +1032,22 @@ func (fs *FactoryService) currentLiveRuntime() *liveRuntimeHandle {
 	return fs.runState.runtime
 }
 
-func (fs *FactoryService) setRunState(ctx context.Context, runtime *liveRuntimeHandle) {
+func (fs *FactoryService) setRunState(ctx context.Context, sessionID string, runtime *liveRuntimeHandle) {
 	fs.runMu.Lock()
 	defer fs.runMu.Unlock()
-	if ctx == nil || runtime == nil {
+	if ctx == nil || runtime == nil || sessionID == "" {
 		fs.runState = nil
 		return
 	}
 	fs.runState = &serviceRunState{
-		ctx:     ctx,
-		runtime: runtime,
+		ctx:       ctx,
+		sessionID: sessionID,
+		runtime:   runtime,
 	}
 }
 
 func (fs *FactoryService) clearRunState() {
-	fs.setRunState(nil, nil)
+	fs.setRunState(nil, "", nil)
 }
 
 func (h *liveRuntimeHandle) completed() bool {
@@ -1774,6 +1784,9 @@ func (fs *FactoryService) currentFactory() factory.Factory {
 	if fs == nil {
 		return nil
 	}
+	if currentSession := fs.currentSession(); currentSession != nil && currentSession.handle != nil && currentSession.handle.runtime != nil {
+		return currentSession.handle.runtime.factory
+	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
 	return fs.factory
@@ -1782,6 +1795,9 @@ func (fs *FactoryService) currentFactory() factory.Factory {
 func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
 	if fs == nil {
 		return nil
+	}
+	if currentSession := fs.currentSession(); currentSession != nil && currentSession.handle != nil && currentSession.handle.runtime != nil {
+		return currentSession.handle.runtime.runtimeCfg
 	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
