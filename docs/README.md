@@ -40,7 +40,7 @@ These are the fixed topic names accepted by `infinite-you docs <topic>`.
 - [Resources reference](reference/resources.md) explains top-level resource pools and workstation or worker resource requirements.
 - [Batch inputs](reference/batch-inputs.md) explains `FACTORY_REQUEST_BATCH`, watched-file placement, and authored relation types.
 - [Templates reference](reference/templates.md) explains supported Go-template surfaces and the JSON-versus-Markdown quoting rule.
-- [Author workflows](reference/authoring-workflows.md) explains how to configure and run factory workflows.
+- [Author factories](reference/authoring-factories.md) explains how to configure and run factories end to end.
 - [Author AGENTS.md](reference/authoring-agents-md.md) explains split `AGENTS.md` file shape, prompt placement, and authoring patterns.
 - [Batch inputs](reference/batch-inputs.md) explains `FACTORY_REQUEST_BATCH` files, fields, and dependency relations.
 - [The Zen of flow](reference/the-zen-of-flow.md) explains the project’s workflow philosophy.

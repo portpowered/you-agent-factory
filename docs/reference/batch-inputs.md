@@ -274,7 +274,7 @@ Before dropping a batch file into `factory/inputs/...`, confirm:
 ## Related
 
 - [Work](../reference/work.md)
-- [Author workflows](../reference/authoring-workflows.md)
+- [Author factories](../reference/authoring-factories.md)
 - [Parent-aware fan-in](../internal/development/parent-aware-fan-in.md)
 - [Workstations](../reference/workstations.md)
 - [Prompt variables](../reference/prompt-variables.md)

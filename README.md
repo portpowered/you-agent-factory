@@ -91,7 +91,7 @@ flowchart LR
 
 ## Customization 
 
-See [authoring-workflows](./docs/reference/authoring-workflows.md) for the full configuration guide.
+See [authoring-factories](./docs/reference/authoring-factories.md) for the full configuration guide.
 Infinite you lets you customize your flow however you want. 
 
 The overall system of how __infinite you__ works is relatively simple. 

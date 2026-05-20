@@ -1,10 +1,10 @@
 ---
 author: Agent Factory Team
 last-modified: 2026-04-21
-doc-id: agent-factory/authoring-workflows
+doc-id: agent-factory/authoring-factories
 ---
 
-# Authoring Workflows
+# Authoring Factories
 
 Use this guide to create and run a current Agent Factory workflow with the
 public `factory.json` contract. Keep topology in `factory.json`, worker runtime

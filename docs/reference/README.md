@@ -41,7 +41,7 @@ Use these canonical concept owners when you need the current contract.
   shape, watched-file placement, and supported relation types.
 - [Templates](templates.md) explains the supported Go-template surfaces and the
   JSON-versus-Markdown quoting rules.
-- [Author workflows](authoring-workflows.md) keeps workflow sequencing,
+- [Author factories](authoring-factories.md) keeps factory sequencing,
   examples, and run commands.
 - [Author AGENTS.md](authoring-agents-md.md) keeps split-file shape, prompt
   placement, and prompt-authoring examples.

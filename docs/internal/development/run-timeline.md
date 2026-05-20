@@ -254,5 +254,5 @@ Start investigation with `expected_event_id` in the recorded artifact, then comp
 ## Next Steps
 
 - [Agent Factory record and replay](record-replay.md)
-- [Author workflows](../reference/authoring-workflows.md)
+- [Author factories](../reference/authoring-factories.md)
 - [Run the live dashboard](development/live-dashboard.md)

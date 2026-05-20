@@ -105,7 +105,7 @@ through arbitrary project files outside the documented allowlist.
 
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Author workflows](authoring-workflows.md)
+- [Author factories](authoring-factories.md)
 - [Factory JSON and work configuration](work.md)
 - [Workstations](workstations.md)
 - [Workers](workers.md)

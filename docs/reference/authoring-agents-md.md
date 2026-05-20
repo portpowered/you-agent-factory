@@ -290,6 +290,6 @@ For complete current examples that include workers and workstations, see:
 
 - [Workers](workers.md) - worker field contract and backend settings
 - [Workstations](workstations.md) - workstation runtime fields, routing, and logical moves
-- [Authoring Workflows](./authoring-workflows.md) - workflow sequencing and mock-worker checks
+- [Authoring Factories](./authoring-factories.md) - factory sequencing and mock-worker checks
 - [Prompt Variables Reference](./prompt-variables.md) - complete variable listing with examples
 - [Architecture](../internal/development/architecture.md) - engine design and subsystem details

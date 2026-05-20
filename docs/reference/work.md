@@ -27,7 +27,7 @@ in [Workers](workers.md), and submitted request payload details in
 | Define `factory.json`, work types, states, top-level resources, routing, or portability fields | This guide |
 | Place batch request files under `inputs/`, define `FACTORY_REQUEST_BATCH`, or choose `DEPENDS_ON` versus `PARENT_CHILD` | [Batch Inputs](batch-inputs.md) |
 | Tune bounded concurrency pools and workstation resource requirements | [Resources](resources.md) |
-| Walk through a full setup sequence with example files and commands | [Author Workflows](authoring-workflows.md) |
+| Walk through a full setup sequence with example files and commands | [Author Factories](authoring-factories.md) |
 
 ## Minimal Factory
 

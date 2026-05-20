@@ -48,7 +48,7 @@ runtime fields from the shipped Agent Factory worker surface.
 - `libraries/agent-factory/pkg/cli/init/init.go`
 - `libraries/agent-factory/pkg/api/*contract*test.go`
 - `libraries/agent-factory/ui/src/api/generated/openapi.ts`
-- `libraries/agent-factory/docs/{authoring-agents-md,authoring-workflows,work,workstations}.md`
+- `libraries/agent-factory/docs/{authoring-agents-md,authoring-factories,work,workstations}.md`
 - `libraries/agent-factory/factory/workers/*/AGENTS.md`
 
 ## Verification

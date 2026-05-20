@@ -18,7 +18,7 @@ func TestFactoryConfigDocsAndExamples_UseCanonicalPublicContractFields(t *testin
 	targetFiles := append([]string{
 		filepath.Join(repoRoot, "README.md"),
 		filepath.Join(repoRoot, "docs", "reference", "authoring-agents-md.md"),
-		filepath.Join(repoRoot, "docs", "reference", "authoring-workflows.md"),
+		filepath.Join(repoRoot, "docs", "reference", "authoring-factories.md"),
 		filepath.Join(repoRoot, "docs", "reference", "work.md"),
 		filepath.Join(repoRoot, "docs", "reference", "workstations.md"),
 		filepath.Join(repoRoot, "docs", "reference", "workers.md"),
@@ -112,7 +112,7 @@ func TestFactoryConfigDocsAndExamples_UseExecutionLimitsForWorkstationTimeouts(t
 	repoRoot := mustRepoRoot(t)
 	targetFiles := []string{
 		filepath.Join(repoRoot, "docs", "reference", "authoring-agents-md.md"),
-		filepath.Join(repoRoot, "docs", "reference", "authoring-workflows.md"),
+		filepath.Join(repoRoot, "docs", "reference", "authoring-factories.md"),
 		filepath.Join(repoRoot, "docs", "reference", "workstations.md"),
 		filepath.Join(repoRoot, "docs", "internal", "development", "workstation-guards-and-guarded-loop-breakers.md"),
 	}
@@ -149,7 +149,7 @@ func TestFactoryConfigDocsAndExamples_UseAlignedRuntimeResourceContract(t *testi
 	repoRoot := mustRepoRoot(t)
 	targetFiles := append([]string{
 		filepath.Join(repoRoot, "docs", "reference", "authoring-agents-md.md"),
-		filepath.Join(repoRoot, "docs", "reference", "authoring-workflows.md"),
+		filepath.Join(repoRoot, "docs", "reference", "authoring-factories.md"),
 		filepath.Join(repoRoot, "docs", "reference", "work.md"),
 		filepath.Join(repoRoot, "docs", "reference", "workstations.md"),
 		filepath.Join(repoRoot, "docs", "reference", "workers.md"),
