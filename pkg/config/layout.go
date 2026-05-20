@@ -132,28 +132,12 @@ func InlineRuntimeDefinitions(factoryDir string, cfg *interfaces.FactoryConfig, 
 		return nil, fmt.Errorf("clone factory config: %w", err)
 	}
 
-	for i := range inlined.Workers {
-		def, err := runtimeWorkerDefinition(factoryDir, inlined.Workers[i], opts.RequireSplitDefinitions)
-		if err != nil {
-			return nil, fmt.Errorf("load worker %q config: %w", inlined.Workers[i].Name, err)
-		}
-		if def == nil {
-			continue
-		}
-		applyWorkerRuntimeDefinition(&inlined.Workers[i], def)
+	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(factoryDir, cfg, opts)
+	if err != nil {
+		return nil, err
 	}
-
-	for i := range inlined.Workstations {
-		def, err := runtimeWorkstationDefinition(factoryDir, inlined.Workstations[i], opts.RequireSplitDefinitions, opts.WorkstationLoader)
-		if err != nil {
-			return nil, fmt.Errorf("load workstation %q config: %w", inlined.Workstations[i].Name, err)
-		}
-		if def == nil {
-			continue
-		}
-		if err := applyWorkstationRuntimeDefinition(&inlined.Workstations[i], def); err != nil {
-			return nil, fmt.Errorf("normalize workstation %q config: %w", inlined.Workstations[i].Name, err)
-		}
+	if err := applyRuntimeDefinitionsToClonedFactoryConfig(inlined, runtimeDefs); err != nil {
+		return nil, err
 	}
 	return inlined, nil
 }
