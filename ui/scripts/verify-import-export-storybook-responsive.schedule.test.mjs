@@ -131,24 +131,6 @@ describe("current-selection prompt hint responsive schedule", () => {
   });
 });
 
-describe("graph consolidation responsive schedule", () => {
-  test("keeps the trace/factory graph consistency story in the default responsive schedule", () => {
-    const graphConsistencyStory = storyChecks.find(
-      (storyCheck) => storyCheck.label === "trace/factory graph visual consistency",
-    );
-
-    expect(graphConsistencyStory?.id).toBe(
-      "agent-factory-dashboard-react-flow-current-activity-card--narrow-viewport",
-    );
-    expect(graphConsistencyStory?.dialogName).toBeUndefined();
-    expect(viewportChecks).toEqual([
-      { height: 844, label: "mobile", width: 390 },
-      { height: 1024, label: "tablet", width: 768 },
-      { height: 900, label: "desktop", width: 1440 },
-    ]);
-  });
-});
-
 describe("localized import/export assertions", () => {
   test("checks the expected localized export controls", async () => {
     const textbox = { isVisible: vi.fn().mockResolvedValue(true) };

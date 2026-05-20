@@ -79,6 +79,15 @@ describe("graph-storybook-responsive", () => {
         if (role === "region" && options?.name === "Work graph viewport") {
           return factoryViewport;
         }
+        if (
+          role === "region" &&
+          options?.name === "Dispatch relationship graph"
+        ) {
+          return dispatchViewport;
+        }
+        if (role === "region" && options?.name === "Batch relation graph") {
+          return relationViewport;
+        }
 
         throw new Error(`Unexpected getByRole call: ${role} ${options?.name}`);
       }),
@@ -86,11 +95,6 @@ describe("graph-storybook-responsive", () => {
         waitFor: vi.fn().mockResolvedValue(undefined),
       }),
       goto: vi.fn().mockResolvedValue(undefined),
-      locator: vi.fn((selector) =>
-        selector === "[data-trace-workstation-path]"
-          ? dispatchViewport
-          : relationViewport,
-      ),
     };
 
     await verifyTraceFactoryGraphVisualConsistency({
@@ -104,6 +108,15 @@ describe("graph-storybook-responsive", () => {
     expect(page.getByRole).toHaveBeenCalledWith("region", {
       name: "Work graph viewport",
     });
+    expect(page.getByRole).toHaveBeenCalledWith("region", {
+      name: "Dispatch relationship graph",
+    });
+    expect(page.getByRole).toHaveBeenCalledWith("region", {
+      name: "Batch relation graph",
+    });
+    expect(page.getByText).toHaveBeenCalledWith("Observe mode");
+    expect(page.getByText).toHaveBeenCalledWith("Reviewed Story");
+    expect(page.getByText).toHaveBeenCalledWith("Repair story");
     expect(page.goto).toHaveBeenCalledWith(
       "http://127.0.0.1:6008/iframe.html?id=agent-factory-dashboard-trace-graph-surfaces--visual-consistency&viewMode=story",
       { waitUntil: "domcontentloaded" },

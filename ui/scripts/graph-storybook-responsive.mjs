@@ -91,11 +91,23 @@ export async function verifyTraceFactoryGraphVisualConsistency({
   );
   await waitForStoryRender(page);
 
-  const dispatchViewport = page.locator("[data-trace-workstation-path]");
-  const relationViewport = page.locator("[data-trace-relation-flow]");
+  const dispatchViewport = page.getByRole("region", {
+    name: "Dispatch relationship graph",
+  });
+  const relationViewport = page.getByRole("region", {
+    name: "Batch relation graph",
+  });
 
   await expectVisible(dispatchViewport, "Trace dispatch graph region");
   await expectVisible(relationViewport, "Trace relation graph region");
+  await expectVisible(
+    page.getByText("Reviewed Story"),
+    "Trace dispatch story content",
+  );
+  await expectVisible(
+    page.getByText("Repair story"),
+    "Trace relation story content",
+  );
 
   const dispatchControlsStyle = await readDashboardGraphControlsStyle(
     dispatchViewport,
