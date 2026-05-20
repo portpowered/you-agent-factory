@@ -10,9 +10,15 @@ import {
 } from "../current-factory-definition/workstation-editable-values";
 import type {
   EditableWorkstationConfigurationState,
+  EditableWorkstationPromptHelpState,
+  EditableWorkstationPromptValidationState,
   EditableWorkstationValidationErrors,
   EditableWorkstationWorkerOptionsState,
 } from "./detail-card-types";
+import {
+  resolvePromptHelpState,
+  resolvePromptValidationState,
+} from "./editable-workstation-prompt-state";
 import { resolveEditableWorkstationOverwriteFields } from "./editable-workstation-overwrite-fields";
 import {
   getWorkstationDetailMessages,
@@ -20,6 +26,7 @@ import {
 } from "./messages";
 import type { DashboardSelection } from "./types";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
+import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;
@@ -33,13 +40,13 @@ export function useEditableWorkstationConfigurationState(
   selectedNode: DashboardWorkstationNode | null,
   locale?: string | null,
 ): EditableWorkstationConfigurationState | undefined {
+  const isNodeSelection = selection?.kind === "node" && selectedNode != null;
   const messages = getWorkstationDetailMessages(locale);
-  const editableDefinition = useCurrentEditableFactoryDefinition(
-    selection?.kind === "node" && selectedNode != null,
-  );
+  const editableDefinition =
+    useCurrentEditableFactoryDefinition(isNodeSelection);
   const promptTemplateContract = useCurrentWorkstationPromptTemplateContract(
     selectedNode?.workstation_name,
-    selection?.kind === "node" && selectedNode != null,
+    isNodeSelection,
   );
   const { selectedEditableValues, sessionState, setSessionState } =
     useEditableWorkstationSession(
@@ -47,8 +54,13 @@ export function useEditableWorkstationConfigurationState(
       selectedNode,
       selection,
     );
+  const promptValidation = useCurrentWorkstationPromptTemplateValidation(
+    selectedNode?.workstation_name,
+    sessionState?.draft.prompt,
+    isNodeSelection,
+  );
 
-  if (selection?.kind !== "node" || !selectedNode) {
+  if (!isNodeSelection) {
     return undefined;
   }
 
@@ -74,82 +86,30 @@ export function useEditableWorkstationConfigurationState(
     promptTemplateContract,
     messages,
   );
+  const promptValidationState = resolvePromptValidationState(
+    promptValidation,
+    sessionState.draft.prompt,
+    messages,
+  );
 
   const resolvedValidationErrors = validateEditableWorkstationDraft(
     sessionState.draft,
     selectedEditableValues,
+    promptValidationState,
     messages,
   );
-  const pendingFactoryDefinition = hasEditableWorkstationValidationErrors(
-    resolvedValidationErrors,
-  )
-    ? null
-    : applyEditableWorkstationDraft(
-        editableDefinition.data,
-        selectedNode,
-        sessionState.draft,
-      );
 
-  return {
-    draft: sessionState.draft,
-    hasValidationErrors: hasEditableWorkstationValidationErrors(
-      resolvedValidationErrors,
-    ),
-    initialValues: selectedEditableValues,
-    isDirty: !areEditableDraftsEqual(
-      sessionState.draft,
-      sessionState.sessionStartDraft,
-    ),
-    markChangesSaved: () => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              sessionStartDraft: currentState.draft,
-            }
-          : currentState,
-      );
-    },
-    onPromptChange: (value) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                prompt: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    onWorkerChange: (value) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                workerName: value,
-              },
-            }
-          : currentState,
-      );
-    },
-    overwriteFieldNames: resolveEditableWorkstationOverwriteFields(
-      sessionState.draft,
-      sessionState.latestDefinitionDraft,
-    ),
-    pendingFactoryDefinition,
+  return buildReadyEditableWorkstationConfigurationState({
+    editableDefinition: editableDefinition.data,
+    messages,
     promptHelpState,
-    status: "ready",
-    validationErrors: resolvedValidationErrors,
-    workerOptionsState: resolveWorkerOptionsState(
-      sessionState.draft,
-      selectedEditableValues,
-      messages,
-    ),
-  };
+    promptValidationState,
+    resolvedValidationErrors,
+    selectedEditableValues,
+    selectedNode,
+    sessionState,
+    setSessionState,
+  });
 }
 
 function useEditableWorkstationSession(
@@ -193,9 +153,15 @@ function useEditableWorkstationSession(
 export function validateEditableWorkstationDraft(
   draft: EditableWorkstationDraft,
   selectedEditableValues?: ReturnType<typeof resolveEditableWorkstationValues>,
+  promptValidationState: EditableWorkstationPromptValidationState = {
+    status: "idle",
+  },
   messages: Pick<
     WorkstationDetailMessages,
     | "editableConfigurationPromptRequired"
+    | "editableConfigurationPromptValidationLoading"
+    | "editableConfigurationPromptValidationErrorPrefix"
+    | "editableConfigurationPromptDiagnosticsSummary"
     | "editableConfigurationWorkerRequired"
     | "editableConfigurationWorkerUnavailable"
   > = getWorkstationDetailMessages(undefined),
@@ -214,6 +180,17 @@ export function validateEditableWorkstationDraft(
 
   if (draft.prompt.trim().length === 0) {
     validationErrors.prompt = messages.editableConfigurationPromptRequired;
+  } else if (promptValidationState.status === "loading") {
+    validationErrors.prompt =
+      messages.editableConfigurationPromptValidationLoading;
+  } else if (promptValidationState.status === "error") {
+    validationErrors.prompt = `${messages.editableConfigurationPromptValidationErrorPrefix} ${promptValidationState.errorMessage}`;
+  } else if (
+    promptValidationState.status === "ready" &&
+    promptValidationState.diagnostics.length > 0
+  ) {
+    validationErrors.prompt =
+      messages.editableConfigurationPromptDiagnosticsSummary;
   }
 
   return validationErrors;
@@ -269,49 +246,109 @@ function resolveWorkerOptionsState(
   };
 }
 
-function resolvePromptHelpState(
-  promptTemplateContract: ReturnType<
-    typeof useCurrentWorkstationPromptTemplateContract
-  >,
-  messages: Pick<
-    WorkstationDetailMessages,
-    | "editableConfigurationPromptHelpEmpty"
-    | "editableConfigurationPromptHelpFallbackError"
-  >,
-) {
-  if (promptTemplateContract.isPending) {
-    return { status: "loading" as const };
-  }
-
-  if (promptTemplateContract.isError) {
-    return {
-      errorMessage:
-        promptTemplateContract.error.message ||
-        messages.editableConfigurationPromptHelpFallbackError,
-      status: "error" as const,
-    };
-  }
-
-  if (!promptTemplateContract.data) {
-    return {
-      message: messages.editableConfigurationPromptHelpEmpty,
-      status: "empty" as const,
-    };
-  }
-
-  if (
-    promptTemplateContract.data.availableVariables.length === 0 &&
-    promptTemplateContract.data.unavailableAccessPatterns.length === 0
-  ) {
-    return {
-      message: messages.editableConfigurationPromptHelpEmpty,
-      status: "empty" as const,
-    };
-  }
+function buildReadyEditableWorkstationConfigurationState({
+  editableDefinition,
+  messages,
+  promptHelpState,
+  promptValidationState,
+  resolvedValidationErrors,
+  selectedEditableValues,
+  selectedNode,
+  sessionState,
+  setSessionState,
+}: {
+  editableDefinition: NonNullable<
+    ReturnType<typeof useCurrentEditableFactoryDefinition>["data"]
+  >;
+  messages: WorkstationDetailMessages;
+  promptHelpState: EditableWorkstationPromptHelpState;
+  promptValidationState: EditableWorkstationPromptValidationState;
+  resolvedValidationErrors: EditableWorkstationValidationErrors;
+  selectedEditableValues: NonNullable<
+    ReturnType<typeof resolveEditableWorkstationValues>
+  >;
+  selectedNode: DashboardWorkstationNode;
+  sessionState: EditableWorkstationSessionState;
+  setSessionState: (
+    updater: (
+      currentState: EditableWorkstationSessionState | null,
+    ) => EditableWorkstationSessionState | null,
+  ) => void;
+}) {
+  const pendingFactoryDefinition = hasEditableWorkstationValidationErrors(
+    resolvedValidationErrors,
+  )
+    ? null
+    : applyEditableWorkstationDraft(
+        editableDefinition,
+        selectedNode,
+        sessionState.draft,
+      );
 
   return {
-    contract: promptTemplateContract.data,
+    draft: sessionState.draft,
+    hasValidationErrors: hasEditableWorkstationValidationErrors(
+      resolvedValidationErrors,
+    ),
+    initialValues: selectedEditableValues,
+    isDirty: !areEditableDraftsEqual(
+      sessionState.draft,
+      sessionState.sessionStartDraft,
+    ),
+    markChangesSaved: () => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              sessionStartDraft: currentState.draft,
+            }
+          : currentState,
+      );
+    },
+    onPromptChange: (value: string) => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              draft: {
+                ...currentState.draft,
+                prompt: value,
+              },
+            }
+          : currentState,
+      );
+    },
+    onWorkerChange: (value: string) => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              draft: {
+                ...currentState.draft,
+                workerName: value,
+              },
+            }
+          : currentState,
+      );
+    },
+    overwriteFieldNames: resolveEditableWorkstationOverwriteFields(
+      sessionState.draft,
+      sessionState.latestDefinitionDraft,
+    ),
+    pendingFactoryDefinition,
+    promptDiagnostics:
+      promptValidationState.status === "ready"
+        ? promptValidationState.diagnostics
+        : [],
+    promptHelpState,
+    promptValidationState,
     status: "ready" as const,
+    validationErrors: resolvedValidationErrors,
+    workerOptionsState: resolveWorkerOptionsState(
+      sessionState.draft,
+      selectedEditableValues,
+      messages,
+    ),
   };
 }
 

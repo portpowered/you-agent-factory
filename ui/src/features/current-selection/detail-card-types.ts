@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
-import type { PromptTemplateContract } from "../../api/current-factory-prompt-template";
+import type {
+  PromptTemplateContract,
+  PromptTemplateValidationResult,
+} from "../../api/current-factory-prompt-template";
 import type {
   DashboardActiveExecution,
   DashboardFailedWorkDetail,
@@ -139,11 +142,30 @@ export interface EditableWorkstationValidationErrors {
   workerName?: string;
 }
 
+export interface EditableWorkstationPromptDiagnostic {
+  endOffset?: number;
+  kind: string;
+  message: string;
+  path?: string;
+  sourceText?: string;
+  startOffset?: number;
+}
+
 export type EditableWorkstationPromptHelpState =
   | { status: "loading" }
   | { errorMessage: string; status: "error" }
   | { message: string; status: "empty" }
   | { contract: PromptTemplateContract; status: "ready" };
+
+export type EditableWorkstationPromptValidationState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { errorMessage: string; status: "error" }
+  | {
+      diagnostics: EditableWorkstationPromptDiagnostic[];
+      result: PromptTemplateValidationResult;
+      status: "ready";
+    };
 
 export type EditableWorkstationOverwriteField = "prompt" | "worker";
 
@@ -169,7 +191,9 @@ export type EditableWorkstationConfigurationState =
       onWorkerChange: (value: string) => void;
       overwriteFieldNames: EditableWorkstationOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+      promptDiagnostics: EditableWorkstationPromptDiagnostic[];
       promptHelpState: EditableWorkstationPromptHelpState;
+      promptValidationState: EditableWorkstationPromptValidationState;
       status: "ready";
       validationErrors: EditableWorkstationValidationErrors;
       workerOptionsState: EditableWorkstationWorkerOptionsState;

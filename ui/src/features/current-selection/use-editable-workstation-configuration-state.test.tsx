@@ -6,6 +6,7 @@ import { useCurrentEditableFactoryDefinition } from "../current-factory-definiti
 import type { DashboardSelection } from "./types";
 import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
+import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
 vi.mock("../current-factory-definition", async () => {
   const actual = await vi.importActual("../current-factory-definition");
@@ -18,6 +19,10 @@ vi.mock("../current-factory-definition", async () => {
 
 vi.mock("./useCurrentWorkstationPromptTemplateContract", () => ({
   useCurrentWorkstationPromptTemplateContract: vi.fn(),
+}));
+
+vi.mock("./useCurrentWorkstationPromptTemplateValidation", () => ({
+  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
 }));
 
 const selectedNode =
@@ -34,6 +39,9 @@ describe("useEditableWorkstationConfigurationState", () => {
     );
     vi.mocked(useCurrentWorkstationPromptTemplateContract).mockReturnValue(
       buildPromptTemplateContractResult(),
+    );
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue(
+      buildPromptTemplateValidationResult(),
     );
   });
 
@@ -214,6 +222,69 @@ describe("useEditableWorkstationConfigurationState", () => {
       status: "ready",
     });
   });
+
+  it("surfaces authoritative prompt diagnostics and blocks saving until the draft is fixed", async () => {
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+      data: {
+        diagnostics: [
+          {
+            endOffset: 30,
+            kind: "UNAVAILABLE_VARIABLE",
+            message: "Only input 0 is available.",
+            path: ".Inputs[1]",
+            sourceText: "(index .Inputs 1)",
+            startOffset: 14,
+          },
+        ],
+        valid: false,
+      },
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onPromptChange("Use {{ (index .Inputs 1).Payload }}");
+    });
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        hasValidationErrors: true,
+        promptDiagnostics: [
+          {
+            kind: "UNAVAILABLE_VARIABLE",
+            path: ".Inputs[1]",
+          },
+        ],
+        promptValidationState: {
+          status: "ready",
+        },
+        status: "ready",
+        validationErrors: {
+          prompt:
+            "Resolve the highlighted prompt diagnostics before saving this workstation.",
+        },
+      });
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition
+        : undefined,
+    ).toBeNull();
+  });
 });
 
 function buildEditableDefinitionResult(
@@ -264,13 +335,27 @@ function buildPromptTemplateContractResult() {
       availableVariables: [
         {
           category: "ROOT",
-          description: "The current work item identifier.",
+          description: "Current work identifier.",
           example: "{{ .WorkID }}",
           path: ".WorkID",
         },
       ],
       inputCount: 1,
       unavailableAccessPatterns: [],
+    },
+    error: null,
+    isError: false,
+    isPending: false,
+    isSuccess: true,
+    status: "success",
+  } as never;
+}
+
+function buildPromptTemplateValidationResult() {
+  return {
+    data: {
+      diagnostics: [],
+      valid: true,
     },
     error: null,
     isError: false,

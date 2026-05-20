@@ -18,6 +18,14 @@ function editableConfigurationSection() {
 }
 
 function buildReadyEditableConfigurationState(overrides?: {
+  promptDiagnostics?: Array<{
+    endOffset?: number;
+    kind: string;
+    message: string;
+    path?: string;
+    sourceText?: string;
+    startOffset?: number;
+  }>;
   prompt?: string;
   promptHelpState?:
     | {
@@ -72,6 +80,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     onWorkerChange: vi.fn(),
     overwriteFieldNames: [],
     pendingFactoryDefinition: null,
+    promptDiagnostics: overrides?.promptDiagnostics ?? [],
     promptHelpState: overrides?.promptHelpState ?? {
       contract: {
         availableVariables: [
@@ -99,6 +108,24 @@ function buildReadyEditableConfigurationState(overrides?: {
       },
       status: "ready" as const,
     },
+    promptValidationState:
+      overrides?.promptDiagnostics && overrides.promptDiagnostics.length > 0
+        ? {
+            diagnostics: overrides.promptDiagnostics,
+            result: {
+              diagnostics: overrides.promptDiagnostics,
+              valid: false,
+            },
+            status: "ready" as const,
+          }
+        : {
+            result: {
+              diagnostics: [],
+              valid: true,
+            },
+            diagnostics: [],
+            status: "ready" as const,
+          },
     status: "ready" as const,
     validationErrors: overrides?.validationErrors ?? {},
     workerOptionsState: overrides?.workerOptionsState ?? {
@@ -278,6 +305,52 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(
       screen.getByText("Only input 0 is available for this workstation."),
     ).toBeTruthy();
+  });
+
+  it("renders inline prompt diagnostics with squiggle feedback for invalid variables", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt: "Use {{ (index .Inputs 1).Payload }} now.",
+          promptDiagnostics: [
+            {
+              endOffset: 33,
+              kind: "UNAVAILABLE_VARIABLE",
+              message: "Only input 0 is available.",
+              path: ".Inputs[1]",
+              sourceText: "(index .Inputs 1)",
+              startOffset: 7,
+            },
+          ],
+          validationErrors: {
+            prompt:
+              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(screen.getByText("Prompt diagnostics")).toBeTruthy();
+    expect(
+      screen.getAllByText(
+        "Resolve the highlighted prompt diagnostics before saving this workstation.",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(".Inputs[1]")).toBeTruthy();
+    expect(screen.getAllByText("(index .Inputs 1)").length).toBeGreaterThan(0);
   });
 
   it("renders loading, empty, and error prompt variable help states explicitly", () => {

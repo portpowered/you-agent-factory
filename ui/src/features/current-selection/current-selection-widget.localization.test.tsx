@@ -10,6 +10,7 @@ import { resetSelectionHistoryStore } from "./state/selectionHistoryStore";
 import type { DashboardSelection } from "./types";
 import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "./useCurrentSelection";
+import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
 vi.mock("../current-factory-definition", async () => {
   const actual = await vi.importActual("../current-factory-definition");
@@ -22,6 +23,10 @@ vi.mock("../current-factory-definition", async () => {
 
 vi.mock("./use-save-editable-workstation-configuration", () => ({
   useSaveEditableWorkstationConfiguration: vi.fn(),
+}));
+
+vi.mock("./useCurrentWorkstationPromptTemplateValidation", () => ({
+  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
 }));
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
@@ -116,6 +121,17 @@ describe("CurrentSelectionWidget localization", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+      data: {
+        diagnostics: [],
+        valid: true,
+      },
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
       data: undefined,
       isPending: true,

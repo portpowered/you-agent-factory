@@ -1,6 +1,6 @@
 import { type ReactNode, useId, useState } from "react";
 
-import { Select, Textarea } from "../../components/ui";
+import { Select } from "../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -23,6 +23,7 @@ import type {
 } from "./detail-card-types";
 import { formatEditableOverwriteFieldLabels } from "./editable-workstation-overwrite-fields";
 import type { getWorkstationDetailMessages } from "./messages";
+import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 
 export function EditableConfigurationSection({
   messages,
@@ -137,17 +138,9 @@ function EditableConfigurationReadyForm({
         errorMessage={state.validationErrors.prompt}
         fieldId="editable-workstation-prompt"
         input={
-          <Textarea
-            aria-describedby={
-              state.validationErrors.prompt
-                ? "editable-workstation-prompt-error"
-                : undefined
-            }
-            aria-invalid={state.validationErrors.prompt ? "true" : undefined}
-            className={DASHBOARD_BODY_TEXT_CLASS}
-            id="editable-workstation-prompt"
-            onChange={(event) => state.onPromptChange(event.target.value)}
-            value={state.draft.prompt}
+          <EditableConfigurationPromptInput
+            messages={messages}
+            state={state}
           />
         }
         label={messages.promptFieldLabel}
@@ -263,6 +256,7 @@ function EditableConfigurationPromptHelp({
     </div>
   );
 }
+
 
 function EditableConfigurationSaveFeedback({
   messages,

@@ -81,11 +81,20 @@ function buildReadyEditableConfigurationState(): EditableWorkstationConfiguratio
       workers: [],
       workstations: [],
     },
+    promptDiagnostics: [],
     promptHelpState: {
       contract: {
         availableVariables: [],
         inputCount: 0,
         unavailableAccessPatterns: [],
+      },
+      status: "ready",
+    },
+    promptValidationState: {
+      diagnostics: [],
+      result: {
+        diagnostics: [],
+        valid: true,
       },
       status: "ready",
     },

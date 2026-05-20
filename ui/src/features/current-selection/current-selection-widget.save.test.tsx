@@ -10,6 +10,7 @@ import { useCurrentEditableFactoryDefinition } from "../current-factory-definiti
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { resetSelectionHistoryStore } from "./state/selectionHistoryStore";
 import type { CurrentSelectionState } from "./useCurrentSelection";
+import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
 vi.mock("../current-factory-definition", async () => {
   const actual = await vi.importActual("../current-factory-definition");
@@ -29,6 +30,10 @@ vi.mock("../../api/named-factory", async () => {
   };
 });
 
+vi.mock("./useCurrentWorkstationPromptTemplateValidation", () => ({
+  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+}));
+
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
 describe("CurrentSelectionWidget workstation save flow", () => {
@@ -38,6 +43,17 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+      data: {
+        diagnostics: [],
+        valid: true,
+      },
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
   });
 
   afterEach(() => {
@@ -67,6 +83,66 @@ describe("CurrentSelectionWidget workstation save flow", () => {
         .getByRole("button", { name: "Save changes" })
         .getAttribute("disabled"),
     ).toBeNull();
+  });
+
+  it("blocks saving while prompt diagnostics remain and re-enables save after the draft is corrected", async () => {
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockImplementation(
+      (_workstationName, prompt) =>
+        ({
+          data:
+            prompt === "Use {{ .WorkID }}."
+              ? {
+                  diagnostics: [],
+                  valid: true,
+                }
+              : {
+                  diagnostics: [
+                    {
+                      endOffset: 18,
+                      kind: "UNAVAILABLE_VARIABLE",
+                      message: "Only input 0 is available.",
+                      path: ".Inputs[1]",
+                      sourceText: "(index .Inputs 1)",
+                      startOffset: 2,
+                    },
+                  ],
+                  valid: false,
+                },
+          error: null,
+          isError: false,
+          isPending: false,
+          isSuccess: true,
+          status: "success",
+        }) as never,
+    );
+
+    renderWorkstationSelection();
+    expandEditableConfiguration();
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Use {{ (index .Inputs 1).Payload }}." },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("button", { name: "Save changes" })
+          .getAttribute("disabled"),
+      ).not.toBeNull();
+    });
+    expect(screen.getByText("Prompt diagnostics")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Use {{ .WorkID }}." },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("button", { name: "Save changes" })
+          .getAttribute("disabled"),
+      ).toBeNull();
+    });
   });
 
   it("confirms before saving and refreshes the form to the saved workstation values", async () => {
