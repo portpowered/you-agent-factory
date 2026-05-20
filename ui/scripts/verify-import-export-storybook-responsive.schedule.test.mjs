@@ -83,6 +83,36 @@ describe("import/export responsive schedule", () => {
   });
 });
 
+describe("localized widget responsive schedule", () => {
+  test("keeps the localized widget stories and viewport sizes in the default schedule", () => {
+    const localizedWidgetStories = storyChecks.filter((storyCheck) =>
+      storyCheck.label.includes("widget (zh-CN)"),
+    );
+
+    expect(localizedWidgetStories.map((storyCheck) => storyCheck.id)).toEqual([
+      "agent-factory-dashboard-submit-work-card--localized-zh-cn",
+      "agent-factory-dashboard-trace-grid-bento-card--localized-zh-cn",
+      "agent-factory-dashboard-work-outcome-chart-card--localized-zh-cn",
+      "agent-factory-dashboard-react-flow-current-activity-card--localized-zh-cn",
+      "infinite-you-workflow-dashboard--locale-propagation-verification",
+    ]);
+    expect(
+      localizedWidgetStories.map((storyCheck) => storyCheck.label),
+    ).toEqual([
+      "submit work widget (zh-CN)",
+      "trace drilldown widget (zh-CN)",
+      "work outcome widget (zh-CN)",
+      "workflow activity widget (zh-CN)",
+      "current selection widget (zh-CN)",
+    ]);
+    expect(viewportChecks).toEqual([
+      { height: 844, label: "mobile", width: 390 },
+      { height: 1024, label: "tablet", width: 768 },
+      { height: 900, label: "desktop", width: 1440 },
+    ]);
+  });
+});
+
 describe("localized import/export assertions", () => {
   test("checks the expected localized export controls", async () => {
     const textbox = { isVisible: vi.fn().mockResolvedValue(true) };
