@@ -2337,6 +2337,90 @@ func TestListWork_HidesInternalTimeWorkTokens(t *testing.T) {
 	}
 }
 
+func TestListWork_HidesResourceTokens(t *testing.T) {
+	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+			"tok-story": {
+				ID:      "tok-story",
+				PlaceID: "story:init",
+				Color: interfaces.TokenColor{
+					WorkID:     "work-story",
+					WorkTypeID: "story",
+					TraceID:    "trace-story",
+				},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+			"agent-slot:resource:0": {
+				ID:        "agent-slot:resource:0",
+				PlaceID:   "agent-slot:available",
+				Color:     interfaces.TokenColor{DataType: interfaces.DataTypeResource},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+		}},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/work", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /work status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var resp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(resp.Results) != 1 || stringValue(resp.Results[0].WorkId) != "work-story" {
+		t.Fatalf("listed work = %#v, want only customer work", resp.Results)
+	}
+	if resp.PaginationContext == nil || stringValue(resp.PaginationContext.NextToken) != "" {
+		t.Fatalf("pagination context = %#v, want metadata without next token after resource filtering", resp.PaginationContext)
+	}
+}
+
+func TestListWork_ResourceOnlySnapshotReturnsEmptyResults(t *testing.T) {
+	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+			"agent-slot:resource:0": {
+				ID:        "agent-slot:resource:0",
+				PlaceID:   "agent-slot:available",
+				Color:     interfaces.TokenColor{DataType: interfaces.DataTypeResource},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+			"agent-slot:resource:1": {
+				ID:        "agent-slot:resource:1",
+				PlaceID:   "agent-slot:available",
+				Color:     interfaces.TokenColor{DataType: interfaces.DataTypeResource},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+		}},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/work", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /work status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var resp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(resp.Results) != 0 {
+		t.Fatalf("listed work = %#v, want empty results", resp.Results)
+	}
+	if resp.PaginationContext == nil || stringValue(resp.PaginationContext.NextToken) != "" {
+		t.Fatalf("pagination context = %#v, want metadata without next token for resource-only snapshot", resp.PaginationContext)
+	}
+}
+
 func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
 	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
 	srv := newTestServer(&testutil.MockFactory{
@@ -2428,6 +2512,107 @@ func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if len(secondResp.Results) != 1 || stringValue(secondResp.Results[0].WorkId) != "work-filter-4" {
+		t.Fatalf("second page listed work = %#v, want remaining public work", secondResp.Results)
+	}
+	if secondResp.PaginationContext == nil || stringValue(secondResp.PaginationContext.NextToken) != "" {
+		t.Fatalf("second page pagination context = %#v, want metadata without next token on final page", secondResp.PaginationContext)
+	}
+}
+
+func TestListWork_FiltersResourceTokensBeforePagination(t *testing.T) {
+	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+			"tok-filter-1": {
+				ID:      "tok-filter-1",
+				PlaceID: "story:init",
+				Color: interfaces.TokenColor{
+					WorkID:     "work-filter-1",
+					WorkTypeID: "story",
+					TraceID:    "trace-filter-1",
+				},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+			"agent-slot:resource:0": {
+				ID:        "agent-slot:resource:0",
+				PlaceID:   "agent-slot:available",
+				Color:     interfaces.TokenColor{DataType: interfaces.DataTypeResource},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+			"tok-filter-3": {
+				ID:      "tok-filter-3",
+				PlaceID: "story:init",
+				Color: interfaces.TokenColor{
+					WorkID:     "work-filter-3",
+					WorkTypeID: "story",
+					TraceID:    "trace-filter-3",
+				},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+			"agent-slot:resource:1": {
+				ID:        "agent-slot:resource:1",
+				PlaceID:   "agent-slot:available",
+				Color:     interfaces.TokenColor{DataType: interfaces.DataTypeResource},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+			"tok-filter-5": {
+				ID:      "tok-filter-5",
+				PlaceID: "story:init",
+				Color: interfaces.TokenColor{
+					WorkID:     "work-filter-5",
+					WorkTypeID: "story",
+					TraceID:    "trace-filter-5",
+				},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+		}},
+	})
+
+	firstReq := httptest.NewRequest(http.MethodGet, "/work?maxResults=2", nil)
+	firstRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(firstRec, firstReq)
+
+	if firstRec.Code != http.StatusOK {
+		t.Fatalf("first page status = %d, want 200: %s", firstRec.Code, firstRec.Body.String())
+	}
+
+	var firstResp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(firstRec.Body).Decode(&firstResp); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(firstResp.Results) != 2 {
+		t.Fatalf("first page results = %d, want 2", len(firstResp.Results))
+	}
+	if stringValue(firstResp.Results[0].WorkId) != "work-filter-1" || stringValue(firstResp.Results[1].WorkId) != "work-filter-3" {
+		t.Fatalf("first page listed work = %#v, want public work before pagination", firstResp.Results)
+	}
+	if firstResp.PaginationContext == nil {
+		t.Fatal("expected first page pagination context")
+	}
+
+	nextToken := stringValue(firstResp.PaginationContext.NextToken)
+	if nextToken == "" {
+		t.Fatal("expected first page nextToken")
+	}
+
+	secondReq := httptest.NewRequest(http.MethodGet, "/work?maxResults=2&nextToken="+nextToken, nil)
+	secondRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(secondRec, secondReq)
+
+	if secondRec.Code != http.StatusOK {
+		t.Fatalf("second page status = %d, want 200: %s", secondRec.Code, secondRec.Body.String())
+	}
+
+	var secondResp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(secondRec.Body).Decode(&secondResp); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(secondResp.Results) != 1 || stringValue(secondResp.Results[0].WorkId) != "work-filter-5" {
 		t.Fatalf("second page listed work = %#v, want remaining public work", secondResp.Results)
 	}
 	if secondResp.PaginationContext == nil || stringValue(secondResp.PaginationContext.NextToken) != "" {
