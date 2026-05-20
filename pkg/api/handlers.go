@@ -662,7 +662,9 @@ func workTypesFromNet(net *state.Net) map[string]*state.WorkType {
 }
 
 func publicWorkToken(token *interfaces.Token) bool {
-	return token != nil && !interfaces.IsSystemTimeToken(token)
+	return token != nil &&
+		token.Color.DataType != interfaces.DataTypeResource &&
+		!interfaces.IsSystemTimeToken(token)
 }
 
 func statusFromEngineStateSnapshot(snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) factoryapi.StatusResponse {

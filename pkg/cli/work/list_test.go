@@ -167,6 +167,57 @@ func TestList_HumanOutputShowsManyWorkItems(t *testing.T) {
 	}
 }
 
+func TestList_HumanOutputOmitsRuntimeResourcesWhenMixedResponseContainsOnlyVisibleWork(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{
+				{
+					Name:         "Plan feature",
+					WorkId:       stringPtr("work-1"),
+					WorkTypeName: stringPtr("story"),
+					State: &factoryapi.WorkState{
+						Name: "init",
+						Type: factoryapi.WorkStateTypeINITIAL,
+					},
+				},
+				{
+					Name:         "Review PRD",
+					WorkId:       stringPtr("work-2"),
+					WorkTypeName: stringPtr("story"),
+					State: &factoryapi.WorkState{
+						Name: "review",
+						Type: factoryapi.WorkStateTypePROCESSING,
+					},
+				},
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:   serverPort(t, srv),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	got := out.String()
+	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tPlan feature\tinit\tINITIAL\tnone\n" +
+		"work-2\tReview PRD\treview\tPROCESSING\tnone\n"
+	if got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+	if bytes.Contains(out.Bytes(), []byte("executor-slot")) {
+		t.Fatalf("output included runtime resource text: %q", got)
+	}
+}
+
 func TestList_HumanOutputShowsRelationSummaryForOneRelation(t *testing.T) {
 	requiredState := "complete"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -318,6 +369,118 @@ func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
 	}
 	if got.PaginationContext == nil || got.PaginationContext.MaxResults != 2 || stringValue(got.PaginationContext.NextToken) != nextToken {
 		t.Fatalf("pagination context = %#v, want maxResults=2 nextToken=%q", got.PaginationContext, nextToken)
+	}
+}
+
+func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPages(t *testing.T) {
+	secondToken := "cursor-2"
+	var requestCount int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		requestCount++
+		switch requestCount {
+		case 1:
+			if r.URL.Query().Get("maxResults") != "1" {
+				t.Fatalf("maxResults query = %q, want 1", r.URL.Query().Get("maxResults"))
+			}
+			if r.URL.Query().Get("nextToken") != "" {
+				t.Fatalf("nextToken query = %q, want empty on first page", r.URL.Query().Get("nextToken"))
+			}
+			if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+				Results: []factoryapi.Work{{
+					Name:         "Plan feature",
+					WorkId:       stringPtr("work-1"),
+					WorkTypeName: stringPtr("story"),
+					State: &factoryapi.WorkState{
+						Name: "init",
+						Type: factoryapi.WorkStateTypeINITIAL,
+					},
+				}},
+				PaginationContext: &factoryapi.PaginationContext{
+					MaxResults: 1,
+					NextToken:  &secondToken,
+				},
+			}); err != nil {
+				t.Fatalf("encode first response: %v", err)
+			}
+		case 2:
+			if r.URL.Query().Get("maxResults") != "1" {
+				t.Fatalf("maxResults query = %q, want 1", r.URL.Query().Get("maxResults"))
+			}
+			if r.URL.Query().Get("nextToken") != secondToken {
+				t.Fatalf("nextToken query = %q, want %q", r.URL.Query().Get("nextToken"), secondToken)
+			}
+			if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+				Results: []factoryapi.Work{{
+					Name:         "Review PRD",
+					WorkId:       stringPtr("work-2"),
+					WorkTypeName: stringPtr("story"),
+					State: &factoryapi.WorkState{
+						Name: "review",
+						Type: factoryapi.WorkStateTypePROCESSING,
+					},
+				}},
+				PaginationContext: &factoryapi.PaginationContext{
+					MaxResults: 1,
+				},
+			}); err != nil {
+				t.Fatalf("encode second response: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected request count %d", requestCount)
+		}
+	}))
+	defer srv.Close()
+
+	var firstOut bytes.Buffer
+	err := List(ListConfig{
+		Port:       serverPort(t, srv),
+		MaxResults: 1,
+		JSON:       true,
+		Output:     &firstOut,
+	})
+	if err != nil {
+		t.Fatalf("List first page: %v", err)
+	}
+	if bytes.Contains(firstOut.Bytes(), []byte("executor-slot")) {
+		t.Fatalf("first page JSON included runtime resource text: %q", firstOut.String())
+	}
+
+	var firstResp factoryapi.ListWorkResponse
+	if err := json.Unmarshal(firstOut.Bytes(), &firstResp); err != nil {
+		t.Fatalf("first page JSON is invalid: %v\n%s", err, firstOut.String())
+	}
+	if len(firstResp.Results) != 1 || stringValue(firstResp.Results[0].WorkId) != "work-1" {
+		t.Fatalf("first page results = %#v, want only work-1", firstResp.Results)
+	}
+	if firstResp.PaginationContext == nil || stringValue(firstResp.PaginationContext.NextToken) != secondToken {
+		t.Fatalf("first page pagination context = %#v, want nextToken=%q", firstResp.PaginationContext, secondToken)
+	}
+
+	var secondOut bytes.Buffer
+	err = List(ListConfig{
+		Port:       serverPort(t, srv),
+		MaxResults: 1,
+		NextToken:  secondToken,
+		JSON:       true,
+		Output:     &secondOut,
+	})
+	if err != nil {
+		t.Fatalf("List second page: %v", err)
+	}
+	if bytes.Contains(secondOut.Bytes(), []byte("executor-slot")) {
+		t.Fatalf("second page JSON included runtime resource text: %q", secondOut.String())
+	}
+
+	var secondResp factoryapi.ListWorkResponse
+	if err := json.Unmarshal(secondOut.Bytes(), &secondResp); err != nil {
+		t.Fatalf("second page JSON is invalid: %v\n%s", err, secondOut.String())
+	}
+	if len(secondResp.Results) != 1 || stringValue(secondResp.Results[0].WorkId) != "work-2" {
+		t.Fatalf("second page results = %#v, want only work-2", secondResp.Results)
+	}
+	if secondResp.PaginationContext == nil || secondResp.PaginationContext.NextToken != nil {
+		t.Fatalf("second page pagination context = %#v, want no next token", secondResp.PaginationContext)
 	}
 }
 
