@@ -25,7 +25,7 @@ const (
 )
 
 var safeProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
-var codexTimestampPrefixedSessionPattern = regexp.MustCompile(`^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-[A-Za-z0-9_-]+\.jsonl$`)
+var codexTimestampPrefixedSessionPattern = regexp.MustCompile(`^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-([A-Za-z0-9_-]+)\.jsonl$`)
 
 var (
 	errInvalidProviderSessionIdentifier = errors.New("invalid provider session identifier")
@@ -203,10 +203,11 @@ func matchesCodexSessionBaseName(baseName, id, exactName string) bool {
 	if baseName == exactName {
 		return true
 	}
-	if !codexTimestampPrefixedSessionPattern.MatchString(baseName) {
+	matches := codexTimestampPrefixedSessionPattern.FindStringSubmatch(baseName)
+	if matches == nil {
 		return false
 	}
-	return strings.HasSuffix(baseName, "-"+id+".jsonl")
+	return matches[2] == id
 }
 
 func classifyCodexSessionFileLayout(baseName, exactName string) codexSessionFileLayout {

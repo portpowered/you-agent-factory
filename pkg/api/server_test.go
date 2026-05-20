@@ -645,6 +645,12 @@ func TestGetProviderSessionDetails_IgnoresUnsupportedRolloutFileNames(t *testing
 		"rollout-backup-sess_123.jsonl",
 		`{"type":"session_meta","id":"sess_123"}`,
 	)
+	writeNamedProviderSessionFixture(
+		t,
+		root,
+		"rollout-2026-05-20T17-35-24-backup-sess_123.jsonl",
+		`{"type":"session_meta","id":"sess_123"}`,
+	)
 
 	srv := newTestServerWithCodexRoot(root)
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
