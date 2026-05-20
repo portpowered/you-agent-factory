@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -485,17 +486,32 @@ func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenR
 
 func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
 	name := firstNonEmptyString(t.Color.Name, t.Color.WorkID, t.ID)
+	workState := workStateForToken(t, net)
 	return factoryapi.Work{
 		Name:                     name,
 		WorkId:                   stringPtrIfNotEmpty(t.Color.WorkID),
 		WorkTypeName:             stringPtrIfNotEmpty(t.Color.WorkTypeID),
-		State:                    workStateForToken(t, net),
+		State:                    workState,
+		CompletedAt:              completedAtForWorkToken(t, workState),
 		ChainingTraceDepth:       intPtrIfPositive(t.Color.ChainingTraceDepth),
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
 		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
 		TraceId:                  stringPtrIfNotEmpty(t.Color.TraceID),
 		Content:                  domainWorkContentToGeneratedPtr(t.Color.Content),
 		Tags:                     stringMapPtr(t.Color.Tags),
+	}
+}
+
+func completedAtForWorkToken(t *interfaces.Token, workState *factoryapi.WorkState) *time.Time {
+	if t == nil || t.EnteredAt.IsZero() || workState == nil {
+		return nil
+	}
+	switch workState.Type {
+	case factoryapi.WorkStateTypeTERMINAL, factoryapi.WorkStateTypeFAILED:
+		completedAt := t.EnteredAt
+		return &completedAt
+	default:
+		return nil
 	}
 }
 

@@ -20,6 +20,10 @@ properties:
   state:
     $ref: './WorkState.yaml'
     description: Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided.
+  completedAt:
+    type: string
+    format: date-time
+    description: Time when this work item entered a completed or failed state, when known.
   chainingTraceDepth:
     type: integer
     minimum: 1

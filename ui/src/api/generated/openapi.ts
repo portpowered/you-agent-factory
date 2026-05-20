@@ -1267,6 +1267,11 @@ export interface components {
             workTypeName?: string;
             /** @description Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided. */
             state?: components["schemas"]["WorkState"];
+            /**
+             * Format: date-time
+             * @description Time when this work item entered a completed or failed state, when known.
+             */
+            completedAt?: string;
             /** @description Current chaining depth for this work item when the runtime already knows its upstream lineage. */
             chainingTraceDepth?: number;
             /** @description Explicit chaining-trace identifier for this submitted work item. */
