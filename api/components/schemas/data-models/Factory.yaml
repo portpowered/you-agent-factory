@@ -55,6 +55,12 @@ example:
           encoding: utf-8
           inline: |
             # Usage
+      - type: INPUT
+        targetPath: factory/inputs/story/default/seed.md
+        content:
+          encoding: utf-8
+          inline: |
+            Shared starter work
   workers:
     - name: reviewer
       type: MODEL_WORKER

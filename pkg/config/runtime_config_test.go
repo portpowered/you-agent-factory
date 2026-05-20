@@ -474,6 +474,37 @@ func TestPersistNamedFactory_StripsSupportedBundledFileInlineContentFromFactoryJ
 	}
 }
 
+func TestPersistNamedFactory_WritesStarterInputBundledFilesToInputsDirectory(t *testing.T) {
+	rootDir := t.TempDir()
+
+	factoryDir, err := PersistNamedFactory(rootDir, "alpha", namedFactoryPayloadWithStarterInputs(t, "alpha"))
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "seed.md"), "starter markdown\n")
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "task", "exec-123", "seed.json"), "{\"payload\":\"starter json\"}\n")
+
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(factoryJSON, &payload); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	resourceManifest, ok := payload["supportingFiles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected supportingFiles object, got %#v", payload["supportingFiles"])
+	}
+	bundledFiles, ok := resourceManifest["bundledFiles"].([]any)
+	if !ok || len(bundledFiles) != 2 {
+		t.Fatalf("expected two starter bundled files, got %#v", resourceManifest["bundledFiles"])
+	}
+	assertBundledFilePayload(t, bundledFiles[0].(map[string]any), "INPUT", "factory/inputs/task/default/seed.md", "starter markdown\n")
+	assertBundledFilePayload(t, bundledFiles[1].(map[string]any), "INPUT", "factory/inputs/task/exec-123/seed.json", "{\"payload\":\"starter json\"}\n")
+}
+
 func TestPersistNamedFactory_RejectsDuplicateNames(t *testing.T) {
 	rootDir := t.TempDir()
 
@@ -2474,6 +2505,67 @@ func namedFactoryPayloadWithBundledFiles(t *testing.T, project string) []byte {
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		t.Fatalf("Marshal(namedFactoryPayloadWithBundledFiles): %v", err)
+	}
+	return data
+}
+
+func namedFactoryPayloadWithStarterInputs(t *testing.T, project string) []byte {
+	t.Helper()
+
+	cfg := map[string]any{
+		"name": project,
+		"id":   project,
+		"supportingFiles": map[string]any{
+			"bundledFiles": []map[string]any{
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/task/default/seed.md",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "starter markdown\n",
+					},
+				},
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/task/exec-123/seed.json",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "{\"payload\":\"starter json\"}\n",
+					},
+				},
+			},
+		},
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name": "executor",
+				"type": "MODEL_WORKER",
+				"body": "You are the executor.",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-" + project,
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+				"type":    "MODEL_WORKSTATION",
+				"body":    "Implement {{ .WorkID }}.",
+			},
+		},
+	}
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("Marshal(namedFactoryPayloadWithStarterInputs): %v", err)
 	}
 	return data
 }

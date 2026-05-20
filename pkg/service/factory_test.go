@@ -539,9 +539,9 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 		t.Fatalf("created factory bundled files = %#v, want 3 entries", created.SupportingFiles.BundledFiles)
 	}
 	bundledFiles := *created.SupportingFiles.BundledFiles
-	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
-	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md")
-	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1")
+	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1")
 
 	importedDir := filepath.Join(rootDir, "beta")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "Makefile"), "test:\n\tgo test ./...\n")
@@ -1039,9 +1039,56 @@ func TestFactoryService_GetCurrentNamedFactory_CollectsSupportedPortableBundledF
 		t.Fatalf("expected 3 bundled files, got %#v", current.SupportingFiles.BundledFiles)
 	}
 	bundledFiles := *current.SupportingFiles.BundledFiles
-	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", "# Portable factory\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+}
+
+func TestFactoryService_GetCurrentNamedFactory_SnapshotsCurrentInputsAsStarterBundledFiles(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "starter.md"), "starter markdown\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", "exec-123", "starter.json"), "{\"payload\":\"starter json\"}\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "unknown", interfaces.DefaultChannelName, "ignored.md"), "ignored\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "ignored.txt"), "ignored\n")
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory: %v", err)
+	}
+	if current.SupportingFiles == nil || current.SupportingFiles.BundledFiles == nil {
+		t.Fatal("expected current factory to include starter bundled files")
+	}
+
+	var starterFiles []factoryapi.BundledFile
+	for _, bundledFile := range *current.SupportingFiles.BundledFiles {
+		if bundledFile.Type == factoryapi.BundledFileType(interfaces.BundledFileTypeInput) {
+			starterFiles = append(starterFiles, bundledFile)
+		}
+	}
+	if len(starterFiles) != 2 {
+		t.Fatalf("starter bundled files = %#v, want 2 current inputs", starterFiles)
+	}
+	assertServiceBundledFactoryEntry(t, starterFiles[0], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/starter.md", "starter markdown\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[1], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/exec-123/starter.json", "{\"payload\":\"starter json\"}\n")
 }
 
 func TestFactoryService_GetCurrentNamedFactory_FallsBackToRootRuntimeWhenPointerMissing(t *testing.T) {

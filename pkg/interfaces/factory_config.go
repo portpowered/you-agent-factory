@@ -67,6 +67,9 @@ const (
 	BundledFileTypeScript = "SCRIPT"
 	// BundledFileTypeDoc is the canonical manifest type for portable documentation assets.
 	BundledFileTypeDoc = "DOC"
+	// BundledFileTypeInput is the canonical manifest type for portable starter
+	// work files that restore under factory/inputs/...
+	BundledFileTypeInput = "INPUT"
 	// BundledFileTypeRootHelper is the canonical manifest type for supported
 	// project-root helper files such as Makefile.
 	BundledFileTypeRootHelper = "ROOT_HELPER"

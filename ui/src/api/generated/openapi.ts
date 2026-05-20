@@ -982,6 +982,14 @@ export interface components {
          *               "encoding": "utf-8",
          *               "inline": "# Usage\n"
          *             }
+         *           },
+         *           {
+         *             "type": "INPUT",
+         *             "targetPath": "factory/inputs/story/default/seed.md",
+         *             "content": {
+         *               "encoding": "utf-8",
+         *               "inline": "Shared starter work\n"
+         *             }
          *           }
          *         ]
          *       },
@@ -1099,7 +1107,7 @@ export interface components {
         ResourceManifest: {
             /** @description Declarative external tools that must already resolve on PATH. These entries are validated but not embedded or installed. */
             requiredTools?: components["schemas"]["RequiredTool"][];
-            /** @description Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script or docs roots for SCRIPT or DOC entries, or match the supported root-helper allowlist for ROOT_HELPER entries. */
+            /** @description Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. */
             bundledFiles?: components["schemas"]["BundledFile"][];
         };
         /** @description One declarative external tool dependency for a portable factory. */
@@ -1113,13 +1121,13 @@ export interface components {
             /** @description Optional argument vector used by future validation flows to probe the tool version without changing the executable lookup token. */
             versionArgs?: string[];
         };
-        /** @description One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile. */
+        /** @description One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile. */
         BundledFile: {
             /**
-             * @description Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile.
+             * @description Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile.
              * @enum {string}
              */
-            type: "SCRIPT" | "DOC" | "ROOT_HELPER";
+            type: "SCRIPT" | "DOC" | "INPUT" | "ROOT_HELPER";
             /** @description Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected. */
             targetPath: string;
             content: components["schemas"]["BundledFileContent"];
