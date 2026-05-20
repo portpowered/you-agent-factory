@@ -501,8 +501,8 @@ func TestPersistNamedFactory_WritesStarterInputBundledFilesToInputsDirectory(t *
 	if !ok || len(bundledFiles) != 2 {
 		t.Fatalf("expected two starter bundled files, got %#v", resourceManifest["bundledFiles"])
 	}
-	assertBundledFilePayload(t, bundledFiles[0].(map[string]any), "INPUT", "factory/inputs/task/default/seed.md", "starter markdown\n")
-	assertBundledFilePayload(t, bundledFiles[1].(map[string]any), "INPUT", "factory/inputs/task/exec-123/seed.json", "{\"payload\":\"starter json\"}\n")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[0].(map[string]any), "INPUT", "factory/inputs/task/default/seed.md")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[1].(map[string]any), "INPUT", "factory/inputs/task/exec-123/seed.json")
 }
 
 func TestPersistNamedFactory_RejectsDuplicateNames(t *testing.T) {
@@ -2578,6 +2578,27 @@ func assertRuntimeFactoryFileContent(t *testing.T, path, want string) {
 	}
 	if string(got) != want {
 		t.Fatalf("%s content = %q, want %q", path, string(got), want)
+	}
+}
+
+func assertBundledFilePayloadWithoutInline(t *testing.T, payload map[string]any, wantType, wantTargetPath string) {
+	t.Helper()
+
+	if got := payload["type"]; got != wantType {
+		t.Fatalf("bundled file type = %#v, want %q", got, wantType)
+	}
+	if got := payload["targetPath"]; got != wantTargetPath {
+		t.Fatalf("bundled file targetPath = %#v, want %q", got, wantTargetPath)
+	}
+	content, ok := payload["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("bundled file content = %#v, want object", payload["content"])
+	}
+	if got := content["encoding"]; got != "utf-8" {
+		t.Fatalf("bundled file encoding = %#v, want utf-8", got)
+	}
+	if _, ok := content["inline"]; ok {
+		t.Fatalf("bundled file inline content = %#v, want omitted field", content["inline"])
 	}
 }
 
