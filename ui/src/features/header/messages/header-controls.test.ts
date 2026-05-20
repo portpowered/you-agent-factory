@@ -52,13 +52,18 @@ describe("getHeaderControlsMessages", () => {
     "ja",
     "ko",
     "zh-CN",
-  ] as const)("keeps tick-status templates and stream labels available for %s", (locale) => {
+  ] as const)(
+    "keeps compact tick-status templates and stream labels available for %s",
+    (locale) => {
     const messages = getHeaderControlsMessages(locale);
 
     expect(messages.currentTickStatusTemplate).toContain(
       HEADER_CURRENT_TICK_TOKEN,
     );
     expect(messages.currentTickStatusTemplate).toContain(HEADER_MAX_TICK_TOKEN);
+    expect(messages.currentTickStatusTemplate).toBe(
+      `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
+    );
     expect(messages.streamStatusLiveLabel).toBeTruthy();
     expect(messages.streamStatusConnectingLabel).toBeTruthy();
     expect(messages.streamStatusOfflineLabel).toBeTruthy();
@@ -66,5 +71,6 @@ describe("getHeaderControlsMessages", () => {
     expect(messages.waitingForMoreTicks).toBeTruthy();
     expect(messages.languageLabel).toBeTruthy();
     expect(messages.languageMenuButtonLabel).toBeTruthy();
-  });
+    },
+  );
 });

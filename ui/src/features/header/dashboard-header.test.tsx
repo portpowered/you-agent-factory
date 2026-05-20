@@ -328,7 +328,7 @@ describe("DashboardHeader", () => {
       name: englishMessages.languageMenuButtonLabel,
     });
 
-    expect(screen.getByText("Tick 1 of 2")).toBeTruthy();
+    expect(screen.getByText("1/2")).toBeTruthy();
     expect(
       screen.getByRole("button", {
         name: englishExportMessages.triggerLabel,
@@ -351,7 +351,7 @@ describe("DashboardHeader", () => {
         }),
       ).toBeTruthy();
     });
-    expect(screen.getByText("틱 1 / 2")).toBeTruthy();
+    expect(screen.getByText("1/2")).toBeTruthy();
     expect(
       screen.getByRole("region", {
         name: koreanMessages.dashboardSummaryLabel,
@@ -405,7 +405,7 @@ describe("DashboardHeader", () => {
         name: englishMessages.languageMenuButtonLabel,
       }),
     ).toBeTruthy();
-    expect(screen.getByText("Tick 1 of 2")).toBeTruthy();
+    expect(screen.getByText("1/2")).toBeTruthy();
     expect(
       screen.getByRole("button", {
         name: englishMessages.returnToCurrentTickLabel,

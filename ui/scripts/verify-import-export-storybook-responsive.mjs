@@ -332,7 +332,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   const streamStatus = page.getByRole("status", {
     name: /Infinite You event stream (connecting|live)/,
   });
-  const currentTick = page.getByText(/(\d+\/\d+|Tick \d+ of \d+)/).first();
+  const currentTick = page.getByText(/\d+\/\d+/).first();
   const currentButton = page.getByRole("button", {
     name: "Return to current tick",
   });
@@ -357,7 +357,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await slider.focus();
   await page.keyboard.press("ArrowLeft");
   await expectVisible(
-    page.getByText(/(\d+\/\d+|Tick \d+ of \d+)/),
+    page.getByText(/\d+\/\d+/),
     "Keyboard-updated timeline tick text",
   );
 

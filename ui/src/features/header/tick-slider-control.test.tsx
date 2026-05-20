@@ -107,7 +107,7 @@ describe("TickSliderControl", () => {
     });
 
     expect(slider.value).toBe("9");
-    expect(screen.getByText("Tick 9 of 9")).toBeTruthy();
+    expect(screen.getByText("9/9")).toBeTruthy();
     expect(currentButton.disabled).toBe(true);
     expect(currentButton.className).toContain("opacity-75");
     expect(screen.queryByText("Current")).toBeNull();
@@ -116,7 +116,7 @@ describe("TickSliderControl", () => {
     fireEvent.change(slider, { target: { value: "2" } });
 
     await waitFor(() => {
-      expect(screen.getByText("Tick 2 of 9")).toBeTruthy();
+      expect(screen.getByText("2/9")).toBeTruthy();
     });
     expect(currentButton.disabled).toBe(false);
     expect(currentButton.className).not.toContain("opacity-75");
@@ -126,7 +126,7 @@ describe("TickSliderControl", () => {
     fireEvent.click(currentButton);
 
     await waitFor(() => {
-      expect(screen.getByText("Tick 9 of 9")).toBeTruthy();
+      expect(screen.getByText("9/9")).toBeTruthy();
     });
     expect(currentButton.disabled).toBe(true);
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
@@ -189,7 +189,7 @@ describe("TickSliderControl", () => {
     expect(slider.min).toBe("2");
     expect(slider.max).toBe("4");
     expect(slider.value).toBe("4");
-    expect(screen.getByText("Tick 4 of 4")).toBeTruthy();
+    expect(screen.getByText("4/4")).toBeTruthy();
     expect(currentButton.disabled).toBe(false);
     expect(currentButton.className).not.toContain("opacity-75");
   });
