@@ -12,6 +12,7 @@ import {
   verifyLocalizedWorkflowActivity,
   verifyLocalizedWorkOutcomeChart,
 } from "./verify-localized-widget-storybook-responsive.mjs";
+import { verifyTraceFactoryGraphVisualConsistency } from "./graph-storybook-responsive.mjs";
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
@@ -58,6 +59,18 @@ export const storyChecks = [
     assertions: verifyDashboardShellConsolidation,
     id: "infinite-you-workflow-dashboard--header-action-buttons-verification",
     label: "dashboard shared shell",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyTraceFactoryGraphVisualConsistency({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+        waitForStoryRender,
+      }),
+    id: "agent-factory-dashboard-react-flow-current-activity-card--narrow-viewport",
+    label: "trace/factory graph visual consistency",
   },
   {
     assertions: (page, _dialog, viewport) =>
@@ -354,6 +367,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
     `Dashboard header at ${viewport.label}`,
   );
 }
+
 
 export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {
   const currentSelection = page.getByRole("article", {

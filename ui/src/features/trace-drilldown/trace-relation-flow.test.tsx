@@ -16,15 +16,33 @@ vi.mock("./trace-elk-layout", () => ({
 
 vi.mock("@xyflow/react", async () => {
   return {
-    Background: () => null,
+    Background: ({
+      color,
+      gap,
+      size,
+    }: {
+      color?: string;
+      gap?: number;
+      size?: number;
+    }) => (
+      <div
+        data-background-color={color}
+        data-background-gap={String(gap ?? "")}
+        data-background-size={String(size ?? "")}
+        data-testid="trace-relation-flow-background"
+      />
+    ),
     Controls: ({
       fitViewOptions,
       showInteractive,
+      style,
     }: {
       fitViewOptions?: Record<string, number>;
       showInteractive?: boolean;
+      style?: Record<string, string | number>;
     }) => (
       <div
+        data-controls-style={JSON.stringify(style ?? null)}
         data-fit-view-options={JSON.stringify(fitViewOptions ?? null)}
         data-show-interactive={String(showInteractive ?? true)}
         data-testid="trace-relation-flow-controls"
@@ -145,6 +163,31 @@ describe("TraceRelationFlow", () => {
         .getByTestId("trace-relation-flow-controls")
         .getAttribute("data-show-interactive"),
     ).toBe("false");
+    expect(
+      screen
+        .getByTestId("trace-relation-flow-background")
+        .getAttribute("data-background-color"),
+    ).toBe("var(--color-af-edge-muted-soft)");
+    expect(
+      screen
+        .getByTestId("trace-relation-flow-background")
+        .getAttribute("data-background-gap"),
+    ).toBe("24");
+    expect(
+      screen
+        .getByTestId("trace-relation-flow-background")
+        .getAttribute("data-background-size"),
+    ).toBe("1");
+    expect(
+      screen
+        .getByTestId("trace-relation-flow-controls")
+        .getAttribute("data-controls-style"),
+    ).toContain("\"backgroundColor\":\"rgb(from var(--color-af-surface) r g b / 0.88)\"");
+    expect(
+      screen
+        .getByTestId("trace-relation-flow-controls")
+        .getAttribute("data-controls-style"),
+    ).toContain("\"borderRadius\":8");
 
     const implementButton = screen.getByRole("button", {
       name: "Implement story",

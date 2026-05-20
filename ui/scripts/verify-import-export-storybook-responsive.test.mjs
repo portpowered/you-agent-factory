@@ -278,6 +278,7 @@ describe("viewport assertions", () => {
   });
 });
 
+
 describe("story assertions", () => {
   test("verifyExportDialog checks the expected export controls", async () => {
     const textbox = { isVisible: vi.fn().mockResolvedValue(true) };

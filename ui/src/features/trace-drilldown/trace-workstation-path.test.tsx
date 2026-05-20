@@ -14,15 +14,33 @@ vi.mock("./trace-elk-layout", () => ({
 
 vi.mock("@xyflow/react", async () => {
   return {
-    Background: () => null,
+    Background: ({
+      color,
+      gap,
+      size,
+    }: {
+      color?: string;
+      gap?: number;
+      size?: number;
+    }) => (
+      <div
+        data-background-color={color}
+        data-background-gap={String(gap ?? "")}
+        data-background-size={String(size ?? "")}
+        data-testid="trace-react-flow-background"
+      />
+    ),
     Controls: ({
       fitViewOptions,
       showInteractive,
+      style,
     }: {
       fitViewOptions?: Record<string, number>;
       showInteractive?: boolean;
+      style?: Record<string, string | number>;
     }) => (
       <div
+        data-controls-style={JSON.stringify(style ?? null)}
         data-fit-view-options={JSON.stringify(fitViewOptions ?? null)}
         data-show-interactive={String(showInteractive ?? true)}
         data-testid="trace-react-flow-controls"
@@ -150,6 +168,31 @@ describe("TraceWorkstationPath", () => {
         .getByTestId("trace-react-flow-controls")
         .getAttribute("data-show-interactive"),
     ).toBe("false");
+    expect(
+      screen
+        .getByTestId("trace-react-flow-background")
+        .getAttribute("data-background-color"),
+    ).toBe("var(--color-af-edge-muted-soft)");
+    expect(
+      screen
+        .getByTestId("trace-react-flow-background")
+        .getAttribute("data-background-gap"),
+    ).toBe("24");
+    expect(
+      screen
+        .getByTestId("trace-react-flow-background")
+        .getAttribute("data-background-size"),
+    ).toBe("1");
+    expect(
+      screen
+        .getByTestId("trace-react-flow-controls")
+        .getAttribute("data-controls-style"),
+    ).toContain("\"backgroundColor\":\"rgb(from var(--color-af-surface) r g b / 0.88)\"");
+    expect(
+      screen
+        .getByTestId("trace-react-flow-controls")
+        .getAttribute("data-controls-style"),
+    ).toContain("\"borderRadius\":8");
   });
 
   it("falls back to output-to-input work lineage when chaining metadata is absent", async () => {

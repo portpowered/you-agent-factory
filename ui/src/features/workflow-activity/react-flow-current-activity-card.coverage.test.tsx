@@ -41,8 +41,32 @@ vi.mock("@xyflow/react", async () => {
 
   return {
     ...actual,
-    Background: () => <div data-testid="graph-background" />,
-    Controls: () => <div data-testid="graph-controls" />,
+    Background: ({
+      color,
+      gap,
+      size,
+    }: {
+      color?: string;
+      gap?: number;
+      size?: number;
+    }) => (
+      <div
+        data-background-color={color}
+        data-background-gap={String(gap ?? "")}
+        data-background-size={String(size ?? "")}
+        data-testid="graph-background"
+      />
+    ),
+    Controls: ({
+      style,
+    }: {
+      style?: Record<string, string | number>;
+    }) => (
+      <div
+        data-controls-style={JSON.stringify(style ?? null)}
+        data-testid="graph-controls"
+      />
+    ),
     ReactFlow: ({
       children,
       isValidConnection,
@@ -305,6 +329,21 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     );
     expect(screen.getByTestId("graph-background")).toBeTruthy();
     expect(screen.getByTestId("graph-controls")).toBeTruthy();
+    expect(
+      screen.getByTestId("graph-background").getAttribute("data-background-color"),
+    ).toBe("var(--color-af-edge-muted-soft)");
+    expect(
+      screen.getByTestId("graph-background").getAttribute("data-background-gap"),
+    ).toBe("24");
+    expect(
+      screen.getByTestId("graph-background").getAttribute("data-background-size"),
+    ).toBe("1");
+    expect(
+      screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
+    ).toContain("\"backgroundColor\":\"rgb(from var(--color-af-surface) r g b / 0.88)\"");
+    expect(
+      screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
+    ).toContain("\"borderRadius\":8");
   });
 
   it("skips node-position persistence when the viewport has no graph key", () => {
