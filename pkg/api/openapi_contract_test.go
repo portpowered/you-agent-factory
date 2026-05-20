@@ -135,14 +135,20 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	}
 
 	requiredOperations := map[string][]string{
-		"/work":                       {"get", "post"},
-		"/work-requests/{request_id}": {"put"},
-		"/work/{id}":                  {"get"},
-		"/events":                     {"get"},
-		"/status":                     {"get"},
-		"/provider-sessions/detail":   {"get"},
-		"/factory":                    {"post"},
-		"/factory/~current":           {"get"},
+		"/work":                        {"get", "post"},
+		"/factories/{factory_id}/work": {"get", "post"},
+		"/work-requests/{request_id}":  {"put"},
+		"/factories/{factory_id}/work-requests/{request_id}": {"put"},
+		"/work/{id}":                               {"get"},
+		"/factories/{factory_id}/work/{id}":        {"get"},
+		"/events":                                  {"get"},
+		"/factories/{factory_id}/events":           {"get"},
+		"/status":                                  {"get"},
+		"/factories/{factory_id}/status":           {"get"},
+		"/provider-sessions/detail":                {"get"},
+		"/factory":                                 {"post"},
+		"/factory/~current":                        {"get"},
+		"/factories/{factory_id}/factory/~current": {"get"},
 	}
 	for path, methods := range requiredOperations {
 		pathItem, ok := paths[path].(map[string]any)
@@ -961,6 +967,11 @@ func TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete(t *testing.T) 
 	assertEventStreamSchemaRef(
 		t,
 		pathOperation(t, paths, "/events", "get"),
+		"#/components/schemas/FactoryEvent",
+	)
+	assertEventStreamSchemaRef(
+		t,
+		pathOperation(t, paths, "/factories/{factory_id}/events", "get"),
 		"#/components/schemas/FactoryEvent",
 	)
 }

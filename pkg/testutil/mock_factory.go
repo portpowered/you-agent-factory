@@ -37,11 +37,13 @@ type MockFactory struct {
 	EditableFactoryErr       error
 	SavedEditableFactories   []factoryapi.SaveEditableFactoryDefinitionRequest
 	SaveEditableFactoryErr   error
+	SessionFactories         map[string]*MockFactory
 }
 
 var _ factory.APIFactory = (*MockFactory)(nil)
 var _ factory.Factory = (*MockFactory)(nil)
 var _ apisurface.APISurface = (*MockFactory)(nil)
+var _ apisurface.SessionAPISurface = (*MockFactory)(nil)
 
 func (m *MockFactory) Run(_ context.Context) error   { return nil }
 func (m *MockFactory) Pause(_ context.Context) error { return nil }
@@ -188,4 +190,47 @@ func (m *MockFactory) SaveEditableFactoryDefinition(_ context.Context, request f
 func (m *MockFactory) WaitToComplete() <-chan struct{} {
 	ch := make(chan struct{})
 	return ch
+}
+
+func (m *MockFactory) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+	session, err := m.sessionFactory(sessionID)
+	if err != nil {
+		return interfaces.WorkRequestSubmitResult{}, err
+	}
+	return session.SubmitWorkRequest(ctx, request)
+}
+
+func (m *MockFactory) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
+	session, err := m.sessionFactory(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return session.SubscribeFactoryEvents(ctx)
+}
+
+func (m *MockFactory) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	session, err := m.sessionFactory(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return session.GetEngineStateSnapshot(ctx)
+}
+
+func (m *MockFactory) GetCurrentNamedFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+	session, err := m.sessionFactory(sessionID)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return session.GetCurrentNamedFactory(ctx)
+}
+
+func (m *MockFactory) sessionFactory(sessionID string) (*MockFactory, error) {
+	if m == nil || m.SessionFactories == nil {
+		return nil, apisurface.ErrFactorySessionNotFound
+	}
+	session, ok := m.SessionFactories[sessionID]
+	if !ok || session == nil {
+		return nil, apisurface.ErrFactorySessionNotFound
+	}
+	return session, nil
 }

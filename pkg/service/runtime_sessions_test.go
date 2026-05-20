@@ -190,6 +190,84 @@ func TestFactoryService_LegacyRuntimeSurfaceTargetsDefaultSessionAlias(t *testin
 	}
 }
 
+func TestFactoryService_SessionRuntimeSurfaceTargetsExplicitSessionID(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default alpha runtime")
+
+	betaSessionID, err := svc.openFactorySession(context.Background(), betaDir)
+	if err != nil {
+		t.Fatalf("openFactorySession(beta): %v", err)
+	}
+
+	request := factory.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+		WorkID:     "beta-session-targeted-work",
+		Name:       "beta-session-targeted-work",
+		WorkTypeID: "task",
+		TraceID:    "trace-beta-session-targeted",
+		Payload:    []byte(`{"title":"beta-session-targeted-work"}`),
+	}})
+	if _, err := svc.SubmitWorkRequestForSession(context.Background(), betaSessionID, request); err != nil {
+		t.Fatalf("SubmitWorkRequestForSession(beta): %v", err)
+	}
+
+	waitForSessionEventsToContain(t, svc.sessionByID(betaSessionID), "beta-session-targeted-work", time.Second)
+	assertSessionEventsDoNotContain(t, svc.sessionByID(defaultFactorySessionID), "beta-session-targeted-work")
+
+	betaCurrent, err := svc.GetCurrentNamedFactoryForSession(context.Background(), betaSessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactoryForSession(beta): %v", err)
+	}
+	if betaCurrent.Name != "beta" {
+		t.Fatalf("beta current factory name = %q, want beta", betaCurrent.Name)
+	}
+
+	defaultCurrent, err := svc.GetCurrentNamedFactoryForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactoryForSession(default): %v", err)
+	}
+	if defaultCurrent.Name != "alpha" {
+		t.Fatalf("default current factory name = %q, want alpha", defaultCurrent.Name)
+	}
+
+	if _, err := svc.GetEngineStateSnapshotForSession(context.Background(), "missing-session"); err == nil || !strings.Contains(err.Error(), "factory session not found") {
+		t.Fatalf("GetEngineStateSnapshotForSession(missing) error = %v, want factory session not found", err)
+	}
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
 func TestFactoryService_Run_RestartsOnlyDefaultSession(t *testing.T) {
 	rootDir := t.TempDir()
 	alphaDir := writeNamedFactoryFixture(t, rootDir, "alpha")

@@ -10,8 +10,13 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 const defaultFactorySessionID = "~default"
@@ -184,6 +189,73 @@ func (fs *FactoryService) sessionByID(sessionID string) *liveFactorySession {
 		return nil
 	}
 	return fs.sessions.get(sessionID)
+}
+
+func (fs *FactoryService) requireSession(sessionID string) (*liveFactorySession, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("factory service is required")
+	}
+	session := fs.sessionByID(sessionID)
+	if session == nil || session.handle == nil || session.handle.runtime == nil {
+		return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+	}
+	return session, nil
+}
+
+func (fs *FactoryService) sessionFactory(sessionID string) (factory.Factory, error) {
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return session.handle.runtime.factory, nil
+}
+
+func (fs *FactoryService) sessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error) {
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return session.handle.runtime.runtimeCfg, nil
+}
+
+func (fs *FactoryService) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+	activeFactory, err := fs.sessionFactory(sessionID)
+	if err != nil {
+		return interfaces.WorkRequestSubmitResult{}, err
+	}
+	return activeFactory.SubmitWorkRequest(ctx, request)
+}
+
+func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
+	activeFactory, err := fs.sessionFactory(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	stream, err := activeFactory.SubscribeFactoryEvents(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("subscribe factory events: %w", err)
+	}
+	return stream, nil
+}
+
+func (fs *FactoryService) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	activeFactory, err := fs.sessionFactory(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := activeFactory.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get engine state snapshot: %w", err)
+	}
+	return snapshot, nil
+}
+
+func (fs *FactoryService) GetCurrentNamedFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
+	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return fs.serializeNamedFactory(sessionFactoryName(fs.factoryRootDir, runtimeCfg), runtimeCfg, true)
 }
 
 func (fs *FactoryService) openFactorySession(ctx context.Context, factoryDir string) (string, error) {
@@ -433,4 +505,31 @@ func cloneFactorySessionTargets(targets []FactorySessionTarget) []FactorySession
 	cloned := make([]FactorySessionTarget, len(targets))
 	copy(cloned, targets)
 	return cloned
+}
+
+func sessionFactoryName(rootDir string, runtimeCfg *factoryconfig.LoadedFactoryConfig) factoryapi.FactoryName {
+	if runtimeCfg == nil {
+		return apisurface.DefaultCurrentFactoryName
+	}
+	factoryDir := runtimeCfg.FactoryDir()
+	cleanRoot := filepath.Clean(rootDir)
+	if sameFactoryDir(factoryDir, cleanRoot) {
+		return apisurface.DefaultCurrentFactoryName
+	}
+	if rootDir != "" && filepath.Dir(factoryDir) == cleanRoot {
+		name := filepath.Base(factoryDir)
+		if err := factoryconfig.ValidateNamedFactoryName(name); err == nil {
+			return factoryapi.FactoryName(name)
+		}
+	}
+	cfg := runtimeCfg.FactoryConfig()
+	if cfg != nil {
+		if name := strings.TrimSpace(cfg.Name); name != "" {
+			return factoryapi.FactoryName(name)
+		}
+		if project := strings.TrimSpace(cfg.Project); project != "" {
+			return factoryapi.FactoryName(project)
+		}
+	}
+	return factoryapi.FactoryName("factory")
 }

@@ -90,6 +90,58 @@ paths:
                 $ref: '#/components/schemas/ListWorkResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factories/{factory_id}/work:
+    post:
+      tags:
+        - Work
+      operationId: submitWorkByFactoryId
+      summary: Submit work for one session
+      description: Submits one work item to the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      parameters:
+        - $ref: '#/components/parameters/FactoryID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitWorkRequest'
+      responses:
+        '201':
+          description: Work was accepted for processing by the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitWorkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+        - Work
+      operationId: listWorkByFactoryId
+      summary: List work for one session
+      description: Lists current work tokens from the engine state snapshot owned by the explicitly selected live factory session.
+      parameters:
+        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/MaxResults'
+        - $ref: '#/components/parameters/NextToken'
+        - $ref: '#/components/parameters/StateName'
+        - $ref: '#/components/parameters/StateType'
+        - $ref: '#/components/parameters/SortBy'
+      responses:
+        '200':
+          description: Current work tokens for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListWorkResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /work-requests/{request_id}:
     put:
       tags:
@@ -121,6 +173,40 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factories/{factory_id}/work-requests/{request_id}:
+    put:
+      tags:
+        - Work
+      operationId: upsertWorkRequestByFactoryId
+      summary: Upsert work request for one session
+      description: Submits or retries one canonical work request batch against the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      parameters:
+        - $ref: '#/components/parameters/FactoryID'
+        - name: request_id
+          in: path
+          required: true
+          description: Stable request identifier used for idempotent submission.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkRequest'
+      responses:
+        '201':
+          description: Work request was accepted or had already been accepted by the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpsertWorkRequestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /work/{id}:
     get:
       tags:
@@ -133,6 +219,27 @@ paths:
       responses:
         '200':
           description: Work token with history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factories/{factory_id}/work/{id}:
+    get:
+      tags:
+        - Work
+      operationId: getWorkByFactoryId
+      summary: Get work token for one session
+      description: Returns one token by token ID from the current marking owned by the explicitly selected live factory session.
+      parameters:
+        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/WorkOrTokenID'
+      responses:
+        '200':
+          description: Work token with history for the targeted session.
           content:
             application/json:
               schema:
@@ -159,6 +266,28 @@ paths:
               x-event-schema: '#/components/schemas/FactoryEvent'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factories/{factory_id}/events:
+    get:
+      tags:
+        - Runtime
+      operationId: getEventsByFactoryId
+      summary: Stream factory events for one session
+      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      parameters:
+        - $ref: '#/components/parameters/FactoryID'
+      responses:
+        '200':
+          description: Factory event stream for the targeted session.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching FactoryEvent.
+              x-event-schema: '#/components/schemas/FactoryEvent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /status:
     get:
       tags:
@@ -173,6 +302,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factories/{factory_id}/status:
+    get:
+      tags:
+        - Runtime
+      operationId: getStatusByFactoryId
+      summary: Get runtime status for one session
+      description: Returns the current factory lifecycle status, token category counts, and resource availability from the aggregate engine snapshot owned by the explicitly selected live factory session.
+      parameters:
+        - $ref: '#/components/parameters/FactoryID'
+      responses:
+        '200':
+          description: Current runtime status summary for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
   /provider-sessions/detail:
@@ -287,6 +436,26 @@ paths:
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factories/{factory_id}/factory/~current:
+    get:
+      tags:
+        - Factory
+      operationId: getCurrentFactoryByFactoryId
+      summary: Get current factory for one session
+      description: Returns the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      parameters:
+        - $ref: '#/components/parameters/FactoryID'
+      responses:
+        '200':
+          description: Current active factory definition for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Factory'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory/~current/workstations/{workstation_name}/prompt-template-contract:
     get:
       tags:
@@ -390,6 +559,13 @@ paths:
           $ref: '#/components/responses/InternalError'
 components:
   parameters:
+    FactoryID:
+      name: factory_id
+      in: path
+      required: true
+      description: Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly.
+      schema:
+        type: string
     MaxResults:
       name: maxResults
       in: query

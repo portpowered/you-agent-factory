@@ -477,6 +477,183 @@ func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testin
 	}
 }
 
+func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing.T) {
+	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
+	defaultFactoryID := "root-runtime"
+	betaFactoryID := "beta-runtime"
+	defaultSession := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: map[string]*interfaces.Token{
+				"tok-default-1": listWorkToken("tok-default-1", "default-work-1", "task:init", "task", now),
+			},
+		},
+		Net: &state.Net{
+			Places: map[string]*petri.Place{
+				"task:init": {ID: "task:init", TypeID: "task", State: "init"},
+				"task:done": {ID: "task:done", TypeID: "task", State: "done"},
+			},
+			WorkTypes: map[string]*state.WorkType{
+				"task": {
+					ID: "task",
+					States: []state.StateDefinition{
+						{Value: "init", Category: state.StateCategoryInitial},
+						{Value: "done", Category: state.StateCategoryTerminal},
+					},
+				},
+			},
+		},
+		FactoryEventStream: &interfaces.FactoryEventStream{
+			History: []factoryapi.FactoryEvent{{Id: "factory-event/work-request/default-history", Type: factoryapi.FactoryEventTypeWorkRequest}},
+			Events:  make(chan factoryapi.FactoryEvent),
+		},
+		CurrentNamedFactory: &factoryapi.Factory{Name: apisurface.DefaultCurrentFactoryName, Id: &defaultFactoryID},
+	}
+	betaSession := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: map[string]*interfaces.Token{
+				"tok-beta-1": listWorkToken("tok-beta-1", "beta-work-1", "task:init", "task", now),
+			},
+		},
+		Net: &state.Net{
+			Places: map[string]*petri.Place{
+				"task:init": {ID: "task:init", TypeID: "task", State: "init"},
+				"task:done": {ID: "task:done", TypeID: "task", State: "done"},
+			},
+			WorkTypes: map[string]*state.WorkType{
+				"task": {
+					ID: "task",
+					States: []state.StateDefinition{
+						{Value: "init", Category: state.StateCategoryInitial},
+						{Value: "done", Category: state.StateCategoryTerminal},
+					},
+				},
+			},
+		},
+		FactoryEventStream: &interfaces.FactoryEventStream{
+			History: []factoryapi.FactoryEvent{{Id: "factory-event/work-request/beta-history", Type: factoryapi.FactoryEventTypeWorkRequest}},
+			Events:  make(chan factoryapi.FactoryEvent),
+		},
+		CurrentNamedFactory: &factoryapi.Factory{Name: "beta", Id: &betaFactoryID},
+	}
+	srv := newTestServer(&testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{Name: apisurface.DefaultCurrentFactoryName, Id: &defaultFactoryID},
+		SessionFactories: map[string]*testutil.MockFactory{
+			"~default":     defaultSession,
+			"session-beta": betaSession,
+		},
+	})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	submitResp, err := http.Post(server.URL+"/factories/session-beta/work", "application/json", bytes.NewBufferString(`{"name":"scoped-submit","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"scoped"}}`))
+	if err != nil {
+		t.Fatalf("POST /factories/session-beta/work: %v", err)
+	}
+	defer submitResp.Body.Close()
+	if submitResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(submitResp.Body)
+		t.Fatalf("POST /factories/session-beta/work status = %d, want 201: %s", submitResp.StatusCode, string(body))
+	}
+	if len(betaSession.WorkRequests) != 1 {
+		t.Fatalf("beta submitted work requests = %d, want 1", len(betaSession.WorkRequests))
+	}
+	if len(defaultSession.WorkRequests) != 0 {
+		t.Fatalf("default submitted work requests = %d, want 0", len(defaultSession.WorkRequests))
+	}
+
+	listResp, err := http.Get(server.URL + "/factories/session-beta/work")
+	if err != nil {
+		t.Fatalf("GET /factories/session-beta/work: %v", err)
+	}
+	defer listResp.Body.Close()
+	if listResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("GET /factories/session-beta/work status = %d, want 200: %s", listResp.StatusCode, string(body))
+	}
+	var listBody factoryapi.ListWorkResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&listBody); err != nil {
+		t.Fatalf("decode scoped list response: %v", err)
+	}
+	if len(listBody.Results) != 1 || stringValue(listBody.Results[0].WorkId) != "beta-work-1" {
+		t.Fatalf("scoped list results = %#v, want beta-work-1", listBody.Results)
+	}
+	if betaSession.EngineStateSnapshotCalls == 0 {
+		t.Fatal("expected scoped GET /work to read the targeted session snapshot")
+	}
+	if defaultSession.EngineStateSnapshotCalls != 0 {
+		t.Fatalf("default session snapshot calls = %d, want 0 after scoped list", defaultSession.EngineStateSnapshotCalls)
+	}
+
+	workResp, err := http.Get(server.URL + "/factories/session-beta/work/tok-beta-1")
+	if err != nil {
+		t.Fatalf("GET /factories/session-beta/work/tok-beta-1: %v", err)
+	}
+	defer workResp.Body.Close()
+	if workResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(workResp.Body)
+		t.Fatalf("GET /factories/session-beta/work/tok-beta-1 status = %d, want 200: %s", workResp.StatusCode, string(body))
+	}
+
+	statusResp, err := http.Get(server.URL + "/factories/session-beta/status")
+	if err != nil {
+		t.Fatalf("GET /factories/session-beta/status: %v", err)
+	}
+	defer statusResp.Body.Close()
+	if statusResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(statusResp.Body)
+		t.Fatalf("GET /factories/session-beta/status status = %d, want 200: %s", statusResp.StatusCode, string(body))
+	}
+
+	currentResp, err := http.Get(server.URL + "/factories/session-beta/factory/~current")
+	if err != nil {
+		t.Fatalf("GET /factories/session-beta/factory/~current: %v", err)
+	}
+	defer currentResp.Body.Close()
+	if currentResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(currentResp.Body)
+		t.Fatalf("GET /factories/session-beta/factory/~current status = %d, want 200: %s", currentResp.StatusCode, string(body))
+	}
+	var currentBody factoryapi.Factory
+	if err := json.NewDecoder(currentResp.Body).Decode(&currentBody); err != nil {
+		t.Fatalf("decode scoped current factory response: %v", err)
+	}
+	if currentBody.Name != "beta" {
+		t.Fatalf("scoped current factory name = %q, want beta", currentBody.Name)
+	}
+
+	eventsReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/factories/session-beta/events", nil)
+	if err != nil {
+		t.Fatalf("new scoped /events request: %v", err)
+	}
+	eventsResp, err := http.DefaultClient.Do(eventsReq)
+	if err != nil {
+		t.Fatalf("GET /factories/session-beta/events: %v", err)
+	}
+	defer eventsResp.Body.Close()
+	if eventsResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(eventsResp.Body)
+		t.Fatalf("GET /factories/session-beta/events status = %d, want 200: %s", eventsResp.StatusCode, string(body))
+	}
+	streamed := readSSEFactoryEvent(t, bufio.NewReader(eventsResp.Body))
+	if streamed.Id != "factory-event/work-request/beta-history" {
+		t.Fatalf("scoped streamed event id = %q, want beta history", streamed.Id)
+	}
+}
+
+func TestSessionScopedAPI_UnknownSessionReturnsNotFound(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"~default": {Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/factories/missing-session/status", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
+}
+
 func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 	session := strings.Join([]string{
 		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,

@@ -6,6 +6,9 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // APISurface is the runtime seam consumed by the Agent Factory API server.
@@ -18,6 +21,16 @@ type APISurface interface {
 	GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error)
 	GetEditableFactoryDefinition(ctx context.Context) (factoryapi.EditableFactoryDefinition, error)
 	SaveEditableFactoryDefinition(ctx context.Context, request factoryapi.SaveEditableFactoryDefinitionRequest) (factoryapi.EditableFactoryDefinition, error)
+}
+
+// SessionAPISurface extends APISurface with explicit per-session routing while
+// preserving the legacy unscoped compatibility behavior through APISurface.
+type SessionAPISurface interface {
+	APISurface
+	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
+	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error)
+	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
+	GetCurrentNamedFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
 }
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
@@ -35,6 +48,10 @@ var ErrInvalidNamedFactory = errors.New("invalid named factory")
 // ErrCurrentNamedFactoryNotFound reports that no durable current-factory
 // pointer could be resolved for named-factory readback.
 var ErrCurrentNamedFactoryNotFound = errors.New("current named factory not found")
+
+// ErrFactorySessionNotFound reports that no live session matched the requested
+// public session identifier.
+var ErrFactorySessionNotFound = errors.New("factory session not found")
 
 // ErrEditableFactoryVersionStale reports that a complete editable-definition
 // save was based on an older factory definition version than the current one.

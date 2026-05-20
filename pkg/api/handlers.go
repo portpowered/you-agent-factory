@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -27,6 +28,14 @@ const defaultMaxResults = 50
 var _ factoryapi.ServerInterface = (*Server)(nil)
 
 // --- Handlers ---
+
+func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.SessionAPISurface, bool) {
+	if s.sessionRuntime == nil {
+		s.writeError(w, http.StatusInternalServerError, "session-scoped API is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	return s.sessionRuntime, true
+}
 
 func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 	req, err := decodeSubmitWorkRequestBody(r.Body)
@@ -69,6 +78,63 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.logger.Error("submit work failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to submit work", "INTERNAL_ERROR")
+		return
+	}
+
+	s.writeJSON(w, http.StatusCreated, factoryapi.SubmitWorkResponse{TraceId: result.TraceID})
+}
+
+func (s *Server) SubmitWorkByFactoryId(w http.ResponseWriter, r *http.Request, factoryID factoryapi.FactoryID) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+
+	req, err := decodeSubmitWorkRequestBody(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	if req.WorkTypeName == "" {
+		s.writeError(w, http.StatusBadRequest, "workTypeName is required", "BAD_REQUEST")
+		return
+	}
+
+	payload, err := generatedPayloadToRawMessage(req.Payload)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	submitReq := interfaces.SubmitRequest{
+		Name:                   strings.TrimSpace(req.Name),
+		WorkTypeID:             req.WorkTypeName,
+		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
+		TraceID:                factorypkg.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
+		Content:                generatedWorkContentToDomain(req.Content),
+		Payload:                payload,
+		Tags:                   generatedStringMap(req.Tags),
+		Relations:              generatedSubmitRelations(req.Relations),
+	}
+	workRequest := factorypkg.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
+
+	result, err := sessionRuntime.SubmitWorkRequestForSession(r.Context(), string(factoryID), workRequest)
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		}
+		if message, ok := submitWorkBadRequestMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.logger.Error("submit work failed", zap.Error(err), zap.String("factory_id", string(factoryID)))
 		s.writeError(w, http.StatusInternalServerError, "failed to submit work", "INTERNAL_ERROR")
 		return
 	}
@@ -124,6 +190,63 @@ func (s *Server) UpsertWorkRequest(w http.ResponseWriter, r *http.Request, reque
 	s.writeJSON(w, http.StatusCreated, factoryapi.UpsertWorkRequestResponse{RequestId: result.RequestID, TraceId: result.TraceID})
 }
 
+func (s *Server) UpsertWorkRequestByFactoryId(w http.ResponseWriter, r *http.Request, factoryID factoryapi.FactoryID, requestID string) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+
+	req, err := decodeWorkRequestBody(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	if requestID == "" {
+		s.writeError(w, http.StatusBadRequest, "request_id is required", "BAD_REQUEST")
+		return
+	}
+	if req.RequestId == "" {
+		s.writeError(w, http.StatusBadRequest, "requestId is required", "BAD_REQUEST")
+		return
+	}
+	if req.RequestId != requestID {
+		s.writeError(w, http.StatusBadRequest, "request_id path and requestId body must match", "BAD_REQUEST")
+		return
+	}
+
+	workRequest, err := generatedWorkRequestToDomain(req)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+	applyStableTraceToWorkRequest(&workRequest)
+	result, err := sessionRuntime.SubmitWorkRequestForSession(r.Context(), string(factoryID), workRequest)
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		}
+		if strings.HasPrefix(err.Error(), "work_request:") {
+			s.writeError(w, http.StatusBadRequest, submitWorkTypeNameMessage(err.Error()), "BAD_REQUEST")
+			return
+		}
+		s.logger.Error("upsert work request failed", zap.Error(err), zap.String("factory_id", string(factoryID)))
+		s.writeError(w, http.StatusInternalServerError, "failed to submit work request", "INTERNAL_ERROR")
+		return
+	}
+
+	s.writeJSON(w, http.StatusCreated, factoryapi.UpsertWorkRequestResponse{RequestId: result.RequestID, TraceId: result.TraceID})
+}
+
 func (s *Server) CreateFactory(w http.ResponseWriter, r *http.Request) {
 	req, err := decodeNamedFactoryBody(r.Body)
 	if err != nil {
@@ -168,6 +291,26 @@ func (s *Server) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
 	namedFactory, ok := s.loadCurrentFactory(w, r)
 	if !ok {
 		return
+	}
+	s.writeJSON(w, http.StatusOK, namedFactory)
+}
+
+func (s *Server) GetCurrentFactoryByFactoryId(w http.ResponseWriter, r *http.Request, factoryID factoryapi.FactoryID) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	namedFactory, err := sessionRuntime.GetCurrentNamedFactoryForSession(r.Context(), string(factoryID))
+	if err != nil {
+		switch {
+		case errors.Is(err, apisurface.ErrFactorySessionNotFound):
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		default:
+			s.logger.Error("get current factory failed", zap.Error(err), zap.String("factory_id", string(factoryID)))
+			s.writeError(w, http.StatusInternalServerError, "failed to load current factory", "INTERNAL_ERROR")
+			return
+		}
 	}
 	s.writeJSON(w, http.StatusOK, namedFactory)
 }
@@ -291,6 +434,38 @@ func (s *Server) SaveEditableCurrentFactoryDefinition(w http.ResponseWriter, r *
 }
 
 func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factoryapi.ListWorkParams) {
+	s.listWork(w, r, params, s.runtime.GetEngineStateSnapshot)
+}
+
+func (s *Server) ListWorkByFactoryId(w http.ResponseWriter, r *http.Request, factoryID factoryapi.FactoryID, params factoryapi.ListWorkByFactoryIdParams) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	legacyParams := factoryapi.ListWorkParams{
+		MaxResults: params.MaxResults,
+		NextToken:  params.NextToken,
+		StateName:  params.StateName,
+	}
+	if params.StateType != nil {
+		stateType := factoryapi.WorkStateType(*params.StateType)
+		legacyParams.StateType = &stateType
+	}
+	if params.SortBy != nil {
+		sortBy := factoryapi.ListWorkParamsSortBy(*params.SortBy)
+		legacyParams.SortBy = &sortBy
+	}
+	s.listWork(w, r, legacyParams, func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+		return sessionRuntime.GetEngineStateSnapshotForSession(ctx, string(factoryID))
+	})
+}
+
+func (s *Server) listWork(
+	w http.ResponseWriter,
+	r *http.Request,
+	params factoryapi.ListWorkParams,
+	loadSnapshot func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error),
+) {
 	if params.StateType != nil && !validWorkStateType(factoryapi.WorkStateType(*params.StateType)) {
 		s.writeError(w, http.StatusBadRequest, "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", "BAD_REQUEST")
 		return
@@ -300,8 +475,12 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 		return
 	}
 
-	snapshot, err := s.runtime.GetEngineStateSnapshot(r.Context())
+	snapshot, err := loadSnapshot(r.Context())
 	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		}
 		s.logger.Error("get engine state snapshot failed", zap.Error(err))
 		s.writeError(w, http.StatusInternalServerError, "failed to get engine state snapshot", "INTERNAL_ERROR")
 		return
@@ -478,8 +657,31 @@ func workMatchesListFilters(work factoryapi.Work, params factoryapi.ListWorkPara
 }
 
 func (s *Server) GetWork(w http.ResponseWriter, r *http.Request, id factoryapi.WorkOrTokenID) {
-	snapshot, err := s.runtime.GetEngineStateSnapshot(r.Context())
+	s.getWork(w, r, id, s.runtime.GetEngineStateSnapshot)
+}
+
+func (s *Server) GetWorkByFactoryId(w http.ResponseWriter, r *http.Request, factoryID factoryapi.FactoryID, id factoryapi.WorkOrTokenID) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	s.getWork(w, r, id, func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+		return sessionRuntime.GetEngineStateSnapshotForSession(ctx, string(factoryID))
+	})
+}
+
+func (s *Server) getWork(
+	w http.ResponseWriter,
+	r *http.Request,
+	id factoryapi.WorkOrTokenID,
+	loadSnapshot func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error),
+) {
+	snapshot, err := loadSnapshot(r.Context())
 	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		}
 		s.logger.Error("get engine state snapshot failed", zap.Error(err))
 		s.writeError(w, http.StatusInternalServerError, "failed to get engine state snapshot", "INTERNAL_ERROR")
 		return
@@ -496,8 +698,30 @@ func (s *Server) GetWork(w http.ResponseWriter, r *http.Request, id factoryapi.W
 
 // GetStatus handles GET /status as the supported runtime status read model.
 func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
-	snapshot, err := s.runtime.GetEngineStateSnapshot(r.Context())
+	s.getStatus(w, r, s.runtime.GetEngineStateSnapshot)
+}
+
+func (s *Server) GetStatusByFactoryId(w http.ResponseWriter, r *http.Request, factoryID factoryapi.FactoryID) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	s.getStatus(w, r, func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+		return sessionRuntime.GetEngineStateSnapshotForSession(ctx, string(factoryID))
+	})
+}
+
+func (s *Server) getStatus(
+	w http.ResponseWriter,
+	r *http.Request,
+	loadSnapshot func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error),
+) {
+	snapshot, err := loadSnapshot(r.Context())
 	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		}
 		s.logger.Error("get engine state snapshot failed", zap.Error(err))
 		s.writeError(w, http.StatusInternalServerError, "failed to get engine state snapshot", "INTERNAL_ERROR")
 		return
@@ -508,14 +732,36 @@ func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
 
 // GetEvents handles GET /events as a canonical factory event SSE stream.
 func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request) {
+	s.getEvents(w, r, s.runtime.SubscribeFactoryEvents)
+}
+
+func (s *Server) GetEventsByFactoryId(w http.ResponseWriter, r *http.Request, factoryID factoryapi.FactoryID) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	s.getEvents(w, r, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
+		return sessionRuntime.SubscribeFactoryEventsForSession(ctx, string(factoryID))
+	})
+}
+
+func (s *Server) getEvents(
+	w http.ResponseWriter,
+	r *http.Request,
+	subscribe func(context.Context) (*interfaces.FactoryEventStream, error),
+) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		s.writeError(w, http.StatusInternalServerError, "streaming unsupported", "INTERNAL_ERROR")
 		return
 	}
 
-	stream, err := s.runtime.SubscribeFactoryEvents(r.Context())
+	stream, err := subscribe(r.Context())
 	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		}
 		s.logger.Error("subscribe factory events failed", zap.Error(err))
 		s.writeError(w, http.StatusInternalServerError, "failed to subscribe to factory events", "INTERNAL_ERROR")
 		return

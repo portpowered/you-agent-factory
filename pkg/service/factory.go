@@ -118,6 +118,7 @@ type FactoryService struct {
 
 var _ factory.APIFactory = (*FactoryService)(nil)
 var _ apisurface.APISurface = (*FactoryService)(nil)
+var _ apisurface.SessionAPISurface = (*FactoryService)(nil)
 
 // FactoryServiceConfig holds all parameters needed to build and run a factory.
 type FactoryServiceConfig struct {
