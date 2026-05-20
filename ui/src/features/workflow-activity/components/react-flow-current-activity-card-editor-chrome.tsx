@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   applyFactoryGraphAddEntityDraft,
@@ -15,9 +15,6 @@ import {
 } from "../../factory-graph-editor/factory-graph-editor-controls";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/factory-graph-draft-types";
 import type { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
-
-const CURRENT_ACTIVITY_HEADER_ROW_CLASS =
-  "flex items-start justify-between gap-3";
 
 export function useFactoryGraphAddEntityController({
   currentFactoryDefinition,
@@ -87,46 +84,6 @@ export function useFactoryGraphAddEntityController({
     setAddEntityErrors,
     setAddMenuOpen,
   };
-}
-
-export function CurrentActivityGraphEditorHeader({
-  editorMode,
-  hasChanges,
-  isDefinitionLoading,
-  loadErrorMessage,
-  locale,
-  onToggle,
-  title,
-}: {
-  editorMode: boolean;
-  hasChanges: boolean;
-  isDefinitionLoading: boolean;
-  loadErrorMessage?: string;
-  locale?: string;
-  onToggle: () => void;
-  title: ReactNode;
-}) {
-  return (
-    <div className={CURRENT_ACTIVITY_HEADER_ROW_CLASS}>
-      <div className="min-w-0">
-        {title}
-        <div className="mt-2">
-          <FactoryGraphEditorStatus
-            editorMode={editorMode}
-            hasChanges={hasChanges}
-            isDefinitionLoading={isDefinitionLoading}
-            locale={locale}
-            loadErrorMessage={loadErrorMessage}
-          />
-        </div>
-      </div>
-      <FactoryGraphEditorModeToggle
-        editorMode={editorMode}
-        locale={locale}
-        onClick={onToggle}
-      />
-    </div>
-  );
 }
 
 const FACTORY_GRAPH_HEADER_ACTIONS_CLASS =
