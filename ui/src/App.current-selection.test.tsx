@@ -1158,8 +1158,19 @@ describe("App current selection", () => {
     expect(stateSelectionSlot?.getAttribute("data-bento-card-id")).toBe(
       "current-selection",
     );
+    const summaryDetails = within(stateInfo)
+      .getByText("Count")
+      .closest("dl");
     expect(within(stateInfo).getByTitle("story:implemented")).toBeTruthy();
     expect(within(stateInfo).getByText("story: implemented")).toBeTruthy();
+    expect(summaryDetails).toBeTruthy();
+    expect(
+      within(summaryDetails ?? stateInfo).queryByText("Work type"),
+    ).toBeNull();
+    expect(within(summaryDetails ?? stateInfo).queryByText("State")).toBeNull();
+    expect(
+      within(summaryDetails ?? stateInfo).queryByText("State node ID"),
+    ).toBeNull();
     expect(within(stateInfo).getByText("Count")).toBeTruthy();
     expect(within(stateInfo).getByText("Current work")).toBeTruthy();
     expect(within(stateInfo).getByText(activeWorkLabel)).toBeTruthy();
@@ -1170,6 +1181,7 @@ describe("App current selection", () => {
     ).toBeTruthy();
     expect(within(stateInfo).queryByText(activeWorkID)).toBeNull();
     expect(within(stateInfo).queryByText("trace-active-story")).toBeNull();
+    expect(within(stateInfo).queryByText(/^story$/)).toBeNull();
 
     fireEvent.click(
       within(stateInfo).getByRole("button", {

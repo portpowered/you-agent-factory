@@ -6,6 +6,7 @@ import {
   resourceCountTimelineEvents,
 } from "./components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
+import { formatTimeOfDay } from "./components/ui/formatters";
 import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import {
   activeStoryTrace,
@@ -181,9 +182,21 @@ export const SelectedPositionCurrentWork = {
     );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
+    const summaryDetails = currentSelection.getByText("Count").closest("dl");
     await expect(currentSelection.getByText("Current work")).toBeVisible();
+    await expect(currentSelection.getByText("story: implemented")).toBeVisible();
     await expect(currentSelection.getByText("Active Story")).toBeVisible();
-    await expect(currentSelection.getByText("work-active-story")).toBeVisible();
+    await expect(
+      currentSelection.getByText(
+        `Started at ${formatTimeOfDay("2026-04-08T12:00:01Z")}`,
+      ),
+    ).toBeVisible();
+    expect(summaryDetails).not.toBeNull();
+    expect(within(summaryDetails ?? canvasElement).queryByText("Work type")).toBeNull();
+    expect(within(summaryDetails ?? canvasElement).queryByText("State")).toBeNull();
+    expect(within(summaryDetails ?? canvasElement).queryByText("State node ID")).toBeNull();
+    expect(currentSelection.queryByText("work-active-story")).toBeNull();
+    expect(currentSelection.queryByText("trace-active-story")).toBeNull();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
@@ -338,9 +351,7 @@ export const FailureAnalysisEventReplaySmoke = {
     await expect(
       positionSelection.getByText("Queued Analysis Story"),
     ).toBeVisible();
-    await expect(
-      positionSelection.getByText("work-queued-analysis"),
-    ).toBeVisible();
+    expect(positionSelection.queryByText("work-queued-analysis")).toBeNull();
     expectCurrentSelectionCardID(canvasElement);
   },
 };

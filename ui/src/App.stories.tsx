@@ -13,6 +13,7 @@ import {
   singleNodeDashboardSnapshot,
   twentyNodeDashboardSnapshot,
 } from "./components/dashboard/test-fixtures";
+import { formatTimeOfDay } from "./components/ui/formatters";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
@@ -1116,17 +1117,24 @@ export const DashboardImprovementsSmoke = {
         name: "Select story:implemented state",
       }),
     );
+    const currentSelection = within(currentSelectionCard(canvasElement));
+    const summaryDetails = currentSelection.getByText("Count").closest("dl");
     await expect(
-      within(currentSelectionCard(canvasElement)).getByText("Current work"),
+      currentSelection.getByText("Current work"),
     ).toBeVisible();
+    await expect(currentSelection.getByText("story: implemented")).toBeVisible();
+    await expect(currentSelection.getByText("Active Story")).toBeVisible();
     await expect(
-      within(currentSelectionCard(canvasElement)).getByText("Active Story"),
-    ).toBeVisible();
-    await expect(
-      within(currentSelectionCard(canvasElement)).getByText(
-        "work-active-story",
+      currentSelection.getByText(
+        `Started at ${formatTimeOfDay("2026-04-08T12:00:01Z")}`,
       ),
     ).toBeVisible();
+    expect(summaryDetails).not.toBeNull();
+    expect(within(summaryDetails ?? canvasElement).queryByText("Work type")).toBeNull();
+    expect(within(summaryDetails ?? canvasElement).queryByText("State")).toBeNull();
+    expect(within(summaryDetails ?? canvasElement).queryByText("State node ID")).toBeNull();
+    expect(currentSelection.queryByText("work-active-story")).toBeNull();
+    expect(currentSelection.queryByText("trace-active-story")).toBeNull();
     const traceDrilldownCard = await canvas.findByRole("article", {
       name: "Trace drill-down",
     });
