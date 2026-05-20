@@ -465,6 +465,45 @@ async function expectEditableConfigurationBrowserFlow(
   ).toBeDisabled();
 }
 
+async function expectFactoryGraphHeaderBrowserFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+  const graphCard = await canvas.findByRole("article", {
+    name: "Factory graph",
+  });
+  const graphHeader = graphCard.querySelector("header");
+
+  if (!(graphHeader instanceof HTMLElement)) {
+    throw new Error("expected factory graph card header");
+  }
+
+  const headerScope = within(graphHeader);
+  await expect(headerScope.getByText("Observe mode")).toBeVisible();
+  await userEvent.click(
+    headerScope.getByRole("button", {
+      name: "Enter factory graph editor",
+    }),
+  );
+  await expect(headerScope.getByText("Editor mode active")).toBeVisible();
+  await expect(
+    headerScope.getByRole("button", {
+      name: "Leave factory graph editor",
+    }),
+  ).toBeVisible();
+  await expect(
+    within(graphCard).getByRole("region", {
+      name: "Factory graph editor tools",
+    }),
+  ).toBeVisible();
+  await userEvent.click(
+    headerScope.getByRole("button", {
+      name: "Leave factory graph editor",
+    }),
+  );
+  await expect(headerScope.getByText("Observe mode")).toBeVisible();
+}
+
 async function expectPromptHintBrowserFlow(
   canvasElement: HTMLElement,
 ): Promise<void> {
@@ -901,9 +940,9 @@ export const SemanticGraphComposition = {
 
     await expectGraphWorkstation(canvasElement, "Select Review workstation");
     expect(canvas.queryByText("Operator View")).toBeNull();
-    await expect(
-      within(graphCard).getByRole("heading", { name: "Current activity" }),
-    ).toBeVisible();
+    expect(
+      within(graphCard).queryByRole("heading", { name: "Current activity" }),
+    ).toBeNull();
     expect(
       (await canvas.findAllByText("dispatch-review-active")).length,
     ).toBeGreaterThan(0);
@@ -1048,9 +1087,9 @@ export const DashboardImprovementsSmoke = {
     await expect(graphCard).toBeVisible();
     await expect(submitWorkCard).toBeVisible();
     expect(within(graphCard).queryByText("Operator View")).toBeNull();
-    await expect(
-      within(graphCard).getByRole("heading", { name: "Current activity" }),
-    ).toBeVisible();
+    expect(
+      within(graphCard).queryByRole("heading", { name: "Current activity" }),
+    ).toBeNull();
     await expect(
       within(submitWorkCard).getByRole("combobox", { name: "Work type" }),
     ).toBeVisible();
@@ -1244,6 +1283,7 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
   ),
   tags: ["test"],
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectFactoryGraphHeaderBrowserFlow(canvasElement);
     await expectEditableConfigurationBrowserFlow(canvasElement);
   },
 };
@@ -1286,6 +1326,7 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
   ),
   tags: ["test"],
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectFactoryGraphHeaderBrowserFlow(canvasElement);
     await expectEditableConfigurationBrowserFlow(canvasElement);
     expectNoPageHorizontalOverflow(canvasElement);
   },
