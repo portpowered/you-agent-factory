@@ -5,7 +5,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import {
   ActivityGraphNodeShell,
   type ActivityGraphNodeHandle,
@@ -253,7 +253,7 @@ function FactoryGraphEditorNodeView({
 >) {
   return (
     <ActivityGraphNodeShell
-      className={cx(
+      className={cn(
         "min-w-0 w-full justify-start border text-left shadow-none",
         KIND_CLASS[data.kind],
         data.draftStatus === "addition" && "ring-2 ring-af-warning/34",
@@ -282,7 +282,7 @@ function FactoryGraphEditorNodeView({
           ) : null}
           {data.kind === "worker" && data.workerStatus ? (
             <span
-              className={cx(
+              className={cn(
                 "rounded-full border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]",
                 WORKER_STATUS_CLASS[data.workerStatus],
               )}

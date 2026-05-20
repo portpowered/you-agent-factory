@@ -1,4 +1,4 @@
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -75,7 +75,7 @@ export function DispatchHistoryCard({
 
   return (
     <article
-      className={cx(
+      className={cn(
         PROVIDER_SESSION_CARD_CLASS,
         isCurrentDispatch && "border-on-foreground/30 bg-on-foreground/6",
       )}
@@ -210,12 +210,12 @@ function DispatchHistoryHeader({
           {title || dispatchID || messages.unknownDispatchTitle}
         </strong>
         <div className="flex flex-wrap items-center gap-2">
-          <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+          <p className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
             {outcome ?? messages.pendingOutcome}
           </p>
           {isCurrentDispatch ? (
             <span
-              className={cx(
+              className={cn(
                 "inline-flex rounded-full border border-on-foreground/35 bg-on-foreground/10 px-2 py-0.5 text-on-foreground",
                 DASHBOARD_SUPPORTING_TEXT_CLASS,
               )}
@@ -240,7 +240,7 @@ function DispatchSummaryDetails({
   view: DispatchHistoryView;
 }) {
   return (
-    <dl className={cx("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
+    <dl className={cn("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
       <InferenceAttemptDetail label={messages.workstationLabel} value={request.workstation_name} />
       <InferenceAttemptDetail label={messages.transitionIdLabel} code value={request.transition_id} />
       <InferenceAttemptDetail label={messages.startedAtLabel} value={requestStartedAt(request)} />

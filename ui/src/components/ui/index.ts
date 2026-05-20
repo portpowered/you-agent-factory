@@ -2,7 +2,6 @@ export * from "../../features/bento/agent-bento";
 export * from "./button";
 export * from "./calendar";
 export * from "./chart";
-export * from "./classnames";
 export * from "./collapsible";
 export * from "./dashboard-shell";
 export * from "./dashboard-typography";

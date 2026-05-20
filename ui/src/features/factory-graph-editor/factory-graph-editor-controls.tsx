@@ -8,7 +8,7 @@ import {
   PopoverTrigger,
   buttonVariants,
 } from "../../components/ui";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import { getFactoryGraphEditorMessages } from "./messages/editor";
 import { FactoryGraphEditorTooltipButton } from "./factory-graph-editor-tooltip-button";
 
@@ -114,7 +114,7 @@ export function FactoryGraphEditorStatus({
   if (!editorMode) {
     return (
       <p
-        className={cx(
+        className={cn(
           STATUS_PILL_CLASS,
           "border-af-overlay/12 bg-af-overlay/6 text-af-ink/76",
         )}
@@ -128,7 +128,7 @@ export function FactoryGraphEditorStatus({
     return (
       <p
         aria-live="polite"
-        className={cx(
+        className={cn(
           STATUS_PILL_CLASS,
           "border-af-accent/24 bg-af-accent/10 text-af-accent",
         )}
@@ -142,7 +142,7 @@ export function FactoryGraphEditorStatus({
     return (
       <p
         aria-live="polite"
-        className={cx(
+        className={cn(
           STATUS_PILL_CLASS,
           "border-af-danger/30 bg-af-danger/8 text-af-danger-ink",
         )}
@@ -156,7 +156,7 @@ export function FactoryGraphEditorStatus({
   return (
     <p
       aria-live="polite"
-      className={cx(
+      className={cn(
         STATUS_PILL_CLASS,
         hasChanges
           ? "border-af-warning/30 bg-af-warning/10 text-af-warning-ink"
@@ -237,7 +237,7 @@ export function FactoryGraphEditorToolbar({
       />
       <p
         aria-live="polite"
-        className={cx(
+        className={cn(
           STATUS_PILL_CLASS,
           hasPendingChanges
             ? "border-af-warning/30 bg-af-warning/10 text-af-warning-ink"
@@ -284,7 +284,7 @@ export function FactoryGraphEditorVisibilityPanel({
               option.label,
             )}
             aria-pressed={option.visible}
-            className={cx(
+            className={cn(
               "flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-af-accent",
               option.visible
                 ? "border-af-accent/20 bg-af-accent/8 text-af-ink"
@@ -468,7 +468,7 @@ export function FactoryGraphEditorNotice({
 }) {
   return (
     <section
-      className={cx(
+      className={cn(
         "grid gap-1 rounded-2xl border p-4",
         NOTICE_TONE_CLASS[tone],
       )}

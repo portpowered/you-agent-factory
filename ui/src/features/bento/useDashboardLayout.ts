@@ -230,4 +230,3 @@ function writeStoredDashboardLayout(layout: AgentBentoLayoutItem[]): void {
     // Layout persistence is a convenience; dashboard interaction should keep working without it.
   }
 }
-

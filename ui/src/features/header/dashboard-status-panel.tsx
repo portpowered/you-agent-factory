@@ -1,4 +1,4 @@
-import { cx } from "../../components/ui";
+import { cn } from "../../lib/cn";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
@@ -7,14 +7,14 @@ import {
 import { useAppLocale } from "../../i18n";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 
-const STATUS_PANEL_CLASS = cx(
+const STATUS_PANEL_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
   "mb-4 p-4 md:p-5 md:px-6",
 );
 const EYEBROW_CLASS =
   "mb-3 text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
-const DASHBOARD_TITLE_CLASS = cx("m-0", DASHBOARD_PAGE_HEADING_CLASS);
-const DETAIL_COPY_CLASS = cx("m-0 max-w-80", DASHBOARD_BODY_TEXT_CLASS);
+const DASHBOARD_TITLE_CLASS = cn("m-0", DASHBOARD_PAGE_HEADING_CLASS);
+const DETAIL_COPY_CLASS = cn("m-0 max-w-80", DASHBOARD_BODY_TEXT_CLASS);
 
 interface DashboardStatusPanelProps {
   detail?: string;
@@ -32,7 +32,7 @@ export function DashboardStatusPanel({
   const { locale: resolvedLocale } = useAppLocale(locale);
   const detailClassName =
     tone === "error"
-      ? cx(DETAIL_COPY_CLASS, "text-af-danger-ink")
+      ? cn(DETAIL_COPY_CLASS, "text-af-danger-ink")
       : DETAIL_COPY_CLASS;
 
   return (

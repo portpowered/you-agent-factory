@@ -13,7 +13,7 @@ import {
 } from "@xyflow/react";
 import type { CSSProperties } from "react";
 
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import type { FactoryGraphNodeKind } from "../factory-graph-editor/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../factory-graph-editor/factory-graph-editor-connections";
 import {
@@ -153,7 +153,7 @@ export function CurrentActivityGraphViewport({
       <section
         aria-describedby="workflow-graph-heading"
         aria-label={editorMessages.viewportLabel}
-        className={cx(
+        className={cn(
           "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",
           (imports.dropState.status === "drag-active" ||
             imports.dropState.status === "reading") &&

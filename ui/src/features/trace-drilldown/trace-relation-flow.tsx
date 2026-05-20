@@ -16,7 +16,7 @@ import {
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -232,7 +232,7 @@ function RelationWorkNode({
         {messages.workItemsLabel}
       </span>
       <strong
-        className={cx("text-sm text-af-ink [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("text-sm text-af-ink [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
       >
         {data.label}
       </strong>
@@ -242,7 +242,7 @@ function RelationWorkNode({
   if (data.selectable && data.workID && data.onSelectWorkID) {
     return (
       <button
-        className={cx(RELATION_NODE_CLASS, RELATION_NODE_ACTIVE_CLASS)}
+        className={cn(RELATION_NODE_CLASS, RELATION_NODE_ACTIVE_CLASS)}
         onClick={handleSelectWork}
         title={data.workID}
         type="button"

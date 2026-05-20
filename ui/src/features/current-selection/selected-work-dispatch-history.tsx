@@ -1,4 +1,4 @@
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -59,7 +59,7 @@ export function SelectedWorkDispatchHistorySection({
         >
           {messages.dispatchHistoryHeading}
         </h4>
-        <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
           {messages.dispatchHistoryCountLabel(requests.length)}
         </p>
       </div>

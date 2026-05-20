@@ -1,4 +1,4 @@
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/ui/dashboard-typography";
 
 export type DashboardChartSemanticRole =
@@ -39,15 +39,15 @@ const DASHBOARD_CHART_POINT_WEIGHT_CLASS = "[stroke-width:1.5]";
 const DASHBOARD_CHART_DEFAULT_POINT_RADIUS = 3.25;
 
 export const DASHBOARD_CHART_AXIS_CLASS = "stroke-af-ink/18 [stroke-width:1]";
-export const DASHBOARD_CHART_AXIS_LABEL_CLASS = cx(
+export const DASHBOARD_CHART_AXIS_LABEL_CLASS = cn(
   "fill-af-ink/58 [letter-spacing:0.16em]",
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 );
-export const DASHBOARD_CHART_LINE_CLASS = cx(
+export const DASHBOARD_CHART_LINE_CLASS = cn(
   "fill-none [stroke-linecap:round] [stroke-linejoin:round]",
   DASHBOARD_CHART_LINE_WEIGHT_CLASS,
 );
-export const DASHBOARD_CHART_POINT_CLASS = cx(
+export const DASHBOARD_CHART_POINT_CLASS = cn(
   "stroke-af-canvas/88",
   DASHBOARD_CHART_POINT_WEIGHT_CLASS,
 );
@@ -60,44 +60,44 @@ const DASHBOARD_CHART_SEMANTIC_STYLES: Record<
 > = {
   queued: {
     color: "var(--color-af-chart-queued)",
-    lineClassName: cx(DASHBOARD_CHART_LINE_CLASS, "[stroke-dasharray:5_4]"),
-    pointClassName: cx(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-queued"),
+    lineClassName: cn(DASHBOARD_CHART_LINE_CLASS, "[stroke-dasharray:5_4]"),
+    pointClassName: cn(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-queued"),
     pointRadius: DASHBOARD_CHART_DEFAULT_POINT_RADIUS,
   },
   inFlight: {
     color: "var(--color-af-chart-in-flight)",
-    lineClassName: cx(DASHBOARD_CHART_LINE_CLASS, "[stroke-dasharray:7_5]"),
-    pointClassName: cx(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-in-flight"),
+    lineClassName: cn(DASHBOARD_CHART_LINE_CLASS, "[stroke-dasharray:7_5]"),
+    pointClassName: cn(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-in-flight"),
     pointRadius: DASHBOARD_CHART_DEFAULT_POINT_RADIUS,
   },
   completed: {
     color: "var(--color-af-chart-completed)",
     lineClassName: DASHBOARD_CHART_LINE_CLASS,
-    pointClassName: cx(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-completed"),
+    pointClassName: cn(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-completed"),
     pointRadius: DASHBOARD_CHART_DEFAULT_POINT_RADIUS,
   },
   failed: {
     color: "var(--color-af-chart-failed)",
-    lineClassName: cx(DASHBOARD_CHART_LINE_CLASS, "[stroke-dasharray:2.5_4.5]"),
-    pointClassName: cx(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-failed"),
+    lineClassName: cn(DASHBOARD_CHART_LINE_CLASS, "[stroke-dasharray:2.5_4.5]"),
+    pointClassName: cn(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-failed"),
     pointRadius: DASHBOARD_CHART_DEFAULT_POINT_RADIUS,
   },
   failureTrend: {
     color: "var(--color-af-chart-failure-trend)",
     lineClassName: DASHBOARD_CHART_LINE_CLASS,
-    pointClassName: cx(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-failure-trend"),
+    pointClassName: cn(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-failure-trend"),
     pointRadius: DASHBOARD_CHART_DEFAULT_POINT_RADIUS,
   },
   reworkTrend: {
     color: "var(--color-af-chart-rework-trend)",
     lineClassName: DASHBOARD_CHART_LINE_CLASS,
-    pointClassName: cx(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-rework-trend"),
+    pointClassName: cn(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-rework-trend"),
     pointRadius: DASHBOARD_CHART_DEFAULT_POINT_RADIUS,
   },
   timingTrend: {
     color: "var(--color-af-chart-timing-trend)",
     lineClassName: DASHBOARD_CHART_LINE_CLASS,
-    pointClassName: cx(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-timing-trend"),
+    pointClassName: cn(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-timing-trend"),
     pointRadius: DASHBOARD_CHART_DEFAULT_POINT_RADIUS,
   },
 };

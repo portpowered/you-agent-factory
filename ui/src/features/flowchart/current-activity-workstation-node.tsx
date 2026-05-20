@@ -9,7 +9,7 @@ import {
   formatDurationFromISO,
   formatWorkItemLabel,
 } from "../../components/ui/formatters";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import { getWorkflowActivityShellMessages } from "../workflow-activity/messages/activity-shell";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
@@ -66,7 +66,7 @@ export function WorkstationNodeView({
     data.workstation.workstation_name ||
     data.workstation.transition_id ||
     data.workstation.node_id;
-  const nodeClassName = cx(
+  const nodeClassName = cn(
     "min-w-0 w-full justify-start overflow-hidden border-2 bg-af-surface/88",
     exhaustionRule ? "border-dashed border-af-danger/36" : "border-af-info/28",
     !exhaustionRule &&
@@ -143,7 +143,7 @@ function ExhaustionRuleNodeButton({
         title={semanticIconMetadata.label}
       >
         <GraphSemanticIcon
-          className={cx("h-4 w-4", semanticIconMetadata.className)}
+          className={cn("h-4 w-4", semanticIconMetadata.className)}
           kind={semanticIconMetadata.iconKind}
           label={semanticIconMetadata.label}
         />
@@ -203,7 +203,7 @@ function ActiveWorkstationNodeContent({
           title={semanticIconMetadata.label}
         >
           <GraphSemanticIcon
-            className={cx("h-4 w-4", semanticIconMetadata.className)}
+            className={cn("h-4 w-4", semanticIconMetadata.className)}
             kind={semanticIconMetadata.iconKind}
             label={semanticIconMetadata.label}
           />
@@ -242,7 +242,7 @@ function ActiveWorkstationNodeContent({
             <li key={`${execution.dispatch_id}:${workItem.work_id}`}>
               <button
                 aria-pressed={workItemSelected}
-                className={cx(
+                className={cn(
                   "nodrag nopan grid min-w-0 w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-af-overlay/8 bg-af-surface px-2 py-1.5 text-left text-[0.74rem] text-inherit",
                   workItemSelected &&
                     "border-af-info/60 bg-af-info/15 shadow-af-info-chip",
@@ -337,7 +337,7 @@ function workstationTitleClassName(label: string): string {
         ? "text-[0.88rem]"
         : "text-[1rem]";
 
-  return cx(
+  return cn(
     "block min-w-0 basis-0 flex-1 truncate whitespace-nowrap font-bold leading-tight",
     textSizeClassName,
   );
@@ -351,7 +351,7 @@ function workItemLabelClassName(label: string): string {
         ? "text-[0.68rem]"
         : "text-[0.74rem]";
 
-  return cx(
+  return cn(
     "block min-w-0 basis-0 flex-1 truncate whitespace-nowrap leading-tight",
     textSizeClassName,
   );

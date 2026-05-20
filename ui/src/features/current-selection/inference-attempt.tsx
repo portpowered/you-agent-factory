@@ -3,7 +3,7 @@ import {
   formatProviderSession,
   getProviderSessionLogTarget,
 } from "../../components/ui/formatters";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -102,7 +102,7 @@ export function InferenceAttemptCard({
                 attempt.dispatch_id,
               )}
               aria-pressed={providerSessionSelected}
-              className={cx(
+              className={cn(
                 PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
                 providerSessionSelected &&
                   "border-af-accent/35 bg-af-accent/10 text-af-accent",

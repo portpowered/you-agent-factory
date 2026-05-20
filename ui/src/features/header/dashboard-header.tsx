@@ -9,7 +9,7 @@ import {
 
 import type { DashboardStreamState } from "../../api/dashboard/types";
 import { TickSliderControl } from "../../components/dashboard";
-import { cx } from "../../components/ui";
+import { cn } from "../../lib/cn";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
@@ -30,27 +30,27 @@ import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { getHeaderControlsMessages } from "./messages/header-controls";
 
-const DASHBOARD_TOOLBAR_CLASS = cx(
+const DASHBOARD_TOOLBAR_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
   "mb-4 flex flex-wrap items-center gap-3 p-3 md:px-4 md:py-3",
 );
-const DASHBOARD_TITLE_CLASS = cx("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
-const DASHBOARD_CONTROLS_CLASS = cx(
+const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
+const DASHBOARD_CONTROLS_CLASS = cn(
   "ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3",
   "max-md:ml-0 max-md:w-full max-md:justify-stretch",
 );
-const STREAM_STATUS_SHELL_CLASS = cx(
+const STREAM_STATUS_SHELL_CLASS = cn(
   "flex shrink-0 items-center justify-end",
   "max-md:justify-start",
 );
-const STREAM_STATUS_CLASS = cx(
+const STREAM_STATUS_CLASS = cn(
   "inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-overlay/12 bg-af-overlay/4",
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const LOCALE_MENU_PANEL_CLASS =
   "absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-af-overlay/12 bg-af-surface/96 p-1 shadow-af-panel backdrop-blur-lg";
-const LOCALE_MENU_ITEM_CLASS = cx(
+const LOCALE_MENU_ITEM_CLASS = cn(
   "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-af-ink/82 outline-none transition-colors",
   "focus-visible:bg-af-overlay/8 focus-visible:ring-2 focus-visible:ring-af-accent/25",
 );
@@ -270,7 +270,7 @@ function DashboardLocaleMenuList({
         return (
           <button
             aria-checked={isSelected}
-            className={cx(
+            className={cn(
               LOCALE_MENU_ITEM_CLASS,
               isSelected && "bg-af-accent/10 text-af-accent",
             )}
@@ -420,7 +420,7 @@ function moveLocaleMenuFocus(
 }
 
 function streamStatusClassName(status: DashboardStreamState["status"]): string {
-  return cx(
+  return cn(
     STREAM_STATUS_CLASS,
     status === "live" &&
       "border-af-success/30 bg-af-success/16 text-af-success-ink",
