@@ -483,7 +483,10 @@ func TestPersistNamedFactory_WritesStarterInputBundledFilesToInputsDirectory(t *
 	}
 
 	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "seed.md"), "starter markdown\n")
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "notes.txt"), "starter text payload\n")
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "request"), "extensionless payload\n")
 	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "task", "exec-123", "seed.json"), "{\"payload\":\"starter json\"}\n")
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "BATCH", interfaces.DefaultChannelName, "seed-batch.json"), "{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"alpha\",\"workTypeName\":\"task\",\"payload\":\"batch payload\"}]}\n")
 
 	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
 	if err != nil {
@@ -498,11 +501,14 @@ func TestPersistNamedFactory_WritesStarterInputBundledFilesToInputsDirectory(t *
 		t.Fatalf("expected supportingFiles object, got %#v", payload["supportingFiles"])
 	}
 	bundledFiles, ok := resourceManifest["bundledFiles"].([]any)
-	if !ok || len(bundledFiles) != 2 {
-		t.Fatalf("expected two starter bundled files, got %#v", resourceManifest["bundledFiles"])
+	if !ok || len(bundledFiles) != 5 {
+		t.Fatalf("expected five starter bundled files, got %#v", resourceManifest["bundledFiles"])
 	}
-	assertBundledFilePayloadWithoutInline(t, bundledFiles[0].(map[string]any), "INPUT", "factory/inputs/task/default/seed.md")
-	assertBundledFilePayloadWithoutInline(t, bundledFiles[1].(map[string]any), "INPUT", "factory/inputs/task/exec-123/seed.json")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[0].(map[string]any), "INPUT", "factory/inputs/BATCH/default/seed-batch.json")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[1].(map[string]any), "INPUT", "factory/inputs/task/default/notes.txt")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[2].(map[string]any), "INPUT", "factory/inputs/task/default/request")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[3].(map[string]any), "INPUT", "factory/inputs/task/default/seed.md")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[4].(map[string]any), "INPUT", "factory/inputs/task/exec-123/seed.json")
 }
 
 func TestPersistNamedFactory_RejectsDuplicateNames(t *testing.T) {
@@ -2531,6 +2537,30 @@ func namedFactoryPayloadWithStarterInputs(t *testing.T, project string) []byte {
 					"content": map[string]string{
 						"encoding": "utf-8",
 						"inline":   "{\"payload\":\"starter json\"}\n",
+					},
+				},
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/task/default/notes.txt",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "starter text payload\n",
+					},
+				},
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/task/default/request",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "extensionless payload\n",
+					},
+				},
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/BATCH/default/seed-batch.json",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"alpha\",\"workTypeName\":\"task\",\"payload\":\"batch payload\"}]}\n",
 					},
 				},
 			},

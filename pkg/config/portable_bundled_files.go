@@ -442,12 +442,7 @@ func collectSharedFactoryStarterWork(factoryDir string, cfg *interfaces.FactoryC
 		}
 
 		name := filepath.Base(path)
-		if isPortableStarterWorkTempFile(name) {
-			return nil
-		}
-		switch strings.ToLower(filepath.Ext(name)) {
-		case ".json", ".md":
-		default:
+		if isPortableStarterWorkIgnoredFile(name) {
 			return nil
 		}
 
@@ -487,7 +482,10 @@ func collectSharedFactoryStarterWork(factoryDir string, cfg *interfaces.FactoryC
 	return bundledFiles, nil
 }
 
-func isPortableStarterWorkTempFile(name string) bool {
+func isPortableStarterWorkIgnoredFile(name string) bool {
+	if name == ".gitkeep" {
+		return true
+	}
 	return strings.HasSuffix(name, ".tmp") ||
 		strings.HasSuffix(name, ".swp") ||
 		strings.HasSuffix(name, "~")

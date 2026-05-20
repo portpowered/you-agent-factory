@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -1124,8 +1125,12 @@ func TestFactoryService_GetCurrentNamedFactory_SnapshotsCurrentInputsAsStarterBu
 
 	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "starter.md"), "starter markdown\n")
 	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", "exec-123", "starter.json"), "{\"payload\":\"starter json\"}\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "notes.txt"), "starter text payload\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "request"), "extensionless payload\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "BATCH", interfaces.DefaultChannelName, "seed-batch.json"), "{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"alpha\",\"workTypeName\":\"task\",\"payload\":\"batch payload\"}]}\n")
 	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "unknown", interfaces.DefaultChannelName, "ignored.md"), "ignored\n")
-	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "ignored.txt"), "ignored\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, ".gitkeep"), "")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "ignored.tmp"), "ignored\n")
 
 	current, err := svc.GetCurrentNamedFactory(context.Background())
 	if err != nil {
@@ -1141,11 +1146,52 @@ func TestFactoryService_GetCurrentNamedFactory_SnapshotsCurrentInputsAsStarterBu
 			starterFiles = append(starterFiles, bundledFile)
 		}
 	}
-	if len(starterFiles) != 2 {
-		t.Fatalf("starter bundled files = %#v, want 2 current inputs", starterFiles)
+	if len(starterFiles) != 5 {
+		t.Fatalf("starter bundled files = %#v, want 5 current inputs", starterFiles)
 	}
-	assertServiceBundledFactoryEntry(t, starterFiles[0], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/starter.md", "starter markdown\n")
-	assertServiceBundledFactoryEntry(t, starterFiles[1], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/exec-123/starter.json", "{\"payload\":\"starter json\"}\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[0], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/BATCH/default/seed-batch.json", "{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"alpha\",\"workTypeName\":\"task\",\"payload\":\"batch payload\"}]}\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[1], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/notes.txt", "starter text payload\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[2], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/request", "extensionless payload\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[3], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/starter.md", "starter markdown\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[4], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/exec-123/starter.json", "{\"payload\":\"starter json\"}\n")
+}
+
+func TestFactoryService_GetCurrentNamedFactory_FailsWhenStarterWorkCopyCannotReadInput(t *testing.T) {
+	if os.Getenv("CI") != "" && runtime.GOOS == "windows" {
+		t.Skip("permission-based starter input read failures are not reliable on Windows CI")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("permission-based starter input read failures are not reliable on Windows")
+	}
+
+	rootDir := t.TempDir()
+	persistNamedFactoryAndSelectCurrent(t, rootDir, "alpha")
+	alphaDir := filepath.Join(rootDir, "alpha")
+
+	starterPath := filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "restricted.txt")
+	writePortableServiceBundledFile(t, starterPath, "starter payload\n")
+	if err := os.Chmod(starterPath, 0o000); err != nil {
+		t.Fatalf("Chmod(%s): %v", starterPath, err)
+	}
+	defer func() {
+		_ = os.Chmod(starterPath, 0o644)
+	}()
+
+	svc := buildNamedFactoryServiceForTest(t, rootDir)
+
+	_, err := svc.GetCurrentNamedFactory(context.Background())
+	if err == nil {
+		t.Fatal("expected starter-work copy failure")
+	}
+	if !strings.Contains(err.Error(), "inline shared factory starter work") {
+		t.Fatalf("GetCurrentNamedFactory error = %q, want shared starter-work context", err)
+	}
+	if !strings.Contains(err.Error(), "read starter work") {
+		t.Fatalf("GetCurrentNamedFactory error = %q, want read starter work context", err)
+	}
+	if !strings.Contains(err.Error(), "restricted.txt") {
+		t.Fatalf("GetCurrentNamedFactory error = %q, want offending starter file", err)
+	}
 }
 
 func TestFactoryService_GetCurrentNamedFactory_FallsBackToRootRuntimeWhenPointerMissing(t *testing.T) {
