@@ -227,6 +227,60 @@ func TestKiroProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t
 	}
 }
 
+func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
+	testCases := []struct {
+		name            string
+		req             interfaces.ProviderInferenceRequest
+		skipPermissions bool
+		want            []string
+	}{
+		{
+			name: "BasicPrompt",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderCursor),
+				UserMessage:   "summarize the workspace",
+			},
+			want: []string{"--print", "summarize the workspace", "--output-format", "text"},
+		},
+		{
+			name: "WithModelSessionAndForce",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderCursor),
+				Model:         "gpt-5",
+				SessionID:     "cursor-session-123",
+				UserMessage:   "run the tests",
+			},
+			skipPermissions: true,
+			want:            []string{"--print", "run the tests", "--output-format", "text", "--model", "gpt-5", "--resume", "cursor-session-123", "--force"},
+		},
+	}
+
+	behavior := cursorProviderBehavior{logger: logging.NoopLogger{}}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			if err != nil {
+				t.Fatalf("BuildArgs returned error: %v", err)
+			}
+			assertStringSlicesEqual(t, tc.want, args)
+		})
+	}
+}
+
+func TestCursorProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
+	behavior := cursorProviderBehavior{logger: logging.NoopLogger{}}
+	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(ModelProviderCursor),
+		UserMessage:   "summarize the workspace",
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
+			interfaces.RunnerOptionalCapabilityStructuredOutput,
+		},
+	}, false)
+	if err == nil || err.Error() != "structured output is not supported by the cursor-cli runner in v1" {
+		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
+	}
+}
+
 func TestClaudeProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
 

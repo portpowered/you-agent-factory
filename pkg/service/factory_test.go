@@ -6401,6 +6401,80 @@ You are a helpful assistant.
 	}
 }
 
+func TestLoadWorkersFromConfig_CursorRunnerExecutesBaselineWorkstationFlow(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: gpt-5
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+			Runner:         interfaces.RunnerIDCursorCLI,
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, nil, runner, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-cursor-default",
+		TransitionID:    "t-cursor-default",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-cursor-default",
+			Color: interfaces.TokenColor{
+				WorkID: "work-cursor-default",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if runner.request.Command != string(workers.ModelProviderCursor) {
+		t.Fatalf("command = %q, want %q", runner.request.Command, workers.ModelProviderCursor)
+	}
+	if len(runner.request.Args) < 4 || runner.request.Args[0] != "--print" || runner.request.Args[2] != "--output-format" || runner.request.Args[3] != "text" {
+		t.Fatalf("args = %#v, want cursor-agent print invocation", runner.request.Args)
+	}
+}
+
 func TestLoadWorkersFromConfig_CanonicalRuntimeLookupDrivesScriptExecutionWorkingDirectory(t *testing.T) {
 	dir := t.TempDir()
 	runtimeBaseDir := t.TempDir()

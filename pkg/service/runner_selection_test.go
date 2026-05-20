@@ -98,6 +98,29 @@ func TestLoadWorkersFromConfig_AcceptsAvailableKiroFactoryRunner(t *testing.T) {
 	}
 }
 
+func TestLoadWorkersFromConfig_AcceptsAvailableCursorFactoryRunner(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMD(t, dir, "worker-a")
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil); err != nil {
+		t.Fatalf("loadWorkersFromConfig error = %v, want available cursor runner", err)
+	}
+}
+
 func TestValidateConfiguredWorkstationRunners_AcceptsLegacyBuiltInRunnerDefault(t *testing.T) {
 	cfg := &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{

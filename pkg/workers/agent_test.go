@@ -518,6 +518,37 @@ func TestAgentExecutor_InferenceRequestDefaultsKiroProviderFromRunnerSelection(t
 	}
 }
 
+func TestAgentExecutor_InferenceRequestDefaultsCursorProviderFromRunnerSelection(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "cursor ok"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Model: "gpt-5",
+			},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-cursor-default",
+			TransitionID: "t-cursor-default",
+			WorkerType:   "worker-a",
+		},
+		withAgentRunnerID(interfaces.RunnerIDCursorCLI),
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderCursor) {
+		t.Fatalf("model provider = %q, want %q", provider.lastReq.ModelProvider, ModelProviderCursor)
+	}
+	if provider.lastReq.RunnerID != interfaces.RunnerIDCursorCLI {
+		t.Fatalf("runner id = %q, want %q", provider.lastReq.RunnerID, interfaces.RunnerIDCursorCLI)
+	}
+}
+
 func TestAgentExecutor_InferenceRequestMarksImageInputCapabilityWhenPresent(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{

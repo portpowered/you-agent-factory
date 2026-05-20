@@ -185,6 +185,8 @@ func modelProviderForRunnerSelection(workerModelProvider, runnerID string) strin
 		return string(ModelProviderGemini)
 	case interfaces.RunnerIDKiro:
 		return string(ModelProviderKiro)
+	case interfaces.RunnerIDCursorCLI:
+		return string(ModelProviderCursor)
 	default:
 		return ""
 	}

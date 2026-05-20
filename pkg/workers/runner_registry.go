@@ -24,8 +24,8 @@ var builtInRunnerStatus = map[string]RunnerStatus{
 		Available: true,
 	},
 	interfaces.RunnerIDCursorCLI: {
-		Metadata:          mustBuiltInRunnerMetadata(interfaces.RunnerIDCursorCLI),
-		UnavailableReason: "cursor-cli runner is registered but not yet available in this build",
+		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDCursorCLI),
+		Available: true,
 	},
 	interfaces.RunnerIDOpenCode: {
 		Metadata:          mustBuiltInRunnerMetadata(interfaces.RunnerIDOpenCode),

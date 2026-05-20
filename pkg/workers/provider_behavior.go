@@ -66,6 +66,10 @@ type kiroProviderBehavior struct {
 	logger logging.Logger
 }
 
+type cursorProviderBehavior struct {
+	logger logging.Logger
+}
+
 func providerBehaviorFor(provider string, logger logging.Logger) providerBehavior {
 	switch provider {
 	case string(ModelProviderCodex):
@@ -74,6 +78,8 @@ func providerBehaviorFor(provider string, logger logging.Logger) providerBehavio
 		return geminiProviderBehavior{logger: logger}
 	case string(ModelProviderKiro):
 		return kiroProviderBehavior{logger: logger}
+	case string(ModelProviderCursor):
+		return cursorProviderBehavior{logger: logger}
 	default:
 		return claudeProviderBehavior{logger: logger}
 	}
@@ -87,6 +93,8 @@ func providerBehaviorForErrorClassification(provider string) providerBehavior {
 		return geminiProviderBehavior{}
 	case string(ModelProviderKiro):
 		return kiroProviderBehavior{}
+	case string(ModelProviderCursor):
+		return cursorProviderBehavior{}
 	default:
 		return codexProviderBehavior{}
 	}
@@ -321,6 +329,39 @@ func (b kiroProviderBehavior) FormatTimeoutFailure(result CommandResult) string 
 	return formatProviderOutputOrDefault(result, "execution timeout")
 }
 
+func (b cursorProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+	if err := validateCursorOptionalCapabilities(req); err != nil {
+		return nil, err
+	}
+	args := []string{"--print", req.UserMessage, "--output-format", "text"}
+	if req.Model != "" {
+		args = append(args, "--model", req.Model)
+	}
+	if req.SessionID != "" {
+		args = append(args, "--resume", req.SessionID)
+	}
+	if skipPermissions {
+		args = append(args, "--force")
+	}
+	return args, nil
+}
+
+func (b cursorProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+	return buildBaseProviderCommandRequest(req, args)
+}
+
+func (b cursorProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
+	return codexProviderBehavior{}.FormatExitFailure(provider, result)
+}
+
+func (b cursorProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+	return codexProviderBehavior{}.ClassifyExitFailure(result)
+}
+
+func (b cursorProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
+	return formatProviderOutputOrDefault(result, "execution timeout")
+}
+
 func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
 	unsupported := map[interfaces.RunnerOptionalCapability]string{
 		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
@@ -346,6 +387,20 @@ func validateKiroOptionalCapabilities(req interfaces.ProviderInferenceRequest) e
 		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the kiro runner in v1",
 		interfaces.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the kiro runner in v1",
 		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the kiro runner in v1",
+	}
+	for _, capability := range req.RequiredOptionalCapabilities {
+		if message, blocked := unsupported[capability]; blocked {
+			return errors.New(message)
+		}
+	}
+	return nil
+}
+
+func validateCursorOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
+	unsupported := map[interfaces.RunnerOptionalCapability]string{
+		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the cursor-cli runner in v1",
+		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the cursor-cli runner in v1",
+		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the cursor-cli runner in v1",
 	}
 	for _, capability := range req.RequiredOptionalCapabilities {
 		if message, blocked := unsupported[capability]; blocked {

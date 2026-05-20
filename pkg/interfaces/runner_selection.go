@@ -63,9 +63,15 @@ var builtInRunnerMetadata = map[string]RunnerMetadata{
 		),
 	},
 	RunnerIDCursorCLI: {
-		ID:           RunnerIDCursorCLI,
-		DisplayName:  "Cursor CLI",
-		Capabilities: NewRunnerCapabilities(),
+		ID:          RunnerIDCursorCLI,
+		DisplayName: "Cursor CLI",
+		Capabilities: NewRunnerCapabilities(
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityImageInput, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilitySessionResume, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityStructuredOutput, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorkingDirectory, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorktree, Status: RunnerOptionalCapabilityStatusUnsupported},
+		),
 	},
 	RunnerIDOpenCode: {
 		ID:           RunnerIDOpenCode,
