@@ -1,11 +1,6 @@
 import { expect, userEvent, waitFor, within } from "storybook/test";
-
 import { App } from "./App";
-import type {
-  DashboardSnapshot,
-  DashboardTrace,
-  DashboardWorkstationRequest,
-} from "./api/dashboard";
+import type { DashboardSnapshot, DashboardTrace, DashboardWorkstationRequest } from "./api/dashboard";
 import type { FactoryValue } from "./api/named-factory";
 import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
 import {
