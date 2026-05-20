@@ -1,4 +1,5 @@
 import type { WorkstationRequestDetailCardProps } from "../detail-card-types";
+import { formatWorkItemLabel } from "../../../components/ui/formatters";
 import { normalizeDetailText } from "./detail-card-shared";
 
 export interface WorkstationRequestDetailView {
@@ -10,6 +11,7 @@ export interface WorkstationRequestDetailView {
   normalizedScriptStderr: string | undefined;
   normalizedScriptStdout: string | undefined;
   outcome: string | undefined;
+  requestTitle: string;
   totalDurationMillis: number | undefined;
 }
 
@@ -46,7 +48,30 @@ export function buildWorkstationRequestDetailView(
       request.script_response?.stdout,
     ),
     outcome: request.outcome ?? request.script_response?.outcome,
+    requestTitle: workstationRequestTitle(request),
     totalDurationMillis:
       request.total_duration_millis ?? request.script_response?.duration_millis,
   };
+}
+
+function workstationRequestTitle(
+  request: WorkstationRequestDetailCardProps["request"],
+): string {
+  const namedInputWorkItem = request.request_view?.input_work_items?.find(
+    hasWorkFacingLabel,
+  );
+  if (namedInputWorkItem) {
+    return formatWorkItemLabel(namedInputWorkItem);
+  }
+
+  const namedWorkItem = request.work_items.find(hasWorkFacingLabel);
+  if (namedWorkItem) {
+    return formatWorkItemLabel(namedWorkItem);
+  }
+
+  return request.request_id || request.dispatch_id;
+}
+
+function hasWorkFacingLabel(workItem: { display_name?: string; work_id: string }) {
+  return Boolean(workItem.display_name?.trim() || workItem.work_id.trim());
 }
