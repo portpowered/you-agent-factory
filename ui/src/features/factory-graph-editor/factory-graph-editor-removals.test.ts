@@ -92,10 +92,14 @@ describe("factory graph editor removals", () => {
 
     expect(nextDraft.removals.workstations).toEqual(["review"]);
     expect(
-      Array.from(collectPendingRemovalNodeIds(baseFactoryDefinition, nextDraft)),
+      Array.from(
+        collectPendingRemovalNodeIds(baseFactoryDefinition, nextDraft),
+      ),
     ).toEqual(["workstation:review"]);
     expect(
-      Array.from(collectPendingRemovalEdgeIds(baseFactoryDefinition, nextDraft)),
+      Array.from(
+        collectPendingRemovalEdgeIds(baseFactoryDefinition, nextDraft),
+      ),
     ).toEqual([
       "worker-assignment:worker:writer->workstation:review",
       "workstation-input:work-state:story:queued->workstation:review",
@@ -152,7 +156,8 @@ describe("factory graph editor removals", () => {
       },
     ]);
     expect(
-      buildPendingFactoryDefinition(baseFactoryDefinition, nextDraft)?.workstations,
+      buildPendingFactoryDefinition(baseFactoryDefinition, nextDraft)
+        ?.workstations,
     ).toEqual([
       {
         inputs: [
@@ -182,8 +187,7 @@ describe("factory graph editor removals", () => {
       buildFactoryGraphEdgeRemovalIntent({
         baseFactoryDefinition,
         draft,
-        edgeId:
-          "workstation-output:workstation:review->work-state:story:done",
+        edgeId: "workstation-output:workstation:review->work-state:story:done",
       }),
     ).toMatchObject({
       confirmLabel: "Remove review success route",
@@ -206,5 +210,115 @@ describe("factory graph editor removals", () => {
       ineligibleReason:
         "Work type ordering edges are managed by work-state membership and cannot be removed directly.",
     });
+  });
+
+  it("summarizes work-type and resource removals with dependent topology impact", () => {
+    const draft = createEmptyFactoryGraphDraft();
+
+    expect(
+      buildFactoryGraphRemovalIntent({
+        baseFactoryDefinition,
+        draft,
+        nodeId: "work-type:story",
+      }),
+    ).toMatchObject({
+      confirmDescription:
+        "This will remove 2 graph edges. story also owns 2 work states, which will be removed with it.",
+      confirmLabel: "Delete story work-type",
+      title: "Remove story work-type?",
+    });
+
+    expect(
+      buildFactoryGraphRemovalIntent({
+        baseFactoryDefinition,
+        draft,
+        nodeId: "resource:gpu",
+      }),
+    ).toMatchObject({
+      confirmDescription:
+        "This will remove 1 graph edge. Worker and workstation resource references that depend on gpu will be cleared from the pending draft.",
+      confirmLabel: "Delete gpu resource",
+      title: "Remove gpu resource?",
+    });
+  });
+
+  it("returns no removal intent for unknown nodes and unknown edges", () => {
+    const draft = createEmptyFactoryGraphDraft();
+
+    expect(
+      buildFactoryGraphRemovalIntent({
+        baseFactoryDefinition,
+        draft,
+        nodeId: "workstation:missing",
+      }),
+    ).toBeNull();
+    expect(
+      buildFactoryGraphEdgeRemovalIntent({
+        baseFactoryDefinition,
+        draft,
+        edgeId: "workstation-output:missing",
+      }),
+    ).toBeNull();
+  });
+
+  it("removes draft-only entities instead of creating server-backed removals", () => {
+    const draft = createEmptyFactoryGraphDraft();
+    draft.additions.resources.push({ capacity: 1, name: "cache" });
+    draft.additions.workers.push({
+      model: "gpt-5",
+      name: "editor",
+      type: "MODEL_WORKER",
+    });
+    draft.additions.workTypes.push({ name: "bug", states: [] });
+    draft.additions.workStates.push({
+      state: { name: "triage", type: "PROCESSING" },
+      workTypeName: "bug",
+    });
+    draft.additions.workstations.push({
+      inputs: [],
+      name: "triage",
+      outputs: [],
+      type: "MODEL_WORKSTATION",
+      worker: "editor",
+    });
+    draft.edgeChanges.additions.push({
+      kind: "worker-resource",
+      source: { kind: "resource", name: "cache" },
+      target: { kind: "worker", name: "editor" },
+    });
+
+    const withoutResource = applyFactoryGraphEntityRemoval(
+      draft,
+      baseFactoryDefinition,
+      { kind: "resource", name: "cache" },
+    );
+    expect(withoutResource.additions.resources).toEqual([]);
+    expect(withoutResource.removals.resources).toEqual([]);
+    expect(withoutResource.edgeChanges.additions).toEqual([]);
+
+    const withoutWorkType = applyFactoryGraphEntityRemoval(
+      draft,
+      baseFactoryDefinition,
+      { kind: "work-type", name: "bug" },
+    );
+    expect(withoutWorkType.additions.workTypes).toEqual([]);
+    expect(withoutWorkType.additions.workStates).toEqual([]);
+    expect(withoutWorkType.removals.workTypes).toEqual([]);
+
+    const withoutWorker = applyFactoryGraphEntityRemoval(
+      draft,
+      baseFactoryDefinition,
+      { kind: "worker", name: "editor" },
+    );
+    expect(withoutWorker.additions.workers).toEqual([]);
+    expect(withoutWorker.removals.workers).toEqual([]);
+
+    const withoutWorkstation = applyFactoryGraphEntityRemoval(
+      draft,
+      baseFactoryDefinition,
+      { kind: "workstation", name: "triage" },
+    );
+    expect(withoutWorkstation.additions.workstations).toEqual([]);
+    expect(withoutWorkstation.removals.workstations).toEqual([]);
   });
 });

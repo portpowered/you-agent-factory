@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+} from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
 import {
@@ -7,14 +13,13 @@ import {
   useSaveCurrentEditableFactoryDefinition,
 } from "../current-factory-definition";
 import { useFactoryGraphDraftState } from "../factory-graph-editor/factory-graph-draft";
+import { createEmptyFactoryGraphDraft } from "../factory-graph-editor/factory-graph-draft-types";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
+import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
-const {
-  mockImportController,
-  mockSetStoredNodePosition,
-} = vi.hoisted(() => ({
+const { mockImportController, mockSetStoredNodePosition } = vi.hoisted(() => ({
   mockImportController: {
     activateImport: vi.fn().mockResolvedValue(undefined),
     activationState: { status: "idle" as const },
@@ -40,12 +45,78 @@ vi.mock("@xyflow/react", async () => {
     Controls: () => <div data-testid="graph-controls" />,
     ReactFlow: ({
       children,
+      isValidConnection,
+      onConnect,
+      onEdgeClick,
+      onNodeClick,
       onNodeDragStop,
     }: {
       children: React.ReactNode;
-      onNodeDragStop?: (_event: unknown, node: { id: string; position: { x: number; y: number } }) => void;
+      isValidConnection?: (connection: {
+        source?: string | null;
+        sourceHandle?: string | null;
+        target?: string | null;
+        targetHandle?: string | null;
+      }) => boolean;
+      onConnect?: (connection: {
+        source?: string | null;
+        sourceHandle?: string | null;
+        target?: string | null;
+        targetHandle?: string | null;
+      }) => void;
+      onEdgeClick?: (_event: unknown, edge: { id: string }) => void;
+      onNodeClick?: (_event: unknown, node: { id: string }) => void;
+      onNodeDragStop?: (
+        _event: unknown,
+        node: { id: string; position: { x: number; y: number } },
+      ) => void;
     }) => (
       <div data-testid="mock-react-flow">
+        <output data-testid="valid-workstation-output">
+          {String(
+            isValidConnection?.({
+              source: "workstation:review",
+              sourceHandle: "workstation-output-source",
+              target: "work-state:story:done",
+              targetHandle: "workstation-output-target",
+            }) ?? false,
+          )}
+        </output>
+        <output data-testid="invalid-workstation-output">
+          {String(
+            isValidConnection?.({
+              source: "workstation:review",
+              sourceHandle: "workstation-output-source",
+              target: "work-state:story:done",
+              targetHandle: "workstation-input-source",
+            }) ?? false,
+          )}
+        </output>
+        <button
+          onClick={() =>
+            onConnect?.({
+              source: "workstation:review",
+              sourceHandle: "workstation-output-source",
+              target: "work-state:story:done",
+              targetHandle: "workstation-output-target",
+            })
+          }
+          type="button"
+        >
+          Trigger connect
+        </button>
+        <button
+          onClick={() => onEdgeClick?.(null, { id: "edge-review-done" })}
+          type="button"
+        >
+          Trigger edge click
+        </button>
+        <button
+          onClick={() => onNodeClick?.(null, { id: "workstation:review" })}
+          type="button"
+        >
+          Trigger node click
+        </button>
         <button
           onClick={() =>
             onNodeDragStop?.(null, {
@@ -92,7 +163,9 @@ vi.mock("../current-factory-definition", async () => {
 });
 
 vi.mock("../factory-graph-editor/factory-graph-draft", async () => {
-  const actual = await vi.importActual("../factory-graph-editor/factory-graph-draft");
+  const actual = await vi.importActual(
+    "../factory-graph-editor/factory-graph-draft",
+  );
 
   return {
     ...actual,
@@ -197,7 +270,9 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(screen.getByText("Observe mode")).toBeTruthy();
     expect(screen.getByText("No workflow topology loaded")).toBeTruthy();
     expect(
-      screen.getByText("The factory has not published any workstation graph yet."),
+      screen.getByText(
+        "The factory has not published any workstation graph yet.",
+      ),
     ).toBeTruthy();
     expect(screen.queryByTestId("mock-react-flow")).toBeNull();
   });
@@ -207,10 +282,14 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger drag stop" }));
 
-    expect(mockSetStoredNodePosition).toHaveBeenCalledWith("graph-key", "review", {
-      x: 320,
-      y: 180,
-    });
+    expect(mockSetStoredNodePosition).toHaveBeenCalledWith(
+      "graph-key",
+      "review",
+      {
+        x: 320,
+        y: 180,
+      },
+    );
   });
 
   it("skips node-position persistence when the viewport has no graph key", () => {
@@ -219,6 +298,157 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Trigger drag stop" }));
 
     expect(mockSetStoredNodePosition).not.toHaveBeenCalled();
+  });
+
+  it("routes editor-mode graph viewport connection and selection callbacks", () => {
+    const onConnect = vi.fn();
+    const onEditorEdgeClick = vi.fn();
+    const onEditorNodeClick = vi.fn();
+
+    renderViewport({
+      activeTool: "connect",
+      editorMode: true,
+      graphKey: "graph-key",
+      nodes: [
+        {
+          data: { kind: "workstation" },
+          id: "workstation:review",
+          position: { x: 0, y: 0 },
+          type: "workstation",
+        },
+        {
+          data: { kind: "work-state" },
+          id: "work-state:story:done",
+          position: { x: 240, y: 0 },
+          type: "workState",
+        },
+      ],
+      onConnect,
+      onEditorEdgeClick,
+      onEditorNodeClick,
+    });
+
+    expect(screen.getByTestId("valid-workstation-output").textContent).toBe(
+      "true",
+    );
+    expect(screen.getByTestId("invalid-workstation-output").textContent).toBe(
+      "false",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Trigger connect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Trigger edge click" }));
+    fireEvent.click(screen.getByRole("button", { name: "Trigger node click" }));
+
+    expect(onConnect).toHaveBeenCalledWith({
+      source: "workstation:review",
+      sourceHandle: "workstation-output-source",
+      target: "work-state:story:done",
+      targetHandle: "workstation-output-target",
+    });
+    expect(onEditorEdgeClick).toHaveBeenCalledWith("edge-review-done");
+    expect(onEditorNodeClick).toHaveBeenCalledWith("workstation:review");
+  });
+
+  it("adds draft edges from valid controller connections", () => {
+    const updateDraft = vi.fn();
+    const { result } = renderHook(() =>
+      useFactoryGraphConnectionController({
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        draftState: createConnectionDraftState(updateDraft),
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorConnect({
+        source: "workstation:review",
+        sourceHandle: "workstation-output-source",
+        target: "work-state:story:done",
+        targetHandle: "workstation-output-target",
+      });
+    });
+
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+    const nextDraft = updateDraft.mock.calls[0][0](
+      createEmptyFactoryGraphDraft(),
+    );
+    expect(nextDraft.edgeChanges.additions).toEqual([
+      {
+        kind: "workstation-output",
+        source: { kind: "workstation", name: "review" },
+        target: {
+          kind: "work-state",
+          stateName: "done",
+          workTypeName: "story",
+        },
+      },
+    ]);
+    expect(result.current.connectionNotice).toBeNull();
+    expect(result.current.pendingConnectionSource).toBeNull();
+  });
+
+  it("keeps controller connection attempts explicit when disabled or incompatible", () => {
+    const updateDraft = vi.fn();
+    const { rerender, result } = renderHook(
+      ({ activeTool, canInteractWithEditor }) =>
+        useFactoryGraphConnectionController({
+          activeTool,
+          canInteractWithEditor,
+          draftState: createConnectionDraftState(updateDraft),
+        }),
+      {
+        initialProps: {
+          activeTool: "delete" as const,
+          canInteractWithEditor: true,
+        },
+      },
+    );
+
+    act(() => {
+      result.current.handleEditorConnect({
+        source: "workstation:review",
+        sourceHandle: "workstation-output-source",
+        target: "work-state:story:done",
+        targetHandle: "workstation-output-target",
+      });
+    });
+    expect(updateDraft).not.toHaveBeenCalled();
+
+    rerender({ activeTool: "connect", canInteractWithEditor: true });
+    act(() => {
+      result.current.handleConnectionAnchorClick({
+        anchorId: "workstation-output-target",
+        nodeId: "work-state:story:done",
+      });
+    });
+    expect(result.current.connectionNotice).toBe(
+      "Select a source anchor before choosing a target anchor.",
+    );
+
+    act(() => {
+      result.current.handleConnectionAnchorClick({
+        anchorId: "workstation-output-source",
+        nodeId: "workstation:review",
+      });
+    });
+    expect(result.current.pendingConnectionSource).toEqual({
+      anchorId: "workstation-output-source",
+      nodeId: "workstation:review",
+    });
+    expect(result.current.connectionNotice).toBeNull();
+
+    act(() => {
+      result.current.handleConnectionAnchorClick({
+        anchorId: "workstation-on-failure-target",
+        nodeId: "work-state:story:done",
+      });
+    });
+    expect(result.current.connectionNotice).toBe(
+      "Success connections from review cannot connect to Failure on story:done.",
+    );
+
+    rerender({ activeTool: "delete", canInteractWithEditor: true });
+    expect(result.current.pendingConnectionSource).toBeNull();
   });
 });
 
@@ -240,12 +470,32 @@ function renderWithQueryClient(view: React.ReactElement) {
   );
 }
 
-function renderViewport({ graphKey }: { graphKey: string }) {
+function renderViewport({
+  activeTool = null,
+  editorMode = false,
+  graphKey,
+  nodes = [],
+  onConnect,
+  onEditorEdgeClick,
+  onEditorNodeClick,
+}: {
+  activeTool?: "add" | "connect" | "delete" | null;
+  editorMode?: boolean;
+  graphKey: string;
+  nodes?: Parameters<typeof CurrentActivityGraphViewport>[0]["nodes"];
+  onConnect?: Parameters<typeof CurrentActivityGraphViewport>[0]["onConnect"];
+  onEditorEdgeClick?: Parameters<
+    typeof CurrentActivityGraphViewport
+  >[0]["onEditorEdgeClick"];
+  onEditorNodeClick?: Parameters<
+    typeof CurrentActivityGraphViewport
+  >[0]["onEditorNodeClick"];
+}) {
   return render(
     <CurrentActivityGraphViewport
-      activeTool={null}
-      canInteractWithEditor={false}
-      editorMode={false}
+      activeTool={activeTool}
+      canInteractWithEditor={editorMode}
+      editorMode={editorMode}
       edges={[]}
       graphKey={graphKey}
       handleNodesChange={vi.fn()}
@@ -254,9 +504,37 @@ function renderViewport({ graphKey }: { graphKey: string }) {
       initialFitViewKey="full-graph"
       initialFitViewOptions={{ padding: 0.18 }}
       nodeTypes={{}}
-      nodes={[]}
+      nodes={nodes}
+      onConnect={onConnect}
+      onEditorEdgeClick={onEditorEdgeClick}
+      onEditorNodeClick={onEditorNodeClick}
       onSelectTool={vi.fn()}
       setStoredNodePosition={mockSetStoredNodePosition}
     />,
   );
+}
+
+function createConnectionDraftState(updateDraft: ReturnType<typeof vi.fn>) {
+  return {
+    ...defaultDraftState,
+    draft: createEmptyFactoryGraphDraft(),
+    graph: {
+      edges: [],
+      nodes: [
+        {
+          id: "workstation:review",
+          key: { kind: "workstation", name: "review" },
+          kind: "workstation",
+          label: "review",
+        },
+        {
+          id: "work-state:story:done",
+          key: { kind: "work-state", stateName: "done", workTypeName: "story" },
+          kind: "work-state",
+          label: "story:done",
+        },
+      ],
+    },
+    updateDraft,
+  } as ReturnType<typeof useFactoryGraphDraftState>;
 }
