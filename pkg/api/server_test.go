@@ -732,6 +732,26 @@ func TestSubmitWork_WorkTypeIDReturnsBadRequest(t *testing.T) {
 	}
 }
 
+func TestSubmitWork_TargetStateReturnsBadRequest(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"name":"draft","workTypeName":"prd","target_state":"queued","payload":{"title":"Draft PRD"}}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "target_state is not supported; use state")
+	if len(mf.Submitted) != 0 {
+		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	}
+}
+
 func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
 	mf := &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{

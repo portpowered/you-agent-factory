@@ -578,6 +578,36 @@ func TestFileWatcher_JSONFactoryRequestBatchRejectsTargetStateAlias(t *testing.T
 	}
 }
 
+func TestFileWatcher_JSONFactoryRequestBatchRejectsConflictingTraceAliases(t *testing.T) {
+	dir := setupWatchDir(t)
+	data := []byte(`{
+		"requestId": "request-batch-trace-conflict",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{"name": "draft", "workTypeName": "request", "currentChainingTraceId": "chain-a", "traceId": "trace-b", "payload": {"step": "draft"}}
+		]
+	}`)
+	if err := os.WriteFile(filepath.Join(dir, "BATCH", "default", "batch.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mf := &mockFactory{}
+	fw := NewFileWatcher(dir, mf, zap.NewNop(), WithKnownWorkTypes([]string{"request"}))
+	err := fw.PreseedInputs(context.Background())
+	if err == nil {
+		t.Fatal("expected conflicting trace aliases to fail")
+	}
+	if !strings.Contains(err.Error(), "currentChainingTraceId and traceId must match") {
+		t.Fatalf("error = %q, want conflicting trace alias rejection", err.Error())
+	}
+	if submitted := mf.getSubmitted(); len(submitted) != 0 {
+		t.Fatalf("expected no partial submissions, got %d", len(submitted))
+	}
+	if requests := mf.getWorkRequests(); len(requests) != 0 {
+		t.Fatalf("expected no submitted work requests, got %d", len(requests))
+	}
+}
+
 func TestFileWatcher_JSONFactoryRequestBatchRejectsConflictingWorkType(t *testing.T) {
 	dir := setupWatchDir(t)
 	batch := interfaces.WorkRequest{
