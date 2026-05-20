@@ -9,6 +9,39 @@ workstation-scoped execution settings here. Keep worker backend fields in
 [Workers](workers.md) and top-level `factory.json` work type and routing
 context in [Factory JSON and work configuration](work.md).
 
+## Split Layout And Ownership
+
+Keep workflow topology in `factory.json`, worker system instructions in
+`workers/<name>/AGENTS.md`, and workstation prompts in
+`workstations/<name>/AGENTS.md`:
+
+```text
+factory/
+  factory.json
+  workers/
+    executor/AGENTS.md
+    reviewer/AGENTS.md
+  workstations/
+    execute-story/AGENTS.md
+    review-story/AGENTS.md
+  inputs/story/default/
+```
+
+Inline runtime fields are also supported in `factory.json` for single-file or
+recorded configs. When a config embeds runtime definitions inline, keep the
+bundle complete: every referenced worker and workstation must either have
+inline runtime fields or a matching split `AGENTS.md` file on disk.
+
+`factory.json` declares the workflow topology. Each model or script
+workstation names a worker through `worker`, consumes one or more input places,
+and routes outcomes through `outputs`, `onContinue`, `onRejection`, or
+`onFailure`.
+
+The bound worker supplies the execution backend and shared system
+instructions. The workstation supplies the step-specific prompt template,
+execution limits, output schema, working directory, worktree path,
+environment, and routing.
+
 ## Current Contract
 
 - Use `behavior` for scheduling behavior: `STANDARD`, `REPEATER`, or `CRON`.
@@ -155,6 +188,56 @@ Pair repeaters with a guarded loop-breaker workstation:
   "outputs": [{ "workType": "story", "state": "failed" }]
 }
 ```
+
+## Minimal Workflow Shape
+
+This abbreviated topology shows the relationship between workstation routing
+and worker binding without restating each detailed field contract:
+
+```json
+{
+  "workTypes": [
+    {
+      "name": "story",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "in-review", "type": "PROCESSING" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workers": [
+    { "name": "executor" },
+    { "name": "reviewer" }
+  ],
+  "workstations": [
+    {
+      "name": "execute-story",
+      "behavior": "REPEATER",
+      "worker": "executor",
+      "inputs": [{ "workType": "story", "state": "init" }],
+      "outputs": [{ "workType": "story", "state": "in-review" }],
+      "onFailure": { "workType": "story", "state": "failed" }
+    },
+    {
+      "name": "review-story",
+      "worker": "reviewer",
+      "inputs": [{ "workType": "story", "state": "in-review" }],
+      "outputs": [{ "workType": "story", "state": "complete" }],
+      "onRejection": { "workType": "story", "state": "init" },
+      "onFailure": { "workType": "story", "state": "failed" }
+    }
+  ]
+}
+```
+
+With a split layout, `workers/executor/AGENTS.md` owns the executor backend
+and system prompt, while `workstations/execute-story/AGENTS.md` owns the
+step-specific prompt and execution settings. Use [Workers](workers.md) for the
+worker contract and this page for the workstation contract.
+
+## Cron Kind
 
 ### Cron Workstations
 
@@ -353,7 +436,6 @@ the full guard authoring guides.
 - [Package docs index](../README.md)
 - [Workers reference](workers.md)
 - [Factory JSON and work configuration](work.md)
-- [Workstations and workers](workstations-and-workers.md)
 - [Templates](templates.md)
 - [Workstation guards and guarded loop breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
 - [Parent-aware fan-in](../internal/development/parent-aware-fan-in.md)

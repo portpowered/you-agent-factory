@@ -107,6 +107,7 @@ through arbitrary project files outside the documented allowlist.
 - [Package docs index](../README.md)
 - [Author workflows](authoring-workflows.md)
 - [Factory JSON and work configuration](work.md)
-- [Workstations and workers](workstations-and-workers.md)
+- [Workstations](workstations.md)
+- [Workers](workers.md)
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Batch inputs](batch-inputs.md)

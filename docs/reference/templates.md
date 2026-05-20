@@ -73,5 +73,5 @@ prompt bodies and prompt files, the template expression can use normal quotes.
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
 - [Prompt variables](prompt-variables.md)
-- [Workstations and workers](workstations-and-workers.md)
+- [Workstations](workstations.md)
 - [Author AGENTS.md](authoring-agents-md.md)

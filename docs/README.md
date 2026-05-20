@@ -44,7 +44,6 @@ These are the fixed topic names accepted by `infinite-you docs <topic>`.
 - [Author AGENTS.md](reference/authoring-agents-md.md) explains split `AGENTS.md` file shape, prompt placement, and authoring patterns.
 - [Batch inputs](reference/batch-inputs.md) explains `FACTORY_REQUEST_BATCH` files, fields, and dependency relations.
 - [The Zen of flow](reference/the-zen-of-flow.md) explains the project’s workflow philosophy.
-- [Workstations and workers](reference/workstations-and-workers.md) is a combined workflow-oriented overview that links to the canonical workstation and worker guides for contract details.
 - [Prompt variables](reference/prompt-variables.md) lists values available in workstation prompts and rendered runtime fields.
 - [Understand a run timeline](internal/development/run-timeline.md) explains how `/events`, recordings, replay, and the dashboard use one ordered event timeline.
 

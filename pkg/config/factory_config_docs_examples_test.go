@@ -20,7 +20,8 @@ func TestFactoryConfigDocsAndExamples_UseCanonicalPublicContractFields(t *testin
 		filepath.Join(repoRoot, "docs", "reference", "authoring-agents-md.md"),
 		filepath.Join(repoRoot, "docs", "reference", "authoring-workflows.md"),
 		filepath.Join(repoRoot, "docs", "reference", "work.md"),
-		filepath.Join(repoRoot, "docs", "reference", "workstations-and-workers.md"),
+		filepath.Join(repoRoot, "docs", "reference", "workstations.md"),
+		filepath.Join(repoRoot, "docs", "reference", "workers.md"),
 		filepath.Join(repoRoot, "docs", "internal", "development", "run-timeline.md"),
 		filepath.Join(repoRoot, "docs", "internal", "development", "parent-aware-fan-in.md"),
 		filepath.Join(repoRoot, "docs", "internal", "development", "workstation-guards-and-guarded-loop-breakers.md"),
@@ -112,7 +113,7 @@ func TestFactoryConfigDocsAndExamples_UseExecutionLimitsForWorkstationTimeouts(t
 	targetFiles := []string{
 		filepath.Join(repoRoot, "docs", "reference", "authoring-agents-md.md"),
 		filepath.Join(repoRoot, "docs", "reference", "authoring-workflows.md"),
-		filepath.Join(repoRoot, "docs", "reference", "workstations-and-workers.md"),
+		filepath.Join(repoRoot, "docs", "reference", "workstations.md"),
 		filepath.Join(repoRoot, "docs", "internal", "development", "workstation-guards-and-guarded-loop-breakers.md"),
 	}
 
@@ -150,7 +151,8 @@ func TestFactoryConfigDocsAndExamples_UseAlignedRuntimeResourceContract(t *testi
 		filepath.Join(repoRoot, "docs", "reference", "authoring-agents-md.md"),
 		filepath.Join(repoRoot, "docs", "reference", "authoring-workflows.md"),
 		filepath.Join(repoRoot, "docs", "reference", "work.md"),
-		filepath.Join(repoRoot, "docs", "reference", "workstations-and-workers.md"),
+		filepath.Join(repoRoot, "docs", "reference", "workstations.md"),
+		filepath.Join(repoRoot, "docs", "reference", "workers.md"),
 		filepath.Join(repoRoot, "docs", "internal", "development", "workstation-guards-and-guarded-loop-breakers.md"),
 		filepath.Join(repoRoot, "README.md"),
 		filepath.Join(repoRoot, "pkg", "cli", "init", "init.go"),
@@ -223,7 +225,7 @@ func TestFactoryConfigDocsAndExamples_StopWordsExamplesDoNotAdvertiseRejectedRou
 	repoRoot := mustRepoRoot(t)
 	targetFiles := []string{
 		filepath.Join(repoRoot, "docs", "reference", "authoring-agents-md.md"),
-		filepath.Join(repoRoot, "docs", "reference", "workstations-and-workers.md"),
+		filepath.Join(repoRoot, "docs", "reference", "workstations.md"),
 	}
 
 	var offenses []string

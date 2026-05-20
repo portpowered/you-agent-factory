@@ -41,9 +41,6 @@ Use these canonical concept owners when you need the current contract.
   shape, watched-file placement, and supported relation types.
 - [Templates](templates.md) explains the supported Go-template surfaces and the
   JSON-versus-Markdown quoting rules.
-- [Workstations and workers](workstations-and-workers.md) explains how
-  workstation steps and worker backends cooperate without owning their detailed
-  field contracts.
 - [Author workflows](authoring-workflows.md) keeps workflow sequencing,
   examples, and run commands.
 - [Author AGENTS.md](authoring-agents-md.md) keeps split-file shape, prompt
@@ -59,7 +56,6 @@ Use these canonical concept owners when you need the current contract.
 - [Factory JSON and work configuration](work.md)
 - [Workstations](workstations.md)
 - [Workers](workers.md)
-- [Workstations and workers](workstations-and-workers.md)
 - [Resources](resources.md)
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Batch inputs](batch-inputs.md)
