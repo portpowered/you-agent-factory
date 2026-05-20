@@ -38,6 +38,7 @@ const completedAttempt: DashboardProviderSessionAttempt = {
 const completedItems: TerminalWorkItem[] = [
   {
     attempts: [completedAttempt],
+    completedAt: "2026-04-08T12:04:00Z",
     label: "Done Story",
     traceWorkID: "work-done-story",
   },
@@ -47,6 +48,7 @@ const completedItems: TerminalWorkItem[] = [
 const failedItems: TerminalWorkItem[] = [
   {
     attempts: [failedAttempt],
+    completedAt: "2026-04-08T12:06:00Z",
     label: "Failed Story",
     traceWorkID: "work-failed-story",
   },

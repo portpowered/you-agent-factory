@@ -305,6 +305,14 @@ export function requestWorkstationName(
     : request.workstationName ?? request.workstation_name;
 }
 
+export function requestCompletedAt(
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+): string | undefined {
+  return isProjectedWorkstationRequest(request)
+    ? request.response_view?.endTime ?? request.response_view?.end_time
+    : request.response?.endTime ?? request.response?.end_time;
+}
+
 function requestReferencesWorkItem(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
   workID: string,

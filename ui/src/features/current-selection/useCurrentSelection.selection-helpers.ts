@@ -22,6 +22,7 @@ import type { DashboardSelection, TerminalWorkDetail } from "./types";
 import {
   isScriptBackedWorkstationRequest,
   requestDispatchID,
+  requestCompletedAt,
   requestTransitionID,
   requestWorkstationNodeID,
   requestWorkstationName,
@@ -66,8 +67,11 @@ export function buildTerminalWorkItems(
         (matchedWorkItem ? detail.work_item.work_id === matchedWorkItem.work_id : false),
     );
 
+    const completedAt = latestRequest ? requestCompletedAt(latestRequest) : undefined;
+
     return {
       attempts: matchingAttempts,
+      ...(completedAt ? { completedAt } : {}),
       dispatchID:
         matchedFailureDetail?.dispatch_id ??
         (latestRequest ? requestDispatchID(latestRequest) : undefined) ??
