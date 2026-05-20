@@ -5,7 +5,7 @@ import {
   getDefaultDashboardFlowAxisLegendEdgeItems,
   getDefaultDashboardFlowAxisLegendIconItems,
 } from "./dashboard-flow-axis-legend";
-import { getDashboardFlowAxisLegendMessages } from "./messages/dashboard-flow-axis-legend";
+import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 
 describe("DashboardFlowAxisLegend", () => {
   it("starts minimized and reveals the dashboard flow semantic vocabulary when expanded", () => {

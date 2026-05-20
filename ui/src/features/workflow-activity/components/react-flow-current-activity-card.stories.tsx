@@ -7,8 +7,8 @@ import type {
   DashboardActiveExecution,
   DashboardSnapshot,
   DashboardWorkItemRef,
-} from "../../api/dashboard/types";
-import type { FactoryValue } from "../../api/named-factory";
+} from "../../../api/dashboard/types";
+import type { FactoryValue } from "../../../api/named-factory";
 import {
   resourceOccupancySnapshotForTick,
   semanticWorkflowDashboardSnapshot,
@@ -16,12 +16,12 @@ import {
   twentyNodeDashboardSnapshot,
   workstationKindParityDashboardSnapshot,
   workstationKindParityExpectations,
-} from "../../components/dashboard/test-fixtures";
+} from "../../../components/dashboard/test-fixtures";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../flowchart";
-import type { FactoryPngImportValue, ReadFactoryImportFile } from "../import";
+import type { FactoryPngImportValue, ReadFactoryImportFile } from "../../import";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 

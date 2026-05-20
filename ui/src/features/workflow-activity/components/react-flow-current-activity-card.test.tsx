@@ -11,18 +11,18 @@ import type { ReactElement } from "react";
 import type {
   CanonicalFactoryDefinition,
   EditableFactoryDefinitionDocument,
-} from "../../api/current-factory-definition";
+} from "../../../api/current-factory-definition";
 import type {
   DashboardActiveExecution,
   DashboardPlaceRef,
   DashboardSnapshot,
   DashboardWorkItemRef,
-} from "../../api/dashboard/types";
+} from "../../../api/dashboard/types";
 import {
   type FactoryValue,
   NamedFactoryAPIError,
-} from "../../api/named-factory";
-import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
+} from "../../../api/named-factory";
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import {
   resourceOccupancySnapshotForTick,
   semanticWorkflowDashboardSnapshot,
@@ -30,33 +30,33 @@ import {
   twentyNodeDashboardSnapshot,
   workstationKindParityDashboardSnapshot,
   workstationKindParityExpectations,
-} from "../../components/dashboard/test-fixtures";
+} from "../../../components/dashboard/test-fixtures";
 import {
   useCurrentEditableFactoryDefinitionDocument,
   useSaveCurrentEditableFactoryDefinition,
-} from "../current-factory-definition";
-import { useFactoryGraphDraftState } from "../factory-graph-editor/factory-graph-draft";
+} from "../../current-factory-definition";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
-} from "../flowchart";
-import { buildGraphLayout } from "../flowchart/layout";
-import type { FactoryPngImportValue, ReadFactoryImportFile } from "../import";
-import { getImportPreviewDialogMessages } from "../import/messages/import-preview-dialog";
-import type { CurrentActivityImportController } from "./current-activity-import-controller";
-import { getDashboardFlowAxisLegendMessages } from "./messages/dashboard-flow-axis-legend";
-import { getWorkflowActivityGraphImportMessages } from "./messages/graph-import";
+} from "../../flowchart";
+import { buildGraphLayout } from "../../flowchart/layout";
+import type { FactoryPngImportValue, ReadFactoryImportFile } from "../../import";
+import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
+import type { CurrentActivityImportController } from "../current-activity-import-controller";
+import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
+import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import {
   currentActivityGraphKey,
   currentActivityTopologyKey,
   ReactFlowCurrentActivityCard,
 } from "./react-flow-current-activity-card";
-import { buildVisibleGraphEdges } from "./react-flow-current-activity-card-graph";
-import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
+import { buildVisibleGraphEdges } from "../react-flow-current-activity-card-graph";
+import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 
-vi.mock("../current-factory-definition", async () => {
-  const actual = await vi.importActual("../current-factory-definition");
+vi.mock("../../current-factory-definition", async () => {
+  const actual = await vi.importActual("../../current-factory-definition");
 
   return {
     ...actual,
@@ -65,9 +65,9 @@ vi.mock("../current-factory-definition", async () => {
   };
 });
 
-vi.mock("../factory-graph-editor/factory-graph-draft", async () => {
+vi.mock("../../factory-graph-editor/factory-graph-draft", async () => {
   const actual = await vi.importActual(
-    "../factory-graph-editor/factory-graph-draft",
+    "../../factory-graph-editor/factory-graph-draft",
   );
 
   return {

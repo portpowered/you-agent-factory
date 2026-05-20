@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 
-import { getWorkflowActivityGraphImportMessages } from "./messages/graph-import";
+import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 import { DashboardMutationDialog } from "./mutation-dialog";
 
 describe("DashboardMutationDialog", () => {

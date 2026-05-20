@@ -7,7 +7,7 @@ import {
   getDefaultDashboardFlowAxisLegendEdgeItems,
   getDefaultDashboardFlowAxisLegendIconItems,
 } from "./dashboard-flow-axis-legend";
-import { getDashboardFlowAxisLegendMessages } from "./messages/dashboard-flow-axis-legend";
+import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 
 export default {
   title: "Agent Factory/Dashboard/Dashboard Flow Axis Legend",

@@ -4,12 +4,12 @@ import { expect, userEvent, within } from "storybook/test";
 
 import "../../styles.css";
 import { FactoryGraphEditorVisibilityPanel } from "./factory-graph-editor-controls";
-import type { FactoryGraphTopology } from "./factory-graph-draft-types";
+import type { FactoryGraphTopology } from "../factory-graph-draft-types";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "./factory-graph-editor-flow";
-import type { FactoryGraphConnectionEndpoint } from "./factory-graph-editor-connections";
+import type { FactoryGraphConnectionEndpoint } from "../factory-graph-editor-connections";
 
 const PENDING_REMOVAL_TOPOLOGY: FactoryGraphTopology = {
   edges: [

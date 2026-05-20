@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";
+import type { CanonicalFactoryDefinition } from "../factory-graph-draft-types";
 import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
-import type { FactoryGraphAddEntityDraft } from "./factory-graph-editor-additions";
+import type { FactoryGraphAddEntityDraft } from "../factory-graph-editor-additions";
 
 const currentFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",

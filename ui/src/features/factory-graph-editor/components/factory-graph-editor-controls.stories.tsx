@@ -3,7 +3,7 @@ import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 
 import "../../styles.css";
-import { Button } from "../../components/ui";
+import { Button } from "../../../components/ui";
 import { FactoryGraphEditorDraftActions } from "./factory-graph-editor-draft-actions";
 import {
   FactoryGraphEditorActionPopover,

@@ -1,19 +1,19 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
-import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
+import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import {
   useCurrentEditableFactoryDefinitionDocument,
   useSaveCurrentEditableFactoryDefinition,
-} from "../current-factory-definition";
-import { useFactoryGraphDraftState } from "../factory-graph-editor/factory-graph-draft";
-import type { DashboardSelection } from "../current-selection";
-import type { CurrentActivityImportController } from "./current-activity-import-controller";
+} from "../../current-factory-definition";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
+import type { DashboardSelection } from "../../current-selection";
+import type { CurrentActivityImportController } from "../current-activity-import-controller";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
-import { getWorkflowActivityShellMessages } from "./messages/activity-shell";
+import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 
-vi.mock("../current-factory-definition", async () => {
-  const actual = await vi.importActual("../current-factory-definition");
+vi.mock("../../current-factory-definition", async () => {
+  const actual = await vi.importActual("../../current-factory-definition");
 
   return {
     ...actual,
@@ -22,9 +22,9 @@ vi.mock("../current-factory-definition", async () => {
   };
 });
 
-vi.mock("../factory-graph-editor/factory-graph-draft", async () => {
+vi.mock("../../factory-graph-editor/factory-graph-draft", async () => {
   const actual = await vi.importActual(
-    "../factory-graph-editor/factory-graph-draft",
+    "../../factory-graph-editor/factory-graph-draft",
   );
 
   return {

@@ -7,16 +7,16 @@ import {
   screen,
 } from "@testing-library/react";
 
-import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
+import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
   useCurrentEditableFactoryDefinitionDocument,
   useSaveCurrentEditableFactoryDefinition,
-} from "../current-factory-definition";
-import { useFactoryGraphDraftState } from "../factory-graph-editor/factory-graph-draft";
-import { createEmptyFactoryGraphDraft } from "../factory-graph-editor/factory-graph-draft-types";
+} from "../../current-factory-definition";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/factory-graph-draft-types";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
-import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
+import { useFactoryGraphConnectionController } from "../react-flow-current-activity-card-editor-connections";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 const { mockImportController, mockSetStoredNodePosition } = vi.hoisted(() => ({
@@ -134,7 +134,7 @@ vi.mock("@xyflow/react", async () => {
   };
 });
 
-vi.mock("./current-activity-import-controller", () => ({
+vi.mock("../current-activity-import-controller", () => ({
   useCurrentActivityImportController: () => mockImportController,
 }));
 
@@ -152,8 +152,8 @@ vi.mock("./react-flow-current-activity-card-import", () => ({
   graphDropStateAttribute: () => "idle",
 }));
 
-vi.mock("../current-factory-definition", async () => {
-  const actual = await vi.importActual("../current-factory-definition");
+vi.mock("../../current-factory-definition", async () => {
+  const actual = await vi.importActual("../../current-factory-definition");
 
   return {
     ...actual,
@@ -162,9 +162,9 @@ vi.mock("../current-factory-definition", async () => {
   };
 });
 
-vi.mock("../factory-graph-editor/factory-graph-draft", async () => {
+vi.mock("../../factory-graph-editor/factory-graph-draft", async () => {
   const actual = await vi.importActual(
-    "../factory-graph-editor/factory-graph-draft",
+    "../../factory-graph-editor/factory-graph-draft",
   );
 
   return {
