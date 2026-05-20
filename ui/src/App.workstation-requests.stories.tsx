@@ -43,8 +43,8 @@ export const WorkstationRequestSelection = {
     );
 
     await expect(
-      currentSelection.getByRole("heading", { name: "Request counts" }),
-    ).toBeVisible();
+      currentSelection.queryByRole("heading", { name: "Request counts" }),
+    ).toBeNull();
     await expect(
       currentSelection.getByRole("heading", { name: "Response details" }),
     ).toBeVisible();
@@ -125,8 +125,8 @@ export const WorkstationRequestSelectionNoResponse = {
 
     const currentSelection = within(currentSelectionCard(canvasElement));
     await expect(
-      currentSelection.getByRole("heading", { name: "Request counts" }),
-    ).toBeVisible();
+      currentSelection.queryByRole("heading", { name: "Request counts" }),
+    ).toBeNull();
     await expect(
       currentSelection.getByText(
         "No inference events are available for this selected work item.",

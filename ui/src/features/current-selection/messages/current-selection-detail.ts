@@ -41,8 +41,6 @@ export interface CurrentSelectionDetailMessages {
   noCurrentWorkInPlace: string;
   noWorkRecordedAtSelectedTick: string;
   requestBodyLabel: string;
-  requestCountsHeading: string;
-  requestCountsRegionLabel: string;
   requestDetailsTitle: string;
   requestIdLabel: string;
   requestIdUnavailable: string;
@@ -168,8 +166,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
     requestBodyLabel: "Request body",
-    requestCountsHeading: "Request counts",
-    requestCountsRegionLabel: "Request counts",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
     requestIdUnavailable:
@@ -282,8 +278,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
     requestBodyLabel: "Request body",
-    requestCountsHeading: "Request counts",
-    requestCountsRegionLabel: "Request counts",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
     requestIdUnavailable:
@@ -396,8 +390,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
     requestBodyLabel: "Request body",
-    requestCountsHeading: "Request counts",
-    requestCountsRegionLabel: "Request counts",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
     requestIdUnavailable:
@@ -505,8 +497,6 @@ const currentSelectionDetailMessagesByLocale = {
     noWorkRecordedAtSelectedTick:
       "在所选时间刻度，这个位置暂时没有记录到工作。",
     requestBodyLabel: "请求正文",
-    requestCountsHeading: "请求计数",
-    requestCountsRegionLabel: "请求计数",
     requestDetailsTitle: "请求详情",
     requestIdLabel: "请求 ID",
     requestIdUnavailable: "此工作站请求没有可用的请求 ID。",

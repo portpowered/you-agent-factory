@@ -12,14 +12,13 @@ import {
 } from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
 import {
-  useCurrentSelectionDetailMessages,
   useCurrentSelectionDispatchHistoryMessages,
 } from "./current-selection-locale";
+import type { useCurrentSelectionDetailMessages } from "./current-selection-locale";
 import type {
   InferenceAttemptDetailProps,
   InferenceAttemptTextSectionProps,
   MetadataSectionProps,
-  RequestCountSectionProps,
 } from "./detail-card-types";
 
 export const EXECUTION_PILL_CLASS = cx(
@@ -160,35 +159,6 @@ export function InferenceAttemptDetail({
         )}
       </dd>
     </div>
-  );
-}
-
-export function RequestCountSection({ request }: RequestCountSectionProps) {
-  const messages = useCurrentSelectionDetailMessages();
-
-  return (
-    <section
-      aria-label={messages.requestCountsRegionLabel}
-      className={RUNTIME_DETAILS_SECTION_CLASS}
-    >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.requestCountsHeading}
-      </h4>
-      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
-        <InferenceAttemptDetail
-          label="dispatchedCount"
-          value={request.dispatched_request_count}
-        />
-        <InferenceAttemptDetail
-          label="respondedCount"
-          value={request.responded_request_count}
-        />
-        <InferenceAttemptDetail
-          label="erroredCount"
-          value={request.errored_request_count}
-        />
-      </dl>
-    </section>
   );
 }
 

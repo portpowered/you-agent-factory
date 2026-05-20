@@ -103,8 +103,8 @@ describe("WorkstationRequestDetailCard", () => {
     ).toBeGreaterThan(0);
     expect(within(currentSelection).getByText("Dispatch ID")).toBeTruthy();
     expect(
-      within(currentSelection).getByRole("heading", { name: "Request counts" }),
-    ).toBeTruthy();
+      within(currentSelection).queryByRole("heading", { name: "Request counts" }),
+    ).toBeNull();
     expect(responseDetails.getByText("trace-active-story")).toBeTruthy();
     const successfulAttempt = within(
       inferenceAttempts.getByRole("article", { name: "Inference attempt 2" }),

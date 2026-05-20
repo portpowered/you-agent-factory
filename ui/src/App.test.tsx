@@ -2383,10 +2383,10 @@ describe("App timeline reconstruction flows", () => {
           within(currentSelection).getAllByText("request-ready-story").length,
         ).toBeGreaterThan(0);
         expect(
-          within(currentSelection).getByRole("heading", {
+          within(currentSelection).queryByRole("heading", {
             name: "Request counts",
           }),
-        ).toBeTruthy();
+        ).toBeNull();
         expect(
           within(currentSelection).getByRole("heading", {
             name: "Response details",
@@ -2459,10 +2459,10 @@ describe("App timeline reconstruction flows", () => {
             .length,
         ).toBeGreaterThan(0);
         expect(
-          within(currentSelection).getByRole("heading", {
+          within(currentSelection).queryByRole("heading", {
             name: "Request counts",
           }),
-        ).toBeTruthy();
+        ).toBeNull();
         expect(
           within(currentSelection).queryByRole("heading", {
             name: "Execution details",
@@ -2747,10 +2747,10 @@ describe("App streamed replay smoke flows", () => {
       name: "Current selection",
     });
     expect(
-      within(completedSelection).getByRole("heading", {
+      within(completedSelection).queryByRole("heading", {
         name: "Request counts",
       }),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       within(completedSelection).getAllByText(
         runtimeDetailsFixtureIDs.completedDispatchID,
@@ -2785,8 +2785,8 @@ describe("App streamed replay smoke flows", () => {
       ).length,
     ).toBeGreaterThan(0);
     expect(
-      within(failedSelection).getByRole("heading", { name: "Request counts" }),
-    ).toBeTruthy();
+      within(failedSelection).queryByRole("heading", { name: "Request counts" }),
+    ).toBeNull();
 
     fireEvent.click(
       (
@@ -2884,10 +2884,10 @@ describe("App streamed replay smoke flows", () => {
       name: "Current selection",
     });
     expect(
-      within(scriptSuccessSelection).getByRole("heading", {
+      within(scriptSuccessSelection).queryByRole("heading", {
         name: "Request counts",
       }),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       within(scriptSuccessSelection).getAllByText(
         scriptDashboardIntegrationFixtureIDs.scriptSuccessDispatchID,

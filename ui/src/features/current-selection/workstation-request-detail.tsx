@@ -6,7 +6,6 @@ import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   MetadataSection,
-  RequestCountSection,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
@@ -37,7 +36,6 @@ export function WorkstationRequestDetailCard({
   return (
     <SelectionDetailLayout widgetId={widgetId}>
       <WorkstationRequestSummary request={request} view={view} />
-      <RequestCountSection request={request} />
       <RequestDetailsSection
         onSelectWorkID={onSelectWorkID}
         request={request}
