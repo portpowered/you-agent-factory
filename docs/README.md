@@ -41,7 +41,6 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - [Templates reference](reference/templates.md) explains supported Go-template surfaces, the complete variable inventory, and the JSON-versus-Markdown quoting rule.
 - [Author factories](reference/authoring-factories.md) explains how to configure and run factories end to end.
 - [Author AGENTS.md](reference/authoring-agents-md.md) explains split `AGENTS.md` file shape, prompt placement, and authoring patterns.
-- [Batch inputs](reference/batch-inputs.md) explains `FACTORY_REQUEST_BATCH` files, fields, and dependency relations.
 - [The Zen of flow](reference/the-zen-of-flow.md) explains the project’s workflow philosophy.
 - [Understand a run timeline](internal/development/run-timeline.md) explains how `/events`, recordings, replay, and the dashboard use one ordered event timeline.
 

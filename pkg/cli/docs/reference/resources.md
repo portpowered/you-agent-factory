@@ -1,10 +1,15 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-04-22
+last-modified: 2026-05-21
 doc-id: agent-factory/reference/resources
 ---
 
 # Resources
+
+`you docs resources` stays available as the stable packaged bounded-concurrency
+quick reference. Use
+[`docs/reference/resources.md`](../../../docs/reference/resources.md) for the
+maintained resource guide.
 
 Resources are bounded capacity pools that limit concurrent dispatches across
 workstations. They are declared once at the top level and then consumed by

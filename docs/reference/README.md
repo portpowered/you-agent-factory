@@ -45,8 +45,6 @@ Use these canonical concept owners when you need the current contract.
   examples, and run commands.
 - [Author AGENTS.md](authoring-agents-md.md) keeps split-file shape, prompt
   placement, and prompt-authoring examples.
-- [Batch inputs](batch-inputs.md) owns submitted batch payload fields,
-  watched-file placement rules, and dependency relations.
 
 ## Related
 

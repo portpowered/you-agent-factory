@@ -56,7 +56,7 @@ default-root runtime or the currently activated named factory on that server.
 Use `submit` for single-work API submission when the factory service is already running:
 
 ```sh
-infinite-you submit --name "driver-incident-review" --work-type-name task --payload request.md
+you submit --name "driver-incident-review" --work-type-name task --payload request.md
 ```
 
 `--name`, `--work-type-name`, and `--payload` are required for unary CLI submission.
@@ -99,6 +99,17 @@ The overall system of how __infinite you__ works is relatively simple.
 2. Work goes to workstations where the work gets worked on by workers (agents, or just shell scripts)
 3. When the workstations complete the, work is converted to other work.  
 4. __Infinite you__ stops when no work remains.
+
+For packaged terminal docs, use the fixed `you docs <topic>` topics:
+`config`, `workstation`, `workers`, `resources`, `batch-work`, and
+`templates`. Those packaged pages point back to the maintained canonical docs
+in [`docs/reference/work.md`](./docs/reference/work.md),
+[`docs/reference/config.md`](./docs/reference/config.md),
+[`docs/reference/workstations.md`](./docs/reference/workstations.md),
+[`docs/reference/workers.md`](./docs/reference/workers.md),
+[`docs/reference/resources.md`](./docs/reference/resources.md),
+[`docs/reference/batch-inputs.md`](./docs/reference/batch-inputs.md), and
+[`docs/reference/templates.md`](./docs/reference/templates.md).
 
 
 ## Shipped example factories

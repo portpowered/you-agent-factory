@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-04-22
+last-modified: 2026-05-21
 doc-id: agent-factory/reference/templates
 ---
 

@@ -1,10 +1,16 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-04-22
+last-modified: 2026-05-21
 doc-id: agent-factory/reference/config
 ---
 
 # Config
+
+`you docs config` stays available as the stable packaged split-layout quick
+reference. Use [`docs/reference/config.md`](../../../docs/reference/config.md)
+for the maintained layout guide and
+[`docs/reference/work.md`](../../../docs/reference/work.md) for the broader
+factory and work contract.
 
 Use `factory.json` as the canonical topology file for an Agent Factory run.
 It declares the work types, states, workers, workstations, resources, and
