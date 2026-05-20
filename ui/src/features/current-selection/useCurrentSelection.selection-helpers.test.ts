@@ -505,6 +505,106 @@ describe("useCurrentSelection.selection-helpers", () => {
     ]);
   });
 
+  it("orders terminal work items by newest completion time with missing times last", () => {
+    const workOld: DashboardWorkItemRef = {
+      display_name: "Old Story",
+      trace_id: "trace-old",
+      work_id: "work-old",
+      work_type_id: "story",
+    };
+    const workNew: DashboardWorkItemRef = {
+      display_name: "New Story",
+      trace_id: "trace-new",
+      work_id: "work-new",
+      work_type_id: "story",
+    };
+    const workTieA: DashboardWorkItemRef = {
+      display_name: "Tie A Story",
+      trace_id: "trace-tie-a",
+      work_id: "work-tie-a",
+      work_type_id: "story",
+    };
+    const workTieB: DashboardWorkItemRef = {
+      display_name: "Tie B Story",
+      trace_id: "trace-tie-b",
+      work_id: "work-tie-b",
+      work_type_id: "story",
+    };
+
+    const request = (
+      dispatchID: string,
+      workItem: DashboardWorkItemRef,
+      endTime: string,
+    ): DashboardWorkstationRequest => ({
+      counts: {
+        dispatched_count: 1,
+        errored_count: 0,
+        responded_count: 1,
+      },
+      dispatch_id: dispatchID,
+      dispatched_request_count: 1,
+      errored_request_count: 0,
+      inference_attempts: [],
+      outcome: "ACCEPTED",
+      responded_request_count: 1,
+      response_view: { end_time: endTime },
+      started_at: endTime,
+      transition_id: "review",
+      work_items: [workItem],
+      workstation_name: "Review",
+      workstation_node_id: "review",
+    });
+
+    const items = buildTerminalWorkItems(
+      [
+        "Missing Story",
+        "Old Story",
+        "Tie B Story",
+        "New Story",
+        "Tie A Story",
+      ],
+      [],
+      undefined,
+      {
+        "dispatch-old": request(
+          "dispatch-old",
+          workOld,
+          "2026-04-08T12:02:00Z",
+        ),
+        "dispatch-new": request(
+          "dispatch-new",
+          workNew,
+          "2026-04-08T12:08:00Z",
+        ),
+        "dispatch-tie-b": request(
+          "dispatch-tie-b",
+          workTieB,
+          "2026-04-08T12:05:00Z",
+        ),
+        "dispatch-tie-a": request(
+          "dispatch-tie-a",
+          workTieA,
+          "2026-04-08T12:05:00Z",
+        ),
+      },
+    );
+
+    expect(items.map((item) => item.label)).toEqual([
+      "New Story",
+      "Tie A Story",
+      "Tie B Story",
+      "Old Story",
+      "Missing Story",
+    ]);
+    expect(items.map((item) => item.completedAt)).toEqual([
+      "2026-04-08T12:08:00Z",
+      "2026-04-08T12:05:00Z",
+      "2026-04-08T12:05:00Z",
+      "2026-04-08T12:02:00Z",
+      undefined,
+    ]);
+  });
+
   it("renders completed terminal context as completed plus workstation without provider-session text", () => {
     const completedAttempt: DashboardProviderSessionAttempt = {
       dispatch_id: "dispatch-review",
