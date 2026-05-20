@@ -81,7 +81,7 @@ func TestCloneToken_DetachesNestedMutableRuntimeFields(t *testing.T) {
 	}
 }
 
-func TestCloneTokenAndProviderSessionMetadata_PreserveNilAndEmptyValues(t *testing.T) {
+func TestCloneToken_PreserveNilAndEmptyValues(t *testing.T) {
 	tests := []struct {
 		name  string
 		token Token
@@ -151,9 +151,14 @@ func TestCloneTokenAndProviderSessionMetadata_PreserveNilAndEmptyValues(t *testi
 			}
 		})
 	}
+}
 
+func TestCloneProviderMetadata_PreserveNilValuesAndDetachCopies(t *testing.T) {
 	if CloneProviderSessionMetadata(nil) != nil {
 		t.Fatal("CloneProviderSessionMetadata(nil) = non-nil, want nil")
+	}
+	if CloneProviderFailureMetadata(nil) != nil {
+		t.Fatal("CloneProviderFailureMetadata(nil) = non-nil, want nil")
 	}
 
 	session := &ProviderSessionMetadata{
@@ -165,6 +170,17 @@ func TestCloneTokenAndProviderSessionMetadata_PreserveNilAndEmptyValues(t *testi
 	clonedSession.ID = "sess-2"
 	if session.ID != "sess-1" {
 		t.Fatalf("original provider session = %#v, want sess-1 unchanged", session)
+	}
+
+	failure := &ProviderFailureMetadata{
+		Family: ProviderErrorFamilyRetryable,
+		Type:   ProviderErrorTypeTimeout,
+	}
+	clonedFailure := CloneProviderFailureMetadata(failure)
+	clonedFailure.Family = ProviderErrorFamilyTerminal
+	clonedFailure.Type = ProviderErrorTypeInternalServerError
+	if failure.Family != ProviderErrorFamilyRetryable || failure.Type != ProviderErrorTypeTimeout {
+		t.Fatalf("original provider failure = %#v, want retryable timeout unchanged", failure)
 	}
 }
 
