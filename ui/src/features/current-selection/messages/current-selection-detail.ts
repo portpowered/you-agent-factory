@@ -55,6 +55,7 @@ export interface CurrentSelectionDetailMessages {
   responseMetadataUnavailableErrored: string;
   responseMetadataUnavailableScript: string;
   responseTimeLabel: string;
+  timestampUnavailable: string;
   selectedTickWorkUnavailable: string;
   scriptArgumentsUnavailable: string;
   scriptAttemptLabel: string;
@@ -183,6 +184,7 @@ const currentSelectionDetailMessagesByLocale = {
     responseMetadataUnavailableScript:
       "Response metadata is not available for this script-backed workstation request.",
     responseTimeLabel: "Response time",
+    timestampUnavailable: "Unavailable",
     scriptArgumentsUnavailable:
       "Script arguments are not available for this workstation request.",
     scriptAttemptLabel: "Script attempt",
@@ -295,6 +297,7 @@ const currentSelectionDetailMessagesByLocale = {
     responseMetadataUnavailableScript:
       "Response metadata is not available for this script-backed workstation request.",
     responseTimeLabel: "Response time",
+    timestampUnavailable: "利用不可",
     scriptArgumentsUnavailable:
       "Script arguments are not available for this workstation request.",
     scriptAttemptLabel: "Script attempt",
@@ -407,6 +410,7 @@ const currentSelectionDetailMessagesByLocale = {
     responseMetadataUnavailableScript:
       "Response metadata is not available for this script-backed workstation request.",
     responseTimeLabel: "Response time",
+    timestampUnavailable: "사용할 수 없음",
     scriptArgumentsUnavailable:
       "Script arguments are not available for this workstation request.",
     scriptAttemptLabel: "Script attempt",
@@ -513,6 +517,7 @@ const currentSelectionDetailMessagesByLocale = {
     responseMetadataUnavailableScript:
       "此脚本驱动的工作站请求没有可用的响应元数据。",
     responseTimeLabel: "响应时间",
+    timestampUnavailable: "不可用",
     selectedTickWorkUnavailable:
       "在所选时间刻度，这个位置对应的工作暂时不可用。",
     scriptArgumentsUnavailable: "此工作站请求没有可用的脚本参数。",

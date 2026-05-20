@@ -6,6 +6,7 @@ import type {
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
 import { dashboardWorkstationRequestFixtures } from "../../components/dashboard/fixtures";
+import { formatLocalDateTime } from "../../components/ui/formatters";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import {
   DETAIL_CARD_NOW,
@@ -27,6 +28,32 @@ function getDetailRow(container: HTMLElement, label: string): HTMLElement {
   }
 
   return row;
+}
+
+function expectLocalizedTimestamp(
+  container: HTMLElement,
+  rawTimestamp: string,
+  unavailableLabel = "Unavailable",
+): void {
+  expect(
+    within(container).getAllByText(
+      formatLocalDateTime(rawTimestamp, unavailableLabel),
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(within(container).queryByText(rawTimestamp)).toBeNull();
+}
+
+function expectLocalizedTimestampRow(
+  container: HTMLElement,
+  label: string,
+  rawTimestamp: string,
+  unavailableLabel = "Unavailable",
+): void {
+  expectLocalizedTimestamp(
+    getDetailRow(container, label),
+    rawTimestamp,
+    unavailableLabel,
+  );
 }
 
 function expandDispatchSection(
@@ -169,9 +196,11 @@ describe("WorkItemDetailCard summary", () => {
       throw new Error("expected dispatch history card with inference attempts");
     }
 
-    const inferenceAttempts = within(
-      expandDispatchSection(dispatchCard, "Inference attempts"),
+    const inferenceAttemptsSection = expandDispatchSection(
+      dispatchCard,
+      "Inference attempts",
     );
+    const inferenceAttempts = within(inferenceAttemptsSection);
     const selectSessionButton = inferenceAttempts.getByRole("button", {
       name: "Select provider session codex / session_id / sess-ready-request for dispatch dispatch-review-active",
     });
@@ -243,9 +272,11 @@ describe("WorkItemDetailCard summary", () => {
       throw new Error("expected dispatch history card with inference attempts");
     }
 
-    const inferenceAttempts = within(
-      expandDispatchSection(dispatchCard, "Inference attempts"),
+    const inferenceAttemptsSection = expandDispatchSection(
+      dispatchCard,
+      "Inference attempts",
     );
+    const inferenceAttempts = within(inferenceAttemptsSection);
 
     expect(
       inferenceAttempts.queryByRole("button", {
@@ -1242,6 +1273,15 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       getSelectedWorkItemFixture();
     const onSelectTraceID = vi.fn();
     const onSelectWorkID = vi.fn();
+    const [requestStartedAt, firstAttemptRequestTime, firstAttemptResponseTime] = [
+      "2026-04-08T12:00:00Z",
+      "2026-04-08T12:00:01Z",
+      "2026-04-08T12:00:02Z",
+    ];
+    const [secondAttemptRequestTime, secondAttemptResponseTime] = [
+      "2026-04-08T12:00:03Z",
+      "2026-04-08T12:00:04Z",
+    ];
 
     render(
       <WorkItemDetailCard
@@ -1283,8 +1323,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
                   kind: "session_id",
                   provider: "codex",
                 },
+                request_time: secondAttemptRequestTime,
                 response: "Ready for the next workstation.",
-                response_time: "2026-04-08T12:00:04Z",
+                response_time: secondAttemptResponseTime,
               }),
               inferenceAttempt(dispatchID, {
                 attempt: 1,
@@ -1298,7 +1339,8 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
                 inference_request_id: `${dispatchID}/inference-request/1`,
                 outcome: "FAILED",
                 prompt: "Review the active story and return a concise result.",
-                response_time: "2026-04-08T12:00:02Z",
+                request_time: firstAttemptRequestTime,
+                response_time: firstAttemptResponseTime,
               }),
             ],
             model: "gpt-5.4",
@@ -1323,6 +1365,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
               },
               response_text: "Ready for the next workstation.",
             },
+            started_at: requestStartedAt,
             total_duration_millis: 63_000,
             trace_ids: ["trace-active-story"],
             working_directory: "C:\\work\\portos",
@@ -1345,9 +1388,11 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       );
     }
 
-    const inferenceAttempts = within(
-      expandDispatchSection(dispatchCard, "Inference attempts"),
+    const inferenceAttemptsSection = expandDispatchSection(
+      dispatchCard,
+      "Inference attempts",
     );
+    const inferenceAttempts = within(inferenceAttemptsSection);
     const attemptCards = inferenceAttempts.getAllByRole("article");
     expect(
       inferenceAttempts.getByRole("article", {
@@ -1384,6 +1429,15 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(attemptCards[1]).getByText("Ready for the next workstation."),
     ).toBeTruthy();
+    expectLocalizedTimestampRow(dispatchCard, "Started at", requestStartedAt);
+    [
+      firstAttemptRequestTime,
+      secondAttemptRequestTime,
+      firstAttemptResponseTime,
+      secondAttemptResponseTime,
+    ].forEach((timestamp) => {
+      expectLocalizedTimestamp(inferenceAttemptsSection, timestamp);
+    });
 
     const traceLink = within(dispatchCard).getByRole("link", {
       name: "trace-active-story",
@@ -1572,63 +1626,6 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).queryByText("No response yet for this dispatch."),
     ).toBeNull();
-  });
-
-  it("uses the selected work title as the dispatch heading while keeping the dispatch id secondary", () => {
-    const { dispatchID, execution, selectedNode, workItem } =
-      getSelectedWorkItemFixture();
-
-    render(
-      <WorkItemDetailCard
-        executionDetails={selectWorkItemExecutionDetails({
-          activeExecution: execution,
-          dispatchID,
-          selectedNode,
-          workItem,
-        })}
-        now={DETAIL_CARD_NOW}
-        dispatchAttempts={[]}
-        selectedNode={selectedNode}
-        selection={{
-          dispatchId: dispatchID,
-          execution,
-          kind: "work-item",
-          nodeId: selectedNode.node_id,
-          workItem,
-        }}
-        workstationRequests={[dashboardWorkstationRequestFixtures.ready]}
-      />,
-    );
-
-    const dispatchHistory = screen.getByRole("region", {
-      name: "Workstation dispatches",
-    });
-    const dispatchCard = within(dispatchHistory)
-      .getByText("Active Story", { selector: "strong" })
-      .closest("article");
-
-    if (!(dispatchCard instanceof HTMLElement)) {
-      throw new Error("expected ready dispatch history card");
-    }
-
-    expect(
-      within(dispatchCard).getByText("Active Story", { selector: "strong" }),
-    ).toBeTruthy();
-    expect(
-      within(dispatchCard).getByText(
-        dashboardWorkstationRequestFixtures.ready.dispatch_id,
-        { selector: "span" },
-      ),
-    ).toBeTruthy();
-    expect(within(dispatchCard).getByText("Started at")).toBeTruthy();
-    expect(
-      within(getDetailRow(dispatchCard, "Started at")).getByText(
-        "2026-04-08T12:00:01Z",
-      ),
-    ).toBeTruthy();
-    expect(within(dispatchCard).queryByText("dispatchedCount")).toBeNull();
-    expect(within(dispatchCard).queryByText("respondedCount")).toBeNull();
-    expect(within(dispatchCard).queryByText("erroredCount")).toBeNull();
   });
 
   it("falls back to the dispatch id as the title when no associated work label is available", () => {
@@ -2084,6 +2081,61 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).queryByText("No response yet for this dispatch."),
     ).toBeNull();
+  });
+});
+
+describe("WorkItemDetailCard dispatch headings", () => {
+  it("uses the selected work title as the dispatch heading while keeping the dispatch id secondary", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        dispatchAttempts={[]}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[dashboardWorkstationRequestFixtures.ready]}
+      />,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "Workstation dispatches",
+    });
+    const dispatchCard = within(dispatchHistory)
+      .getByText("Active Story", { selector: "strong" })
+      .closest("article");
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected ready dispatch history card");
+    }
+
+    expect(
+      within(dispatchCard).getByText("Active Story", { selector: "strong" }),
+    ).toBeTruthy();
+    expect(
+      within(dispatchCard).getByText(
+        dashboardWorkstationRequestFixtures.ready.dispatch_id,
+        { selector: "span" },
+      ),
+    ).toBeTruthy();
+    expect(within(dispatchCard).getByText("Started at")).toBeTruthy();
+    expectLocalizedTimestampRow(dispatchCard, "Started at", "2026-04-08T12:00:01Z");
+    expect(within(dispatchCard).queryByText("dispatchedCount")).toBeNull();
+    expect(within(dispatchCard).queryByText("respondedCount")).toBeNull();
+    expect(within(dispatchCard).queryByText("erroredCount")).toBeNull();
   });
 });
 

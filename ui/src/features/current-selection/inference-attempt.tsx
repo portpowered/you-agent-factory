@@ -1,4 +1,5 @@
 import {
+  formatLocalDateTime,
   formatDurationMillis,
   formatProviderSession,
   getProviderSessionLogTarget,
@@ -35,6 +36,14 @@ export function InferenceAttemptCard({
 }: InferenceAttemptCardProps) {
   const detailMessages = useCurrentSelectionDetailMessages();
   const workstationMessages = useCurrentSelectionWorkstationDetailMessages();
+  const requestTime = formatLocalDateTime(
+    attempt.request_time,
+    detailMessages.timestampUnavailable,
+  );
+  const responseTime = formatLocalDateTime(
+    attempt.response_time,
+    detailMessages.timestampUnavailable,
+  );
   const provider = attempt.diagnostics?.provider?.provider ?? attempt.provider_session?.provider;
   const model = attempt.diagnostics?.provider?.model;
   const providerSessionLogTarget = getProviderSessionLogTarget(
@@ -78,7 +87,7 @@ export function InferenceAttemptCard({
           value={attempt.working_directory}
         />
         <InferenceAttemptDetail code label={detailMessages.worktreeLabel} value={attempt.worktree} />
-        <InferenceAttemptDetail code label={detailMessages.requestTimeLabel} value={attempt.request_time} />
+        <InferenceAttemptDetail label={detailMessages.requestTimeLabel} value={requestTime} />
         <InferenceAttemptDetail code label={detailMessages.outcomeLabel} value={attempt.outcome} />
         <InferenceAttemptDetail
           label={detailMessages.elapsedTimeLabel}
@@ -88,7 +97,7 @@ export function InferenceAttemptCard({
               : undefined
           }
         />
-        <InferenceAttemptDetail code label={detailMessages.responseTimeLabel} value={attempt.response_time} />
+        <InferenceAttemptDetail label={detailMessages.responseTimeLabel} value={responseTime} />
         <InferenceAttemptDetail label={detailMessages.exitCodeLabel} value={attempt.exit_code} />
         <InferenceAttemptDetail code label={detailMessages.errorClassLabel} value={attempt.error_class} />
       </dl>

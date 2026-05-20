@@ -10,7 +10,12 @@ const storybookInteropDeps = [
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
 ] as const;
-const proxiedAPIPaths = ["/events", "/factory", "/work"] as const;
+const proxiedAPIPaths = [
+  "/events",
+  "/factory",
+  "/provider-sessions/detail",
+  "/work",
+] as const;
 const apiProxy = Object.fromEntries(
   proxiedAPIPaths.map((path) => [
     path,
