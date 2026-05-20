@@ -47,6 +47,7 @@ type FactoryEventHistory struct {
 	mu             sync.RWMutex
 	net            *state.Net
 	runtimeConfig  interfaces.RuntimeDefinitionLookup
+	factoryRunner  string
 	now            func() time.Time
 	events         []factoryapi.FactoryEvent
 	recorders      []func(factoryapi.FactoryEvent)
@@ -69,6 +70,17 @@ func NewFactoryEventHistory(net *state.Net, now func() time.Time, runtimeConfigs
 		now:           now,
 		streams:       make(map[int]*eventHistorySubscription),
 	}
+}
+
+// SetFactoryRunnerOverride preserves the effective factory-level runner
+// selection when service wiring overrides the authored runtime config.
+func (h *FactoryEventHistory) SetFactoryRunnerOverride(runnerID string) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.factoryRunner = interfaces.NormalizeRunnerID(runnerID)
 }
 
 // Events returns the recorded events in append order.
@@ -789,7 +801,18 @@ func (h *FactoryEventHistory) runnerSelectionInputsForDispatch(dispatch interfac
 
 func (h *FactoryEventHistory) factoryRunnerID() string {
 	if h == nil || h.runtimeConfig == nil {
-		return ""
+		if h == nil {
+			return ""
+		}
+		h.mu.RLock()
+		defer h.mu.RUnlock()
+		return h.factoryRunner
+	}
+	h.mu.RLock()
+	override := h.factoryRunner
+	h.mu.RUnlock()
+	if override != "" {
+		return override
 	}
 	type factoryConfigProvider interface {
 		FactoryConfig() *interfaces.FactoryConfig

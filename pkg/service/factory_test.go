@@ -16,12 +16,14 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	apiview "github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -5294,6 +5296,76 @@ func TestFactoryService_SimpleDashboardRenderInputUsesRenderData(t *testing.T) {
 	assertDashboardRenderDataFailed(t, failed.RenderData, "dashboard-world-failed")
 	assertSimpleDashboardTerminalOutput(t, failed)
 	assertSimpleDashboardSessionRowsMatchRenderData(t, failed)
+}
+
+func TestFactoryService_ProjectsFactoryRunnerOverrideInDispatchMetadata(t *testing.T) {
+	dir := t.TempDir()
+	cfg := minimalFactoryConfig()
+	cfg["runner"] = interfaces.RunnerIDCodex
+	writeFactoryJSON(t, dir, cfg)
+	writeWorkerAgentsMD(t, dir, "worker-a")
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	provider := newDashboardWorldViewProvider()
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:              dir,
+		RuntimeMode:      interfaces.RuntimeModeService,
+		RunnerID:         interfaces.RunnerIDGemini,
+		Logger:           zap.NewNop(),
+		ProviderOverride: provider,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+	defer stopServiceModeRun(t, cancelRun, errCh)
+
+	submitDashboardWorldViewWork(t, svc, "override-runner-story", "trace-override-runner")
+	request := provider.nextDispatch(t)
+	if request.RunnerID != interfaces.RunnerIDGemini {
+		t.Fatalf("provider request runner id = %q, want gemini", request.RunnerID)
+	}
+
+	events, err := svc.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents: %v", err)
+	}
+	selectedTick := 0
+	for _, event := range events {
+		if event.Context.Tick > selectedTick {
+			selectedTick = event.Context.Tick
+		}
+	}
+	worldState, err := projections.ReconstructFactoryWorldState(events, selectedTick)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	slice := apiview.BuildFactoryWorldWorkstationRequestProjectionSlice(worldState)
+	if slice.WorkstationRequestsByDispatchId == nil || len(*slice.WorkstationRequestsByDispatchId) != 1 {
+		t.Fatalf("workstation requests projection = %#v, want one projected request", slice.WorkstationRequestsByDispatchId)
+	}
+
+	var view factoryapi.FactoryWorldWorkstationRequestView
+	for _, candidate := range *slice.WorkstationRequestsByDispatchId {
+		view = candidate
+	}
+	if view.Request.Runner == nil || view.Request.Runner.RunnerId == nil || string(*view.Request.Runner.RunnerId) != interfaces.RunnerIDGemini {
+		t.Fatalf("projected runner = %#v, want gemini", view.Request.Runner)
+	}
+	if view.Request.Runner.SelectionSource == nil || string(*view.Request.Runner.SelectionSource) != string(interfaces.RunnerSelectionSourceFactory) {
+		t.Fatalf("projected runner selection source = %#v, want factory", view.Request.Runner.SelectionSource)
+	}
+
+	provider.respond(interfaces.InferenceResponse{Content: "COMPLETE"}, nil)
+	waitForTokenInPlaceByWorkID(t, svc, "task:complete", "override-runner-story", time.Second)
 }
 
 func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing.T) {

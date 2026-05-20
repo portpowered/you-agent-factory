@@ -278,6 +278,45 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	}
 }
 
+func TestFactoryEventHistory_RecordWorkstationRequest_PreservesFactoryRunnerOverride(t *testing.T) {
+	eventTime := time.Date(2026, 4, 22, 16, 5, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() }, eventHistoryRuntimeConfig{
+		Factory: &interfaces.FactoryConfig{Runner: interfaces.RunnerIDCodex},
+		Workers: map[string]*interfaces.WorkerConfig{
+			"builder": {ModelProvider: interfaces.RunnerIDCodex},
+		},
+	})
+	history.SetFactoryRunnerOverride(interfaces.RunnerIDGemini)
+
+	history.RecordWorkstationRequest(4, interfaces.FactoryDispatchRecord{
+		DispatchID:  "dispatch-override",
+		CreatedTick: 4,
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID:   "dispatch-override",
+			TransitionID: "build",
+			WorkerType:   "builder",
+			Execution: interfaces.ExecutionMetadata{
+				RequestID: "request-override",
+			},
+		},
+	}, eventTime)
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsDispatchRequestEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch request payload: %v", err)
+	}
+	if payload.Metadata == nil || payload.Metadata.RunnerId == nil || string(*payload.Metadata.RunnerId) != interfaces.RunnerIDGemini {
+		t.Fatalf("metadata runnerId = %#v, want gemini", payload.Metadata)
+	}
+	if payload.Metadata.RunnerSelectionSource == nil || string(*payload.Metadata.RunnerSelectionSource) != string(interfaces.RunnerSelectionSourceFactory) {
+		t.Fatalf("metadata runnerSelectionSource = %#v, want factory", payload.Metadata.RunnerSelectionSource)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailureDetails(t *testing.T) {
 	eventTime := time.Date(2026, 4, 17, 9, 30, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })

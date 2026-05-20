@@ -283,8 +283,9 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		return nil, fmt.Errorf("map factory config: %w", err)
 	}
 
-	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(cfg.RunnerID, loadedFactoryCfg.FactoryConfig())
+	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
+	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	workerOpts, err := loadWorkersFromConfig(
 		loadedFactoryCfg.FactoryDir(),
 		loadedFactoryCfg.FactoryConfig(),
@@ -441,8 +442,9 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, fa
 	if clock == nil {
 		clock = factory.EnsureClock(clockwork.NewRealClock())
 	}
-	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(fs.cfg.RunnerID, loadedFactoryCfg.FactoryConfig())
+	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
+	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	workerOpts, err := loadWorkersFromConfig(
 		loadedFactoryCfg.FactoryDir(),
 		loadedFactoryCfg.FactoryConfig(),
