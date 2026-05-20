@@ -168,6 +168,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/factory/~current/workstations/{workstation_name}/prompt-template-contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get workstation prompt-template contract
+         * @description Returns the authoritative prompt-variable reference and unavailable-access patterns for the selected current-factory workstation editing context.
+         */
+        get: operations["getCurrentFactoryWorkstationPromptTemplateContract"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factory/~current/editable-definition": {
         parameters: {
             query?: never;
@@ -186,6 +206,26 @@ export interface paths {
          */
         put: operations["saveEditableCurrentFactoryDefinition"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/factory/~current/workstations/{workstation_name}/prompt-template-validation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate workstation prompt template
+         * @description Validates a prompt draft against the authoritative current-factory workstation prompt contract and returns typed syntax or variable diagnostics.
+         */
+        post: operations["validateCurrentFactoryWorkstationPromptTemplate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1293,6 +1333,62 @@ export interface components {
             /** @description Destination workstation name. */
             to: string;
         };
+        PromptTemplateContract: {
+            /** @description Available prompt-template variables for the selected workstation editing context. */
+            availableVariables: components["schemas"]["PromptTemplateVariableReference"][];
+            /** @description Number of authored inputs on the selected workstation, which controls valid `.Inputs[N]` access. */
+            inputCount: number;
+            /** @description Unsupported or unavailable variable access patterns for the selected workstation editing context. */
+            unavailableAccessPatterns: components["schemas"]["PromptTemplateUnavailableAccessPattern"][];
+        };
+        PromptTemplateVariableReference: {
+            /**
+             * @description High-level grouping for the variable reference.
+             * @enum {string}
+             */
+            category: "ROOT" | "INPUT" | "HISTORY" | "CONTEXT" | "MAP_ACCESS";
+            /** @description User-readable description of what the variable resolves to. */
+            description: string;
+            /** @description Go template snippet that shows how to reference the variable. */
+            example: string;
+            /** @description Canonical variable path summary used in diagnostics and help surfaces. */
+            path: string;
+        };
+        PromptTemplateUnavailableAccessPattern: {
+            /** @description Representative unsupported template snippet for this access pattern. */
+            example: string;
+            /** @description Unsupported or unavailable variable path pattern. */
+            path: string;
+            /** @description Why the access pattern is unavailable or unsupported in the selected workstation context. */
+            reason: string;
+        };
+        PromptTemplateValidationRequest: {
+            /** @description Prompt draft to validate against the selected current-factory workstation contract. */
+            prompt: string;
+        };
+        PromptTemplateValidationResult: {
+            /** @description Typed validation diagnostics for the submitted prompt draft. */
+            diagnostics: components["schemas"]["PromptTemplateDiagnostic"][];
+            /** @description True when the prompt contains no syntax or variable diagnostics. */
+            valid: boolean;
+        };
+        PromptTemplateDiagnostic: {
+            /** @description Inclusive 1-based byte offset where the diagnostic source span ends when available. */
+            endOffset: number;
+            /**
+             * @description Diagnostic classification for prompt-template validation.
+             * @enum {string}
+             */
+            kind: "SYNTAX_ERROR" | "INVALID_VARIABLE" | "UNAVAILABLE_VARIABLE";
+            /** @description User-readable explanation of the validation failure. */
+            message: string;
+            /** @description Canonical variable path or access pattern involved in the diagnostic when available. */
+            path: string;
+            /** @description Source variable or access expression that triggered the diagnostic when available. */
+            sourceText: string;
+            /** @description Inclusive 1-based byte offset where the diagnostic source span starts when available. */
+            startOffset: number;
+        };
         WorkRequest: {
             /** @description Stable client-provided request identifier used for idempotent batch submission. */
             requestId: string;
@@ -1701,6 +1797,31 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    getCurrentFactoryWorkstationPromptTemplateContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Customer-authored workstation name to inspect in the current factory. */
+                workstation_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Prompt-template contract for the selected workstation editing context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplateContract"];
+                };
+            };
+            404: components["responses"]["CurrentFactoryNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     getEditableCurrentFactoryDefinition: {
         parameters: {
             query?: never;
@@ -1748,6 +1869,35 @@ export interface operations {
             400: components["responses"]["SaveEditableFactoryDefinitionBadRequest"];
             404: components["responses"]["CurrentFactoryNotFound"];
             409: components["responses"]["SaveEditableFactoryDefinitionConflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    validateCurrentFactoryWorkstationPromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Customer-authored workstation name to validate against in the current factory. */
+                workstation_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptTemplateValidationRequest"];
+            };
+        };
+        responses: {
+            /** @description Prompt validation result for the selected workstation editing context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplateValidationResult"];
+                };
+            };
+            404: components["responses"]["CurrentFactoryNotFound"];
             500: components["responses"]["InternalError"];
         };
     };

@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+required:
+  - example
+  - path
+  - reason
+properties:
+  example:
+    type: string
+    description: Representative unsupported template snippet for this access pattern.
+  path:
+    type: string
+    description: Unsupported or unavailable variable path pattern.
+  reason:
+    type: string
+    description: Why the access pattern is unavailable or unsupported in the selected workstation context.

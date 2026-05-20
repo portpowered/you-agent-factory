@@ -108,6 +108,21 @@ const exportFactoryDefinition = {
   ],
 };
 
+function buildReplayPromptTemplateContract() {
+  return {
+    availableVariables: [],
+    inputCount: 0,
+    unavailableAccessPatterns: [],
+  };
+}
+
+function buildReplayPromptTemplateValidationResult() {
+  return {
+    diagnostics: [],
+    valid: true,
+  };
+}
+
 function createBunEnv(extraEnv = {}, options = {}) {
   const env = {
     ...process.env,
@@ -367,6 +382,34 @@ async function startReplayServer(lines, options = {}) {
         "Content-Type": "application/json",
       });
       response.end(JSON.stringify(currentFactoryDefinition));
+      return;
+    }
+
+    if (
+      request.url?.match(
+        /^\/factory\/~current\/workstations\/[^/]+\/prompt-template-contract$/,
+      ) &&
+      request.method === "GET"
+    ) {
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(JSON.stringify(buildReplayPromptTemplateContract()));
+      return;
+    }
+
+    if (
+      request.url?.match(
+        /^\/factory\/~current\/workstations\/[^/]+\/prompt-template-validation$/,
+      ) &&
+      request.method === "POST"
+    ) {
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(JSON.stringify(buildReplayPromptTemplateValidationResult()));
       return;
     }
 

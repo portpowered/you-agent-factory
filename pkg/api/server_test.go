@@ -1014,6 +1014,106 @@ func TestSaveEditableCurrentFactoryDefinition_MapsStaleVersion(t *testing.T) {
 	}
 }
 
+func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{
+			Name: "beta",
+			Workstations: &[]factoryapi.Workstation{{
+				Name:   "Review",
+				Worker: "reviewer",
+				Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}},
+				Outputs: []factoryapi.WorkstationIO{{
+					State:    "reviewed",
+					WorkType: "task",
+				}},
+			}},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory/~current/workstations/Review/prompt-template-contract", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	var contract factoryapi.PromptTemplateContract
+	if err := json.NewDecoder(rec.Body).Decode(&contract); err != nil {
+		t.Fatalf("decode prompt template contract: %v", err)
+	}
+	if contract.InputCount != 1 {
+		t.Fatalf("inputCount = %d, want 1", contract.InputCount)
+	}
+	if len(contract.AvailableVariables) == 0 {
+		t.Fatal("availableVariables = empty, want entries")
+	}
+	if contract.AvailableVariables[0].Path == "" {
+		t.Fatalf("first available variable = %#v, want non-empty path", contract.AvailableVariables[0])
+	}
+}
+
+func TestValidateCurrentFactoryWorkstationPromptTemplate(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{
+			Name: "beta",
+			Workstations: &[]factoryapi.Workstation{{
+				Name:   "Review",
+				Worker: "reviewer",
+				Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}},
+				Outputs: []factoryapi.WorkstationIO{{
+					State:    "reviewed",
+					WorkType: "task",
+				}},
+			}},
+		},
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/factory/~current/workstations/Review/prompt-template-validation",
+		bytes.NewBufferString(`{"prompt":"{{ (index .Inputs 1).Payload }}"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	var result factoryapi.PromptTemplateValidationResult
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode prompt template validation response: %v", err)
+	}
+	if result.Valid {
+		t.Fatal("valid = true, want false")
+	}
+	if len(result.Diagnostics) != 1 {
+		t.Fatalf("diagnostics = %#v, want 1", result.Diagnostics)
+	}
+	if result.Diagnostics[0].Kind != factoryapi.UNAVAILABLEVARIABLE {
+		t.Fatalf("diagnostic kind = %q, want %q", result.Diagnostics[0].Kind, factoryapi.UNAVAILABLEVARIABLE)
+	}
+}
+
+func TestValidateCurrentFactoryWorkstationPromptTemplate_UnknownWorkstation(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{Name: "beta"},
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/factory/~current/workstations/Missing/prompt-template-validation",
+		bytes.NewBufferString(`{"prompt":"{{ .Context.Project }}"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "Current named factory workstation not found.")
+}
+
 func TestCreateFactory_RejectsDuplicateFactoryName(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		CreateNamedFactoryErr: factoryconfig.ErrNamedFactoryAlreadyExists,

@@ -15,6 +15,7 @@ import { resetSelectionHistoryStore } from "./state/selectionHistoryStore";
 import type { DashboardSelection, TerminalWorkDetail } from "./types";
 import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "./useCurrentSelection";
+import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
 vi.mock("../current-factory-definition", async () => {
   const actual = await vi.importActual("../current-factory-definition");
@@ -27,6 +28,10 @@ vi.mock("../current-factory-definition", async () => {
 
 vi.mock("./use-save-editable-workstation-configuration", () => ({
   useSaveEditableWorkstationConfiguration: vi.fn(),
+}));
+
+vi.mock("./useCurrentWorkstationPromptTemplateValidation", () => ({
+  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
 }));
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
@@ -127,6 +132,17 @@ describe("CurrentSelectionWidget", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+      data: {
+        diagnostics: [],
+        valid: true,
+      },
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
       data: undefined,
       error: null,
@@ -268,7 +284,7 @@ describe("CurrentSelectionWidget", () => {
       workItem,
     } = buildSelectedWorkItemFixture();
 
-    render(
+    renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
           selectedNode,
@@ -636,7 +652,7 @@ describe("CurrentSelectionWidget", () => {
       );
     }
 
-    render(
+    renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
           selectedStatePlace,
@@ -681,7 +697,7 @@ describe("CurrentSelectionWidget", () => {
       );
     }
 
-    render(
+    renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
           selectStateWorkItem,
@@ -726,7 +742,7 @@ describe("CurrentSelectionWidget", () => {
         attempt.workstation_name === selectedNode.workstation_name,
     );
 
-    render(
+    renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
           selectedNode,
@@ -753,7 +769,7 @@ describe("CurrentSelectionWidget", () => {
   });
 
   it("does not load the editable factory definition when no workstation is selected", () => {
-    render(
+    renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection()}
         now={DETAIL_CARD_NOW}
@@ -769,7 +785,7 @@ describe("CurrentSelectionWidget", () => {
   it("enables editable workstation loading after a workstation becomes selected", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    const { rerender } = render(
+    const { rerender } = renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection()}
         now={DETAIL_CARD_NOW}
@@ -800,7 +816,7 @@ describe("CurrentSelectionWidget", () => {
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
-    render(
+    renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
           selectedNode,
@@ -832,7 +848,7 @@ describe("CurrentSelectionWidget", () => {
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
-    const { rerender } = render(
+    const { rerender } = renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection()}
         now={DETAIL_CARD_NOW}
@@ -876,7 +892,7 @@ describe("CurrentSelectionWidget", () => {
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
-    const { rerender } = render(
+    const { rerender } = renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection()}
         now={DETAIL_CARD_NOW}
@@ -964,7 +980,7 @@ describe("CurrentSelectionWidget", () => {
       },
     );
 
-    render(
+    renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
           selectedNode:
@@ -1020,7 +1036,7 @@ describe("CurrentSelectionWidget", () => {
   });
 
   it("renders the empty current-selection guidance when nothing is selected", () => {
-    render(
+    renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection()}
         now={DETAIL_CARD_NOW}
@@ -1036,7 +1052,7 @@ describe("CurrentSelectionWidget", () => {
   });
 
   it("renders localized current-selection shell copy for a supported non-default locale", () => {
-    render(
+    renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection()}
         locale="ja"
@@ -1060,7 +1076,7 @@ describe("CurrentSelectionWidget", () => {
   });
 
   it("renders disabled undo and redo controls in the shared current-selection header by default", () => {
-    render(
+    renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection()}
         now={DETAIL_CARD_NOW}
@@ -1117,9 +1133,11 @@ function renderWithQueryClient(view: ReactNode) {
     },
   });
 
-  return render(
-    <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
-  );
+  return render(view, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
 }
 
 function expandEditableConfiguration() {

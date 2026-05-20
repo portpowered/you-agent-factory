@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - diagnostics
+  - valid
+properties:
+  diagnostics:
+    type: array
+    description: Typed validation diagnostics for the submitted prompt draft.
+    items:
+      $ref: '../../../openapi-main.yaml#/components/schemas/PromptTemplateDiagnostic'
+  valid:
+    type: boolean
+    description: True when the prompt contains no syntax or variable diagnostics.

@@ -1,0 +1,26 @@
+type: object
+additionalProperties: false
+required:
+  - category
+  - description
+  - example
+  - path
+properties:
+  category:
+    type: string
+    enum:
+      - ROOT
+      - INPUT
+      - HISTORY
+      - CONTEXT
+      - MAP_ACCESS
+    description: High-level grouping for the variable reference.
+  description:
+    type: string
+    description: User-readable description of what the variable resolves to.
+  example:
+    type: string
+    description: Go template snippet that shows how to reference the variable.
+  path:
+    type: string
+    description: Canonical variable path summary used in diagnostics and help surfaces.

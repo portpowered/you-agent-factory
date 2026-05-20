@@ -1321,6 +1321,22 @@ function renderApp({
   return { ...result, fetchMock };
 }
 
+function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchMock.mock.calls.map(([input]) =>
+    typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? `${input.pathname}${input.search}`
+        : input.url,
+  );
+}
+
+function nonPromptTemplateFetchPaths(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchCallPaths(fetchMock).filter(
+    (path) => !path.includes("/prompt-template-contract"),
+  );
+}
+
 function submitWorkCardControls() {
   const dashboardGrid = screen.getByRole("region", {
     name: "Infinite You bento board",
@@ -2202,8 +2218,9 @@ describe("App shell import and export flows", () => {
       expect(
         screen.getByRole("region", { name: "dashboard summary" }),
       ).toBeTruthy();
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(fetchMock.mock.calls[0]?.[0]).toBe("/factory/~current");
+      expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
+        "/factory/~current",
+      ]);
       expect(exportProbe.getDownloadedBlob()).toBeNull();
       expect(exportProbe.getDownloadedFilename()).toBe("");
     } finally {
@@ -2895,7 +2912,7 @@ describe("App streamed replay smoke flows", () => {
         screen.getByRole("button", { name: "Select Review workstation" }),
       ).toBeTruthy();
     });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
 
     fireEvent.change(slider, { target: { value: "3" } });
 
@@ -3019,7 +3036,7 @@ describe("App streamed replay smoke flows", () => {
         "Provider rate limit exceeded while generating the analysis.",
       ).length,
     ).toBeGreaterThan(0);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
   });
 
   it("smoke tests resource counts from streamed events against backend world-view counts", async () => {
@@ -3061,7 +3078,7 @@ describe("App streamed replay smoke flows", () => {
       expectRenderedResourceCountMatchesBackendWorldView(1);
     });
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
   });
 
   it("smoke tests workstation-request runtime details against backend expectations", async () => {
@@ -3830,9 +3847,9 @@ describe("App dashboard follow-up flows", () => {
         "Your request was submitted. Trace ID: trace-submit-story.",
       ),
     ).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/work");
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+    const submitCalls = nonPromptTemplateFetchPaths(fetchMock);
+    expect(submitCalls).toEqual(["/work"]);
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
       name: "Dashboard smoke request",
       payload: "Review the failed dashboard submission smoke.",
       workTypeName: "story",
@@ -3857,9 +3874,9 @@ describe("App dashboard follow-up flows", () => {
     expect(
       await submitWorkScope.findByText("work_type_name is required"),
     ).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("/work");
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+    expect(submitCalls).toEqual(["/work"]);
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work", "/work"]);
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
       name: "Retry dashboard request",
       payload: "Retry the broken submission from the dashboard shell.",
       workTypeName: "story",
@@ -3924,12 +3941,11 @@ describe("App dashboard follow-up flows", () => {
         "Your request was submitted. Trace ID: trace-submit-story.",
       ),
     ).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/work");
-    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work"]);
+    expect(fetchMock.mock.calls.at(-1)?.[1]).toMatchObject({
       method: "POST",
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
       name: "Dashboard smoke request",
       payload: "Review the failed dashboard submission smoke.",
       workTypeName: "story",
@@ -3968,8 +3984,8 @@ describe("App dashboard follow-up flows", () => {
         "Your request was submitted. Trace ID: trace-submit-story.",
       ),
     ).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work"]);
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
       name: "Dashboard empty payload request",
       payload: "",
       workTypeName: "story",
@@ -4033,8 +4049,7 @@ describe("App dashboard follow-up flows", () => {
     expect(
       await submitWorkScope.findByText("work_type_name is required"),
     ).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/work");
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work"]);
     expect(workType.value).toBe("story");
     expect(requestName.value).toBe("Retry dashboard request");
     expect(requestText.value).toBe(
@@ -4231,7 +4246,7 @@ describe("App dashboard follow-up flows", () => {
     );
     await screen.findByText("Trace dispatch grid");
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
   });
 
   it("updates completed and failed totals from the live stream", async () => {

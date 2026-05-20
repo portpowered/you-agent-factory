@@ -49,6 +49,36 @@ const workstationDetailMessagesByLocale = {
       "Resolve the highlighted fields before saving this workstation.",
     editableConfigurationPromptRequired:
       "Enter a prompt before saving this workstation.",
+    editableConfigurationPromptValidationLoading:
+      "Validating prompt variables for the current draft.",
+    editableConfigurationPromptValidationFallbackError:
+      "Prompt validation could not be completed.",
+    editableConfigurationPromptValidationErrorPrefix:
+      "Prompt validation unavailable.",
+    editableConfigurationPromptDiagnosticsSummary:
+      "Resolve the highlighted prompt diagnostics before saving this workstation.",
+    editableConfigurationPromptDiagnosticsHeading: "Prompt diagnostics",
+    editableConfigurationPromptSyntaxDiagnosticLabel: "Template syntax",
+    editableConfigurationPromptVariableDiagnosticLabel: "Variable access",
+    editableConfigurationPromptValidationDetail:
+      "Save stays disabled until the prompt validates cleanly for this workstation context.",
+    editableConfigurationPromptHelpLoading:
+      "Loading available prompt variables for this workstation.",
+    editableConfigurationPromptHelpEmpty:
+      "No prompt variable help is available for this workstation.",
+    editableConfigurationPromptHelpFallbackError:
+      "Prompt variable help could not be loaded.",
+    editableConfigurationPromptHelpErrorPrefix:
+      "Prompt variable help unavailable.",
+    editableConfigurationPromptHelpHeading: "Prompt variable help",
+    editableConfigurationPromptHelpOpenActionLabel: "Open prompt variable help",
+    editableConfigurationPromptHelpCloseActionLabel:
+      "Close prompt variable help",
+    editableConfigurationPromptHelpAvailableHeading: "Available variables",
+    editableConfigurationPromptHelpUnavailableHeading:
+      "Unavailable access patterns",
+    editableConfigurationPromptHelpInputCountSummary: (count) =>
+      `This workstation exposes ${singularPlural(count, "authored input", "authored inputs")}.`,
     editableConfigurationSaveFallbackError:
       "The running factory could not be saved.",
     editableConfigurationWorkerMissing:
@@ -164,6 +194,37 @@ const workstationDetailMessagesByLocale = {
       "このワークステーションを保存する前に、強調表示された項目を修正してください。",
     editableConfigurationPromptRequired:
       "このワークステーションを保存する前にプロンプトを入力してください。",
+    editableConfigurationPromptValidationLoading:
+      "この下書きのプロンプト変数を検証しています。",
+    editableConfigurationPromptValidationFallbackError:
+      "プロンプト検証を完了できませんでした。",
+    editableConfigurationPromptValidationErrorPrefix:
+      "プロンプト検証は利用できません。",
+    editableConfigurationPromptDiagnosticsSummary:
+      "このワークステーションを保存する前に、強調表示されたプロンプト診断を修正してください。",
+    editableConfigurationPromptDiagnosticsHeading: "プロンプト診断",
+    editableConfigurationPromptSyntaxDiagnosticLabel: "テンプレート構文",
+    editableConfigurationPromptVariableDiagnosticLabel: "変数アクセス",
+    editableConfigurationPromptValidationDetail:
+      "このワークステーション文脈でプロンプトの検証が成功するまで保存は無効のままです。",
+    editableConfigurationPromptHelpLoading:
+      "このワークステーションで利用可能なプロンプト変数を読み込んでいます。",
+    editableConfigurationPromptHelpEmpty:
+      "このワークステーションで利用できるプロンプト変数ヘルプはありません。",
+    editableConfigurationPromptHelpFallbackError:
+      "プロンプト変数ヘルプを読み込めませんでした。",
+    editableConfigurationPromptHelpErrorPrefix:
+      "プロンプト変数ヘルプは利用できません。",
+    editableConfigurationPromptHelpHeading: "プロンプト変数ヘルプ",
+    editableConfigurationPromptHelpOpenActionLabel:
+      "プロンプト変数ヘルプを開く",
+    editableConfigurationPromptHelpCloseActionLabel:
+      "プロンプト変数ヘルプを閉じる",
+    editableConfigurationPromptHelpAvailableHeading: "利用可能な変数",
+    editableConfigurationPromptHelpUnavailableHeading:
+      "利用できないアクセスパターン",
+    editableConfigurationPromptHelpInputCountSummary: (count) =>
+      `このワークステーションは ${count} 件の入力を公開しています。`,
     editableConfigurationSaveFallbackError:
       "実行中ファクトリーを保存できませんでした。",
     editableConfigurationWorkerMissing:
@@ -279,6 +340,36 @@ const workstationDetailMessagesByLocale = {
       "이 워크스테이션을 저장하기 전에 강조 표시된 필드를 수정하세요.",
     editableConfigurationPromptRequired:
       "이 워크스테이션을 저장하기 전에 프롬프트를 입력하세요.",
+    editableConfigurationPromptValidationLoading:
+      "현재 초안의 프롬프트 변수를 검증하는 중입니다.",
+    editableConfigurationPromptValidationFallbackError:
+      "프롬프트 검증을 완료할 수 없습니다.",
+    editableConfigurationPromptValidationErrorPrefix:
+      "프롬프트 검증을 사용할 수 없습니다.",
+    editableConfigurationPromptDiagnosticsSummary:
+      "이 워크스테이션을 저장하기 전에 강조 표시된 프롬프트 진단을 해결하세요.",
+    editableConfigurationPromptDiagnosticsHeading: "프롬프트 진단",
+    editableConfigurationPromptSyntaxDiagnosticLabel: "템플릿 구문",
+    editableConfigurationPromptVariableDiagnosticLabel: "변수 접근",
+    editableConfigurationPromptValidationDetail:
+      "이 워크스테이션 문맥에서 프롬프트가 정상 검증될 때까지 저장은 비활성화됩니다.",
+    editableConfigurationPromptHelpLoading:
+      "이 워크스테이션에서 사용할 수 있는 프롬프트 변수를 불러오는 중입니다.",
+    editableConfigurationPromptHelpEmpty:
+      "이 워크스테이션에는 사용할 수 있는 프롬프트 변수 도움말이 없습니다.",
+    editableConfigurationPromptHelpFallbackError:
+      "프롬프트 변수 도움말을 불러올 수 없습니다.",
+    editableConfigurationPromptHelpErrorPrefix:
+      "프롬프트 변수 도움말을 사용할 수 없습니다.",
+    editableConfigurationPromptHelpHeading: "프롬프트 변수 도움말",
+    editableConfigurationPromptHelpOpenActionLabel: "프롬프트 변수 도움말 열기",
+    editableConfigurationPromptHelpCloseActionLabel:
+      "프롬프트 변수 도움말 닫기",
+    editableConfigurationPromptHelpAvailableHeading: "사용 가능한 변수",
+    editableConfigurationPromptHelpUnavailableHeading:
+      "사용할 수 없는 접근 패턴",
+    editableConfigurationPromptHelpInputCountSummary: (count) =>
+      `이 워크스테이션은 ${count}개의 작성된 입력을 노출합니다.`,
     editableConfigurationSaveFallbackError:
       "실행 중인 팩토리를 저장할 수 없습니다.",
     editableConfigurationWorkerMissing:
@@ -387,6 +478,30 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
     editableConfigurationPromptRequired: "保存此工作站前请输入提示词。",
+    editableConfigurationPromptValidationLoading: "正在校验当前草稿中的提示词变量。",
+    editableConfigurationPromptValidationFallbackError: "无法完成提示词校验。",
+    editableConfigurationPromptValidationErrorPrefix: "提示词校验不可用。",
+    editableConfigurationPromptDiagnosticsSummary:
+      "保存此工作站前，请先解决高亮显示的提示词诊断问题。",
+    editableConfigurationPromptDiagnosticsHeading: "提示词诊断",
+    editableConfigurationPromptSyntaxDiagnosticLabel: "模板语法",
+    editableConfigurationPromptVariableDiagnosticLabel: "变量访问",
+    editableConfigurationPromptValidationDetail:
+      "只有当此工作站上下文中的提示词通过校验后，保存才会重新可用。",
+    editableConfigurationPromptHelpLoading:
+      "正在加载此工作站可用的提示词变量。",
+    editableConfigurationPromptHelpEmpty:
+      "此工作站没有可用的提示词变量帮助信息。",
+    editableConfigurationPromptHelpFallbackError:
+      "无法加载提示词变量帮助信息。",
+    editableConfigurationPromptHelpErrorPrefix: "提示词变量帮助信息不可用。",
+    editableConfigurationPromptHelpHeading: "提示词变量帮助",
+    editableConfigurationPromptHelpOpenActionLabel: "打开提示词变量帮助",
+    editableConfigurationPromptHelpCloseActionLabel: "关闭提示词变量帮助",
+    editableConfigurationPromptHelpAvailableHeading: "可用变量",
+    editableConfigurationPromptHelpUnavailableHeading: "不可用访问模式",
+    editableConfigurationPromptHelpInputCountSummary: (count) =>
+      `此工作站公开了 ${count} 个已编写输入。`,
     editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",
     editableConfigurationWorkerMissing:
       "所选工作站引用的工作器已不在当前工厂定义中。请重新加载当前选择并选择其他工作器。",

@@ -131,6 +131,7 @@ const invokeWorkstationDetail = (
       return [formatter("prompt" as never)];
     case "historyRequestCountLabel":
     case "historyRunCountLabel":
+    case "editableConfigurationPromptHelpInputCountSummary":
       return [formatter(1 as never), formatter(3 as never)];
     case "openNamedWorkItemAction":
     case "selectWorkItemLabel":

@@ -40,6 +40,7 @@ Use this checklist for the shadcn primitive migration lane and similar dashboard
 - Trace dispatch grid: shared table and skeleton states render without layout breakage on narrow and wide viewports.
 - Dashboard header: icon-only branding keeps the accessible `Infinite You` name, the timeline slider cluster stays keyboard-operable, and the header toolbar remains unclipped at mobile, tablet, and desktop widths with desktop controls ordered brand -> slider -> stream status -> export action.
 - Dashboard shared shell: the header and representative grid-card shell use the same computed border, radius, background, and shadow at mobile, tablet, and desktop widths while header and card controls keep their accessible names.
+- Current-selection prompt editor: the prompt variable help toggle stays keyboard-operable, available-variable examples remain readable in-context, invalid template references render inline squiggle diagnostics, and the editor stays unclipped at mobile, tablet, and desktop widths.
 
 ## Latest Evidence
 
@@ -64,3 +65,6 @@ Date: `2026-05-20`
 - `cd ui && bun run build` passed.
 - `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6011 node scripts/verify-import-export-storybook-responsive.mjs` passed against built Storybook `iframe.html` stories for `ExportFactoryDialog`, `DashboardImportPreviewDialog`, the dashboard header verification story, and the shared shell verification story, confirming mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) dialog/header/card bounds, visible controls, keyboard timeline interactions, desktop toolbar ordering, matching computed header/card shell styles, and no horizontal overflow in headless Chromium.
 - `cd ui && bun run tsc` passed.
+- `cd ui && bunx vitest run src/features/current-selection/current-selection-widget.save.test.tsx scripts/verify-import-export-storybook-responsive.schedule.test.mjs scripts/verify-import-export-storybook-responsive.test.mjs scripts/dashboard-shell-storybook-responsive.test.mjs` passed.
+- `cd ui && bun run build-storybook` passed.
+- `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6012 bun run test-storybook` passed, including the new current-selection prompt hinting Storybook interaction and responsive browser verification for prompt help, inline squiggle diagnostics, keyboard interaction, and mobile/tablet/desktop overflow checks.

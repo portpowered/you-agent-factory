@@ -1,6 +1,6 @@
 import { type ReactNode, useId, useState } from "react";
 
-import { Select, Textarea } from "../../components/ui";
+import { Select } from "../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -23,6 +23,7 @@ import type {
 } from "./detail-card-types";
 import { formatEditableOverwriteFieldLabels } from "./editable-workstation-overwrite-fields";
 import type { getWorkstationDetailMessages } from "./messages";
+import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 
 export function EditableConfigurationSection({
   messages,
@@ -124,7 +125,12 @@ function EditableConfigurationReadyForm({
         <EditableConfigurationField
           fieldId="editable-workstation-worker"
           errorMessage={state.validationErrors.workerName}
-          input={<EditableConfigurationWorkerInput messages={messages} state={state} />}
+          input={
+            <EditableConfigurationWorkerInput
+              messages={messages}
+              state={state}
+            />
+          }
           label={messages.workerFieldLabel}
         />
       </div>
@@ -132,24 +138,125 @@ function EditableConfigurationReadyForm({
         errorMessage={state.validationErrors.prompt}
         fieldId="editable-workstation-prompt"
         input={
-          <Textarea
-            aria-describedby={
-              state.validationErrors.prompt
-                ? "editable-workstation-prompt-error"
-                : undefined
-            }
-            aria-invalid={state.validationErrors.prompt ? "true" : undefined}
-            className={DASHBOARD_BODY_TEXT_CLASS}
-            id="editable-workstation-prompt"
-            onChange={(event) => state.onPromptChange(event.target.value)}
-            value={state.draft.prompt}
+          <EditableConfigurationPromptInput
+            messages={messages}
+            state={state}
           />
         }
         label={messages.promptFieldLabel}
+        supportingContent={
+          <EditableConfigurationPromptHelp messages={messages} state={state} />
+        }
       />
     </form>
   );
 }
+
+function EditableConfigurationPromptHelp({
+  messages,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const sectionId = useId();
+  const contentId = `${sectionId}-content`;
+  const helpState = state.promptHelpState;
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p
+          className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+        >
+          {messages.editableConfigurationPromptHelpHeading}
+        </p>
+        <button
+          aria-controls={contentId}
+          aria-expanded={expanded}
+          className="inline-flex min-h-9 items-center rounded-lg border border-af-accent/24 bg-af-accent/10 px-3 py-2 text-xs font-semibold text-af-accent outline-none transition-colors hover:bg-af-accent/16 hover:text-af-accent-glow focus-visible:ring-2 focus-visible:ring-af-accent/25"
+          onClick={() => setExpanded((current) => !current)}
+          type="button"
+        >
+          {expanded
+            ? messages.editableConfigurationPromptHelpCloseActionLabel
+            : messages.editableConfigurationPromptHelpOpenActionLabel}
+        </button>
+      </div>
+      {expanded ? (
+        <div
+          className="grid gap-3 rounded-2xl border border-af-overlay/10 bg-af-surface/72 p-3"
+          id={contentId}
+        >
+          {helpState.status === "loading" ? (
+            <p className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+              {messages.editableConfigurationPromptHelpLoading}
+            </p>
+          ) : null}
+          {helpState.status === "error" ? (
+            <p
+              className={cn(
+                "m-0 text-af-danger-ink",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
+              role="alert"
+            >
+              {messages.editableConfigurationPromptHelpErrorPrefix}{" "}
+              {helpState.errorMessage}
+            </p>
+          ) : null}
+          {helpState.status === "empty" ? (
+            <p className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+              {helpState.message}
+            </p>
+          ) : null}
+          {helpState.status === "ready" ? (
+            <>
+              <p
+                className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}
+              >
+                {messages.editableConfigurationPromptHelpInputCountSummary(
+                  helpState.contract.inputCount,
+                )}
+              </p>
+              <PromptTemplateReferenceList
+                heading={
+                  messages.editableConfigurationPromptHelpAvailableHeading
+                }
+                items={helpState.contract.availableVariables.map(
+                  (variable) => ({
+                    body: variable.description,
+                    detail: variable.example,
+                    key: `${variable.path}:${variable.example}`,
+                    label: variable.path,
+                  }),
+                )}
+              />
+              <PromptTemplateReferenceList
+                heading={
+                  messages.editableConfigurationPromptHelpUnavailableHeading
+                }
+                items={helpState.contract.unavailableAccessPatterns.map(
+                  (pattern) => ({
+                    body: pattern.reason,
+                    detail: pattern.example,
+                    key: `${pattern.path}:${pattern.example}`,
+                    label: pattern.path,
+                  }),
+                )}
+              />
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 
 function EditableConfigurationSaveFeedback({
   messages,
@@ -370,6 +477,45 @@ function EditableConfigurationField({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function PromptTemplateReferenceList({
+  heading,
+  items,
+}: {
+  heading: string;
+  items: Array<{
+    body: string;
+    detail: string;
+    key: string;
+    label: string;
+  }>;
+}) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="grid gap-2">
+      <h5 className={cn("m-0", DASHBOARD_SUPPORTING_LABEL_CLASS)}>{heading}</h5>
+      <ul className="m-0 grid list-none gap-2 p-0">
+        {items.map((item) => (
+          <li
+            className="grid gap-1 rounded-xl border border-af-overlay/8 bg-af-overlay/4 p-3"
+            key={item.key}
+          >
+            <code className={DASHBOARD_BODY_TEXT_CLASS}>{item.label}</code>
+            <p className={cn("m-0 text-af-ink/72", DASHBOARD_BODY_TEXT_CLASS)}>
+              {item.body}
+            </p>
+            <pre className="m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 text-xs text-af-ink/78 [overflow-wrap:anywhere]">
+              {item.detail}
+            </pre>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

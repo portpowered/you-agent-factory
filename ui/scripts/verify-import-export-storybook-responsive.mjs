@@ -2,26 +2,29 @@ import process from "node:process";
 import { chromium } from "playwright";
 import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
 import {
+  createLocalizedExportDialogVerifier,
+  createLocalizedImportDialogVerifier,
+} from "./verify-import-export-storybook-localized.mjs";
+import {
   verifyLocalizedCurrentSelection,
   verifyLocalizedSubmitWorkCard,
   verifyLocalizedTraceGrid,
   verifyLocalizedWorkflowActivity,
   verifyLocalizedWorkOutcomeChart,
 } from "./verify-localized-widget-storybook-responsive.mjs";
-
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
 const OVERFLOW_TOLERANCE_PX = 1;
 const STORY_RENDER_TIMEOUT_MS = 30000;
 
-const viewportChecks = [
+export const viewportChecks = [
   { height: 844, label: "mobile", width: 390 },
   { height: 1024, label: "tablet", width: 768 },
   { height: 900, label: "desktop", width: 1440 },
 ];
 
-const storyChecks = [
+export const storyChecks = [
   {
     assertions: verifyExportDialog,
     dialogName: "Export factory",
@@ -48,7 +51,7 @@ const storyChecks = [
   },
   {
     assertions: verifyDashboardHeader,
-    id: "infinite-you-dashboard-dashboard-header--responsive-verification",
+    id: "infinite-you-workflow-dashboard--header-action-buttons-verification",
     label: "dashboard header",
   },
   {
@@ -111,6 +114,11 @@ const storyChecks = [
     id: "infinite-you-workflow-dashboard--locale-propagation-verification",
     label: "current selection widget (zh-CN)",
   },
+  {
+    assertions: verifyCurrentSelectionPromptHint,
+    id: "infinite-you-workflow-dashboard--current-selection-prompt-hint-verification",
+    label: "current selection prompt hinting",
+  },
 ];
 
 function storyUrl(storyId) {
@@ -128,16 +136,13 @@ export async function waitForStoryRender(page) {
       if (!(root instanceof HTMLElement)) {
         return false;
       }
-
       if (root.childElementCount > 0) {
         return true;
       }
-
       return Array.from(document.body.children).some((child) => {
         if (!(child instanceof HTMLElement)) {
           return false;
         }
-
         if (
           child.id === "storybook-root" ||
           child.id === "storybook-docs" ||
@@ -181,11 +186,9 @@ export async function expectNoHorizontalOverflow(page, label) {
 
 export async function expectDialogWithinViewport(dialog, viewport, label) {
   const box = await dialog.boundingBox();
-
   if (!box) {
     throw new Error(`Could not measure ${label} dialog bounds.`);
   }
-
   const exceedsViewport =
     box.x < -OVERFLOW_TOLERANCE_PX ||
     box.y < -OVERFLOW_TOLERANCE_PX ||
@@ -205,6 +208,7 @@ export async function expectVisible(locator, label) {
       state: "visible",
       timeout: STORY_RENDER_TIMEOUT_MS,
     });
+    return;
   }
 
   if (!(await locator.isVisible())) {
@@ -263,70 +267,25 @@ export async function verifyImportDialog(page, dialog, viewport) {
     `Import preview dialog at ${viewport.label}`,
   );
 }
-
-async function verifyLocalizedExportDialog(page, dialog, viewport) {
-  await expectVisible(
-    dialog.getByRole("textbox", { name: "工厂名称" }),
-    "Localized factory name input",
-  );
-  await expectVisible(
-    dialog.getByLabel("封面图片"),
-    "Localized cover image input",
-  );
-  await expectVisible(
-    dialog.getByRole("button", { name: "取消" }),
-    "Localized export cancel button",
-  );
-  await expectVisible(
-    dialog.getByRole("button", { name: "导出 PNG" }),
-    "Localized export action button",
-  );
-  await expectVisible(
-    dialog.getByText("确认导出不会更改当前仪表板状态"),
-    "Localized export helper copy",
-  );
-  await expectDialogWithinViewport(dialog, viewport, "Localized export");
-  await expectNoHorizontalOverflow(
-    page,
-    `Localized export dialog at ${viewport.label}`,
-  );
+const verifyLocalizedExportDialogImpl = createLocalizedExportDialogVerifier({
+  expectDialogWithinViewport,
+  expectNoHorizontalOverflow,
+  expectVisible,
+});
+const verifyLocalizedImportDialogImpl = createLocalizedImportDialogVerifier({
+  expectDialogWithinViewport,
+  expectNoHorizontalOverflow,
+  expectVisible,
+});
+export async function verifyLocalizedExportDialog(page, dialog, viewport) {
+  return verifyLocalizedExportDialogImpl(page, dialog, viewport);
 }
-
-async function verifyLocalizedImportDialog(page, dialog, viewport) {
-  await expectVisible(
-    dialog.getByRole("img", { name: "Dropped Factory 预览图" }),
-    "Localized import preview image",
-  );
-  await expectVisible(
-    dialog.getByText("factory-import.png"),
-    "Localized dropped file name",
-  );
-  await expectVisible(
-    dialog.getByRole("button", { name: "取消导入" }),
-    "Localized import cancel button",
-  );
-  await expectVisible(
-    dialog.getByRole("button", { name: "启用工厂" }),
-    "Localized import activate button",
-  );
-  await expectVisible(
-    dialog.getByRole("button", { name: "关闭导入预览" }),
-    "Localized import close button",
-  );
-  await expectDialogWithinViewport(
-    dialog,
-    viewport,
-    "Localized import preview",
-  );
-  await expectNoHorizontalOverflow(
-    page,
-    `Localized import preview dialog at ${viewport.label}`,
-  );
+export async function verifyLocalizedImportDialog(page, dialog, viewport) {
+  return verifyLocalizedImportDialogImpl(page, dialog, viewport);
 }
 
 export async function expectOrderedLeftEdges(locators, label) {
   let previousRight = null;
-
   for (const locator of locators) {
     const box = await locator.boundingBox();
     if (!box) {
@@ -345,18 +304,17 @@ export async function expectOrderedLeftEdges(locators, label) {
 }
 
 export async function verifyDashboardHeader(page, _dialog, viewport) {
-  const toolbar = await waitForStoryRegion(page, "dashboard summary");
-  const heading = toolbar.getByRole("heading", { name: "Infinite You" });
+  const heading = page.getByRole("heading", { name: "Infinite You" });
   const hiddenWordmark = heading.getByText("Infinite You");
-  const slider = toolbar.getByRole("slider", { name: "Timeline tick" });
-  const streamStatus = toolbar.getByRole("status", {
+  const slider = page.getByRole("slider", { name: "Timeline tick" });
+  const streamStatus = page.getByRole("status", {
     name: /Infinite You event stream (connecting|live)/,
   });
-  const currentTick = page.getByText("Tick 5 of 5");
-  const currentButton = toolbar.getByRole("button", {
+  const currentTick = page.getByText(/Tick 5 of 5/).first();
+  const currentButton = page.getByRole("button", {
     name: "Return to current tick",
   });
-  const exportButton = toolbar.getByRole("button", { name: "Export PNG" });
+  const exportButton = page.getByRole("button", { name: "Export PNG" });
 
   await expectVisible(heading, "Dashboard heading");
   await expectVisible(hiddenWordmark, "Accessible Infinite You wordmark");
@@ -397,6 +355,59 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   );
 }
 
+export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {
+  const currentSelection = page.getByRole("article", {
+    name: "Current selection",
+  });
+  await currentSelection.waitFor({ state: "visible" });
+  const helpButton = currentSelection.getByRole("button", {
+    name: "Close prompt variable help",
+  });
+  const promptField = currentSelection.getByRole("textbox", { name: "Prompt" });
+  const saveButton = currentSelection.getByRole("button", {
+    name: "Save changes",
+  });
+
+  await expectVisible(helpButton, "Prompt variable help toggle");
+  await expectVisible(
+    currentSelection.getByText("This workstation exposes 1 authored input."),
+    "Prompt help input-count summary",
+  );
+  await expectVisible(
+    currentSelection.getByText("Available variables"),
+    "Prompt help available variables heading",
+  );
+  await expectVisible(
+    currentSelection.getByText("{{ .WorkID }}"),
+    "Prompt help example snippet",
+  );
+
+  await promptField.focus();
+  await promptField.fill("Use {{ (index .Inputs 1).Payload }}.");
+  await expectVisible(
+    currentSelection.getByRole("heading", { name: "Prompt diagnostics" }),
+    "Prompt diagnostics summary",
+  );
+  await expectVisible(
+    currentSelection.getByText(".Inputs[1]", { exact: true }),
+    "Prompt diagnostics variable path",
+  );
+  await expectVisible(
+    currentSelection.locator("mark").filter({ hasText: "(index .Inputs 1)" }),
+    "Prompt squiggle overlay",
+  );
+
+  const saveButtonDisabled = await saveButton.isDisabled();
+  if (!saveButtonDisabled) {
+    throw new Error("Save changes should stay disabled while diagnostics remain.");
+  }
+
+  await expectNoHorizontalOverflow(
+    page,
+    `Current selection prompt hinting at ${viewport.label}`,
+  );
+}
+
 export async function verifyStory(browser, storyCheck, viewport) {
   const page = await browser.newPage();
 
@@ -417,15 +428,22 @@ export async function verifyStory(browser, storyCheck, viewport) {
   }
 }
 
+export async function runResponsiveStorybookChecks(
+  browser,
+  { checks = storyChecks, viewports = viewportChecks } = {},
+) {
+  for (const viewport of viewports) {
+    for (const storyCheck of checks) {
+      await verifyStory(browser, storyCheck, viewport);
+    }
+  }
+}
+
 export async function main() {
   const browser = await chromium.launch({ headless: true });
 
   try {
-    for (const viewport of viewportChecks) {
-      for (const storyCheck of storyChecks) {
-        await verifyStory(browser, storyCheck, viewport);
-      }
-    }
+    await runResponsiveStorybookChecks(browser);
   } finally {
     await browser.close();
   }
