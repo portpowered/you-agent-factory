@@ -63,7 +63,6 @@ export interface CurrentSelectionDetailMessages {
   scriptResponseUnavailablePending: string;
   scriptResponseUnavailableSummary: string;
   selectWorkItemLabel: (workItemLabel: string) => string;
-  selectedWorkItemAction: string;
   stderrEmpty: string;
   stderrLabel: string;
   stdoutEmpty: string;
@@ -196,7 +195,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
-    selectedWorkItemAction: "Work item selected",
     stderrEmpty: "No stderr was recorded for this script response.",
     stderrLabel: "Stderr",
     stdoutEmpty: "No stdout was recorded for this script response.",
@@ -308,7 +306,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
-    selectedWorkItemAction: "Work item selected",
     stderrEmpty: "No stderr was recorded for this script response.",
     stderrLabel: "Stderr",
     stdoutEmpty: "No stdout was recorded for this script response.",
@@ -420,7 +417,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
-    selectedWorkItemAction: "Work item selected",
     stderrEmpty: "No stderr was recorded for this script response.",
     stderrLabel: "Stderr",
     stdoutEmpty: "No stdout was recorded for this script response.",
@@ -524,7 +520,6 @@ const currentSelectionDetailMessagesByLocale = {
     scriptResponseUnavailableSummary: "此工作站请求没有可用的脚本响应详情。",
     selectWorkItemLabel: (workItemLabel: string) =>
       `选择工作项 ${workItemLabel}`,
-    selectedWorkItemAction: "已选中工作项",
     stderrEmpty: "此脚本响应没有记录 stderr。",
     stderrLabel: "标准错误",
     stdoutEmpty: "此脚本响应没有记录 stdout。",
