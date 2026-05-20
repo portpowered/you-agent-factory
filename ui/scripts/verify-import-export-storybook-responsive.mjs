@@ -28,13 +28,13 @@ const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
 
-const viewportChecks = [
+export const viewportChecks = [
   { height: 844, label: "mobile", width: 390 },
   { height: 1024, label: "tablet", width: 768 },
   { height: 900, label: "desktop", width: 1440 },
 ];
 
-const storyChecks = [
+export const storyChecks = [
   {
     assertions: verifyExportDialog,
     dialogName: "Export factory",
@@ -245,7 +245,7 @@ export async function verifyImportDialog(page, dialog, viewport) {
   );
 }
 
-async function verifyLocalizedExportDialog(page, dialog, viewport) {
+export async function verifyLocalizedExportDialog(page, dialog, viewport) {
   await expectVisible(
     dialog.getByRole("textbox", { name: "工厂名称" }),
     "Localized factory name input",
@@ -273,7 +273,7 @@ async function verifyLocalizedExportDialog(page, dialog, viewport) {
   );
 }
 
-async function verifyLocalizedImportDialog(page, dialog, viewport) {
+export async function verifyLocalizedImportDialog(page, dialog, viewport) {
   await expectVisible(
     dialog.getByRole("img", { name: "Dropped Factory 预览图" }),
     "Localized import preview image",
@@ -398,15 +398,22 @@ export async function verifyStory(browser, storyCheck, viewport) {
   }
 }
 
+export async function runResponsiveStorybookChecks(
+  browser,
+  { checks = storyChecks, viewports = viewportChecks } = {},
+) {
+  for (const viewport of viewports) {
+    for (const storyCheck of checks) {
+      await verifyStory(browser, storyCheck, viewport);
+    }
+  }
+}
+
 async function main() {
   const browser = await chromium.launch({ headless: true });
 
   try {
-    for (const viewport of viewportChecks) {
-      for (const storyCheck of storyChecks) {
-        await verifyStory(browser, storyCheck, viewport);
-      }
-    }
+    await runResponsiveStorybookChecks(browser);
   } finally {
     await browser.close();
   }
