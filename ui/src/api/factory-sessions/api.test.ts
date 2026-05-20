@@ -1,4 +1,5 @@
 import {
+  closeFactorySession,
   FactorySessionsAPIError,
   listFactorySessions,
   openFactorySession,
@@ -153,6 +154,21 @@ describe("factory sessions API", () => {
         status: 400,
         statusText: "Bad Request",
       }),
+    );
+  });
+
+  it("deletes one live factory session from the typed API surface", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 204,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(closeFactorySession("session-beta")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/session-beta",
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 });

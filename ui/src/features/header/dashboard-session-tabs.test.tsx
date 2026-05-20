@@ -9,6 +9,7 @@ import { getHeaderControlsMessages } from "./messages/header-controls";
 
 const listFactorySessions = vi.fn();
 const openFactorySession = vi.fn();
+const closeFactorySession = vi.fn();
 
 vi.mock("../../api/factory-sessions", () => ({
   FactorySessionsAPIError: class FactorySessionsAPIError extends Error {
@@ -35,6 +36,7 @@ vi.mock("../../api/factory-sessions", () => ({
     }
   },
   listFactorySessions: (...args: unknown[]) => listFactorySessions(...args),
+  closeFactorySession: (...args: unknown[]) => closeFactorySession(...args),
   openFactorySession: (...args: unknown[]) => openFactorySession(...args),
 }));
 
@@ -42,6 +44,7 @@ describe("DashboardSessionTabs", () => {
   beforeEach(() => {
     listFactorySessions.mockReset();
     openFactorySession.mockReset();
+    closeFactorySession.mockReset();
     useDashboardSessionStore.setState({
       selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
     });
@@ -363,6 +366,111 @@ describe("DashboardSessionTabs", () => {
         },
       });
     });
+  });
+
+  it("closes the active session tab and selects the remaining session deterministically", async () => {
+    listFactorySessions
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+        {
+          factoryDir: "/workspace/root/beta",
+          folderPath: "/workspace/root",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          target: {
+            kind: "named",
+            name: "beta",
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root/beta",
+          folderPath: "/workspace/root",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          target: {
+            kind: "named",
+            name: "beta",
+          },
+        },
+      ]);
+    closeFactorySession.mockResolvedValue(undefined);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /root \/ default/i })).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Close root / default session",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(closeFactorySession).toHaveBeenCalledWith("~default");
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("tab", { name: /root \/ beta/i }).getAttribute(
+          "aria-selected",
+        ),
+      ).toBe("true");
+    });
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      "session-beta",
+    );
+  });
+
+  it("keeps the open-session affordance available when the last session is closed", async () => {
+    listFactorySessions
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    closeFactorySession.mockResolvedValue(undefined);
+    const messages = getHeaderControlsMessages("en");
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /root \/ default/i })).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Close root / default session",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(messages.sessionsEmptyTitle)).toBeTruthy();
+    });
+    expect(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    ).toBeTruthy();
   });
 });
 

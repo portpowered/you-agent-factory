@@ -175,6 +175,7 @@ func (fs *FactoryService) unregisterLiveSession(sessionID string) {
 	fs.sessions.remove(sessionID)
 	current := fs.sessions.current()
 	if current == nil || current.handle == nil || current.handle.runtime == nil {
+		fs.clearActiveRuntime()
 		return
 	}
 	fs.swapActiveRuntime(current.handle.runtime)
@@ -325,6 +326,13 @@ func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factor
 	return response, nil
 }
 
+func (fs *FactoryService) CloseFactorySession(_ context.Context, sessionID string) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return fmt.Errorf("factory session id is required")
+	}
+	return fs.stopFactorySession(sessionID)
+}
+
 func (fs *FactoryService) openFactorySession(ctx context.Context, factoryDir string) (string, error) {
 	if fs == nil {
 		return "", fmt.Errorf("factory service is required")
@@ -438,18 +446,43 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	runState := fs.currentRunState()
-	if runState != nil && runState.sessionID == sessionID {
-		return fmt.Errorf("stopping the selected runtime session is not supported")
-	}
 	session := fs.sessionByID(sessionID)
 	if session == nil || session.handle == nil {
-		return fmt.Errorf("runtime session %q not found", sessionID)
+		return fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
 	}
+
+	runState := fs.currentRunState()
+	if runState != nil && runState.sessionID == sessionID {
+		successor := fs.nextLiveSessionAfterStop(sessionID)
+		if successor != nil {
+			fs.setRunState(runState.ctx, successor.id, successor.handle)
+			fs.swapActiveRuntime(successor.handle.runtime)
+		} else {
+			fs.setRunState(runState.ctx, "", nil)
+			fs.clearActiveRuntime()
+		}
+	}
+
+	fs.unregisterLiveSession(sessionID)
 	if err := fs.stopLiveRuntime(session.handle); err != nil && err != context.Canceled {
 		return err
 	}
-	fs.unregisterLiveSession(sessionID)
+	return nil
+}
+
+func (fs *FactoryService) nextLiveSessionAfterStop(sessionID string) *liveFactorySession {
+	if fs == nil || fs.sessions == nil {
+		return nil
+	}
+	for _, id := range fs.sessions.ids() {
+		if id == sessionID {
+			continue
+		}
+		next := fs.sessionByID(id)
+		if next != nil && next.handle != nil {
+			return next
+		}
+	}
 	return nil
 }
 

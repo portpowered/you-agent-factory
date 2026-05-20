@@ -1,5 +1,5 @@
 export async function verifyDashboardSessionTabs(
-  { expectNoHorizontalOverflow, expectVisible, waitForDialog },
+  { expectNoHorizontalOverflow, expectVisible },
   page,
   viewport,
 ) {
@@ -20,37 +20,18 @@ export async function verifyDashboardSessionTabs(
     "Named session tab",
   );
   await expectVisible(openButton, "Open another session button");
-
-  await openButton.click();
-  const dialog = await waitForDialog(page, "Open factory session");
-  const folderField = dialog.getByRole("textbox", { name: "Factory folder" });
-  await folderField.fill("/workspace/catalog");
-  await dialog.getByRole("button", { name: "Inspect folder" }).click();
-
-  const targetPicker = page.getByRole("region", {
-    name: "Pick a runnable target",
+  await page.getByRole("button", { name: /close root \/ default session/i }).click();
+  const betaTab = page.getByRole("tab", {
+    name: "root / beta beta",
   });
-  await expectVisible(targetPicker, "Session target picker");
-  await expectVisible(
-    targetPicker.getByText("Choose one runnable target from this folder."),
-    "Session target picker hint",
-  );
-  await targetPicker
-    .getByRole("button", { name: "Catalog / review catalog" })
-    .click();
-
-  const reviewTab = page.getByRole("tab", {
-    name: "catalog / review catalog",
-  });
-  await expectVisible(reviewTab, "Opened review session tab");
-  const selected = await reviewTab.getAttribute("aria-selected");
-  if (selected !== "true") {
-    throw new Error("Opened review session tab was not selected.");
+  await expectVisible(betaTab, "Beta session tab after closing the default tab");
+  const betaSelected = await betaTab.getAttribute("aria-selected");
+  if (betaSelected !== "true") {
+    throw new Error("Beta session tab was not selected after closing the default tab.");
   }
-  await expectVisible(
-    page.getByText("Active folder: /workspace/catalog"),
-    "Opened review session path",
-  );
+  if ((await page.getByRole("tab", { name: "root / default root" }).count()) !== 0) {
+    throw new Error("Default session tab remained visible after closing it.");
+  }
   await expectNoHorizontalOverflow(
     page,
     `Dashboard session tabs at ${viewport.label}`,

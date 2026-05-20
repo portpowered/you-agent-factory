@@ -102,6 +102,19 @@ export const OpenFlowVerification = {
       ).toHaveAttribute("aria-selected", "true");
     });
     await expect(canvas.getByText("Active folder: /workspace/catalog")).toBeVisible();
+
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Close catalog / review session" }),
+    );
+    await waitFor(() => {
+      expect(
+        canvas.getByRole("tab", { name: /root \/ default/i }),
+      ).toHaveAttribute("aria-selected", "true");
+    });
+    await expect(
+      canvas.queryByRole("tab", { name: /catalog \/ review/i }),
+    ).toBeNull();
+    await expect(canvas.getByText("Active folder: /workspace/root")).toBeVisible();
   },
 };
 
@@ -120,7 +133,9 @@ function SessionTabsStory() {
 }
 
 function sessionTabsStoryParameters() {
+  let defaultSessionClosed = false;
   let openedReviewSession = false;
+  let reviewSessionClosed = false;
 
   return {
     dashboardApi: {
@@ -131,8 +146,16 @@ function sessionTabsStoryParameters() {
           response: () => ({
             body: {
               sessions: openedReviewSession
-                ? [defaultSession, betaSession, reviewSession]
-                : [defaultSession, betaSession],
+                ? reviewSessionClosed
+                  ? defaultSessionClosed
+                    ? [betaSession]
+                    : [defaultSession, betaSession]
+                  : defaultSessionClosed
+                    ? [betaSession, reviewSession]
+                    : [defaultSession, betaSession, reviewSession]
+                : defaultSessionClosed
+                  ? [betaSession]
+                  : [defaultSession, betaSession],
             },
           }),
         },
@@ -196,6 +219,26 @@ function sessionTabsStoryParameters() {
               },
               status: 400,
               statusText: "Bad Request",
+            };
+          },
+        },
+        {
+          method: "DELETE",
+          path: "/factory-sessions/session-review",
+          response: () => {
+            reviewSessionClosed = true;
+            return {
+              status: 204,
+            };
+          },
+        },
+        {
+          method: "DELETE",
+          path: "/factory-sessions/~default",
+          response: () => {
+            defaultSessionClosed = true;
+            return {
+              status: 204,
             };
           },
         },

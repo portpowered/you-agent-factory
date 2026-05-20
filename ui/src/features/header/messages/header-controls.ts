@@ -6,6 +6,7 @@ import {
 export interface HeaderControlsMessages {
   activeSessionPathLabel: string;
   brandWordmark: string;
+  closingSessionButtonLabel: string;
   currentTickStatusTemplate: string;
   dashboardSummaryLabel: string;
   dashboardUnavailableTitle: string;
@@ -23,6 +24,7 @@ export interface HeaderControlsMessages {
   selectSessionTargetLabel: string;
   sessionFolderFieldLabel: string;
   sessionFolderFieldPlaceholder: string;
+  sessionTabCloseLabelTemplate: string;
   sessionTabsLabel: string;
   sessionsEmptyTitle: string;
   sessionsErrorTitle: string;
@@ -44,6 +46,7 @@ const headerControlsMessagesByLocale = {
   en: {
     activeSessionPathLabel: "Active folder",
     brandWordmark: "Infinite You",
+    closingSessionButtonLabel: "Closing session",
     currentTickStatusTemplate: `Tick ${HEADER_CURRENT_TICK_TOKEN} of ${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "dashboard summary",
     dashboardUnavailableTitle: "Dashboard unavailable",
@@ -62,6 +65,7 @@ const headerControlsMessagesByLocale = {
     selectSessionTargetLabel: "Open session target",
     sessionFolderFieldLabel: "Factory folder",
     sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
+    sessionTabCloseLabelTemplate: "Close {{sessionLabel}} session",
     sessionTabsLabel: "factory sessions",
     sessionsEmptyTitle: "No live sessions",
     sessionsErrorTitle: "Factory sessions unavailable",
@@ -78,6 +82,7 @@ const headerControlsMessagesByLocale = {
   ja: {
     activeSessionPathLabel: "現在のフォルダー",
     brandWordmark: "Infinite You",
+    closingSessionButtonLabel: "セッションを終了中",
     currentTickStatusTemplate: `${HEADER_MAX_TICK_TOKEN} 件中 ${HEADER_CURRENT_TICK_TOKEN} 件目のティック`,
     dashboardSummaryLabel: "ダッシュボードの概要",
     dashboardUnavailableTitle: "ダッシュボードを利用できません",
@@ -96,6 +101,7 @@ const headerControlsMessagesByLocale = {
     selectSessionTargetLabel: "セッションターゲットを開く",
     sessionFolderFieldLabel: "ファクトリーフォルダー",
     sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
+    sessionTabCloseLabelTemplate: "{{sessionLabel}} セッションを閉じる",
     sessionTabsLabel: "ファクトリーセッション",
     sessionsEmptyTitle: "実行中のセッションはありません",
     sessionsErrorTitle: "ファクトリーセッションを表示できません",
@@ -113,6 +119,7 @@ const headerControlsMessagesByLocale = {
   ko: {
     activeSessionPathLabel: "활성 폴더",
     brandWordmark: "Infinite You",
+    closingSessionButtonLabel: "세션 종료 중",
     currentTickStatusTemplate: `틱 ${HEADER_CURRENT_TICK_TOKEN} / ${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "대시보드 요약",
     dashboardUnavailableTitle: "대시보드를 사용할 수 없음",
@@ -131,6 +138,7 @@ const headerControlsMessagesByLocale = {
     selectSessionTargetLabel: "세션 대상 열기",
     sessionFolderFieldLabel: "팩토리 폴더",
     sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
+    sessionTabCloseLabelTemplate: "{{sessionLabel}} 세션 닫기",
     sessionTabsLabel: "팩토리 세션",
     sessionsEmptyTitle: "실행 중인 세션이 없습니다",
     sessionsErrorTitle: "팩토리 세션을 불러올 수 없음",
@@ -148,6 +156,7 @@ const headerControlsMessagesByLocale = {
   "zh-CN": {
     activeSessionPathLabel: "当前文件夹",
     brandWordmark: "Infinite You",
+    closingSessionButtonLabel: "正在关闭会话",
     currentTickStatusTemplate: `第 ${HEADER_CURRENT_TICK_TOKEN} 个刻度，共 ${HEADER_MAX_TICK_TOKEN} 个`,
     dashboardSummaryLabel: "仪表板概览",
     dashboardUnavailableTitle: "仪表板不可用",
@@ -166,6 +175,7 @@ const headerControlsMessagesByLocale = {
     selectSessionTargetLabel: "打开会话目标",
     sessionFolderFieldLabel: "工厂文件夹",
     sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
+    sessionTabCloseLabelTemplate: "关闭 {{sessionLabel}} 会话",
     sessionTabsLabel: "工厂会话",
     sessionsEmptyTitle: "没有运行中的会话",
     sessionsErrorTitle: "工厂会话不可用",

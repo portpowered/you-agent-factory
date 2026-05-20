@@ -43,6 +43,8 @@ type MockFactory struct {
 	OpenFactorySessionResult factoryapi.OpenFactorySessionResponse
 	OpenFactorySessionErr    error
 	OpenedFactorySessions    []factoryapi.OpenFactorySessionRequest
+	ClosedFactorySessions    []string
+	CloseFactorySessionErr   error
 }
 
 var _ factory.APIFactory = (*MockFactory)(nil)
@@ -205,6 +207,14 @@ func (m *MockFactory) OpenFactorySession(_ context.Context, request factoryapi.O
 	}
 	m.OpenedFactorySessions = append(m.OpenedFactorySessions, request)
 	return m.OpenFactorySessionResult, nil
+}
+
+func (m *MockFactory) CloseFactorySession(_ context.Context, sessionID string) error {
+	if m.CloseFactorySessionErr != nil {
+		return m.CloseFactorySessionErr
+	}
+	m.ClosedFactorySessions = append(m.ClosedFactorySessions, sessionID)
+	return nil
 }
 
 func (m *MockFactory) WaitToComplete() <-chan struct{} {

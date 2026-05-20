@@ -29,6 +29,7 @@ type SessionAPISurface interface {
 	APISurface
 	ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
+	CloseFactorySession(ctx context.Context, sessionID string) error
 	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
 	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)

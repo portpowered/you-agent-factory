@@ -116,6 +116,137 @@ func TestFactoryService_OpenFactorySession_RunsConcurrentIsolatedSessions(t *tes
 	}
 }
 
+func TestFactoryService_CloseFactorySession_ClosesDefaultAndPromotesRemainingSession(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default alpha runtime")
+
+	betaSessionID, err := svc.openFactorySession(context.Background(), betaDir)
+	if err != nil {
+		t.Fatalf("openFactorySession(beta): %v", err)
+	}
+	waitForSessionRuntimeStatus(t, svc, betaSessionID, interfaces.RuntimeStatusIdle, time.Second, "beta runtime")
+
+	defaultSession := svc.sessionByID(defaultFactorySessionID)
+	if defaultSession == nil {
+		t.Fatal("expected default session to be registered")
+	}
+
+	if err := svc.CloseFactorySession(context.Background(), defaultFactorySessionID); err != nil {
+		t.Fatalf("CloseFactorySession(default): %v", err)
+	}
+
+	select {
+	case <-defaultSession.handle.runDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for closed default session to exit")
+	}
+	if svc.sessionByID(defaultFactorySessionID) != nil {
+		t.Fatal("default session remained registered after close")
+	}
+	if current := svc.currentRunState(); current == nil || current.sessionID != betaSessionID {
+		t.Fatalf("current run state = %#v, want beta session %q", current, betaSessionID)
+	}
+	assertSessionRemainsLive(t, svc, betaSessionID, 200*time.Millisecond, "beta runtime after default close")
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
+func TestFactoryService_CloseFactorySession_LeavesServiceAliveWithoutLiveSessions(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default alpha runtime")
+
+	defaultSession := svc.sessionByID(defaultFactorySessionID)
+	if defaultSession == nil {
+		t.Fatal("expected default session to be registered")
+	}
+	if err := svc.CloseFactorySession(context.Background(), defaultFactorySessionID); err != nil {
+		t.Fatalf("CloseFactorySession(default): %v", err)
+	}
+
+	select {
+	case <-defaultSession.handle.runDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for closed default session to exit")
+	}
+	if svc.sessions.count() != 0 {
+		t.Fatalf("live session count = %d, want 0", svc.sessions.count())
+	}
+	if svc.currentFactory() != nil {
+		t.Fatal("expected no compatibility runtime after closing the last session")
+	}
+
+	select {
+	case err := <-runErrCh:
+		t.Fatalf("Run exited early after last-session close: %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
 func TestFactoryService_LegacyRuntimeSurfaceTargetsDefaultSessionAlias(t *testing.T) {
 	rootDir := t.TempDir()
 	writeNamedFactoryFixture(t, rootDir, "alpha")

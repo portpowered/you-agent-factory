@@ -745,6 +745,34 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 	}
 }
 
+func TestFactorySessionsAPI_CloseFactorySession(t *testing.T) {
+	mf := &testutil.MockFactory{}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodDelete, "/factory-sessions/session-beta", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /factory-sessions/session-beta status = %d, want 204: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.ClosedFactorySessions) != 1 || mf.ClosedFactorySessions[0] != "session-beta" {
+		t.Fatalf("closed factory sessions = %#v, want [session-beta]", mf.ClosedFactorySessions)
+	}
+}
+
+func TestFactorySessionsAPI_CloseFactorySession_NotFound(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		CloseFactorySessionErr: apisurface.ErrFactorySessionNotFound,
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/factory-sessions/missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
+}
+
 func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 	session := strings.Join([]string{
 		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,

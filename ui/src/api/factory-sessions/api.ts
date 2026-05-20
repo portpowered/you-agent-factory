@@ -34,6 +34,10 @@ export interface OpenFactorySessionOptions {
   fetch?: typeof globalThis.fetch;
 }
 
+export interface CloseFactorySessionOptions {
+  fetch?: typeof globalThis.fetch;
+}
+
 interface APIErrorResponse {
   code?: string;
   message?: string;
@@ -169,6 +173,48 @@ export async function openFactorySession(
   return responseBody;
 }
 
+export async function closeFactorySession(
+  sessionID: string,
+  options: CloseFactorySessionOptions = {},
+): Promise<void> {
+  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  if (typeof fetchImplementation !== "function") {
+    throw new FactorySessionsAPIError(
+      "Factory sessions are unavailable in this environment.",
+      {
+        code: "NETWORK_ERROR",
+      },
+    );
+  }
+
+  let response: Response;
+  try {
+    response = await fetchImplementation(
+      factoryAPIURL(`${FACTORY_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionID)}`),
+      {
+        method: "DELETE",
+      },
+    );
+  } catch (error) {
+    throw new FactorySessionsAPIError(
+      "The dashboard could not reach the factory sessions API.",
+      {
+        code: "NETWORK_ERROR",
+        responseBody: error,
+      },
+    );
+  }
+
+  const responseBody = await readResponseBody(response);
+  if (!response.ok) {
+    throw buildFactorySessionsAPIError(
+      response,
+      responseBody,
+      "The factory sessions API rejected the request.",
+    );
+  }
+}
+
 function buildFactorySessionsAPIError(
   response: Response,
   responseBody: unknown,
@@ -189,6 +235,9 @@ function normalizeFactorySessionsAPIErrorCode(
   switch (code) {
     case "BAD_REQUEST":
       return code;
+    case "NOT_FOUND":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      return "INTERNAL_ERROR";
     default:
       // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INTERNAL_ERROR";

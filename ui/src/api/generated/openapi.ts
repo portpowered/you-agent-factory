@@ -276,6 +276,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/factory-sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Close one live factory session
+         * @description Stops the selected live factory session, removes it from the workspace session list, and leaves all remaining sessions running unchanged.
+         */
+        delete: operations["closeFactorySession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factory/~current": {
         parameters: {
             query?: never;
@@ -2175,6 +2195,29 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    closeFactorySession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable live factory session identifier. Use `~default` to close the default compatibility session explicitly. */
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session was stopped and removed from the live workspace. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };

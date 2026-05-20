@@ -1,29 +1,22 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useId,
-  useMemo,
   useRef,
-  useState,
 } from "react";
 
 import {
   type FactorySessionSummary,
   type FactorySessionTarget,
   FactorySessionsAPIError,
-  listFactorySessions,
-  openFactorySession,
 } from "../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input } from "../../components/ui";
 import { cn } from "../../lib/cn";
 import { DASHBOARD_BODY_TEXT_CLASS, DASHBOARD_SUPPORTING_LABELS_CLASS } from "../../components/ui/dashboard-typography";
-import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
 import { getHeaderControlsMessages } from "./messages/header-controls";
-
-const FACTORY_SESSIONS_QUERY_KEY = ["factory-sessions"] as const;
+import { useDashboardSessionTabsState } from "./use-dashboard-session-tabs-state";
 
 const SESSION_TABS_SHELL_CLASS = "mt-3 flex w-full flex-col gap-3 border-t border-af-overlay/10 pt-3";
 const SESSION_HEADER_ROW_CLASS = "flex items-center justify-between gap-3";
@@ -32,8 +25,12 @@ const SESSION_SECTION_LABEL_CLASS = cn(
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const SESSION_TAB_LIST_CLASS = "flex gap-2 overflow-x-auto pb-1";
+const SESSION_TAB_ITEM_CLASS =
+  "flex min-w-0 shrink-0 items-stretch rounded-2xl border transition-colors";
 const SESSION_TAB_BUTTON_CLASS =
-  "min-w-0 shrink-0 rounded-2xl border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
+  "min-w-0 flex-1 rounded-l-2xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
+const SESSION_TAB_CLOSE_BUTTON_CLASS =
+  "rounded-r-2xl border-l border-current/10 px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
 const SESSION_TAB_ACTIVE_CLASS =
   "border-af-accent/42 bg-af-accent/12 text-af-ink";
 const SESSION_TAB_INACTIVE_CLASS =
@@ -46,34 +43,26 @@ const SESSION_TARGET_BUTTON_CLASS =
 
 export function DashboardSessionTabs({ locale }: { locale: string }) {
   const messages = getHeaderControlsMessages(locale);
-  const queryClient = useQueryClient();
-  const sessionsQuery = useQuery({
-    queryKey: FACTORY_SESSIONS_QUERY_KEY,
-    queryFn: () => listFactorySessions(),
-  });
-  const openSessionMutation = useMutation({
-    mutationFn: (input: Parameters<typeof openFactorySession>[0]) =>
-      openFactorySession(input),
-  });
-  const activeSessionID = useDashboardSessionStore(
-    (state) => state.selectedSessionID,
-  );
-  const setActiveSessionID = useDashboardSessionStore(
-    (state) => state.setSelectedSessionID,
-  );
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogError, setDialogError] = useState<FactorySessionsAPIError | null>(null);
-  const [folderPath, setFolderPath] = useState("");
-  const [discoveredTargets, setDiscoveredTargets] = useState<FactorySessionTarget[]>([]);
-
-  const sessions = sessionsQuery.data ?? [];
-  const activeSession = useMemo(
-    () =>
-      sessions.find((session) => session.id === activeSessionID) ??
-      sessions[0] ??
-      null,
-    [activeSessionID, sessions],
-  );
+  const {
+    activeSession,
+    activeSessionID,
+    closeError,
+    closeSessionMutation,
+    dialogError,
+    dialogOpen,
+    discoveredTargets,
+    folderPath,
+    handleCloseSession,
+    handleInspectFolder,
+    handleOpenTarget,
+    openSessionMutation,
+    resetDialogState,
+    sessions,
+    sessionsQuery,
+    setActiveSessionID,
+    setDialogOpen,
+    setFolderPath,
+  } = useDashboardSessionTabsState();
 
   useEffect(() => {
     if (sessions.length === 0) {
@@ -87,55 +76,6 @@ export function DashboardSessionTabs({ locale }: { locale: string }) {
     }
   }, [activeSessionID, sessions, setActiveSessionID]);
 
-  async function handleInspectFolder(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setDialogError(null);
-    setDiscoveredTargets([]);
-
-    try {
-      const response = await openSessionMutation.mutateAsync({
-        folderPath,
-      });
-      if (response.session) {
-        await finishOpeningSession(response.session.id);
-        return;
-      }
-      setDiscoveredTargets(response.targets ?? []);
-    } catch (error) {
-      setDialogError(normalizeFactorySessionsError(error));
-    }
-  }
-
-  async function handleOpenTarget(target: FactorySessionTarget) {
-    setDialogError(null);
-    try {
-      const response = await openSessionMutation.mutateAsync({
-        folderPath,
-        target: target.ref,
-      });
-      if (response.session) {
-        await finishOpeningSession(response.session.id);
-      }
-    } catch (error) {
-      setDialogError(normalizeFactorySessionsError(error));
-    }
-  }
-
-  async function finishOpeningSession(sessionID: string) {
-    await queryClient.invalidateQueries({
-      queryKey: FACTORY_SESSIONS_QUERY_KEY,
-    });
-    setActiveSessionID(sessionID);
-    resetDialogState();
-    setDialogOpen(false);
-  }
-
-  function resetDialogState() {
-    setDialogError(null);
-    setDiscoveredTargets([]);
-    setFolderPath("");
-  }
-
   return (
     <>
       <div className={SESSION_TABS_SHELL_CLASS}>
@@ -148,11 +88,20 @@ export function DashboardSessionTabs({ locale }: { locale: string }) {
             }}
           />
         </div>
+        {closeError ? (
+          <p className={SESSION_DIALOG_ERROR_CLASS} role="alert">
+            {closeError.message}
+          </p>
+        ) : null}
         <SessionTabsContent
           activeSession={activeSession}
+          closingSessionID={
+            closeSessionMutation.isPending ? closeSessionMutation.variables : null
+          }
           error={sessionsQuery.isError ? sessionsQuery.error : null}
           isPending={sessionsQuery.isPending}
           messages={messages}
+          onCloseSession={handleCloseSession}
           onRetry={() => {
             void sessionsQuery.refetch();
           }}
@@ -201,17 +150,21 @@ function OpenSessionButton({
 
 function SessionTabsContent({
   activeSession,
+  closingSessionID,
   error,
   isPending,
   messages,
+  onCloseSession,
   onRetry,
   onSelectSession,
   sessions,
 }: {
   activeSession: FactorySessionSummary | null;
+  closingSessionID: string | null;
   error: unknown;
   isPending: boolean;
   messages: ReturnType<typeof getHeaderControlsMessages>;
+  onCloseSession: (sessionID: string) => void;
   onRetry: () => void;
   onSelectSession: (sessionID: string) => void;
   sessions: FactorySessionSummary[];
@@ -309,6 +262,11 @@ function SessionTabsContent({
               onClick={() => {
                 onSelectSession(session.id);
               }}
+              onClose={() => {
+                onCloseSession(session.id);
+              }}
+              closeDisabled={closingSessionID === session.id}
+              messages={messages}
               session={session}
               tabID={sessionTabID(sessionTabsID, session.id)}
             />
@@ -355,42 +313,61 @@ function SessionTabButton({
   active,
   buttonRef,
   controlsID,
+  closeDisabled,
+  messages,
   onKeyDown,
   onClick,
+  onClose,
   session,
   tabID,
 }: {
   active: boolean;
   buttonRef: (element: HTMLButtonElement | null) => void;
   controlsID: string;
+  closeDisabled: boolean;
+  messages: ReturnType<typeof getHeaderControlsMessages>;
   onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   onClick: () => void;
+  onClose: () => void;
   session: FactorySessionSummary;
   tabID: string;
 }) {
   const label = sessionTabLabel(session);
   return (
-    <button
-      aria-controls={controlsID}
-      aria-selected={active}
+    <div
       className={cn(
-        SESSION_TAB_BUTTON_CLASS,
+        SESSION_TAB_ITEM_CLASS,
         active ? SESSION_TAB_ACTIVE_CLASS : SESSION_TAB_INACTIVE_CLASS,
       )}
-      id={tabID}
-      onClick={onClick}
-      onKeyDown={onKeyDown}
-      ref={buttonRef}
-      role="tab"
-      tabIndex={active ? 0 : -1}
       title={`${session.folderPath} (${session.id})`}
-      type="button"
     >
-      <span className="block truncate text-sm font-semibold">{label}</span>
-      <span className="block truncate text-xs text-af-ink/58">
-        {session.project || session.folderPath}
-      </span>
-    </button>
+      <button
+        aria-controls={controlsID}
+        aria-selected={active}
+        className={SESSION_TAB_BUTTON_CLASS}
+        id={tabID}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+        ref={buttonRef}
+        role="tab"
+        tabIndex={active ? 0 : -1}
+        type="button"
+      >
+        <span className="block truncate text-sm font-semibold">{label}</span>
+        <span className="block truncate text-xs text-af-ink/58">
+          {session.project || session.folderPath}
+        </span>
+      </button>
+      <button
+        aria-label={sessionCloseLabel(session, messages)}
+        className={SESSION_TAB_CLOSE_BUTTON_CLASS}
+        disabled={closeDisabled}
+        onClick={onClose}
+        type="button"
+      >
+        {closeDisabled ? messages.closingSessionButtonLabel : "×"}
+      </button>
+    </div>
   );
 }
 
@@ -512,6 +489,16 @@ function sessionTabLabel(session: FactorySessionSummary): string {
   return `${folderName} / ${targetName}`;
 }
 
+function sessionCloseLabel(
+  session: FactorySessionSummary,
+  messages: ReturnType<typeof getHeaderControlsMessages>,
+): string {
+  return messages.sessionTabCloseLabelTemplate.replace(
+    "{{sessionLabel}}",
+    sessionTabLabel(session),
+  );
+}
+
 function basename(path: string): string {
   const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
   return segments[segments.length - 1] ?? "";
@@ -533,14 +520,11 @@ function normalizeFactorySessionsError(error: unknown): FactorySessionsAPIError 
   if (error instanceof FactorySessionsAPIError) {
     return error;
   }
-  if (error instanceof Error) {
-    // hardcoded-ui-copy-exception: non-product-diagnostic
-    return new FactorySessionsAPIError(error.message, {
+  return new FactorySessionsAPIError(
+    "The dashboard could not complete the factory session request.",
+    {
       code: "INTERNAL_ERROR",
-    });
-  }
-  // hardcoded-ui-copy-exception: non-product-diagnostic
-  return new FactorySessionsAPIError("Factory session request failed.", {
-    code: "INTERNAL_ERROR",
-  });
+      responseBody: error,
+    },
+  );
 }

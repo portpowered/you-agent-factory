@@ -560,10 +560,14 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	}
 
 	if !serviceMode {
+		listener := fs.listener
 		sidecars.Add(1)
 		go func() {
 			defer sidecars.Done()
-			if err := fs.listener.Watch(runCtx); err != nil && err != context.Canceled {
+			if listener == nil {
+				return
+			}
+			if err := listener.Watch(runCtx); err != nil && err != context.Canceled {
 				fs.logger.Error("file watcher error", zap.Error(err))
 			}
 		}()
@@ -993,7 +997,12 @@ func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
 	for {
 		handle := fs.currentLiveRuntime()
 		if handle == nil {
-			return nil
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(25 * time.Millisecond):
+				continue
+			}
 		}
 		select {
 		case <-ctx.Done():
@@ -1008,6 +1017,10 @@ func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
 }
 
 func (fs *FactoryService) swapActiveRuntime(runtimeBundle *replacementFactoryRuntime) {
+	if runtimeBundle == nil {
+		fs.clearActiveRuntime()
+		return
+	}
 	fs.runtimeMu.Lock()
 	defer fs.runtimeMu.Unlock()
 	fs.eventHistory = runtimeBundle.eventHistory
@@ -1016,6 +1029,19 @@ func (fs *FactoryService) swapActiveRuntime(runtimeBundle *replacementFactoryRun
 	fs.net = runtimeBundle.net
 	fs.runtimeCfg = runtimeBundle.runtimeCfg
 	fs.cfg.Dir = runtimeBundle.dir
+}
+
+func (fs *FactoryService) clearActiveRuntime() {
+	fs.runtimeMu.Lock()
+	defer fs.runtimeMu.Unlock()
+	fs.eventHistory = nil
+	fs.factory = nil
+	fs.listener = nil
+	fs.net = nil
+	fs.runtimeCfg = nil
+	if fs.cfg != nil && strings.TrimSpace(fs.factoryRootDir) != "" {
+		fs.cfg.Dir = fs.factoryRootDir
+	}
 }
 
 func (fs *FactoryService) currentRunState() *serviceRunState {
@@ -1036,7 +1062,7 @@ func (fs *FactoryService) currentLiveRuntime() *liveRuntimeHandle {
 func (fs *FactoryService) setRunState(ctx context.Context, sessionID string, runtime *liveRuntimeHandle) {
 	fs.runMu.Lock()
 	defer fs.runMu.Unlock()
-	if ctx == nil || runtime == nil || sessionID == "" {
+	if ctx == nil {
 		fs.runState = nil
 		return
 	}

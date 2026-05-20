@@ -428,6 +428,27 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}:
+    delete:
+      tags:
+        - Factory
+      operationId: closeFactorySession
+      summary: Close one live factory session
+      description: Stops the selected live factory session, removes it from the workspace session list, and leaves all remaining sessions running unchanged.
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Stable live factory session identifier. Use `~default` to close the default compatibility session explicitly.
+      responses:
+        '204':
+          description: Session was stopped and removed from the live workspace.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory/~current:
     get:
       tags:

@@ -328,6 +328,23 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionID string) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	if err := sessionRuntime.CloseFactorySession(r.Context(), sessionID); err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		}
+		s.logger.Error("close factory session failed", zap.Error(err), zap.String("session_id", sessionID))
+		s.writeError(w, http.StatusInternalServerError, "failed to close factory session", "INTERNAL_ERROR")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
 	namedFactory, ok := s.loadCurrentFactory(w, r)
 	if !ok {
