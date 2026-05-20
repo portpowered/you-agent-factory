@@ -1,6 +1,8 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
   fireEvent,
+  render,
   screen,
   waitFor,
   within,
@@ -11,7 +13,6 @@ import {
   registerAppDashboardTestLifecycle,
   removeTraceIDsFromSnapshot,
   renderApp,
-  renderWithAppDashboardQueryClient,
   requireValue,
 } from "./App.dashboard-test-harness";
 import type {
@@ -1194,9 +1195,22 @@ function renderTraceDrilldownHarness({
 }) {
   useFactoryTimelineStore.getState().replaceEvents(timelineEvents);
 
-  return renderWithAppDashboardQueryClient(
-    <TraceDrilldownTestHarness selectedWorkID={selectedWorkID} />,
+  return render(
+    <QueryClientProvider client={createTraceDrilldownQueryClient()}>
+      <TraceDrilldownTestHarness selectedWorkID={selectedWorkID} />
+    </QueryClientProvider>,
   );
+}
+
+function createTraceDrilldownQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: Infinity,
+        retry: false,
+      },
+    },
+  });
 }
 
 function createFactoryImportValue(): FactoryPngImportValue {

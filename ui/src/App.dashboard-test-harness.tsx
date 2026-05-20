@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { RenderResult } from "@testing-library/react";
 import { cleanup, render } from "@testing-library/react";
-import type { ReactNode } from "react";
 import type { Mock } from "vitest";
 import { afterEach, beforeEach, vi } from "vitest";
 import { App } from "./App";
@@ -109,7 +108,7 @@ function timelineSnapshot(
   };
 }
 
-export function seedTimelineSnapshot(
+function seedTimelineSnapshot(
   snapshot: DashboardSnapshot,
   tracesByWorkID: Record<string, DashboardTrace> = {},
   workstationRequestsByDispatchID: Record<
@@ -133,7 +132,7 @@ export function seedTimelineSnapshot(
   });
 }
 
-export function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
+function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
   const worldViewCache = Object.fromEntries(
     snapshots.map(
       (snapshot) =>
@@ -210,14 +209,6 @@ export function renderApp({
   );
 
   return { ...result, fetchMock };
-}
-
-export function renderWithAppDashboardQueryClient(children: ReactNode) {
-  return render(
-    <QueryClientProvider client={createAppDashboardQueryClient()}>
-      {children}
-    </QueryClientProvider>,
-  );
 }
 
 export function registerAppDashboardTestLifecycle({
