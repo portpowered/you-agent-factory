@@ -1,7 +1,7 @@
 import { expect, userEvent, within } from "storybook/test";
 
 import { NoSelectionDetailCard } from "../current-selection/no-selection-detail-card";
-import { WorkTotalsCard } from "../work-totals/work-totals-card";
+import { WorkTotalsCard } from "../work-totals";
 import "../../styles.css";
 import {
   AgentBentoCard,

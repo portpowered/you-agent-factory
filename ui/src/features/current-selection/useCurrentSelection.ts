@@ -11,7 +11,7 @@ import { useSelectionHistoryStore } from "./state/selectionHistoryStore";
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
-} from "../terminal-work/terminal-work-card";
+} from "../terminal-work";
 import type { DashboardSelection, TerminalWorkDetail } from "./types";
 import { useCurrentSelectionActions } from "./useCurrentSelection.actions";
 import {

@@ -5,7 +5,7 @@ import type {
   DashboardSelection,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
-import type { TerminalWorkItem } from "../terminal-work/terminal-work-card";
+import type { TerminalWorkItem } from "../terminal-work";
 import { useCurrentSelectionActions } from "./useCurrentSelection.actions";
 
 const helperMocks = vi.hoisted(() => ({

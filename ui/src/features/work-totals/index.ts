@@ -1,3 +1,3 @@
-export * from "./work-totals-card";
-export * from "./work-totals-widget";
+export * from "./components/work-totals-card";
+export * from "./components/work-totals-widget";
 
