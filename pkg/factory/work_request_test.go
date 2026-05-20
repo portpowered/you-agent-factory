@@ -964,6 +964,24 @@ func TestParseCanonicalWorkRequestJSON_RejectsConflictingCurrentChainingTraceID(
 	}
 }
 
+func TestParseCanonicalWorkRequestJSON_RejectsRequestLevelConflictingCurrentChainingTraceID(t *testing.T) {
+	_, err := ParseCanonicalWorkRequestJSON([]byte(`{
+		"requestId": "request-json-root-conflict",
+		"type": "FACTORY_REQUEST_BATCH",
+		"currentChainingTraceId": "chain-a",
+		"traceId": "trace-b",
+		"works": [
+			{
+				"name": "draft",
+				"workTypeName": "task"
+			}
+		]
+	}`))
+	if err == nil || err.Error() != "work request batch currentChainingTraceId and traceId must match when both are provided" {
+		t.Fatalf("ParseCanonicalWorkRequestJSON error = %v, want request-level conflict rejection", err)
+	}
+}
+
 func TestParseCanonicalWorkRequestJSON_RejectsRetiredAliases(t *testing.T) {
 	tests := []struct {
 		name    string

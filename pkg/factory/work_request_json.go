@@ -8,8 +8,12 @@ import (
 )
 
 type canonicalWorkRequestJSON struct {
-	WorkTypeID json.RawMessage             `json:"work_type_id"`
-	Works      []canonicalWorkRequestEntry `json:"works"`
+	WorkTypeID             json.RawMessage             `json:"work_type_id"`
+	CurrentChainingTraceID json.RawMessage             `json:"currentChainingTraceId"`
+	LegacyCurrentChaining  json.RawMessage             `json:"current_chaining_trace_id"`
+	TraceID                json.RawMessage             `json:"traceId"`
+	LegacyTraceID          json.RawMessage             `json:"trace_id"`
+	Works                  []canonicalWorkRequestEntry `json:"works"`
 }
 
 type canonicalWorkRequestEntry struct {
@@ -87,6 +91,14 @@ func validateRetiredWorkRequestFieldAliases(raw canonicalWorkRequestJSON) error 
 }
 
 func validateConflictingWorkRequestTraceFields(raw canonicalWorkRequestJSON) error {
+	if err := ValidateWorkRequestTraceFieldAliases(
+		raw.CurrentChainingTraceID,
+		raw.LegacyCurrentChaining,
+		raw.TraceID,
+		raw.LegacyTraceID,
+	); err != nil {
+		return fmt.Errorf("work request batch %w", err)
+	}
 	for i := range raw.Works {
 		if err := ValidateWorkRequestTraceFieldAliases(
 			raw.Works[i].CurrentChainingTraceID,
