@@ -858,11 +858,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 }
 
 func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
-	parts, err := interfaces.WorkContentFromGenerated(content)
-	if err != nil {
-		return nil
-	}
-	return parts
+	return interfaces.BestEffortWorkContentFromGenerated(content)
 }
 
 func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {

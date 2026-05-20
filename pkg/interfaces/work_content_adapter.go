@@ -34,6 +34,21 @@ func WorkContentFromGenerated(content *factoryapi.WorkContent) ([]WorkContentPar
 // WorkContentFromGeneratedAtPath converts generated OpenAPI work content and
 // reports validation errors with a caller-owned field path.
 func WorkContentFromGeneratedAtPath(content *factoryapi.WorkContent, fieldPath string) ([]WorkContentPart, error) {
+	return workContentFromGenerated(content, fieldPath, false)
+}
+
+// BestEffortWorkContentFromGenerated converts generated content while skipping
+// unsupported legacy parts. Strict request ingress should use
+// WorkContentFromGeneratedAtPath instead so malformed user input is rejected.
+func BestEffortWorkContentFromGenerated(content *factoryapi.WorkContent) []WorkContentPart {
+	parts, err := workContentFromGenerated(content, "", true)
+	if err != nil {
+		return nil
+	}
+	return parts
+}
+
+func workContentFromGenerated(content *factoryapi.WorkContent, fieldPath string, skipInvalid bool) ([]WorkContentPart, error) {
 	if content == nil || len(*content) == 0 {
 		return nil, nil
 	}
@@ -58,6 +73,9 @@ func WorkContentFromGeneratedAtPath(content *factoryapi.WorkContent, fieldPath s
 			continue
 		}
 
+		if skipInvalid {
+			continue
+		}
 		return nil, WorkContentValidationError{
 			FieldPath: workContentPartFieldPath(fieldPath, i, "type"),
 			Message:   workContentTypeValidationMessage,

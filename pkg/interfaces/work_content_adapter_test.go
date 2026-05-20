@@ -74,6 +74,26 @@ func TestWorkContentFromGeneratedRejectsUnsupportedPartWithFieldPath(t *testing.
 	}
 }
 
+func TestBestEffortWorkContentFromGeneratedSkipsUnsupportedLegacyParts(t *testing.T) {
+	var content factoryapi.WorkContent
+	if err := json.Unmarshal([]byte(`[
+		{"type":"text","text":"before"},
+		{"type":"audio","file":"sound.wav"},
+		{"type":"image","file":"after.png"}
+	]`), &content); err != nil {
+		t.Fatalf("unmarshal generated content: %v", err)
+	}
+
+	got := BestEffortWorkContentFromGenerated(&content)
+	want := []WorkContentPart{
+		{Type: WorkContentPartTypeText, Text: "before"},
+		{Type: WorkContentPartTypeImage, File: "after.png"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("BestEffortWorkContentFromGenerated() = %#v, want %#v", got, want)
+	}
+}
+
 func TestGeneratedWorkContentPtrPreservesPartsAndOmissionBehavior(t *testing.T) {
 	if got := GeneratedWorkContentPtr(nil); got != nil {
 		t.Fatalf("GeneratedWorkContentPtr(nil) = %#v, want nil", got)
