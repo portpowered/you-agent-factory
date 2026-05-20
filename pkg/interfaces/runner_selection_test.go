@@ -65,3 +65,27 @@ func TestBuiltInRunnerMetadata(t *testing.T) {
 		t.Fatalf("metadata.ID = %q, want %q", metadata.ID, RunnerIDCursorCLI)
 	}
 }
+
+func TestBuiltInRunnerMetadata_CodexWorktreeDetailMatchesRuntimeBehavior(t *testing.T) {
+	t.Parallel()
+
+	metadata, ok := BuiltInRunnerMetadata(RunnerIDCodex)
+	if !ok {
+		t.Fatal("expected codex metadata")
+	}
+
+	for _, capability := range metadata.Capabilities.Optional {
+		if capability.Capability != RunnerOptionalCapabilityWorktree {
+			continue
+		}
+		if capability.Status != RunnerOptionalCapabilityStatusUnsupported {
+			t.Fatalf("worktree status = %q, want %q", capability.Status, RunnerOptionalCapabilityStatusUnsupported)
+		}
+		if capability.Detail != "codex rejects workstation worktree selection in v1" {
+			t.Fatalf("worktree detail = %q", capability.Detail)
+		}
+		return
+	}
+
+	t.Fatal("expected codex worktree capability metadata")
+}

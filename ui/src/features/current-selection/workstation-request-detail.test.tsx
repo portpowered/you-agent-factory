@@ -211,6 +211,31 @@ describe("WorkstationRequestDetailCard", () => {
     ).toBeTruthy();
   });
 
+  it("renders fallback Codex capability detail that matches unsupported worktree behavior", () => {
+    render(
+      <WorkstationRequestDetailCard
+        request={workstationRequest("dispatch-review-codex-fallback", {
+          request_id: "request-codex-fallback",
+          request_view: {
+            input_work_items: [],
+            runner: {
+              runnerId: "codex",
+              selectionSource: "default",
+            },
+          },
+        })}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", { name: "Current selection" });
+    expect(within(currentSelection).getByText("Runner capability support")).toBeTruthy();
+    expect(
+      within(currentSelection).getByText(
+        "Codex rejects workstation worktree selection in v1.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("surfaces failed outcome reason and message in the top-level outcome row", () => {
     render(
       <WorkstationRequestDetailCard
