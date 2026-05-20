@@ -143,6 +143,13 @@ func (fs *FactoryService) currentSession() *liveFactorySession {
 	return fs.sessions.current()
 }
 
+func (fs *FactoryService) defaultSession() *liveFactorySession {
+	if fs == nil || fs.sessions == nil {
+		return nil
+	}
+	return fs.sessions.get(defaultFactorySessionID)
+}
+
 func (fs *FactoryService) sessionByID(sessionID string) *liveFactorySession {
 	if fs == nil || fs.sessions == nil {
 		return nil

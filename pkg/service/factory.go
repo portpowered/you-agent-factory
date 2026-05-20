@@ -1784,8 +1784,8 @@ func (fs *FactoryService) currentFactory() factory.Factory {
 	if fs == nil {
 		return nil
 	}
-	if currentSession := fs.currentSession(); currentSession != nil && currentSession.handle != nil && currentSession.handle.runtime != nil {
-		return currentSession.handle.runtime.factory
+	if compatibilitySession := fs.compatibilitySession(); compatibilitySession != nil && compatibilitySession.handle != nil && compatibilitySession.handle.runtime != nil {
+		return compatibilitySession.handle.runtime.factory
 	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
@@ -1796,12 +1796,22 @@ func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryCon
 	if fs == nil {
 		return nil
 	}
-	if currentSession := fs.currentSession(); currentSession != nil && currentSession.handle != nil && currentSession.handle.runtime != nil {
-		return currentSession.handle.runtime.runtimeCfg
+	if compatibilitySession := fs.compatibilitySession(); compatibilitySession != nil && compatibilitySession.handle != nil && compatibilitySession.handle.runtime != nil {
+		return compatibilitySession.handle.runtime.runtimeCfg
 	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
 	return fs.runtimeCfg
+}
+
+func (fs *FactoryService) compatibilitySession() *liveFactorySession {
+	if fs == nil {
+		return nil
+	}
+	if defaultSession := fs.defaultSession(); defaultSession != nil {
+		return defaultSession
+	}
+	return fs.currentSession()
 }
 
 func (fs *FactoryService) workflowID() string {

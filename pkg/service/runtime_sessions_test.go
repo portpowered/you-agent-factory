@@ -115,6 +115,161 @@ func TestFactoryService_OpenFactorySession_RunsConcurrentIsolatedSessions(t *tes
 	}
 }
 
+func TestFactoryService_LegacyRuntimeSurfaceTargetsDefaultSessionAlias(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default alpha runtime")
+
+	betaSessionID, err := svc.openFactorySession(context.Background(), betaDir)
+	if err != nil {
+		t.Fatalf("openFactorySession(beta): %v", err)
+	}
+	betaSession := svc.sessionByID(betaSessionID)
+	if betaSession == nil {
+		t.Fatalf("expected beta session %q to be registered", betaSessionID)
+	}
+
+	selectCompatibilitySessionForTest(t, svc, betaSessionID)
+
+	submitSessionWork(t, betaSession, "beta-only-work", "trace-beta-only")
+	waitForSessionEventsToContain(t, betaSession, "beta-only-work", time.Second)
+
+	submitCompatWork(t, svc, "default-only-work", "trace-default-only")
+	waitForSessionEventsToContain(t, svc.sessionByID(defaultFactorySessionID), "default-only-work", time.Second)
+
+	compatEvents, err := svc.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents: %v", err)
+	}
+	compatPayload, err := json.Marshal(compatEvents)
+	if err != nil {
+		t.Fatalf("Marshal(GetFactoryEvents): %v", err)
+	}
+	if !strings.Contains(string(compatPayload), "default-only-work") {
+		t.Fatalf("legacy factory events did not include default session work: %s", string(compatPayload))
+	}
+	if strings.Contains(string(compatPayload), "beta-only-work") {
+		t.Fatalf("legacy factory events unexpectedly included selected non-default session work: %s", string(compatPayload))
+	}
+
+	assertSessionEventsDoNotContain(t, svc.sessionByID(defaultFactorySessionID), "beta-only-work")
+	assertSessionEventsDoNotContain(t, betaSession, "default-only-work")
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
+func TestFactoryService_Run_RestartsOnlyDefaultSession(t *testing.T) {
+	rootDir := t.TempDir()
+	alphaDir := writeNamedFactoryFixture(t, rootDir, "alpha")
+	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService(first): %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default alpha runtime")
+	if _, err := svc.openFactorySession(context.Background(), betaDir); err != nil {
+		t.Fatalf("openFactorySession(beta): %v", err)
+	}
+	if got := svc.sessions.count(); got != 2 {
+		t.Fatalf("first run live session count = %d, want 2", got)
+	}
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("first Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first service shutdown")
+	}
+
+	restarted, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService(restart): %v", err)
+	}
+
+	restartCtx, restartCancel := context.WithCancel(context.Background())
+	restartErrCh := make(chan error, 1)
+	go func() {
+		restartErrCh <- restarted.Run(restartCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, restarted, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "restarted default alpha runtime")
+	if got := restarted.sessions.ids(); len(got) != 1 || got[0] != defaultFactorySessionID {
+		t.Fatalf("restarted session ids = %v, want [%s]", got, defaultFactorySessionID)
+	}
+	defaultSession := restarted.sessionByID(defaultFactorySessionID)
+	if defaultSession == nil || defaultSession.handle == nil || defaultSession.handle.runtime == nil {
+		t.Fatal("expected restarted default session runtime to be registered")
+	}
+	if defaultSession.handle.runtime.dir != alphaDir {
+		t.Fatalf("restarted default runtime dir = %q, want %q", defaultSession.handle.runtime.dir, alphaDir)
+	}
+
+	restartCancel()
+	select {
+	case err := <-restartErrCh:
+		if err != nil {
+			t.Fatalf("restarted Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for restarted service shutdown")
+	}
+}
+
 func waitForSessionRuntimeStatus(
 	t *testing.T,
 	svc *FactoryService,
@@ -155,6 +310,35 @@ func submitSessionWork(t *testing.T, session *liveFactorySession, workID, traceI
 	if _, err := session.handle.runtime.factory.SubmitWorkRequest(context.Background(), request); err != nil {
 		t.Fatalf("SubmitWorkRequest(%s): %v", workID, err)
 	}
+}
+
+func submitCompatWork(t *testing.T, svc *FactoryService, workID, traceID string) {
+	t.Helper()
+
+	request := factory.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+		WorkID:     workID,
+		Name:       workID,
+		WorkTypeID: "task",
+		TraceID:    traceID,
+		Payload:    []byte(`{"title":"` + workID + `"}`),
+	}})
+	if _, err := svc.SubmitWorkRequest(context.Background(), request); err != nil {
+		t.Fatalf("SubmitWorkRequest(%s): %v", workID, err)
+	}
+}
+
+func selectCompatibilitySessionForTest(t *testing.T, svc *FactoryService, sessionID string) {
+	t.Helper()
+
+	if svc == nil || svc.sessions == nil {
+		t.Fatal("service session manager is required")
+	}
+	svc.sessions.mu.Lock()
+	defer svc.sessions.mu.Unlock()
+	if _, ok := svc.sessions.sessions[sessionID]; !ok {
+		t.Fatalf("session %q is not registered", sessionID)
+	}
+	svc.sessions.selectedID = sessionID
 }
 
 func assertSessionRemainsLive(t *testing.T, svc *FactoryService, sessionID string, wait time.Duration, label string) {
