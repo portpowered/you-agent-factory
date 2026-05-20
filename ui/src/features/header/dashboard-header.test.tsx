@@ -138,6 +138,16 @@ describe("DashboardHeader", () => {
     expect(slider.closest("div")?.parentElement?.className).toContain(
       "justify-end",
     );
+    const controls = Array.from(
+      toolbar.querySelectorAll(
+        `[aria-label="${headerMessages.sliderAriaLabel}"], [aria-label="${headerMessages.languageMenuButtonLabel}"], [aria-label="${messages.triggerLabel}"], [role="status"]`,
+      ),
+    );
+    expect(controls).toHaveLength(4);
+    expect(controls[0]).toBe(slider);
+    expect(controls[1]).toBe(languageButton);
+    expect(controls[2]).toBe(exportButton);
+    expect(controls[3]).toBe(streamStatus);
     expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");
     expect(languageButton.getAttribute("aria-expanded")).toBe("false");
