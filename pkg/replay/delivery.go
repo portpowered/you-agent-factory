@@ -364,7 +364,7 @@ func cloneReplayPlannedResult(result interfaces.WorkResult) interfaces.WorkResul
 	if result.RecordedOutputWork != nil {
 		clone.RecordedOutputWork = cloneReplayFactoryWorkItems(result.RecordedOutputWork)
 	}
-	clone.ProviderFailure = cloneProviderFailureMetadata(result.ProviderFailure)
+	clone.ProviderFailure = interfaces.CloneProviderFailureMetadata(result.ProviderFailure)
 	clone.ProviderSession = interfaces.CloneProviderSessionMetadata(result.ProviderSession)
 	clone.Diagnostics = interfaces.CloneWorkDiagnostics(result.Diagnostics)
 	return clone
@@ -388,14 +388,6 @@ func cloneReplayFactoryWorkItems(items []interfaces.FactoryWorkItem) []interface
 		}
 	}
 	return out
-}
-
-func cloneProviderFailureMetadata(metadata *interfaces.ProviderFailureMetadata) *interfaces.ProviderFailureMetadata {
-	if metadata == nil {
-		return nil
-	}
-	clone := *metadata
-	return &clone
 }
 
 func (p *CompletionDeliveryPlan) expectedForObservedDispatchLocked(observed interfaces.WorkDispatch) (completionDeliveryRecord, bool) {

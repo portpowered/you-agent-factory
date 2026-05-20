@@ -30,7 +30,7 @@ func NewProviderError(errorType interfaces.ProviderErrorType, message string, ca
 
 func NewProviderErrorWithSession(errorType interfaces.ProviderErrorType, message string, cause error, session *interfaces.ProviderSessionMetadata) *ProviderError {
 	err := NewProviderError(errorType, message, cause)
-	err.ProviderSession = cloneProviderSession(session)
+	err.ProviderSession = interfaces.CloneProviderSessionMetadata(session)
 	return err
 }
 
@@ -106,12 +106,4 @@ func ProviderFailureMetadataFromError(err *ProviderError) *interfaces.ProviderFa
 		Family: err.Family,
 		Type:   err.Type,
 	}
-}
-
-func cloneProviderSession(session *interfaces.ProviderSessionMetadata) *interfaces.ProviderSessionMetadata {
-	if session == nil {
-		return nil
-	}
-	clone := *session
-	return &clone
 }

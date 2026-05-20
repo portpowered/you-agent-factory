@@ -43,6 +43,24 @@ func TestProviderError_Error_PrefersMessageThenCauseThenType(t *testing.T) {
 	}
 }
 
+func TestNewProviderErrorWithSession_ClonesProviderSessionMetadata(t *testing.T) {
+	session := &interfaces.ProviderSessionMetadata{
+		Provider: "codex",
+		Kind:     "session_id",
+		ID:       "sess_codex_123",
+	}
+
+	providerErr := NewProviderErrorWithSession(interfaces.ProviderErrorTypeAuthFailure, "auth failed", nil, session)
+	session.ID = "mutated-session"
+
+	if providerErr.ProviderSession == nil {
+		t.Fatal("expected provider session metadata on provider error")
+	}
+	if providerErr.ProviderSession.ID != "sess_codex_123" {
+		t.Fatalf("provider session id = %q, want detached original", providerErr.ProviderSession.ID)
+	}
+}
+
 func TestClassifyProviderFailure_ReturnsDeterministicBehavior(t *testing.T) {
 	testCases := []struct {
 		name              string

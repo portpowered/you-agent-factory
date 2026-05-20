@@ -238,7 +238,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		TransitionID:    result.TransitionID,
 		Outcome:         resolved.outcome,
 		Reason:          completedDispatchReason(resolved),
-		ProviderFailure: cloneProviderFailureMetadata(result.ProviderFailure),
+		ProviderFailure: interfaces.CloneProviderFailureMetadata(result.ProviderFailure),
 		ProviderSession: interfaces.CloneProviderSessionMetadata(result.ProviderSession),
 		EndTime:         endTime,
 		ConsumedTokens:  interfaces.CloneTokens(consumedTokens),
@@ -347,15 +347,6 @@ func cloneTags(tags map[string]string) map[string]string {
 		clone[key] = value
 	}
 	return clone
-}
-
-func cloneProviderFailureMetadata(metadata *interfaces.ProviderFailureMetadata) *interfaces.ProviderFailureMetadata {
-	if metadata == nil {
-		return nil
-	}
-
-	clone := *metadata
-	return &clone
 }
 
 func resolveWorkResult(transition *petri.Transition, result *interfaces.WorkResult, runtimeConfig interfaces.RuntimeWorkstationLookup) resolvedWorkResult {

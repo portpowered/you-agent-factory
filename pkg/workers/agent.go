@@ -115,7 +115,7 @@ func (ae *AgentExecutor) workResultForInferenceResponse(request interfaces.Works
 				Outcome:         interfaces.OutcomeFailed,
 				Output:          resp.Content,
 				Error:           "output parse failed: " + parseErr.Error(),
-				ProviderSession: cloneProviderSession(resp.ProviderSession),
+				ProviderSession: interfaces.CloneProviderSessionMetadata(resp.ProviderSession),
 				Diagnostics:     diagnostics,
 				Metrics:         metrics,
 			}, nil
@@ -127,7 +127,7 @@ func (ae *AgentExecutor) workResultForInferenceResponse(request interfaces.Works
 		TransitionID:    request.Dispatch.TransitionID,
 		Outcome:         outcome,
 		Output:          resp.Content,
-		ProviderSession: cloneProviderSession(resp.ProviderSession),
+		ProviderSession: interfaces.CloneProviderSessionMetadata(resp.ProviderSession),
 		Diagnostics:     diagnostics,
 		Metrics:         metrics,
 	}, nil
@@ -173,7 +173,7 @@ func providerSessionFromError(providerErr *ProviderError) *interfaces.ProviderSe
 	if providerErr == nil {
 		return nil
 	}
-	return cloneProviderSession(providerErr.ProviderSession)
+	return interfaces.CloneProviderSessionMetadata(providerErr.ProviderSession)
 }
 
 func providerDiagnosticsFromError(providerErr *ProviderError) *interfaces.WorkDiagnostics {

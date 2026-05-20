@@ -412,15 +412,16 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 	n := buildPipelineNet()
 	tp := newTestPipeline(n)
 	errorText := "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)"
+	providerFailure := &interfaces.ProviderFailureMetadata{
+		Family: interfaces.ProviderErrorFamilyRetryable,
+		Type:   interfaces.ProviderErrorTypeInternalServerError,
+	}
 	tp.WriteResult(interfaces.WorkResult{
-		DispatchID:   "d-1",
-		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeFailed,
-		Error:        errorText,
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyRetryable,
-			Type:   interfaces.ProviderErrorTypeInternalServerError,
-		},
+		DispatchID:      "d-1",
+		TransitionID:    "t1",
+		Outcome:         interfaces.OutcomeFailed,
+		Error:           errorText,
+		ProviderFailure: providerFailure,
 	})
 
 	snapshot := pipelineSnapshot(
@@ -462,6 +463,14 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 	decision := workers.ProviderFailureDecisionFromMetadata(completed.ProviderFailure)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
 		t.Fatalf("ProviderFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", completed.ProviderFailure, decision)
+	}
+	providerFailure.Type = interfaces.ProviderErrorTypeAuthFailure
+	providerFailure.Family = interfaces.ProviderErrorFamilyTerminal
+	if completed.ProviderFailure.Type != interfaces.ProviderErrorTypeInternalServerError {
+		t.Fatalf("completed dispatch provider failure type after source mutation = %q, want detached original", completed.ProviderFailure.Type)
+	}
+	if completed.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
+		t.Fatalf("completed dispatch provider failure family after source mutation = %q, want detached original", completed.ProviderFailure.Family)
 	}
 }
 
