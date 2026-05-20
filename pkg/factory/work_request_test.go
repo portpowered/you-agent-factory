@@ -1026,6 +1026,15 @@ func TestParseCanonicalWorkRequestJSON_RejectsRetiredAliases(t *testing.T) {
 			wantErr: "work request batch works[0] uses retired work_type_id field; use workTypeName",
 		},
 		{
+			name: "top level target state",
+			data: `{
+				"name": "draft",
+				"workTypeName": "task",
+				"target_state": "queued"
+			}`,
+			wantErr: "work request batch uses retired target_state field; use state",
+		},
+		{
 			name: "nested target state",
 			data: `{
 				"requestId": "request-json-target-state-alias",

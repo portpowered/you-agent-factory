@@ -9,6 +9,7 @@ import (
 
 type canonicalWorkRequestJSON struct {
 	WorkTypeID             json.RawMessage             `json:"work_type_id"`
+	TargetState            json.RawMessage             `json:"target_state"`
 	CurrentChainingTraceID json.RawMessage             `json:"currentChainingTraceId"`
 	LegacyCurrentChaining  json.RawMessage             `json:"current_chaining_trace_id"`
 	TraceID                json.RawMessage             `json:"traceId"`
@@ -60,6 +61,9 @@ func ValidateCanonicalWorkRequestJSON(data []byte) error {
 func validateRetiredWorkRequestFieldAliases(raw canonicalWorkRequestJSON) error {
 	if raw.WorkTypeID != nil {
 		return fmt.Errorf("work request batch uses retired work_type_id field; use workTypeName")
+	}
+	if raw.TargetState != nil {
+		return fmt.Errorf("work request batch uses retired target_state field; use state")
 	}
 	for i := range raw.Works {
 		if raw.Works[i].WorkTypeID != nil {
