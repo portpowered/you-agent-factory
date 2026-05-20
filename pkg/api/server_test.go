@@ -2458,6 +2458,53 @@ func TestListWork_FiltersByStateNameAndType(t *testing.T) {
 	}
 }
 
+func TestListWork_IncludesCompletionTimeForTerminalAndFailedWork(t *testing.T) {
+	now := time.Date(2026, 5, 20, 10, 30, 0, 0, time.UTC)
+	completedAt := now.Add(5 * time.Minute)
+	failedAt := now.Add(7 * time.Minute)
+	tokens := map[string]*interfaces.Token{
+		"tok-active":           listWorkToken("tok-active", "work-active", "task:review", "task", now),
+		"tok-complete":         listWorkToken("tok-complete", "work-complete", "task:complete", "task", completedAt),
+		"tok-failed":           listWorkToken("tok-failed", "work-failed", "task:failed", "task", failedAt),
+		"tok-missing-complete": listWorkToken("tok-missing-complete", "work-missing-complete", "task:complete", "task", now),
+	}
+	tokens["tok-missing-complete"].EnteredAt = time.Time{}
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: tokens},
+		Net:     listWorkFilterTopology(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/work", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	completed := listedWorkByID(t, resp.Results, "work-complete")
+	if completed.CompletedAt == nil || !completed.CompletedAt.Equal(completedAt) {
+		t.Fatalf("completedAt = %#v, want %s", completed.CompletedAt, completedAt)
+	}
+	failed := listedWorkByID(t, resp.Results, "work-failed")
+	if failed.CompletedAt == nil || !failed.CompletedAt.Equal(failedAt) {
+		t.Fatalf("failed completedAt = %#v, want %s", failed.CompletedAt, failedAt)
+	}
+	active := listedWorkByID(t, resp.Results, "work-active")
+	if active.CompletedAt != nil {
+		t.Fatalf("active completedAt = %#v, want nil", active.CompletedAt)
+	}
+	missing := listedWorkByID(t, resp.Results, "work-missing-complete")
+	if missing.CompletedAt != nil {
+		t.Fatalf("missing completedAt = %#v, want nil", missing.CompletedAt)
+	}
+}
+
 func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing.T) {
 	now := time.Now()
 	tokens := map[string]*interfaces.Token{

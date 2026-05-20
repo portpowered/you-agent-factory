@@ -1150,6 +1150,9 @@ type Work struct {
 	// ChainingTraceDepth Current chaining depth for this work item when the runtime already knows its upstream lineage.
 	ChainingTraceDepth *int `json:"chainingTraceDepth,omitempty"`
 
+	// CompletedAt Time when this work item entered a completed or failed state, when known.
+	CompletedAt *time.Time `json:"completedAt,omitempty"`
+
 	// Content Ordered canonical content parts for one work item.
 	Content *WorkContent `json:"content,omitempty"`
 
