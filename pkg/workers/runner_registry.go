@@ -20,8 +20,8 @@ var builtInRunnerStatus = map[string]RunnerStatus{
 		Available: true,
 	},
 	interfaces.RunnerIDKiro: {
-		Metadata:          mustBuiltInRunnerMetadata(interfaces.RunnerIDKiro),
-		UnavailableReason: "kiro runner is registered but not yet available in this build",
+		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDKiro),
+		Available: true,
 	},
 	interfaces.RunnerIDCursorCLI: {
 		Metadata:          mustBuiltInRunnerMetadata(interfaces.RunnerIDCursorCLI),

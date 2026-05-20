@@ -62,12 +62,18 @@ type geminiProviderBehavior struct {
 	logger logging.Logger
 }
 
+type kiroProviderBehavior struct {
+	logger logging.Logger
+}
+
 func providerBehaviorFor(provider string, logger logging.Logger) providerBehavior {
 	switch provider {
 	case string(ModelProviderCodex):
 		return codexProviderBehavior{logger: logger}
 	case string(ModelProviderGemini):
 		return geminiProviderBehavior{logger: logger}
+	case string(ModelProviderKiro):
+		return kiroProviderBehavior{logger: logger}
 	default:
 		return claudeProviderBehavior{logger: logger}
 	}
@@ -79,6 +85,8 @@ func providerBehaviorForErrorClassification(provider string) providerBehavior {
 		return claudeProviderBehavior{}
 	case string(ModelProviderGemini):
 		return geminiProviderBehavior{}
+	case string(ModelProviderKiro):
+		return kiroProviderBehavior{}
 	default:
 		return codexProviderBehavior{}
 	}
@@ -266,6 +274,53 @@ func (b geminiProviderBehavior) FormatTimeoutFailure(result CommandResult) strin
 	return formatProviderOutputOrDefault(result, "execution timeout")
 }
 
+func (b kiroProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+	if err := validateKiroOptionalCapabilities(req); err != nil {
+		return nil, err
+	}
+	args := []string{"chat", "--no-interactive"}
+	if req.SessionID != "" {
+		args = append(args, "--resume-id", req.SessionID)
+	}
+	if skipPermissions {
+		args = append(args, "--trust-all-tools")
+	}
+	if prompt := buildKiroPrompt(req); prompt != "" {
+		args = append(args, prompt)
+	}
+	return args, nil
+}
+
+func (b kiroProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+	return buildBaseProviderCommandRequest(req, args)
+}
+
+func (b kiroProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
+	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
+}
+
+func (b kiroProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
+	switch {
+	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
+		return interfaces.ProviderErrorTypeAuthFailure
+	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
+		return interfaces.ProviderErrorTypePermanentBadRequest
+	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
+		return interfaces.ProviderErrorTypeThrottled
+	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
+		return interfaces.ProviderErrorTypeInternalServerError
+	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
+		return interfaces.ProviderErrorTypeTimeout
+	default:
+		return interfaces.ProviderErrorTypeUnknown
+	}
+}
+
+func (b kiroProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
+	return formatProviderOutputOrDefault(result, "execution timeout")
+}
+
 func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
 	unsupported := map[interfaces.RunnerOptionalCapability]string{
 		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
@@ -283,6 +338,34 @@ func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest)
 		return errors.New("session resume is not supported by the gemini runner in v1")
 	}
 	return nil
+}
+
+func validateKiroOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
+	unsupported := map[interfaces.RunnerOptionalCapability]string{
+		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the kiro runner in v1",
+		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the kiro runner in v1",
+		interfaces.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the kiro runner in v1",
+		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the kiro runner in v1",
+	}
+	for _, capability := range req.RequiredOptionalCapabilities {
+		if message, blocked := unsupported[capability]; blocked {
+			return errors.New(message)
+		}
+	}
+	return nil
+}
+
+func buildKiroPrompt(req interfaces.ProviderInferenceRequest) string {
+	systemPrompt := strings.TrimSpace(req.SystemPrompt)
+	userMessage := strings.TrimSpace(req.UserMessage)
+	switch {
+	case systemPrompt == "":
+		return userMessage
+	case userMessage == "":
+		return systemPrompt
+	default:
+		return "System instructions:\n" + systemPrompt + "\n\nUser request:\n" + userMessage
+	}
 }
 
 func buildBaseProviderCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {

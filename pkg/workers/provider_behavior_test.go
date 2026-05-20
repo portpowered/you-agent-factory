@@ -166,6 +166,67 @@ func TestGeminiProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities
 	}
 }
 
+func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
+	testCases := []struct {
+		name            string
+		req             interfaces.ProviderInferenceRequest
+		skipPermissions bool
+		want            []string
+	}{
+		{
+			name: "BasicPrompt",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderKiro),
+				UserMessage:   "summarize the workspace",
+			},
+			want: []string{"chat", "--no-interactive", "summarize the workspace"},
+		},
+		{
+			name: "WithSystemPromptSessionAndTrustedTools",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderKiro),
+				SystemPrompt:  "You are a careful reviewer.",
+				UserMessage:   "run the tests",
+				SessionID:     "kiro-session-123",
+			},
+			skipPermissions: true,
+			want: []string{
+				"chat",
+				"--no-interactive",
+				"--resume-id",
+				"kiro-session-123",
+				"--trust-all-tools",
+				"System instructions:\nYou are a careful reviewer.\n\nUser request:\nrun the tests",
+			},
+		},
+	}
+
+	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			if err != nil {
+				t.Fatalf("BuildArgs returned error: %v", err)
+			}
+			assertStringSlicesEqual(t, tc.want, args)
+		})
+	}
+}
+
+func TestKiroProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
+	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
+	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(ModelProviderKiro),
+		UserMessage:   "summarize the workspace",
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
+			interfaces.RunnerOptionalCapabilityStructuredOutput,
+		},
+	}, false)
+	if err == nil || err.Error() != "structured output is not supported by the kiro runner in v1" {
+		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
+	}
+}
+
 func TestClaudeProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
 

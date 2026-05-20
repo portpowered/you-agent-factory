@@ -52,9 +52,15 @@ var builtInRunnerMetadata = map[string]RunnerMetadata{
 		),
 	},
 	RunnerIDKiro: {
-		ID:           RunnerIDKiro,
-		DisplayName:  "Kiro",
-		Capabilities: NewRunnerCapabilities(),
+		ID:          RunnerIDKiro,
+		DisplayName: "Kiro",
+		Capabilities: NewRunnerCapabilities(
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityImageInput, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilitySessionResume, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityStructuredOutput, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorkingDirectory, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorktree, Status: RunnerOptionalCapabilityStatusUnsupported},
+		),
 	},
 	RunnerIDCursorCLI: {
 		ID:           RunnerIDCursorCLI,

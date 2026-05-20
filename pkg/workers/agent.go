@@ -183,6 +183,8 @@ func modelProviderForRunnerSelection(workerModelProvider, runnerID string) strin
 		return string(ModelProviderCodex)
 	case interfaces.RunnerIDGemini:
 		return string(ModelProviderGemini)
+	case interfaces.RunnerIDKiro:
+		return string(ModelProviderKiro)
 	default:
 		return ""
 	}

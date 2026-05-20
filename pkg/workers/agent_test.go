@@ -487,6 +487,37 @@ func TestAgentExecutor_InferenceRequestDefaultsGeminiProviderFromRunnerSelection
 	}
 }
 
+func TestAgentExecutor_InferenceRequestDefaultsKiroProviderFromRunnerSelection(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "kiro ok"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Model: "sonnet-4.5",
+			},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-kiro-default",
+			TransitionID: "t-kiro-default",
+			WorkerType:   "worker-a",
+		},
+		withAgentRunnerID(interfaces.RunnerIDKiro),
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderKiro) {
+		t.Fatalf("model provider = %q, want %q", provider.lastReq.ModelProvider, ModelProviderKiro)
+	}
+	if provider.lastReq.RunnerID != interfaces.RunnerIDKiro {
+		t.Fatalf("runner id = %q, want %q", provider.lastReq.RunnerID, interfaces.RunnerIDKiro)
+	}
+}
+
 func TestAgentExecutor_InferenceRequestMarksImageInputCapabilityWhenPresent(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{

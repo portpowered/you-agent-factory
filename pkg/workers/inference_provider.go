@@ -215,6 +215,7 @@ const (
 	ModelProviderClaude ModelProvider = "claude"
 	ModelProviderCodex  ModelProvider = "codex"
 	ModelProviderGemini ModelProvider = "gemini"
+	ModelProviderKiro   ModelProvider = "kiro-cli"
 )
 
 // ContainsStopToken checks whether the output text contains the given stop token.

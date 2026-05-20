@@ -6327,6 +6327,80 @@ You are a helpful assistant.
 	}
 }
 
+func TestLoadWorkersFromConfig_KiroRunnerExecutesBaselineWorkstationFlow(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: sonnet-4.5
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+			Runner:         interfaces.RunnerIDKiro,
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, nil, runner, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-kiro-default",
+		TransitionID:    "t-kiro-default",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-kiro-default",
+			Color: interfaces.TokenColor{
+				WorkID: "work-kiro-default",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if runner.request.Command != string(workers.ModelProviderKiro) {
+		t.Fatalf("command = %q, want %q", runner.request.Command, workers.ModelProviderKiro)
+	}
+	if len(runner.request.Args) < 3 || runner.request.Args[0] != "chat" || runner.request.Args[1] != "--no-interactive" {
+		t.Fatalf("args = %#v, want kiro chat --no-interactive invocation", runner.request.Args)
+	}
+}
+
 func TestLoadWorkersFromConfig_CanonicalRuntimeLookupDrivesScriptExecutionWorkingDirectory(t *testing.T) {
 	dir := t.TempDir()
 	runtimeBaseDir := t.TempDir()
