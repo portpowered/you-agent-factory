@@ -80,28 +80,11 @@ func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 
 func replayWorkContentForDeliveryTest(t *testing.T, parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
 	t.Helper()
-	content := make(factoryapi.WorkContent, 0, len(parts))
-	for _, part := range parts {
-		var generated factoryapi.WorkContentPart
-		switch part.Type {
-		case interfaces.WorkContentPartTypeText:
-			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-				Type: factoryapi.WorkContentPartTypeText,
-				Text: part.Text,
-			}); err != nil {
-				t.Fatalf("encode text content: %v", err)
-			}
-		case interfaces.WorkContentPartTypeImage:
-			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
-				Type: factoryapi.WorkContentPartTypeImage,
-				File: part.File,
-			}); err != nil {
-				t.Fatalf("encode image content: %v", err)
-			}
-		}
-		content = append(content, generated)
+	content := interfaces.GeneratedWorkContentPtr(parts)
+	if len(parts) > 0 && content == nil {
+		t.Fatalf("encode work content %#v", parts)
 	}
-	return &content
+	return content
 }
 
 func TestSubmissionHook_ReplaysCronTimeWorkRequestWithPendingTargetState(t *testing.T) {

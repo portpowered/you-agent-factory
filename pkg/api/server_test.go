@@ -306,6 +306,34 @@ func TestUpsertWorkRequest_RejectsInvalidContentPartShape(t *testing.T) {
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].content[0].file is not supported")
 }
 
+func TestSubmitWork_RejectsUnsupportedContentPartTypeWithFieldPath(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+	})
+
+	body := `{"workTypeName":"prd","content":[{"type":"audio","file":"fixtures/audio.mp3"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].type must be one of text or image")
+}
+
+func TestUpsertWorkRequest_RejectsUnsupportedContentPartTypeWithFieldPath(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+	})
+
+	body := `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","content":[{"type":"audio","file":"fixtures/audio.mp3"}]}]}`
+	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].content[0].type must be one of text or image")
+}
+
 func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
 	eventTime := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 	currentFactoryID := "beta"

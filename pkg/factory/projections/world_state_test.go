@@ -157,6 +157,39 @@ func TestReconstructFactoryWorldState_FallsBackToPayloadDispatchChainingLineageF
 	}
 }
 
+func TestReconstructFactoryWorldState_PreservesGeneratedWorkContent(t *testing.T) {
+	t0 := time.Date(2026, 4, 22, 14, 0, 0, 0, time.UTC)
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
+			ID:          "work-with-content",
+			WorkTypeID:  "task",
+			DisplayName: "Review image",
+			TraceID:     "trace-content",
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "review this image"},
+				{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
+			},
+		}),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 1)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+
+	want := []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "review this image"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
+	}
+	if got := state.WorkItemsByID["work-with-content"].Content; !reflect.DeepEqual(got, want) {
+		t.Fatalf("work item content = %#v, want %#v", got, want)
+	}
+	if got := state.ActiveWorkItemsByID["work-with-content"].Content; !reflect.DeepEqual(got, want) {
+		t.Fatalf("active work item content = %#v, want %#v", got, want)
+	}
+}
+
 func TestReconstructFactoryWorldState_RetainsInferenceAttemptsByDispatchID(t *testing.T) {
 	t0 := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
@@ -1353,6 +1386,7 @@ func scriptResponseEvent(tick int, eventTime time.Time, payload factoryapi.Scrip
 func generatedWorkForProjectionTest(item interfaces.FactoryWorkItem, requestID string) factoryapi.Work {
 	return factoryapi.Work{
 		Name:                     item.DisplayName,
+		Content:                  interfaces.GeneratedWorkContentPtr(item.Content),
 		RequestId:                stringPtrForProjectionTest(requestID),
 		Tags:                     generatedStringMapForProjectionTest(item.Tags),
 		ChainingTraceDepth:       intPtrForProjectionTest(item.ChainingTraceDepth),
