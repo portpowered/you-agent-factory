@@ -1,5 +1,5 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: app-level story scenarios stay together so shared fixtures and browser interactions remain traceable in one harness.
 import { expect, userEvent, waitFor, within } from "storybook/test";
-
 import { App } from "./App";
 import type {
   DashboardSnapshot,
@@ -13,11 +13,7 @@ import {
 } from "./components/dashboard/test-fixtures";
 import { formatTimeOfDay } from "./components/ui/formatters";
 import { LocalePropagationStory } from "./stories/localePropagationStory";
-import {
-  buttonVisibleStyle,
-  expectGraphWorkstation,
-  fillSubmitWorkCard,
-} from "./stories/dashboardStoryTestUtils";
+import { buttonVisibleStyle, expectGraphWorkstation, fillSubmitWorkCard } from "./stories/dashboardStoryTestUtils";
 
 const activeStoryTrace: DashboardTrace = {
   trace_id: "trace-active-story",
@@ -1106,8 +1102,12 @@ export const HeaderLocalizationVerification = {
     await expect(
       within(englishToolbar).getByRole("button", { name: "Export PNG" }),
     ).toBeVisible();
-    await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
+    await expect(await canvas.findByText("5/5")).toBeVisible();
 
+    await userEvent.tab();
+    await expect(
+      within(englishToolbar).getByRole("slider", { name: "Timeline tick" }),
+    ).toHaveFocus();
     await userEvent.tab();
     await expect(languageButton).toHaveFocus();
     await userEvent.click(languageButton);
@@ -1126,7 +1126,7 @@ export const HeaderLocalizationVerification = {
     await expect(
       within(localizedToolbar).getByRole("slider", { name: "时间线刻度" }),
     ).toBeVisible();
-    await expect(await canvas.findByText("第 5 个刻度，共 5 个")).toBeVisible();
+    await expect(await canvas.findByText("5/5")).toBeVisible();
     await expect(
       within(localizedToolbar).getByRole("status", {
         name: /Infinite You 事件流(正在连接|在线)/,
@@ -1175,7 +1175,7 @@ export const HeaderLocalizationVerification = {
     await expect(
       within(restoredToolbar).getByRole("button", { name: "Change language" }),
     ).toBeVisible();
-    await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
+    await expect(await canvas.findByText("5/5")).toBeVisible();
     await expect(
       within(restoredToolbar).getByRole("button", { name: "Export PNG" }),
     ).toBeVisible();
@@ -1210,7 +1210,7 @@ export const LocalePropagationVerification = {
         name: "Return to current tick",
       }),
     ).toBeVisible();
-    await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
+    await expect(await canvas.findByText("5/5")).toBeVisible();
 
     await userEvent.click(
       within(controls).getByRole("button", {
@@ -1229,6 +1229,6 @@ export const LocalePropagationVerification = {
         name: "返回当前刻度",
       }),
     ).toBeVisible();
-    await expect(await canvas.findByText("第 5 个刻度，共 5 个")).toBeVisible();
+    await expect(await canvas.findByText("5/5")).toBeVisible();
   },
 };

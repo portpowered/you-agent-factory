@@ -283,13 +283,11 @@ function DispatchRequestSection({
       <WorkItemActionGroup
         items={view.inputWorkItems}
         label={messages.inputWorkLabel}
-        openWorkItemActionLabel={messages.openWorkItemActionLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
         selectWorkItemAccessibleLabel={
           messages.selectWorkItemAccessibleLabel
         }
-        workSelectedActionLabel={messages.workSelectedActionLabel}
       />
     </DispatchDetailSection>
   );
@@ -317,13 +315,11 @@ function DispatchResponseSection({
       <WorkItemActionGroup
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}
-        openWorkItemActionLabel={messages.openWorkItemActionLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
         selectWorkItemAccessibleLabel={
           messages.selectWorkItemAccessibleLabel
         }
-        workSelectedActionLabel={messages.workSelectedActionLabel}
       />
       <TraceActionGroup
         activeTraceID={activeTraceID}
@@ -359,13 +355,11 @@ function DispatchTraceSection({
       <WorkItemActionGroup
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}
-        openWorkItemActionLabel={messages.openWorkItemActionLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
         selectWorkItemAccessibleLabel={
           messages.selectWorkItemAccessibleLabel
         }
-        workSelectedActionLabel={messages.workSelectedActionLabel}
       />
       <TraceActionGroup
         activeTraceID={activeTraceID}

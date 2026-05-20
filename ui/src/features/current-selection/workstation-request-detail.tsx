@@ -1,3 +1,4 @@
+import { cn } from "../../lib/cn";
 import { formatWorkItemLabel } from "../../components/ui/formatters";
 import { formatDurationMillis } from "../../components/ui/formatters";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
@@ -221,14 +222,15 @@ function ConsumedWorkItemsSection({
             <button
               aria-label={messages.selectWorkItemLabel(workLabel)}
               aria-pressed={isSelected}
-              className={WORK_SELECTION_BUTTON_CLASS}
+              className={cn(
+                WORK_SELECTION_BUTTON_CLASS,
+                isSelected && "border-af-accent/35 bg-af-accent/10 text-af-accent",
+              )}
               key={workItem.work_id}
               onClick={() => onSelectWorkID?.(workItem.work_id)}
               type="button"
             >
-              {isSelected
-                ? messages.selectedWorkItemAction
-                : messages.openWorkItemAction(workLabel)}
+              {workLabel}
             </button>
           );
         })}

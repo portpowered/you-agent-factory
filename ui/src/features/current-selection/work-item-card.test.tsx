@@ -1796,7 +1796,6 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         name: "作業項目 Active Story を選択",
       }),
     ).toBeTruthy();
-    expect(within(dispatchCard).getByText("作業を選択中")).toBeTruthy();
     expect(within(dispatchCard).getByText("トレース ID")).toBeTruthy();
     expect(
       within(dispatchCard).getByRole("link", {
@@ -1878,8 +1877,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       name: "Select work item Active Story",
     });
     expect(selectedWorkButton).toBeTruthy();
-    expect(within(dispatchCard).getByText("Work selected")).toBeTruthy();
-    expect(selectedWorkButton.textContent).toContain("Work selected");
+    expect(selectedWorkButton.textContent).toContain("Active Story");
     expect(selectedWorkButton.className).toContain("text-on-foreground");
     expect(within(dispatchCard).getByText("Trace IDs")).toBeTruthy();
     const selectedTraceLink = within(dispatchCard).getByRole("link", {

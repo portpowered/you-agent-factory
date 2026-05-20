@@ -41,6 +41,8 @@ export interface CurrentSelectionDetailMessages {
   providerLabel: string;
   providerResponseUnavailable: string;
   providerSessionLabel: string;
+  collapseAction: string;
+  expandAction: string;
   expandAttemptAction: (attemptNumber: number) => string;
   expandRequestBodyAction: string;
   expandResponseBodyAction: string;
@@ -70,7 +72,6 @@ export interface CurrentSelectionDetailMessages {
   scriptResponseUnavailablePending: string;
   scriptResponseUnavailableSummary: string;
   selectWorkItemLabel: (workItemLabel: string) => string;
-  selectedWorkItemAction: string;
   startedAtLabel: string;
   stderrEmpty: string;
   stderrLabel: string;
@@ -97,7 +98,6 @@ export interface CurrentSelectionDetailMessages {
   workTypeLabel: string;
   workTypeUnavailable: string;
   workingDirectoryLabel: string;
-  openWorkItemAction: (workItemLabel: string) => string;
 }
 
 const stateNodeDetailFallbackMessages = {
@@ -179,6 +179,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    collapseAction: "Collapse",
+    expandAction: "Expand",
     expandAttemptAction: (attemptNumber: number) =>
       `Expand attempt ${attemptNumber}`,
     expandRequestBodyAction: "Expand request body",
@@ -215,7 +217,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
-    selectedWorkItemAction: "Work item selected",
     startedAtLabel: "Started at",
     stderrEmpty: "No stderr was recorded for this script response.",
     stderrLabel: "Stderr",
@@ -252,7 +253,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Workstation details are not available for this request.",
     workTypeUnavailable: "Unknown",
     workingDirectoryLabel: "Working directory",
-    openWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
   },
   ja: {
     ...stateNodeDetailFallbackMessages,
@@ -301,6 +301,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    collapseAction: "Collapse",
+    expandAction: "Expand",
     expandAttemptAction: (attemptNumber: number) =>
       `Expand attempt ${attemptNumber}`,
     expandRequestBodyAction: "Expand request body",
@@ -337,7 +339,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
-    selectedWorkItemAction: "Work item selected",
     startedAtLabel: "開始時刻",
     stderrEmpty: "No stderr was recorded for this script response.",
     stderrLabel: "Stderr",
@@ -374,7 +375,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Workstation details are not available for this request.",
     workTypeUnavailable: "알 수 없음",
     workingDirectoryLabel: "Working directory",
-    openWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
   },
   ko: {
     ...stateNodeDetailFallbackMessages,
@@ -423,6 +423,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    collapseAction: "Collapse",
+    expandAction: "Expand",
     expandAttemptAction: (attemptNumber: number) =>
       `Expand attempt ${attemptNumber}`,
     expandRequestBodyAction: "Expand request body",
@@ -459,7 +461,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
-    selectedWorkItemAction: "Work item selected",
     startedAtLabel: "시작 시각",
     stderrEmpty: "No stderr was recorded for this script response.",
     stderrLabel: "Stderr",
@@ -495,7 +496,6 @@ const currentSelectionDetailMessagesByLocale = {
     workstationUnavailable:
       "Workstation details are not available for this request.",
     workingDirectoryLabel: "Working directory",
-    openWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
   },
   "zh-CN": {
     attemptAriaLabel: (attemptNumber: number) => `推理尝试 ${attemptNumber}`,
@@ -536,6 +536,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerLabel: "提供方",
     providerResponseUnavailable: "此推理尝试没有可用的提供方响应文本。",
     providerSessionLabel: "Provider session",
+    collapseAction: "折叠",
+    expandAction: "展开",
     expandAttemptAction: (attemptNumber: number) => `展开尝试 ${attemptNumber}`,
     expandRequestBodyAction: "展开请求正文",
     expandResponseBodyAction: "展开响应正文",
@@ -571,7 +573,6 @@ const currentSelectionDetailMessagesByLocale = {
     scriptResponseUnavailableSummary: "此工作站请求没有可用的脚本响应详情。",
     selectWorkItemLabel: (workItemLabel: string) =>
       `选择工作项 ${workItemLabel}`,
-    selectedWorkItemAction: "已选中工作项",
     startedAtLabel: "开始时间",
     stderrEmpty: "此脚本响应没有记录 stderr。",
     stderrLabel: "标准错误",
@@ -610,7 +611,6 @@ const currentSelectionDetailMessagesByLocale = {
     workTypeLabel: "工作类型",
     workTypeUnavailable: "未知",
     workingDirectoryLabel: "工作目录",
-    openWorkItemAction: (workItemLabel: string) => `打开 ${workItemLabel}`,
   },
 } satisfies LocalizedMessages<CurrentSelectionDetailMessages>;
 
