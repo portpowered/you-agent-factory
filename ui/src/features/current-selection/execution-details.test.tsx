@@ -253,7 +253,11 @@ describe("InferenceAttemptsSection", () => {
     expect(within(section).getByText("Attempt 2")).toBeTruthy();
     expect(expandAttempt1.getAttribute("aria-expanded")).toBe("false");
     expect(expandAttempt2.getAttribute("aria-expanded")).toBe("false");
-    expect(within(section).getByText("Response time: 2026-04-08T12:00:03Z")).toBeTruthy();
+    expect(
+      within(section).getByText(
+        `Response time: ${formatLocalDateTime("2026-04-08T12:00:03Z", "Unavailable")}`,
+      ),
+    ).toBeTruthy();
     expect(within(section).getByText("Elapsed time: 740ms")).toBeTruthy();
     expect(
       within(section).queryByText("dispatch-review/inference-request/1"),

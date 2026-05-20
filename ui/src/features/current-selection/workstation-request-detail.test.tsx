@@ -465,7 +465,7 @@ describe("WorkstationRequestDetailCard", () => {
 
   it("renders request and response timestamps through the shared local-time formatter", () => {
     const requestTime = "2026-04-08T12:00:01Z";
-    const responseTime = "2026-04-08T12:00:02Z";
+    const responseTime = "2026-04-08T12:01:02Z";
 
     render(
       <WorkstationRequestDetailCard
@@ -486,9 +486,15 @@ describe("WorkstationRequestDetailCard", () => {
     const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
     const expectedRequestTime = formatLocalDateTime(requestTime, "Unavailable");
     const expectedResponseTime = formatLocalDateTime(responseTime, "Unavailable");
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    );
 
-    expect(inferenceAttempts.getAllByText(expectedRequestTime)).toHaveLength(2);
-    expect(inferenceAttempts.getAllByText(expectedResponseTime)).toHaveLength(2);
+    expect(inferenceAttempts.getAllByText(expectedRequestTime)).toHaveLength(1);
+    expect(inferenceAttempts.getAllByText(expectedResponseTime)).toHaveLength(1);
+    expect(
+      inferenceAttempts.getByText(`Response time: ${expectedResponseTime}`),
+    ).toBeTruthy();
     expect(inferenceAttempts.queryByText(requestTime)).toBeNull();
     expect(inferenceAttempts.queryByText(responseTime)).toBeNull();
   });
@@ -513,6 +519,9 @@ describe("WorkstationRequestDetailCard", () => {
     );
 
     const inferenceAttempts = within(screen.getByRole("region", { name: "推理尝试" }));
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "展开尝试 1" }),
+    );
 
     expect(inferenceAttempts.getAllByText("不可用")).toHaveLength(2);
     expect(inferenceAttempts.queryByText("not-a-date")).toBeNull();
