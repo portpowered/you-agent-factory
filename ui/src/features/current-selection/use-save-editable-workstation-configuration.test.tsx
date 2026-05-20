@@ -61,33 +61,39 @@ function createQueryClientWrapper() {
 function buildReadyEditableConfigurationState(): EditableWorkstationConfigurationState {
   return {
     draft: {
-      model: "gpt-5.5",
       prompt: "Review the story.",
-      promptFile: "prompts/review.md",
+      workerName: "reviewer",
     },
     hasValidationErrors: false,
     initialValues: {
-      isModelEditable: true,
-      model: "gpt-5.5",
-      modelEditBlockedReason: null,
       prompt: "Review the story.",
-      promptFile: "prompts/review.md",
       workerName: "reviewer",
+      workerOptions: ["reviewer"],
       workstationName: "Review",
     },
     isDirty: true,
-    isModelEditable: true,
     markChangesSaved: vi.fn(),
-    onModelChange: vi.fn(),
     onPromptChange: vi.fn(),
-    onPromptFileChange: vi.fn(),
+    onWorkerChange: vi.fn(),
     overwriteFieldNames: [],
     pendingFactoryDefinition: {
       name: "Current Factory",
       workers: [],
       workstations: [],
     },
+    promptHelpState: {
+      contract: {
+        availableVariables: [],
+        inputCount: 0,
+        unavailableAccessPatterns: [],
+      },
+      status: "ready",
+    },
     status: "ready",
     validationErrors: {},
+    workerOptionsState: {
+      options: ["reviewer"],
+      status: "ready",
+    },
   };
 }

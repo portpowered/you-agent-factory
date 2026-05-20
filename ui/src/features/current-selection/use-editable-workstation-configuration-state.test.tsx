@@ -5,6 +5,7 @@ import type { CanonicalFactoryDefinition } from "../current-factory-definition";
 import { useCurrentEditableFactoryDefinition } from "../current-factory-definition";
 import type { DashboardSelection } from "./types";
 import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
+import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 
 vi.mock("../current-factory-definition", async () => {
   const actual = await vi.importActual("../current-factory-definition");
@@ -14,6 +15,10 @@ vi.mock("../current-factory-definition", async () => {
     useCurrentEditableFactoryDefinition: vi.fn(),
   };
 });
+
+vi.mock("./useCurrentWorkstationPromptTemplateContract", () => ({
+  useCurrentWorkstationPromptTemplateContract: vi.fn(),
+}));
 
 const selectedNode =
   semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review;
@@ -26,6 +31,9 @@ describe("useEditableWorkstationConfigurationState", () => {
   beforeEach(() => {
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+    );
+    vi.mocked(useCurrentWorkstationPromptTemplateContract).mockReturnValue(
+      buildPromptTemplateContractResult(),
     );
   });
 
@@ -163,6 +171,9 @@ describe("useEditableWorkstationConfigurationState", () => {
 
     expect(result.current).toMatchObject({
       hasValidationErrors: true,
+      promptHelpState: {
+        status: "ready",
+      },
       status: "ready",
       validationErrors: {
         workerName:
@@ -173,6 +184,34 @@ describe("useEditableWorkstationConfigurationState", () => {
           "The selected workstation references a worker that is no longer available in the current factory definition. Reload current selection and choose another worker.",
         status: "error",
       },
+    });
+  });
+
+  it("maps prompt variable help query states into the editable workstation form state", async () => {
+    vi.mocked(useCurrentWorkstationPromptTemplateContract).mockReturnValue({
+      data: undefined,
+      error: {
+        message: "Current named factory workstation not found.",
+      },
+      isError: true,
+      isPending: false,
+      status: "error",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      promptHelpState: {
+        errorMessage: "Current named factory workstation not found.",
+        status: "error",
+      },
+      status: "ready",
     });
   });
 });
@@ -217,4 +256,26 @@ function buildEditableFactoryDefinition(overrides?: {
     ],
     workTypes: [],
   };
+}
+
+function buildPromptTemplateContractResult() {
+  return {
+    data: {
+      availableVariables: [
+        {
+          category: "ROOT",
+          description: "The current work item identifier.",
+          example: "{{ .WorkID }}",
+          path: ".WorkID",
+        },
+      ],
+      inputCount: 1,
+      unavailableAccessPatterns: [],
+    },
+    error: null,
+    isError: false,
+    isPending: false,
+    isSuccess: true,
+    status: "success",
+  } as never;
 }

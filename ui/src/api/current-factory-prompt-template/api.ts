@@ -1,5 +1,6 @@
-import type { components } from "../generated/openapi";
 import { factoryAPIURL } from "../baseUrl";
+import type { components } from "../generated/openapi";
+import { promptTemplateAPIErrorMessages } from "./messages";
 
 export type PromptTemplateContract =
   components["schemas"]["PromptTemplateContract"];
@@ -55,11 +56,10 @@ export async function getCurrentFactoryWorkstationPromptTemplateContract(
     `/factory/~current/workstations/${encodeURIComponent(workstationName)}/prompt-template-contract`,
     {
       emptyEnvironmentMessage:
-        "Current factory prompt-template help is unavailable in this environment.",
+        promptTemplateAPIErrorMessages.contractEmptyEnvironment,
       invalidResponseMessage:
-        "The current factory prompt-template contract API returned an invalid response.",
-      networkMessage:
-        "The dashboard could not reach the current factory prompt-template contract API.",
+        promptTemplateAPIErrorMessages.contractInvalidResponse,
+      networkMessage: promptTemplateAPIErrorMessages.contractNetwork,
       options,
     },
   );
@@ -75,12 +75,11 @@ export async function validateCurrentFactoryWorkstationPromptTemplate(
     {
       body: JSON.stringify({ prompt }),
       emptyEnvironmentMessage:
-        "Current factory prompt-template validation is unavailable in this environment.",
+        promptTemplateAPIErrorMessages.validationEmptyEnvironment,
       invalidResponseMessage:
-        "The current factory prompt-template validation API returned an invalid response.",
+        promptTemplateAPIErrorMessages.validationInvalidResponse,
       method: "POST",
-      networkMessage:
-        "The dashboard could not reach the current factory prompt-template validation API.",
+      networkMessage: promptTemplateAPIErrorMessages.validationNetwork,
       options,
     },
   );
@@ -129,7 +128,8 @@ async function fetchPromptTemplateJSON<T>(
   if (!response.ok) {
     const errorBody = asAPIErrorResponse(responseBody);
     throw new CurrentFactoryPromptTemplateAPIError(
-      errorBody?.message ?? "The current factory prompt-template API rejected the request.",
+      errorBody?.message ??
+        promptTemplateAPIErrorMessages.genericRejectedRequest,
       {
         code: normalizePromptTemplateAPIErrorCode(errorBody?.code),
         responseBody,
@@ -186,6 +186,7 @@ function normalizePromptTemplateAPIErrorCode(
     case "NOT_FOUND":
       return code;
     default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INTERNAL_ERROR";
   }
 }

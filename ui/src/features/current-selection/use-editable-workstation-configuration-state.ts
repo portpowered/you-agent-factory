@@ -19,6 +19,7 @@ import {
   type WorkstationDetailMessages,
 } from "./messages";
 import type { DashboardSelection } from "./types";
+import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;
@@ -34,6 +35,10 @@ export function useEditableWorkstationConfigurationState(
 ): EditableWorkstationConfigurationState | undefined {
   const messages = getWorkstationDetailMessages(locale);
   const editableDefinition = useCurrentEditableFactoryDefinition(
+    selection?.kind === "node" && selectedNode != null,
+  );
+  const promptTemplateContract = useCurrentWorkstationPromptTemplateContract(
+    selectedNode?.workstation_name,
     selection?.kind === "node" && selectedNode != null,
   );
   const { selectedEditableValues, sessionState, setSessionState } =
@@ -64,6 +69,11 @@ export function useEditableWorkstationConfigurationState(
       status: "empty",
     };
   }
+
+  const promptHelpState = resolvePromptHelpState(
+    promptTemplateContract,
+    messages,
+  );
 
   const resolvedValidationErrors = validateEditableWorkstationDraft(
     sessionState.draft,
@@ -131,6 +141,7 @@ export function useEditableWorkstationConfigurationState(
       sessionState.latestDefinitionDraft,
     ),
     pendingFactoryDefinition,
+    promptHelpState,
     status: "ready",
     validationErrors: resolvedValidationErrors,
     workerOptionsState: resolveWorkerOptionsState(
@@ -255,6 +266,52 @@ function resolveWorkerOptionsState(
   return {
     options: selectedEditableValues.workerOptions,
     status: "ready",
+  };
+}
+
+function resolvePromptHelpState(
+  promptTemplateContract: ReturnType<
+    typeof useCurrentWorkstationPromptTemplateContract
+  >,
+  messages: Pick<
+    WorkstationDetailMessages,
+    | "editableConfigurationPromptHelpEmpty"
+    | "editableConfigurationPromptHelpFallbackError"
+  >,
+) {
+  if (promptTemplateContract.isPending) {
+    return { status: "loading" as const };
+  }
+
+  if (promptTemplateContract.isError) {
+    return {
+      errorMessage:
+        promptTemplateContract.error.message ||
+        messages.editableConfigurationPromptHelpFallbackError,
+      status: "error" as const,
+    };
+  }
+
+  if (!promptTemplateContract.data) {
+    return {
+      message: messages.editableConfigurationPromptHelpEmpty,
+      status: "empty" as const,
+    };
+  }
+
+  if (
+    promptTemplateContract.data.availableVariables.length === 0 &&
+    promptTemplateContract.data.unavailableAccessPatterns.length === 0
+  ) {
+    return {
+      message: messages.editableConfigurationPromptHelpEmpty,
+      status: "empty" as const,
+    };
+  }
+
+  return {
+    contract: promptTemplateContract.data,
+    status: "ready" as const,
   };
 }
 

@@ -19,9 +19,32 @@ function editableConfigurationSection() {
 
 function buildReadyEditableConfigurationState(overrides?: {
   prompt?: string;
+  promptHelpState?:
+    | {
+        contract: {
+          availableVariables: Array<{
+            category: string;
+            description: string;
+            example: string;
+            path: string;
+          }>;
+          inputCount: number;
+          unavailableAccessPatterns: Array<{
+            example: string;
+            path: string;
+            reason: string;
+          }>;
+        };
+        status: "ready";
+      }
+    | { message: string; status: "empty" }
+    | { errorMessage: string; status: "error" }
+    | { status: "loading" };
   validationErrors?: { prompt?: string; workerName?: string };
   workerName?: string;
-  workerOptionsState?: { status: "ready"; options: string[] } | { message: string; status: "empty" | "error" };
+  workerOptionsState?:
+    | { status: "ready"; options: string[] }
+    | { message: string; status: "empty" | "error" };
 }) {
   return {
     draft: {
@@ -30,7 +53,8 @@ function buildReadyEditableConfigurationState(overrides?: {
       workerName: overrides?.workerName ?? "reviewer",
     },
     hasValidationErrors: Boolean(
-      overrides?.validationErrors?.prompt || overrides?.validationErrors?.workerName,
+      overrides?.validationErrors?.prompt ||
+        overrides?.validationErrors?.workerName,
     ),
     initialValues: {
       prompt: "Review the latest story changes before approval.",
@@ -48,13 +72,39 @@ function buildReadyEditableConfigurationState(overrides?: {
     onWorkerChange: vi.fn(),
     overwriteFieldNames: [],
     pendingFactoryDefinition: null,
+    promptHelpState: overrides?.promptHelpState ?? {
+      contract: {
+        availableVariables: [
+          {
+            category: "ROOT",
+            description: "The current work item identifier.",
+            example: "{{ .WorkID }}",
+            path: ".WorkID",
+          },
+          {
+            category: "INPUT",
+            description: "Payload for the first authored input.",
+            example: "{{ (index .Inputs 0).Payload }}",
+            path: ".Inputs[0].Payload",
+          },
+        ],
+        inputCount: 1,
+        unavailableAccessPatterns: [
+          {
+            example: "{{ (index .Inputs 1).Payload }}",
+            path: ".Inputs[1].Payload",
+            reason: "Only input 0 is available for this workstation.",
+          },
+        ],
+      },
+      status: "ready" as const,
+    },
     status: "ready" as const,
     validationErrors: overrides?.validationErrors ?? {},
-    workerOptionsState:
-      overrides?.workerOptionsState ?? {
-        options: ["reviewer", "planner"],
-        status: "ready" as const,
-      },
+    workerOptionsState: overrides?.workerOptionsState ?? {
+      options: ["reviewer", "planner"],
+      status: "ready" as const,
+    },
   };
 }
 
@@ -192,6 +242,117 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     expect(onWorkerChange).toHaveBeenCalledWith("planner");
     expect(onPromptChange).toHaveBeenCalledWith("Updated prompt");
+  });
+
+  it("shows prompt variable help inline from the current workstation contract", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open prompt variable help" }),
+    );
+
+    expect(
+      screen.getByText("This workstation exposes 1 authored input."),
+    ).toBeTruthy();
+    expect(screen.getByText("Available variables")).toBeTruthy();
+    expect(screen.getByText(".WorkID")).toBeTruthy();
+    expect(screen.getByText("{{ .WorkID }}")).toBeTruthy();
+    expect(screen.getByText("Unavailable access patterns")).toBeTruthy();
+    expect(screen.getByText(".Inputs[1].Payload")).toBeTruthy();
+    expect(
+      screen.getByText("Only input 0 is available for this workstation."),
+    ).toBeTruthy();
+  });
+
+  it("renders loading, empty, and error prompt variable help states explicitly", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          promptHelpState: { status: "loading" },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open prompt variable help" }),
+    );
+
+    expect(
+      screen.getByText(
+        "Loading available prompt variables for this workstation.",
+      ),
+    ).toBeTruthy();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          promptHelpState: {
+            message:
+              "No prompt variable help is available for this workstation.",
+            status: "empty",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "No prompt variable help is available for this workstation.",
+      ),
+    ).toBeTruthy();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          promptHelpState: {
+            errorMessage: "Current named factory workstation not found.",
+            status: "error",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Prompt variable help unavailable. Current named factory workstation not found.",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders explicit worker empty and stale-selection states", () => {
