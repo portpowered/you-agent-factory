@@ -95,6 +95,30 @@ const _markdownReadyWorkstationRequest: DashboardWorkstationRequest = {
 const editableConfigurationFactoryDefinition =
   buildEditableConfigurationFactoryDefinition();
 const editableConfigurationDocument = buildEditableConfigurationDocument();
+const promptTemplateContractResponse = {
+  availableVariables: [
+    {
+      category: "ROOT",
+      description: "The current work item identifier.",
+      example: "{{ .WorkID }}",
+      path: ".WorkID",
+    },
+    {
+      category: "INPUT",
+      description: "Payload for the first authored input.",
+      example: "{{ (index .Inputs 0).Payload }}",
+      path: ".Inputs[0].Payload",
+    },
+  ],
+  inputCount: 1,
+  unavailableAccessPatterns: [
+    {
+      example: "{{ (index .Inputs 1).Payload }}",
+      path: ".Inputs[1].Payload",
+      reason: "Only input 0 is available for this workstation.",
+    },
+  ],
+};
 
 interface WorkOutcomeCounts {
   completed: number;
@@ -319,6 +343,44 @@ function submittedFactoryDefinitionBody(init?: RequestInit): FactoryValue {
   );
 }
 
+function promptTemplateValidationResponse(init?: RequestInit) {
+  if (typeof init?.body !== "string") {
+    return {
+      diagnostics: [],
+      valid: true,
+    };
+  }
+
+  const payload = JSON.parse(init.body) as { prompt?: string };
+  if (payload.prompt === "Use {{ .WorkID }}.") {
+    return {
+      diagnostics: [],
+      valid: true,
+    };
+  }
+
+  return {
+    diagnostics: [
+      {
+        endOffset: 33,
+        kind: "UNAVAILABLE_VARIABLE",
+        message: "Only input 0 is available.",
+        path: ".Inputs[1]",
+        sourceText: "(index .Inputs 1)",
+        startOffset: 7,
+      },
+    ],
+    valid: false,
+  };
+}
+
+function validPromptTemplateValidationResponse() {
+  return {
+    diagnostics: [],
+    valid: true,
+  };
+}
+
 function editableConfigurationSection(
   currentSelection: HTMLElement,
 ): HTMLElement {
@@ -401,6 +463,61 @@ async function expectEditableConfigurationBrowserFlow(
   await expect(
     currentSelectionScope.getByRole("button", { name: "Save changes" }),
   ).toBeDisabled();
+}
+
+async function expectPromptHintBrowserFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+
+  await userEvent.click(
+    await canvas.findByRole("button", { name: "Select Review workstation" }),
+  );
+
+  const currentSelection = currentSelectionCard(canvasElement);
+  const section = editableConfigurationSection(currentSelection);
+  const sectionScope = within(section);
+
+  await userEvent.click(
+    sectionScope.getByRole("button", {
+      name: "Expand editable configuration",
+    }),
+  );
+
+  const promptField = await sectionScope.findByRole("textbox", {
+    name: "Prompt",
+  });
+  const helpButton = sectionScope.getByRole("button", {
+    name: "Open prompt variable help",
+  });
+  const saveButton = within(currentSelection).getByRole("button", {
+    name: "Save changes",
+  });
+
+  helpButton.focus();
+  await userEvent.keyboard("{Enter}");
+  await expect(
+    await sectionScope.findByText("This workstation exposes 1 authored input."),
+  ).toBeVisible();
+  await expect(sectionScope.getByText(".WorkID")).toBeVisible();
+  await expect(sectionScope.getByText("{{ .WorkID }}")).toBeVisible();
+  await expect(sectionScope.getByText(".Inputs[1].Payload")).toBeVisible();
+
+  promptField.focus();
+  await userEvent.clear(promptField);
+  await userEvent.type(promptField, "Use {{ (index .Inputs 1).Payload }}.");
+
+  await expect(
+    await sectionScope.findByText("Prompt diagnostics"),
+  ).toBeVisible();
+  await expect(sectionScope.getByText(".Inputs[1]")).toBeVisible();
+  await expect(sectionScope.getAllByText("(index .Inputs 1)")[0]).toBeVisible();
+  await expect(saveButton).toBeDisabled();
+
+  const diagnosticUnderline = section.querySelector(
+    "mark.decoration-wavy",
+  ) as HTMLElement | null;
+  expect(diagnosticUnderline?.textContent).toContain("(index .Inputs 1)");
 }
 
 function expectNoPageHorizontalOverflow(canvasElement: HTMLElement): void {
@@ -1102,6 +1219,14 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
         },
         {
           method: "POST",
+          path: "/factory/~current/workstations/Review/prompt-template-validation",
+          response: {
+            body: validPromptTemplateValidationResponse(),
+            status: 200,
+          },
+        },
+        {
+          method: "POST",
           path: "/factory",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
             body: submittedFactoryDefinitionBody(init),
@@ -1136,6 +1261,14 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
         },
         {
           method: "POST",
+          path: "/factory/~current/workstations/Review/prompt-template-validation",
+          response: {
+            body: validPromptTemplateValidationResponse(),
+            status: 200,
+          },
+        },
+        {
+          method: "POST",
           path: "/factory",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
             body: submittedFactoryDefinitionBody(init),
@@ -1154,6 +1287,56 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
   tags: ["test"],
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await expectEditableConfigurationBrowserFlow(canvasElement);
+    expectNoPageHorizontalOverflow(canvasElement);
+  },
+};
+
+export const CurrentSelectionPromptHintVerification = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory/~current",
+          response: {
+            body: editableConfigurationFactoryDefinition,
+          },
+        },
+        {
+          method: "GET",
+          path: "/factory/~current/workstations/Review/prompt-template-contract",
+          response: {
+            body: promptTemplateContractResponse,
+          },
+        },
+        {
+          method: "POST",
+          path: "/factory/~current/workstations/Review/prompt-template-validation",
+          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
+            body: promptTemplateValidationResponse(init),
+            status: 200,
+          }),
+        },
+        {
+          method: "POST",
+          path: "/factory",
+          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
+            body: submittedFactoryBody(init),
+            status: 201,
+          }),
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "1280px" }}>
+      <App />
+    </div>
+  ),
+  tags: ["test"],
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectPromptHintBrowserFlow(canvasElement);
     expectNoPageHorizontalOverflow(canvasElement);
   },
 };

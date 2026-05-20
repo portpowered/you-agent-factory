@@ -143,6 +143,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
           .getAttribute("disabled"),
       ).toBeNull();
     });
+    await waitFor(() => {
+      expect(screen.queryByText("Prompt diagnostics")).toBeNull();
+    });
   });
 
   it("confirms before saving and refreshes the form to the saved workstation values", async () => {
