@@ -1,28 +1,93 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
+  cleanup,
   fireEvent,
+  render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import {
-  MockEventSource,
-  registerAppDashboardTestLifecycle,
-  removeTraceIDsFromSnapshot,
-  renderApp,
-  requireValue,
-} from "./App.dashboard-test-harness";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { App } from "./App";
 import type {
   DashboardSnapshot,
   DashboardTrace,
+  DashboardWorkItemRef,
+  DashboardWorkstationRequest,
 } from "./api/dashboard";
 import {
   buildDashboardSnapshotFixture,
   dashboardWorkstationRequestFixtures,
   mediumBranchingDashboardTopology,
 } from "./components/dashboard/fixtures";
+import { installDashboardBrowserTestShims } from "./components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
+import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
+import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
+import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
+import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
+import {
+  createDefaultDashboardStreamState,
+  useDashboardStreamStore,
+} from "./features/dashboard/state/dashboardStreamStore";
+import { useExportDialogStore } from "./features/export/state/exportDialogStore";
+import type { WorldState } from "./features/timeline/state/factoryTimelineStore";
+import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
+
+vi.mock("./features/current-factory-definition", async () => {
+  const actual = await vi.importActual("./features/current-factory-definition");
+
+  return {
+    ...actual,
+    useCurrentEditableFactoryDefinition: vi.fn(),
+  };
+});
+
+class MockEventSource {
+  public static instances: MockEventSource[] = [];
+
+  public onerror: ((event: Event) => void) | null = null;
+  public onopen: ((event: Event) => void) | null = null;
+
+  private readonly listeners = new Map<string, EventListener[]>();
+
+  constructor(public readonly url: string) {
+    MockEventSource.instances.push(this);
+  }
+
+  public addEventListener(type: string, listener: EventListener): void {
+    const existing = this.listeners.get(type) ?? [];
+    existing.push(listener);
+    this.listeners.set(type, existing);
+  }
+
+  public close(): void {}
+
+  public emit(type: string, data: unknown): void {
+    if (type === "snapshot") {
+      const state = useFactoryTimelineStore.getState();
+      const tracesByWorkID =
+        state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {};
+      seedTimelineSnapshot(data as DashboardSnapshot, tracesByWorkID);
+    }
+
+    const event = new MessageEvent(type, {
+      data: JSON.stringify(data),
+    });
+
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener(event);
+    }
+  }
+}
+
+interface RenderAppOptions {
+  snapshot: DashboardSnapshot;
+  timelineSnapshots?: DashboardSnapshot[];
+  traceFixtures?: Record<string, DashboardTrace>;
+  workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
+}
 
 const activeWorkID = "work-active-story";
 const completedWorkID = "work-complete";
@@ -207,6 +272,133 @@ const failedTraceSnapshot: DashboardTrace = {
   ],
 };
 
+const queryClients: QueryClient[] = [];
+let restoreBrowserTestShims: (() => void) | null = null;
+
+function timelineSnapshot(
+  snapshot: DashboardSnapshot,
+  tracesByWorkID: Record<string, DashboardTrace> = {},
+  workstationRequestsByDispatchID: Record<
+    string,
+    DashboardWorkstationRequest
+  > = {},
+): WorldState {
+  return {
+    ...snapshot,
+    relationsByWorkID: {},
+    tracesByWorkID,
+    workstationRequestsByDispatchID,
+    workRequestsByID: {},
+  };
+}
+
+function seedTimelineSnapshot(
+  snapshot: DashboardSnapshot,
+  tracesByWorkID: Record<string, DashboardTrace> = {},
+  workstationRequestsByDispatchID: Record<
+    string,
+    DashboardWorkstationRequest
+  > = {},
+): void {
+  useFactoryTimelineStore.setState({
+    events: [],
+    latestTick: snapshot.tick_count,
+    mode: "current",
+    receivedEventIDs: [],
+    selectedTick: snapshot.tick_count,
+    worldViewCache: {
+      [snapshot.tick_count]: timelineSnapshot(
+        snapshot,
+        tracesByWorkID,
+        workstationRequestsByDispatchID,
+      ),
+    },
+  });
+}
+
+function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
+  const worldViewCache = Object.fromEntries(
+    snapshots.map(
+      (snapshot) =>
+        [
+          snapshot.tick_count,
+          timelineSnapshot(snapshot) satisfies WorldState,
+        ] as const,
+    ),
+  );
+  const latestTick = Math.max(
+    ...snapshots.map((snapshot) => snapshot.tick_count),
+  );
+
+  useFactoryTimelineStore.setState({
+    events: [],
+    latestTick,
+    mode: "current",
+    receivedEventIDs: [],
+    selectedTick: latestTick,
+    worldViewCache,
+  });
+}
+
+function renderApp({
+  snapshot,
+  timelineSnapshots,
+  traceFixtures = {},
+  workstationRequestsByDispatchID = {},
+}: RenderAppOptions) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: Infinity,
+        retry: false,
+      },
+    },
+  });
+  queryClients.push(queryClient);
+
+  const fetchMock = vi
+    .fn()
+    .mockImplementation(async (input: RequestInfo | URL) => {
+      const path =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? `${input.pathname}${input.search}`
+            : input.url;
+
+      throw new Error(`unexpected fetch for ${path}`);
+    });
+
+  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("EventSource", MockEventSource);
+  reloadDashboardLayoutFromStorage();
+  if (timelineSnapshots) {
+    seedTimelineSnapshots(timelineSnapshots);
+  } else {
+    seedTimelineSnapshot(
+      snapshot,
+      traceFixtures,
+      workstationRequestsByDispatchID,
+    );
+  }
+
+  const result = render(
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>,
+  );
+
+  return { ...result, fetchMock };
+}
+
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
 function getDispatchHistoryCard(
   container: HTMLElement,
   dispatchId: string,
@@ -233,17 +425,6 @@ function expandDispatchAttemptSection(
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
 
   return section;
-}
-
-function expandInferenceBody(section: HTMLElement, title: string): HTMLElement {
-  const body = within(section).getByRole("region", { name: title });
-  const toggle = within(body).getByRole("button", { name: "Expand" });
-
-  expect(toggle.getAttribute("aria-expanded")).toBe("false");
-  fireEvent.click(toggle);
-  expect(toggle.getAttribute("aria-expanded")).toBe("true");
-
-  return body;
 }
 
 function expectDefinitionValue(
@@ -284,6 +465,73 @@ function getActiveStorySelectionButton(): HTMLElement {
   return activeStoryButton;
 }
 
+function removeTraceIDFromWorkItem(
+  workItem: DashboardWorkItemRef,
+): DashboardWorkItemRef {
+  const withoutTraceID: DashboardWorkItemRef = { work_id: workItem.work_id };
+  if (workItem.display_name) {
+    withoutTraceID.display_name = workItem.display_name;
+  }
+  if (workItem.work_type_id) {
+    withoutTraceID.work_type_id = workItem.work_type_id;
+  }
+  return withoutTraceID;
+}
+
+function removeTraceIDsFromSnapshot(
+  snapshot: DashboardSnapshot,
+): DashboardSnapshot {
+  return {
+    ...snapshot,
+    runtime: {
+      ...snapshot.runtime,
+      active_executions_by_dispatch_id: Object.fromEntries(
+        Object.entries(
+          snapshot.runtime.active_executions_by_dispatch_id ?? {},
+        ).map(([dispatchID, execution]) => [
+          dispatchID,
+          {
+            ...execution,
+            trace_ids: [],
+            work_items: execution.work_items?.map(removeTraceIDFromWorkItem),
+          },
+        ]),
+      ),
+      current_work_items_by_place_id: Object.fromEntries(
+        Object.entries(
+          snapshot.runtime.current_work_items_by_place_id ?? {},
+        ).map(([placeID, workItems]) => [
+          placeID,
+          workItems.map(removeTraceIDFromWorkItem),
+        ]),
+      ),
+      session: {
+        ...snapshot.runtime.session,
+        provider_sessions: snapshot.runtime.session.provider_sessions?.map(
+          (attempt) => ({
+            ...attempt,
+            work_items: attempt.work_items?.map(removeTraceIDFromWorkItem),
+          }),
+        ),
+      },
+      workstation_activity_by_node_id: Object.fromEntries(
+        Object.entries(
+          snapshot.runtime.workstation_activity_by_node_id ?? {},
+        ).map(([nodeID, activity]) => [
+          nodeID,
+          {
+            ...activity,
+            active_work_items: activity.active_work_items?.map(
+              removeTraceIDFromWorkItem,
+            ),
+            trace_ids: [],
+          },
+        ]),
+      ),
+    },
+  };
+}
+
 function resizeDashboardViewport(width: number): void {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
@@ -299,7 +547,59 @@ function resizeDashboardViewport(width: number): void {
 }
 
 describe("App current selection", () => {
-  registerAppDashboardTestLifecycle();
+  beforeEach(() => {
+    window.localStorage.clear();
+    MockEventSource.instances = [];
+    restoreBrowserTestShims = installDashboardBrowserTestShims();
+    resetSelectionHistoryStore();
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+      data: undefined,
+      error: null,
+      failureCount: 0,
+      failureReason: null,
+      fetchStatus: "idle",
+      isError: false,
+      isFetched: false,
+      isFetchedAfterMount: false,
+      isFetching: false,
+      isInitialLoading: false,
+      isLoading: false,
+      isLoadingError: false,
+      isPaused: false,
+      isPending: true,
+      isPlaceholderData: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isStale: true,
+      isSuccess: false,
+      promise: Promise.resolve(undefined),
+      refetch: vi.fn(),
+      status: "pending",
+    } as never);
+  });
+
+  afterEach(() => {
+    for (const queryClient of queryClients.splice(0)) {
+      queryClient.clear();
+    }
+    cleanup();
+    useDashboardBentoStore.setState({
+      refreshToken: 0,
+      selectedTraceID: null,
+    });
+    useExportDialogStore.setState({
+      isExportDialogOpen: false,
+    });
+    useDashboardStreamStore.setState({
+      streamState: createDefaultDashboardStreamState(),
+    });
+    useFactoryTimelineStore.getState().reset();
+    resetSelectionHistoryStore();
+    restoreBrowserTestShims?.();
+    restoreBrowserTestShims = null;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it("renders a trace drill-down for a selected work item", async () => {
     renderApp({
@@ -446,51 +746,15 @@ describe("App current selection", () => {
         "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
-    expect(
-      within(readyRequestDetails).queryByText(
-        "Review the active story and decide whether it is ready.",
-      ),
-    ).toBeNull();
-    expect(
-      within(readyAttempt).queryByText(
-        "Retry the review with the latest context.",
-      ),
-    ).toBeNull();
-    const readyRequestBody = expandInferenceBody(readyAttempt, "Request body");
-    const readyResponseBody = within(readyAttempt).getByRole("region", {
-      name: "Response body",
-    });
-    expect(
-      within(readyResponseBody).queryByText("Ready for the next workstation."),
-    ).toBeNull();
-    expect(
-      within(readyRequestBody).getByText(
-        "Retry the review with the latest context.",
-      ),
-    ).toBeTruthy();
-    expect(
-      within(readyResponseBody)
-        .getByRole("button", { name: "Expand" })
-        .getAttribute("aria-expanded"),
-    ).toBe("false");
-    fireEvent.click(
-      within(readyResponseBody).getByRole("button", { name: "Expand" }),
-    );
-    expect(
-      within(readyResponseBody).getByText("Ready for the next workstation."),
-    ).toBeTruthy();
-    expect(
-      within(readyAttempt).getByText(
-        "codex / session_id / dispatch-review-ready/session/1",
-      ),
-    ).toBeTruthy();
+    expect(within(readyRequestDetails).queryByText(
+      "Review the active story and decide whether it is ready.",
+    )).toBeNull();
+    expect(within(readyAttempt).getByText("Retry the review with the latest context.")).toBeTruthy();
+    expect(within(readyAttempt).getByText("Ready for the next workstation.")).toBeTruthy();
+    expect(within(readyAttempt).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();
     expect(within(readyAttempt).getByText("gpt-5.4")).toBeTruthy();
     expect(within(readyAttempt).getByText("C:\\work\\portos")).toBeTruthy();
-    expect(
-      within(readyAttempt).getByText(
-        "C:\\work\\portos\\.worktrees\\active-story",
-      ),
-    ).toBeTruthy();
+    expect(within(readyAttempt).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();
     expect(
       within(readyRequestDetails).queryByText("Provider", { selector: "dt" }),
     ).toBeNull();
@@ -519,27 +783,16 @@ describe("App current selection", () => {
       rejectedCard,
       "Inference attempts",
     );
-    const rejectedAttempt = within(rejectedInferenceAttempts).getByRole(
-      "article",
-      {
-        name: "Inference attempt 1",
-      },
-    );
-    const rejectedRequestBody = expandInferenceBody(
-      rejectedAttempt,
-      "Request body",
-    );
-    const rejectedResponseBody = expandInferenceBody(
-      rejectedAttempt,
-      "Response body",
-    );
+    const rejectedAttempt = within(rejectedInferenceAttempts).getByRole("article", {
+      name: "Inference attempt 1",
+    });
     expect(
-      within(rejectedRequestBody).getByText(
+      within(rejectedAttempt).getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeTruthy();
     expect(
-      within(rejectedResponseBody).getByText(
+      within(rejectedAttempt).getByText(
         "The active story needs revision before it can continue.",
       ),
     ).toBeTruthy();
@@ -555,12 +808,9 @@ describe("App current selection", () => {
       erroredCard,
       "Inference attempts",
     );
-    const erroredAttempt = within(erroredInferenceAttempts).getByRole(
-      "article",
-      {
-        name: "Inference attempt 1",
-      },
-    );
+    const erroredAttempt = within(erroredInferenceAttempts).getByRole("article", {
+      name: "Inference attempt 1",
+    });
     expect(
       within(erroredCard).getByText(
         "Provider rate limit exceeded while reviewing the story.",
@@ -583,13 +833,8 @@ describe("App current selection", () => {
       scriptSuccessCard,
       "Script attempts",
     );
-    expect(
-      within(scriptSuccessAttempts).getAllByText("script-tool").length,
-    ).toBeGreaterThan(0);
-    expect(
-      within(scriptSuccessAttempts).getAllByText("script success stdout")
-        .length,
-    ).toBeGreaterThan(0);
+    expect(within(scriptSuccessAttempts).getAllByText("script-tool").length).toBeGreaterThan(0);
+    expect(within(scriptSuccessAttempts).getAllByText("script success stdout").length).toBeGreaterThan(0);
     expect(
       within(scriptSuccessCard).getAllByText("SUCCEEDED").length,
     ).toBeGreaterThan(0);
@@ -967,7 +1212,33 @@ describe("App current selection", () => {
 });
 
 describe("App current selection layout", () => {
-  registerAppDashboardTestLifecycle({ resetSelectionHistory: false });
+  beforeEach(() => {
+    window.localStorage.clear();
+    MockEventSource.instances = [];
+    restoreBrowserTestShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    for (const queryClient of queryClients.splice(0)) {
+      queryClient.clear();
+    }
+    cleanup();
+    useDashboardBentoStore.setState({
+      refreshToken: 0,
+      selectedTraceID: null,
+    });
+    useExportDialogStore.setState({
+      isExportDialogOpen: false,
+    });
+    useDashboardStreamStore.setState({
+      streamState: createDefaultDashboardStreamState(),
+    });
+    useFactoryTimelineStore.getState().reset();
+    restoreBrowserTestShims?.();
+    restoreBrowserTestShims = null;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it("keeps selection detail out of the workflow graph inspector layer", async () => {
     renderApp({
@@ -1315,63 +1586,62 @@ describe("App current selection layout", () => {
     ).toBeNull();
   });
 
-  it.each([1366, 1024, 640])(
-    "keeps the widget cards readable at %ipx viewport width",
-    async (viewportWidth) => {
-      resizeDashboardViewport(viewportWidth);
-      renderApp({
-        snapshot: terminalSnapshot,
-        traceFixtures: {
-          [activeWorkID]: reworkTraceSnapshot,
-        },
-      });
+  it.each([
+    1366, 1024, 640,
+  ])("keeps the widget cards readable at %ipx viewport width", async (viewportWidth) => {
+    resizeDashboardViewport(viewportWidth);
+    renderApp({
+      snapshot: terminalSnapshot,
+      traceFixtures: {
+        [activeWorkID]: reworkTraceSnapshot,
+      },
+    });
 
-      fireEvent.click(getActiveStorySelectionButton());
+    fireEvent.click(getActiveStorySelectionButton());
 
-      const dashboardGrid = screen.getByRole("region", {
-        name: "Infinite You bento board",
-      });
+    const dashboardGrid = screen.getByRole("region", {
+      name: "Infinite You bento board",
+    });
 
-      const widgets = within(dashboardGrid).getAllByRole("article");
-      const widgetNames = widgets.map(
-        (widget) => widget.getAttribute("aria-label") ?? "",
-      );
+    const widgets = within(dashboardGrid).getAllByRole("article");
+    const widgetNames = widgets.map(
+      (widget) => widget.getAttribute("aria-label") ?? "",
+    );
 
-      expect(widgetNames).toContain("Work outcome chart");
-      expect(widgetNames).toContain("Submit work");
-      expect(widgetNames).not.toContain("Completion trend");
-      expect(widgetNames).not.toContain("Failure trend");
-      expect(widgetNames).not.toContain("Retry and rework trend");
-      expect(widgetNames).not.toContain("Timing trend");
-      expect(widgetNames).toContain("Completed and failed work");
-      expect(widgetNames).toContain("Current selection");
-      expect(widgetNames).toContain("Trace drill-down");
-      const bentoItems = Array.from(
-        dashboardGrid.querySelectorAll<HTMLElement>("[data-bento-card-id]"),
-      );
-      const cardIds = bentoItems.map((item) => item.dataset.bentoCardId);
-      expect(cardIds).toContain("work-outcome-chart");
-      expect(cardIds).toContain("submit-work");
-      expect(cardIds).not.toContain("completion-trend");
-      expect(cardIds).not.toContain("failure-trend");
-      expect(cardIds).not.toContain("rework-trend");
-      expect(cardIds).not.toContain("timing-trend");
-      expect(cardIds).toContain("terminal-work");
-      expect(cardIds).toContain("trace");
-      expect(cardIds).toContain("current-selection");
+    expect(widgetNames).toContain("Work outcome chart");
+    expect(widgetNames).toContain("Submit work");
+    expect(widgetNames).not.toContain("Completion trend");
+    expect(widgetNames).not.toContain("Failure trend");
+    expect(widgetNames).not.toContain("Retry and rework trend");
+    expect(widgetNames).not.toContain("Timing trend");
+    expect(widgetNames).toContain("Completed and failed work");
+    expect(widgetNames).toContain("Current selection");
+    expect(widgetNames).toContain("Trace drill-down");
+    const bentoItems = Array.from(
+      dashboardGrid.querySelectorAll<HTMLElement>("[data-bento-card-id]"),
+    );
+    const cardIds = bentoItems.map((item) => item.dataset.bentoCardId);
+    expect(cardIds).toContain("work-outcome-chart");
+    expect(cardIds).toContain("submit-work");
+    expect(cardIds).not.toContain("completion-trend");
+    expect(cardIds).not.toContain("failure-trend");
+    expect(cardIds).not.toContain("rework-trend");
+    expect(cardIds).not.toContain("timing-trend");
+    expect(cardIds).toContain("terminal-work");
+    expect(cardIds).toContain("trace");
+    expect(cardIds).toContain("current-selection");
 
-      expect(
-        within(dashboardGrid).getByRole("img", {
-          name: "Work outcome chart for Session",
-        }),
-      ).toBeTruthy();
-      expect(
-        within(dashboardGrid).queryByRole("img", {
-          name: `Timing trend for ${activeWorkID}`,
-        }),
-      ).toBeNull();
-    },
-  );
+    expect(
+      within(dashboardGrid).getByRole("img", {
+        name: "Work outcome chart for Session",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(dashboardGrid).queryByRole("img", {
+        name: `Timing trend for ${activeWorkID}`,
+      }),
+    ).toBeNull();
+  });
 
   it("smoke tests the composed bento dashboard at a narrow viewport", async () => {
     resizeDashboardViewport(640);
@@ -1510,7 +1780,33 @@ describe("App current selection layout", () => {
 });
 
 describe("App current selection terminal states", () => {
-  registerAppDashboardTestLifecycle({ resetSelectionHistory: false });
+  beforeEach(() => {
+    window.localStorage.clear();
+    MockEventSource.instances = [];
+    restoreBrowserTestShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    for (const queryClient of queryClients.splice(0)) {
+      queryClient.clear();
+    }
+    cleanup();
+    useDashboardBentoStore.setState({
+      refreshToken: 0,
+      selectedTraceID: null,
+    });
+    useExportDialogStore.setState({
+      isExportDialogOpen: false,
+    });
+    useDashboardStreamStore.setState({
+      streamState: createDefaultDashboardStreamState(),
+    });
+    useFactoryTimelineStore.getState().reset();
+    restoreBrowserTestShims?.();
+    restoreBrowserTestShims = null;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it("opens completed and failed work summaries and updates the trace card", async () => {
     renderApp({

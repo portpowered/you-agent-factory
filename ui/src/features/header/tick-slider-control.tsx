@@ -1,5 +1,5 @@
 import { type ChangeEvent, useMemo } from "react";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import {
@@ -8,7 +8,7 @@ import {
   HEADER_MAX_TICK_TOKEN,
 } from "./messages/header-controls";
 
-const TICK_SLIDER_SHELL_CLASS = cx(
+const TICK_SLIDER_SHELL_CLASS = cn(
   "flex min-w-0 w-full flex-wrap items-center gap-2 rounded-lg border border-af-overlay/10 bg-af-overlay/4 px-3 py-2",
   "md:w-auto md:min-w-80 md:max-w-xl",
 );
@@ -127,7 +127,7 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
       </span>
 
       <DashboardHeaderActionButton
-        className={cx(mode === "current" && "opacity-75")}
+        className={cn(mode === "current" && "opacity-75")}
         aria-label={messages.returnToCurrentTickLabel}
         compact
         disabled={isDisabled || mode === "current"}

@@ -16,7 +16,7 @@ import {
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -216,12 +216,12 @@ function WorkstationPathGraphNode({
   const messages = getTraceDrilldownMessages(data.locale);
 
   return (
-    <article className={cx(PATH_NODE_CLASS, outcomeToneClassName(data.outcome))}>
+    <article className={cn(PATH_NODE_CLASS, outcomeToneClassName(data.outcome))}>
       <Handle className="opacity-0" position={Position.Left} type="target" />
       <Handle className="opacity-0" position={Position.Right} type="source" />
       <div className="flex items-center justify-between gap-3">
         <span
-          className={cx(
+          className={cn(
             "inline-flex rounded-full px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.12em]",
             DASHBOARD_SUPPORTING_LABEL_CLASS,
           )}
@@ -229,7 +229,7 @@ function WorkstationPathGraphNode({
           {messages.dispatchPathSectionLabel}
         </span>
         <span
-          className={cx(
+          className={cn(
             "inline-flex rounded-full px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em]",
             DASHBOARD_SUPPORTING_LABEL_CLASS,
           )}
@@ -240,7 +240,7 @@ function WorkstationPathGraphNode({
         </span>
       </div>
       <strong
-        className={cx("text-sm text-af-ink [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("text-sm text-af-ink [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
       >
         {data.label}
       </strong>

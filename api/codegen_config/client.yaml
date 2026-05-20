@@ -6,5 +6,7 @@ generate:
 output-options:
   include-operation-ids:
     - createFactory
+    - getEditableCurrentFactoryDefinition
     - getCurrentFactory
+    - saveEditableCurrentFactoryDefinition
   response-type-suffix: ClientResponse

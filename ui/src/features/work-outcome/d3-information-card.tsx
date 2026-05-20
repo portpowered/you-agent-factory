@@ -1,5 +1,5 @@
 import { getDashboardWorkChartSeriesDefinitions } from "./chart-contract";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import type { WorkChartModel } from "./trends";
 import { WorkChart } from "./work-chart";
 import type { WorkChartSeriesDefinition, WorkChartState } from "./work-chart";
@@ -30,7 +30,7 @@ export function WorkChartCard({
   const messages = getWorkOutcomeMessages(locale);
   const chartMessages = messages.chart;
   const chartRegionID = widgetId ? `${widgetId}-chart-region` : "work-outcome-chart-region";
-  const cardClassName = cx(DASHBOARD_WIDGET_CLASS, className);
+  const cardClassName = cn(DASHBOARD_WIDGET_CLASS, className);
   const resolvedTitle = title ?? chartMessages.cardTitle;
   const chartSeries: readonly WorkChartSeriesDefinition[] =
     getDashboardWorkChartSeriesDefinitions([

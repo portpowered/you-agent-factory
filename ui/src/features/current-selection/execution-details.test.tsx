@@ -61,9 +61,7 @@ describe("ExecutionDetailsSection", () => {
     expect(
       within(section).getByRole("link", { name: "Open trace" }),
     ).toBeTruthy();
-    const traceIdValue = within(section)
-      .getByText("trace-alpha (selected)")
-      .closest("dd");
+    const traceIdValue = within(section).getByText("trace-alpha (selected)").closest("dd");
     if (!traceIdValue) {
       throw new Error("Expected trace ID list container.");
     }
@@ -227,18 +225,8 @@ describe("InferenceAttemptsSection", () => {
     expect(
       within(section).getByText("dispatch-review/inference-request/1"),
     ).toBeTruthy();
-    const requestBody = within(
-      within(section).getByRole("region", { name: "Request body" }),
-    );
-    const responseBody = within(
-      within(section).getByRole("region", { name: "Response body" }),
-    );
-    expect(requestBody.queryByText("Review the story.")).toBeNull();
-    fireEvent.click(requestBody.getByRole("button", { name: "Expand" }));
-    expect(requestBody.getByText("Review the story.")).toBeTruthy();
-    expect(responseBody.queryByText("Looks good.")).toBeNull();
-    fireEvent.click(responseBody.getByRole("button", { name: "Expand" }));
-    expect(responseBody.getByText("Looks good.")).toBeTruthy();
+    expect(within(section).getByText("Review the story.")).toBeTruthy();
+    expect(within(section).getByText("Looks good.")).toBeTruthy();
     expect(
       within(section).queryByText(
         "No inference events are available for this selected work item.",

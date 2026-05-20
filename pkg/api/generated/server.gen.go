@@ -42,6 +42,7 @@ const (
 	INVALIDFACTORY       ErrorResponseCode = "INVALID_FACTORY"
 	INVALIDFACTORYNAME   ErrorResponseCode = "INVALID_FACTORY_NAME"
 	NOTFOUND             ErrorResponseCode = "NOT_FOUND"
+	STALEFACTORYVERSION  ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
 // Defines values for FactoryEventSchemaVersion.
@@ -105,6 +106,22 @@ const (
 // Defines values for LoadableProviderSessionProvider.
 const (
 	Codex LoadableProviderSessionProvider = "codex"
+)
+
+// Defines values for PromptTemplateDiagnosticKind.
+const (
+	INVALIDVARIABLE     PromptTemplateDiagnosticKind = "INVALID_VARIABLE"
+	SYNTAXERROR         PromptTemplateDiagnosticKind = "SYNTAX_ERROR"
+	UNAVAILABLEVARIABLE PromptTemplateDiagnosticKind = "UNAVAILABLE_VARIABLE"
+)
+
+// Defines values for PromptTemplateVariableReferenceCategory.
+const (
+	CONTEXT   PromptTemplateVariableReferenceCategory = "CONTEXT"
+	HISTORY   PromptTemplateVariableReferenceCategory = "HISTORY"
+	INPUT     PromptTemplateVariableReferenceCategory = "INPUT"
+	MAPACCESS PromptTemplateVariableReferenceCategory = "MAP_ACCESS"
+	ROOT      PromptTemplateVariableReferenceCategory = "ROOT"
 )
 
 // Defines values for RelationType.
@@ -429,6 +446,13 @@ type DispatchResponseEventPayload struct {
 	TransitionId             string                   `json:"transitionId"`
 }
 
+// EditableFactoryDefinition defines model for EditableFactoryDefinition.
+type EditableFactoryDefinition struct {
+	// FactoryDefinition Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
+	FactoryDefinition Factory                `json:"factoryDefinition"`
+	Version           HybridLogicalTimestamp `json:"version"`
+}
+
 // ErrorFamily Stable machine-readable error family for broader client grouping.
 type ErrorFamily string
 
@@ -440,10 +464,25 @@ type ErrorResponse struct {
 	// Family Stable machine-readable error family for broader client grouping.
 	Family  ErrorFamily `json:"family"`
 	Message string      `json:"message"`
+
+	// Targets Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages.
+	Targets *[]ErrorTarget `json:"targets,omitempty"`
 }
 
 // ErrorResponseCode Stable machine-readable error code.
 type ErrorResponseCode string
+
+// ErrorTarget defines model for ErrorTarget.
+type ErrorTarget struct {
+	// Field Optional request or form field path associated with the error.
+	Field *string `json:"field,omitempty"`
+
+	// Id Optional graph entity, relationship, or save condition identifier.
+	Id *string `json:"id,omitempty"`
+
+	// Kind Client-visible target category such as form, node, edge, field, or save.
+	Kind string `json:"kind"`
+}
 
 // Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
 type Factory struct {
@@ -736,6 +775,15 @@ type GuardMatchConfig struct {
 // GuardType Guard condition attached to a workstation or one of its specific inputs.
 type GuardType string
 
+// HybridLogicalTimestamp defines model for HybridLogicalTimestamp.
+type HybridLogicalTimestamp struct {
+	// Logical Monotonic Lamport-style logical component derived from the persisted factory definition version.
+	Logical int64 `json:"logical"`
+
+	// Physical UTC physical timestamp component for the persisted factory definition version.
+	Physical time.Time `json:"physical"`
+}
+
 // InferenceOutcome Result category returned by a provider inference attempt.
 type InferenceOutcome string
 
@@ -843,6 +891,87 @@ type PanicDiagnostic struct {
 	Message *string `json:"message,omitempty"`
 	Stack   *string `json:"stack,omitempty"`
 }
+
+// PromptTemplateContract defines model for PromptTemplateContract.
+type PromptTemplateContract struct {
+	// AvailableVariables Available prompt-template variables for the selected workstation editing context.
+	AvailableVariables []PromptTemplateVariableReference `json:"availableVariables"`
+
+	// InputCount Number of authored inputs on the selected workstation, which controls valid `.Inputs[N]` access.
+	InputCount int `json:"inputCount"`
+
+	// UnavailableAccessPatterns Unsupported or unavailable variable access patterns for the selected workstation editing context.
+	UnavailableAccessPatterns []PromptTemplateUnavailableAccessPattern `json:"unavailableAccessPatterns"`
+}
+
+// PromptTemplateDiagnostic defines model for PromptTemplateDiagnostic.
+type PromptTemplateDiagnostic struct {
+	// EndOffset Inclusive 1-based byte offset where the diagnostic source span ends when available.
+	EndOffset int `json:"endOffset"`
+
+	// Kind Diagnostic classification for prompt-template validation.
+	Kind PromptTemplateDiagnosticKind `json:"kind"`
+
+	// Message User-readable explanation of the validation failure.
+	Message string `json:"message"`
+
+	// Path Canonical variable path or access pattern involved in the diagnostic when available.
+	Path string `json:"path"`
+
+	// SourceText Source variable or access expression that triggered the diagnostic when available.
+	SourceText string `json:"sourceText"`
+
+	// StartOffset Inclusive 1-based byte offset where the diagnostic source span starts when available.
+	StartOffset int `json:"startOffset"`
+}
+
+// PromptTemplateDiagnosticKind Diagnostic classification for prompt-template validation.
+type PromptTemplateDiagnosticKind string
+
+// PromptTemplateUnavailableAccessPattern defines model for PromptTemplateUnavailableAccessPattern.
+type PromptTemplateUnavailableAccessPattern struct {
+	// Example Representative unsupported template snippet for this access pattern.
+	Example string `json:"example"`
+
+	// Path Unsupported or unavailable variable path pattern.
+	Path string `json:"path"`
+
+	// Reason Why the access pattern is unavailable or unsupported in the selected workstation context.
+	Reason string `json:"reason"`
+}
+
+// PromptTemplateValidationRequest defines model for PromptTemplateValidationRequest.
+type PromptTemplateValidationRequest struct {
+	// Prompt Prompt draft to validate against the selected current-factory workstation contract.
+	Prompt string `json:"prompt"`
+}
+
+// PromptTemplateValidationResult defines model for PromptTemplateValidationResult.
+type PromptTemplateValidationResult struct {
+	// Diagnostics Typed validation diagnostics for the submitted prompt draft.
+	Diagnostics []PromptTemplateDiagnostic `json:"diagnostics"`
+
+	// Valid True when the prompt contains no syntax or variable diagnostics.
+	Valid bool `json:"valid"`
+}
+
+// PromptTemplateVariableReference defines model for PromptTemplateVariableReference.
+type PromptTemplateVariableReference struct {
+	// Category High-level grouping for the variable reference.
+	Category PromptTemplateVariableReferenceCategory `json:"category"`
+
+	// Description User-readable description of what the variable resolves to.
+	Description string `json:"description"`
+
+	// Example Go template snippet that shows how to reference the variable.
+	Example string `json:"example"`
+
+	// Path Canonical variable path summary used in diagnostics and help surfaces.
+	Path string `json:"path"`
+}
+
+// PromptTemplateVariableReferenceCategory High-level grouping for the variable reference.
+type PromptTemplateVariableReferenceCategory string
 
 // ProviderDiagnostic defines model for ProviderDiagnostic.
 type ProviderDiagnostic struct {
@@ -980,6 +1109,14 @@ type RunResponseEventPayload struct {
 type SafeWorkDiagnostics struct {
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
+}
+
+// SaveEditableFactoryDefinitionRequest defines model for SaveEditableFactoryDefinitionRequest.
+type SaveEditableFactoryDefinitionRequest struct {
+	BaseVersion *HybridLogicalTimestamp `json:"baseVersion,omitempty"`
+
+	// FactoryDefinition Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
+	FactoryDefinition Factory `json:"factoryDefinition"`
 }
 
 // ScriptExecutionOutcome Result category returned by one public script execution boundary.
@@ -1149,9 +1286,6 @@ type WallClock struct {
 type Work struct {
 	// ChainingTraceDepth Current chaining depth for this work item when the runtime already knows its upstream lineage.
 	ChainingTraceDepth *int `json:"chainingTraceDepth,omitempty"`
-
-	// CompletedAt Time when this work item entered a completed or failed state, when known.
-	CompletedAt *time.Time `json:"completedAt,omitempty"`
 
 	// Content Ordered canonical content parts for one work item.
 	Content *WorkContent `json:"content,omitempty"`
@@ -1478,6 +1612,12 @@ type InternalError = ErrorResponse
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
 
+// SaveEditableFactoryDefinitionBadRequest defines model for SaveEditableFactoryDefinitionBadRequest.
+type SaveEditableFactoryDefinitionBadRequest = ErrorResponse
+
+// SaveEditableFactoryDefinitionConflict defines model for SaveEditableFactoryDefinitionConflict.
+type SaveEditableFactoryDefinitionConflict = ErrorResponse
+
 // GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
 type GetProviderSessionDetailsParams struct {
 	// Provider Provider that emitted the session identifier. Only codex sessions are currently loadable.
@@ -1513,6 +1653,12 @@ type ListWorkParamsSortBy string
 
 // CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
 type CreateFactoryJSONRequestBody = Factory
+
+// SaveEditableCurrentFactoryDefinitionJSONRequestBody defines body for SaveEditableCurrentFactoryDefinition for application/json ContentType.
+type SaveEditableCurrentFactoryDefinitionJSONRequestBody = SaveEditableFactoryDefinitionRequest
+
+// ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplate for application/json ContentType.
+type ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody = PromptTemplateValidationRequest
 
 // SubmitWorkJSONRequestBody defines body for SubmitWork for application/json ContentType.
 type SubmitWorkJSONRequestBody = SubmitWorkRequest
@@ -1941,6 +2087,18 @@ type ServerInterface interface {
 	// Get current factory
 	// (GET /factory/~current)
 	GetCurrentFactory(w http.ResponseWriter, r *http.Request)
+	// Get editable current factory definition
+	// (GET /factory/~current/editable-definition)
+	GetEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request)
+	// Save editable current factory definition
+	// (PUT /factory/~current/editable-definition)
+	SaveEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request)
+	// Get workstation prompt-template contract
+	// (GET /factory/~current/workstations/{workstation_name}/prompt-template-contract)
+	GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request, workstationName string)
+	// Validate workstation prompt template
+	// (POST /factory/~current/workstations/{workstation_name}/prompt-template-validation)
+	ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request, workstationName string)
 	// Get provider session details
 	// (GET /provider-sessions/detail)
 	GetProviderSessionDetails(w http.ResponseWriter, r *http.Request, params GetProviderSessionDetailsParams)
@@ -2003,6 +2161,84 @@ func (siw *ServerInterfaceWrapper) GetCurrentFactory(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCurrentFactory(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEditableCurrentFactoryDefinition operation middleware
+func (siw *ServerInterfaceWrapper) GetEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEditableCurrentFactoryDefinition(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SaveEditableCurrentFactoryDefinition operation middleware
+func (siw *ServerInterfaceWrapper) SaveEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SaveEditableCurrentFactoryDefinition(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCurrentFactoryWorkstationPromptTemplateContract operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "workstation_name" -------------
+	var workstationName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workstation_name", mux.Vars(r)["workstation_name"], &workstationName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workstation_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCurrentFactoryWorkstationPromptTemplateContract(w, r, workstationName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ValidateCurrentFactoryWorkstationPromptTemplate operation middleware
+func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "workstation_name" -------------
+	var workstationName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workstation_name", mux.Vars(r)["workstation_name"], &workstationName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workstation_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ValidateCurrentFactoryWorkstationPromptTemplate(w, r, workstationName)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2331,6 +2567,14 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory", wrapper.CreateFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory/~current", wrapper.GetCurrentFactory).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory/~current/editable-definition", wrapper.GetEditableCurrentFactoryDefinition).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory/~current/editable-definition", wrapper.SaveEditableCurrentFactoryDefinition).Methods("PUT")
+
+	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-contract", wrapper.GetCurrentFactoryWorkstationPromptTemplateContract).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplate).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 

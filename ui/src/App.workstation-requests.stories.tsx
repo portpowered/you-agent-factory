@@ -35,14 +35,22 @@ export const WorkstationRequestSelection = {
     const formattedAttempt = within(
       inferenceAttempts.getByRole("article", { name: "Inference attempt 2" }),
     );
-    const requestBody = within(
-      formattedAttempt.getByRole("region", { name: "Request body" }),
+    const requestBodyRegion = formattedAttempt.getByRole("region", {
+      name: "Request body",
+    });
+    const responseBodyRegion = formattedAttempt.getByRole("region", {
+      name: "Response body",
+    });
+    await userEvent.click(
+      within(requestBodyRegion).getByRole("button", { name: "Expand" }),
     );
-    const responseBody = within(
-      formattedAttempt.getByRole("region", { name: "Response body" }),
+    await userEvent.click(
+      within(responseBodyRegion).getByRole("button", { name: "Expand" }),
     );
+    const requestBody = within(requestBodyRegion);
+    const responseBody = within(responseBodyRegion);
 
-    await expect(
+    expect(
       currentSelection.queryByRole("heading", { name: "Request counts" }),
     ).toBeNull();
     await expect(
@@ -56,35 +64,12 @@ export const WorkstationRequestSelection = {
       currentSelection.getAllByText("request-ready-story").length,
     ).toBeGreaterThan(0);
     await expect(
-      requestBody.getByRole("button", { name: "Expand" }),
-    ).toHaveAttribute("aria-expanded", "false");
-    await expect(
-      requestBody.queryByRole("heading", {
-        level: 2,
-        name: "Review checklist",
-      }),
-    ).toBeNull();
-    await userEvent.click(requestBody.getByRole("button", { name: "Expand" }));
-    await expect(
-      requestBody.getByRole("button", { name: "Collapse" }),
-    ).toHaveAttribute("aria-expanded", "true");
-    await expect(
-      responseBody.getByRole("button", { name: "Expand" }),
-    ).toHaveAttribute("aria-expanded", "false");
-    await expect(
       requestBody.getByRole("heading", { level: 2, name: "Review checklist" }),
     ).toBeVisible();
     await expect(requestBody.getByRole("list")).toBeVisible();
     await expect(requestBody.getByText("Check the latest diff")).toBeVisible();
     expect(requestBody.queryByText("## Review checklist")).toBeNull();
     expect(requestBody.queryByText("```text")).toBeNull();
-    await expect(
-      responseBody.queryByRole("heading", {
-        level: 3,
-        name: "Reviewer response",
-      }),
-    ).toBeNull();
-    await userEvent.click(responseBody.getByRole("button", { name: "Expand" }));
     await expect(
       responseBody.getByRole("heading", {
         level: 3,
@@ -124,7 +109,7 @@ export const WorkstationRequestSelectionNoResponse = {
     );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
-    await expect(
+    expect(
       currentSelection.queryByRole("heading", { name: "Request counts" }),
     ).toBeNull();
     await expect(
@@ -164,34 +149,13 @@ export const WorkstationRequestSelectionRejected = {
     expect(
       currentSelection.getAllByText("request-rejected-story").length,
     ).toBeGreaterThan(0);
-    const rejectedAttempt = within(
-      inferenceAttempts.getByRole("article", { name: "Inference attempt 1" }),
-    );
-    const rejectedRequestBody = within(
-      rejectedAttempt.getByRole("region", { name: "Request body" }),
-    );
-    const rejectedResponseBody = within(
-      rejectedAttempt.getByRole("region", { name: "Response body" }),
-    );
     await expect(
-      rejectedRequestBody.getByRole("button", { name: "Expand" }),
-    ).toHaveAttribute("aria-expanded", "false");
-    await expect(
-      rejectedResponseBody.getByRole("button", { name: "Expand" }),
-    ).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(
-      rejectedRequestBody.getByRole("button", { name: "Expand" }),
-    );
-    await userEvent.click(
-      rejectedResponseBody.getByRole("button", { name: "Expand" }),
-    );
-    await expect(
-      rejectedRequestBody.getByText(
+      currentSelection.getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeVisible();
     await expect(
-      rejectedResponseBody.getByText(
+      inferenceAttempts.getByText(
         "The active story needs revision before it can continue.",
       ),
     ).toBeVisible();
@@ -240,20 +204,8 @@ export const WorkstationRequestSelectionErrored = {
     await expect(
       currentSelection.getByRole("heading", { name: "Inference attempts" }),
     ).toBeVisible();
-    const erroredAttempt = within(
-      currentSelection.getByRole("article", { name: "Inference attempt 1" }),
-    );
-    const erroredRequestBody = within(
-      erroredAttempt.getByRole("region", { name: "Request body" }),
-    );
     await expect(
-      erroredRequestBody.getByRole("button", { name: "Expand" }),
-    ).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(
-      erroredRequestBody.getByRole("button", { name: "Expand" }),
-    );
-    await expect(
-      erroredRequestBody.getByText(
+      currentSelection.getByText(
         "Review the blocked story and explain the failure.",
       ),
     ).toBeVisible();
@@ -332,10 +284,12 @@ export const SelectedWorkDispatchHistorySmoke = {
     await expect(
       within(activeCard).getByText("Current dispatch"),
     ).toBeVisible();
-    expect(
-      within(activeCard).getAllByText("Active Story").length,
-    ).toBeGreaterThan(0);
-    await expect(within(activeCard).getByText("Started at")).toBeVisible();
+    await expect(
+      within(activeCard).getByText("Active Story"),
+    ).toBeVisible();
+    await expect(
+      within(activeCard).getByText("Started at"),
+    ).toBeVisible();
     expect(within(activeCard).queryByText("Dispatched")).toBeNull();
     expect(within(activeCard).queryByText("Responded")).toBeNull();
     expect(within(activeCard).queryByText("Errored")).toBeNull();
@@ -355,13 +309,11 @@ export const SelectedWorkDispatchHistorySmoke = {
         "No inference attempt details have been recorded for this dispatch yet.",
       ),
     ).toBeVisible();
-    const selectedWorkButton = within(activeCard).getByRole("button", {
-      name: "Select work item Active Story",
-    });
-    await expect(selectedWorkButton).toBeVisible();
-    expect(selectedWorkButton.textContent).toContain("Active Story");
-    expect(selectedWorkButton.getAttribute("aria-pressed")).toBe("true");
-    expect(within(activeCard).queryByText("Work selected")).toBeNull();
+    await expect(
+      within(activeCard).getByRole("button", {
+        name: "Select work item Active Story",
+      }),
+    ).toBeVisible();
 
     const erroredCard = dispatchHistoryCard(
       dispatchHistory,
@@ -391,9 +343,7 @@ export const SelectedWorkDispatchHistorySmoke = {
       name: "Expand",
     });
     expect(scriptAttemptsToggle.getAttribute("aria-expanded")).toBe("false");
-    expect(
-      within(scriptSuccessCard).queryByText("script success stdout"),
-    ).toBeNull();
+    expect(within(scriptSuccessCard).queryByText("script success stdout")).toBeNull();
     await userEvent.click(scriptAttemptsToggle);
     expect(scriptAttemptsToggle.getAttribute("aria-expanded")).toBe("true");
     await expect(

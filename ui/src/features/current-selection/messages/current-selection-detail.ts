@@ -38,6 +38,8 @@ export interface CurrentSelectionDetailMessages {
   providerLabel: string;
   providerResponseUnavailable: string;
   providerSessionLabel: string;
+  collapseAction: string;
+  expandAction: string;
   noCurrentWorkInPlace: string;
   noWorkRecordedAtSelectedTick: string;
   requestBodyLabel: string;
@@ -88,7 +90,6 @@ export interface CurrentSelectionDetailMessages {
   workTypeLabel: string;
   workTypeUnavailable: string;
   workingDirectoryLabel: string;
-  openWorkItemAction: (workItemLabel: string) => string;
 }
 
 const stateNodeDetailFallbackMessages = {
@@ -164,6 +165,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    collapseAction: "Collapse",
+    expandAction: "Expand",
     requestBodyLabel: "Request body",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
@@ -230,7 +233,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Workstation details are not available for this request.",
     workTypeUnavailable: "Unknown",
     workingDirectoryLabel: "Working directory",
-    openWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
   },
   ja: {
     ...stateNodeDetailFallbackMessages,
@@ -275,6 +277,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    collapseAction: "Collapse",
+    expandAction: "Expand",
     requestBodyLabel: "Request body",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
@@ -341,7 +345,6 @@ const currentSelectionDetailMessagesByLocale = {
       "Workstation details are not available for this request.",
     workTypeUnavailable: "알 수 없음",
     workingDirectoryLabel: "Working directory",
-    openWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
   },
   ko: {
     ...stateNodeDetailFallbackMessages,
@@ -386,6 +389,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    collapseAction: "Collapse",
+    expandAction: "Expand",
     requestBodyLabel: "Request body",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
@@ -451,7 +456,6 @@ const currentSelectionDetailMessagesByLocale = {
     workstationUnavailable:
       "Workstation details are not available for this request.",
     workingDirectoryLabel: "Working directory",
-    openWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
   },
   "zh-CN": {
     attemptAriaLabel: (attemptNumber: number) => `推理尝试 ${attemptNumber}`,
@@ -489,6 +493,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerLabel: "提供方",
     providerResponseUnavailable: "此推理尝试没有可用的提供方响应文本。",
     providerSessionLabel: "Provider session",
+    collapseAction: "折叠",
+    expandAction: "展开",
     noCurrentWorkInPlace: "当前没有工作占用这个位置。",
     noWorkRecordedAtSelectedTick:
       "在所选时间刻度，这个位置暂时没有记录到工作。",
@@ -557,7 +563,6 @@ const currentSelectionDetailMessagesByLocale = {
     workTypeLabel: "工作类型",
     workTypeUnavailable: "未知",
     workingDirectoryLabel: "工作目录",
-    openWorkItemAction: (workItemLabel: string) => `打开 ${workItemLabel}`,
   },
 } satisfies LocalizedMessages<CurrentSelectionDetailMessages>;
 

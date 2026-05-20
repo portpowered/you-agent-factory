@@ -1,7 +1,7 @@
 import { Fragment, useId, useState } from "react";
 import type { ReactNode } from "react";
 import type { DashboardPlaceRef } from "../../api/dashboard/types";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
@@ -11,17 +11,14 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
-import {
-  useCurrentSelectionDispatchHistoryMessages,
-} from "./current-selection-locale";
-import type { useCurrentSelectionDetailMessages } from "./current-selection-locale";
 import type {
   InferenceAttemptDetailProps,
   InferenceAttemptTextSectionProps,
   MetadataSectionProps,
 } from "./detail-card-types";
+import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
 
-export const EXECUTION_PILL_CLASS = cx(
+export const EXECUTION_PILL_CLASS = cn(
   "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
   DASHBOARD_SUPPORTING_CODE_CLASS,
 );
@@ -29,7 +26,7 @@ export const PROVIDER_SESSION_CARD_CLASS =
   "rounded-lg border border-af-overlay/8 bg-af-overlay/4 p-3.5";
 export const HISTORY_HEADER_CLASS =
   "flex items-center justify-between gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2 [&_h4]:m-0";
-export const HISTORY_TOGGLE_CLASS = cx(
+export const HISTORY_TOGGLE_CLASS = cn(
   "shrink-0 cursor-pointer rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-af-ink/78 transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
@@ -37,38 +34,38 @@ export const WORKSTATION_SUMMARY_ITEM_CLASS =
   "grid min-w-0 gap-1 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2";
 export const INFERENCE_ATTEMPT_CARD_CLASS =
   "grid min-w-0 gap-2.5 rounded-lg border border-af-overlay/8 p-3.5";
-export const INFERENCE_ATTEMPT_DETAIL_CLASS = cx(
+export const INFERENCE_ATTEMPT_DETAIL_CLASS = cn(
   "m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[8.5rem_minmax(0,1fr)] [&_div]:gap-2",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 // tailwind-exception: intrinsic-sizing
-export const INFERENCE_ATTEMPT_TEXT_CLASS = cx(
+export const INFERENCE_ATTEMPT_TEXT_CLASS = cn(
   "min-h-[20rem] md:min-h-[26rem] lg:min-h-[min(70vh,36rem)]",
 );
-export const REQUEST_AUTHORED_TEXT_CLASS = cx(
+export const REQUEST_AUTHORED_TEXT_CLASS = cn(
   "grid gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere] [&_code]:rounded-sm [&_code]:bg-af-overlay/12 [&_code]:px-1 [&_code]:py-0.5 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:m-0 [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-af-overlay/8 [&_pre]:bg-af-overlay/12 [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:m-0 [&_ul]:list-disc [&_ul]:pl-5",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 export const RUNTIME_DETAILS_SECTION_CLASS =
   "mt-4 grid gap-3 border-t border-af-overlay/8 pt-4 [&_h4]:m-0";
 export const RUNTIME_DETAIL_VALUE_CLASS = "min-w-0 [overflow-wrap:anywhere]";
-export const RUNTIME_DETAIL_CODE_CLASS = cx(
+export const RUNTIME_DETAIL_CODE_CLASS = cn(
   DASHBOARD_BODY_CODE_CLASS,
   "[overflow-wrap:anywhere]",
 );
 export const TRACE_ACTION_LINK_CLASS =
   "inline-flex w-fit rounded-lg border border-on-foreground/35 bg-on-foreground/10 px-3 py-2 text-sm font-bold text-on-foreground outline-af-accent transition hover:bg-on-foreground/15 focus-visible:outline-2 focus-visible:outline-offset-2";
-export const REQUEST_SELECTION_STATUS_CLASS = cx(
+export const REQUEST_SELECTION_STATUS_CLASS = cn(
   "m-0 text-af-ink/68",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
-export const PROVIDER_SESSION_SELECTION_BUTTON_CLASS = cx(
+export const PROVIDER_SESSION_SELECTION_BUTTON_CLASS = cn(
   "grid w-full gap-1.5 rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-3 py-2.5 text-left text-on-foreground/82 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 export const WORK_SELECTION_BUTTON_CLASS =
   "inline-flex w-fit rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-xs font-bold text-on-foreground/78 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-on-foreground focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35";
-export const REQUEST_HISTORY_TEXT_CLASS = cx(
+export const REQUEST_HISTORY_TEXT_CLASS = cn(
   "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 [overflow-wrap:anywhere]",
   DASHBOARD_BODY_CODE_CLASS,
 );
@@ -105,18 +102,15 @@ export function InferenceAttemptTextSection({
   label,
   value,
 }: InferenceAttemptTextSectionProps) {
-  const messages = useCurrentSelectionDispatchHistoryMessages();
+  const messages = useCurrentSelectionDetailMessages();
   const [expanded, setExpanded] = useState(false);
   const sectionId = useId();
   const panelId = `${sectionId}-panel`;
-  const headingId = `${sectionId}-heading`;
 
   return (
-    <section aria-labelledby={headingId} className="grid gap-1.5">
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2">
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS} id={headingId}>
-          {label}
-        </span>
+    <section aria-label={label} className="grid gap-1">
+      <div className={HISTORY_HEADER_CLASS}>
+        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
         <button
           aria-controls={panelId}
           aria-expanded={expanded}
@@ -129,10 +123,7 @@ export function InferenceAttemptTextSection({
       </div>
       {expanded ? (
         <div id={panelId}>
-          <AuthoredBodyText
-            className={INFERENCE_ATTEMPT_TEXT_CLASS}
-            value={value}
-          />
+          <AuthoredBodyText className={INFERENCE_ATTEMPT_TEXT_CLASS} value={value} />
         </div>
       ) : null}
     </section>
@@ -152,11 +143,7 @@ export function InferenceAttemptDetail({
     <div>
       <dt>{label}</dt>
       <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-        {code ? (
-          <code className={RUNTIME_DETAIL_CODE_CLASS}>{value}</code>
-        ) : (
-          value
-        )}
+        {code ? <code className={RUNTIME_DETAIL_CODE_CLASS}>{value}</code> : value}
       </dd>
     </div>
   );
@@ -193,9 +180,7 @@ export function MetadataSection({
 }
 
 export function isTerminalOrFailedPlace(place: DashboardPlaceRef): boolean {
-  return (
-    place.state_category === "TERMINAL" || place.state_category === "FAILED"
-  );
+  return place.state_category === "TERMINAL" || place.state_category === "FAILED";
 }
 
 export function emptyStatePlaceMessage(
@@ -219,9 +204,7 @@ export function emptyStatePlaceMessage(
   return messages.noWorkRecordedAtSelectedTick;
 }
 
-export function normalizeDetailText(
-  value: string | undefined,
-): string | undefined {
+export function normalizeDetailText(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
 }
@@ -236,7 +219,7 @@ export function AuthoredBodyText({
   const blocks = parseRequestAuthoredBlocks(value);
 
   return (
-    <div className={cx(REQUEST_AUTHORED_TEXT_CLASS, className)}>
+    <div className={cn(REQUEST_AUTHORED_TEXT_CLASS, className)}>
       {blocks.map((block, index) => renderRequestAuthoredBlock(block, index))}
     </div>
   );
@@ -250,7 +233,7 @@ function parseRequestAuthoredBlocks(value: string): RequestAuthoredBlock[] {
   const lines = value.split(/\r?\n/);
   const blocks: RequestAuthoredBlock[] = [];
 
-  for (let lineIndex = 0; lineIndex < lines.length; ) {
+  for (let lineIndex = 0; lineIndex < lines.length;) {
     const line = lines[lineIndex];
 
     if (!line.trim()) {
@@ -329,10 +312,7 @@ function parseRequestAuthoredBlocks(value: string): RequestAuthoredBlock[] {
 
     const paragraphLines: string[] = [];
 
-    while (
-      lineIndex < lines.length &&
-      shouldContinueParagraph(lines[lineIndex])
-    ) {
+    while (lineIndex < lines.length && shouldContinueParagraph(lines[lineIndex])) {
       paragraphLines.push(lines[lineIndex]);
       lineIndex += 1;
     }
@@ -351,18 +331,13 @@ function shouldContinueParagraph(line: string): boolean {
     return false;
   }
 
-  return (
-    !/^(#{1,6})\s+/.test(line) &&
-    !/^[-*+]\s+/.test(line) &&
-    !/^\d+\.\s+/.test(line) &&
-    !/^```([^\s`]+)?\s*$/.test(line)
-  );
+  return !/^(#{1,6})\s+/.test(line)
+    && !/^[-*+]\s+/.test(line)
+    && !/^\d+\.\s+/.test(line)
+    && !/^```([^\s`]+)?\s*$/.test(line);
 }
 
-function renderRequestAuthoredBlock(
-  block: RequestAuthoredBlock,
-  index: number,
-) {
+function renderRequestAuthoredBlock(block: RequestAuthoredBlock, index: number) {
   switch (block.type) {
     case "code-block":
       return (
@@ -382,10 +357,7 @@ function renderRequestAuthoredBlock(
       return (
         <ol key={`ordered-list-${index}`}>
           {stableListKeys(block.items).map(({ item, key }) => (
-            <li
-              className="whitespace-pre-wrap"
-              key={`ordered-list-item-${index}-${key}`}
-            >
+            <li className="whitespace-pre-wrap" key={`ordered-list-item-${index}-${key}`}>
               {renderInlineMarkdown(item)}
             </li>
           ))}
@@ -395,10 +367,7 @@ function renderRequestAuthoredBlock(
       return (
         <ul key={`unordered-list-${index}`}>
           {stableListKeys(block.items).map(({ item, key }) => (
-            <li
-              className="whitespace-pre-wrap"
-              key={`unordered-list-item-${index}-${key}`}
-            >
+            <li className="whitespace-pre-wrap" key={`unordered-list-item-${index}-${key}`}>
               {renderInlineMarkdown(item)}
             </li>
           ))}
@@ -424,7 +393,9 @@ function renderInlineMarkdown(value: string): ReactNode[] {
       segments.push(value.slice(lastIndex, match.index));
     }
 
-    segments.push(<code key={`inline-code-${match.index}`}>{match[1]}</code>);
+    segments.push(
+      <code key={`inline-code-${match.index}`}>{match[1]}</code>,
+    );
     lastIndex = inlineCodePattern.lastIndex;
     match = inlineCodePattern.exec(value);
   }
@@ -438,11 +409,7 @@ function renderInlineMarkdown(value: string): ReactNode[] {
     if (typeof segment === "string") {
       const occurrence = (seenStringSegments.get(segment) ?? 0) + 1;
       seenStringSegments.set(segment, occurrence);
-      return (
-        <Fragment key={`inline-text-${segment}-${occurrence}`}>
-          {segment}
-        </Fragment>
-      );
+      return <Fragment key={`inline-text-${segment}-${occurrence}`}>{segment}</Fragment>;
     }
 
     return segment;

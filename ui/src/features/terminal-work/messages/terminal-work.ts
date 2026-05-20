@@ -7,8 +7,6 @@ export type TerminalWorkMessageStatus = "completed" | "failed";
 
 export interface TerminalWorkMessages {
   cardTitle: string;
-  completionTime: (formattedTime: string) => string;
-  completionTimeUnavailable: string;
   disclosureLabel: (expanded: boolean) => string;
   emptyState: (status: TerminalWorkMessageStatus) => string;
   iconLabel: (status: TerminalWorkMessageStatus) => string;
@@ -22,8 +20,6 @@ export interface TerminalWorkMessages {
 const terminalWorkMessagesByLocale: LocalizedMessages<TerminalWorkMessages> = {
   en: {
     cardTitle: "Completed and failed work",
-    completionTime: (formattedTime) => `Completed ${formattedTime}`,
-    completionTimeUnavailable: "Completion time unavailable",
     disclosureLabel: (expanded) => (expanded ? "Collapse" : "Expand"),
     emptyState: (status) =>
       status === "failed"
@@ -43,8 +39,6 @@ const terminalWorkMessagesByLocale: LocalizedMessages<TerminalWorkMessages> = {
   },
   ja: {
     cardTitle: "完了済みおよび失敗した作業",
-    completionTime: (formattedTime) => `完了時刻: ${formattedTime}`,
-    completionTimeUnavailable: "完了時刻は利用できません",
     disclosureLabel: (expanded) => (expanded ? "折りたたむ" : "展開"),
     emptyState: (status) =>
       status === "failed"
@@ -64,8 +58,6 @@ const terminalWorkMessagesByLocale: LocalizedMessages<TerminalWorkMessages> = {
   },
   ko: {
     cardTitle: "완료 및 실패한 작업",
-    completionTime: (formattedTime) => `완료 시간: ${formattedTime}`,
-    completionTimeUnavailable: "완료 시간을 사용할 수 없습니다",
     disclosureLabel: (expanded) => (expanded ? "접기" : "펼치기"),
     emptyState: (status) =>
       status === "failed"
@@ -85,8 +77,6 @@ const terminalWorkMessagesByLocale: LocalizedMessages<TerminalWorkMessages> = {
   },
   "zh-CN": {
     cardTitle: "已完成和失败的工作",
-    completionTime: (formattedTime) => `完成时间：${formattedTime}`,
-    completionTimeUnavailable: "完成时间不可用",
     disclosureLabel: (expanded) => (expanded ? "折叠" : "展开"),
     emptyState: (status) =>
       status === "failed" ? "尚未记录失败的工作。" : "尚未记录已完成的工作。",

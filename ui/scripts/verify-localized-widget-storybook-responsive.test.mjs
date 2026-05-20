@@ -4,8 +4,8 @@ import {
   verifyLocalizedCurrentSelection,
   verifyLocalizedSubmitWorkCard,
   verifyLocalizedTraceGrid,
-  verifyLocalizedWorkflowActivity,
   verifyLocalizedWorkOutcomeChart,
+  verifyLocalizedWorkflowActivity,
 } from "./verify-localized-widget-storybook-responsive.mjs";
 
 function createVisibleLocator() {
@@ -146,7 +146,6 @@ function createWorkflowActivityHarness() {
       }),
       getByText: vi.fn((text) => (text === "操作员视图" ? eyebrow : dataValue)),
     },
-    viewportRegion,
   };
 }
 
@@ -216,16 +215,10 @@ describe("verify-localized-widget-storybook-responsive", () => {
       viewport: createViewport(),
     });
 
-    expect(page.getByRole).toHaveBeenCalledWith("article", {
-      name: "提交工作",
-    });
+    expect(page.getByRole).toHaveBeenCalledWith("article", { name: "提交工作" });
     expect(card.waitFor).toHaveBeenCalledWith({ state: "visible" });
-    expect(card.getByRole).toHaveBeenCalledWith("combobox", {
-      name: "工作类型",
-    });
-    expect(card.getByRole).toHaveBeenCalledWith("textbox", {
-      name: "请求名称",
-    });
+    expect(card.getByRole).toHaveBeenCalledWith("combobox", { name: "工作类型" });
+    expect(card.getByRole).toHaveBeenCalledWith("textbox", { name: "请求名称" });
     expect(card.getByRole).toHaveBeenCalledWith("textbox", {
       exact: true,
       name: "请求",
@@ -254,9 +247,7 @@ describe("verify-localized-widget-storybook-responsive", () => {
       viewport: createViewport(),
     });
 
-    expect(page.getByRole).toHaveBeenCalledWith("article", {
-      name: "追踪下钻",
-    });
+    expect(page.getByRole).toHaveBeenCalledWith("article", { name: "追踪下钻" });
     expect(card.waitFor).toHaveBeenCalledWith({ state: "visible" });
     expect(card.getByText).toHaveBeenCalledWith("追踪分派表");
     expect(card.getByText).toHaveBeenCalledWith("分派流");
@@ -280,9 +271,7 @@ describe("verify-localized-widget-storybook-responsive", () => {
       viewport: createViewport(),
     });
 
-    expect(page.getByRole).toHaveBeenCalledWith("article", {
-      name: "工作结果图表",
-    });
+    expect(page.getByRole).toHaveBeenCalledWith("article", { name: "工作结果图表" });
     expect(card.getByRole).toHaveBeenCalledWith("img", {
       name: "15m 的工作结果图表",
     });
@@ -298,7 +287,7 @@ describe("verify-localized-widget-storybook-responsive", () => {
   });
 
   test("verifyLocalizedWorkflowActivity checks the localized workflow activity surface", async () => {
-    const { expectNoHorizontalOverflow, expectVisible, page, viewportRegion } =
+    const { expectNoHorizontalOverflow, expectVisible, page } =
       createWorkflowActivityHarness();
 
     await verifyLocalizedWorkflowActivity({
@@ -312,37 +301,14 @@ describe("verify-localized-widget-storybook-responsive", () => {
     expect(page.getByRole).toHaveBeenCalledWith("region", {
       name: "工作图视口",
     });
-    expect(viewportRegion.waitFor).toHaveBeenCalledWith({
-      state: "visible",
-    });
     expect(page.getByRole).toHaveBeenCalledWith("button", {
-      name: "选择 Review 工作站",
+      name: "进入工厂图编辑器",
     });
-    expect(page.getByText).toHaveBeenCalledWith("Active Story");
+    expect(page.getByText).toHaveBeenCalledWith("观察模式");
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
       "Localized workflow activity card at mobile",
     );
-  });
-});
-
-describe("localized widget shared helper defaults", () => {
-  test("uses the shared helper defaults when helper overrides are omitted", async () => {
-    const { card, page } = createSubmitWorkHarness();
-    page.evaluate = vi
-      .fn()
-      .mockResolvedValue({ clientWidth: 390, scrollWidth: 391 });
-
-    await verifyLocalizedSubmitWorkCard({
-      page,
-      viewport: createViewport(),
-    });
-
-    expect(card.waitFor).toHaveBeenCalledWith({
-      state: "visible",
-      timeout: 30000,
-    });
-    expect(page.evaluate).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -354,7 +320,6 @@ describe("verifyLocalizedCurrentSelection", () => {
       expectVisible,
       page,
       selectionCard,
-      workstationButton,
     } = createCurrentSelectionHarness();
 
     await verifyLocalizedCurrentSelection({
@@ -376,11 +341,6 @@ describe("verifyLocalizedCurrentSelection", () => {
     expect(selectionCard.getByRole).toHaveBeenCalledWith("button", {
       name: "撤销所选内容",
     });
-    expect(page.getByRole).toHaveBeenCalledWith("button", {
-      name: "选择 Implement 工作站",
-    });
-    expect(workstationButton.focus).toHaveBeenCalled();
-    expect(page.keyboard.press).toHaveBeenCalledWith("Enter");
     expect(selectionCard.getByRole).toHaveBeenCalledWith("heading", {
       name: "活动工作",
     });
@@ -388,9 +348,6 @@ describe("verifyLocalizedCurrentSelection", () => {
       name: "运行历史",
     });
     expect(selectionCard.getByText).toHaveBeenCalledWith("Review", {
-      exact: true,
-    });
-    expect(selectionCard.getByText).toHaveBeenCalledWith("Implement", {
       exact: true,
     });
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(

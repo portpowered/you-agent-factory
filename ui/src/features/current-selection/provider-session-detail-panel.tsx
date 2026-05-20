@@ -6,7 +6,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import type { ProviderSessionDetailResponse } from "../../api/provider-session-details";
 import { PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
 import { getProviderSessionDetailMessages } from "./messages/provider-session-detail";
@@ -60,7 +60,7 @@ function LoadedProviderSessionDetailPanel({
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
           {messages.selectedSessionHeading}
         </h4>
-        <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
           <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
             {messages.sessionLabel}
           </span>{" "}
@@ -261,7 +261,7 @@ function TurnsSection({
               <div className="grid gap-1">
                 <strong>{messages.turnLabel({ index: turn.index })}</strong>
                 <p
-                  className={cx(
+                  className={cn(
                     "m-0 text-af-ink/62",
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
@@ -319,7 +319,7 @@ function FunctionCallsSection({
                 <div className="grid gap-1">
                   <strong>{call.name ?? call.type}</strong>
                   <p
-                    className={cx(
+                    className={cn(
                       "m-0 text-af-ink/62",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
@@ -332,7 +332,7 @@ function FunctionCallsSection({
                 </div>
                 {call.status ? (
                   <span
-                    className={cx(
+                    className={cn(
                       "inline-flex w-fit rounded-full border border-af-overlay/12 bg-af-overlay/6 px-2 py-0.5",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
@@ -388,7 +388,7 @@ function ReasoningSection({
               <div className="grid gap-1">
                 <strong>{entry.sourceType}</strong>
                 <p
-                  className={cx(
+                  className={cn(
                     "m-0 text-af-ink/62",
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
@@ -400,13 +400,13 @@ function ReasoningSection({
                 </p>
               </div>
               {entry.summary ? (
-                <p className={cx("m-0 mt-2", DASHBOARD_BODY_TEXT_CLASS)}>
+                <p className={cn("m-0 mt-2", DASHBOARD_BODY_TEXT_CLASS)}>
                   {entry.summary}
                 </p>
               ) : null}
               {entry.text ? (
                 <pre
-                  className={cx(
+                  className={cn(
                     "m-0 mt-2 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere]",
                     DASHBOARD_BODY_CODE_CLASS,
                   )}
@@ -416,7 +416,7 @@ function ReasoningSection({
               ) : null}
               {entry.encrypted ? (
                 <p
-                  className={cx(
+                  className={cn(
                     "m-0 mt-2 text-af-ink/62",
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
@@ -462,7 +462,7 @@ function ParseDiagnosticsSection({
             key={`parse-error-${error.lineNumber}`}
           >
             <strong>{messages.lineLabel({ lineNumber: error.lineNumber })}</strong>
-            <p className={cx("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p className={cn("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
               {error.message}
             </p>
           </article>
@@ -476,7 +476,7 @@ function ParseDiagnosticsSection({
               {messages.unknownEventOnLineLabel({ lineNumber: event.lineNumber })}
             </strong>
             <p
-              className={cx(
+              className={cn(
                 "m-0 mt-1.5 text-af-ink/62",
                 DASHBOARD_SUPPORTING_TEXT_CLASS,
               )}
@@ -505,7 +505,7 @@ function DetailMetric({
   return (
     <div className={PROVIDER_SESSION_CARD_CLASS}>
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <p className={cx("m-0 mt-1", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cn("m-0 mt-1", DASHBOARD_BODY_TEXT_CLASS)}>
         {value}
       </p>
     </div>
@@ -523,7 +523,7 @@ function CodeBlockMetric({
     <div className="grid gap-1">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       <pre
-        className={cx(
+        className={cn(
           "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere]",
           DASHBOARD_BODY_CODE_CLASS,
         )}

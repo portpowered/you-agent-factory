@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+required:
+  - logical
+  - physical
+properties:
+  logical:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Monotonic Lamport-style logical component derived from the persisted factory definition version.
+  physical:
+    type: string
+    format: date-time
+    description: UTC physical timestamp component for the persisted factory definition version.

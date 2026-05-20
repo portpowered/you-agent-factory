@@ -51,7 +51,28 @@ type NamedFactoryPersistResult struct {
 // payload under a named subdirectory rooted at rootDir and reports any
 // differing portable bundled files that were replaced on disk.
 func PersistNamedFactoryWithReport(rootDir, name string, canonicalFactoryJSON []byte) (*NamedFactoryPersistResult, error) {
-	return persistNamedFactory(rootDir, name, canonicalFactoryJSON, namedFactoryPersistHooks{})
+	return persistNamedFactory(rootDir, name, canonicalFactoryJSON, namedFactoryPersistOptions{}, namedFactoryPersistHooks{})
+}
+
+// ReplaceNamedFactory materializes a compact canonical factory payload and
+// atomically replaces an existing named factory directory rooted at rootDir.
+func ReplaceNamedFactory(rootDir, name string, canonicalFactoryJSON []byte) (string, error) {
+	result, err := ReplaceNamedFactoryWithReport(rootDir, name, canonicalFactoryJSON)
+	if err != nil {
+		return "", err
+	}
+	return result.FactoryDir, nil
+}
+
+// ReplaceNamedFactoryWithReport is the replacement equivalent of
+// PersistNamedFactoryWithReport. It uses the same staging and validation path
+// as create, then swaps the staged layout into the existing named-factory slot.
+func ReplaceNamedFactoryWithReport(rootDir, name string, canonicalFactoryJSON []byte) (*NamedFactoryPersistResult, error) {
+	return persistNamedFactory(rootDir, name, canonicalFactoryJSON, namedFactoryPersistOptions{replaceExisting: true}, namedFactoryPersistHooks{})
+}
+
+type namedFactoryPersistOptions struct {
+	replaceExisting bool
 }
 
 type namedFactoryPersistHooks struct {
@@ -59,7 +80,7 @@ type namedFactoryPersistHooks struct {
 	loadRuntimeConfig func(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error)
 }
 
-func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, hooks namedFactoryPersistHooks) (*NamedFactoryPersistResult, error) {
+func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, options namedFactoryPersistOptions, hooks namedFactoryPersistHooks) (*NamedFactoryPersistResult, error) {
 	if strings.TrimSpace(rootDir) == "" {
 		return nil, fmt.Errorf("factory root is required")
 	}
@@ -71,9 +92,13 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, hook
 
 	targetDir := filepath.Join(rootDir, segment)
 	if _, err := os.Stat(targetDir); err == nil {
-		return nil, fmt.Errorf("%w: factory %q already exists", ErrNamedFactoryAlreadyExists, segment)
+		if !options.replaceExisting {
+			return nil, fmt.Errorf("%w: factory %q already exists", ErrNamedFactoryAlreadyExists, segment)
+		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("check existing factory %q: %w", segment, err)
+	} else if options.replaceExisting {
+		return nil, fmt.Errorf("replace factory %q: %w", segment, os.ErrNotExist)
 	}
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create factory root %s: %w", rootDir, err)
@@ -121,7 +146,11 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, hook
 	if _, err := loadRuntimeConfig(stagingDir, nil); err != nil {
 		return nil, fmt.Errorf("%w: validate factory %q config: %v", ErrInvalidNamedFactory, segment, err)
 	}
-	if err := os.Rename(stagingDir, targetDir); err != nil {
+	if options.replaceExisting {
+		if err := replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir); err != nil {
+			return nil, err
+		}
+	} else if err := os.Rename(stagingDir, targetDir); err != nil {
 		return nil, fmt.Errorf("commit factory %q: %w", segment, err)
 	}
 	keepStaging = true
@@ -129,6 +158,35 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, hook
 		FactoryDir:                      targetDir,
 		PortableBundledFileReplacements: clonePortableBundledFileReplacements(replacements),
 	}, nil
+}
+
+func replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir string) error {
+	backupDir, err := os.MkdirTemp(rootDir, "."+segment+".previous-")
+	if err != nil {
+		return fmt.Errorf("prepare replacement backup for factory %q: %w", segment, err)
+	}
+	if err := os.Remove(backupDir); err != nil {
+		return fmt.Errorf("prepare replacement backup for factory %q: %w", segment, err)
+	}
+
+	if err := os.Rename(targetDir, backupDir); err != nil {
+		return fmt.Errorf("backup existing factory %q: %w", segment, err)
+	}
+	committed := false
+	defer func() {
+		if committed {
+			_ = os.RemoveAll(backupDir)
+		}
+	}()
+
+	if err := os.Rename(stagingDir, targetDir); err != nil {
+		if restoreErr := os.Rename(backupDir, targetDir); restoreErr != nil {
+			return fmt.Errorf("commit replacement factory %q: %w; restore failed: %v", segment, err, restoreErr)
+		}
+		return fmt.Errorf("commit replacement factory %q: %w", segment, err)
+	}
+	committed = true
+	return nil
 }
 
 // ReadCurrentFactoryPointer returns the current named factory selected for the

@@ -1,0 +1,32 @@
+type: object
+additionalProperties: false
+required:
+  - endOffset
+  - kind
+  - message
+  - path
+  - sourceText
+  - startOffset
+properties:
+  endOffset:
+    type: integer
+    description: Inclusive 1-based byte offset where the diagnostic source span ends when available.
+  kind:
+    type: string
+    enum:
+      - SYNTAX_ERROR
+      - INVALID_VARIABLE
+      - UNAVAILABLE_VARIABLE
+    description: Diagnostic classification for prompt-template validation.
+  message:
+    type: string
+    description: User-readable explanation of the validation failure.
+  path:
+    type: string
+    description: Canonical variable path or access pattern involved in the diagnostic when available.
+  sourceText:
+    type: string
+    description: Source variable or access expression that triggered the diagnostic when available.
+  startOffset:
+    type: integer
+    description: Inclusive 1-based byte offset where the diagnostic source span starts when available.

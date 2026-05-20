@@ -5,7 +5,7 @@ import { GridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
-import { cx } from "../../components/ui/classnames";
+import { cn } from "../../lib/cn";
 import { DashboardPanelShell } from "../../components/ui/dashboard-shell";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
@@ -62,7 +62,7 @@ const BENTO_ITEM_CLASS = "min-w-0";
 const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
   "flex min-h-13 cursor-move items-center justify-between gap-3 border-af-overlay/10 px-3.5 py-3";
-const BENTO_CARD_TITLE_CLASS = cx(
+const BENTO_CARD_TITLE_CLASS = cn(
   "m-0 [overflow-wrap:anywhere]",
   DASHBOARD_SECTION_HEADING_CLASS,
 );
@@ -70,7 +70,7 @@ const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_DRAG_HANDLE_CLASS =
   "inline-grid size-9 shrink-0 cursor-grab place-items-center rounded-lg border border-af-overlay/18 bg-af-overlay/8 text-af-ink/68 outline-af-ink/55 transition-colors hover:border-af-overlay/28 hover:bg-af-overlay/12 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 active:cursor-grabbing";
-const BENTO_CARD_BODY_CLASS = cx(
+const BENTO_CARD_BODY_CLASS = cn(
   "grid h-full min-h-0 flex-1 gap-2.5 overflow-auto p-3.5 [&_p]:m-0",
   DASHBOARD_BODY_TEXT_CLASS,
 );
@@ -156,7 +156,7 @@ export function AgentBentoLayout({
     onLayoutChange?.(toBentoLayout(nextLayout));
   };
 
-  const layoutClassName = cx(BENTO_LAYOUT_CLASS, className);
+  const layoutClassName = cn(BENTO_LAYOUT_CLASS, className);
   const renderedWidth = Math.max(width, 320);
 
   return (
@@ -209,8 +209,8 @@ export function AgentBentoCard({
   headerAction,
   title,
 }: AgentBentoCardProps) {
-  const cardClassName = cx(BENTO_CARD_CLASS, className);
-  const cardBodyClassName = cx(BENTO_CARD_BODY_CLASS, bodyClassName);
+  const cardClassName = cn(BENTO_CARD_CLASS, className);
+  const cardBodyClassName = cn(BENTO_CARD_BODY_CLASS, bodyClassName);
 
   return (
     <DashboardPanelShell

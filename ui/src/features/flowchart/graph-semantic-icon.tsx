@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 
 export const GRAPH_SEMANTIC_ICON_KINDS = [
   "queue",
@@ -184,7 +184,7 @@ export function GraphSemanticIcon({
   return (
     <svg
       aria-label={accessibleLabel}
-      className={cx(DEFAULT_ICON_CLASS_NAME, className)}
+      className={cn(DEFAULT_ICON_CLASS_NAME, className)}
       data-graph-semantic-icon={definition ? kind : "unknown"}
       fill="none"
       focusable="false"

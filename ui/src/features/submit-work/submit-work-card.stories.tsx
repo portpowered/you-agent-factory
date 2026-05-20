@@ -152,3 +152,149 @@ export const LocalizedZhCN = {
     ).toBeDisabled();
   },
 };
+
+function submitButton(card: HTMLElement): HTMLElement {
+  const button = card.querySelector<HTMLElement>('button[type="submit"]');
+
+  if (!(button instanceof HTMLElement)) {
+    throw new Error("expected submit-work submit button");
+  }
+
+  return button;
+}
+
+export const StableActionAlignment = {
+  render: () => (
+    <div className="grid gap-4">
+      <div className="w-full max-w-xs">
+        <SubmitWorkCard
+          draft={{
+            requestName: "Driver review",
+            requestText: "",
+            workTypeName: "story",
+          }}
+          onRequestNameChange={() => {}}
+          onRequestTextChange={() => {}}
+          onSubmit={() => {}}
+          onWorkTypeNameChange={() => {}}
+          status={{
+            kind: "guidance",
+            message:
+              "Ready to submit with a long guidance message that wraps on narrow widths without moving the primary action.",
+          }}
+          submitWorkTypeNames={["story", "task"]}
+          widgetId="submit-work-ready"
+        />
+      </div>
+      <div className="w-full max-w-xs">
+        <SubmitWorkCard
+          draft={{
+            requestName: "Driver review",
+            requestText: "",
+            workTypeName: "story",
+          }}
+          isSubmitting
+          onRequestNameChange={() => {}}
+          onRequestTextChange={() => {}}
+          onSubmit={() => {}}
+          onWorkTypeNameChange={() => {}}
+          status={{
+            kind: "submitting",
+            message:
+              "Sending your request while the status text remains wrapped and the button stays anchored at the same right edge.",
+          }}
+          submitWorkTypeNames={["story", "task"]}
+          widgetId="submit-work-submitting"
+        />
+      </div>
+      <div className="w-full max-w-xs">
+        <SubmitWorkCard
+          draft={{
+            requestName: "",
+            requestText: "",
+            workTypeName: "story",
+          }}
+          onRequestNameChange={() => {}}
+          onRequestTextChange={() => {}}
+          onSubmit={() => {}}
+          onWorkTypeNameChange={() => {}}
+          status={{
+            kind: "success",
+            message:
+              "Your request was submitted. Trace ID: trace-submit-story-with-extra-copy-to-force-wrapping.",
+          }}
+          submitWorkTypeNames={["story", "task"]}
+          widgetId="submit-work-success"
+        />
+      </div>
+      <div className="w-full max-w-xs">
+        <SubmitWorkCard
+          draft={{
+            requestName: "Retry dashboard request",
+            requestText: "Retry the broken submission.",
+            workTypeName: "story",
+          }}
+          onRequestNameChange={() => {}}
+          onRequestTextChange={() => {}}
+          onSubmit={() => {}}
+          onWorkTypeNameChange={() => {}}
+          status={{
+            kind: "error",
+            message:
+              "The server rejected this submission with a long retryable error that should wrap without shifting the button.",
+          }}
+          submitWorkTypeNames={["story", "task"]}
+          widgetId="submit-work-error"
+        />
+      </div>
+      <div className="w-full max-w-xs">
+        <SubmitWorkCard
+          draft={{
+            requestName: "",
+            requestText: "",
+            workTypeName: "",
+          }}
+          onRequestNameChange={() => {}}
+          onRequestTextChange={() => {}}
+          onSubmit={() => {}}
+          onWorkTypeNameChange={() => {}}
+          status={{
+            kind: "validation-error",
+            message:
+              "Choose a work type and enter a request name before submitting so the wrapped validation summary still leaves the action pinned right.",
+          }}
+          submitWorkTypeNames={["story", "task"]}
+          validationErrors={{
+            requestName: "Enter a request name before submitting.",
+            workTypeName: "Choose a work type before submitting.",
+          }}
+          widgetId="submit-work-validation"
+        />
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const cards = await canvas.findAllByRole("article", { name: "Submit work" });
+    const buttonRights: number[] = [];
+
+    for (const card of cards) {
+      buttonRights.push(submitButton(card).getBoundingClientRect().right);
+    }
+
+    const referenceRight = buttonRights[0];
+    if (referenceRight === undefined) {
+      throw new Error("expected submit-work button alignment reference");
+    }
+
+    for (const rightEdge of buttonRights) {
+      expect(Math.abs(rightEdge - referenceRight)).toBeLessThanOrEqual(1);
+    }
+
+    await expect(
+      canvas.getByText(
+        "Choose a work type and enter a request name before submitting so the wrapped validation summary still leaves the action pinned right.",
+      ),
+    ).toBeVisible();
+  },
+};

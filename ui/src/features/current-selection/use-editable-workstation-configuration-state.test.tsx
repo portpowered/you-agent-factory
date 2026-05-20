@@ -4,7 +4,12 @@ import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/te
 import type { CanonicalFactoryDefinition } from "../current-factory-definition";
 import { useCurrentEditableFactoryDefinition } from "../current-factory-definition";
 import type { DashboardSelection } from "./types";
-import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
+import {
+  useEditableWorkstationConfigurationState,
+  validateEditableWorkstationDraft,
+} from "./use-editable-workstation-configuration-state";
+import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
+import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
 vi.mock("../current-factory-definition", async () => {
   const actual = await vi.importActual("../current-factory-definition");
@@ -14,6 +19,14 @@ vi.mock("../current-factory-definition", async () => {
     useCurrentEditableFactoryDefinition: vi.fn(),
   };
 });
+
+vi.mock("./useCurrentWorkstationPromptTemplateContract", () => ({
+  useCurrentWorkstationPromptTemplateContract: vi.fn(),
+}));
+
+vi.mock("./useCurrentWorkstationPromptTemplateValidation", () => ({
+  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+}));
 
 const selectedNode =
   semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review;
@@ -26,6 +39,12 @@ describe("useEditableWorkstationConfigurationState", () => {
   beforeEach(() => {
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+    );
+    vi.mocked(useCurrentWorkstationPromptTemplateContract).mockReturnValue(
+      buildPromptTemplateContractResult(),
+    );
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue(
+      buildPromptTemplateValidationResult(),
     );
   });
 
@@ -112,6 +131,28 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("surfaces editable-definition load failures directly in the form state", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+      data: undefined,
+      error: { message: "Current factory definition failed to load." },
+      isError: true,
+      isPending: false,
+      isSuccess: false,
+      status: "error",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        errorMessage: "Current factory definition failed to load.",
+        status: "error",
+      });
+    });
+  });
+
   it("rehydrates clean sessions from newer editable factory data", async () => {
     const { rerender, result } = renderHook(() =>
       useEditableWorkstationConfigurationState(selection, selectedNode),
@@ -163,6 +204,9 @@ describe("useEditableWorkstationConfigurationState", () => {
 
     expect(result.current).toMatchObject({
       hasValidationErrors: true,
+      promptHelpState: {
+        status: "ready",
+      },
       status: "ready",
       validationErrors: {
         workerName:
@@ -173,6 +217,165 @@ describe("useEditableWorkstationConfigurationState", () => {
           "The selected workstation references a worker that is no longer available in the current factory definition. Reload current selection and choose another worker.",
         status: "error",
       },
+    });
+  });
+
+  it("surfaces an empty worker-options state when the workstation currently exposes no workers", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          workerName: "reviewer",
+          workerOptions: [],
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      hasValidationErrors: true,
+      status: "ready",
+      workerOptionsState: {
+        message:
+          "No current workers are available for this workstation. Add a worker to the factory before editing this field.",
+        status: "empty",
+      },
+    });
+  });
+
+  it("maps prompt variable help query states into the editable workstation form state", async () => {
+    vi.mocked(useCurrentWorkstationPromptTemplateContract).mockReturnValue({
+      data: undefined,
+      error: {
+        message: "Current named factory workstation not found.",
+      },
+      isError: true,
+      isPending: false,
+      status: "error",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      promptHelpState: {
+        errorMessage: "Current named factory workstation not found.",
+        status: "error",
+      },
+      status: "ready",
+    });
+  });
+
+  it("surfaces authoritative prompt diagnostics and blocks saving until the draft is fixed", async () => {
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+      data: {
+        diagnostics: [
+          {
+            endOffset: 30,
+            kind: "UNAVAILABLE_VARIABLE",
+            message: "Only input 0 is available.",
+            path: ".Inputs[1]",
+            sourceText: "(index .Inputs 1)",
+            startOffset: 14,
+          },
+        ],
+        valid: false,
+      },
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onPromptChange("Use {{ (index .Inputs 1).Payload }}");
+    });
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        hasValidationErrors: true,
+        promptDiagnostics: [
+          {
+            kind: "UNAVAILABLE_VARIABLE",
+            path: ".Inputs[1]",
+          },
+        ],
+        promptValidationState: {
+          status: "ready",
+        },
+        status: "ready",
+        validationErrors: {
+          prompt:
+            "Resolve the highlighted prompt diagnostics before saving this workstation.",
+        },
+      });
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition
+        : undefined,
+    ).toBeNull();
+  });
+
+  it("formats loading and error prompt validation states into observable prompt errors", () => {
+    const selectedEditableValues = {
+      prompt: "Review the story.",
+      workerName: "reviewer",
+      workerOptions: ["reviewer"],
+      workstationName: "Review",
+    };
+
+    expect(
+      validateEditableWorkstationDraft(
+        {
+          prompt: "Review the story.",
+          workerName: "reviewer",
+        },
+        selectedEditableValues,
+        { status: "loading" },
+      ),
+    ).toEqual({
+      prompt: "Validating prompt variables for the current draft.",
+    });
+
+    expect(
+      validateEditableWorkstationDraft(
+        {
+          prompt: "Review the story.",
+          workerName: "reviewer",
+        },
+        selectedEditableValues,
+        {
+          errorMessage: "Prompt validation API unavailable.",
+          status: "error",
+        },
+      ),
+    ).toEqual({
+      prompt:
+        "Prompt validation unavailable. Prompt validation API unavailable.",
     });
   });
 });
@@ -217,4 +420,40 @@ function buildEditableFactoryDefinition(overrides?: {
     ],
     workTypes: [],
   };
+}
+
+function buildPromptTemplateContractResult() {
+  return {
+    data: {
+      availableVariables: [
+        {
+          category: "ROOT",
+          description: "Current work identifier.",
+          example: "{{ .WorkID }}",
+          path: ".WorkID",
+        },
+      ],
+      inputCount: 1,
+      unavailableAccessPatterns: [],
+    },
+    error: null,
+    isError: false,
+    isPending: false,
+    isSuccess: true,
+    status: "success",
+  } as never;
+}
+
+function buildPromptTemplateValidationResult() {
+  return {
+    data: {
+      diagnostics: [],
+      valid: true,
+    },
+    error: null,
+    isError: false,
+    isPending: false,
+    isSuccess: true,
+    status: "success",
+  } as never;
 }

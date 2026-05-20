@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -19,19 +18,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
 
 const defaultMaxResults = 50
-
-const (
-	workTypeIDField                   = "work_type_id"
-	targetStateField                  = "target_state"
-	traceIDField                      = "traceId"
-	currentChainingTraceIDField       = "currentChainingTraceId"
-	legacyTraceIDField                = "trace_id"
-	legacyCurrentChainingTraceIDField = "current_chaining_trace_id"
-)
 
 var _ factoryapi.ServerInterface = (*Server)(nil)
 
@@ -174,19 +165,129 @@ func (s *Server) CreateFactory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
+	namedFactory, ok := s.loadCurrentFactory(w, r)
+	if !ok {
+		return
+	}
+	s.writeJSON(w, http.StatusOK, namedFactory)
+}
+
+func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request, workstationName string) {
+	namedFactory, ok := s.loadCurrentFactory(w, r)
+	if !ok {
+		return
+	}
+	workstation, ok := currentFactoryWorkstation(namedFactory, workstationName)
+	if !ok {
+		s.writeError(w, http.StatusNotFound, "Current named factory workstation not found.", "NOT_FOUND")
+		return
+	}
+
+	contract := workers.BuildPromptTemplateContract(len(workstation.Inputs))
+	s.writeJSON(w, http.StatusOK, promptTemplateContractResponse(contract))
+}
+
+func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request, workstationName string) {
+	namedFactory, ok := s.loadCurrentFactory(w, r)
+	if !ok {
+		return
+	}
+	workstation, ok := currentFactoryWorkstation(namedFactory, workstationName)
+	if !ok {
+		s.writeError(w, http.StatusNotFound, "Current named factory workstation not found.", "NOT_FOUND")
+		return
+	}
+	req, err := decodePromptTemplateValidationRequestBody(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	result := workers.ValidatePromptTemplate(req.Prompt, len(workstation.Inputs))
+	s.writeJSON(w, http.StatusOK, promptTemplateValidationResultResponse(result))
+}
+
+func (s *Server) loadCurrentFactory(w http.ResponseWriter, r *http.Request) (factoryapi.Factory, bool) {
 	namedFactory, err := s.runtime.GetCurrentNamedFactory(r.Context())
+	if err != nil {
+		switch {
+		case errors.Is(err, apisurface.ErrCurrentNamedFactoryNotFound):
+			s.writeError(w, http.StatusNotFound, "Current named factory not found.", "NOT_FOUND")
+			return factoryapi.Factory{}, false
+		default:
+			s.logger.Error("get current factory failed", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to load current named factory", "INTERNAL_ERROR")
+			return factoryapi.Factory{}, false
+		}
+	}
+	return namedFactory, true
+}
+
+func (s *Server) GetEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request) {
+	editable, err := s.runtime.GetEditableFactoryDefinition(r.Context())
 	if err != nil {
 		switch {
 		case errors.Is(err, apisurface.ErrCurrentNamedFactoryNotFound):
 			s.writeError(w, http.StatusNotFound, "Current named factory not found.", "NOT_FOUND")
 			return
 		default:
-			s.logger.Error("get current factory failed", zap.Error(err))
-			s.writeError(w, http.StatusInternalServerError, "failed to load current named factory", "INTERNAL_ERROR")
+			s.logger.Error("get editable current factory definition failed", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to load editable current factory definition", "INTERNAL_ERROR")
 			return
 		}
 	}
-	s.writeJSON(w, http.StatusOK, namedFactory)
+	s.writeJSON(w, http.StatusOK, editable)
+}
+
+func (s *Server) SaveEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeSaveEditableFactoryDefinitionBody(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.ErrorTarget{errorTarget("form", "", "factoryDefinition")})
+			return
+		}
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST", []factoryapi.ErrorTarget{errorTarget("form", "", "factoryDefinition")})
+		return
+	}
+
+	saved, err := s.runtime.SaveEditableFactoryDefinition(r.Context(), req)
+	if err != nil {
+		var topologyErr *apisurface.TopologyValidationError
+		switch {
+		case errors.Is(err, apisurface.ErrCurrentNamedFactoryNotFound):
+			s.writeError(w, http.StatusNotFound, "Current named factory not found.", "NOT_FOUND")
+			return
+		case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
+			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.ErrorTarget{errorTarget("field", "", "factoryDefinition.name")})
+			return
+		case errors.Is(err, apisurface.ErrEditableFactoryVersionStale):
+			s.writeErrorWithTargets(w, http.StatusConflict, "Editable factory definition is stale. Refresh the graph before saving.", "STALE_FACTORY_VERSION", []factoryapi.ErrorTarget{errorTarget("save", "stale-version", "")})
+			return
+		case errors.As(err, &topologyErr):
+			targets := topologyErr.Targets
+			if len(targets) == 0 {
+				targets = []factoryapi.ErrorTarget{errorTarget("form", "", "factoryDefinition")}
+			}
+			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", targets)
+			return
+		case errors.Is(err, apisurface.ErrInvalidNamedFactory):
+			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.ErrorTarget{errorTarget("form", "", "factoryDefinition")})
+			return
+		case errors.Is(err, apisurface.ErrFactoryActivationRequiresIdle):
+			s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.ErrorTarget{errorTarget("save", "active-work", "")})
+			return
+		default:
+			s.logger.Error("save editable current factory definition failed", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to save editable current factory definition", "INTERNAL_ERROR")
+			return
+		}
+	}
+
+	s.writeJSON(w, http.StatusOK, saved)
 }
 
 func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factoryapi.ListWorkParams) {
@@ -300,11 +401,6 @@ func sortListWorkItems(items []listWorkItem, mode listWorkSortModeValue) {
 		if leftOrder != rightOrder {
 			return leftOrder < rightOrder
 		}
-		if isFinishedListWorkState(left.work.State) && isFinishedListWorkState(right.work.State) {
-			if less, decided := lessListWorkByCompletedAt(left, right); decided {
-				return less
-			}
-		}
 
 		leftStateType := listWorkStateType(left.work.State)
 		rightStateType := listWorkStateType(right.work.State)
@@ -322,40 +418,7 @@ func lessListWorkByStateType(left, right listWorkItem) bool {
 	if leftStateType != rightStateType {
 		return leftStateType < rightStateType
 	}
-	if isFinishedListWorkState(left.work.State) && isFinishedListWorkState(right.work.State) {
-		if less, decided := lessListWorkByCompletedAt(left, right); decided {
-			return less
-		}
-	}
 	return left.cursorID < right.cursorID
-}
-
-func lessListWorkByCompletedAt(left, right listWorkItem) (bool, bool) {
-	leftCompletedAt := left.work.CompletedAt
-	rightCompletedAt := right.work.CompletedAt
-	switch {
-	case leftCompletedAt != nil && rightCompletedAt != nil:
-		if !leftCompletedAt.Equal(*rightCompletedAt) {
-			return leftCompletedAt.After(*rightCompletedAt), true
-		}
-	case leftCompletedAt != nil:
-		return true, true
-	case rightCompletedAt != nil:
-		return false, true
-	}
-	return false, false
-}
-
-func isFinishedListWorkState(workState *factoryapi.WorkState) bool {
-	if workState == nil {
-		return false
-	}
-	switch workState.Type {
-	case factoryapi.WorkStateTypeTERMINAL, factoryapi.WorkStateTypeFAILED:
-		return true
-	default:
-		return false
-	}
 }
 
 func listWorkStateOrder(workState *factoryapi.WorkState) int {
@@ -524,32 +587,17 @@ func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenR
 
 func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
 	name := firstNonEmptyString(t.Color.Name, t.Color.WorkID, t.ID)
-	workState := workStateForToken(t, net)
 	return factoryapi.Work{
 		Name:                     name,
 		WorkId:                   stringPtrIfNotEmpty(t.Color.WorkID),
 		WorkTypeName:             stringPtrIfNotEmpty(t.Color.WorkTypeID),
-		State:                    workState,
-		CompletedAt:              completedAtForWorkToken(t, workState),
+		State:                    workStateForToken(t, net),
 		ChainingTraceDepth:       intPtrIfPositive(t.Color.ChainingTraceDepth),
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
 		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
 		TraceId:                  stringPtrIfNotEmpty(t.Color.TraceID),
 		Content:                  domainWorkContentToGeneratedPtr(t.Color.Content),
 		Tags:                     stringMapPtr(t.Color.Tags),
-	}
-}
-
-func completedAtForWorkToken(t *interfaces.Token, workState *factoryapi.WorkState) *time.Time {
-	if t == nil || t.EnteredAt.IsZero() || workState == nil {
-		return nil
-	}
-	switch workState.Type {
-	case factoryapi.WorkStateTypeTERMINAL, factoryapi.WorkStateTypeFAILED:
-		completedAt := t.EnteredAt
-		return &completedAt
-	default:
-		return nil
 	}
 }
 
@@ -740,11 +788,31 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func (s *Server) writeError(w http.ResponseWriter, status int, message, code string) {
+	s.writeErrorWithTargets(w, status, message, code, nil)
+}
+
+func (s *Server) writeErrorWithTargets(w http.ResponseWriter, status int, message, code string, targets []factoryapi.ErrorTarget) {
+	var targetPtr *[]factoryapi.ErrorTarget
+	if len(targets) > 0 {
+		targetPtr = &targets
+	}
 	s.writeJSON(w, status, factoryapi.ErrorResponse{
 		Message: message,
 		Family:  errorFamilyForStatus(status),
 		Code:    factoryapi.ErrorResponseCode(code),
+		Targets: targetPtr,
 	})
+}
+
+func errorTarget(kind, id, field string) factoryapi.ErrorTarget {
+	target := factoryapi.ErrorTarget{Kind: kind}
+	if id != "" {
+		target.Id = &id
+	}
+	if field != "" {
+		target.Field = &field
+	}
+	return target
 }
 
 func (s *Server) writeSSEDataJSON(w http.ResponseWriter, v any) error {
@@ -912,17 +980,73 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 }
 
 func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
-	return interfaces.BestEffortWorkContentFromGenerated(content)
+	parts, err := generatedWorkContentToDomainAtPath(content, "content")
+	if err != nil {
+		return nil
+	}
+	return parts
 }
 
 func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
-	return interfaces.GeneratedWorkContentPtr(parts)
+	if len(parts) == 0 {
+		return nil
+	}
+	content := make(factoryapi.WorkContent, 0, len(parts))
+	for _, part := range parts {
+		var generated factoryapi.WorkContentPart
+		switch part.Type {
+		case interfaces.WorkContentPartTypeText:
+			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+				Type: factoryapi.WorkContentPartTypeText,
+				Text: part.Text,
+			}); err != nil {
+				continue
+			}
+		case interfaces.WorkContentPartTypeImage:
+			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
+				Type: factoryapi.WorkContentPartTypeImage,
+				File: part.File,
+			}); err != nil {
+				continue
+			}
+		default:
+			continue
+		}
+		content = append(content, generated)
+	}
+	if len(content) == 0 {
+		return nil
+	}
+	return &content
 }
 
 func generatedWorkContentToDomainAtPath(content *factoryapi.WorkContent, fieldPath string) ([]interfaces.WorkContentPart, error) {
-	parts, err := interfaces.WorkContentFromGeneratedAtPath(content, fieldPath)
-	if err != nil {
-		return nil, requestFieldValidationError{message: err.Error()}
+	if content == nil || len(*content) == 0 {
+		return nil, nil
+	}
+
+	parts := make([]interfaces.WorkContentPart, 0, len(*content))
+	for i, part := range *content {
+		pathPrefix := fmt.Sprintf("%s[%d].", fieldPath, i)
+		textPart, textErr := part.AsWorkTextContentPart()
+		if textErr == nil && textPart.Type == factoryapi.WorkContentPartTypeText {
+			parts = append(parts, interfaces.WorkContentPart{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: textPart.Text,
+			})
+			continue
+		}
+
+		imagePart, imageErr := part.AsWorkImageContentPart()
+		if imageErr == nil && imagePart.Type == factoryapi.WorkContentPartTypeImage {
+			parts = append(parts, interfaces.WorkContentPart{
+				Type: interfaces.WorkContentPartTypeImage,
+				File: imagePart.File,
+			})
+			continue
+		}
+
+		return nil, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", pathPrefix)}
 	}
 	return parts, nil
 }
@@ -953,15 +1077,12 @@ func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkJSONReque
 	if err := json.Unmarshal(data, &req); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err
 	}
+	if err := validateCanonicalWorkRequestJSONForAPI(data); err != nil {
+		return factoryapi.SubmitWorkJSONRequestBody{}, err
+	}
 
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
-		return factoryapi.SubmitWorkJSONRequestBody{}, err
-	}
-	if err := rejectPublicBatchWorkAliases(fields, ""); err != nil {
-		return factoryapi.SubmitWorkJSONRequestBody{}, err
-	}
-	if err := rejectConflictingChainingTraceFields(fields, ""); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err
 	}
 	if err := validateWorkContentField(fields, ""); err != nil {
@@ -983,15 +1104,7 @@ func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestJSONRequ
 	if err := json.Unmarshal(data, &req); err != nil {
 		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
 	}
-
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
-	}
-	if err := rejectPublicBatchWorkAliases(fields, ""); err != nil {
-		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
-	}
-	if err := rejectConflictingChainingTraceFields(fields, ""); err != nil {
+	if err := validateCanonicalWorkRequestJSONForAPI(data); err != nil {
 		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
 	}
 
@@ -1009,12 +1122,6 @@ func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestJSONRequ
 	for i := range *req.Works {
 		if i >= len(rawRequest.Works) {
 			return req, nil
-		}
-		if err := rejectPublicBatchWorkAliases(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
-			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
-		}
-		if err := rejectConflictingChainingTraceFields(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
-			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
 		}
 		if err := validateWorkContentField(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
 			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
@@ -1045,28 +1152,118 @@ func decodeNamedFactoryBody(body io.Reader) (factoryapi.CreateFactoryJSONRequest
 	return req, nil
 }
 
-func rejectPublicBatchWorkAliases(fields map[string]json.RawMessage, prefix string) error {
-	if _, ok := fields[workTypeIDField]; ok {
-		return requestFieldValidationError{message: fmt.Sprintf("%swork_type_id is not supported; use workTypeName", prefix)}
+func decodeSaveEditableFactoryDefinitionBody(body io.Reader) (factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody{}, err
 	}
-	if _, ok := fields[targetStateField]; ok {
-		return requestFieldValidationError{message: fmt.Sprintf("%starget_state is not supported; use state", prefix)}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+
+	var req factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody
+	if err := decoder.Decode(&req); err != nil {
+		return factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody{}, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
+		}
+		return factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody{}, err
+	}
+	return req, nil
+}
+func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody{}, err
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+
+	var req factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody
+	if err := dec.Decode(&req); err != nil {
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody{}, err
+	}
+	if err := ensureSingleJSONObject(dec); err != nil {
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody{}, err
+	}
+
+	return req, nil
+}
+
+func ensureSingleJSONObject(dec *json.Decoder) error {
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return requestFieldValidationError{message: "request payload must contain one JSON object"}
+		}
+		return err
 	}
 	return nil
 }
 
-func rejectConflictingChainingTraceFields(fields map[string]json.RawMessage, prefix string) error {
-	if err := factorypkg.ValidateWorkRequestTraceFieldAliases(
-		fields[currentChainingTraceIDField],
-		fields[legacyCurrentChainingTraceIDField],
-		fields[traceIDField],
-		fields[legacyTraceIDField],
-	); err != nil {
-		return requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
+func validateCanonicalWorkRequestJSONForAPI(data []byte) error {
+	if err := factorypkg.ValidateCanonicalWorkRequestJSON(data); err != nil {
+		return translateCanonicalWorkRequestValidationError(err)
 	}
 	return nil
 }
 
+func currentFactoryWorkstation(factory factoryapi.Factory, workstationName string) (factoryapi.Workstation, bool) {
+	if factory.Workstations == nil {
+		return factoryapi.Workstation{}, false
+	}
+	for _, workstation := range *factory.Workstations {
+		if workstation.Name == workstationName || stringValue(workstation.Id) == workstationName {
+			return workstation, true
+		}
+	}
+	return factoryapi.Workstation{}, false
+}
+
+func promptTemplateContractResponse(contract workers.PromptTemplateContract) factoryapi.PromptTemplateContract {
+	availableVariables := make([]factoryapi.PromptTemplateVariableReference, 0, len(contract.AvailableVariables))
+	for _, reference := range contract.AvailableVariables {
+		availableVariables = append(availableVariables, factoryapi.PromptTemplateVariableReference{
+			Category:    factoryapi.PromptTemplateVariableReferenceCategory(reference.Category),
+			Description: reference.Description,
+			Example:     reference.Example,
+			Path:        reference.Path,
+		})
+	}
+	unavailablePatterns := make([]factoryapi.PromptTemplateUnavailableAccessPattern, 0, len(contract.UnavailableAccessPatterns))
+	for _, pattern := range contract.UnavailableAccessPatterns {
+		unavailablePatterns = append(unavailablePatterns, factoryapi.PromptTemplateUnavailableAccessPattern{
+			Example: pattern.Example,
+			Path:    pattern.Path,
+			Reason:  pattern.Reason,
+		})
+	}
+	return factoryapi.PromptTemplateContract{
+		AvailableVariables:        availableVariables,
+		InputCount:                contract.InputCount,
+		UnavailableAccessPatterns: unavailablePatterns,
+	}
+}
+
+func promptTemplateValidationResultResponse(result workers.PromptTemplateValidationResult) factoryapi.PromptTemplateValidationResult {
+	diagnostics := make([]factoryapi.PromptTemplateDiagnostic, 0, len(result.Diagnostics))
+	for _, diagnostic := range result.Diagnostics {
+		diagnostics = append(diagnostics, factoryapi.PromptTemplateDiagnostic{
+			EndOffset:   diagnostic.EndOffset,
+			Kind:        factoryapi.PromptTemplateDiagnosticKind(diagnostic.Kind),
+			Message:     diagnostic.Message,
+			Path:        diagnostic.Path,
+			SourceText:  diagnostic.SourceText,
+			StartOffset: diagnostic.StartOffset,
+		})
+	}
+	return factoryapi.PromptTemplateValidationResult{
+		Diagnostics: diagnostics,
+		Valid:       result.Valid,
+	}
+}
 func validateWorkContentField(fields map[string]json.RawMessage, prefix string) error {
 	contentRaw, ok := fields["content"]
 	if !ok {
@@ -1214,4 +1411,30 @@ func submitWorkTypeNameMessage(message string) string {
 		return message
 	}
 	return strings.ReplaceAll(message, "work type", "work type name")
+}
+
+func translateCanonicalWorkRequestValidationError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	message := err.Error()
+	message = strings.TrimPrefix(message, "work request batch ")
+	message = strings.ReplaceAll(message, " uses retired work_type_id field; use workTypeName", ".work_type_id is not supported; use workTypeName")
+	message = strings.ReplaceAll(message, " uses retired target_state field; use state", ".target_state is not supported; use state")
+	if strings.HasPrefix(message, "works[") && strings.Contains(message, "] ") {
+		message = strings.Replace(message, "] ", "].", 1)
+	}
+	if strings.HasSuffix(message, ".work_type_id is not supported; use workTypeName") ||
+		strings.HasSuffix(message, ".target_state is not supported; use state") {
+		return requestFieldValidationError{message: message}
+	}
+	switch message {
+	case "uses retired work_type_id field; use workTypeName":
+		return requestFieldValidationError{message: "work_type_id is not supported; use workTypeName"}
+	case "uses retired target_state field; use state":
+		return requestFieldValidationError{message: "target_state is not supported; use state"}
+	default:
+		return requestFieldValidationError{message: message}
+	}
 }

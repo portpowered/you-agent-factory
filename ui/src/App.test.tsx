@@ -1,24 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import {
-  MockEventSource,
-  registerAppDashboardTestLifecycle,
-  removeTraceIDsFromSnapshot,
-  renderApp,
-  requireValue,
-} from "./App.dashboard-test-harness";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { App } from "./App";
 import type {
   DashboardRuntimeWorkstationRequest,
   DashboardSnapshot,
   DashboardTrace,
+  DashboardWorkItemRef,
+  DashboardWorkstationRequest,
 } from "./api/dashboard";
 import type { FactoryEvent } from "./api/events";
 import { FACTORY_EVENT_TYPES } from "./api/events";
@@ -40,6 +37,7 @@ import {
   scriptDashboardIntegrationFixtureIDs,
   scriptDashboardIntegrationTimelineEvents,
 } from "./components/dashboard/fixtures";
+import { installDashboardBrowserTestShims } from "./components/dashboard/test-browser-shims";
 import {
   semanticWorkflowDashboardSnapshot,
   twentyNodeDashboardSnapshot,
@@ -50,15 +48,83 @@ import {
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "./components/ui/dashboard-typography";
 import { formatDurationMillis } from "./components/ui/formatters";
-import { useDashboardStreamStore } from "./features/dashboard/state/dashboardStreamStore";
+import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
+import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
+import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
+import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
+import {
+  createDefaultDashboardStreamState,
+  useDashboardStreamStore,
+} from "./features/dashboard/state/dashboardStreamStore";
 import * as factoryPngExportModule from "./features/export/factory-png-export";
+import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "./features/import";
 import * as factoryPngImportModule from "./features/import/factory-png-import";
+import type { WorldState } from "./features/timeline/state/factoryTimelineStore";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import {
   TraceDrilldownWidget,
   useTraceDrilldown,
 } from "./features/trace-drilldown";
+
+vi.mock("./features/current-factory-definition", async () => {
+  const actual = await vi.importActual("./features/current-factory-definition");
+
+  return {
+    ...actual,
+    useCurrentEditableFactoryDefinition: vi.fn(),
+  };
+});
+
+class MockEventSource {
+  public static instances: MockEventSource[] = [];
+
+  public onerror: ((event: Event) => void) | null = null;
+  public onopen: ((event: Event) => void) | null = null;
+
+  private readonly listeners = new Map<string, EventListener[]>();
+
+  constructor(public readonly url: string) {
+    MockEventSource.instances.push(this);
+  }
+
+  public addEventListener(type: string, listener: EventListener): void {
+    const existing = this.listeners.get(type) ?? [];
+    existing.push(listener);
+    this.listeners.set(type, existing);
+  }
+
+  public close(): void {}
+
+  public emit(type: string, data: unknown): void {
+    if (type === "snapshot") {
+      const state = useFactoryTimelineStore.getState();
+      const tracesByWorkID =
+        state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {};
+      seedTimelineSnapshot(data as DashboardSnapshot, tracesByWorkID);
+    }
+
+    const event = new MessageEvent(type, {
+      data: JSON.stringify(data),
+    });
+
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener(event);
+    }
+  }
+}
+
+interface RenderAppOptions {
+  browserLanguage?: string | null;
+  browserLanguages?: readonly string[] | null;
+  initialLocale?: string | null;
+  locationSearch?: string | null;
+  snapshot: DashboardSnapshot;
+  timelineEvents?: FactoryEvent[];
+  timelineSnapshots?: DashboardSnapshot[];
+  traceFixtures?: Record<string, DashboardTrace>;
+  workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
+}
 
 function TraceDrilldownTestHarness({
   selectedWorkID,
@@ -337,6 +403,14 @@ function getWorkstationNodeByLabel(label: string): HTMLElement {
   return node;
 }
 
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
 function expectFixedReviewWorkstationDimensions(): void {
   const reviewNode = getWorkstationNodeByLabel("Review");
 
@@ -490,6 +564,73 @@ function _expectRenderedWorkstationRequest(
       "The workstation request has not produced a response yet.",
     ),
   ).toBeTruthy();
+}
+
+function removeTraceIDFromWorkItem(
+  workItem: DashboardWorkItemRef,
+): DashboardWorkItemRef {
+  const withoutTraceID: DashboardWorkItemRef = { work_id: workItem.work_id };
+  if (workItem.display_name) {
+    withoutTraceID.display_name = workItem.display_name;
+  }
+  if (workItem.work_type_id) {
+    withoutTraceID.work_type_id = workItem.work_type_id;
+  }
+  return withoutTraceID;
+}
+
+function removeTraceIDsFromSnapshot(
+  snapshot: DashboardSnapshot,
+): DashboardSnapshot {
+  return {
+    ...snapshot,
+    runtime: {
+      ...snapshot.runtime,
+      active_executions_by_dispatch_id: Object.fromEntries(
+        Object.entries(
+          snapshot.runtime.active_executions_by_dispatch_id ?? {},
+        ).map(([dispatchID, execution]) => [
+          dispatchID,
+          {
+            ...execution,
+            trace_ids: [],
+            work_items: execution.work_items?.map(removeTraceIDFromWorkItem),
+          },
+        ]),
+      ),
+      current_work_items_by_place_id: Object.fromEntries(
+        Object.entries(
+          snapshot.runtime.current_work_items_by_place_id ?? {},
+        ).map(([placeID, workItems]) => [
+          placeID,
+          workItems.map(removeTraceIDFromWorkItem),
+        ]),
+      ),
+      session: {
+        ...snapshot.runtime.session,
+        provider_sessions: snapshot.runtime.session.provider_sessions?.map(
+          (attempt) => ({
+            ...attempt,
+            work_items: attempt.work_items?.map(removeTraceIDFromWorkItem),
+          }),
+        ),
+      },
+      workstation_activity_by_node_id: Object.fromEntries(
+        Object.entries(
+          snapshot.runtime.workstation_activity_by_node_id ?? {},
+        ).map(([nodeID, activity]) => [
+          nodeID,
+          {
+            ...activity,
+            active_work_items: activity.active_work_items?.map(
+              removeTraceIDFromWorkItem,
+            ),
+            trace_ids: [],
+          },
+        ]),
+      ),
+    },
+  };
 }
 
 function expectSeparatedStateMarkerZones(label: string, count: number): void {
@@ -1049,6 +1190,153 @@ const currentNamedFactoryExportResponse = {
     },
   ],
 } satisfies FactoryValue;
+const queryClients: QueryClient[] = [];
+let restoreBrowserTestShims: (() => void) | null = null;
+
+function timelineSnapshot(
+  snapshot: DashboardSnapshot,
+  tracesByWorkID: Record<string, DashboardTrace> = {},
+  workstationRequestsByDispatchID: Record<
+    string,
+    DashboardWorkstationRequest
+  > = {},
+): WorldState {
+  return {
+    ...snapshot,
+    relationsByWorkID: {},
+    tracesByWorkID,
+    workstationRequestsByDispatchID,
+    workRequestsByID: {},
+  };
+}
+
+function seedTimelineSnapshot(
+  snapshot: DashboardSnapshot,
+  tracesByWorkID: Record<string, DashboardTrace> = {},
+  workstationRequestsByDispatchID: Record<
+    string,
+    DashboardWorkstationRequest
+  > = {},
+): void {
+  useFactoryTimelineStore.setState({
+    events: [],
+    latestTick: snapshot.tick_count,
+    mode: "current",
+    receivedEventIDs: [],
+    selectedTick: snapshot.tick_count,
+    worldViewCache: {
+      [snapshot.tick_count]: timelineSnapshot(
+        snapshot,
+        tracesByWorkID,
+        workstationRequestsByDispatchID,
+      ),
+    },
+  });
+}
+
+function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
+  const worldViewCache = Object.fromEntries(
+    snapshots.map(
+      (snapshot) =>
+        [
+          snapshot.tick_count,
+          timelineSnapshot(snapshot) satisfies WorldState,
+        ] as const,
+    ),
+  );
+  const latestTick = Math.max(
+    ...snapshots.map((snapshot) => snapshot.tick_count),
+  );
+
+  useFactoryTimelineStore.setState({
+    events: [],
+    latestTick,
+    mode: "current",
+    receivedEventIDs: [],
+    selectedTick: latestTick,
+    worldViewCache,
+  });
+}
+
+function renderApp({
+  browserLanguage,
+  browserLanguages,
+  initialLocale,
+  locationSearch,
+  snapshot,
+  timelineEvents,
+  timelineSnapshots,
+  traceFixtures = {},
+  workstationRequestsByDispatchID = {},
+}: RenderAppOptions) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: Infinity,
+        retry: false,
+      },
+    },
+  });
+  queryClients.push(queryClient);
+
+  const fetchMock = vi
+    .fn()
+    .mockImplementation(async (input: RequestInfo | URL) => {
+      const path =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? `${input.pathname}${input.search}`
+            : input.url;
+
+      throw new Error(`unexpected fetch for ${path}`);
+    });
+
+  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("EventSource", MockEventSource);
+  reloadDashboardLayoutFromStorage();
+  if (timelineEvents) {
+    useFactoryTimelineStore.getState().replaceEvents(timelineEvents);
+  } else if (timelineSnapshots) {
+    seedTimelineSnapshots(timelineSnapshots);
+  } else {
+    seedTimelineSnapshot(
+      snapshot,
+      traceFixtures,
+      workstationRequestsByDispatchID,
+    );
+  }
+
+  const result = render(
+    <QueryClientProvider client={queryClient}>
+      <App
+        browserLanguage={browserLanguage}
+        browserLanguages={browserLanguages}
+        initialLocale={initialLocale}
+        locationSearch={locationSearch}
+      />
+    </QueryClientProvider>,
+  );
+
+  return { ...result, fetchMock };
+}
+
+function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchMock.mock.calls.map(([input]) =>
+    typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? `${input.pathname}${input.search}`
+        : input.url,
+  );
+}
+
+function nonPromptTemplateFetchPaths(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchCallPaths(fetchMock).filter(
+    (path) => !path.includes("/prompt-template-contract"),
+  );
+}
+
 function submitWorkCardControls() {
   const dashboardGrid = screen.getByRole("region", {
     name: "Infinite You bento board",
@@ -1193,17 +1481,7 @@ function renderTraceDrilldownHarness({
   selectedWorkID: string;
   timelineEvents: FactoryEvent[];
 }) {
-  useFactoryTimelineStore.getState().replaceEvents(timelineEvents);
-
-  return render(
-    <QueryClientProvider client={createTraceDrilldownQueryClient()}>
-      <TraceDrilldownTestHarness selectedWorkID={selectedWorkID} />
-    </QueryClientProvider>,
-  );
-}
-
-function createTraceDrilldownQueryClient(): QueryClient {
-  return new QueryClient({
+  const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
         gcTime: Infinity,
@@ -1211,6 +1489,14 @@ function createTraceDrilldownQueryClient(): QueryClient {
       },
     },
   });
+  queryClients.push(queryClient);
+  useFactoryTimelineStore.getState().replaceEvents(timelineEvents);
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <TraceDrilldownTestHarness selectedWorkID={selectedWorkID} />
+    </QueryClientProvider>,
+  );
 }
 
 function createFactoryImportValue(): FactoryPngImportValue {
@@ -1299,6 +1585,92 @@ function _getDispatchHistoryCard(
   }
 
   return card;
+}
+
+function registerAppDashboardTestLifecycle(): void {
+  beforeEach(() => {
+    window.localStorage.clear();
+    MockEventSource.instances = [];
+    restoreBrowserTestShims = installDashboardBrowserTestShims();
+    resetSelectionHistoryStore();
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+      data: undefined,
+      error: null,
+      failureCount: 0,
+      failureReason: null,
+      fetchStatus: "idle",
+      isError: false,
+      isFetched: false,
+      isFetchedAfterMount: false,
+      isFetching: false,
+      isInitialLoading: false,
+      isLoading: false,
+      isLoadingError: false,
+      isPaused: false,
+      isPending: true,
+      isPlaceholderData: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isStale: true,
+      isSuccess: false,
+      promise: Promise.resolve(undefined),
+      refetch: vi.fn(),
+      status: "pending",
+    } as never);
+  });
+
+  afterEach(() => {
+    for (const queryClient of queryClients.splice(0)) {
+      queryClient.clear();
+    }
+    cleanup();
+    useDashboardBentoStore.setState({
+      refreshToken: 0,
+      selectedTraceID: null,
+    });
+    useExportDialogStore.setState({
+      isExportDialogOpen: false,
+    });
+    useDashboardStreamStore.setState({
+      streamState: createDefaultDashboardStreamState(),
+    });
+    useFactoryTimelineStore.getState().reset();
+    resetSelectionHistoryStore();
+    restoreBrowserTestShims?.();
+    restoreBrowserTestShims = null;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+}
+
+function registerAppFollowUpTestLifecycle(): void {
+  beforeEach(() => {
+    window.localStorage.clear();
+    MockEventSource.instances = [];
+    restoreBrowserTestShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    for (const queryClient of queryClients.splice(0)) {
+      queryClient.clear();
+    }
+    cleanup();
+    useDashboardBentoStore.setState({
+      refreshToken: 0,
+      selectedTraceID: null,
+    });
+    useExportDialogStore.setState({
+      isExportDialogOpen: false,
+    });
+    useDashboardStreamStore.setState({
+      streamState: createDefaultDashboardStreamState(),
+    });
+    useFactoryTimelineStore.getState().reset();
+    restoreBrowserTestShims?.();
+    restoreBrowserTestShims = null;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 }
 
 describe("App shell import and export flows", () => {
@@ -1846,8 +2218,9 @@ describe("App shell import and export flows", () => {
       expect(
         screen.getByRole("region", { name: "dashboard summary" }),
       ).toBeTruthy();
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(fetchMock.mock.calls[0]?.[0]).toBe("/factory/~current");
+      expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
+        "/factory/~current",
+      ]);
       expect(exportProbe.getDownloadedBlob()).toBeNull();
       expect(exportProbe.getDownloadedFilename()).toBe("");
     } finally {
@@ -2019,8 +2392,9 @@ describe("App shell import and export flows", () => {
 
   it("does not download after cancelling an export that is still in flight", async () => {
     const exportProbe = installExportDownloadProbe();
-    const factoryPngExportModule =
-      await import("./features/export/factory-png-export");
+    const factoryPngExportModule = await import(
+      "./features/export/factory-png-export"
+    );
     const pendingExport =
       createDeferredPromise<
         Awaited<ReturnType<typeof factoryPngExportModule.writeFactoryExportPng>>
@@ -2183,8 +2557,9 @@ describe("App shell import and export flows", () => {
 
   it("exports the current named-factory API payload instead of the event timeline projection", async () => {
     const exportProbe = installExportDownloadProbe();
-    const factoryPngExportModule =
-      await import("./features/export/factory-png-export");
+    const factoryPngExportModule = await import(
+      "./features/export/factory-png-export"
+    );
     const writeFactoryExportPngSpy = vi
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")
       .mockResolvedValue({
@@ -2379,6 +2754,14 @@ describe("App timeline reconstruction flows", () => {
       label: "ready",
       requestProjection: dashboardWorkstationRequestFixtures.ready,
       verify: (currentSelection: HTMLElement) => {
+        const attempt = within(currentSelection).getByRole("article", {
+          name: "Inference attempt 2",
+        });
+        fireEvent.click(
+          within(
+            within(attempt).getByRole("region", { name: "Response body" }),
+          ).getByRole("button", { name: "Expand" }),
+        );
         expect(
           within(currentSelection).getAllByText("request-ready-story").length,
         ).toBeGreaterThan(0);
@@ -2392,17 +2775,11 @@ describe("App timeline reconstruction flows", () => {
             name: "Response details",
           }),
         ).toBeTruthy();
-        const responseBody = within(currentSelection).getByRole("region", {
-          name: "Response body",
-        });
         expect(
-          within(responseBody)
-            .getByRole("button", { name: "Expand" })
-            .getAttribute("aria-expanded"),
-        ).toBe("false");
-        expect(
-          within(responseBody).queryByText("Ready for the next workstation."),
-        ).toBeNull();
+          within(currentSelection).getAllByText(
+            "Ready for the next workstation.",
+          ).length,
+        ).toBeGreaterThan(0);
       },
     },
     {
@@ -2420,15 +2797,19 @@ describe("App timeline reconstruction flows", () => {
       label: "rejected",
       requestProjection: dashboardWorkstationRequestFixtures.rejected,
       verify: (currentSelection: HTMLElement) => {
-        expect(
+        const attempt = within(currentSelection).getByRole("article", {
+          name: "Inference attempt 1",
+        });
+        fireEvent.click(
           within(
-            within(currentSelection).getByRole("region", {
-              name: "Response body",
-            }),
-          ).queryByText(
+            within(attempt).getByRole("region", { name: "Response body" }),
+          ).getByRole("button", { name: "Expand" }),
+        );
+        expect(
+          within(currentSelection).getAllByText(
             "The active story needs revision before it can continue.",
-          ),
-        ).toBeNull();
+          ).length,
+        ).toBeGreaterThan(0);
         expect(
           within(currentSelection).getByRole("heading", {
             name: "Response details",
@@ -2488,35 +2869,35 @@ describe("App timeline reconstruction flows", () => {
         ).toBeTruthy();
       },
     },
-  ])(
-    "selects a workstation dispatch and routes $label request context through work-item details",
-    async ({ requestProjection, verify }) => {
-      renderApp({
-        snapshot: activeSnapshot,
-        workstationRequestsByDispatchID: {
-          [requestProjection.dispatch_id]: requestProjection,
-        },
-      });
+  ])("selects a workstation dispatch and routes $label request context through work-item details", async ({
+    requestProjection,
+    verify,
+  }) => {
+    renderApp({
+      snapshot: activeSnapshot,
+      workstationRequestsByDispatchID: {
+        [requestProjection.dispatch_id]: requestProjection,
+      },
+    });
 
-      await selectWorkstationRequest(requestProjection.dispatch_id);
+    await selectWorkstationRequest(requestProjection.dispatch_id);
 
-      await waitFor(() => {
-        const currentSelection = screen.getByRole("article", {
-          name: "Current selection",
-        });
-        expect(
-          within(currentSelection).getAllByText(requestProjection.dispatch_id)
-            .length,
-        ).toBeGreaterThan(0);
-        expect(
-          within(currentSelection).queryByRole("heading", {
-            name: "Active work",
-          }),
-        ).toBeNull();
-        verify(currentSelection);
+    await waitFor(() => {
+      const currentSelection = screen.getByRole("article", {
+        name: "Current selection",
       });
-    },
-  );
+      expect(
+        within(currentSelection).getAllByText(requestProjection.dispatch_id)
+          .length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(currentSelection).queryByRole("heading", {
+          name: "Active work",
+        }),
+      ).toBeNull();
+      verify(currentSelection);
+    });
+  });
 });
 
 describe("App streamed replay smoke flows", () => {
@@ -2547,7 +2928,7 @@ describe("App streamed replay smoke flows", () => {
         screen.getByRole("button", { name: "Select Review workstation" }),
       ).toBeTruthy();
     });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
 
     fireEvent.change(slider, { target: { value: "3" } });
 
@@ -2671,7 +3052,7 @@ describe("App streamed replay smoke flows", () => {
         "Provider rate limit exceeded while generating the analysis.",
       ).length,
     ).toBeGreaterThan(0);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
   });
 
   it("smoke tests resource counts from streamed events against backend world-view counts", async () => {
@@ -2713,7 +3094,7 @@ describe("App streamed replay smoke flows", () => {
       expectRenderedResourceCountMatchesBackendWorldView(1);
     });
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
   });
 
   it("smoke tests workstation-request runtime details against backend expectations", async () => {
@@ -2946,20 +3327,19 @@ describe("App streamed replay smoke flows", () => {
         name: "Inference attempts",
       }),
     ).toBeTruthy();
-    const inferenceResponseBody = within(inferenceSelection).getByRole(
-      "region",
-      { name: "Response body" },
+    const inferenceAttempt = within(inferenceSelection).getByRole("article", {
+      name: "Inference attempt 1",
+    });
+    fireEvent.click(
+      within(
+        within(inferenceAttempt).getByRole("region", { name: "Response body" }),
+      ).getByRole("button", { name: "Expand" }),
     );
     expect(
-      within(inferenceResponseBody)
-        .getByRole("button", { name: "Expand" })
-        .getAttribute("aria-expanded"),
-    ).toBe("false");
-    expect(
-      within(inferenceResponseBody).queryByText(
+      within(inferenceSelection).getAllByText(
         scriptDashboardIntegrationFixtureIDs.inferenceResponseText,
-      ),
-    ).toBeNull();
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it("smoke tests graph state across event replay, terminal selection, and tick changes", async () => {
@@ -3359,7 +3739,7 @@ describe("App dashboard layout and graph behavior", () => {
 });
 
 describe("App dashboard follow-up flows", () => {
-  registerAppDashboardTestLifecycle({ resetSelectionHistory: false });
+  registerAppFollowUpTestLifecycle();
 
   it("renders the submit-work card alongside the existing dashboard widgets", async () => {
     renderApp({ snapshot: terminalSnapshot });
@@ -3491,9 +3871,9 @@ describe("App dashboard follow-up flows", () => {
         "Your request was submitted. Trace ID: trace-submit-story.",
       ),
     ).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/work");
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+    const submitCalls = nonPromptTemplateFetchPaths(fetchMock);
+    expect(submitCalls).toEqual(["/work"]);
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
       name: "Dashboard smoke request",
       payload: "Review the failed dashboard submission smoke.",
       workTypeName: "story",
@@ -3518,9 +3898,9 @@ describe("App dashboard follow-up flows", () => {
     expect(
       await submitWorkScope.findByText("work_type_name is required"),
     ).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("/work");
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+    expect(submitCalls).toEqual(["/work"]);
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work", "/work"]);
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
       name: "Retry dashboard request",
       payload: "Retry the broken submission from the dashboard shell.",
       workTypeName: "story",
@@ -3585,12 +3965,11 @@ describe("App dashboard follow-up flows", () => {
         "Your request was submitted. Trace ID: trace-submit-story.",
       ),
     ).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/work");
-    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work"]);
+    expect(fetchMock.mock.calls.at(-1)?.[1]).toMatchObject({
       method: "POST",
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
       name: "Dashboard smoke request",
       payload: "Review the failed dashboard submission smoke.",
       workTypeName: "story",
@@ -3629,8 +4008,8 @@ describe("App dashboard follow-up flows", () => {
         "Your request was submitted. Trace ID: trace-submit-story.",
       ),
     ).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work"]);
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
       name: "Dashboard empty payload request",
       payload: "",
       workTypeName: "story",
@@ -3694,8 +4073,7 @@ describe("App dashboard follow-up flows", () => {
     expect(
       await submitWorkScope.findByText("work_type_name is required"),
     ).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/work");
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work"]);
     expect(workType.value).toBe("story");
     expect(requestName.value).toBe("Retry dashboard request");
     expect(requestText.value).toBe(
@@ -3892,7 +4270,7 @@ describe("App dashboard follow-up flows", () => {
     );
     await screen.findByText("Trace dispatch grid");
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
   });
 
   it("updates completed and failed totals from the live stream", async () => {

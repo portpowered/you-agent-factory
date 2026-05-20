@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import type { GraphSemanticIconKind } from "../flowchart/graph-semantic-icon";
 import { GraphSemanticIcon } from "../flowchart/graph-semantic-icon";
 import {
@@ -172,7 +172,7 @@ function DashboardFlowAxisLegendItems({
           key={item.id}
         >
           <span
-            className={cx(
+            className={cn(
               "h-1 w-7 rounded-full",
               edgeSwatchClassName(item.tone),
             )}
@@ -190,7 +190,7 @@ function DashboardFlowAxisLegendItems({
           key={item.kind}
         >
           <GraphSemanticIcon
-            className={cx("h-4 w-4", item.iconClassName)}
+            className={cn("h-4 w-4", item.iconClassName)}
             kind={item.kind}
             label={messages.iconLabel(item.label)}
           />
@@ -219,7 +219,7 @@ export function DashboardFlowAxisLegend({
 
   return (
     <div
-      className={cx(DEFAULT_CONTAINER_CLASS, className)}
+      className={cn(DEFAULT_CONTAINER_CLASS, className)}
       data-dashboard-flow-axis-legend=""
       data-legend-expanded={expanded ? "true" : "false"}
     >

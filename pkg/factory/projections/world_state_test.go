@@ -60,6 +60,29 @@ func TestReconstructFactoryWorldState_InitialStructurePreservesNonSuccessRouteAr
 	}
 }
 
+func TestReconstructFactoryWorldState_FactoryChangeReplacesProjectedTopology(t *testing.T) {
+	t0 := time.Date(2026, 4, 22, 9, 0, 0, 0, time.UTC)
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		factoryChangeEvent(t0.Add(time.Second)),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 1)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+
+	if len(state.Topology.WorkTypes) != 1 || state.Topology.WorkTypes[0].ID != "story" {
+		t.Fatalf("work types after factory-change = %#v, want story replacement topology", state.Topology.WorkTypes)
+	}
+	if len(state.Topology.Workstations) != 1 || state.Topology.Workstations[0].ID != "t-plan" {
+		t.Fatalf("workstations after factory-change = %#v, want t-plan replacement topology", state.Topology.Workstations)
+	}
+	if _, ok := state.PlaceOccupancyByID["task:init"]; ok {
+		t.Fatalf("task:init occupancy = %#v, want old topology removed after factory-change", state.PlaceOccupancyByID["task:init"])
+	}
+}
+
 func TestReconstructFactoryWorldState_ActiveRequestAtSelectedTick(t *testing.T) {
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
@@ -154,39 +177,6 @@ func TestReconstructFactoryWorldState_FallsBackToPayloadDispatchChainingLineageF
 	}
 	if got := dispatch.PreviousChainingTraceIDs; len(got) != 2 || got[0] != "payload-a" || got[1] != "payload-z" {
 		t.Fatalf("active dispatch previous chaining trace IDs = %#v, want [payload-a payload-z]", got)
-	}
-}
-
-func TestReconstructFactoryWorldState_PreservesGeneratedWorkContent(t *testing.T) {
-	t0 := time.Date(2026, 4, 22, 14, 0, 0, 0, time.UTC)
-	events := []factoryapi.FactoryEvent{
-		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
-			ID:          "work-with-content",
-			WorkTypeID:  "task",
-			DisplayName: "Review image",
-			TraceID:     "trace-content",
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: "review this image"},
-				{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
-			},
-		}),
-	}
-
-	state, err := ReconstructFactoryWorldState(events, 1)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
-	}
-
-	want := []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "review this image"},
-		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
-	}
-	if got := state.WorkItemsByID["work-with-content"].Content; !reflect.DeepEqual(got, want) {
-		t.Fatalf("work item content = %#v, want %#v", got, want)
-	}
-	if got := state.ActiveWorkItemsByID["work-with-content"].Content; !reflect.DeepEqual(got, want) {
-		t.Fatalf("active work item content = %#v, want %#v", got, want)
 	}
 }
 
@@ -1153,6 +1143,28 @@ func initialStructureEventWithNonSuccessRouteArrays(eventTime time.Time) factory
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeInitialStructureRequest, "initial-non-success-routes", 0, eventTime, factoryapi.FactoryEventContext{}, payload)
 }
 
+func factoryChangeEvent(eventTime time.Time) factoryapi.FactoryEvent {
+	payload := factoryapi.FactoryChangeEventPayload{
+		Factory: factoryapi.Factory{
+			WorkTypes: &[]factoryapi.WorkType{{
+				Name: "story",
+				States: []factoryapi.WorkState{
+					{Name: "new", Type: factoryapi.WorkStateTypeINITIAL},
+					{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+				},
+			}},
+			Workstations: &[]factoryapi.Workstation{{
+				Id:      stringPtrForProjectionTest("t-plan"),
+				Name:    "Plan",
+				Worker:  "planner",
+				Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "new"}},
+				Outputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
+			}},
+		},
+	}
+	return generatedProjectionEvent(factoryapi.FactoryEventTypeFactoryChange, "factory-change", 1, eventTime, factoryapi.FactoryEventContext{}, payload)
+}
+
 func runRequestEvent(eventTime time.Time) factoryapi.FactoryEvent {
 	payload := factoryapi.RunRequestEventPayload{
 		RecordedAt: eventTime,
@@ -1302,6 +1314,10 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 		if err := event.Payload.FromInitialStructureRequestEventPayload(typed); err != nil {
 			panic(err)
 		}
+	case factoryapi.FactoryChangeEventPayload:
+		if err := event.Payload.FromFactoryChangeEventPayload(typed); err != nil {
+			panic(err)
+		}
 	case factoryapi.WorkRequestEventPayload:
 		if err := event.Payload.FromWorkRequestEventPayload(typed); err != nil {
 			panic(err)
@@ -1386,7 +1402,6 @@ func scriptResponseEvent(tick int, eventTime time.Time, payload factoryapi.Scrip
 func generatedWorkForProjectionTest(item interfaces.FactoryWorkItem, requestID string) factoryapi.Work {
 	return factoryapi.Work{
 		Name:                     item.DisplayName,
-		Content:                  interfaces.GeneratedWorkContentPtr(item.Content),
 		RequestId:                stringPtrForProjectionTest(requestID),
 		Tags:                     generatedStringMapForProjectionTest(item.Tags),
 		ChainingTraceDepth:       intPtrForProjectionTest(item.ChainingTraceDepth),

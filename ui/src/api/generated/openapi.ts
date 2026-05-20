@@ -168,6 +168,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/factory/~current/workstations/{workstation_name}/prompt-template-contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get workstation prompt-template contract
+         * @description Returns the authoritative prompt-variable reference and unavailable-access patterns for the selected current-factory workstation editing context.
+         */
+        get: operations["getCurrentFactoryWorkstationPromptTemplateContract"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/factory/~current/editable-definition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get editable current factory definition
+         * @description Returns the complete current factory definition for graph editing together with hybrid logical timestamp metadata clients must carry into saves for stale-edit detection.
+         */
+        get: operations["getEditableCurrentFactoryDefinition"];
+        /**
+         * Save editable current factory definition
+         * @description Submits one complete replacement for the current factory definition. The payload preserves all untouched fields because the full Factory contract is saved through the same canonical factory persistence path used by named-factory activation.
+         */
+        put: operations["saveEditableCurrentFactoryDefinition"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/factory/~current/workstations/{workstation_name}/prompt-template-validation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate workstation prompt template
+         * @description Validates a prompt draft against the authoritative current-factory workstation prompt contract and returns typed syntax or variable diagnostics.
+         */
+        post: operations["validateCurrentFactoryWorkstationPromptTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -270,7 +334,37 @@ export interface components {
              * @description Stable machine-readable error code.
              * @enum {string}
              */
-            code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "NOT_FOUND" | "INTERNAL_ERROR";
+            code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "STALE_FACTORY_VERSION" | "NOT_FOUND" | "INTERNAL_ERROR";
+            /** @description Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages. */
+            targets?: components["schemas"]["ErrorTarget"][];
+        };
+        ErrorTarget: {
+            /** @description Client-visible target category such as form, node, edge, field, or save. */
+            kind: string;
+            /** @description Optional graph entity, relationship, or save condition identifier. */
+            id?: string;
+            /** @description Optional request or form field path associated with the error. */
+            field?: string;
+        };
+        HybridLogicalTimestamp: {
+            /**
+             * Format: int64
+             * @description Monotonic Lamport-style logical component derived from the persisted factory definition version.
+             */
+            logical: number;
+            /**
+             * Format: date-time
+             * @description UTC physical timestamp component for the persisted factory definition version.
+             */
+            physical: string;
+        };
+        EditableFactoryDefinition: {
+            factoryDefinition: components["schemas"]["Factory"];
+            version: components["schemas"]["HybridLogicalTimestamp"];
+        };
+        SaveEditableFactoryDefinitionRequest: {
+            factoryDefinition: components["schemas"]["Factory"];
+            baseVersion?: components["schemas"]["HybridLogicalTimestamp"];
         };
         ProviderSessionDetailResponse: {
             providerSession: components["schemas"]["LoadableProviderSessionRef"];
@@ -1239,6 +1333,62 @@ export interface components {
             /** @description Destination workstation name. */
             to: string;
         };
+        PromptTemplateContract: {
+            /** @description Available prompt-template variables for the selected workstation editing context. */
+            availableVariables: components["schemas"]["PromptTemplateVariableReference"][];
+            /** @description Number of authored inputs on the selected workstation, which controls valid `.Inputs[N]` access. */
+            inputCount: number;
+            /** @description Unsupported or unavailable variable access patterns for the selected workstation editing context. */
+            unavailableAccessPatterns: components["schemas"]["PromptTemplateUnavailableAccessPattern"][];
+        };
+        PromptTemplateVariableReference: {
+            /**
+             * @description High-level grouping for the variable reference.
+             * @enum {string}
+             */
+            category: "ROOT" | "INPUT" | "HISTORY" | "CONTEXT" | "MAP_ACCESS";
+            /** @description User-readable description of what the variable resolves to. */
+            description: string;
+            /** @description Go template snippet that shows how to reference the variable. */
+            example: string;
+            /** @description Canonical variable path summary used in diagnostics and help surfaces. */
+            path: string;
+        };
+        PromptTemplateUnavailableAccessPattern: {
+            /** @description Representative unsupported template snippet for this access pattern. */
+            example: string;
+            /** @description Unsupported or unavailable variable path pattern. */
+            path: string;
+            /** @description Why the access pattern is unavailable or unsupported in the selected workstation context. */
+            reason: string;
+        };
+        PromptTemplateValidationRequest: {
+            /** @description Prompt draft to validate against the selected current-factory workstation contract. */
+            prompt: string;
+        };
+        PromptTemplateValidationResult: {
+            /** @description Typed validation diagnostics for the submitted prompt draft. */
+            diagnostics: components["schemas"]["PromptTemplateDiagnostic"][];
+            /** @description True when the prompt contains no syntax or variable diagnostics. */
+            valid: boolean;
+        };
+        PromptTemplateDiagnostic: {
+            /** @description Inclusive 1-based byte offset where the diagnostic source span ends when available. */
+            endOffset: number;
+            /**
+             * @description Diagnostic classification for prompt-template validation.
+             * @enum {string}
+             */
+            kind: "SYNTAX_ERROR" | "INVALID_VARIABLE" | "UNAVAILABLE_VARIABLE";
+            /** @description User-readable explanation of the validation failure. */
+            message: string;
+            /** @description Canonical variable path or access pattern involved in the diagnostic when available. */
+            path: string;
+            /** @description Source variable or access expression that triggered the diagnostic when available. */
+            sourceText: string;
+            /** @description Inclusive 1-based byte offset where the diagnostic source span starts when available. */
+            startOffset: number;
+        };
         WorkRequest: {
             /** @description Stable client-provided request identifier used for idempotent batch submission. */
             requestId: string;
@@ -1267,11 +1417,6 @@ export interface components {
             workTypeName?: string;
             /** @description Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided. */
             state?: components["schemas"]["WorkState"];
-            /**
-             * Format: date-time
-             * @description Time when this work item entered a completed or failed state, when known.
-             */
-            completedAt?: string;
             /** @description Current chaining depth for this work item when the runtime already knows its upstream lineage. */
             chainingTraceDepth?: number;
             /** @description Explicit chaining-trace identifier for this submitted work item. */
@@ -1364,6 +1509,24 @@ export interface components {
         };
         /** @description Current named factory was not found. */
         CurrentFactoryNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Editable factory definition save request failed validation. */
+        SaveEditableFactoryDefinitionBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Editable factory definition could not be saved because the runtime or submitted version is not safe to replace. */
+        SaveEditableFactoryDefinitionConflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1628,6 +1791,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Factory"];
+                };
+            };
+            404: components["responses"]["CurrentFactoryNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getCurrentFactoryWorkstationPromptTemplateContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Customer-authored workstation name to inspect in the current factory. */
+                workstation_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Prompt-template contract for the selected workstation editing context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplateContract"];
+                };
+            };
+            404: components["responses"]["CurrentFactoryNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getEditableCurrentFactoryDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Editable current factory definition and version metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditableFactoryDefinition"];
+                };
+            };
+            404: components["responses"]["CurrentFactoryNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    saveEditableCurrentFactoryDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveEditableFactoryDefinitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved editable factory definition and new version metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditableFactoryDefinition"];
+                };
+            };
+            400: components["responses"]["SaveEditableFactoryDefinitionBadRequest"];
+            404: components["responses"]["CurrentFactoryNotFound"];
+            409: components["responses"]["SaveEditableFactoryDefinitionConflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    validateCurrentFactoryWorkstationPromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Customer-authored workstation name to validate against in the current factory. */
+                workstation_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptTemplateValidationRequest"];
+            };
+        };
+        responses: {
+            /** @description Prompt validation result for the selected workstation editing context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplateValidationResult"];
                 };
             };
             404: components["responses"]["CurrentFactoryNotFound"];

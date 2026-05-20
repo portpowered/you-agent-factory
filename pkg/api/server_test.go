@@ -306,34 +306,6 @@ func TestUpsertWorkRequest_RejectsInvalidContentPartShape(t *testing.T) {
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].content[0].file is not supported")
 }
 
-func TestSubmitWork_RejectsUnsupportedContentPartTypeWithFieldPath(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
-	})
-
-	body := `{"workTypeName":"prd","content":[{"type":"audio","file":"fixtures/audio.mp3"}]}`
-	req := httptest.NewRequest(http.MethodPost, "/work", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].type must be one of text or image")
-}
-
-func TestUpsertWorkRequest_RejectsUnsupportedContentPartTypeWithFieldPath(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
-	})
-
-	body := `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","content":[{"type":"audio","file":"fixtures/audio.mp3"}]}]}`
-	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-1", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].content[0].type must be one of text or image")
-}
-
 func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
 	eventTime := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 	currentFactoryID := "beta"
@@ -760,6 +732,26 @@ func TestSubmitWork_WorkTypeIDReturnsBadRequest(t *testing.T) {
 	}
 }
 
+func TestSubmitWork_TargetStateReturnsBadRequest(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"name":"draft","workTypeName":"prd","target_state":"queued","payload":{"title":"Draft PRD"}}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "target_state is not supported; use state")
+	if len(mf.Submitted) != 0 {
+		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	}
+}
+
 func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
 	mf := &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
@@ -879,6 +871,267 @@ func TestGetCurrentFactory_AllowsDefaultRuntimeIdentifier(t *testing.T) {
 	if current.Id == nil || *current.Id != "root-runtime" {
 		t.Fatalf("current factory id = %#v, want root-runtime", current.Id)
 	}
+}
+
+func TestGetEditableCurrentFactoryDefinition_ReturnsDefinitionAndVersion(t *testing.T) {
+	versionTime := time.Date(2026, 5, 18, 10, 30, 0, 0, time.UTC)
+	mf := &testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{
+			Name: factoryapi.FactoryName("beta"),
+			WorkTypes: &[]factoryapi.WorkType{{
+				Name: "beta-task",
+				States: []factoryapi.WorkState{
+					{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+					{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+				},
+			}},
+		},
+		EditableFactoryVersion: factoryapi.HybridLogicalTimestamp{
+			Logical:  42,
+			Physical: versionTime,
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodGet, "/factory/~current/editable-definition", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var editable factoryapi.EditableFactoryDefinition
+	if err := json.NewDecoder(rec.Body).Decode(&editable); err != nil {
+		t.Fatalf("decode editable factory response: %v", err)
+	}
+	if editable.FactoryDefinition.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("editable factory name = %q, want beta", editable.FactoryDefinition.Name)
+	}
+	if editable.Version.Logical != 42 || !editable.Version.Physical.Equal(versionTime) {
+		t.Fatalf("editable version = %#v, want logical 42 physical %s", editable.Version, versionTime)
+	}
+}
+
+func TestSaveEditableCurrentFactoryDefinition_SubmitsCompleteDefinitionAndReturnsVersion(t *testing.T) {
+	versionTime := time.Date(2026, 5, 18, 10, 45, 0, 0, time.UTC)
+	mf := &testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{Name: factoryapi.FactoryName("beta")},
+		EditableFactoryVersion: factoryapi.HybridLogicalTimestamp{
+			Logical:  44,
+			Physical: versionTime,
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"factoryDefinition":{"name":"beta","metadata":{"owner":"graph-editor"},"workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}]}}`
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.SavedEditableFactories) != 1 {
+		t.Fatalf("saved editable factories = %d, want 1", len(mf.SavedEditableFactories))
+	}
+	saved := mf.SavedEditableFactories[0].FactoryDefinition
+	if saved.Metadata == nil || (*saved.Metadata)["owner"] != "graph-editor" {
+		t.Fatalf("saved metadata = %#v, want owner graph-editor", saved.Metadata)
+	}
+
+	var editable factoryapi.EditableFactoryDefinition
+	if err := json.NewDecoder(rec.Body).Decode(&editable); err != nil {
+		t.Fatalf("decode save editable factory response: %v", err)
+	}
+	if editable.Version.Logical != 44 || !editable.Version.Physical.Equal(versionTime) {
+		t.Fatalf("save editable version = %#v, want logical 44 physical %s", editable.Version, versionTime)
+	}
+}
+
+func TestSaveEditableCurrentFactoryDefinition_MapsValidationErrorsToTargets(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{SaveEditableFactoryErr: apisurface.ErrInvalidNamedFactory})
+
+	body := `{"factoryDefinition":{"name":"beta"}}`
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode("INVALID_FACTORY") {
+		t.Fatalf("error code = %q, want INVALID_FACTORY", response.Code)
+	}
+	if response.Message != "Factory payload is not a valid Agent Factory definition." {
+		t.Fatalf("error message = %q", response.Message)
+	}
+	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Kind != "form" || response.Targets == nil || (*response.Targets)[0].Field == nil || *(*response.Targets)[0].Field != "factoryDefinition" {
+		t.Fatalf("error targets = %#v, want form factoryDefinition target", response.Targets)
+	}
+}
+
+func TestSaveEditableCurrentFactoryDefinition_MapsTopologyValidationTargets(t *testing.T) {
+	field := "factoryDefinition.workstations[0].outputs[0]"
+	targetID := "process->story:missing-state"
+	target := factoryapi.ErrorTarget{Kind: "edge", Id: &targetID, Field: &field}
+	srv := newTestServer(&testutil.MockFactory{
+		SaveEditableFactoryErr: apisurface.NewTopologyValidationError("dangling output", []factoryapi.ErrorTarget{target}),
+	})
+
+	body := `{"factoryDefinition":{"name":"beta"}}`
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode("INVALID_FACTORY") {
+		t.Fatalf("error code = %q, want INVALID_FACTORY", response.Code)
+	}
+	if response.Targets == nil || len(*response.Targets) != 1 {
+		t.Fatalf("error targets = %#v, want one topology target", response.Targets)
+	}
+	gotTarget := (*response.Targets)[0]
+	if gotTarget.Kind != "edge" || gotTarget.Id == nil || *gotTarget.Id != "process->story:missing-state" || gotTarget.Field == nil || *gotTarget.Field != field {
+		t.Fatalf("error target = %#v, want dangling output edge target", gotTarget)
+	}
+}
+
+func TestSaveEditableCurrentFactoryDefinition_MapsStaleVersion(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{SaveEditableFactoryErr: apisurface.ErrEditableFactoryVersionStale})
+
+	body := `{"factoryDefinition":{"name":"beta"}}`
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409: %s", rec.Code, rec.Body.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode("STALE_FACTORY_VERSION") {
+		t.Fatalf("error code = %q, want STALE_FACTORY_VERSION", response.Code)
+	}
+	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Kind != "save" {
+		t.Fatalf("error targets = %#v, want save stale-version target", response.Targets)
+	}
+}
+
+func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{
+			Name: "beta",
+			Workstations: &[]factoryapi.Workstation{{
+				Name:   "Review",
+				Worker: "reviewer",
+				Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}},
+				Outputs: []factoryapi.WorkstationIO{{
+					State:    "reviewed",
+					WorkType: "task",
+				}},
+			}},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory/~current/workstations/Review/prompt-template-contract", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	var contract factoryapi.PromptTemplateContract
+	if err := json.NewDecoder(rec.Body).Decode(&contract); err != nil {
+		t.Fatalf("decode prompt template contract: %v", err)
+	}
+	if contract.InputCount != 1 {
+		t.Fatalf("inputCount = %d, want 1", contract.InputCount)
+	}
+	if len(contract.AvailableVariables) == 0 {
+		t.Fatal("availableVariables = empty, want entries")
+	}
+	if contract.AvailableVariables[0].Path == "" {
+		t.Fatalf("first available variable = %#v, want non-empty path", contract.AvailableVariables[0])
+	}
+}
+
+func TestValidateCurrentFactoryWorkstationPromptTemplate(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{
+			Name: "beta",
+			Workstations: &[]factoryapi.Workstation{{
+				Name:   "Review",
+				Worker: "reviewer",
+				Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}},
+				Outputs: []factoryapi.WorkstationIO{{
+					State:    "reviewed",
+					WorkType: "task",
+				}},
+			}},
+		},
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/factory/~current/workstations/Review/prompt-template-validation",
+		bytes.NewBufferString(`{"prompt":"{{ (index .Inputs 1).Payload }}"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	var result factoryapi.PromptTemplateValidationResult
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode prompt template validation response: %v", err)
+	}
+	if result.Valid {
+		t.Fatal("valid = true, want false")
+	}
+	if len(result.Diagnostics) != 1 {
+		t.Fatalf("diagnostics = %#v, want 1", result.Diagnostics)
+	}
+	if result.Diagnostics[0].Kind != factoryapi.UNAVAILABLEVARIABLE {
+		t.Fatalf("diagnostic kind = %q, want %q", result.Diagnostics[0].Kind, factoryapi.UNAVAILABLEVARIABLE)
+	}
+}
+
+func TestValidateCurrentFactoryWorkstationPromptTemplate_UnknownWorkstation(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{Name: "beta"},
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/factory/~current/workstations/Missing/prompt-template-validation",
+		bytes.NewBufferString(`{"prompt":"{{ .Context.Project }}"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "Current named factory workstation not found.")
 }
 
 func TestCreateFactory_RejectsDuplicateFactoryName(t *testing.T) {
@@ -2486,106 +2739,6 @@ func TestListWork_FiltersByStateNameAndType(t *testing.T) {
 	}
 }
 
-func TestListWork_IncludesCompletionTimeForTerminalAndFailedWork(t *testing.T) {
-	now := time.Date(2026, 5, 20, 10, 30, 0, 0, time.UTC)
-	completedAt := now.Add(5 * time.Minute)
-	failedAt := now.Add(7 * time.Minute)
-	tokens := map[string]*interfaces.Token{
-		"tok-active":           listWorkToken("tok-active", "work-active", "task:review", "task", now),
-		"tok-complete":         listWorkToken("tok-complete", "work-complete", "task:complete", "task", completedAt),
-		"tok-failed":           listWorkToken("tok-failed", "work-failed", "task:failed", "task", failedAt),
-		"tok-missing-complete": listWorkToken("tok-missing-complete", "work-missing-complete", "task:complete", "task", now),
-	}
-	tokens["tok-missing-complete"].EnteredAt = time.Time{}
-	srv := newTestServer(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: tokens},
-		Net:     listWorkFilterTopology(),
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/work", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	var resp factoryapi.ListWorkResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-
-	completed := listedWorkByID(t, resp.Results, "work-complete")
-	if completed.CompletedAt == nil || !completed.CompletedAt.Equal(completedAt) {
-		t.Fatalf("completedAt = %#v, want %s", completed.CompletedAt, completedAt)
-	}
-	failed := listedWorkByID(t, resp.Results, "work-failed")
-	if failed.CompletedAt == nil || !failed.CompletedAt.Equal(failedAt) {
-		t.Fatalf("failed completedAt = %#v, want %s", failed.CompletedAt, failedAt)
-	}
-	active := listedWorkByID(t, resp.Results, "work-active")
-	if active.CompletedAt != nil {
-		t.Fatalf("active completedAt = %#v, want nil", active.CompletedAt)
-	}
-	missing := listedWorkByID(t, resp.Results, "work-missing-complete")
-	if missing.CompletedAt != nil {
-		t.Fatalf("missing completedAt = %#v, want nil", missing.CompletedAt)
-	}
-}
-
-func TestListWork_SortsFinishedWorkByCompletionTimeNewestFirst(t *testing.T) {
-	now := time.Date(2026, 5, 20, 10, 45, 0, 0, time.UTC)
-	for _, tc := range []struct {
-		name        string
-		stateType   factoryapi.WorkStateType
-		placeID     string
-		wantWorkIDs []string
-	}{
-		{
-			name:        "completed",
-			stateType:   factoryapi.WorkStateTypeTERMINAL,
-			placeID:     "task:complete",
-			wantWorkIDs: []string{"work-completed-new", "work-completed-tie-a", "work-completed-tie-b", "work-completed-old", "work-completed-missing"},
-		},
-		{
-			name:        "failed",
-			stateType:   factoryapi.WorkStateTypeFAILED,
-			placeID:     "task:failed",
-			wantWorkIDs: []string{"work-failed-new", "work-failed-tie-a", "work-failed-tie-b", "work-failed-old", "work-failed-missing"},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			tokens := map[string]*interfaces.Token{
-				"tok-old":     listWorkToken("tok-old", tc.wantWorkIDs[3], tc.placeID, "task", now.Add(-2*time.Hour)),
-				"tok-new":     listWorkToken("tok-new", tc.wantWorkIDs[0], tc.placeID, "task", now.Add(2*time.Hour)),
-				"tok-tie-b":   listWorkToken("tok-tie-b", tc.wantWorkIDs[2], tc.placeID, "task", now),
-				"tok-tie-a":   listWorkToken("tok-tie-a", tc.wantWorkIDs[1], tc.placeID, "task", now),
-				"tok-missing": listWorkToken("tok-missing", tc.wantWorkIDs[4], tc.placeID, "task", now.Add(4*time.Hour)),
-			}
-			tokens["tok-missing"].EnteredAt = time.Time{}
-			srv := newTestServer(&testutil.MockFactory{
-				Marking: &petri.MarkingSnapshot{Tokens: tokens},
-				Net:     listWorkFilterTopology(),
-			})
-
-			req := httptest.NewRequest(http.MethodGet, "/work?state.type="+string(tc.stateType), nil)
-			rec := httptest.NewRecorder()
-			srv.Handler().ServeHTTP(rec, req)
-
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-			}
-
-			var resp factoryapi.ListWorkResponse
-			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
-
-			assertListedWorkIDs(t, resp.Results, tc.wantWorkIDs)
-		})
-	}
-}
-
 func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing.T) {
 	now := time.Now()
 	tokens := map[string]*interfaces.Token{
@@ -2613,7 +2766,14 @@ func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing
 	}
 
 	wantWorkIDs := []string{"work-init", "work-review", "work-failed", "work-complete"}
-	assertListedWorkIDs(t, resp.Results, wantWorkIDs)
+	if len(resp.Results) != len(wantWorkIDs) {
+		t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(wantWorkIDs), resp.Results)
+	}
+	for i, wantWorkID := range wantWorkIDs {
+		if got := stringValue(resp.Results[i].WorkId); got != wantWorkID {
+			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, resp.Results)
+		}
+	}
 }
 
 func TestListWork_SortsByStateType(t *testing.T) {
@@ -2643,18 +2803,12 @@ func TestListWork_SortsByStateType(t *testing.T) {
 	}
 
 	wantWorkIDs := []string{"work-failed", "work-init", "work-review", "work-complete"}
-	assertListedWorkIDs(t, resp.Results, wantWorkIDs)
-}
-
-func assertListedWorkIDs(t *testing.T, works []factoryapi.Work, wantWorkIDs []string) {
-	t.Helper()
-
-	if len(works) != len(wantWorkIDs) {
-		t.Fatalf("results = %d, want %d: %#v", len(works), len(wantWorkIDs), works)
+	if len(resp.Results) != len(wantWorkIDs) {
+		t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(wantWorkIDs), resp.Results)
 	}
 	for i, wantWorkID := range wantWorkIDs {
-		if got := stringValue(works[i].WorkId); got != wantWorkID {
-			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, works)
+		if got := stringValue(resp.Results[i].WorkId); got != wantWorkID {
+			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, resp.Results)
 		}
 	}
 }

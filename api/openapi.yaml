@@ -287,6 +287,107 @@ paths:
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory/~current/workstations/{workstation_name}/prompt-template-contract:
+    get:
+      tags:
+        - Factory
+      operationId: getCurrentFactoryWorkstationPromptTemplateContract
+      summary: Get workstation prompt-template contract
+      description: Returns the authoritative prompt-variable reference and unavailable-access patterns for the selected current-factory workstation editing context.
+      parameters:
+        - name: workstation_name
+          in: path
+          required: true
+          description: Customer-authored workstation name to inspect in the current factory.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Prompt-template contract for the selected workstation editing context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptTemplateContract'
+        '404':
+          $ref: '#/components/responses/CurrentFactoryNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory/~current/editable-definition:
+    get:
+      tags:
+        - Factory
+      operationId: getEditableCurrentFactoryDefinition
+      summary: Get editable current factory definition
+      description: Returns the complete current factory definition for graph editing together with hybrid logical timestamp metadata clients must carry into saves for stale-edit detection.
+      responses:
+        '200':
+          description: Editable current factory definition and version metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditableFactoryDefinition'
+        '404':
+          $ref: '#/components/responses/CurrentFactoryNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags:
+        - Factory
+      operationId: saveEditableCurrentFactoryDefinition
+      summary: Save editable current factory definition
+      description: Submits one complete replacement for the current factory definition. The payload preserves all untouched fields because the full Factory contract is saved through the same canonical factory persistence path used by named-factory activation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveEditableFactoryDefinitionRequest'
+      responses:
+        '200':
+          description: Saved editable factory definition and new version metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditableFactoryDefinition'
+        '400':
+          $ref: '#/components/responses/SaveEditableFactoryDefinitionBadRequest'
+        '404':
+          $ref: '#/components/responses/CurrentFactoryNotFound'
+        '409':
+          $ref: '#/components/responses/SaveEditableFactoryDefinitionConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory/~current/workstations/{workstation_name}/prompt-template-validation:
+    post:
+      tags:
+        - Factory
+      operationId: validateCurrentFactoryWorkstationPromptTemplate
+      summary: Validate workstation prompt template
+      description: Validates a prompt draft against the authoritative current-factory workstation prompt contract and returns typed syntax or variable diagnostics.
+      parameters:
+        - name: workstation_name
+          in: path
+          required: true
+          description: Customer-authored workstation name to validate against in the current factory.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptTemplateValidationRequest'
+      responses:
+        '200':
+          description: Prompt validation result for the selected workstation editing context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptTemplateValidationResult'
+        '404':
+          $ref: '#/components/responses/CurrentFactoryNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   parameters:
     MaxResults:
@@ -399,6 +500,38 @@ components:
                 message: Current named factory not found.
                 family: NOT_FOUND
                 code: NOT_FOUND
+    SaveEditableFactoryDefinitionBadRequest:
+      description: Editable factory definition save request failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidFactory:
+              summary: Factory payload failed validation.
+              value:
+                message: Factory payload is not a valid Agent Factory definition.
+                family: BAD_REQUEST
+                code: INVALID_FACTORY
+                targets:
+                  - kind: form
+                    field: factoryDefinition
+    SaveEditableFactoryDefinitionConflict:
+      description: Editable factory definition could not be saved because the runtime or submitted version is not safe to replace.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            factoryNotIdle:
+              summary: Runtime is not idle.
+              value:
+                message: Current factory runtime must be idle before activation.
+                family: CONFLICT
+                code: FACTORY_NOT_IDLE
+                targets:
+                  - kind: save
+                    id: active-work
     InternalError:
       description: Server failed while reading or building runtime state.
       content:
@@ -654,6 +787,7 @@ components:
             - FACTORY_ALREADY_EXISTS
             - INVALID_FACTORY
             - FACTORY_NOT_IDLE
+            - STALE_FACTORY_VERSION
             - NOT_FOUND
             - INTERNAL_ERROR
           x-enum-descriptions:
@@ -662,8 +796,66 @@ components:
             - Submitted named factory already exists.
             - Submitted named factory payload failed validation.
             - Current factory runtime is not idle and cannot activate a new named factory.
+            - Submitted editable factory definition was based on an older version than the current definition.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
+        targets:
+          type: array
+          description: Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages.
+          items:
+            $ref: '#/components/schemas/ErrorTarget'
+    ErrorTarget:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          description: Client-visible target category such as form, node, edge, field, or save.
+        id:
+          type: string
+          description: Optional graph entity, relationship, or save condition identifier.
+        field:
+          type: string
+          description: Optional request or form field path associated with the error.
+    HybridLogicalTimestamp:
+      type: object
+      additionalProperties: false
+      required:
+        - logical
+        - physical
+      properties:
+        logical:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Monotonic Lamport-style logical component derived from the persisted factory definition version.
+        physical:
+          type: string
+          format: date-time
+          description: UTC physical timestamp component for the persisted factory definition version.
+    EditableFactoryDefinition:
+      type: object
+      additionalProperties: false
+      required:
+        - factoryDefinition
+        - version
+      properties:
+        factoryDefinition:
+          $ref: '#/components/schemas/Factory'
+        version:
+          $ref: '#/components/schemas/HybridLogicalTimestamp'
+    SaveEditableFactoryDefinitionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - factoryDefinition
+      properties:
+        factoryDefinition:
+          $ref: '#/components/schemas/Factory'
+        baseVersion:
+          $ref: '#/components/schemas/HybridLogicalTimestamp'
     ProviderSessionDetailResponse:
       type: object
       additionalProperties: false
@@ -2518,6 +2710,129 @@ components:
         to:
           type: string
           description: Destination workstation name.
+    PromptTemplateContract:
+      type: object
+      additionalProperties: false
+      required:
+        - availableVariables
+        - inputCount
+        - unavailableAccessPatterns
+      properties:
+        availableVariables:
+          type: array
+          description: Available prompt-template variables for the selected workstation editing context.
+          items:
+            $ref: '#/components/schemas/PromptTemplateVariableReference'
+        inputCount:
+          type: integer
+          minimum: 0
+          description: Number of authored inputs on the selected workstation, which controls valid `.Inputs[N]` access.
+        unavailableAccessPatterns:
+          type: array
+          description: Unsupported or unavailable variable access patterns for the selected workstation editing context.
+          items:
+            $ref: '#/components/schemas/PromptTemplateUnavailableAccessPattern'
+    PromptTemplateVariableReference:
+      type: object
+      additionalProperties: false
+      required:
+        - category
+        - description
+        - example
+        - path
+      properties:
+        category:
+          type: string
+          enum:
+            - ROOT
+            - INPUT
+            - HISTORY
+            - CONTEXT
+            - MAP_ACCESS
+          description: High-level grouping for the variable reference.
+        description:
+          type: string
+          description: User-readable description of what the variable resolves to.
+        example:
+          type: string
+          description: Go template snippet that shows how to reference the variable.
+        path:
+          type: string
+          description: Canonical variable path summary used in diagnostics and help surfaces.
+    PromptTemplateUnavailableAccessPattern:
+      type: object
+      additionalProperties: false
+      required:
+        - example
+        - path
+        - reason
+      properties:
+        example:
+          type: string
+          description: Representative unsupported template snippet for this access pattern.
+        path:
+          type: string
+          description: Unsupported or unavailable variable path pattern.
+        reason:
+          type: string
+          description: Why the access pattern is unavailable or unsupported in the selected workstation context.
+    PromptTemplateValidationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - prompt
+      properties:
+        prompt:
+          type: string
+          description: Prompt draft to validate against the selected current-factory workstation contract.
+    PromptTemplateValidationResult:
+      type: object
+      additionalProperties: false
+      required:
+        - diagnostics
+        - valid
+      properties:
+        diagnostics:
+          type: array
+          description: Typed validation diagnostics for the submitted prompt draft.
+          items:
+            $ref: '#/components/schemas/PromptTemplateDiagnostic'
+        valid:
+          type: boolean
+          description: True when the prompt contains no syntax or variable diagnostics.
+    PromptTemplateDiagnostic:
+      type: object
+      additionalProperties: false
+      required:
+        - endOffset
+        - kind
+        - message
+        - path
+        - sourceText
+        - startOffset
+      properties:
+        endOffset:
+          type: integer
+          description: Inclusive 1-based byte offset where the diagnostic source span ends when available.
+        kind:
+          type: string
+          enum:
+            - SYNTAX_ERROR
+            - INVALID_VARIABLE
+            - UNAVAILABLE_VARIABLE
+          description: Diagnostic classification for prompt-template validation.
+        message:
+          type: string
+          description: User-readable explanation of the validation failure.
+        path:
+          type: string
+          description: Canonical variable path or access pattern involved in the diagnostic when available.
+        sourceText:
+          type: string
+          description: Source variable or access expression that triggered the diagnostic when available.
+        startOffset:
+          type: integer
+          description: Inclusive 1-based byte offset where the diagnostic source span starts when available.
     WorkRequest:
       type: object
       additionalProperties: false
@@ -2574,10 +2889,6 @@ components:
         state:
           $ref: '#/components/schemas/WorkState'
           description: Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided.
-        completedAt:
-          type: string
-          format: date-time
-          description: Time when this work item entered a completed or failed state, when known.
         chainingTraceDepth:
           type: integer
           minimum: 1

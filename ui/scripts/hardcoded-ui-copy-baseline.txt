@@ -1,5 +1,7 @@
 # Baseline for the hardcoded UI copy check.
 # Entries are path|line|column|kind|text.
+src/api/current-factory-definition/api.ts|324|14|string-literal|INVALID_FACTORY_DEFINITION
+src/api/current-factory-definition/api.ts|326|14|string-literal|INTERNAL_ERROR
 src/api/named-factory/api.ts|193|14|string-literal|INTERNAL_ERROR
 src/api/provider-session-details/api.ts|179|14|string-literal|INTERNAL_ERROR
 src/components/ui/data-table.tsx|37|18|string-literal|No rows available.
@@ -64,6 +66,99 @@ src/features/current-selection/state/selectionHistoryStore.ts|42|14|string-liter
 src/features/dashboard/state/dashboardStreamStore.ts|7|12|string-literal|Loading factory events...
 src/features/export/factory-png-export.ts|59|18|string-literal|The selected image could not be decoded for PNG export.
 src/features/export/factory-png-export.ts|82|18|string-literal|The exported PNG metadata could not be written.
+src/features/factory-graph-editor/factory-graph-draft-types.ts|243|14|string-literal|resource:
+src/features/factory-graph-editor/factory-graph-draft-types.ts|245|14|string-literal|worker:
+src/features/factory-graph-editor/factory-graph-draft-types.ts|247|14|string-literal|work-state: :
+src/features/factory-graph-editor/factory-graph-draft-types.ts|249|14|string-literal|work-type:
+src/features/factory-graph-editor/factory-graph-draft-types.ts|251|14|string-literal|workstation:
+src/features/factory-graph-editor/factory-graph-draft-validation.ts|70|18|string-literal|Duplicate graph identifier " " is not allowed.
+src/features/factory-graph-editor/factory-graph-draft-validation.ts|132|14|string-literal|identifiers are required before save.
+src/features/factory-graph-editor/factory-graph-draft-validation.ts|161|16|string-literal|Relationship " " cannot connect to .
+src/features/factory-graph-editor/factory-graph-draft-validation.ts|264|14|string-literal|Workstation " " must keep one worker assignment.
+src/features/factory-graph-editor/factory-graph-draft-validation.ts|281|14|string-literal|Relationship " " references an unknown node.
+src/features/factory-graph-editor/factory-graph-editor-add-dialog.tsx|202|22|string-literal|INITIAL
+src/features/factory-graph-editor/factory-graph-editor-add-dialog.tsx|203|22|string-literal|PROCESSING
+src/features/factory-graph-editor/factory-graph-editor-add-dialog.tsx|204|22|string-literal|TERMINAL
+src/features/factory-graph-editor/factory-graph-editor-add-dialog.tsx|205|22|string-literal|FAILED
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|68|20|string-literal|Create a pending workstation and assign an existing worker.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|71|14|string-literal|Workstation
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|74|20|string-literal|Add a model worker that can be assigned to workstations.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|76|14|string-literal|Worker
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|79|20|string-literal|Define a new work type with its first ordered state.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|81|14|string-literal|Work type
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|84|20|string-literal|Append a state to an existing work type.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|87|14|string-literal|Work state
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|90|20|string-literal|Register a resource that workers or workstations can consume.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|92|14|string-literal|Resource
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|31|20|string-literal|Provide this resource to a worker.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|34|14|string-literal|Worker
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|39|20|string-literal|Provide this resource to a workstation.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|42|14|string-literal|Station
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|49|20|string-literal|Accept a resource required by this worker.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|52|14|string-literal|Resource
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|57|20|string-literal|Assign this worker to a workstation.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|60|14|string-literal|Assign
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|67|20|string-literal|Route this work state into a workstation input.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|70|14|string-literal|Input
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|75|20|string-literal|Receive a successful workstation output.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|78|14|string-literal|Success
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|83|20|string-literal|Receive a workstation continue transition.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|86|14|string-literal|Continue
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|91|20|string-literal|Receive a workstation failure transition.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|94|14|string-literal|Failure
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|99|20|string-literal|Receive a workstation rejection transition.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|102|14|string-literal|Reject
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|110|20|string-literal|Accept an input work state for this workstation.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|113|14|string-literal|Input
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|118|20|string-literal|Accept a worker assignment for this workstation.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|121|14|string-literal|Worker
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|126|20|string-literal|Accept a resource requirement for this workstation.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|129|14|string-literal|Resource
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|134|20|string-literal|Route successful output from this workstation.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|137|14|string-literal|Success
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|142|20|string-literal|Route a continue transition from this workstation.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|145|14|string-literal|Continue
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|150|20|string-literal|Route a failure transition from this workstation.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|153|14|string-literal|Failure
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|158|20|string-literal|Route a rejection transition from this workstation.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|161|14|string-literal|Reject
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|336|12|string-literal|Choose a compatible source and target anchor before creating a connection.
+src/features/factory-graph-editor/factory-graph-editor-connections.ts|339|10|string-literal|connections from cannot connect to on .
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|9|14|string-literal|This will unassign from . The workstation will need another worker before topology save can succeed.
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|15|14|string-literal|This will remove from 's available resources in the pending draft.
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|21|14|string-literal|This will remove from 's required resources in the pending draft.
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|27|14|string-literal|This will stop routing into .
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|31|14|string-literal|This will remove the success route from to .
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|35|14|string-literal|This will remove the continue route from to .
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|39|14|string-literal|This will remove the failure route from to .
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|43|14|string-literal|This will remove the rejection route from to .
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|57|14|string-literal|resource link
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|59|14|string-literal|input route
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|61|14|string-literal|success route
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|63|14|string-literal|continue route
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|65|14|string-literal|failure route
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|67|14|string-literal|rejection route
+src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|69|14|string-literal|state membership
+src/features/factory-graph-editor/factory-graph-editor-flow.tsx|170|20|string-literal|from to
+src/features/factory-graph-editor/factory-graph-editor-flow.tsx|218|14|string-literal|Worker assignment
+src/features/factory-graph-editor/factory-graph-editor-flow.tsx|220|14|string-literal|Worker resource
+src/features/factory-graph-editor/factory-graph-editor-flow.tsx|222|14|string-literal|State membership
+src/features/factory-graph-editor/factory-graph-editor-flow.tsx|224|14|string-literal|Input route
+src/features/factory-graph-editor/factory-graph-editor-flow.tsx|226|14|string-literal|Continue route
+src/features/factory-graph-editor/factory-graph-editor-flow.tsx|228|14|string-literal|Failure route
+src/features/factory-graph-editor/factory-graph-editor-flow.tsx|230|14|string-literal|Reject route
+src/features/factory-graph-editor/factory-graph-editor-flow.tsx|232|14|string-literal|Success route
+src/features/factory-graph-editor/factory-graph-editor-flow.tsx|234|14|string-literal|Station resource
+src/features/factory-graph-editor/factory-graph-editor-removals.ts|96|19|string-literal|Delete
+src/features/factory-graph-editor/factory-graph-editor-removals.ts|98|12|string-literal|Remove ?
+src/features/factory-graph-editor/factory-graph-editor-removals.ts|148|19|string-literal|Remove
+src/features/factory-graph-editor/factory-graph-editor-removals.ts|150|12|string-literal|Remove ?
+src/features/factory-graph-editor/factory-graph-editor-removals.ts|419|12|string-literal|also owns , which will be removed with it.
+src/features/factory-graph-editor/factory-graph-editor-removals.ts|426|12|string-literal|Any workstation routes that reference will be cleared from the pending draft.
+src/features/factory-graph-editor/factory-graph-editor-removals.ts|430|12|string-literal|Worker and workstation resource references that depend on will be cleared from the pending draft.
+src/features/factory-graph-editor/factory-graph-editor-save-summary.ts|48|12|string-literal|No graph changes are pending.
+src/features/factory-graph-editor/factory-graph-editor-save-summary.ts|52|12|string-literal|This save will apply .
+src/features/factory-graph-editor/factory-graph-editor-save-summary.ts|56|10|string-literal|This save will apply and .
 src/features/flowchart/current-activity-place-node.tsx|150|14|string-literal|border-af-overlay/22 bg-af-canvas text-af-ink
 src/features/flowchart/current-activity-place-node.tsx|152|12|string-literal|border-dashed border-af-info/36 bg-af-surface/78 text-af-ink
 src/features/flowchart/current-activity-place-node.tsx|167|14|string-literal|Terminal

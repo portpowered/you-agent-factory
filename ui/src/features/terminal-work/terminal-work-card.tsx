@@ -3,7 +3,6 @@ import type {
   DashboardProviderSessionAttempt,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
-import { formatDate, formatTime } from "../../i18n";
 import {
   DASHBOARD_WIDGET_CLASS,
   DETAIL_CARD_CLASS,
@@ -21,7 +20,7 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import type { GraphSemanticIconKind } from "../flowchart/graph-semantic-icon";
 import { GraphSemanticIcon } from "../flowchart/graph-semantic-icon";
 import { getTerminalWorkMessages } from "./messages";
@@ -30,7 +29,6 @@ export type TerminalWorkStatus = "completed" | "failed";
 
 export interface TerminalWorkItem {
   attempts?: DashboardProviderSessionAttempt[];
-  completedAt?: string;
   dispatchID?: string;
   failureMessage?: string;
   failureReason?: string;
@@ -60,14 +58,11 @@ interface TerminalWorkRowProps {
   iconLabel: string;
   itemCountLabel: string;
   items: TerminalWorkItem[];
-  locale?: string;
   onExpandedChange: (expanded: boolean) => void;
   onSelectItem: (item: TerminalWorkItem) => void;
   selectedLabel?: string;
   status: TerminalWorkStatus;
   summary: (status: TerminalWorkStatus, workstation: string) => string;
-  completionTime: (formattedTime: string) => string;
-  completionTimeUnavailable: string;
   title: string;
   toggleLabel: string;
 }
@@ -83,7 +78,7 @@ const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_LIST_CLASS = "grid gap-2";
 const TERMINAL_TOGGLE_CLASS =
   "min-h-9 shrink-0 border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-xs text-af-ink/78 hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink";
-const TERMINAL_BUTTON_CLASS = cx(
+const TERMINAL_BUTTON_CLASS = cn(
   "grid h-auto min-h-0 w-full justify-start gap-1 border-af-info/35 bg-af-info/10 px-3 py-2 text-left text-on-foreground [overflow-wrap:anywhere]",
   DASHBOARD_BODY_TEXT_CLASS,
 );
@@ -92,7 +87,7 @@ const TERMINAL_BUTTON_FAILED_CLASS =
 const TERMINAL_BUTTON_SELECTED_CLASS =
   "border-on-foreground/55 bg-on-foreground/14 text-on-foreground shadow-af-accent-chip";
 const TERMINAL_BUTTON_LABEL_CLASS = "font-bold";
-const TERMINAL_BUTTON_META_CLASS = cx(
+const TERMINAL_BUTTON_META_CLASS = cn(
   "leading-snug text-af-ink/66",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
@@ -120,7 +115,7 @@ export function CompletedFailedWorkstationCard({
 }: CompletedFailedWorkstationCardProps) {
   const [completedExpanded, setCompletedExpanded] = useState(true);
   const [failedExpanded, setFailedExpanded] = useState(true);
-  const cardClassName = cx(
+  const cardClassName = cn(
     DASHBOARD_WIDGET_CLASS,
     DETAIL_CARD_CLASS,
     className,
@@ -139,7 +134,6 @@ export function CompletedFailedWorkstationCard({
           iconLabel={messages.iconLabel("completed")}
           itemCountLabel={messages.itemCountLabel(completedItems.length)}
           items={completedItems}
-          locale={locale}
           onExpandedChange={setCompletedExpanded}
           onSelectItem={(item) => onSelectItem("completed", item)}
           selectedLabel={
@@ -150,8 +144,6 @@ export function CompletedFailedWorkstationCard({
           toggleLabel={messages.disclosureLabel(completedExpanded)}
           status="completed"
           summary={messages.summary}
-          completionTime={messages.completionTime}
-          completionTimeUnavailable={messages.completionTimeUnavailable}
           title={messages.rowTitle("completed")}
         />
         <TerminalWorkRow
@@ -161,7 +153,6 @@ export function CompletedFailedWorkstationCard({
           iconLabel={messages.iconLabel("failed")}
           itemCountLabel={messages.itemCountLabel(failedItems.length)}
           items={failedItems}
-          locale={locale}
           onExpandedChange={setFailedExpanded}
           onSelectItem={(item) => onSelectItem("failed", item)}
           selectedLabel={
@@ -170,8 +161,6 @@ export function CompletedFailedWorkstationCard({
           toggleLabel={messages.disclosureLabel(failedExpanded)}
           status="failed"
           summary={messages.summary}
-          completionTime={messages.completionTime}
-          completionTimeUnavailable={messages.completionTimeUnavailable}
           title={messages.rowTitle("failed")}
         />
       </fieldset>
@@ -186,14 +175,11 @@ function TerminalWorkRow({
   iconLabel,
   itemCountLabel,
   items,
-  locale,
   onExpandedChange,
   onSelectItem,
   selectedLabel,
   status,
   summary,
-  completionTime,
-  completionTimeUnavailable,
   title,
   toggleLabel,
 }: TerminalWorkRowProps) {
@@ -201,7 +187,7 @@ function TerminalWorkRow({
 
   return (
     <section
-      className={cx(
+      className={cn(
         TERMINAL_ROW_CLASS,
         status === "failed" && TERMINAL_FAILED_ROW_CLASS,
       )}
@@ -213,7 +199,7 @@ function TerminalWorkRow({
           <div>
             <div className={TERMINAL_ROW_TITLE_CLASS} data-terminal-work-title>
               <GraphSemanticIcon
-                className={cx(
+                className={cn(
                   TERMINAL_ROW_TITLE_ICON_CLASS,
                   terminalStatusIconClassName(status),
                 )}
@@ -247,7 +233,7 @@ function TerminalWorkRow({
             items.map((item) => (
               <Button
                 aria-label={item.label}
-                className={cx(
+                className={cn(
                   TERMINAL_BUTTON_CLASS,
                   status === "failed" && TERMINAL_BUTTON_FAILED_CLASS,
                   selectedLabel === item.label &&
@@ -270,14 +256,6 @@ function TerminalWorkRow({
                   summary,
                   status,
                 )}
-                <span className={TERMINAL_BUTTON_META_CLASS}>
-                  {renderCompletionTime(
-                    item.completedAt,
-                    locale,
-                    completionTime,
-                    completionTimeUnavailable,
-                  )}
-                </span>
               </Button>
             ))
           ) : (
@@ -286,21 +264,6 @@ function TerminalWorkRow({
         </CollapsibleContent>
       </Collapsible>
     </section>
-  );
-}
-
-function renderCompletionTime(
-  completedAt: string | undefined,
-  locale: string | undefined,
-  completionTime: (formattedTime: string) => string,
-  completionTimeUnavailable: string,
-): string {
-  if (!completedAt || Number.isNaN(Date.parse(completedAt))) {
-    return completionTimeUnavailable;
-  }
-
-  return completionTime(
-    `${formatDate(completedAt, locale)} ${formatTime(completedAt, locale)}`,
   );
 }
 

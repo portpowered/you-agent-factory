@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import {
   formatDurationMillis,
   formatTraceOutcome,
@@ -50,7 +50,7 @@ const TRACE_EXPANDER_TOGGLE_CLASS = "min-h-9 shrink-0 px-2.5 py-2";
 const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-48";
 // tailwind-exception: intrinsic-sizing
 const TRACE_GRID_TABLE_CLASS = "min-w-[860px]";
-const TRACE_WORK_ITEM_BUTTON_CLASS = cx(
+const TRACE_WORK_ITEM_BUTTON_CLASS = cn(
   "h-auto min-h-0 justify-start border-af-accent/35 bg-af-accent/10 px-2.5 py-1.5 text-left text-af-accent",
   DASHBOARD_SUPPORTING_CODE_CLASS,
 );
@@ -79,7 +79,7 @@ export function TraceGridBentoCard({
   title,
 }: TraceGridBentoCardProps) {
   const messages = getTraceDrilldownMessages(locale);
-  const cardClassName = cx(
+  const cardClassName = cn(
     DASHBOARD_WIDGET_CLASS,
     DETAIL_CARD_CLASS,
     DETAIL_CARD_WIDE_CLASS,
@@ -104,14 +104,14 @@ function renderTraceState(
   switch (state.status) {
     case "idle":
       return (
-        <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
+        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
           <h3>{messages.idleTitle}</h3>
           <p>{messages.idleMessage}</p>
         </div>
       );
     case "loading":
       return (
-        <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
+        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
           <h3>{messages.loadingTitle}</h3>
           <p>{messages.loadingMessage(state.workID)}</p>
           <div aria-hidden="true" className="grid gap-2 pt-2">
@@ -123,14 +123,14 @@ function renderTraceState(
       );
     case "empty":
       return (
-        <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
+        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
           <h3>{messages.emptyTitle}</h3>
           <p>{messages.emptyMessage}</p>
         </div>
       );
     case "error":
       return (
-        <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
+        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
           <h3>{messages.errorTitle}</h3>
           <p>{state.message}</p>
         </div>
@@ -159,7 +159,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
   return (
     <div className="grid min-w-0 w-full gap-3" style={{ overflowX: "hidden" }}>
       <dl
-        className={cx(
+        className={cn(
           "m-0 grid gap-3 [&_dd]:m-0 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-af-overlay/6 [&_div]:pt-3 [&_dt]:mb-1",
           DASHBOARD_SUPPORTING_LABELS_CLASS,
           DASHBOARD_BODY_TEXT_CLASS,
@@ -200,7 +200,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
                       <Button
                         aria-controls={workItemsID}
                         aria-expanded={workItemsExpanded}
-                        className={cx(
+                        className={cn(
                           TRACE_EXPANDER_TOGGLE_CLASS,
                           DASHBOARD_SUPPORTING_LABEL_CLASS,
                         )}
@@ -246,8 +246,8 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
 
       {trace.dispatches.length > 0 ? (
         <div className="min-w-0 overflow-x-auto">
-          <Table className={cx(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}>
-            <TableCaption className={cx("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
+          <Table className={cn(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}>
+            <TableCaption className={cn("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
               {messages.tableCaption}
             </TableCaption>
             <TableHeader>
@@ -274,7 +274,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
                 <TableRow key={dispatch.dispatch_id}>
                   <TableHead className="align-top" scope="row">
                     <span
-                      className={cx(
+                      className={cn(
                         "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
                         DASHBOARD_SUPPORTING_CODE_CLASS,
                       )}
@@ -316,7 +316,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           </Table>
         </div>
       ) : (
-        <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
+        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
           <h3>{messages.noTraceHistoryTitle}</h3>
           <p>{messages.noTraceHistoryMessage}</p>
         </div>

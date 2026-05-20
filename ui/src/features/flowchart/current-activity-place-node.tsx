@@ -6,7 +6,7 @@ import {
   formatDashboardPlaceLabel,
   getDashboardPlaceLabelParts,
 } from "../../components/ui/place-labels";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import { getWorkflowActivityShellMessages } from "../workflow-activity/messages/activity-shell";
 import {
   ActivityGraphNodeShell,
@@ -90,7 +90,7 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
       : data.place.kind === "resource"
         ? "resource"
         : "constraint";
-  const nodeClassName = cx(
+  const nodeClassName = cn(
     placeNodeClassName(data.place),
     data.activeFlow &&
       !data.selectedStateNode &&
@@ -101,7 +101,7 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
 
   return (
     <ActivityGraphNodeShell
-      className={cx("justify-center text-left", nodeClassName)}
+      className={cn("justify-center text-left", nodeClassName)}
       incomingHandleCount={data.incomingHandleCount}
       nodeType={nodeType}
       outgoingHandleCount={data.outgoingHandleCount}
@@ -110,7 +110,7 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
         <button
           aria-label={messages.selectStateLabel(placeLabel)}
           aria-pressed={data.selectedStateNode}
-          className={cx(
+          className={cn(
             "nodrag nopan cursor-pointer border-0 bg-transparent p-0 text-left text-inherit",
             STATE_POSITION_CONTENT_CONTAINER_CLASSNAME,
           )}
@@ -158,7 +158,7 @@ function placeNodeClassName(place: DashboardPlaceRef): string {
         ? "border-af-edge-danger-muted"
         : "";
 
-  return cx(kindClassName, stateClassName);
+  return cn(kindClassName, stateClassName);
 }
 
 function placeKindLabel(place: DashboardPlaceRef): string {
@@ -308,7 +308,7 @@ function PlaceSemanticIcon({ place }: { place: DashboardPlaceRef }) {
       title={placeKindLabel(place)}
     >
       <GraphSemanticIcon
-        className={cx("h-3.5 w-3.5", placeSemanticIconClassName(place))}
+        className={cn("h-3.5 w-3.5", placeSemanticIconClassName(place))}
         kind={placeSemanticIconKind(place)}
         label={placeSemanticIconLabel(place)}
       />

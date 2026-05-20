@@ -113,6 +113,24 @@ describe("localized widget responsive schedule", () => {
   });
 });
 
+describe("current-selection prompt hint responsive schedule", () => {
+  test("keeps the prompt hint story in the default responsive schedule", () => {
+    const promptHintStory = storyChecks.find(
+      (storyCheck) => storyCheck.label === "current selection prompt hinting",
+    );
+
+    expect(promptHintStory?.id).toBe(
+      "infinite-you-workflow-dashboard--current-selection-prompt-hint-verification",
+    );
+    expect(promptHintStory?.dialogName).toBeUndefined();
+    expect(viewportChecks).toEqual([
+      { height: 844, label: "mobile", width: 390 },
+      { height: 1024, label: "tablet", width: 768 },
+      { height: 900, label: "desktop", width: 1440 },
+    ]);
+  });
+});
+
 describe("localized import/export assertions", () => {
   test("checks the expected localized export controls", async () => {
     const textbox = { isVisible: vi.fn().mockResolvedValue(true) };

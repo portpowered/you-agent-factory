@@ -816,6 +816,193 @@ func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPa
 	}
 }
 
+func TestFactoryService_GetEditableFactoryDefinition_IncludesVersionMetadata(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	editable, err := svc.GetEditableFactoryDefinition(context.Background())
+	if err != nil {
+		t.Fatalf("GetEditableFactoryDefinition: %v", err)
+	}
+	if editable.FactoryDefinition.Name != factoryapi.FactoryName("alpha") {
+		t.Fatalf("editable factory name = %q, want alpha", editable.FactoryDefinition.Name)
+	}
+	if editable.Version.Logical <= 0 || editable.Version.Physical.IsZero() {
+		t.Fatalf("editable version = %#v, want logical and physical components", editable.Version)
+	}
+}
+
+func TestFactoryService_SaveEditableFactoryDefinition_ReplacesCurrentDefinition(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
+	saved, err := svc.SaveEditableFactoryDefinition(context.Background(), factoryapi.SaveEditableFactoryDefinitionRequest{
+		FactoryDefinition: replacement,
+	})
+	if err != nil {
+		t.Fatalf("SaveEditableFactoryDefinition: %v", err)
+	}
+	if saved.FactoryDefinition.WorkTypes == nil || len(*saved.FactoryDefinition.WorkTypes) != 1 || (*saved.FactoryDefinition.WorkTypes)[0].Name != "story" {
+		t.Fatalf("saved work types = %#v, want story", saved.FactoryDefinition.WorkTypes)
+	}
+	if saved.Version.Logical <= 0 || saved.Version.Physical.IsZero() {
+		t.Fatalf("saved version = %#v, want logical and physical components", saved.Version)
+	}
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory after save: %v", err)
+	}
+	if current.WorkTypes == nil || (*current.WorkTypes)[0].Name != "story" {
+		t.Fatalf("current work types after save = %#v, want story", current.WorkTypes)
+	}
+	assertCurrentFactoryPointer(t, rootDir, "alpha", "after editable save")
+}
+
+func TestFactoryService_SaveEditableFactoryDefinition_RejectsStaleBaseVersion(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	editable, err := svc.GetEditableFactoryDefinition(context.Background())
+	if err != nil {
+		t.Fatalf("GetEditableFactoryDefinition: %v", err)
+	}
+
+	factoryJSON := filepath.Join(rootDir, "alpha", interfaces.FactoryConfigFile)
+	newer := editable.Version.Physical.Add(time.Second)
+	if err := os.Chtimes(factoryJSON, newer, newer); err != nil {
+		t.Fatalf("advance factory version: %v", err)
+	}
+
+	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
+	_, err = svc.SaveEditableFactoryDefinition(context.Background(), factoryapi.SaveEditableFactoryDefinitionRequest{
+		FactoryDefinition: replacement,
+		BaseVersion:       &editable.Version,
+	})
+	if !errors.Is(err, apisurface.ErrEditableFactoryVersionStale) {
+		t.Fatalf("SaveEditableFactoryDefinition error = %v, want stale version", err)
+	}
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory after stale save: %v", err)
+	}
+	if current.WorkTypes == nil || (*current.WorkTypes)[0].Name != "task" {
+		t.Fatalf("current work types after stale save = %#v, want unchanged task", current.WorkTypes)
+	}
+}
+
+func TestFactoryService_SaveEditableFactoryDefinition_RejectsDuplicateAndDanglingTopology(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
+	if replacement.Workers == nil || replacement.Workstations == nil {
+		t.Fatal("expected fixture workers and workstations")
+	}
+	*replacement.Workers = append(*replacement.Workers, (*replacement.Workers)[0])
+	(*replacement.Workstations)[0].Worker = "missing-worker"
+	(*replacement.Workstations)[0].Outputs = []factoryapi.WorkstationIO{{WorkType: "story", State: "missing-state"}}
+
+	_, err = svc.SaveEditableFactoryDefinition(context.Background(), factoryapi.SaveEditableFactoryDefinitionRequest{
+		FactoryDefinition: replacement,
+	})
+	var topologyErr *apisurface.TopologyValidationError
+	if !errors.As(err, &topologyErr) {
+		t.Fatalf("SaveEditableFactoryDefinition error = %v, want topology validation error", err)
+	}
+	if len(topologyErr.Targets) < 3 {
+		t.Fatalf("topology targets = %#v, want duplicate worker, missing worker, and dangling output targets", topologyErr.Targets)
+	}
+	if !hasServiceErrorTarget(topologyErr.Targets, "node", "worker-a") {
+		t.Fatalf("topology targets = %#v, want duplicate worker node target", topologyErr.Targets)
+	}
+	if !hasServiceErrorTarget(topologyErr.Targets, "field", "process") {
+		t.Fatalf("topology targets = %#v, want missing workstation worker field target", topologyErr.Targets)
+	}
+	if !hasServiceErrorTarget(topologyErr.Targets, "edge", "process->story:missing-state") {
+		t.Fatalf("topology targets = %#v, want dangling output edge target", topologyErr.Targets)
+	}
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory after rejected save: %v", err)
+	}
+	if current.WorkTypes == nil || (*current.WorkTypes)[0].Name != "task" {
+		t.Fatalf("current work types after rejected topology = %#v, want unchanged task", current.WorkTypes)
+	}
+}
+
+func hasServiceErrorTarget(targets []factoryapi.ErrorTarget, kind, id string) bool {
+	for _, target := range targets {
+		if target.Kind == kind && target.Id != nil && *target.Id == id {
+			return true
+		}
+	}
+	return false
+}
+
 func TestFactoryService_GetCurrentNamedFactory_CollectsSupportedPortableBundledFilesFromDisk(t *testing.T) {
 	rootDir := t.TempDir()
 
@@ -4977,6 +5164,44 @@ func TestBuildFactoryService_WorkFileRejectsRetiredTargetStateAlias(t *testing.T
 	}
 	if !strings.Contains(err.Error(), "target_state") || !strings.Contains(err.Error(), "state") {
 		t.Fatalf("error = %q, want target_state rejection with state guidance", err.Error())
+	}
+}
+
+func TestBuildFactoryService_WorkFileRejectsConflictingTraceAliases(t *testing.T) {
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	workFile := filepath.Join(dir, "initial-work.json")
+	if err := os.WriteFile(workFile, []byte(`{
+  "requestId": "request-service-trace-conflict",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {"name": "draft", "workTypeName": "task", "currentChainingTraceId": "chain-a", "traceId": "trace-b"}
+  ]
+}`), 0o644); err != nil {
+		t.Fatalf("write work file: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		WorkFile:          workFile,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	err = svc.submitWorkFile(context.Background())
+	if err == nil {
+		t.Fatal("expected conflicting trace aliases to fail")
+	}
+	if !strings.Contains(err.Error(), "currentChainingTraceId and traceId must match") {
+		t.Fatalf("error = %q, want conflicting trace alias rejection", err.Error())
 	}
 }
 
