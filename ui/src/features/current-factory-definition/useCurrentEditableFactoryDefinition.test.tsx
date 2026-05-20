@@ -8,6 +8,7 @@ import {
   type CanonicalFactoryDefinition,
   type EditableFactoryDefinitionDocument,
 } from "../../api/current-factory-definition";
+import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
 import {
   useCurrentEditableFactoryDefinition,
   useCurrentEditableFactoryDefinitionDocument,
@@ -60,6 +61,7 @@ describe("useCurrentEditableFactoryDefinition", () => {
   beforeEach(() => {
     vi.mocked(getCurrentEditableFactoryDefinition).mockReset();
     vi.mocked(getCurrentEditableFactoryDefinitionDocument).mockReset();
+    useDashboardSessionStore.setState({ selectedSessionID: "~default" });
   });
 
   it("does not fetch while workstation editing is disabled", () => {
@@ -90,6 +92,23 @@ describe("useCurrentEditableFactoryDefinition", () => {
         error: null,
         isPending: false,
         status: "success",
+      });
+    });
+  });
+
+  it("loads the selected non-default session definition instead of the default alias", async () => {
+    useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
+    vi.mocked(getCurrentEditableFactoryDefinition).mockResolvedValue(
+      editableFactoryDefinition,
+    );
+
+    renderHook(() => useCurrentEditableFactoryDefinition(), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(getCurrentEditableFactoryDefinition).toHaveBeenCalledWith({
+        sessionID: "session-2",
       });
     });
   });
@@ -144,6 +163,27 @@ describe("useCurrentEditableFactoryDefinition", () => {
         error: null,
         isPending: false,
         status: "success",
+      });
+    });
+  });
+
+  it("loads the editable document for the selected non-default session", async () => {
+    useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
+    vi.mocked(getCurrentEditableFactoryDefinitionDocument).mockResolvedValue({
+      factoryDefinition: editableFactoryDefinition,
+      version: {
+        logical: 5,
+        physical: "2026-05-18T14:49:00Z",
+      },
+    });
+
+    renderHook(() => useCurrentEditableFactoryDefinitionDocument(), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(getCurrentEditableFactoryDefinitionDocument).toHaveBeenCalledWith({
+        sessionID: "session-2",
       });
     });
   });

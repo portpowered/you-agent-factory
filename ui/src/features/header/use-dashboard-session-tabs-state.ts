@@ -27,12 +27,6 @@ export function useDashboardSessionTabsState() {
   const closeSessionMutation = useMutation({
     mutationFn: (sessionID: string) => closeFactorySession(sessionID),
   });
-  const activeSessionID = useDashboardSessionStore(
-    (state) => state.selectedSessionID,
-  );
-  const setActiveSessionID = useDashboardSessionStore(
-    (state) => state.setSelectedSessionID,
-  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogError, setDialogError] = useState<FactorySessionsAPIError | null>(null);
   const [closeError, setCloseError] = useState<FactorySessionsAPIError | null>(null);
@@ -40,13 +34,8 @@ export function useDashboardSessionTabsState() {
   const [discoveredTargets, setDiscoveredTargets] = useState<FactorySessionTarget[]>([]);
 
   const sessions = sessionsQuery.data ?? [];
-  const activeSession = useMemo(
-    () =>
-      sessions.find((session) => session.id === activeSessionID) ??
-      sessions[0] ??
-      null,
-    [activeSessionID, sessions],
-  );
+  const { activeSession, activeSessionID, setActiveSessionID } =
+    useActiveDashboardSession(sessions);
 
   async function handleInspectFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -149,6 +138,28 @@ export function useDashboardSessionTabsState() {
     setActiveSessionID,
     setDialogOpen,
     setFolderPath,
+  };
+}
+
+function useActiveDashboardSession(sessions: FactorySessionSummary[]) {
+  const activeSessionID = useDashboardSessionStore(
+    (state) => state.selectedSessionID,
+  );
+  const setActiveSessionID = useDashboardSessionStore(
+    (state) => state.setSelectedSessionID,
+  );
+  const activeSession = useMemo(
+    () =>
+      sessions.find((session) => session.id === activeSessionID) ??
+      sessions[0] ??
+      null,
+    [activeSessionID, sessions],
+  );
+
+  return {
+    activeSession,
+    activeSessionID,
+    setActiveSessionID,
   };
 }
 

@@ -5,6 +5,7 @@ import {
   normalizeFactoryDefinition,
   type CanonicalFactoryDefinition,
 } from "../factory-definition";
+import { factorySessionScopedPath } from "../session-routing";
 
 export type { CanonicalFactoryDefinition } from "../factory-definition";
 
@@ -41,6 +42,7 @@ export interface CurrentEditableFactoryDefinitionErrorDetails {
 
 export interface GetCurrentEditableFactoryDefinitionOptions {
   fetch?: typeof globalThis.fetch;
+  sessionID?: string | null;
 }
 
 interface APIErrorResponse {
@@ -51,6 +53,7 @@ interface APIErrorResponse {
 
 export interface SaveCurrentEditableFactoryDefinitionOptions {
   fetch?: typeof globalThis.fetch;
+  sessionID?: string | null;
 }
 
 export interface SaveCurrentEditableFactoryDefinitionInput {
@@ -108,7 +111,12 @@ export async function getCurrentEditableFactoryDefinitionDocument(
   let response: Response;
   try {
     response = await fetchImplementation(
-      factoryAPIURL(GET_CURRENT_EDITABLE_FACTORY_DEFINITION_ENDPOINT),
+      factoryAPIURL(
+        factorySessionScopedPath(
+          GET_CURRENT_EDITABLE_FACTORY_DEFINITION_ENDPOINT,
+          options.sessionID,
+        ),
+      ),
       {
         method: "GET",
       },
@@ -171,7 +179,12 @@ export async function saveCurrentEditableFactoryDefinitionDocument(
   let response: Response;
   try {
     response = await fetchImplementation(
-      factoryAPIURL(GET_CURRENT_EDITABLE_FACTORY_DEFINITION_ENDPOINT),
+      factoryAPIURL(
+        factorySessionScopedPath(
+          GET_CURRENT_EDITABLE_FACTORY_DEFINITION_ENDPOINT,
+          options.sessionID,
+        ),
+      ),
       {
         body: JSON.stringify(requestBody),
         headers: {

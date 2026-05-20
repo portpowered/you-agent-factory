@@ -1,5 +1,6 @@
 import type { components } from "../generated/openapi";
 import { factoryAPIURL } from "../baseUrl";
+import { factorySessionScopedPath } from "../session-routing";
 
 export type FactoryValue = components["schemas"]["Factory"];
 
@@ -26,6 +27,7 @@ export interface CreateFactoryOptions {
 
 export interface GetCurrentFactoryOptions {
   fetch?: typeof globalThis.fetch;
+  sessionID?: string | null;
 }
 
 interface APIErrorResponse {
@@ -119,9 +121,17 @@ export async function getCurrentFactory(
 
   let response: Response;
   try {
-    response = await fetchImplementation(factoryAPIURL(GET_CURRENT_NAMED_FACTORY_ENDPOINT), {
-      method: "GET",
-    });
+    response = await fetchImplementation(
+      factoryAPIURL(
+        factorySessionScopedPath(
+          GET_CURRENT_NAMED_FACTORY_ENDPOINT,
+          options.sessionID,
+        ),
+      ),
+      {
+        method: "GET",
+      },
+    );
   } catch (error) {
     throw new NamedFactoryAPIError("The dashboard could not reach the current factory API.", {
       code: "NETWORK_ERROR",
@@ -205,4 +215,3 @@ function isFactoryValue(value: unknown): value is FactoryValue {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-

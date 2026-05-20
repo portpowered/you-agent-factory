@@ -6,8 +6,9 @@ import {
   type FactoryValue,
   NamedFactoryAPIError,
 } from "../../api/named-factory";
+import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
 
-const CURRENT_FACTORY_EXPORT_QUERY_KEY = ["agent-factory-current-export"] as const;
+const CURRENT_FACTORY_EXPORT_QUERY_KEY = "agent-factory-current-export";
 const CURRENT_FACTORY_UNAVAILABLE_MESSAGE =
   "The current factory definition is not available yet. Wait for the current-factory API to expose the authored definition before exporting.";
 const CURRENT_FACTORY_LOAD_FAILED_MESSAGE =
@@ -34,9 +35,10 @@ export interface UseCurrentFactoryExportResult {
 }
 
 export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryExportResult {
+  const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
   const query = useQuery({
-    queryKey: CURRENT_FACTORY_EXPORT_QUERY_KEY,
-    queryFn: () => getCurrentFactory(),
+    queryKey: [CURRENT_FACTORY_EXPORT_QUERY_KEY, sessionID],
+    queryFn: () => getCurrentFactory({ sessionID }),
     enabled: isEnabled,
     gcTime: 0,
     refetchOnWindowFocus: false,
@@ -89,4 +91,3 @@ function currentFactoryExportFailureMessage(error: unknown): string {
 
   return CURRENT_FACTORY_LOAD_FAILED_MESSAGE;
 }
-

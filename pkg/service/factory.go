@@ -1318,13 +1318,6 @@ func newRecordingArtifact(
 	}, interfaces.ReplayDiagnostics{})
 }
 
-func (fs *FactoryService) writeRecording() error {
-	if fs.recording == nil {
-		return nil
-	}
-	return fs.recording.Flush()
-}
-
 func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *replacementFactoryRuntime) error {
 	if runtimeBundle == nil {
 		return nil

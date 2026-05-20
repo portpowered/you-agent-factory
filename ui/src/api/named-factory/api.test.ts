@@ -127,6 +127,41 @@ describe("factory API", () => {
     });
   });
 
+  it("reads the current factory through the session-scoped route for non-default sessions", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Session Factory",
+          workTypes: [],
+          workers: [],
+          workstations: [],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getCurrentFactory({ sessionID: "session-2" }),
+    ).resolves.toEqual({
+      name: "Session Factory",
+      workTypes: [],
+      workers: [],
+      workstations: [],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factories/session-2/factory/~current",
+      {
+        method: "GET",
+      },
+    );
+  });
+
   it("rejects retired named-factory wrapper responses from the current factory endpoint", async () => {
     vi.stubGlobal(
       "fetch",
@@ -168,4 +203,3 @@ describe("factory API", () => {
     );
   });
 });
-

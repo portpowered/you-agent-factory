@@ -5,8 +5,9 @@ import type { FactoryEvent } from "../../api/events";
 import { FACTORY_EVENT_TYPES, openFactoryEventStream } from "../../api/events";
 import { normalizeFactoryDefinition } from "../../api/factory-definition";
 import {
-  CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
-  CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
+  CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
+  currentEditableFactoryDefinitionDocumentQueryKey,
+  currentEditableFactoryDefinitionQueryKey,
 } from "../current-factory-definition";
 import { resetSelectionHistoryStore } from "../current-selection/state/selectionHistoryStore";
 import {
@@ -35,10 +36,12 @@ function resetDashboardSessionScopedState(
   resetStreamState();
   resetSelectionHistoryStore();
   queryClient.removeQueries({
-    queryKey: CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
+    queryKey: [CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
+    exact: false,
   });
   queryClient.removeQueries({
-    queryKey: CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
+    queryKey: [CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
+    exact: false,
   });
 }
 
@@ -101,7 +104,7 @@ export function useDashboardSnapshot({
 
     const stream = openFactoryEventStream(
       (event) => {
-        syncCurrentEditableFactoryDefinition(queryClient, event);
+        syncCurrentEditableFactoryDefinition(queryClient, event, selectedSessionID);
         queuedEventsRef.current.push(
           compactFactoryEventForTimeline(event, debugOptions),
         );
@@ -178,6 +181,7 @@ export function useDashboardSnapshot({
 function syncCurrentEditableFactoryDefinition(
   queryClient: ReturnType<typeof useQueryClient>,
   event: FactoryEvent,
+  sessionID: string,
 ): void {
   if (event.type !== FACTORY_EVENT_TYPES.factoryChange) {
     return;
@@ -188,11 +192,11 @@ function syncCurrentEditableFactoryDefinition(
   }
   try {
     queryClient.setQueryData(
-      CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
+      currentEditableFactoryDefinitionQueryKey(sessionID),
       normalizeFactoryDefinition(payloadFactory),
     );
     void queryClient.invalidateQueries({
-      queryKey: CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
+      queryKey: currentEditableFactoryDefinitionDocumentQueryKey(sessionID),
     });
   } catch {
     return;
