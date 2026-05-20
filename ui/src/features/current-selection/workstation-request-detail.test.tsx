@@ -51,6 +51,22 @@ describe("WorkstationRequestDetailCard", () => {
           request_view: {
             input_work_items: [],
             runner: {
+              capabilities: {
+                baselineCapabilities: [
+                  "prompt_submission",
+                  "tool_execution",
+                ],
+                optionalCapabilities: [
+                  {
+                    capability: "structured_output",
+                    status: "unsupported",
+                  },
+                  {
+                    capability: "working_directory",
+                    status: "unsupported",
+                  },
+                ],
+              },
               displayName: "Gemini",
               runnerId: "gemini",
               selectionSource: "factory",
@@ -81,6 +97,9 @@ describe("WorkstationRequestDetailCard", () => {
     expect(within(currentSelection).getByText("Runner")).toBeTruthy();
     expect(within(currentSelection).getByText("Gemini")).toBeTruthy();
     expect(within(currentSelection).getByText("factory")).toBeTruthy();
+    expect(within(currentSelection).getByText("Runner capability support")).toBeTruthy();
+    expect(within(currentSelection).getByText("Structured output")).toBeTruthy();
+    expect(within(currentSelection).getAllByText("Unsupported").length).toBeGreaterThan(0);
     expect(within(currentSelection).getByRole("heading", { name: "Request counts" })).toBeTruthy();
     expect(responseDetails.getByText("trace-active-story")).toBeTruthy();
     expect(inferenceAttempts.getByText("Retry the review with the latest context.")).toBeTruthy();

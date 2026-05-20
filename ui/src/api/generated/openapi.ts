@@ -574,6 +574,22 @@ export interface components {
             runnerId?: components["schemas"]["RunnerID"];
             displayName?: string;
             selectionSource?: components["schemas"]["RunnerSelectionSource"];
+            capabilities?: components["schemas"]["FactoryWorldRunnerCapabilitiesView"];
+        };
+        /** @enum {string} */
+        FactoryWorldRunnerBaselineCapability: "prompt_submission" | "tool_execution";
+        /** @enum {string} */
+        FactoryWorldRunnerOptionalCapability: "image_input" | "session_resume" | "structured_output" | "working_directory" | "worktree";
+        /** @enum {string} */
+        FactoryWorldRunnerOptionalCapabilityStatus: "supported" | "unsupported";
+        FactoryWorldRunnerOptionalCapabilitySupportView: {
+            capability: components["schemas"]["FactoryWorldRunnerOptionalCapability"];
+            status: components["schemas"]["FactoryWorldRunnerOptionalCapabilityStatus"];
+            detail?: string;
+        };
+        FactoryWorldRunnerCapabilitiesView: {
+            baselineCapabilities: components["schemas"]["FactoryWorldRunnerBaselineCapability"][];
+            optionalCapabilities: components["schemas"]["FactoryWorldRunnerOptionalCapabilitySupportView"][];
         };
         FactoryWorldWorkstationRequestCountView: {
             dispatchedCount: number;

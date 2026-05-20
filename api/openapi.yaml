@@ -1291,6 +1291,54 @@ components:
           type: string
         selectionSource:
           $ref: '#/components/schemas/RunnerSelectionSource'
+        capabilities:
+          $ref: '#/components/schemas/FactoryWorldRunnerCapabilitiesView'
+    FactoryWorldRunnerBaselineCapability:
+      type: string
+      enum:
+        - prompt_submission
+        - tool_execution
+    FactoryWorldRunnerOptionalCapability:
+      type: string
+      enum:
+        - image_input
+        - session_resume
+        - structured_output
+        - working_directory
+        - worktree
+    FactoryWorldRunnerOptionalCapabilityStatus:
+      type: string
+      enum:
+        - supported
+        - unsupported
+    FactoryWorldRunnerOptionalCapabilitySupportView:
+      type: object
+      additionalProperties: false
+      required:
+        - capability
+        - status
+      properties:
+        capability:
+          $ref: '#/components/schemas/FactoryWorldRunnerOptionalCapability'
+        status:
+          $ref: '#/components/schemas/FactoryWorldRunnerOptionalCapabilityStatus'
+        detail:
+          type: string
+    FactoryWorldRunnerCapabilitiesView:
+      type: object
+      additionalProperties: false
+      required:
+        - baselineCapabilities
+        - optionalCapabilities
+      properties:
+        baselineCapabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryWorldRunnerBaselineCapability'
+        optionalCapabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryWorldRunnerOptionalCapabilitySupportView'
     FactoryWorldWorkstationRequestCountView:
       type: object
       additionalProperties: false

@@ -4,6 +4,12 @@ import type { components } from "../generated/openapi";
 type DashboardRunnerID = components["schemas"]["RunnerID"];
 type DashboardRunnerSelectionSource =
   components["schemas"]["RunnerSelectionSource"];
+type DashboardRunnerBaselineCapability =
+  components["schemas"]["FactoryWorldRunnerBaselineCapability"];
+type DashboardRunnerOptionalCapability =
+  components["schemas"]["FactoryWorldRunnerOptionalCapability"];
+type DashboardRunnerOptionalCapabilityStatus =
+  components["schemas"]["FactoryWorldRunnerOptionalCapabilityStatus"];
 
 export type StateCategory = "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED";
 export type DashboardPlaceKind =
@@ -242,9 +248,21 @@ export interface DashboardRuntimeWorkstationRequest {
 }
 
 export interface DashboardSelectedRunner {
+  capabilities?: DashboardRunnerCapabilities;
   displayName?: string;
   runnerId?: DashboardRunnerID;
   selectionSource?: DashboardRunnerSelectionSource;
+}
+
+export interface DashboardRunnerCapabilities {
+  baselineCapabilities?: DashboardRunnerBaselineCapability[];
+  optionalCapabilities?: DashboardRunnerOptionalCapabilitySupport[];
+}
+
+export interface DashboardRunnerOptionalCapabilitySupport {
+  capability: DashboardRunnerOptionalCapability;
+  detail?: string;
+  status: DashboardRunnerOptionalCapabilityStatus;
 }
 
 export interface DashboardWorkstationRequest {

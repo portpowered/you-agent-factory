@@ -76,6 +76,27 @@ const (
 	FactoryStateRunning   FactoryState = "RUNNING"
 )
 
+// Defines values for FactoryWorldRunnerBaselineCapability.
+const (
+	PromptSubmission FactoryWorldRunnerBaselineCapability = "prompt_submission"
+	ToolExecution    FactoryWorldRunnerBaselineCapability = "tool_execution"
+)
+
+// Defines values for FactoryWorldRunnerOptionalCapability.
+const (
+	ImageInput       FactoryWorldRunnerOptionalCapability = "image_input"
+	SessionResume    FactoryWorldRunnerOptionalCapability = "session_resume"
+	StructuredOutput FactoryWorldRunnerOptionalCapability = "structured_output"
+	WorkingDirectory FactoryWorldRunnerOptionalCapability = "working_directory"
+	Worktree         FactoryWorldRunnerOptionalCapability = "worktree"
+)
+
+// Defines values for FactoryWorldRunnerOptionalCapabilityStatus.
+const (
+	Supported   FactoryWorldRunnerOptionalCapabilityStatus = "supported"
+	Unsupported FactoryWorldRunnerOptionalCapabilityStatus = "unsupported"
+)
+
 // Defines values for GuardType.
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
@@ -670,6 +691,28 @@ type FactoryWorldRenderedPromptDiagnostic struct {
 	Variables        *StringMap `json:"variables,omitempty"`
 }
 
+// FactoryWorldRunnerBaselineCapability defines model for FactoryWorldRunnerBaselineCapability.
+type FactoryWorldRunnerBaselineCapability string
+
+// FactoryWorldRunnerCapabilitiesView defines model for FactoryWorldRunnerCapabilitiesView.
+type FactoryWorldRunnerCapabilitiesView struct {
+	BaselineCapabilities []FactoryWorldRunnerBaselineCapability            `json:"baselineCapabilities"`
+	OptionalCapabilities []FactoryWorldRunnerOptionalCapabilitySupportView `json:"optionalCapabilities"`
+}
+
+// FactoryWorldRunnerOptionalCapability defines model for FactoryWorldRunnerOptionalCapability.
+type FactoryWorldRunnerOptionalCapability string
+
+// FactoryWorldRunnerOptionalCapabilityStatus defines model for FactoryWorldRunnerOptionalCapabilityStatus.
+type FactoryWorldRunnerOptionalCapabilityStatus string
+
+// FactoryWorldRunnerOptionalCapabilitySupportView defines model for FactoryWorldRunnerOptionalCapabilitySupportView.
+type FactoryWorldRunnerOptionalCapabilitySupportView struct {
+	Capability FactoryWorldRunnerOptionalCapability       `json:"capability"`
+	Detail     *string                                    `json:"detail,omitempty"`
+	Status     FactoryWorldRunnerOptionalCapabilityStatus `json:"status"`
+}
+
 // FactoryWorldScriptRequestView defines model for FactoryWorldScriptRequestView.
 type FactoryWorldScriptRequestView struct {
 	Args            *[]string `json:"args,omitempty"`
@@ -692,7 +735,8 @@ type FactoryWorldScriptResponseView struct {
 
 // FactoryWorldSelectedRunnerView defines model for FactoryWorldSelectedRunnerView.
 type FactoryWorldSelectedRunnerView struct {
-	DisplayName *string `json:"displayName,omitempty"`
+	Capabilities *FactoryWorldRunnerCapabilitiesView `json:"capabilities,omitempty"`
+	DisplayName  *string                             `json:"displayName,omitempty"`
 
 	// RunnerId Stable built-in runner identifiers supported by factory and workstation runner selection.
 	RunnerId *RunnerID `json:"runnerId,omitempty"`

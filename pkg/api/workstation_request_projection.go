@@ -207,8 +207,32 @@ func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource inter
 	}
 	if metadata, ok := interfaces.BuiltInRunnerMetadata(runnerID); ok {
 		view.DisplayName = workstationRequestStringPtr(metadata.DisplayName)
+		view.Capabilities = generatedFactoryWorldRunnerCapabilitiesView(metadata.Capabilities)
 	}
 	return view
+}
+
+func generatedFactoryWorldRunnerCapabilitiesView(
+	capabilities interfaces.RunnerCapabilities,
+) *factoryapi.FactoryWorldRunnerCapabilitiesView {
+	baseline := make([]factoryapi.FactoryWorldRunnerBaselineCapability, 0, len(capabilities.Baseline))
+	for _, capability := range capabilities.Baseline {
+		baseline = append(baseline, factoryapi.FactoryWorldRunnerBaselineCapability(capability))
+	}
+
+	optional := make([]factoryapi.FactoryWorldRunnerOptionalCapabilitySupportView, 0, len(capabilities.Optional))
+	for _, support := range capabilities.Optional {
+		optional = append(optional, factoryapi.FactoryWorldRunnerOptionalCapabilitySupportView{
+			Capability: factoryapi.FactoryWorldRunnerOptionalCapability(support.Capability),
+			Status:     factoryapi.FactoryWorldRunnerOptionalCapabilityStatus(support.Status),
+			Detail:     workstationRequestStringPtr(support.Detail),
+		})
+	}
+
+	return &factoryapi.FactoryWorldRunnerCapabilitiesView{
+		BaselineCapabilities: baseline,
+		OptionalCapabilities: optional,
+	}
 }
 
 func buildFactoryWorldWorkstationRequestCounts(

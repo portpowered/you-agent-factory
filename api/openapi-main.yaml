@@ -625,6 +625,16 @@ components:
       $ref: './components/schemas/factory-world/FactoryWorldScriptResponseView.yaml'
     FactoryWorldSelectedRunnerView:
       $ref: './components/schemas/factory-world/FactoryWorldSelectedRunnerView.yaml'
+    FactoryWorldRunnerBaselineCapability:
+      $ref: './components/schemas/factory-world/FactoryWorldRunnerBaselineCapability.yaml'
+    FactoryWorldRunnerOptionalCapability:
+      $ref: './components/schemas/factory-world/FactoryWorldRunnerOptionalCapability.yaml'
+    FactoryWorldRunnerOptionalCapabilityStatus:
+      $ref: './components/schemas/factory-world/FactoryWorldRunnerOptionalCapabilityStatus.yaml'
+    FactoryWorldRunnerOptionalCapabilitySupportView:
+      $ref: './components/schemas/factory-world/FactoryWorldRunnerOptionalCapabilitySupportView.yaml'
+    FactoryWorldRunnerCapabilitiesView:
+      $ref: './components/schemas/factory-world/FactoryWorldRunnerCapabilitiesView.yaml'
     FactoryWorldWorkstationRequestCountView:
       $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestCountView.yaml'
     FactoryWorldWorkstationRequestRequestView:

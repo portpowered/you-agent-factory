@@ -7,3 +7,5 @@ properties:
     type: string
   selectionSource:
     $ref: '../../../openapi-main.yaml#/components/schemas/RunnerSelectionSource'
+  capabilities:
+    $ref: './FactoryWorldRunnerCapabilitiesView.yaml'

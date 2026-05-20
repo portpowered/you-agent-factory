@@ -39,6 +39,14 @@ export interface CurrentSelectionDetailMessages {
   providerResponseUnavailable: string;
   providerSessionLabel: string;
   runnerLabel: string;
+  runnerCapabilityImageInputLabel: string;
+  runnerCapabilitySessionResumeLabel: string;
+  runnerCapabilityStructuredOutputLabel: string;
+  runnerCapabilitySupportHeading: string;
+  runnerCapabilitySupportedLabel: string;
+  runnerCapabilityUnsupportedLabel: string;
+  runnerCapabilityWorkingDirectoryLabel: string;
+  runnerCapabilityWorktreeLabel: string;
   runnerSelectionSourceLabel: string;
   noCurrentWorkInPlace: string;
   noWorkRecordedAtSelectedTick: string;
@@ -170,6 +178,14 @@ const currentSelectionDetailMessagesByLocale = {
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
     runnerLabel: "Runner",
+    runnerCapabilityImageInputLabel: "Image input",
+    runnerCapabilitySessionResumeLabel: "Session resume",
+    runnerCapabilityStructuredOutputLabel: "Structured output",
+    runnerCapabilitySupportHeading: "Runner capability support",
+    runnerCapabilitySupportedLabel: "Supported",
+    runnerCapabilityUnsupportedLabel: "Unsupported",
+    runnerCapabilityWorkingDirectoryLabel: "Working directory",
+    runnerCapabilityWorktreeLabel: "Worktree selection",
     runnerSelectionSourceLabel: "Runner source",
     requestBodyLabel: "Request body",
     requestCountsHeading: "Request counts",
@@ -286,6 +302,14 @@ const currentSelectionDetailMessagesByLocale = {
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
     runnerLabel: "Runner",
+    runnerCapabilityImageInputLabel: "画像入力",
+    runnerCapabilitySessionResumeLabel: "セッション再開",
+    runnerCapabilityStructuredOutputLabel: "構造化出力",
+    runnerCapabilitySupportHeading: "Runner の機能サポート",
+    runnerCapabilitySupportedLabel: "対応",
+    runnerCapabilityUnsupportedLabel: "未対応",
+    runnerCapabilityWorkingDirectoryLabel: "作業ディレクトリ",
+    runnerCapabilityWorktreeLabel: "worktree 選択",
     runnerSelectionSourceLabel: "Runner source",
     requestBodyLabel: "Request body",
     requestCountsHeading: "Request counts",
@@ -402,6 +426,14 @@ const currentSelectionDetailMessagesByLocale = {
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
     runnerLabel: "Runner",
+    runnerCapabilityImageInputLabel: "이미지 입력",
+    runnerCapabilitySessionResumeLabel: "세션 재개",
+    runnerCapabilityStructuredOutputLabel: "구조화된 출력",
+    runnerCapabilitySupportHeading: "Runner 기능 지원",
+    runnerCapabilitySupportedLabel: "지원",
+    runnerCapabilityUnsupportedLabel: "미지원",
+    runnerCapabilityWorkingDirectoryLabel: "작업 디렉터리",
+    runnerCapabilityWorktreeLabel: "worktree 선택",
     runnerSelectionSourceLabel: "Runner source",
     requestBodyLabel: "Request body",
     requestCountsHeading: "Request counts",
@@ -510,6 +542,14 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable: "此推理尝试没有可用的提供方响应文本。",
     providerSessionLabel: "Provider session",
     runnerLabel: "Runner",
+    runnerCapabilityImageInputLabel: "图片输入",
+    runnerCapabilitySessionResumeLabel: "会话恢复",
+    runnerCapabilityStructuredOutputLabel: "结构化输出",
+    runnerCapabilitySupportHeading: "Runner 能力支持",
+    runnerCapabilitySupportedLabel: "支持",
+    runnerCapabilityUnsupportedLabel: "不支持",
+    runnerCapabilityWorkingDirectoryLabel: "工作目录",
+    runnerCapabilityWorktreeLabel: "worktree 选择",
     runnerSelectionSourceLabel: "Runner 来源",
     noCurrentWorkInPlace: "当前没有工作占用这个位置。",
     noWorkRecordedAtSelectedTick:

@@ -23,7 +23,11 @@ import {
   type WorkstationRequestDetailView,
 } from "./workstation-request-detail-view";
 import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
-import { getRunnerDisplayName } from "./runner-metadata";
+import {
+  getRunnerDisplayName,
+  resolveSelectedRunnerMetadata,
+  type RunnerOptionalCapability,
+} from "./runner-metadata";
 
 export function WorkstationRequestDetailCard({
   onSelectWorkID,
@@ -80,6 +84,7 @@ function WorkstationRequestSummary({
   view: WorkstationRequestDetailView;
 }) {
   const messages = useCurrentSelectionDetailMessages();
+  const requestRunnerMetadata = resolveSelectedRunnerMetadata(view.requestRunner);
 
   return (
     <>
@@ -161,8 +166,65 @@ function WorkstationRequestSummary({
           </div>
         ) : null}
       </dl>
+      {requestRunnerMetadata ? (
+        <div className="mt-3 grid gap-2 rounded-xl border border-af-overlay/8 bg-af-overlay/4 p-3">
+          <p className="m-0 text-sm text-af-ink/72">
+            {messages.runnerCapabilitySupportHeading}
+          </p>
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {requestRunnerMetadata.capabilities.optionalCapabilities.map(
+              (capability) => (
+                <li
+                  className="grid gap-1 rounded-lg border border-af-overlay/8 bg-af-surface/66 p-2"
+                  key={capability.capability}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm text-af-ink">
+                      {labelForRunnerCapability(messages, capability.capability)}
+                    </span>
+                    <span
+                      className={
+                        capability.status === "supported"
+                          ? "rounded-full bg-af-success/10 px-2 py-1 text-xs font-semibold text-af-success-ink"
+                          : "rounded-full bg-af-warning/12 px-2 py-1 text-xs font-semibold text-af-warning-ink"
+                      }
+                    >
+                      {capability.status === "supported"
+                        ? messages.runnerCapabilitySupportedLabel
+                        : messages.runnerCapabilityUnsupportedLabel}
+                    </span>
+                  </div>
+                  {capability.detail ? (
+                    <p className="m-0 text-sm text-af-ink/62">
+                      {capability.detail}
+                    </p>
+                  ) : null}
+                </li>
+              ),
+            )}
+          </ul>
+        </div>
+      ) : null}
     </>
   );
+}
+
+function labelForRunnerCapability(
+  messages: ReturnType<typeof useCurrentSelectionDetailMessages>,
+  capability: RunnerOptionalCapability,
+) {
+  switch (capability) {
+    case "image_input":
+      return messages.runnerCapabilityImageInputLabel;
+    case "session_resume":
+      return messages.runnerCapabilitySessionResumeLabel;
+    case "structured_output":
+      return messages.runnerCapabilityStructuredOutputLabel;
+    case "working_directory":
+      return messages.runnerCapabilityWorkingDirectoryLabel;
+    case "worktree":
+      return messages.runnerCapabilityWorktreeLabel;
+  }
 }
 
 function RequestDetailsSection({

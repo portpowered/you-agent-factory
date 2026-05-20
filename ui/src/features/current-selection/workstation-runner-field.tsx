@@ -70,7 +70,7 @@ export function EditableConfigurationRunnerField({
             {messages.runnerCapabilitySupportHeading}
           </p>
           <ul className="m-0 grid list-none gap-2 p-0">
-            {runnerMetadata.optionalCapabilities.map((capability) => (
+            {runnerMetadata.capabilities.optionalCapabilities.map((capability) => (
               <li
                 className="grid gap-1 rounded-lg border border-af-overlay/8 bg-af-surface/66 p-2"
                 key={capability.capability}

@@ -2224,6 +2224,11 @@ func assertProjectionSchemasPresent(t *testing.T, schemas map[string]any) {
 		"FactoryWorldWorkstationRequestView",
 		"FactoryWorldWorkstationRequestCountView",
 		"FactoryWorldSelectedRunnerView",
+		"FactoryWorldRunnerBaselineCapability",
+		"FactoryWorldRunnerOptionalCapability",
+		"FactoryWorldRunnerOptionalCapabilityStatus",
+		"FactoryWorldRunnerOptionalCapabilitySupportView",
+		"FactoryWorldRunnerCapabilitiesView",
 		"FactoryWorldWorkstationRequestRequestView",
 		"FactoryWorldWorkstationRequestResponseView",
 		"FactoryWorldWorkItemRef",
@@ -2269,6 +2274,22 @@ func assertWorkstationRequestViewSchema(t *testing.T, schemas map[string]any) {
 
 	countView := schemaObject(t, schemas, "FactoryWorldWorkstationRequestCountView")
 	assertRequiredFields(t, countView, "dispatchedCount", "respondedCount", "erroredCount")
+
+	selectedRunner := schemaObject(t, schemas, "FactoryWorldSelectedRunnerView")
+	selectedRunnerProperties := schemaProperties(t, selectedRunner, "FactoryWorldSelectedRunnerView")
+	assertPropertyRef(t, selectedRunnerProperties, "capabilities", "#/components/schemas/FactoryWorldRunnerCapabilitiesView")
+
+	capabilitiesView := schemaObject(t, schemas, "FactoryWorldRunnerCapabilitiesView")
+	assertRequiredFields(t, capabilitiesView, "baselineCapabilities", "optionalCapabilities")
+	capabilitiesProperties := schemaProperties(t, capabilitiesView, "FactoryWorldRunnerCapabilitiesView")
+	assertArrayItemRef(t, capabilitiesProperties, "baselineCapabilities", "#/components/schemas/FactoryWorldRunnerBaselineCapability")
+	assertArrayItemRef(t, capabilitiesProperties, "optionalCapabilities", "#/components/schemas/FactoryWorldRunnerOptionalCapabilitySupportView")
+
+	optionalSupportView := schemaObject(t, schemas, "FactoryWorldRunnerOptionalCapabilitySupportView")
+	assertRequiredFields(t, optionalSupportView, "capability", "status")
+	optionalSupportProperties := schemaProperties(t, optionalSupportView, "FactoryWorldRunnerOptionalCapabilitySupportView")
+	assertPropertyRef(t, optionalSupportProperties, "capability", "#/components/schemas/FactoryWorldRunnerOptionalCapability")
+	assertPropertyRef(t, optionalSupportProperties, "status", "#/components/schemas/FactoryWorldRunnerOptionalCapabilityStatus")
 }
 
 func assertWorkstationRequestRequestSchema(t *testing.T, schemas map[string]any) {
