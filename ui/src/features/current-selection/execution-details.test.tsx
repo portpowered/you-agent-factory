@@ -232,8 +232,18 @@ describe("InferenceAttemptsSection", () => {
     expect(
       within(section).getByText("dispatch-review/inference-request/1"),
     ).toBeTruthy();
-    expect(within(section).getByText("Review the story.")).toBeTruthy();
-    expect(within(section).getByText("Looks good.")).toBeTruthy();
+    const requestBody = within(section).getByRole("region", {
+      name: "Request body",
+    });
+    const responseBody = within(section).getByRole("region", {
+      name: "Response body",
+    });
+
+    fireEvent.click(within(requestBody).getByRole("button", { name: "Expand" }));
+    fireEvent.click(within(responseBody).getByRole("button", { name: "Expand" }));
+
+    expect(within(requestBody).getByText("Review the story.")).toBeTruthy();
+    expect(within(responseBody).getByText("Looks good.")).toBeTruthy();
     expect(
       within(section).queryByText(
         "No inference events are available for this selected work item.",
