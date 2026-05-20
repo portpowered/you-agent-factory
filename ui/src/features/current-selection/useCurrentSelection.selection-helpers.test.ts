@@ -121,11 +121,31 @@ describe("useCurrentSelection.selection-helpers", () => {
       workstation_name: "Review",
     };
     const snapshot = buildSnapshot();
+    snapshot.runtime.active_executions_by_dispatch_id = {
+      "dispatch-review-active": {
+        dispatch_id: "dispatch-review-active",
+        started_at: "2026-04-08T12:00:00Z",
+        transition_id: "review",
+        work_items: [workAlpha],
+        workstation_name: "Review",
+        workstation_node_id: "review",
+      },
+    };
     snapshot.runtime.current_work_items_by_place_id = {
       [reviewInputPlace.place_id]: [workAlpha],
     };
     snapshot.runtime.place_occupancy_work_items_by_place_id = {
       [reviewOutputPlace.place_id]: [workBeta],
+    };
+    snapshot.runtime.workstation_requests_by_dispatch_id = {
+      "dispatch-repair-complete": {
+        dispatch_id: "dispatch-repair-complete",
+        started_at: "2026-04-08T12:00:06Z",
+        transition_id: "repair",
+        workstation_node_id: "repair",
+        work_items: [workBeta],
+        workstation_name: "Repair",
+      },
     };
 
     expect(
@@ -150,9 +170,11 @@ describe("useCurrentSelection.selection-helpers", () => {
     ]);
     expect(findStatePlace(snapshot, reviewInputPlace.place_id)).toEqual(reviewInputPlace);
     expect(findStatePlace(snapshot, "missing-place")).toBeNull();
-    expect(currentWorkItemsForPlace(snapshot, reviewInputPlace.place_id)).toEqual([workAlpha]);
+    expect(currentWorkItemsForPlace(snapshot, reviewInputPlace.place_id)).toEqual([
+      { ...workAlpha, started_at: "2026-04-08T12:00:00Z" },
+    ]);
     expect(terminalHistoryItemsForPlace(snapshot, reviewOutputPlace.place_id)).toEqual([
-      workBeta,
+      { ...workBeta, started_at: "2026-04-08T12:00:06Z" },
     ]);
     expect(currentWorkItemsForPlace(null, reviewInputPlace.place_id)).toEqual([]);
     expect(terminalHistoryItemsForPlace(snapshot, undefined)).toEqual([]);
