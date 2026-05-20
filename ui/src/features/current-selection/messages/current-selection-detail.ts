@@ -38,6 +38,8 @@ export interface CurrentSelectionDetailMessages {
   providerLabel: string;
   providerResponseUnavailable: string;
   providerSessionLabel: string;
+  runnerLabel: string;
+  runnerSelectionSourceLabel: string;
   noCurrentWorkInPlace: string;
   noWorkRecordedAtSelectedTick: string;
   requestBodyLabel: string;
@@ -167,6 +169,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    runnerLabel: "Runner",
+    runnerSelectionSourceLabel: "Runner source",
     requestBodyLabel: "Request body",
     requestCountsHeading: "Request counts",
     requestCountsRegionLabel: "Request counts",
@@ -281,6 +285,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    runnerLabel: "Runner",
+    runnerSelectionSourceLabel: "Runner source",
     requestBodyLabel: "Request body",
     requestCountsHeading: "Request counts",
     requestCountsRegionLabel: "Request counts",
@@ -395,6 +401,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    runnerLabel: "Runner",
+    runnerSelectionSourceLabel: "Runner source",
     requestBodyLabel: "Request body",
     requestCountsHeading: "Request counts",
     requestCountsRegionLabel: "Request counts",
@@ -501,6 +509,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerLabel: "提供方",
     providerResponseUnavailable: "此推理尝试没有可用的提供方响应文本。",
     providerSessionLabel: "Provider session",
+    runnerLabel: "Runner",
+    runnerSelectionSourceLabel: "Runner 来源",
     noCurrentWorkInPlace: "当前没有工作占用这个位置。",
     noWorkRecordedAtSelectedTick:
       "在所选时间刻度，这个位置暂时没有记录到工作。",

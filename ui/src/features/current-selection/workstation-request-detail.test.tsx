@@ -48,6 +48,14 @@ describe("WorkstationRequestDetailCard", () => {
             prompt_source: "factory-renderer",
             source: "dispatch-history",
           },
+          request_view: {
+            input_work_items: [],
+            runner: {
+              displayName: "Gemini",
+              runnerId: "gemini",
+              selectionSource: "factory",
+            },
+          },
           responded_request_count: 1,
           response: "Ready for the next workstation.",
           response_metadata: {
@@ -70,6 +78,9 @@ describe("WorkstationRequestDetailCard", () => {
     expect(within(currentSelection).getByRole("heading", { name: "Current selection" })).toBeTruthy();
     expect(within(currentSelection).getAllByText("request-ready-story").length).toBeGreaterThan(0);
     expect(within(currentSelection).getAllByText("Dispatch ID").length).toBeGreaterThan(0);
+    expect(within(currentSelection).getByText("Runner")).toBeTruthy();
+    expect(within(currentSelection).getByText("Gemini")).toBeTruthy();
+    expect(within(currentSelection).getByText("factory")).toBeTruthy();
     expect(within(currentSelection).getByRole("heading", { name: "Request counts" })).toBeTruthy();
     expect(responseDetails.getByText("trace-active-story")).toBeTruthy();
     expect(inferenceAttempts.getByText("Retry the review with the latest context.")).toBeTruthy();

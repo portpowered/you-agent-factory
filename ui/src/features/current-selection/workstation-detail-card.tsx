@@ -81,6 +81,7 @@ export function WorkstationDetailCard({
       />
       <WorkstationSummary
         activeRunCount={activeExecutions.length}
+        editableConfigurationState={editableConfigurationState}
         historyCount={
           hasProjectedRequestHistory
             ? workstationRequests.length

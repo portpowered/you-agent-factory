@@ -179,6 +179,7 @@ describe("WorkstationDetailCard", () => {
     expect(screen.getByRole("heading", { name: "Workstation summary" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Configuration" })).toBeTruthy();
     expect(screen.getByText("Worker type")).toBeTruthy();
+    expect(screen.getByText("Selected runner")).toBeTruthy();
     expect(screen.getByText("No active work is running on this workstation.")).toBeTruthy();
 
     const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
@@ -218,6 +219,7 @@ describe("WorkstationDetailCard", () => {
       screen.getByRole("heading", { name: "ワークステーション概要" }),
     ).toBeTruthy();
     expect(screen.getByText("ワーカータイプ")).toBeTruthy();
+    expect(screen.getByText("選択中の runner")).toBeTruthy();
     expect(
       screen.getByText("このワークステーションでは現在アクティブな作業は実行されていません。"),
     ).toBeTruthy();

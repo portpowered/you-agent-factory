@@ -68,6 +68,7 @@ describe("useEditableWorkstationConfigurationState", () => {
     expect(result.current).toMatchObject({
       draft: {
         prompt: "",
+        runnerName: "gemini",
         workerName: "",
       },
       hasValidationErrors: true,
@@ -395,11 +396,13 @@ function buildEditableDefinitionResult(
 
 function buildEditableFactoryDefinition(overrides?: {
   prompt?: string;
+  runnerName?: "codex" | "gemini" | "kiro" | "cursor-cli" | "opencode" | null;
   workerName?: string;
   workerOptions?: string[];
 }): CanonicalFactoryDefinition {
   return {
     name: "Current Factory",
+    runner: "codex",
     workers: (overrides?.workerOptions ?? ["reviewer"]).map((name, index) => ({
       model: `gpt-5.${index + 5}`,
       name,
@@ -415,6 +418,7 @@ function buildEditableFactoryDefinition(overrides?: {
         name: "Review",
         outputs: [{ state: "approved", workType: "story" }],
         promptFile: "prompts/review.md",
+        runner: overrides?.runnerName ?? "gemini",
         worker: overrides?.workerName ?? "reviewer",
       },
     ],

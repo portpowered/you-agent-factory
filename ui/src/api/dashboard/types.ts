@@ -1,4 +1,9 @@
 import type { InferenceOutcome } from "../events";
+import type { components } from "../generated/openapi";
+
+type DashboardRunnerID = components["schemas"]["RunnerID"];
+type DashboardRunnerSelectionSource =
+  components["schemas"]["RunnerSelectionSource"];
 
 export type StateCategory = "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED";
 export type DashboardPlaceKind =
@@ -185,6 +190,7 @@ export interface DashboardRuntimeWorkstationRequestCounts {
 }
 
 export interface DashboardRuntimeWorkstationRequestRequest {
+  runner?: DashboardSelectedRunner;
   startedAt?: string;
   started_at?: string;
   inputWorkItems?: DashboardWorkItemRef[];
@@ -205,6 +211,7 @@ export interface DashboardRuntimeWorkstationRequestRequest {
 
 export interface DashboardRuntimeWorkstationRequestResponse {
   outcome?: string;
+  runner?: DashboardSelectedRunner;
   feedback?: string;
   failureReason?: string;
   failure_reason?: string;
@@ -232,6 +239,12 @@ export interface DashboardRuntimeWorkstationRequest {
   counts: DashboardRuntimeWorkstationRequestCounts;
   request: DashboardRuntimeWorkstationRequestRequest;
   response?: DashboardRuntimeWorkstationRequestResponse;
+}
+
+export interface DashboardSelectedRunner {
+  displayName?: string;
+  runnerId?: DashboardRunnerID;
+  selectionSource?: DashboardRunnerSelectionSource;
 }
 
 export interface DashboardWorkstationRequest {

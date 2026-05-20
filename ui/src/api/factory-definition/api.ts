@@ -8,6 +8,7 @@ type FactoryGuard = FactorySchemas["Guard"];
 type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
 type FactoryResourceRequirement = FactorySchemas["ResourceRequirement"];
+type FactoryRunnerID = FactorySchemas["RunnerID"];
 type FactoryWorker = FactorySchemas["Worker"];
 type FactoryWorkState = FactorySchemas["WorkState"];
 type FactoryWorkstation = FactorySchemas["Workstation"];
@@ -23,6 +24,7 @@ const FACTORY_KEYS = new Set([
   "metadata",
   "name",
   "resources",
+  "runner",
   "sourceDirectory",
   "supportingFiles",
   "workers",
@@ -66,6 +68,7 @@ const WORKSTATION_KEYS = new Set([
   "outputs",
   "promptFile",
   "resources",
+  "runner",
   "stopWords",
   "type",
   "worker",
@@ -107,6 +110,13 @@ const WORKER_MODEL_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["modelPro
 ]);
 const WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["executorProvider"]>>([
   "SCRIPT_WRAP",
+]);
+const RUNNER_ID_VALUES = new Set<FactoryRunnerID>([
+  "codex",
+  "gemini",
+  "kiro",
+  "cursor-cli",
+  "opencode",
 ]);
 const WORKSTATION_BEHAVIOR_VALUES = new Set<
   NonNullable<FactoryWorkstation["behavior"]>
@@ -178,6 +188,7 @@ function decodeFactoryDefinition(
   const guards = readOptionalArray(value, "guards", path, decodeFactoryGuard);
   const workTypes = readOptionalArray(value, "workTypes", path, decodeWorkType);
   const resources = readOptionalArray(value, "resources", path, decodeResource);
+  const runner = readOptionalEnum(value, "runner", path, RUNNER_ID_VALUES);
   const supportingFiles = readOptionalObject(value, "supportingFiles", path, expectObject);
   const workers = readOptionalArray(value, "workers", path, decodeWorker);
   const workstations = readOptionalArray(value, "workstations", path, decodeWorkstation);
@@ -208,6 +219,9 @@ function decodeFactoryDefinition(
   }
   if (resources !== undefined) {
     factory.resources = resources;
+  }
+  if (runner !== undefined) {
+    factory.runner = runner;
   }
   if (workers !== undefined) {
     factory.workers = workers;
@@ -348,6 +362,7 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   const workingDirectory = readOptionalString(record, "workingDirectory", path);
   const worktree = readOptionalString(record, "worktree", path);
   const env = readOptionalStringMap(record, "env", path);
+  const runner = readOptionalEnum(record, "runner", path, RUNNER_ID_VALUES);
 
   if (id !== undefined) {
     workstation.id = id;
@@ -402,6 +417,9 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   }
   if (env !== undefined) {
     workstation.env = env;
+  }
+  if (runner !== undefined) {
+    workstation.runner = runner;
   }
 
   return workstation;

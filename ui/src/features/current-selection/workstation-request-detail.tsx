@@ -23,6 +23,7 @@ import {
   type WorkstationRequestDetailView,
 } from "./workstation-request-detail-view";
 import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
+import { getRunnerDisplayName } from "./runner-metadata";
 
 export function WorkstationRequestDetailCard({
   onSelectWorkID,
@@ -141,6 +142,24 @@ function WorkstationRequestSummary({
               : messages.totalDurationUnavailable}
           </dd>
         </div>
+        {view.requestRunner?.runnerId ? (
+          <div>
+            <dt>{messages.runnerLabel}</dt>
+            <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
+              {getRunnerDisplayName(view.requestRunner.runnerId) ??
+                view.requestRunner.displayName ??
+                view.requestRunner.runnerId}
+            </dd>
+          </div>
+        ) : null}
+        {view.requestRunner?.selectionSource ? (
+          <div>
+            <dt>{messages.runnerSelectionSourceLabel}</dt>
+            <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
+              {view.requestRunner.selectionSource}
+            </dd>
+          </div>
+        ) : null}
       </dl>
     </>
   );

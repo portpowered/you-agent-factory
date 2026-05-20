@@ -1,5 +1,6 @@
 import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
 import { normalizeDetailText } from "./detail-card-shared";
+import type { DashboardSelectedRunner } from "../../api/dashboard/types";
 
 export interface WorkstationRequestDetailView {
   hasFailureDetails: boolean;
@@ -10,6 +11,8 @@ export interface WorkstationRequestDetailView {
   normalizedScriptStderr: string | undefined;
   normalizedScriptStdout: string | undefined;
   outcome: string | undefined;
+  requestRunner: DashboardSelectedRunner | undefined;
+  responseRunner: DashboardSelectedRunner | undefined;
   totalDurationMillis: number | undefined;
 }
 
@@ -46,6 +49,8 @@ export function buildWorkstationRequestDetailView(
       request.script_response?.stdout,
     ),
     outcome: request.outcome ?? request.script_response?.outcome,
+    requestRunner: request.request_view?.runner,
+    responseRunner: request.response_view?.runner,
     totalDurationMillis:
       request.total_duration_millis ?? request.script_response?.duration_millis,
   };
