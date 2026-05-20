@@ -16,6 +16,7 @@ const EMPTY_DRAFT: SubmitWorkDraft = {
 };
 
 export function useSubmitWorkWidget(
+  sessionID: string,
   submitWorkTypes: DashboardSubmitWorkType[],
   messages: SubmitWorkMessages,
 ) {
@@ -26,7 +27,8 @@ export function useSubmitWorkWidget(
   );
 
   const mutation = useMutation({
-    mutationFn: submitWork,
+    mutationFn: (request: Parameters<typeof submitWork>[0]) =>
+      submitWork(request, { sessionID }),
     onSuccess: () => {
       setDraft((currentDraft) => ({
         ...EMPTY_DRAFT,
@@ -35,6 +37,16 @@ export function useSubmitWorkWidget(
       setShowValidation(false);
     },
   });
+  const resetMutation = mutation.reset;
+
+  useEffect(() => {
+    if (sessionID.trim().length === 0) {
+      return;
+    }
+    setDraft(EMPTY_DRAFT);
+    setShowValidation(false);
+    resetMutation();
+  }, [resetMutation, sessionID]);
 
   useEffect(() => {
     if (

@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../api/factory-sessions";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
+import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { getHeaderControlsMessages } from "./messages/header-controls";
 
@@ -40,6 +42,9 @@ describe("DashboardSessionTabs", () => {
   beforeEach(() => {
     listFactorySessions.mockReset();
     openFactorySession.mockReset();
+    useDashboardSessionStore.setState({
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
   });
 
   it("renders loading and then the active session tabs with folder inspection text", async () => {
@@ -154,6 +159,7 @@ describe("DashboardSessionTabs", () => {
       expect(rootTab.getAttribute("aria-pressed")).toBe("true");
     });
     expect(document.activeElement).toBe(rootTab);
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe("~default");
   });
 
   it("shows the offline state and allows session refetch", async () => {
@@ -257,6 +263,9 @@ describe("DashboardSessionTabs", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /other \/ default/i })).toBeTruthy();
     });
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      "session-other",
+    );
   });
 
   it("shows a compact target picker when the folder exposes multiple runnable targets", async () => {

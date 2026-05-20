@@ -8,6 +8,7 @@ import {
   CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
   CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
 } from "../current-factory-definition";
+import { resetSelectionHistoryStore } from "../current-selection/state/selectionHistoryStore";
 import {
   compactFactoryEventForTimeline,
   installFactoryTimelineDebugGlobal,
@@ -19,9 +20,26 @@ import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore"
 import {
   useDashboardStreamStore,
 } from "./state/dashboardStreamStore";
+import { useDashboardSessionStore } from "./state/dashboardSessionStore";
 
 export interface UseDashboardSnapshotOptions {
   refreshToken?: number;
+}
+
+function resetDashboardSessionScopedState(
+  queryClient: ReturnType<typeof useQueryClient>,
+  resetStreamState: () => void,
+  resetTimeline: () => void,
+): void {
+  resetTimeline();
+  resetStreamState();
+  resetSelectionHistoryStore();
+  queryClient.removeQueries({
+    queryKey: CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
+  });
+  queryClient.removeQueries({
+    queryKey: CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
+  });
 }
 
 export function useDashboardSnapshot({
@@ -32,12 +50,13 @@ export function useDashboardSnapshot({
   const eventCount = useFactoryTimelineStore((state) => state.events.length);
   const resetTimeline = useFactoryTimelineStore((state) => state.reset);
   const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
-  const snapshot = useFactoryTimelineStore(
-    (state) => state.worldViewCache[state.selectedTick],
-  );
+  const snapshot = useFactoryTimelineStore((state) => state.worldViewCache[state.selectedTick]);
   const streamState = useDashboardStreamStore((state) => state.streamState);
   const resetStreamState = useDashboardStreamStore((state) => state.resetStreamState);
   const setStreamState = useDashboardStreamStore((state) => state.setStreamState);
+  const selectedSessionID = useDashboardSessionStore(
+    (state) => state.selectedSessionID,
+  );
   const queuedEventsRef = useRef<FactoryEvent[]>([]);
   const flushHandleRef = useRef<number | null>(null);
   const hasOpenedStreamRef = useRef(false);
@@ -71,8 +90,11 @@ export function useDashboardSnapshot({
   useEffect(() => {
     if (hasOpenedStreamRef.current || refreshToken !== 0) {
       queuedEventsRef.current = [];
-      resetTimeline();
-      resetStreamState();
+      resetDashboardSessionScopedState(
+        queryClient,
+        resetStreamState,
+        resetTimeline,
+      );
     } else {
       hasOpenedStreamRef.current = true;
     }
@@ -88,6 +110,7 @@ export function useDashboardSnapshot({
       (status, message) => {
         setStreamState({ status, message });
       },
+      selectedSessionID,
     );
     return () => {
       if (flushHandleRef.current !== null) {
@@ -110,6 +133,7 @@ export function useDashboardSnapshot({
     scheduleQueuedFlush,
     setStreamState,
     queryClient,
+    selectedSessionID,
   ]);
 
   useEffect(() => {

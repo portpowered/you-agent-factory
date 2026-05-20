@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -7,9 +8,17 @@ import {
   within,
 } from "@testing-library/react";
 
+import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
+import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
 import { SubmitWorkWidget } from "./submit-work-widget";
 
 describe("SubmitWorkWidget", () => {
+  beforeEach(() => {
+    useDashboardSessionStore.setState({
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -382,6 +391,64 @@ describe("SubmitWorkWidget", () => {
     expect(workType.value).toBe("story");
     expect(requestName.value).toBe("Retry dashboard request");
     expect(requestText.value).toBe("Retry the broken submission.");
+  });
+
+  it("clears the draft and switches submit routing when the selected session changes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 201,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Work type",
+    });
+    const requestName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Request name",
+    });
+    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Request",
+    });
+
+    fireEvent.change(workType, { target: { value: "story" } });
+    fireEvent.change(requestName, {
+      target: { value: "Switch session draft" },
+    });
+    fireEvent.change(requestText, {
+      target: { value: "Do not leak this into another tab." },
+    });
+
+    act(() => {
+      useDashboardSessionStore.getState().setSelectedSessionID("session-beta");
+    });
+
+    await waitFor(() => {
+      expect(workType.value).toBe("");
+    });
+    expect(requestName.value).toBe("");
+    expect(requestText.value).toBe("");
+
+    fireEvent.change(workType, { target: { value: "story" } });
+    fireEvent.change(requestName, {
+      target: { value: "Beta submission" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/factories/session-beta/work",
+        expect.objectContaining({
+          method: "POST",
+        }),
+      );
+    });
   });
 
   it("renders an explained disabled state when no submit work types are configured", () => {

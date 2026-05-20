@@ -53,6 +53,9 @@ import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardL
 import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
 import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
 import {
+  useDashboardSessionStore,
+} from "./features/dashboard/state/dashboardSessionStore";
+import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "./features/dashboard/state/dashboardStreamStore";
@@ -1333,7 +1336,9 @@ function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
 
 function nonPromptTemplateFetchPaths(fetchMock: ReturnType<typeof vi.fn>) {
   return fetchCallPaths(fetchMock).filter(
-    (path) => !path.includes("/prompt-template-contract"),
+    (path) =>
+      !path.includes("/prompt-template-contract") &&
+      path !== "/factory-sessions",
   );
 }
 
@@ -1593,6 +1598,9 @@ function registerAppDashboardTestLifecycle(): void {
     MockEventSource.instances = [];
     restoreBrowserTestShims = installDashboardBrowserTestShims();
     resetSelectionHistoryStore();
+    useDashboardSessionStore.setState({
+      selectedSessionID: "~default",
+    });
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
       data: undefined,
       error: null,
@@ -1634,6 +1642,9 @@ function registerAppDashboardTestLifecycle(): void {
     useDashboardStreamStore.setState({
       streamState: createDefaultDashboardStreamState(),
     });
+    useDashboardSessionStore.setState({
+      selectedSessionID: "~default",
+    });
     useFactoryTimelineStore.getState().reset();
     resetSelectionHistoryStore();
     restoreBrowserTestShims?.();
@@ -1648,6 +1659,9 @@ function registerAppFollowUpTestLifecycle(): void {
     window.localStorage.clear();
     MockEventSource.instances = [];
     restoreBrowserTestShims = installDashboardBrowserTestShims();
+    useDashboardSessionStore.setState({
+      selectedSessionID: "~default",
+    });
   });
 
   afterEach(() => {
@@ -1664,6 +1678,9 @@ function registerAppFollowUpTestLifecycle(): void {
     });
     useDashboardStreamStore.setState({
       streamState: createDefaultDashboardStreamState(),
+    });
+    useDashboardSessionStore.setState({
+      selectedSessionID: "~default",
     });
     useFactoryTimelineStore.getState().reset();
     restoreBrowserTestShims?.();

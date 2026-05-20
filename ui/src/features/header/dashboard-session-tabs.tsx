@@ -16,9 +16,11 @@ import {
   listFactorySessions,
   openFactorySession,
 } from "../../api/factory-sessions";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input } from "../../components/ui";
 import { cn } from "../../lib/cn";
 import { DASHBOARD_BODY_TEXT_CLASS, DASHBOARD_SUPPORTING_LABELS_CLASS } from "../../components/ui/dashboard-typography";
+import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
 import { getHeaderControlsMessages } from "./messages/header-controls";
 
 const FACTORY_SESSIONS_QUERY_KEY = ["factory-sessions"] as const;
@@ -53,7 +55,12 @@ export function DashboardSessionTabs({ locale }: { locale: string }) {
     mutationFn: (input: Parameters<typeof openFactorySession>[0]) =>
       openFactorySession(input),
   });
-  const [activeSessionID, setActiveSessionID] = useState<string>("");
+  const activeSessionID = useDashboardSessionStore(
+    (state) => state.selectedSessionID,
+  );
+  const setActiveSessionID = useDashboardSessionStore(
+    (state) => state.setSelectedSessionID,
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogError, setDialogError] = useState<FactorySessionsAPIError | null>(null);
   const [folderPath, setFolderPath] = useState("");
@@ -70,16 +77,15 @@ export function DashboardSessionTabs({ locale }: { locale: string }) {
 
   useEffect(() => {
     if (sessions.length === 0) {
-      setActiveSessionID("");
       return;
     }
     if (
       activeSessionID === "" ||
       !sessions.some((session) => session.id === activeSessionID)
     ) {
-      setActiveSessionID(sessions[0]?.id ?? "");
+      setActiveSessionID(sessions[0]?.id ?? DEFAULT_FACTORY_SESSION_ID);
     }
-  }, [activeSessionID, sessions]);
+  }, [activeSessionID, sessions, setActiveSessionID]);
 
   async function handleInspectFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

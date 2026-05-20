@@ -1,4 +1,5 @@
 import type { DashboardSubmitWorkType } from "../../api/dashboard/types";
+import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
 import { getSubmitWorkMessages } from "./messages/submit-work";
 import { SubmitWorkCard } from "./submit-work-card";
 import { useSubmitWorkWidget } from "./use-submit-work-widget";
@@ -12,6 +13,9 @@ export function SubmitWorkWidget({
   locale,
   submitWorkTypes = [],
 }: SubmitWorkWidgetProps) {
+  const selectedSessionID = useDashboardSessionStore(
+    (state) => state.selectedSessionID,
+  );
   const messages = getSubmitWorkMessages(locale);
   const {
     draft,
@@ -23,7 +27,7 @@ export function SubmitWorkWidget({
     status,
     submitWorkTypeNames,
     validationErrors,
-  } = useSubmitWorkWidget(submitWorkTypes, messages);
+  } = useSubmitWorkWidget(selectedSessionID, submitWorkTypes, messages);
 
   return (
     <SubmitWorkCard

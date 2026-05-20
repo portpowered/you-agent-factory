@@ -28,6 +28,9 @@ import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardL
 import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
 import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
 import {
+  useDashboardSessionStore,
+} from "./features/dashboard/state/dashboardSessionStore";
+import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "./features/dashboard/state/dashboardStreamStore";
@@ -552,6 +555,9 @@ describe("App current selection", () => {
     MockEventSource.instances = [];
     restoreBrowserTestShims = installDashboardBrowserTestShims();
     resetSelectionHistoryStore();
+    useDashboardSessionStore.setState({
+      selectedSessionID: "~default",
+    });
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
       data: undefined,
       error: null,
@@ -592,6 +598,9 @@ describe("App current selection", () => {
     });
     useDashboardStreamStore.setState({
       streamState: createDefaultDashboardStreamState(),
+    });
+    useDashboardSessionStore.setState({
+      selectedSessionID: "~default",
     });
     useFactoryTimelineStore.getState().reset();
     resetSelectionHistoryStore();
@@ -1233,6 +1242,9 @@ describe("App current selection layout", () => {
     useDashboardStreamStore.setState({
       streamState: createDefaultDashboardStreamState(),
     });
+    useDashboardSessionStore.setState({
+      selectedSessionID: "~default",
+    });
     useFactoryTimelineStore.getState().reset();
     restoreBrowserTestShims?.();
     restoreBrowserTestShims = null;
@@ -1800,6 +1812,9 @@ describe("App current selection terminal states", () => {
     });
     useDashboardStreamStore.setState({
       streamState: createDefaultDashboardStreamState(),
+    });
+    useDashboardSessionStore.setState({
+      selectedSessionID: "~default",
     });
     useFactoryTimelineStore.getState().reset();
     restoreBrowserTestShims?.();
