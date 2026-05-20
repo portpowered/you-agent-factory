@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
-  useMemo,
-  useState,
   useId,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 
 import {
@@ -208,6 +210,8 @@ function SessionTabsContent({
   onSelectSession: (sessionID: string) => void;
   sessions: FactorySessionSummary[];
 }) {
+  const sessionButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
   if (isPending) {
     return (
       <p className={cn("text-sm text-af-ink/68", DASHBOARD_BODY_TEXT_CLASS)}>
@@ -236,13 +240,59 @@ function SessionTabsContent({
       </p>
     );
   }
+
+  function focusSessionButton(index: number) {
+    sessionButtonRefs.current[index]?.focus();
+  }
+
+  function moveSessionFocus(currentIndex: number, offset: number) {
+    const nextIndex = (currentIndex + offset + sessions.length) % sessions.length;
+    const nextSession = sessions[nextIndex];
+    if (!nextSession) {
+      return;
+    }
+    onSelectSession(nextSession.id);
+    focusSessionButton(nextIndex);
+  }
+
   return (
     <>
       <nav aria-label={messages.sessionTabsLabel} className={SESSION_TAB_LIST_CLASS}>
-        {sessions.map((session) => (
+        {sessions.map((session, index) => (
           <SessionTabButton
             active={session.id === activeSession?.id}
             key={session.id}
+            buttonRef={(element) => {
+              sessionButtonRefs.current[index] = element;
+            }}
+            onKeyDown={(event) => {
+              switch (event.key) {
+                case "ArrowLeft":
+                case "ArrowUp":
+                  event.preventDefault();
+                  moveSessionFocus(index, -1);
+                  return;
+                case "ArrowRight":
+                case "ArrowDown":
+                  event.preventDefault();
+                  moveSessionFocus(index, 1);
+                  return;
+                case "Home":
+                  event.preventDefault();
+                  onSelectSession(sessions[0]?.id ?? session.id);
+                  focusSessionButton(0);
+                  return;
+                case "End":
+                  event.preventDefault();
+                  onSelectSession(
+                    sessions[sessions.length - 1]?.id ?? session.id,
+                  );
+                  focusSessionButton(sessions.length - 1);
+                  return;
+                default:
+                  return;
+              }
+            }}
             onClick={() => {
               onSelectSession(session.id);
             }}
@@ -282,10 +332,14 @@ function SessionErrorState({
 
 function SessionTabButton({
   active,
+  buttonRef,
+  onKeyDown,
   onClick,
   session,
 }: {
   active: boolean;
+  buttonRef: (element: HTMLButtonElement | null) => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   onClick: () => void;
   session: FactorySessionSummary;
 }) {
@@ -298,6 +352,8 @@ function SessionTabButton({
         active ? SESSION_TAB_ACTIVE_CLASS : SESSION_TAB_INACTIVE_CLASS,
       )}
       onClick={onClick}
+      onKeyDown={onKeyDown}
+      ref={buttonRef}
       title={`${session.folderPath} (${session.id})`}
       type="button"
     >

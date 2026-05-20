@@ -85,6 +85,77 @@ describe("DashboardSessionTabs", () => {
     ).toBeTruthy();
   });
 
+  it("supports keyboard navigation across session tabs", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/gamma",
+        folderPath: "/workspace/root",
+        id: "session-gamma",
+        isDefault: false,
+        project: "gamma",
+        target: {
+          kind: "named",
+          name: "gamma",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("navigation", { name: messages.sessionTabsLabel }),
+      ).toBeTruthy();
+    });
+
+    const rootTab = screen.getByRole("button", { name: /root \/ default/i });
+    const betaTab = screen.getByRole("button", { name: /root \/ beta/i });
+    const gammaTab = screen.getByRole("button", { name: /root \/ gamma/i });
+
+    expect(rootTab.getAttribute("aria-pressed")).toBe("true");
+    rootTab.focus();
+
+    fireEvent.keyDown(rootTab, { key: "ArrowRight" });
+    await waitFor(() => {
+      expect(betaTab.getAttribute("aria-pressed")).toBe("true");
+    });
+    expect(document.activeElement).toBe(betaTab);
+
+    fireEvent.keyDown(betaTab, { key: "End" });
+    await waitFor(() => {
+      expect(gammaTab.getAttribute("aria-pressed")).toBe("true");
+    });
+    expect(document.activeElement).toBe(gammaTab);
+
+    fireEvent.keyDown(gammaTab, { key: "Home" });
+    await waitFor(() => {
+      expect(rootTab.getAttribute("aria-pressed")).toBe("true");
+    });
+    expect(document.activeElement).toBe(rootTab);
+  });
+
   it("shows the offline state and allows session refetch", async () => {
     listFactorySessions
       .mockRejectedValueOnce(
