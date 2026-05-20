@@ -7,6 +7,9 @@ import {
 export interface CurrentSelectionDetailMessages {
   attemptAriaLabel: (attemptNumber: number) => string;
   attemptTitle: (attemptNumber: number) => string;
+  collapseAttemptAction: (attemptNumber: number) => string;
+  collapseRequestBodyAction: string;
+  collapseResponseBodyAction: string;
   awaitingProviderResponse: string;
   commandLabel: string;
   commandUnavailable: string;
@@ -38,11 +41,12 @@ export interface CurrentSelectionDetailMessages {
   providerLabel: string;
   providerResponseUnavailable: string;
   providerSessionLabel: string;
+  expandAttemptAction: (attemptNumber: number) => string;
+  expandRequestBodyAction: string;
+  expandResponseBodyAction: string;
   noCurrentWorkInPlace: string;
   noWorkRecordedAtSelectedTick: string;
   requestBodyLabel: string;
-  requestCountsHeading: string;
-  requestCountsRegionLabel: string;
   requestDetailsTitle: string;
   requestIdLabel: string;
   requestIdUnavailable: string;
@@ -133,6 +137,10 @@ const currentSelectionDetailMessagesByLocale = {
     attemptAriaLabel: (attemptNumber: number) =>
       `Inference attempt ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `Attempt ${attemptNumber}`,
+    collapseAttemptAction: (attemptNumber: number) =>
+      `Collapse attempt ${attemptNumber}`,
+    collapseRequestBodyAction: "Collapse request body",
+    collapseResponseBodyAction: "Collapse response body",
     awaitingProviderResponse: "Awaiting provider response.",
     commandLabel: "Command",
     commandUnavailable:
@@ -171,9 +179,11 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    expandAttemptAction: (attemptNumber: number) =>
+      `Expand attempt ${attemptNumber}`,
+    expandRequestBodyAction: "Expand request body",
+    expandResponseBodyAction: "Expand response body",
     requestBodyLabel: "Request body",
-    requestCountsHeading: "Request counts",
-    requestCountsRegionLabel: "Request counts",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
     requestIdUnavailable:
@@ -249,6 +259,10 @@ const currentSelectionDetailMessagesByLocale = {
     attemptAriaLabel: (attemptNumber: number) =>
       `Inference attempt ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `Attempt ${attemptNumber}`,
+    collapseAttemptAction: (attemptNumber: number) =>
+      `Collapse attempt ${attemptNumber}`,
+    collapseRequestBodyAction: "Collapse request body",
+    collapseResponseBodyAction: "Collapse response body",
     awaitingProviderResponse: "Awaiting provider response.",
     commandLabel: "Command",
     commandUnavailable:
@@ -287,9 +301,11 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    expandAttemptAction: (attemptNumber: number) =>
+      `Expand attempt ${attemptNumber}`,
+    expandRequestBodyAction: "Expand request body",
+    expandResponseBodyAction: "Expand response body",
     requestBodyLabel: "Request body",
-    requestCountsHeading: "Request counts",
-    requestCountsRegionLabel: "Request counts",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
     requestIdUnavailable:
@@ -365,6 +381,10 @@ const currentSelectionDetailMessagesByLocale = {
     attemptAriaLabel: (attemptNumber: number) =>
       `Inference attempt ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `Attempt ${attemptNumber}`,
+    collapseAttemptAction: (attemptNumber: number) =>
+      `Collapse attempt ${attemptNumber}`,
+    collapseRequestBodyAction: "Collapse request body",
+    collapseResponseBodyAction: "Collapse response body",
     awaitingProviderResponse: "Awaiting provider response.",
     commandLabel: "Command",
     commandUnavailable:
@@ -403,9 +423,11 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    expandAttemptAction: (attemptNumber: number) =>
+      `Expand attempt ${attemptNumber}`,
+    expandRequestBodyAction: "Expand request body",
+    expandResponseBodyAction: "Expand response body",
     requestBodyLabel: "Request body",
-    requestCountsHeading: "Request counts",
-    requestCountsRegionLabel: "Request counts",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
     requestIdUnavailable:
@@ -478,6 +500,9 @@ const currentSelectionDetailMessagesByLocale = {
   "zh-CN": {
     attemptAriaLabel: (attemptNumber: number) => `推理尝试 ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `尝试 ${attemptNumber}`,
+    collapseAttemptAction: (attemptNumber: number) => `收起尝试 ${attemptNumber}`,
+    collapseRequestBodyAction: "收起请求正文",
+    collapseResponseBodyAction: "收起响应正文",
     awaitingProviderResponse: "正在等待提供方响应。",
     commandLabel: "命令",
     commandUnavailable: "此工作站请求没有可用的脚本命令详情。",
@@ -511,12 +536,13 @@ const currentSelectionDetailMessagesByLocale = {
     providerLabel: "提供方",
     providerResponseUnavailable: "此推理尝试没有可用的提供方响应文本。",
     providerSessionLabel: "Provider session",
+    expandAttemptAction: (attemptNumber: number) => `展开尝试 ${attemptNumber}`,
+    expandRequestBodyAction: "展开请求正文",
+    expandResponseBodyAction: "展开响应正文",
     noCurrentWorkInPlace: "当前没有工作占用这个位置。",
     noWorkRecordedAtSelectedTick:
       "在所选时间刻度，这个位置暂时没有记录到工作。",
     requestBodyLabel: "请求正文",
-    requestCountsHeading: "请求计数",
-    requestCountsRegionLabel: "请求计数",
     requestDetailsTitle: "请求详情",
     requestIdLabel: "请求 ID",
     requestIdUnavailable: "此工作站请求没有可用的请求 ID。",

@@ -247,6 +247,9 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     await user.click(
       within(inferenceAttempts).getByRole("button", { name: "Expand" }),
     );
+    await user.click(
+      within(inferenceAttempts).getByRole("button", { name: "Expand attempt 1" }),
+    );
     const selectSessionButton = within(currentSelection).getByRole("button", {
       name: "Select provider session codex / session_id / sess_inference_only for dispatch dispatch-review-active",
     });
@@ -378,6 +381,9 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     await user.click(
       within(inferenceAttempts).getByRole("button", { name: "Expand" }),
     );
+    await user.click(
+      within(inferenceAttempts).getByRole("button", { name: "Expand attempt 1" }),
+    );
 
     await user.click(
       within(currentSelection).getByRole("button", {
@@ -505,6 +511,12 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     });
     await user.click(
       within(inferenceAttempts).getByRole("button", { name: "Expand" }),
+    );
+    await user.click(
+      within(inferenceAttempts).getByRole("button", { name: "Expand attempt 1" }),
+    );
+    await user.click(
+      within(inferenceAttempts).getByRole("button", { name: "Expand attempt 2" }),
     );
     const firstButton = within(currentSelection).getByRole("button", {
       name: "Select provider session codex / session_id / sess_inference_first for dispatch dispatch-review-active",
