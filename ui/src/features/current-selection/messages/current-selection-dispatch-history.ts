@@ -59,7 +59,6 @@ export interface CurrentSelectionDispatchHistoryMessages {
   openWorkItemActionLabel: (workItemLabel: string) => string;
   workstationLabel: string;
   workingDirectoryLabel: string;
-  workSelectedActionLabel: string;
   worktreeLabel: string;
 }
 
@@ -129,7 +128,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     openWorkItemActionLabel: (workItemLabel: string) => `Open ${workItemLabel}`,
     workstationLabel: "Workstation",
     workingDirectoryLabel: "Working directory",
-    workSelectedActionLabel: "Work selected",
     worktreeLabel: "Worktree",
   },
   ja: {
@@ -199,7 +197,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
       `${workItemLabel} を開く`,
     workstationLabel: "ワークステーション",
     workingDirectoryLabel: "作業ディレクトリ",
-    workSelectedActionLabel: "作業を選択中",
     worktreeLabel: "ワークツリー",
   },
   ko: {
@@ -265,7 +262,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     openWorkItemActionLabel: (workItemLabel: string) => `${workItemLabel} 열기`,
     workstationLabel: "워크스테이션",
     workingDirectoryLabel: "작업 디렉터리",
-    workSelectedActionLabel: "작업 선택됨",
     worktreeLabel: "워크트리",
   },
   "zh-CN": {
@@ -326,7 +322,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     openWorkItemActionLabel: (workItemLabel: string) => `打开 ${workItemLabel}`,
     workstationLabel: "工作站",
     workingDirectoryLabel: "工作目录",
-    workSelectedActionLabel: "已选中工作项",
     worktreeLabel: "工作树",
   },
 } satisfies LocalizedMessages<CurrentSelectionDispatchHistoryMessages>;

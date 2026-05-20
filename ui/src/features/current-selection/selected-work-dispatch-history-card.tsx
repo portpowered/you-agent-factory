@@ -283,7 +283,6 @@ function DispatchRequestSection({
         selectWorkItemAccessibleLabel={
           messages.selectWorkItemAccessibleLabel
         }
-        workSelectedActionLabel={messages.workSelectedActionLabel}
       />
     </DispatchDetailSection>
   );
@@ -317,7 +316,6 @@ function DispatchResponseSection({
         selectWorkItemAccessibleLabel={
           messages.selectWorkItemAccessibleLabel
         }
-        workSelectedActionLabel={messages.workSelectedActionLabel}
       />
       <TraceActionGroup
         activeTraceID={activeTraceID}
@@ -359,7 +357,6 @@ function DispatchTraceSection({
         selectWorkItemAccessibleLabel={
           messages.selectWorkItemAccessibleLabel
         }
-        workSelectedActionLabel={messages.workSelectedActionLabel}
       />
       <TraceActionGroup
         activeTraceID={activeTraceID}

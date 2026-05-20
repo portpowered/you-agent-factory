@@ -188,10 +188,12 @@ describe("WorkstationRequestDetailCard", () => {
 
   it("lets consumed work items become the current selection from request details", () => {
     const onSelectWorkID = vi.fn();
+    const selectedWorkID = "work-blocked-story";
 
     render(
       <WorkstationRequestDetailCard
         onSelectWorkID={onSelectWorkID}
+        selectedWorkID={selectedWorkID}
         request={workstationRequest("dispatch-review-consumed", {
           request_view: {
             input_work_items: [
@@ -208,13 +210,19 @@ describe("WorkstationRequestDetailCard", () => {
     );
 
     const requestDetails = within(screen.getByRole("region", { name: "Request details" }));
+    const selectedWorkButton = requestDetails.getByRole("button", {
+      name: "Select work item Blocked Story",
+    });
+
+    expect(selectedWorkButton.textContent).toBe("Blocked Story");
+    expect(selectedWorkButton.getAttribute("aria-pressed")).toBe("true");
+    expect(requestDetails.queryByText("Work item selected")).toBeNull();
+
     fireEvent.click(
-      requestDetails.getByRole("button", {
-        name: "Select work item Blocked Story",
-      }),
+      selectedWorkButton,
     );
 
-    expect(onSelectWorkID).toHaveBeenCalledWith("work-blocked-story");
+    expect(onSelectWorkID).toHaveBeenCalledWith(selectedWorkID);
   });
 
   it("renders markdown-authored request and response bodies inside inference attempts", () => {

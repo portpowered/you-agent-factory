@@ -110,7 +110,6 @@ export function WorkItemActionGroup({
   onSelectWorkID,
   selectedWorkID,
   selectWorkItemAccessibleLabel,
-  workSelectedActionLabel,
 }: {
   items: ReturnType<typeof dedupeWorkItems>;
   label: string;
@@ -118,7 +117,6 @@ export function WorkItemActionGroup({
   onSelectWorkID?: (workID: string) => void;
   selectedWorkID: string;
   selectWorkItemAccessibleLabel: (workItemLabel: string) => string;
-  workSelectedActionLabel: string;
 }) {
   if (items.length === 0) {
     return null;
@@ -128,22 +126,25 @@ export function WorkItemActionGroup({
     <div className="grid gap-1">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       <div className="flex flex-wrap gap-2">
-        {items.map((workItem) => (
-          <button
-            aria-label={selectWorkItemAccessibleLabel(
-              formatWorkItemLabel(workItem),
-            )}
-            aria-pressed={selectedWorkID === workItem.work_id}
-            className={WORK_SELECTION_BUTTON_CLASS}
-            key={`${label}-${workItem.work_id}`}
-            onClick={() => onSelectWorkID?.(workItem.work_id)}
-            type="button"
-          >
-            {selectedWorkID === workItem.work_id
-              ? workSelectedActionLabel
-              : openWorkItemActionLabel(formatWorkItemLabel(workItem))}
-          </button>
-        ))}
+        {items.map((workItem) => {
+          const workItemLabel = formatWorkItemLabel(workItem);
+          const isSelected = selectedWorkID === workItem.work_id;
+
+          return (
+            <button
+              aria-label={selectWorkItemAccessibleLabel(workItemLabel)}
+              aria-pressed={isSelected}
+              className={WORK_SELECTION_BUTTON_CLASS}
+              key={`${label}-${workItem.work_id}`}
+              onClick={() => onSelectWorkID?.(workItem.work_id)}
+              type="button"
+            >
+              {isSelected
+                ? workItemLabel
+                : openWorkItemActionLabel(workItemLabel)}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

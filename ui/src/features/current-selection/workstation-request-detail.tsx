@@ -223,7 +223,7 @@ function ConsumedWorkItemsSection({
               onClick={() => onSelectWorkID?.(workItem.work_id)}
               type="button"
             >
-              {isSelected ? "Work item selected" : `Open ${workLabel}`}
+              {isSelected ? workLabel : `Open ${workLabel}`}
             </button>
           );
         })}

@@ -1727,12 +1727,12 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(within(dispatchCard).queryByText("応答数")).toBeNull();
     expect(within(dispatchCard).queryByText("エラー数")).toBeNull();
     expect(within(localizedRequestDetails).queryByText("解決済み引数")).toBeNull();
-    expect(
-      within(dispatchCard).getByRole("button", {
-        name: "作業項目 Active Story を選択",
-      }),
-    ).toBeTruthy();
-    expect(within(dispatchCard).getByText("作業を選択中")).toBeTruthy();
+    const localizedSelectedWorkButton = within(dispatchCard).getByRole("button", {
+      name: "作業項目 Active Story を選択",
+    });
+    expect(localizedSelectedWorkButton.textContent).toContain("Active Story");
+    expect(localizedSelectedWorkButton.getAttribute("aria-pressed")).toBe("true");
+    expect(within(dispatchCard).queryByText("作業を選択中")).toBeNull();
     expect(within(dispatchCard).getByText("トレース ID")).toBeTruthy();
     expect(
       within(dispatchCard).getByRole("link", {
@@ -1812,8 +1812,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       name: "Select work item Active Story",
     });
     expect(selectedWorkButton).toBeTruthy();
-    expect(within(dispatchCard).getByText("Work selected")).toBeTruthy();
-    expect(selectedWorkButton.textContent).toContain("Work selected");
+    expect(selectedWorkButton.textContent).toContain("Active Story");
+    expect(selectedWorkButton.getAttribute("aria-pressed")).toBe("true");
+    expect(within(fallbackRequestDetails).queryByText("Work selected")).toBeNull();
     expect(selectedWorkButton.className).toContain("text-on-foreground");
     expect(within(dispatchCard).getByText("Trace IDs")).toBeTruthy();
     const selectedTraceLink = within(dispatchCard).getByRole("link", {

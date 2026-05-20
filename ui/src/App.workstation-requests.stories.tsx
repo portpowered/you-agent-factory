@@ -271,9 +271,9 @@ export const SelectedWorkDispatchHistorySmoke = {
     await expect(
       within(activeCard).getByText("Current dispatch"),
     ).toBeVisible();
-    await expect(
-      within(activeCard).getByText("Active Story"),
-    ).toBeVisible();
+    expect(
+      within(activeCard).getAllByText("Active Story").length,
+    ).toBeGreaterThan(0);
     await expect(
       within(activeCard).getByText("Started at"),
     ).toBeVisible();
@@ -296,11 +296,13 @@ export const SelectedWorkDispatchHistorySmoke = {
         "No inference attempt details have been recorded for this dispatch yet.",
       ),
     ).toBeVisible();
-    await expect(
-      within(activeCard).getByRole("button", {
-        name: "Select work item Active Story",
-      }),
-    ).toBeVisible();
+    const selectedWorkButton = within(activeCard).getByRole("button", {
+      name: "Select work item Active Story",
+    });
+    await expect(selectedWorkButton).toBeVisible();
+    expect(selectedWorkButton.textContent).toContain("Active Story");
+    expect(selectedWorkButton.getAttribute("aria-pressed")).toBe("true");
+    expect(within(activeCard).queryByText("Work selected")).toBeNull();
 
     const erroredCard = dispatchHistoryCard(
       dispatchHistory,
