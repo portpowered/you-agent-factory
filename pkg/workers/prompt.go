@@ -19,16 +19,17 @@ type PromptRenderer interface {
 // TokenData holds the per-token data extracted from a single input token's color and history.
 // Available per-input via {{ (index .Inputs 0).FieldName }}.
 type TokenData struct {
-	Name       string                // {{ (index .Inputs 0).Name }} — human-readable identifier
-	WorkID     string                // {{ (index .Inputs 0).WorkID }}
-	WorkTypeID string                // {{ (index .Inputs 0).WorkTypeID }}
-	DataType   string                // {{ (index .Inputs 0).DataType }} — "work" or "resource"
-	TraceID    string                // {{ (index .Inputs 0).TraceID }}
-	ParentID   string                // {{ (index .Inputs 0).ParentID }}
-	Project    string                // {{ (index .Inputs 0).Project }} — token project tag, explicit context project, or neutral default
-	Tags       map[string]string     // {{ index (index .Inputs 0).Tags "key" }}
-	Payload    string                // {{ (index .Inputs 0).Payload }}
-	Relations  []interfaces.Relation // {{ range (index .Inputs 0).Relations }}...{{ end }}
+	Name       string                       // {{ (index .Inputs 0).Name }} — human-readable identifier
+	WorkID     string                       // {{ (index .Inputs 0).WorkID }}
+	WorkTypeID string                       // {{ (index .Inputs 0).WorkTypeID }}
+	DataType   string                       // {{ (index .Inputs 0).DataType }} — "work" or "resource"
+	TraceID    string                       // {{ (index .Inputs 0).TraceID }}
+	ParentID   string                       // {{ (index .Inputs 0).ParentID }}
+	Project    string                       // {{ (index .Inputs 0).Project }} — token project tag, explicit context project, or neutral default
+	Tags       map[string]string            // {{ index (index .Inputs 0).Tags "key" }}
+	Payload    string                       // {{ (index .Inputs 0).Payload }}
+	Relations  []interfaces.Relation        // {{ range (index .Inputs 0).Relations }}...{{ end }}
+	Content    []interfaces.WorkContentPart // {{ range (index .Inputs 0).Content }}...{{ end }}
 
 	PreviousOutput    string // {{ (index .Inputs 0).PreviousOutput }} — from Tags["_last_output"]
 	RejectionFeedback string // {{ (index .Inputs 0).RejectionFeedback }} — from Tags["_rejection_feedback"]
@@ -120,6 +121,7 @@ func buildTokenData(token interfaces.Token, wfCtx *factory_context.FactoryContex
 	td.ParentID = color.ParentID
 	td.Payload = string(color.Payload)
 	td.Relations = color.Relations
+	td.Content = append([]interfaces.WorkContentPart(nil), color.Content...)
 
 	if color.Tags != nil {
 		td.Tags = color.Tags

@@ -1,9 +1,5 @@
 import "@xyflow/react/dist/style.css";
-import {
-  Background,
-  Controls,
-  ReactFlow,
-} from "@xyflow/react";
+import { Background, Controls, ReactFlow } from "@xyflow/react";
 import type { CSSProperties } from "react";
 import type {
   DashboardActiveExecution,
@@ -11,10 +7,9 @@ import type {
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
 import type { FactoryValue } from "../../api/named-factory";
+import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
 import { cx } from "../../lib/cx";
-import {
-  CURRENT_ACTIVITY_NODE_TYPES,
-} from "../flowchart/current-activity-nodes";
+import { CURRENT_ACTIVITY_NODE_TYPES } from "../flowchart/current-activity-nodes";
 import {
   FactoryImportPreviewDialog,
   type FactoryPngImportValue,
@@ -67,8 +62,10 @@ const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
   overflow: "hidden",
 };
 
-const CURRENT_ACTIVITY_CARD_CLASS =
-  "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-4 shadow-af-panel backdrop-blur-lg md:p-5";
+const CURRENT_ACTIVITY_CARD_CLASS = cx(
+  DASHBOARD_PANEL_SHELL_CLASS,
+  "relative flex h-full min-h-0 min-w-0 flex-col p-4 md:p-5",
+);
 const CURRENT_ACTIVITY_LEGEND_CLASS =
   "absolute left-4 right-4 top-4 z-10 md:left-7 md:right-auto md:top-7";
 

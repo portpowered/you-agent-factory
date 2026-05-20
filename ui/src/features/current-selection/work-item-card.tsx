@@ -155,11 +155,13 @@ function WorkRelationshipsSection({
               label="Depends on"
               onSelectWorkID={onSelectWorkID}
             />
-            <div className="grid gap-2 rounded-xl border border-af-signal/20 bg-af-signal/8 p-3 md:col-start-2 md:row-start-2">
+            <div className="grid gap-2 rounded-xl border border-on-foreground/20 bg-on-foreground/8 p-3 md:col-start-2 md:row-start-2">
               <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
                 Selected work
               </span>
-              <code className="text-sm text-af-ink">{selectedWorkLabel}</code>
+              <code className="text-sm text-on-foreground">
+                {selectedWorkLabel}
+              </code>
             </div>
             <RelationshipLane
               className="md:col-start-3 md:row-start-2"

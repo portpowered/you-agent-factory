@@ -742,7 +742,7 @@ describe("CurrentSelectionWidget", () => {
       name: "Current selection",
     });
     expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
-      false,
+      true,
     );
     expect(
       within(currentSelection).getByRole("heading", { name: "Active work" }),
@@ -793,7 +793,39 @@ describe("CurrentSelectionWidget", () => {
     ).toHaveBeenLastCalledWith(true);
   });
 
-  it("initializes editable workstation inputs from the canonical factory definition and validates local edits", () => {
+  it("loads editable workstation inputs when a workstation is already selected on mount", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+    );
+
+    render(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selection: { kind: "node", nodeId: selectedNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
+      true,
+    );
+
+    expandEditableConfiguration();
+
+    expect((screen.getByLabelText("Worker") as HTMLSelectElement).value).toBe(
+      "reviewer",
+    );
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
+      "Review the latest story changes before approval.",
+    );
+  });
+
+  it("initializes editable workstation inputs from the canonical factory definition and allows worker edits", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
@@ -819,28 +851,22 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect((screen.getByLabelText("Model") as HTMLInputElement).value).toBe(
-      "gpt-5.5",
-    );
-    expect((screen.getByLabelText("Template") as HTMLInputElement).value).toBe(
-      "prompts/review.md",
+    expandEditableConfiguration();
+
+    expect((screen.getByLabelText("Worker") as HTMLSelectElement).value).toBe(
+      "reviewer",
     );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Review the latest story changes before approval.",
     );
 
-    fireEvent.change(screen.getByLabelText("Model"), {
-      target: { value: "   " },
+    fireEvent.change(screen.getByLabelText("Worker"), {
+      target: { value: "planner" },
     });
 
-    expect(
-      screen.getByText("Enter a model before saving this workstation."),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Resolve the highlighted fields before saving this workstation.",
-      ),
-    ).toBeTruthy();
+    expect((screen.getByLabelText("Worker") as HTMLSelectElement).value).toBe(
+      "planner",
+    );
   });
 
   it("preserves unsaved editable workstation input when the server definition refreshes", () => {
@@ -869,6 +895,8 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
+    expandEditableConfiguration();
+
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep my local edit." },
     });
@@ -876,9 +904,8 @@ describe("CurrentSelectionWidget", () => {
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
-          model: "gpt-5.6",
           prompt: "Server changed prompt",
-          promptFile: "prompts/server.md",
+          workerName: "planner",
         }),
       ),
     );
@@ -897,15 +924,12 @@ describe("CurrentSelectionWidget", () => {
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Keep my local edit.",
     );
-    expect((screen.getByLabelText("Model") as HTMLInputElement).value).toBe(
-      "gpt-5.5",
-    );
-    expect((screen.getByLabelText("Template") as HTMLInputElement).value).toBe(
-      "prompts/review.md",
+    expect((screen.getByLabelText("Worker") as HTMLSelectElement).value).toBe(
+      "reviewer",
     );
     expect(
       screen.getByText(
-        "The running factory changed after you started editing. Saving now will overwrite newer server values for prompt, model, template.",
+        "The running factory changed after you started editing. Saving now will overwrite newer server values for prompt, worker.",
       ),
     ).toBeTruthy();
     expect(
@@ -1098,20 +1122,36 @@ function renderWithQueryClient(view: ReactNode) {
   );
 }
 
+function expandEditableConfiguration() {
+  const section = screen
+    .getAllByRole("heading", { name: "Editable configuration" })
+    .at(-1)
+    ?.closest("section");
+  if (!section) {
+    throw new Error("expected editable configuration section");
+  }
+
+  fireEvent.click(
+    within(section).getByRole("button", {
+      name: "Expand editable configuration",
+    }),
+  );
+}
+
 function buildEditableFactoryDefinition(overrides?: {
-  model?: string;
   prompt?: string;
-  promptFile?: string;
+  workerName?: string;
+  workerOptions?: string[];
 }): CanonicalFactoryDefinition {
   return {
     name: "Current Factory",
-    workers: [
-      {
-        model: overrides?.model ?? "gpt-5.5",
-        name: "reviewer",
+    workers: (overrides?.workerOptions ?? ["reviewer", "planner"]).map(
+      (name, index) => ({
+        model: `gpt-5.${index + 5}`,
+        name,
         type: "MODEL_WORKER",
-      },
-    ],
+      }),
+    ),
     workstations: [
       {
         body:
@@ -1121,8 +1161,8 @@ function buildEditableFactoryDefinition(overrides?: {
         inputs: [{ state: "queued", workType: "story" }],
         name: "Review",
         outputs: [{ state: "approved", workType: "story" }],
-        promptFile: overrides?.promptFile ?? "prompts/review.md",
-        worker: "reviewer",
+        promptFile: "prompts/review.md",
+        worker: overrides?.workerName ?? "reviewer",
       },
     ],
     workTypes: [],

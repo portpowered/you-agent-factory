@@ -193,6 +193,11 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 		"UpsertWorkRequestResponse",
 		"WorkRequest",
 		"Work",
+		"WorkContent",
+		"WorkContentPart",
+		"WorkContentPartType",
+		"WorkTextContentPart",
+		"WorkImageContentPart",
 		"Relation",
 		"ListWorkResponse",
 		"TokenResponse",
@@ -255,6 +260,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	if _, ok := submitWorkRequestProperties["currentChainingTraceId"].(map[string]any); !ok {
 		t.Fatalf("components.schemas.SubmitWorkRequest.properties.currentChainingTraceId is missing")
 	}
+	assertPropertyRef(t, submitWorkRequestProperties, "content", "#/components/schemas/WorkContent")
 	assertArrayItemRef(t, submitWorkRequestProperties, "relations", "#/components/schemas/SubmitRelation")
 	if _, ok := submitWorkRequestProperties["work_type_id"]; ok {
 		t.Fatalf("components.schemas.SubmitWorkRequest.properties.work_type_id must not be advertised for submitted work")
@@ -294,6 +300,37 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	}
 	workRequestType := schemaObject(t, schemas, "WorkRequestType")
 	assertEnumValues(t, workRequestType, "WorkRequestType", []string{"FACTORY_REQUEST_BATCH"})
+
+	workSchema := schemaObject(t, schemas, "Work")
+	workProperties := schemaProperties(t, workSchema, "Work")
+	assertPropertyRef(t, workProperties, "content", "#/components/schemas/WorkContent")
+
+	workContentSchema := schemaObject(t, schemas, "WorkContent")
+	if got, ok := workContentSchema["type"].(string); !ok || got != "array" {
+		t.Fatalf("components.schemas.WorkContent.type = %v, want array", workContentSchema["type"])
+	}
+	workContentItems, ok := workContentSchema["items"].(map[string]any)
+	if !ok || workContentItems["$ref"] != "#/components/schemas/WorkContentPart" {
+		t.Fatalf("components.schemas.WorkContent.items must reference WorkContentPart")
+	}
+
+	workContentPartSchema := schemaObject(t, schemas, "WorkContentPart")
+	assertSchemaOneOfRefs(t, workContentPartSchema, "WorkContentPart", []string{
+		"#/components/schemas/WorkTextContentPart",
+		"#/components/schemas/WorkImageContentPart",
+	})
+	workContentPartTypeSchema := schemaObject(t, schemas, "WorkContentPartType")
+	assertEnumValues(t, workContentPartTypeSchema, "WorkContentPartType", []string{"text", "image"})
+
+	workTextPartSchema := schemaObject(t, schemas, "WorkTextContentPart")
+	assertRequiredFields(t, workTextPartSchema, "type", "text")
+	workTextPartProperties := schemaProperties(t, workTextPartSchema, "WorkTextContentPart")
+	assertSchemaPropertiesPresent(t, workTextPartProperties, "WorkTextContentPart", "type", "text")
+
+	workImagePartSchema := schemaObject(t, schemas, "WorkImageContentPart")
+	assertRequiredFields(t, workImagePartSchema, "type", "file")
+	workImagePartProperties := schemaProperties(t, workImagePartSchema, "WorkImageContentPart")
+	assertSchemaPropertiesPresent(t, workImagePartProperties, "WorkImageContentPart", "type", "file")
 	workRequestTypeVarNames, ok := workRequestType["x-enum-varnames"].([]any)
 	if !ok {
 		t.Fatalf("components.schemas.WorkRequestType.x-enum-varnames is missing")
@@ -302,15 +339,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 		t.Fatalf("components.schemas.WorkRequestType must not advertise legacy DEFAULT request type")
 	}
 
-	workSchema, ok := schemas["Work"].(map[string]any)
-	if !ok {
-		t.Fatalf("components.schemas.Work must be an object schema")
-	}
-	workProperties, ok := workSchema["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("components.schemas.Work.properties is missing")
-	}
-	for _, field := range []string{"name", "workId", "requestId", "workTypeName", "state", "currentChainingTraceId", "previousChainingTraceIds", "traceId", "payload", "tags", "relations"} {
+	for _, field := range []string{"name", "workId", "requestId", "workTypeName", "state", "currentChainingTraceId", "previousChainingTraceIds", "traceId", "content", "payload", "tags", "relations"} {
 		if _, ok := workProperties[field].(map[string]any); !ok {
 			t.Fatalf("components.schemas.Work.properties.%s is missing", field)
 		}
@@ -2109,6 +2138,31 @@ func assertArrayItemRef(t *testing.T, properties map[string]any, propertyName st
 	}
 	if got, ok := items["$ref"].(string); !ok || got != wantRef {
 		t.Fatalf("properties.%s.items.$ref = %v, want %s", propertyName, items["$ref"], wantRef)
+	}
+}
+
+func assertSchemaOneOfRefs(t *testing.T, schema map[string]any, schemaName string, wantRefs []string) {
+	t.Helper()
+
+	oneOf, ok := schema["oneOf"].([]any)
+	if !ok {
+		t.Fatalf("%s.oneOf is missing", schemaName)
+	}
+	if len(oneOf) != len(wantRefs) {
+		t.Fatalf("%s.oneOf has %d refs, want %d", schemaName, len(oneOf), len(wantRefs))
+	}
+	for _, wantRef := range wantRefs {
+		found := false
+		for _, item := range oneOf {
+			refObject, ok := item.(map[string]any)
+			if ok && refObject["$ref"] == wantRef {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("%s.oneOf is missing %s", schemaName, wantRef)
+		}
 	}
 }
 

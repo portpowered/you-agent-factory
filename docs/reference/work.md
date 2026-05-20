@@ -13,6 +13,22 @@ behavior that the runtime turns into a Petri-net execution model.
 Use this guide when writing or reviewing `factory.json`. For the JSON file you
 drop into `inputs/<workType>/...`, see [Batch Inputs](batch-inputs.md).
 
+This is the canonical customer-facing guide for work and top-level
+`factory.json` configuration. Keep work types, work states, routing behavior,
+runtime resource pools, and portability fields here. Keep workstation-specific
+runtime step behavior in [Workstations](workstations.md), worker backend fields
+in [Workers](workers.md), and submitted request payload details in
+[Batch Inputs](batch-inputs.md).
+
+## When To Use This Guide
+
+| Need | Use |
+|------|-----|
+| Define `factory.json`, work types, states, top-level resources, routing, or portability fields | This guide |
+| Place batch request files under `inputs/`, define `FACTORY_REQUEST_BATCH`, or choose `DEPENDS_ON` versus `PARENT_CHILD` | [Batch Inputs](batch-inputs.md) |
+| Tune bounded concurrency pools and workstation resource requirements | [Resources](resources.md) |
+| Walk through a full setup sequence with example files and commands | [Author Workflows](authoring-workflows.md) |
+
 ## Minimal Factory
 
 A minimal factory needs one work type, one worker, and one workstation that
@@ -55,10 +71,10 @@ factory/
   inputs/task/default/
 ```
 
-For the canonical watched-file and API request shape, minimum-field reference,
-and submitted `PARENT_CHILD` example, use
-[Batch Inputs](batch-inputs.md). The overview below is intentionally
-summary-only.
+Submitted work payloads are not part of the `factory.json` topology contract.
+Use [Batch Inputs](batch-inputs.md) for the watched-file and API request
+schema, validation rules, relation fields, and submitted `PARENT_CHILD`
+examples.
 
 ## Single-Work API Submission
 
@@ -90,42 +106,8 @@ use the OpenAPI camelCase fields such as `workTypeName` and `traceId`; batch
 request bodies continue to use `works[].work_type_name` and `trace_id`. This
 change does not alter the existing batch naming rule.
 
-### Field Reference for structured schema
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `request_id` | string | yes | Stable ID for idempotent batch submission and request history. |
-| `type` | string | yes | Must be `FACTORY_REQUEST_BATCH`. |
-| `works` | array of work items | yes | At least one work item. Each entry becomes one engine token. |
-| `works[].work_type_name` | string | usually | The configured work type name. Must match a `workTypes[].name` in `factory.json`; file inputs can infer it from the watched input folder when omitted. |
-| `works[].name` | string | yes | A unique name within this batch. Used in `relations` to declare dependencies and as the token's display name. |
-| `works[].payload` | object, string, array, or scalar | no | Optional payload for the work item. |
-| `works[].tags` | `map[string]string` | no | Optional tags for this work item. Available in prompt templates via `{{ index (index .Inputs 0).Tags "key" }}` and in parameterized workstation fields (see [workstations.md](workstations.md)). |
-| `relations` | array of relations | no | Dependency edges between work items. |
-| `relations[].type` | string | yes | Relation type. Use `"DEPENDS_ON"` for sibling prerequisites or `"PARENT_CHILD"` for submitted parent-child membership. |
-| `relations[].source_work_name` | string | yes | The blocked work item for `DEPENDS_ON`, or the child work item for `PARENT_CHILD`. Must match a `works[].name`. |
-| `relations[].target_work_name` | string | yes | The prerequisite work item for `DEPENDS_ON`, or the parent work item for `PARENT_CHILD`. Must match a `works[].name`. |
-| `relations[].required_state` | string | no | Required target state before the dependent work can run. Defaults to `complete` for `DEPENDS_ON`. Ignore this field for `PARENT_CHILD`. |
-
-### Validation Rules
-
-The factory validates the payload before creating any tokens. If validation fails, no tokens are created (atomic submission).
-
-1. `type` must be `FACTORY_REQUEST_BATCH`.
-2. `request_id` must be present.
-3. The `works` array must contain at least one item.
-4. Every work item must have `name` and a resolvable `work_type_name`.
-5. Work item names must be unique within the batch.
-6. Work item types must match a declared `workTypes[].name` in `factory.json`.
-7. Relation types must be supported (`DEPENDS_ON` and `PARENT_CHILD`).
-8. Relation source and target names must reference existing work items.
-9. Self-referencing dependencies are rejected.
-
-Invalid payloads are rejected and logged. No partial tokens are created.
-
-### Tracking and submitting work in a submission
-
-Tags declared on each work item let you track work at each submitted workstation.
+Tags declared on submitted work items are available after the batch request has
+been accepted:
 
 ```
 FACTORY_REQUEST_BATCH work tags
@@ -163,8 +145,8 @@ Each `workType` and `state` pair becomes a place named
 | `workTypes` | Yes | Work categories and lifecycle states. Workstation input and output places must reference these names. |
 | `resources` | No | Bounded concurrency pools. Workers and workstations declare requirements against these pools through their `resources` entries. |
 | `supportingFiles` | No | Portability-only manifest for validation-only external tools and bundled files. This is distinct from runtime-capacity `resources`. |
-| `workers` | Yes | Worker identities and optional inline worker runtime config. Workstations reference workers by `name`. |
-| `workstations` | Yes | Dispatch steps that consume input states, invoke workers or logical routing, and produce output states. |
+| `workers` | Yes | Worker identities that workstations reference by `name`; see [Workers](workers.md) for worker runtime fields. |
+| `workstations` | Yes | Dispatch steps that consume input states and produce output states; see [Workstations](workstations.md) for the workstation field contract. |
 
 Do not rely on stale top-level `global_limits` or `exhaustionRules` examples.
 The current public `factory.json` authoring contract uses guarded
@@ -260,8 +242,9 @@ land somewhere visible.
 
 ## Workers
 
-A worker is the execution backend a workstation dispatches to. The `workers`
-entry can be just a name when runtime details live in `workers/<name>/AGENTS.md`:
+A worker is the execution backend a workstation dispatches to. In
+`factory.json`, the work topology needs a stable worker `name` so
+`workstations[].worker` can route to that backend:
 
 ```json
 {
@@ -272,42 +255,16 @@ entry can be just a name when runtime details live in `workers/<name>/AGENTS.md`
 }
 ```
 
-You can also inline worker runtime fields in `factory.json` for portable
-single-file configs:
-
-```json
-{
-  "name": "lint",
-  "type": "SCRIPT_WORKER",
-  "command": "go",
-  "args": ["test", "./..."],
-  "timeout": "10m"
-}
-```
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Worker identity referenced by `workstations[].worker`. |
-| `type` | Split or inline runtime config | `MODEL_WORKER` or `SCRIPT_WORKER`. Required in inline worker config or worker `AGENTS.md`. |
-| `model` | Model workers | Provider model name. |
-| `modelProvider` | Model workers | Model-provider identifier used in diagnostics and model routing. Built-in values are `CLAUDE` and `CODEX`. |
-| `executorProvider` | Model workers | Executor adapter identifier used to choose the worker execution wrapper, for example `SCRIPT_WRAP` in local default scaffolds. |
-| `command` | Script workers | Executable name for `SCRIPT_WORKER`. |
-| `args` | Script workers | Command arguments. Values can use prompt-template variables. |
-| `timeout` | No | Go duration such as `10m` or `1h`. |
-| `stopToken` | No | Model-output token that marks accepted completion when configured. |
-| `skipPermissions` | No | Provider-specific permission shortcut used by supported providers. |
-
-Prefer split `AGENTS.md` files for long model instructions. Prefer inline
-worker fields for generated, recorded, or single-file factory configs.
-The canonical source of truth for worker-contract values is the `Worker` schema
-in [`api/openapi.yaml`](../api/openapi.yaml). Current built-in
-`modelProvider` values are `CLAUDE` and `CODEX`, and the current public
-`executorProvider` value is `SCRIPT_WRAP`.
+Keep worker runtime fields, provider values, script commands, permission
+settings, and split-versus-inline worker guidance in
+[Workers](workers.md). This work guide only owns the fact that `workers` is a
+top-level collection and that workstation routing refers to workers by name.
 
 ## Workstations
 
-A workstation is the step that connects topology to execution:
+A workstation is the step that connects work topology to execution. In
+`factory.json`, workstations declare which work states enable the step and
+which states receive the outcome:
 
 ```json
 {
@@ -321,84 +278,18 @@ A workstation is the step that connects topology to execution:
 }
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Stable workstation and transition name. |
-| `behavior` | No | Scheduling behavior: `STANDARD`, `REPEATER`, or `CRON`. Defaults to `STANDARD`. |
-| `worker` | Usually | Worker name. Required for model or script dispatch and for cron workstations. Omit only for `LOGICAL_MOVE` runtime workstations. |
-| `inputs` | Usually | Work or resource places that enable the workstation. Cron workstations may omit customer inputs but still consume internal time work. |
-| `outputs` | Usually | Places produced when the worker accepts. Cron workstations require at least one output. |
-| `onRejection` | No | Place produced when the worker rejects. |
-| `onFailure` | Recommended | Place produced when the worker fails or times out. |
-| `resources` | No | Resource capacity consumed while this workstation runs. |
-| `copyReferencedScripts` | No | When `true`, `you config expand` copies supported referenced script files for this workstation's bound `SCRIPT_WORKER`. Omit it or set `false` to keep script references external. |
-| `guards` | No | Workstation-level `VISIT_COUNT` guards. Parent fan-in belongs on per-input guards. |
-| `CRON` | Cron only | Trigger timing for `behavior: "CRON"`. |
+Keep workstation kinds, routing fields, runtime fields, cron behavior, guards,
+script-copy behavior, and split-versus-inline workstation guidance in
+[Workstations](workstations.md). This work guide only owns how work states and
+top-level factory routing fit together.
 
-Runtime fields such as `type`, `promptFile`, `promptTemplate`,
-`limits.maxExecutionTime`, `stopWords`, `workingDirectory`, `worktree`, and
-`env` can live either inline on the
-workstation entry or in `workstations/<name>/AGENTS.md`. See
-[Workstations](workstations-and-workers.md) for the full workstation guide.
+## Script-Backed Portability
 
-## Config Portability For Script-Backed Layouts
-
-`you config flatten` supports script-backed workstations without a
-split `workstations/<name>/AGENTS.md` file when the workstation already
-declares inline runtime fields in `factory.json`. Keep at least one runtime
-field inline, such as `type: "MODEL_WORKSTATION"`, so the flattened config
-still carries a complete standalone workstation definition.
-
-Use `copyReferencedScripts` on the workstation when `you config
-expand` should materialize supported relative script files into the expanded
-layout. When the field is omitted or `false`, expand leaves those script files
-external and only writes the split config files.
-
-Portable script-backed example:
-
-```json
-{
-  "workers": [
-    {
-      "name": "workspace-setup",
-      "type": "SCRIPT_WORKER",
-      "command": "python3",
-      "args": ["scripts/setup-workspace.py", "--mode", "portable"]
-    }
-  ],
-  "workstations": [
-    {
-      "name": "setup-workspace",
-      "type": "MODEL_WORKSTATION",
-      "worker": "workspace-setup",
-      "copyReferencedScripts": true,
-      "inputs": [{ "workType": "task", "state": "init" }],
-      "outputs": [{ "workType": "task", "state": "complete" }]
-    }
-  ]
-}
-```
-
-With that shape:
-
-1. `you config flatten ./factory` succeeds even if
-   `workstations/setup-workspace/AGENTS.md` does not exist.
-2. The flattened JSON keeps the inline workstation runtime fields and the
-   script-worker command metadata needed for a later expand.
-3. `you config expand ./factory.json` copies
-   `scripts/setup-workspace.py` into the expanded layout only because
-   `copyReferencedScripts` is explicitly `true`.
-
-Only supported factory-bundle-relative script references are copied. The
-current expand path accepts either a relative script `command` or the first
-non-flag script argument for interpreter-style commands such as `python`,
-`powershell`, `bash`, `node`, and `bun`. Absolute paths and `..`-escaping
-paths are rejected instead of being rewritten.
-
-Legacy workstation `timeout`, singular workstation stop aliases, and retired
-workstation resource aliases are accepted only to load older factories.
-Canonical flattening, replay serialization, and current docs rewrite those
-inputs to `limits.maxExecutionTime`, `stopWords`, and `resources`.
+Top-level portability dependencies belong in `supportingFiles`. Script-backed
+worker commands, copied script references, inline workstation runtime fields,
+and migration aliases are workstation and worker contract details. Use
+[Workstations](workstations.md) for workstation-side script portability and
+[Workers](workers.md) for script-worker runtime fields.
 
 ## Workstation IO
 
@@ -413,10 +304,10 @@ routes all use the same IO shape:
 |-------|----------|-------------|
 | `workType` | Yes | Must match a `workTypes[].name`. |
 | `state` | Yes | Must match one state on that work type. |
-| `guards` | Inputs only | Parent-aware fan-in guards for this input. The current mapper uses the first guard entry. |
 
 The config validator rejects workstation IO that points to missing work types
-or missing states.
+or missing states. Input guards are workstation-specific; see
+[Workstations](workstations.md) for guard fields and behavior.
 
 ## Resources
 
@@ -447,7 +338,8 @@ dispatch completes, fails, rejects, or emits generated work.
 
 ## Guarded Loop Breakers
 
-Use an explicit guarded `LOGICAL_MOVE` workstation to cap loops:
+Use an explicit guarded `LOGICAL_MOVE` workstation to route work out of loops
+when a visit threshold is reached:
 
 ```json
 {
@@ -463,17 +355,10 @@ Use an explicit guarded `LOGICAL_MOVE` workstation to cap loops:
 }
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `type` | Yes | Must be `LOGICAL_MOVE` for a no-worker loop-breaker route. |
-| `guards[].type` | Yes | Use `VISIT_COUNT` to gate the loop-breaker route. |
-| `guards[].workstation` | Yes | Workstation whose visits are counted. |
-| `guards[].maxVisits` | Yes | Positive visit threshold. |
-| `inputs` | Yes | Place to consume from when the threshold is exceeded. |
-| `outputs` | Yes | Place to move work into. |
-
 Pair `REPEATER` workstations and review loops with a guarded `LOGICAL_MOVE`
-workstation so work cannot cycle forever.
+workstation so work cannot cycle forever. The exact guard fields and
+`LOGICAL_MOVE` workstation contract are owned by
+[Workstations](workstations.md).
 
 ## Complete Example
 
@@ -564,7 +449,9 @@ At runtime:
 
 ## Related
 
-- [Workstations](workstations-and-workers.md)
+- [Workstations](workstations.md)
+- [Workers](workers.md)
+- [Resources](resources.md)
 - [Batch Inputs](batch-inputs.md)
 - [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md)
 - [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)

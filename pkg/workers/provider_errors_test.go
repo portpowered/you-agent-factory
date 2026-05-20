@@ -251,7 +251,10 @@ func TestCodexProviderBehavior_StreamsUserMessageOnStdin(t *testing.T) {
 		WorkingDirectory: "workspace",
 	}
 
-	args := behavior.BuildArgs(req, false)
+	args, err := behavior.BuildArgs(req, false)
+	if err != nil {
+		t.Fatalf("BuildArgs returned error: %v", err)
+	}
 	commandReq := behavior.BuildCommandRequest(req, args)
 
 	if len(args) == 0 || args[len(args)-1] != "-" {
@@ -270,7 +273,10 @@ func TestClaudeProviderBehavior_PassesUserMessageAsArgument(t *testing.T) {
 		UserMessage:   "line one\nline two",
 	}
 
-	args := behavior.BuildArgs(req, false)
+	args, err := behavior.BuildArgs(req, false)
+	if err != nil {
+		t.Fatalf("BuildArgs returned error: %v", err)
+	}
 	commandReq := behavior.BuildCommandRequest(req, args)
 
 	if len(args) == 0 || args[len(args)-1] != req.UserMessage {

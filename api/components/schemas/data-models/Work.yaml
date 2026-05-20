@@ -35,6 +35,9 @@ properties:
   traceId:
     type: string
     description: Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
+  content:
+    $ref: './WorkContent.yaml'
+    description: Optional canonical ordered work content parts for this work item.
   payload:
     description: Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. 
   tags:

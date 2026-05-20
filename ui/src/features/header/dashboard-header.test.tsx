@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../api/events";
+import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
 import { AppLocaleProvider, NATIVE_LANGUAGE_LABELS } from "../../i18n";
 import { useDashboardStreamStore } from "../dashboard/state/dashboardStreamStore";
 import { getExportDialogMessages } from "../export/messages/export-dialog";
@@ -130,6 +131,7 @@ describe("DashboardHeader", () => {
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
     expect(exportButton.getAttribute("aria-expanded")).toBe("false");
     expect(wordmark.className).toContain("sr-only");
+    expect(toolbar.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
     expect(heading.textContent).toContain("∞");
     expect(heading.textContent).toContain("U");
     expect(toolbar.firstElementChild).toBe(heading);
@@ -365,9 +367,11 @@ describe("DashboardHeader", () => {
       }),
     );
     expect(
-      screen.getByRole("menuitemradio", {
-        name: NATIVE_LANGUAGE_LABELS.ko,
-      }).getAttribute("aria-checked"),
+      screen
+        .getByRole("menuitemradio", {
+          name: NATIVE_LANGUAGE_LABELS.ko,
+        })
+        .getAttribute("aria-checked"),
     ).toBe("true");
     expect(
       screen.getByRole("menuitemradio", {
