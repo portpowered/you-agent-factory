@@ -289,8 +289,8 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
     expect(screen.getByLabelText("Current activity")).toBeTruthy();
     expect(
-      screen.queryByRole("heading", { name: "Current activity" }),
-    ).toBeNull();
+      screen.getByRole("heading", { name: "Current activity" }),
+    ).toBeTruthy();
     expect(screen.getByText("Observe mode")).toBeTruthy();
     expect(screen.getByText("No workflow topology loaded")).toBeTruthy();
     expect(
@@ -317,16 +317,14 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
   });
 
   it("renders the factory graph inside the shared dashboard graph frame", () => {
-    const { container } = renderViewport({ graphKey: "graph-key" });
+    renderViewport({ graphKey: "graph-key" });
 
-    const graphFrame = container.querySelector(
-      '[data-dashboard-graph-frame="true"]',
-    );
+    const graphFrame = screen.getByRole("region", {
+      name: "Work graph viewport",
+    });
 
     expect(graphFrame).toBeTruthy();
-    expect(graphFrame?.getAttribute("aria-label")).toBe(
-      "Work graph viewport",
-    );
+    expect(graphFrame.getAttribute("aria-label")).toBe("Work graph viewport");
     expect(screen.getByTestId("graph-background")).toBeTruthy();
     expect(screen.getByTestId("graph-controls")).toBeTruthy();
     expect(

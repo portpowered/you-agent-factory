@@ -81,6 +81,16 @@ describe("graph-storybook-responsive", () => {
       evaluate: vi
         .fn()
         .mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
+      getByLabel: vi.fn((label) => {
+        if (label === "Dispatch relationship graph") {
+          return dispatchViewport;
+        }
+        if (label === "Batch relation graph") {
+          return relationViewport;
+        }
+
+        throw new Error(`Unexpected getByLabel call: ${label}`);
+      }),
       getByRole: vi.fn((role, options) => {
         if (role === "region" && options?.name === "Work graph viewport") {
           return factoryViewport;
@@ -114,12 +124,8 @@ describe("graph-storybook-responsive", () => {
     expect(page.getByRole).toHaveBeenCalledWith("region", {
       name: "Work graph viewport",
     });
-    expect(page.getByRole).toHaveBeenCalledWith("region", {
-      name: "Dispatch relationship graph",
-    });
-    expect(page.getByRole).toHaveBeenCalledWith("region", {
-      name: "Batch relation graph",
-    });
+    expect(page.getByLabel).toHaveBeenCalledWith("Dispatch relationship graph");
+    expect(page.getByLabel).toHaveBeenCalledWith("Batch relation graph");
     expect(page.getByText).toHaveBeenCalledWith("Observe mode");
     expect(dispatchViewport.getByText).toHaveBeenCalledWith(
       'Out: story:"Reviewed Story"',
