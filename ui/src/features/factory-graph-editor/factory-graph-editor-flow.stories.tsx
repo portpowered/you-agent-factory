@@ -428,13 +428,13 @@ export const ConnectionAnchors = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const failureSource = await canvas.findByRole("button", {
-      name: "Choose review Failure connection source",
+      name: "Connect: review Failure",
     });
     const failureTarget = await canvas.findByRole("button", {
-      name: "Connect to story:queued Failure anchor",
+      name: "Connect: story:queued Failure",
     });
     const continueTarget = await canvas.findByRole("button", {
-      name: "Connect to story:queued Continue anchor",
+      name: "Connect: story:queued Continue",
     });
 
     await expect(failureSource).toBeVisible();

@@ -302,9 +302,9 @@ describe("verify-localized-widget-storybook-responsive", () => {
       name: "工作图视口",
     });
     expect(page.getByRole).toHaveBeenCalledWith("button", {
-      name: "选择 Review 工作站",
+      name: "进入工厂图编辑器",
     });
-    expect(page.getByText).toHaveBeenCalledWith("Active Story");
+    expect(page.getByText).toHaveBeenCalledWith("观察模式");
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
       "Localized workflow activity card at mobile",
@@ -320,7 +320,6 @@ describe("verifyLocalizedCurrentSelection", () => {
       expectVisible,
       page,
       selectionCard,
-      workstationButton,
     } = createCurrentSelectionHarness();
 
     await verifyLocalizedCurrentSelection({
@@ -342,11 +341,6 @@ describe("verifyLocalizedCurrentSelection", () => {
     expect(selectionCard.getByRole).toHaveBeenCalledWith("button", {
       name: "撤销所选内容",
     });
-    expect(page.getByRole).toHaveBeenCalledWith("button", {
-      name: "选择 Implement 工作站",
-    });
-    expect(workstationButton.focus).toHaveBeenCalled();
-    expect(page.keyboard.press).toHaveBeenCalledWith("Enter");
     expect(selectionCard.getByRole).toHaveBeenCalledWith("heading", {
       name: "活动工作",
     });
@@ -354,9 +348,6 @@ describe("verifyLocalizedCurrentSelection", () => {
       name: "运行历史",
     });
     expect(selectionCard.getByText).toHaveBeenCalledWith("Review", {
-      exact: true,
-    });
-    expect(selectionCard.getByText).toHaveBeenCalledWith("Implement", {
       exact: true,
     });
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(

@@ -417,7 +417,7 @@ export async function verifyStory(browser, storyCheck, viewport) {
   }
 }
 
-async function main() {
+export async function main() {
   const browser = await chromium.launch({ headless: true });
 
   try {

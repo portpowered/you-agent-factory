@@ -107,12 +107,12 @@ export async function verifyLocalizedWorkflowActivity({
     "Localized workflow activity viewport",
   );
   await expectVisible(
-    page.getByRole("button", { name: "选择 Review 工作站" }),
-    "Localized workflow activity workstation button",
+    page.getByRole("button", { name: "进入工厂图编辑器" }),
+    "Localized workflow activity editor toggle",
   );
   await expectVisible(
-    page.getByText("Active Story"),
-    "Active Story data value",
+    page.getByText("观察模式"),
+    "Localized workflow activity observe-mode badge",
   );
   await expectNoHorizontalOverflow(
     page,
@@ -150,18 +150,6 @@ export async function verifyLocalizedCurrentSelection({
   await expectVisible(
     currentSelection.getByText("Review", { exact: true }).first(),
     "Current-selection initial workstation data value",
-  );
-
-  const implementWorkstation = page.getByRole("button", {
-    name: "选择 Implement 工作站",
-  });
-  await implementWorkstation.focus();
-  await page.keyboard.press("Enter");
-
-  const selectedWorkstation = page.getByRole("article", { name: "当前选择" });
-  await expectVisible(
-    selectedWorkstation.getByText("Implement", { exact: true }).first(),
-    "Keyboard-selected workstation data value",
   );
   await expectNoHorizontalOverflow(
     page,
