@@ -1837,8 +1837,8 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(card?.className).toContain("p-4");
     expect(card?.className).toContain("md:p-5");
     expect(
-      screen.getByRole("heading", { name: "Current activity" }),
-    ).toBeTruthy();
+      screen.queryByRole("heading", { name: "Current activity" }),
+    ).toBeNull();
     expect(screen.getByText("Observe mode")).toBeTruthy();
     expect(legend?.className).toContain("absolute");
     expect(legend?.className).toContain("left-7");

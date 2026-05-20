@@ -901,9 +901,9 @@ export const SemanticGraphComposition = {
 
     await expectGraphWorkstation(canvasElement, "Select Review workstation");
     expect(canvas.queryByText("Operator View")).toBeNull();
-    await expect(
-      within(graphCard).getByRole("heading", { name: "Current activity" }),
-    ).toBeVisible();
+    expect(
+      within(graphCard).queryByRole("heading", { name: "Current activity" }),
+    ).toBeNull();
     expect(
       (await canvas.findAllByText("dispatch-review-active")).length,
     ).toBeGreaterThan(0);
@@ -1048,9 +1048,9 @@ export const DashboardImprovementsSmoke = {
     await expect(graphCard).toBeVisible();
     await expect(submitWorkCard).toBeVisible();
     expect(within(graphCard).queryByText("Operator View")).toBeNull();
-    await expect(
-      within(graphCard).getByRole("heading", { name: "Current activity" }),
-    ).toBeVisible();
+    expect(
+      within(graphCard).queryByRole("heading", { name: "Current activity" }),
+    ).toBeNull();
     await expect(
       within(submitWorkCard).getByRole("combobox", { name: "Work type" }),
     ).toBeVisible();
