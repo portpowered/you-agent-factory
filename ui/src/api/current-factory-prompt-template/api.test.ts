@@ -129,4 +129,68 @@ describe("current-factory prompt-template API", () => {
       statusText: "Not Found",
     });
   });
+
+  it("surfaces a network error when no fetch implementation is available", async () => {
+    const originalFetch = globalThis.fetch;
+    let thrown: unknown;
+
+    // @ts-expect-error coverage for environments without fetch support
+    globalThis.fetch = undefined;
+
+    try {
+      await getCurrentFactoryWorkstationPromptTemplateContract("Review");
+    } catch (error) {
+      thrown = error;
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(thrown).toMatchObject({
+      code: "NETWORK_ERROR",
+      message:
+        "Current factory prompt-template help is unavailable in this environment.",
+    });
+  });
+
+  it("surfaces invalid JSON and fallback API codes from prompt-template responses", async () => {
+    await expect(
+      getCurrentFactoryWorkstationPromptTemplateContract("Review", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response("not-json", {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          }),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message:
+        "The current factory prompt-template contract API returned an invalid response.",
+      responseBody: "not-json",
+    });
+
+    await expect(
+      validateCurrentFactoryWorkstationPromptTemplate(
+        "Review",
+        "{{ .Prompt }}",
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response("", {
+              status: 500,
+              statusText: "Internal Server Error",
+            }),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "The current factory prompt-template API rejected the request.",
+      responseBody: null,
+      status: 500,
+      statusText: "Internal Server Error",
+    });
+  });
 });

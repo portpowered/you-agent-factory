@@ -48,6 +48,32 @@ function buildReadyEditableConfigurationState(overrides?: {
     | { message: string; status: "empty" }
     | { errorMessage: string; status: "error" }
     | { status: "loading" };
+  promptValidationState?:
+    | { status: "idle" }
+    | { status: "loading" }
+    | { errorMessage: string; status: "error" }
+    | {
+        diagnostics: Array<{
+          endOffset?: number;
+          kind: string;
+          message: string;
+          path?: string;
+          sourceText?: string;
+          startOffset?: number;
+        }>;
+        result: {
+          diagnostics: Array<{
+            endOffset?: number;
+            kind: string;
+            message: string;
+            path?: string;
+            sourceText?: string;
+            startOffset?: number;
+          }>;
+          valid: boolean;
+        };
+        status: "ready";
+      };
   validationErrors?: { prompt?: string; workerName?: string };
   workerName?: string;
   workerOptionsState?:
@@ -109,7 +135,8 @@ function buildReadyEditableConfigurationState(overrides?: {
       status: "ready" as const,
     },
     promptValidationState:
-      overrides?.promptDiagnostics && overrides.promptDiagnostics.length > 0
+      overrides?.promptValidationState ??
+      (overrides?.promptDiagnostics && overrides.promptDiagnostics.length > 0
         ? {
             diagnostics: overrides.promptDiagnostics,
             result: {
@@ -125,7 +152,7 @@ function buildReadyEditableConfigurationState(overrides?: {
             },
             diagnostics: [],
             status: "ready" as const,
-          },
+          }),
     status: "ready" as const,
     validationErrors: overrides?.validationErrors ?? {},
     workerOptionsState: overrides?.workerOptionsState ?? {
@@ -353,6 +380,29 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(screen.getAllByText("(index .Inputs 1)").length).toBeGreaterThan(0);
   });
 
+  it("does not render a squiggle overlay when the prompt has no diagnostics", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(editableConfigurationSection().querySelector("mark")).toBeNull();
+  });
+
   it("labels syntax diagnostics separately from variable-access diagnostics", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
@@ -435,6 +485,226 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     const squiggle = editableConfigurationSection().querySelector("mark");
     expect(squiggle?.textContent).toBe("index .Context.Env 0");
+  });
+
+  it("renders explicit prompt-validation loading and error states", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          promptValidationState: { status: "loading" },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(
+      screen.getByText("Validating prompt variables for the current draft."),
+    ).toBeTruthy();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          promptValidationState: {
+            errorMessage: "Prompt validation API unavailable.",
+            status: "error",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Prompt validation unavailable. Prompt validation API unavailable.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("merges overlapping diagnostic ranges into one visible squiggle", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt: "Use {{ .Prompt }} now.",
+          promptDiagnostics: [
+            {
+              endOffset: 17,
+              kind: "INVALID_VARIABLE",
+              message: "Prompt root is invalid.",
+              path: ".Prompt",
+              sourceText: "{{ .Prompt }}",
+              startOffset: 5,
+            },
+            {
+              endOffset: 15,
+              kind: "INVALID_VARIABLE",
+              message: "Prompt access is invalid.",
+              path: ".Prompt",
+              sourceText: ".Prompt",
+              startOffset: 9,
+            },
+          ],
+          validationErrors: {
+            prompt:
+              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const squiggles = editableConfigurationSection().querySelectorAll("mark");
+    expect(squiggles).toHaveLength(1);
+    expect(squiggles[0]?.textContent).toBe("{{ .Prompt }}");
+  });
+
+  it("uses byte offsets correctly when diagnostics begin after multibyte characters", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt: "😀 {{ .Prompt }}",
+          promptDiagnostics: [
+            {
+              endOffset: 18,
+              kind: "INVALID_VARIABLE",
+              message: "Prompt root is invalid.",
+              path: ".Prompt",
+              sourceText: "{{ .Prompt }}",
+              startOffset: 6,
+            },
+          ],
+          validationErrors: {
+            prompt:
+              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const squiggle = editableConfigurationSection().querySelector("mark");
+    expect(squiggle?.textContent).toBe("{{ .Prompt }}");
+  });
+
+  it("clamps diagnostic offsets that start at byte one or extend past the prompt end", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt: "Prompt",
+          promptDiagnostics: [
+            {
+              endOffset: 999,
+              kind: "INVALID_VARIABLE",
+              message: "Whole prompt is invalid.",
+              sourceText: "Prompt",
+              startOffset: 1,
+            },
+          ],
+          validationErrors: {
+            prompt:
+              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const squiggle = editableConfigurationSection().querySelector("mark");
+    expect(squiggle?.textContent).toBe("Prompt");
+  });
+
+  it("falls back to source-text matching when authoritative offsets are unavailable", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt:
+            "Use {{ .Prompt }} first and {{ .Prompt }} second for review.",
+          promptDiagnostics: [
+            {
+              kind: "INVALID_VARIABLE",
+              message: "First prompt access is invalid.",
+              sourceText: "{{ .Prompt }}",
+            },
+            {
+              kind: "INVALID_VARIABLE",
+              message: "Second prompt access is invalid.",
+              sourceText: "{{ .Prompt }}",
+            },
+          ],
+          validationErrors: {
+            prompt:
+              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const squiggles = Array.from(
+      editableConfigurationSection().querySelectorAll("mark"),
+    ).map((element) => element.textContent);
+    expect(squiggles).toEqual(["{{ .Prompt }}", "{{ .Prompt }}"]);
   });
 
   it("renders loading, empty, and error prompt variable help states explicitly", () => {

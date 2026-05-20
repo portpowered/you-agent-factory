@@ -4,7 +4,10 @@ import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/te
 import type { CanonicalFactoryDefinition } from "../current-factory-definition";
 import { useCurrentEditableFactoryDefinition } from "../current-factory-definition";
 import type { DashboardSelection } from "./types";
-import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
+import {
+  useEditableWorkstationConfigurationState,
+  validateEditableWorkstationDraft,
+} from "./use-editable-workstation-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
@@ -128,6 +131,28 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
+  it("surfaces editable-definition load failures directly in the form state", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+      data: undefined,
+      error: { message: "Current factory definition failed to load." },
+      isError: true,
+      isPending: false,
+      isSuccess: false,
+      status: "error",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        errorMessage: "Current factory definition failed to load.",
+        status: "error",
+      });
+    });
+  });
+
   it("rehydrates clean sessions from newer editable factory data", async () => {
     const { rerender, result } = renderHook(() =>
       useEditableWorkstationConfigurationState(selection, selectedNode),
@@ -191,6 +216,35 @@ describe("useEditableWorkstationConfigurationState", () => {
         message:
           "The selected workstation references a worker that is no longer available in the current factory definition. Reload current selection and choose another worker.",
         status: "error",
+      },
+    });
+  });
+
+  it("surfaces an empty worker-options state when the workstation currently exposes no workers", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          workerName: "reviewer",
+          workerOptions: [],
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      hasValidationErrors: true,
+      status: "ready",
+      workerOptionsState: {
+        message:
+          "No current workers are available for this workstation. Add a worker to the factory before editing this field.",
+        status: "empty",
       },
     });
   });
@@ -284,6 +338,45 @@ describe("useEditableWorkstationConfigurationState", () => {
         ? result.current.pendingFactoryDefinition
         : undefined,
     ).toBeNull();
+  });
+
+  it("formats loading and error prompt validation states into observable prompt errors", () => {
+    const selectedEditableValues = {
+      prompt: "Review the story.",
+      workerName: "reviewer",
+      workerOptions: ["reviewer"],
+      workstationName: "Review",
+    };
+
+    expect(
+      validateEditableWorkstationDraft(
+        {
+          prompt: "Review the story.",
+          workerName: "reviewer",
+        },
+        selectedEditableValues,
+        { status: "loading" },
+      ),
+    ).toEqual({
+      prompt: "Validating prompt variables for the current draft.",
+    });
+
+    expect(
+      validateEditableWorkstationDraft(
+        {
+          prompt: "Review the story.",
+          workerName: "reviewer",
+        },
+        selectedEditableValues,
+        {
+          errorMessage: "Prompt validation API unavailable.",
+          status: "error",
+        },
+      ),
+    ).toEqual({
+      prompt:
+        "Prompt validation unavailable. Prompt validation API unavailable.",
+    });
   });
 });
 
