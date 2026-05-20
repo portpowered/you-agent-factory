@@ -202,11 +202,10 @@ src/features/import/factory-png-import.ts|243|18|string-literal|The selected PNG
 src/features/import/factory-png-import.ts|270|18|string-literal|The Infinite You factory metadata does not contain a valid factory payload.
 src/features/import/factory-png-import.ts|309|16|string-literal|The Infinite You factory metadata is missing the factory name.
 src/features/timeline/state/timeline/replayGraphState.ts|220|10|string-literal|:resource:
-src/features/trace-drilldown/trace-relation-flow.tsx|331|53|string-literal|Unknown source
-src/features/trace-drilldown/trace-workstation-path.tsx|301|67|string-literal|Unknown workstation
-src/features/trace-drilldown/trace-workstation-path.tsx|452|12|string-literal|border-af-overlay/10 bg-af-canvas
-src/features/trace-drilldown/trace-workstation-path.tsx|456|12|string-literal|border-af-danger/24 bg-af-danger/6
-src/features/trace-drilldown/trace-workstation-path.tsx|459|10|string-literal|border-af-success/20 bg-af-success/6
+src/features/trace-drilldown/trace-workstation-path.tsx|280|67|string-literal|Unknown workstation
+src/features/trace-drilldown/trace-workstation-path.tsx|431|12|string-literal|border-af-overlay/10 bg-af-canvas
+src/features/trace-drilldown/trace-workstation-path.tsx|435|12|string-literal|border-af-danger/24 bg-af-danger/6
+src/features/trace-drilldown/trace-workstation-path.tsx|438|10|string-literal|border-af-success/20 bg-af-success/6
 src/features/trace-drilldown/useTraceDrilldown.ts|22|20|string-literal|Select active, completed, or failed work to inspect retained trace history.
 src/features/trace-drilldown/useTraceDrilldown.ts|34|28|string-literal|Select active, completed, or failed work to inspect retained trace history.
 src/features/work-outcome/trend-cards.tsx|254|60|jsx-text|retry or rework events
