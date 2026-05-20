@@ -210,7 +210,9 @@ describe("TickSliderControl", () => {
       name: messages.returnToCurrentTickLabel,
     });
 
-    expect(screen.getByText(messages.sliderLabel)).toBeTruthy();
+    expect(screen.getByText(messages.sliderLabel).className).toContain(
+      "sr-only",
+    );
     expect(screen.getByText(currentTickStatus("ja", 9, 9))).toBeTruthy();
     expect(currentButton.disabled).toBe(true);
 
@@ -219,6 +221,25 @@ describe("TickSliderControl", () => {
     await waitFor(() => {
       expect(screen.getByText(currentTickStatus("ja", 3, 9))).toBeTruthy();
     });
+  });
+
+  it("keeps the visible timeline label hidden while preserving the slider accessible name", () => {
+    useFactoryTimelineStore
+      .getState()
+      .replaceEvents(graphStateSmokeTimelineEvents);
+
+    const messages = getHeaderControlsMessages("en");
+
+    render(<TickSliderControl />);
+
+    expect(
+      screen.getByRole<HTMLInputElement>("slider", {
+        name: messages.sliderAriaLabel,
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText(messages.sliderLabel).className).toContain(
+      "sr-only",
+    );
   });
 
   it("renders the localized disabled-state copy from the requested locale catalog", () => {

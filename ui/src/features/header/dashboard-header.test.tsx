@@ -202,7 +202,9 @@ describe("DashboardHeader", () => {
     expect(
       screen.getByRole("heading", { name: messages.brandWordmark }),
     ).toBeTruthy();
-    expect(screen.getByText(messages.sliderLabel)).toBeTruthy();
+    expect(screen.getByText(messages.sliderLabel).className).toContain(
+      "sr-only",
+    );
     expect(
       screen.getByRole("slider", { name: messages.sliderAriaLabel }),
     ).toBeTruthy();

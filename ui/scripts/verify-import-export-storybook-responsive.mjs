@@ -325,6 +325,7 @@ export async function expectOrderedLeftEdges(locators, label) {
 export async function verifyDashboardHeader(page, _dialog, viewport) {
   const heading = page.getByRole("heading", { name: "Infinite You" });
   const hiddenWordmark = heading.getByText("Infinite You");
+  const hiddenTickLabel = page.getByText("Timeline tick", { exact: true }).first();
   const slider = page.getByRole("slider", { name: "Timeline tick" });
   const languageButton = page.getByRole("button", {
     name: "Change language",
@@ -351,6 +352,12 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   if (!hiddenWordmarkClass?.includes("sr-only")) {
     throw new Error(
       "Dashboard heading wordmark was not hidden with sr-only styling.",
+    );
+  }
+  const hiddenTickLabelClass = await hiddenTickLabel.getAttribute("class");
+  if (!hiddenTickLabelClass?.includes("sr-only")) {
+    throw new Error(
+      "Dashboard timeline tick label was not hidden with sr-only styling.",
     );
   }
 
