@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import type { DashboardSnapshot } from "../../api/dashboard/types";
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type {
   DispatchRequestPayload,
   DispatchResponsePayload,
@@ -9,14 +9,14 @@ import type {
   FactoryWork,
   InitialStructureRequestPayload,
   RunRequestPayload,
-} from "../../api/events/index";
-import { FACTORY_EVENT_TYPES } from "../../api/events";
-import type { WorldState } from "../timeline/state/factoryTimelineStore";
+} from "../../../api/events/index";
+import { FACTORY_EVENT_TYPES } from "../../../api/events";
+import type { WorldState } from "../../timeline/state/factoryTimelineStore";
 import {
   buildWorkChartModel,
   recordThroughputSample,
   type ThroughputSample,
-} from "./trends";
+} from "../trends";
 
 const WORK_OUTCOME_RANGE_ID = "session";
 const SESSION_WORK_CHART_NOW = 0;
@@ -415,4 +415,3 @@ function firstMatchingInitialPlaceID(
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.length > 0))].sort();
 }
-

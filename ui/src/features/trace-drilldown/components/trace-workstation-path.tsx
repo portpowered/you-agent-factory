@@ -16,25 +16,25 @@ import {
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { cn } from "../../lib/cn";
+import { cn } from "../../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../components/ui/dashboard-typography";
+} from "../../../components/ui/dashboard-typography";
 import {
   formatTraceOutcome,
   formatTypedWorkItemLabel,
-} from "../../components/ui/formatters";
+} from "../../../components/ui/formatters";
 import type {
   DashboardTraceDispatch,
   DashboardWorkItemRef,
-} from "../../api/dashboard/types";
-import { getTraceDrilldownMessages } from "./messages/trace-drilldown";
+} from "../../../api/dashboard/types";
+import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import {
   getCachedTraceGraphLayout,
   layoutTraceGraphWithElk,
   traceGraphLayoutKey,
-} from "./trace-elk-layout";
+} from "../trace-elk-layout";
 
 // tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =

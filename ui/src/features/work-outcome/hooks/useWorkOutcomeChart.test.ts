@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../api/events";
+import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
 import { buildWorkOutcomeTimelineSamplesFromEvents } from "./useWorkOutcomeChart";
 
 const eventTime = "2026-04-29T12:00:00Z";
@@ -181,4 +181,3 @@ function event(
     type,
   };
 }
-

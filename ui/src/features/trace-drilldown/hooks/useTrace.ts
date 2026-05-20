@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import type { DashboardTrace, DashboardTraceDispatch, DashboardWorkRelation } from "../../api/dashboard/types";
-import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
+import type { DashboardTrace, DashboardTraceDispatch, DashboardWorkRelation } from "../../../api/dashboard/types";
+import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 
 const DASHBOARD_WORK_TRACE_QUERY_KEY = ["agent-factory-work-trace"] as const;
 
@@ -178,4 +178,3 @@ function uniqueNonEmptyStrings(values: Array<string | undefined>): string[] {
 function sortedUniqueNonEmptyStrings(values: Array<string | undefined>): string[] {
   return uniqueNonEmptyStrings(values).sort((left, right) => left.localeCompare(right));
 }
-

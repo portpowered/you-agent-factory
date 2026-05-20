@@ -1,11 +1,11 @@
 import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
-import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { WorkChartCard } from "./d3-information-card";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
-import type { WorkChartModel } from "./trends";
-import { getDashboardWorkChartSeriesStyle } from "./chart-contract";
+import type { WorkChartModel } from "../trends";
+import { getDashboardWorkChartSeriesStyle } from "../chart-contract";
 
 const sparseWorkChartModel: WorkChartModel = {
   delta: {

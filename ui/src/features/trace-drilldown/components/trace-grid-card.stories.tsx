@@ -1,4 +1,4 @@
-import type { DashboardTrace } from "../../api/dashboard/types";
+import type { DashboardTrace } from "../../../api/dashboard/types";
 import { TraceGridBentoCard } from "./trace-grid-card";
 
 const populatedTrace: DashboardTrace = {

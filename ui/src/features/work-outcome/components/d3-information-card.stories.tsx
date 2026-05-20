@@ -1,9 +1,9 @@
 import { expect, within } from "storybook/test";
 
-import "../../styles.css";
-import { getDashboardWorkChartSeriesDefinitions } from "./chart-contract";
+import "../../../styles.css";
+import { getDashboardWorkChartSeriesDefinitions } from "../chart-contract";
 import { D3CompletionInformationCard } from "./d3-information-card";
-import type { WorkChartModel } from "./trends";
+import type { WorkChartModel } from "../trends";
 
 const populatedTrend: WorkChartModel = {
   delta: {

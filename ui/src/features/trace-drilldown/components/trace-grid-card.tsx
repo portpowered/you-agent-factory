@@ -1,32 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { cn } from "../../lib/cn";
+import { cn } from "../../../lib/cn";
 import {
   formatDurationMillis,
   formatTraceOutcome,
   formatTypedWorkItemLabel,
-} from "../../components/ui/formatters";
+} from "../../../components/ui/formatters";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
-} from "../../components/ui/dashboard-typography";
+} from "../../../components/ui/dashboard-typography";
 import {
   DASHBOARD_WIDGET_CLASS,
   DETAIL_CARD_CLASS,
   DETAIL_CARD_WIDE_CLASS,
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
-} from "../../components/dashboard/widget-board";
-import { AgentBentoCard } from "../../components/ui";
-import { Button } from "../../components/ui/button";
+} from "../../../components/dashboard/widget-board";
+import { AgentBentoCard } from "../../../components/ui";
+import { Button } from "../../../components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "../../components/ui/collapsible";
-import { Skeleton } from "../../components/ui/skeleton";
+} from "../../../components/ui/collapsible";
+import { Skeleton } from "../../../components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -35,12 +35,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../components/ui/table";
+} from "../../../components/ui/table";
 import type {
   DashboardTrace,
   DashboardWorkItemRef,
-} from "../../api/dashboard/types";
-import { getTraceDrilldownMessages } from "./messages/trace-drilldown";
+} from "../../../api/dashboard/types";
+import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
 

@@ -1,11 +1,11 @@
-import { getDashboardWorkChartSeriesDefinitions } from "./chart-contract";
-import { cn } from "../../lib/cn";
-import type { WorkChartModel } from "./trends";
+import { getDashboardWorkChartSeriesDefinitions } from "../chart-contract";
+import { cn } from "../../../lib/cn";
+import type { WorkChartModel } from "../trends";
 import { WorkChart } from "./work-chart";
 import type { WorkChartSeriesDefinition, WorkChartState } from "./work-chart";
-import { DASHBOARD_WIDGET_CLASS } from "../../components/dashboard/widget-board";
-import { AgentBentoCard } from "../../components/ui";
-import { getWorkOutcomeMessages } from "./messages/work-outcome";
+import { DASHBOARD_WIDGET_CLASS } from "../../../components/dashboard/widget-board";
+import { AgentBentoCard } from "../../../components/ui";
+import { getWorkOutcomeMessages } from "../messages/work-outcome";
 
 export interface WorkChartCardProps {
   chartState?: WorkChartState;

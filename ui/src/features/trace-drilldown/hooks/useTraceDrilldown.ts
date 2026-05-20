@@ -1,4 +1,4 @@
-import type { TraceGridState } from "./trace-grid-card";
+import type { TraceGridState } from "../components/trace-grid-card";
 import { useDashboardTrace } from "./useTrace";
 
 export interface UseTraceDrilldownResult {
@@ -36,4 +36,3 @@ export function useTraceDrilldown(
 
   return { selectedTrace, traceGridState };
 }
-

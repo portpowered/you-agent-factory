@@ -2,33 +2,33 @@ import {
   DASHBOARD_CHART_AXIS_CLASS,
   DASHBOARD_CHART_SURFACE_CLASS,
   getDashboardChartSemanticStyle,
-} from "./chart-contract";
-import { cn } from "../../lib/cn";
+} from "../chart-contract";
+import { cn } from "../../../lib/cn";
 import {
   formatDurationMillis,
   formatTraceOutcome,
-} from "../../components/ui/formatters";
+} from "../../../components/ui/formatters";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
-} from "../../components/ui/dashboard-typography";
+} from "../../../components/ui/dashboard-typography";
 import {
   THROUGHPUT_RANGE_OPTIONS,
   type FailureTrendModel,
   type ReworkTrendModel,
   type ThroughputRangeID,
   type TimingTrendModel,
-} from "./trends";
-import { getWorkOutcomeMessages } from "./messages/work-outcome";
+} from "../trends";
+import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import {
   DETAIL_CARD_WIDE_CLASS,
   DETAIL_COPY_CLASS,
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
   WIDGET_SUBTITLE_CLASS,
-} from "../../components/dashboard/widget-board";
-import { DashboardWidgetFrame } from "../../components/ui";
+} from "../../../components/dashboard/widget-board";
+import { DashboardWidgetFrame } from "../../../components/ui";
 
 interface FailureTrendCardProps {
   className?: string;

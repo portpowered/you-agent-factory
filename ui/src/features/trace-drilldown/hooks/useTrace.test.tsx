@@ -1,5 +1,5 @@
 import { expandTraceWithCausalPredecessors } from "./useTrace";
-import type { DashboardTrace } from "../../api/dashboard/types";
+import type { DashboardTrace } from "../../../api/dashboard/types";
 import { describe, expect, it } from "vitest";
 
 function buildTrace(
@@ -151,4 +151,3 @@ describe("expandTraceWithCausalPredecessors", () => {
     expect(expanded?.relations).toEqual([sharedRelation]);
   });
 });
-

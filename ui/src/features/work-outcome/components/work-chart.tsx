@@ -11,32 +11,32 @@ import {
 
 import {
   DASHBOARD_CHART_AXIS_LABEL_CLASS,
-} from "./chart-contract";
+} from "../chart-contract";
 import {
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
-} from "../../components/ui/chart";
-import { Button } from "../../components/ui/button";
-import { Skeleton } from "../../components/ui/skeleton";
-import { cn } from "../../lib/cn";
+} from "../../../components/ui/chart";
+import { Button } from "../../../components/ui/button";
+import { Skeleton } from "../../../components/ui/skeleton";
+import { cn } from "../../../lib/cn";
 import {
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
-} from "../../components/dashboard/widget-board";
-import { getWorkOutcomeMessages } from "./messages/work-outcome";
-import type { WorkChartModel } from "./trends";
+} from "../../../components/dashboard/widget-board";
+import { getWorkOutcomeMessages } from "../messages/work-outcome";
+import type { WorkChartModel } from "../trends";
 import {
   buildWorkChartData,
   type WorkChartBuiltSeries,
   type WorkChartData,
   type WorkChartRow,
   type WorkChartSeriesDefinition,
-} from "./work-chart-data";
+} from "../work-chart-data";
 
-export type { WorkChartSeriesDefinition } from "./work-chart-data";
+export type { WorkChartSeriesDefinition } from "../work-chart-data";
 
 export const WORK_CHART_AXIS_LABEL_CLASS = DASHBOARD_CHART_AXIS_LABEL_CLASS;
 const WORK_CHART_MARGIN = { bottom: 40, left: 18, right: 28, top: 28 };

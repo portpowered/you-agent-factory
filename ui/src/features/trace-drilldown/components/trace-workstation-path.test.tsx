@@ -1,9 +1,9 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardTraceDispatch, DashboardWorkItemRef } from "../../api/dashboard/types";
+import type { DashboardTraceDispatch, DashboardWorkItemRef } from "../../../api/dashboard/types";
 import { TraceWorkstationPath } from "./trace-workstation-path";
 
-vi.mock("./trace-elk-layout", () => ({
+vi.mock("../trace-elk-layout", () => ({
   getCachedTraceGraphLayout: () => null,
   async layoutTraceGraphWithElk<TNode>(nodes: TNode[]): Promise<TNode[]> {
     return nodes;
@@ -159,4 +159,3 @@ describe("TraceWorkstationPath", () => {
     });
   });
 });
-

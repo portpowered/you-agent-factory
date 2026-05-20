@@ -16,18 +16,18 @@ import {
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { cn } from "../../lib/cn";
+import { cn } from "../../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../components/ui/dashboard-typography";
-import type { DashboardWorkRelation } from "../../api/dashboard/types";
-import { getTraceDrilldownMessages } from "./messages/trace-drilldown";
+} from "../../../components/ui/dashboard-typography";
+import type { DashboardWorkRelation } from "../../../api/dashboard/types";
+import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import {
   getCachedTraceGraphLayout,
   layoutTraceGraphWithElk,
   traceGraphLayoutKey,
-} from "./trace-elk-layout";
+} from "../trace-elk-layout";
 
 // tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
