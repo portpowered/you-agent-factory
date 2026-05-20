@@ -24,15 +24,6 @@ import (
 
 const defaultMaxResults = 50
 
-const (
-	workTypeIDField                   = "work_type_id"
-	targetStateField                  = "target_state"
-	traceIDField                      = "traceId"
-	currentChainingTraceIDField       = "currentChainingTraceId"
-	legacyTraceIDField                = "trace_id"
-	legacyCurrentChainingTraceIDField = "current_chaining_trace_id"
-)
-
 var _ factoryapi.ServerInterface = (*Server)(nil)
 
 // --- Handlers ---
@@ -1086,15 +1077,12 @@ func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkJSONReque
 	if err := json.Unmarshal(data, &req); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err
 	}
+	if err := validateCanonicalWorkRequestJSONForAPI(data); err != nil {
+		return factoryapi.SubmitWorkJSONRequestBody{}, err
+	}
 
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
-		return factoryapi.SubmitWorkJSONRequestBody{}, err
-	}
-	if err := rejectPublicBatchWorkAliases(fields, ""); err != nil {
-		return factoryapi.SubmitWorkJSONRequestBody{}, err
-	}
-	if err := rejectConflictingChainingTraceFields(fields, ""); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err
 	}
 	if err := validateWorkContentField(fields, ""); err != nil {
@@ -1116,15 +1104,7 @@ func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestJSONRequ
 	if err := json.Unmarshal(data, &req); err != nil {
 		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
 	}
-
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
-	}
-	if err := rejectPublicBatchWorkAliases(fields, ""); err != nil {
-		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
-	}
-	if err := rejectConflictingChainingTraceFields(fields, ""); err != nil {
+	if err := validateCanonicalWorkRequestJSONForAPI(data); err != nil {
 		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
 	}
 
@@ -1142,12 +1122,6 @@ func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestJSONRequ
 	for i := range *req.Works {
 		if i >= len(rawRequest.Works) {
 			return req, nil
-		}
-		if err := rejectPublicBatchWorkAliases(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
-			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
-		}
-		if err := rejectConflictingChainingTraceFields(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
-			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
 		}
 		if err := validateWorkContentField(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
 			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
@@ -1229,6 +1203,13 @@ func ensureSingleJSONObject(dec *json.Decoder) error {
 	return nil
 }
 
+func validateCanonicalWorkRequestJSONForAPI(data []byte) error {
+	if err := factorypkg.ValidateCanonicalWorkRequestJSON(data); err != nil {
+		return translateCanonicalWorkRequestValidationError(err)
+	}
+	return nil
+}
+
 func currentFactoryWorkstation(factory factoryapi.Factory, workstationName string) (factoryapi.Workstation, bool) {
 	if factory.Workstations == nil {
 		return factoryapi.Workstation{}, false
@@ -1283,28 +1264,6 @@ func promptTemplateValidationResultResponse(result workers.PromptTemplateValidat
 		Valid:       result.Valid,
 	}
 }
-func rejectPublicBatchWorkAliases(fields map[string]json.RawMessage, prefix string) error {
-	if _, ok := fields[workTypeIDField]; ok {
-		return requestFieldValidationError{message: fmt.Sprintf("%swork_type_id is not supported; use workTypeName", prefix)}
-	}
-	if _, ok := fields[targetStateField]; ok {
-		return requestFieldValidationError{message: fmt.Sprintf("%starget_state is not supported; use state", prefix)}
-	}
-	return nil
-}
-
-func rejectConflictingChainingTraceFields(fields map[string]json.RawMessage, prefix string) error {
-	if err := factorypkg.ValidateWorkRequestTraceFieldAliases(
-		fields[currentChainingTraceIDField],
-		fields[legacyCurrentChainingTraceIDField],
-		fields[traceIDField],
-		fields[legacyTraceIDField],
-	); err != nil {
-		return requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
-	}
-	return nil
-}
-
 func validateWorkContentField(fields map[string]json.RawMessage, prefix string) error {
 	contentRaw, ok := fields["content"]
 	if !ok {
@@ -1452,4 +1411,30 @@ func submitWorkTypeNameMessage(message string) string {
 		return message
 	}
 	return strings.ReplaceAll(message, "work type", "work type name")
+}
+
+func translateCanonicalWorkRequestValidationError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	message := err.Error()
+	message = strings.TrimPrefix(message, "work request batch ")
+	message = strings.ReplaceAll(message, " uses retired work_type_id field; use workTypeName", ".work_type_id is not supported; use workTypeName")
+	message = strings.ReplaceAll(message, " uses retired target_state field; use state", ".target_state is not supported; use state")
+	if strings.HasPrefix(message, "works[") && strings.Contains(message, "] ") {
+		message = strings.Replace(message, "] ", "].", 1)
+	}
+	if strings.HasSuffix(message, ".work_type_id is not supported; use workTypeName") ||
+		strings.HasSuffix(message, ".target_state is not supported; use state") {
+		return requestFieldValidationError{message: message}
+	}
+	switch message {
+	case "uses retired work_type_id field; use workTypeName":
+		return requestFieldValidationError{message: "work_type_id is not supported; use workTypeName"}
+	case "uses retired target_state field; use state":
+		return requestFieldValidationError{message: "target_state is not supported; use state"}
+	default:
+		return requestFieldValidationError{message: message}
+	}
 }
