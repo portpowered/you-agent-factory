@@ -72,10 +72,10 @@ src/features/factory-graph-editor/factory-graph-draft-types.ts|247|14|string-lit
 src/features/factory-graph-editor/factory-graph-draft-types.ts|249|14|string-literal|work-type:
 src/features/factory-graph-editor/factory-graph-draft-types.ts|251|14|string-literal|workstation:
 src/features/factory-graph-editor/factory-graph-draft-validation.ts|70|18|string-literal|Duplicate graph identifier " " is not allowed.
-src/features/factory-graph-editor/factory-graph-draft-validation.ts|186|14|string-literal|identifiers are required before save.
-src/features/factory-graph-editor/factory-graph-draft-validation.ts|215|16|string-literal|Relationship " " cannot connect to .
-src/features/factory-graph-editor/factory-graph-draft-validation.ts|350|14|string-literal|Workstation " " must keep one worker assignment.
-src/features/factory-graph-editor/factory-graph-draft-validation.ts|367|14|string-literal|Relationship " " references an unknown node.
+src/features/factory-graph-editor/factory-graph-draft-validation.ts|132|14|string-literal|identifiers are required before save.
+src/features/factory-graph-editor/factory-graph-draft-validation.ts|161|16|string-literal|Relationship " " cannot connect to .
+src/features/factory-graph-editor/factory-graph-draft-validation.ts|264|14|string-literal|Workstation " " must keep one worker assignment.
+src/features/factory-graph-editor/factory-graph-draft-validation.ts|281|14|string-literal|Relationship " " references an unknown node.
 src/features/factory-graph-editor/factory-graph-editor-add-dialog.tsx|202|22|string-literal|INITIAL
 src/features/factory-graph-editor/factory-graph-editor-add-dialog.tsx|203|22|string-literal|PROCESSING
 src/features/factory-graph-editor/factory-graph-editor-add-dialog.tsx|204|22|string-literal|TERMINAL

@@ -22,6 +22,13 @@ export function buildPendingFactoryDefinition(
     return null;
   }
 
+  return buildDraftAppliedFactoryDefinition(baseFactoryDefinition, draft);
+}
+
+export function buildDraftAppliedFactoryDefinition(
+  baseFactoryDefinition: CanonicalFactoryDefinition,
+  draft: FactoryGraphDraft,
+): CanonicalFactoryDefinition {
   const nextFactoryDefinition = structuredClone(baseFactoryDefinition);
   nextFactoryDefinition.resources = applyNamedEntityChanges(
     baseFactoryDefinition.resources,
