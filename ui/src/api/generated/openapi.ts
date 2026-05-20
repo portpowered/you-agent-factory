@@ -252,6 +252,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/factory-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List live factory sessions
+         * @description Lists every live factory session that the shared runtime host is currently keeping open, including the reserved default session.
+         */
+        get: operations["listFactorySessions"];
+        put?: never;
+        /**
+         * Open another live factory session
+         * @description Opens another live factory session from a folder path and optional target selection. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
+         */
+        post: operations["openFactorySession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factory/~current": {
         parameters: {
             query?: never;
@@ -494,6 +518,37 @@ export interface components {
             providerSession: components["schemas"]["LoadableProviderSessionRef"];
             source: components["schemas"]["ProviderSessionSourceMetadata"];
             parse: components["schemas"]["CodexSessionParseSummary"];
+        };
+        FactorySessionTargetRef: {
+            /** @enum {string} */
+            kind: "default" | "named";
+            name?: string;
+        };
+        FactorySessionTarget: {
+            ref: components["schemas"]["FactorySessionTargetRef"];
+            label: string;
+            folderPath: string;
+            factoryDir: string;
+            project: string;
+        };
+        FactorySessionSummary: {
+            id: string;
+            target: components["schemas"]["FactorySessionTargetRef"];
+            folderPath: string;
+            factoryDir: string;
+            project: string;
+            isDefault: boolean;
+        };
+        ListFactorySessionsResponse: {
+            sessions: components["schemas"]["FactorySessionSummary"][];
+        };
+        OpenFactorySessionRequest: {
+            folderPath: string;
+            target?: components["schemas"]["FactorySessionTargetRef"];
+        };
+        OpenFactorySessionResponse: {
+            session?: components["schemas"]["FactorySessionSummary"];
+            targets?: components["schemas"]["FactorySessionTarget"][];
         };
         LoadableProviderSessionRef: {
             provider: components["schemas"]["LoadableProviderSessionProvider"];
@@ -2073,6 +2128,53 @@ export interface operations {
             };
             400: components["responses"]["CreateFactoryBadRequest"];
             409: components["responses"]["CreateFactoryConflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listFactorySessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Live factory sessions that can be rendered as workspace tabs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListFactorySessionsResponse"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    openFactorySession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenFactorySessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Session was opened or the caller needs to choose one of the returned runnable targets. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenFactorySessionResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             500: components["responses"]["InternalError"];
         };
     };

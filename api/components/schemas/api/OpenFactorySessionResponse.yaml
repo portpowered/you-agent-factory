@@ -1,0 +1,9 @@
+type: object
+additionalProperties: false
+properties:
+  session:
+    $ref: './FactorySessionSummary.yaml'
+  targets:
+    type: array
+    items:
+      $ref: './FactorySessionTarget.yaml'

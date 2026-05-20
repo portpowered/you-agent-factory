@@ -28,6 +28,7 @@ import { useExportDialogStore } from "../export/state/exportDialogStore";
 import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
+import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { getHeaderControlsMessages } from "./messages/header-controls";
 
 const DASHBOARD_TOOLBAR_CLASS = cn(
@@ -133,6 +134,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
           </svg>
         </DashboardHeaderActionButton>
       </div>
+      <DashboardSessionTabs locale={resolvedLocale} />
     </section>
   );
 }

@@ -1,0 +1,9 @@
+type: object
+additionalProperties: false
+required:
+  - sessions
+properties:
+  sessions:
+    type: array
+    items:
+      $ref: './FactorySessionSummary.yaml'

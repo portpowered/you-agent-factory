@@ -654,6 +654,97 @@ func TestSessionScopedAPI_UnknownSessionReturnsNotFound(t *testing.T) {
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
 }
 
+func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		FactorySessions: factoryapi.ListFactorySessionsResponse{
+			Sessions: []factoryapi.FactorySessionSummary{
+				{
+					FactoryDir: "/workspace/root",
+					FolderPath: "/workspace/root",
+					Id:         "~default",
+					IsDefault:  true,
+					Project:    "root",
+					Target: factoryapi.FactorySessionTargetRef{
+						Kind: factoryapi.Default,
+					},
+				},
+				{
+					FactoryDir: "/workspace/root/beta",
+					FolderPath: "/workspace/root",
+					Id:         "session-beta",
+					IsDefault:  false,
+					Project:    "beta",
+					Target: factoryapi.FactorySessionTargetRef{
+						Kind: factoryapi.Named,
+						Name: stringPointerForAPITest("beta"),
+					},
+				},
+			},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /factory-sessions status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var response factoryapi.ListFactorySessionsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode list factory sessions response: %v", err)
+	}
+	if len(response.Sessions) != 2 || response.Sessions[1].Id != "session-beta" {
+		t.Fatalf("factory sessions = %#v, want default and beta sessions", response.Sessions)
+	}
+}
+
+func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
+	mf := &testutil.MockFactory{
+		OpenFactorySessionResult: factoryapi.OpenFactorySessionResponse{
+			Session: &factoryapi.FactorySessionSummary{
+				FactoryDir: "/workspace/fleet/beta",
+				FolderPath: "/workspace/fleet",
+				Id:         "session-beta",
+				IsDefault:  false,
+				Project:    "beta",
+				Target: factoryapi.FactorySessionTargetRef{
+					Kind: factoryapi.Named,
+					Name: stringPointerForAPITest("beta"),
+				},
+			},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/fleet","target":{"kind":"named","name":"beta"}}`))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /factory-sessions status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.OpenedFactorySessions) != 1 {
+		t.Fatalf("opened factory sessions = %d, want 1", len(mf.OpenedFactorySessions))
+	}
+	if mf.OpenedFactorySessions[0].FolderPath != "/workspace/fleet" {
+		t.Fatalf("opened session folder = %q, want /workspace/fleet", mf.OpenedFactorySessions[0].FolderPath)
+	}
+	if mf.OpenedFactorySessions[0].Target == nil ||
+		mf.OpenedFactorySessions[0].Target.Kind != factoryapi.Named ||
+		mf.OpenedFactorySessions[0].Target.Name == nil ||
+		*mf.OpenedFactorySessions[0].Target.Name != "beta" {
+		t.Fatalf("opened session target = %#v, want named beta", mf.OpenedFactorySessions[0].Target)
+	}
+	var response factoryapi.OpenFactorySessionResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode open factory session response: %v", err)
+	}
+	if response.Session == nil || response.Session.Id != "session-beta" {
+		t.Fatalf("open factory session response = %#v, want session-beta", response)
+	}
+}
+
 func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 	session := strings.Join([]string{
 		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,

@@ -38,6 +38,11 @@ type MockFactory struct {
 	SavedEditableFactories   []factoryapi.SaveEditableFactoryDefinitionRequest
 	SaveEditableFactoryErr   error
 	SessionFactories         map[string]*MockFactory
+	FactorySessions          factoryapi.ListFactorySessionsResponse
+	ListFactorySessionsErr   error
+	OpenFactorySessionResult factoryapi.OpenFactorySessionResponse
+	OpenFactorySessionErr    error
+	OpenedFactorySessions    []factoryapi.OpenFactorySessionRequest
 }
 
 var _ factory.APIFactory = (*MockFactory)(nil)
@@ -185,6 +190,21 @@ func (m *MockFactory) SaveEditableFactoryDefinition(_ context.Context, request f
 		FactoryDefinition: request.FactoryDefinition,
 		Version:           version,
 	}, nil
+}
+
+func (m *MockFactory) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+	if m.ListFactorySessionsErr != nil {
+		return factoryapi.ListFactorySessionsResponse{}, m.ListFactorySessionsErr
+	}
+	return m.FactorySessions, nil
+}
+
+func (m *MockFactory) OpenFactorySession(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+	if m.OpenFactorySessionErr != nil {
+		return factoryapi.OpenFactorySessionResponse{}, m.OpenFactorySessionErr
+	}
+	m.OpenedFactorySessions = append(m.OpenedFactorySessions, request)
+	return m.OpenFactorySessionResult, nil
 }
 
 func (m *MockFactory) WaitToComplete() <-chan struct{} {

@@ -389,6 +389,45 @@ paths:
           $ref: '#/components/responses/CreateFactoryConflict'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions:
+    get:
+      tags:
+        - Factory
+      operationId: listFactorySessions
+      summary: List live factory sessions
+      description: Lists every live factory session that the shared runtime host is currently keeping open, including the reserved default session.
+      responses:
+        '200':
+          description: Live factory sessions that can be rendered as workspace tabs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFactorySessionsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags:
+        - Factory
+      operationId: openFactorySession
+      summary: Open another live factory session
+      description: Opens another live factory session from a folder path and optional target selection. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenFactorySessionRequest'
+      responses:
+        '200':
+          description: Session was opened or the caller needs to choose one of the returned runnable targets.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenFactorySessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory/~current:
     get:
       tags:
@@ -753,6 +792,18 @@ components:
       $ref: './components/schemas/api/SaveEditableFactoryDefinitionRequest.yaml'
     ProviderSessionDetailResponse:
       $ref: './components/schemas/api/ProviderSessionDetailResponse.yaml'
+    FactorySessionTargetRef:
+      $ref: './components/schemas/api/FactorySessionTargetRef.yaml'
+    FactorySessionTarget:
+      $ref: './components/schemas/api/FactorySessionTarget.yaml'
+    FactorySessionSummary:
+      $ref: './components/schemas/api/FactorySessionSummary.yaml'
+    ListFactorySessionsResponse:
+      $ref: './components/schemas/api/ListFactorySessionsResponse.yaml'
+    OpenFactorySessionRequest:
+      $ref: './components/schemas/api/OpenFactorySessionRequest.yaml'
+    OpenFactorySessionResponse:
+      $ref: './components/schemas/api/OpenFactorySessionResponse.yaml'
     LoadableProviderSessionRef:
       $ref: './components/schemas/api/LoadableProviderSessionRef.yaml'
     LoadableProviderSessionProvider:

@@ -47,8 +47,13 @@ type FactorySessionOpenResult struct {
 }
 
 type liveFactorySession struct {
-	id     string
-	handle *liveRuntimeHandle
+	id         string
+	factoryDir string
+	folderPath string
+	handle     *liveRuntimeHandle
+	isDefault  bool
+	project    string
+	target     FactorySessionTargetRef
 }
 
 type liveRuntimeSessionManager struct {
@@ -149,10 +154,15 @@ func (fs *FactoryService) registerLiveSession(sessionID string, handle *liveRunt
 	if fs == nil || fs.sessions == nil || sessionID == "" || handle == nil {
 		return
 	}
-	fs.sessions.upsert(&liveFactorySession{
-		id:     sessionID,
-		handle: handle,
-	}, selectSession)
+	fs.sessions.upsert(newLiveFactorySession(
+		sessionID,
+		fs.factoryRootDir,
+		fs.factoryRootDir,
+		FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
+		handle,
+		sessionID == defaultFactorySessionID,
+		filepath.Base(fs.factoryRootDir),
+	), selectSession)
 	if selectSession && handle.runtime != nil {
 		fs.swapActiveRuntime(handle.runtime)
 	}
@@ -258,6 +268,63 @@ func (fs *FactoryService) GetCurrentNamedFactoryForSession(_ context.Context, se
 	return fs.serializeNamedFactory(sessionFactoryName(fs.factoryRootDir, runtimeCfg), runtimeCfg, true)
 }
 
+func (fs *FactoryService) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+	if fs == nil || fs.sessions == nil {
+		return factoryapi.ListFactorySessionsResponse{}, nil
+	}
+	sessionIDs := fs.sessions.ids()
+	summaries := make([]factoryapi.FactorySessionSummary, 0, len(sessionIDs))
+	for _, sessionID := range sessionIDs {
+		session := fs.sessionByID(sessionID)
+		if session == nil {
+			continue
+		}
+		summaries = append(summaries, sessionSummaryResponse(session))
+	}
+	sort.SliceStable(summaries, func(i, j int) bool {
+		if summaries[i].IsDefault != summaries[j].IsDefault {
+			return summaries[i].IsDefault
+		}
+		return summaries[i].Id < summaries[j].Id
+	})
+	return factoryapi.ListFactorySessionsResponse{Sessions: summaries}, nil
+}
+
+func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+	var target *FactorySessionTargetRef
+	if request.Target != nil {
+		targetName := ""
+		if request.Target.Name != nil {
+			targetName = strings.TrimSpace(*request.Target.Name)
+		}
+		target = &FactorySessionTargetRef{
+			Kind: FactorySessionTargetKind(request.Target.Kind),
+			Name: targetName,
+		}
+	}
+	result, err := fs.OpenFactorySessionFromFolder(ctx, request.FolderPath, target)
+	if err != nil {
+		return factoryapi.OpenFactorySessionResponse{}, err
+	}
+	response := factoryapi.OpenFactorySessionResponse{}
+	if len(result.Targets) > 0 {
+		targets := make([]factoryapi.FactorySessionTarget, 0, len(result.Targets))
+		for _, sessionTarget := range result.Targets {
+			targets = append(targets, factorySessionTargetResponse(sessionTarget))
+		}
+		response.Targets = &targets
+	}
+	if result.SessionID != "" {
+		session, err := fs.requireSession(result.SessionID)
+		if err != nil {
+			return factoryapi.OpenFactorySessionResponse{}, err
+		}
+		summary := sessionSummaryResponse(session)
+		response.Session = &summary
+	}
+	return response, nil
+}
+
 func (fs *FactoryService) openFactorySession(ctx context.Context, factoryDir string) (string, error) {
 	if fs == nil {
 		return "", fmt.Errorf("factory service is required")
@@ -295,14 +362,45 @@ func (fs *FactoryService) OpenFactorySessionFromFolder(
 		return &FactorySessionOpenResult{Targets: cloneFactorySessionTargets(targets)}, nil
 	}
 
-	sessionID, err := fs.openFactorySession(ctx, selectedTarget.FactoryDir)
+	sessionID, err := fs.openFactorySessionForTarget(ctx, *selectedTarget)
 	if err != nil {
 		return nil, err
 	}
 	return &FactorySessionOpenResult{SessionID: sessionID}, nil
 }
 
+func (fs *FactoryService) openFactorySessionForTarget(ctx context.Context, target FactorySessionTarget) (string, error) {
+	if fs == nil {
+		return "", fmt.Errorf("factory service is required")
+	}
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, target.FactoryDir)
+	if err != nil {
+		return "", err
+	}
+	sessionID := newFactorySessionID()
+	if err := fs.startBackgroundSessionWithMetadata(ctx, sessionID, replacement, target); err != nil {
+		return "", err
+	}
+	return sessionID, nil
+}
+
 func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID string, runtimeBundle *replacementFactoryRuntime) error {
+	return fs.startBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, FactorySessionTarget{
+		Ref: FactorySessionTargetRef{
+			Kind: FactorySessionTargetKindDefault,
+		},
+		FactoryDir: runtimeBundle.dir,
+		FolderPath: runtimeBundle.dir,
+		Project:    filepath.Base(runtimeBundle.dir),
+	})
+}
+
+func (fs *FactoryService) startBackgroundSessionWithMetadata(
+	ctx context.Context,
+	sessionID string,
+	runtimeBundle *replacementFactoryRuntime,
+	target FactorySessionTarget,
+) error {
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
@@ -324,7 +422,15 @@ func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID 
 			return fmt.Errorf("start runtime session sidecars: %w", err)
 		}
 	}
-	fs.registerLiveSession(sessionID, handle, false)
+	fs.sessions.upsert(newLiveFactorySession(
+		sessionID,
+		target.FactoryDir,
+		target.FolderPath,
+		target.Ref,
+		handle,
+		false,
+		target.Project,
+	), false)
 	return nil
 }
 
@@ -505,6 +611,61 @@ func cloneFactorySessionTargets(targets []FactorySessionTarget) []FactorySession
 	cloned := make([]FactorySessionTarget, len(targets))
 	copy(cloned, targets)
 	return cloned
+}
+
+func newLiveFactorySession(
+	sessionID string,
+	factoryDir string,
+	folderPath string,
+	target FactorySessionTargetRef,
+	handle *liveRuntimeHandle,
+	isDefault bool,
+	project string,
+) *liveFactorySession {
+	return &liveFactorySession{
+		id:         sessionID,
+		factoryDir: factoryDir,
+		folderPath: folderPath,
+		handle:     handle,
+		isDefault:  isDefault,
+		project:    project,
+		target:     target,
+	}
+}
+
+func sessionSummaryResponse(session *liveFactorySession) factoryapi.FactorySessionSummary {
+	return factoryapi.FactorySessionSummary{
+		FactoryDir: session.factoryDir,
+		FolderPath: session.folderPath,
+		Id:         session.id,
+		IsDefault:  session.isDefault,
+		Project:    session.project,
+		Target: factoryapi.FactorySessionTargetRef{
+			Kind: factoryapi.FactorySessionTargetRefKind(session.target.Kind),
+			Name: stringPointerOrNil(session.target.Name),
+		},
+	}
+}
+
+func factorySessionTargetResponse(target FactorySessionTarget) factoryapi.FactorySessionTarget {
+	return factoryapi.FactorySessionTarget{
+		FactoryDir: target.FactoryDir,
+		FolderPath: target.FolderPath,
+		Label:      target.Label,
+		Project:    target.Project,
+		Ref: factoryapi.FactorySessionTargetRef{
+			Kind: factoryapi.FactorySessionTargetRefKind(target.Ref.Kind),
+			Name: stringPointerOrNil(target.Ref.Name),
+		},
+	}
+}
+
+func stringPointerOrNil(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func sessionFactoryName(rootDir string, runtimeCfg *factoryconfig.LoadedFactoryConfig) factoryapi.FactoryName {

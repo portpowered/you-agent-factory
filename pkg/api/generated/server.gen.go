@@ -67,6 +67,12 @@ const (
 	FactoryEventTypeWorkRequest               FactoryEventType = "WORK_REQUEST"
 )
 
+// Defines values for FactorySessionTargetRefKind.
+const (
+	Default FactorySessionTargetRefKind = "default"
+	Named   FactorySessionTargetRefKind = "named"
+)
+
 // Defines values for FactoryState.
 const (
 	FactoryStateCompleted FactoryState = "COMPLETED"
@@ -611,6 +617,34 @@ type FactoryGuard struct {
 // FactoryName Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string
 
+// FactorySessionSummary defines model for FactorySessionSummary.
+type FactorySessionSummary struct {
+	FactoryDir string                  `json:"factoryDir"`
+	FolderPath string                  `json:"folderPath"`
+	Id         string                  `json:"id"`
+	IsDefault  bool                    `json:"isDefault"`
+	Project    string                  `json:"project"`
+	Target     FactorySessionTargetRef `json:"target"`
+}
+
+// FactorySessionTarget defines model for FactorySessionTarget.
+type FactorySessionTarget struct {
+	FactoryDir string                  `json:"factoryDir"`
+	FolderPath string                  `json:"folderPath"`
+	Label      string                  `json:"label"`
+	Project    string                  `json:"project"`
+	Ref        FactorySessionTargetRef `json:"ref"`
+}
+
+// FactorySessionTargetRef defines model for FactorySessionTargetRef.
+type FactorySessionTargetRef struct {
+	Kind FactorySessionTargetRefKind `json:"kind"`
+	Name *string                     `json:"name,omitempty"`
+}
+
+// FactorySessionTargetRefKind defines model for FactorySessionTargetRef.Kind.
+type FactorySessionTargetRefKind string
+
 // FactoryState Lifecycle state of the running factory.
 type FactoryState string
 
@@ -861,6 +895,11 @@ type InputType struct {
 // IntegerMap defines model for IntegerMap.
 type IntegerMap map[string]int
 
+// ListFactorySessionsResponse defines model for ListFactorySessionsResponse.
+type ListFactorySessionsResponse struct {
+	Sessions []FactorySessionSummary `json:"sessions"`
+}
+
 // ListWorkResponse defines model for ListWorkResponse.
 type ListWorkResponse struct {
 	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
@@ -883,6 +922,18 @@ type LoadableProviderSessionRef struct {
 
 	// Provider Canonical provider value for provider-session detail requests that can be loaded by the API.
 	Provider LoadableProviderSessionProvider `json:"provider"`
+}
+
+// OpenFactorySessionRequest defines model for OpenFactorySessionRequest.
+type OpenFactorySessionRequest struct {
+	FolderPath string                   `json:"folderPath"`
+	Target     *FactorySessionTargetRef `json:"target,omitempty"`
+}
+
+// OpenFactorySessionResponse defines model for OpenFactorySessionResponse.
+type OpenFactorySessionResponse struct {
+	Session *FactorySessionSummary  `json:"session,omitempty"`
+	Targets *[]FactorySessionTarget `json:"targets,omitempty"`
 }
 
 // PaginationContext defines model for PaginationContext.
@@ -1689,6 +1740,9 @@ type UpsertWorkRequestByFactoryIdJSONRequestBody = WorkRequest
 // CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
 type CreateFactoryJSONRequestBody = Factory
 
+// OpenFactorySessionJSONRequestBody defines body for OpenFactorySession for application/json ContentType.
+type OpenFactorySessionJSONRequestBody = OpenFactorySessionRequest
+
 // SaveEditableCurrentFactoryDefinitionJSONRequestBody defines body for SaveEditableCurrentFactoryDefinition for application/json ContentType.
 type SaveEditableCurrentFactoryDefinitionJSONRequestBody = SaveEditableFactoryDefinitionRequest
 
@@ -2140,6 +2194,12 @@ type ServerInterface interface {
 	// Create factory
 	// (POST /factory)
 	CreateFactory(w http.ResponseWriter, r *http.Request)
+	// List live factory sessions
+	// (GET /factory-sessions)
+	ListFactorySessions(w http.ResponseWriter, r *http.Request)
+	// Open another live factory session
+	// (POST /factory-sessions)
+	OpenFactorySession(w http.ResponseWriter, r *http.Request)
 	// Get current factory
 	// (GET /factory/~current)
 	GetCurrentFactory(w http.ResponseWriter, r *http.Request)
@@ -2439,6 +2499,34 @@ func (siw *ServerInterfaceWrapper) CreateFactory(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateFactory(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListFactorySessions operation middleware
+func (siw *ServerInterfaceWrapper) ListFactorySessions(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListFactorySessions(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// OpenFactorySession operation middleware
+func (siw *ServerInterfaceWrapper) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.OpenFactorySession(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2871,6 +2959,10 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/work/{id}", wrapper.GetWorkByFactoryId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory", wrapper.CreateFactory).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.ListFactorySessions).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.OpenFactorySession).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory/~current", wrapper.GetCurrentFactory).Methods("GET")
 

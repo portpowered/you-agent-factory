@@ -287,6 +287,47 @@ func (s *Server) CreateFactory(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusCreated, created)
 }
 
+func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	response, err := sessionRuntime.ListFactorySessions(r.Context())
+	if err != nil {
+		s.logger.Error("list factory sessions failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to list factory sessions", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	req, err := decodeOpenFactorySessionBody(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+	if strings.TrimSpace(req.FolderPath) == "" {
+		s.writeError(w, http.StatusBadRequest, "folderPath is required", "BAD_REQUEST")
+		return
+	}
+	response, err := sessionRuntime.OpenFactorySession(r.Context(), req)
+	if err != nil {
+		s.logger.Debug("open factory session rejected", zap.Error(err))
+		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
+}
+
 func (s *Server) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
 	namedFactory, ok := s.loadCurrentFactory(w, r)
 	if !ok {
@@ -1394,6 +1435,25 @@ func decodeNamedFactoryBody(body io.Reader) (factoryapi.CreateFactoryJSONRequest
 			return factoryapi.CreateFactoryJSONRequestBody{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
 		}
 		return factoryapi.CreateFactoryJSONRequestBody{}, err
+	}
+	return req, nil
+}
+
+func decodeOpenFactorySessionBody(body io.Reader) (factoryapi.OpenFactorySessionJSONRequestBody, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.OpenFactorySessionJSONRequestBody{}, err
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+
+	var req factoryapi.OpenFactorySessionJSONRequestBody
+	if err := decoder.Decode(&req); err != nil {
+		return factoryapi.OpenFactorySessionJSONRequestBody{}, err
+	}
+	if err := ensureSingleJSONObject(decoder); err != nil {
+		return factoryapi.OpenFactorySessionJSONRequestBody{}, err
 	}
 	return req, nil
 }

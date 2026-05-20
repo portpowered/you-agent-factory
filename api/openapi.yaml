@@ -389,6 +389,45 @@ paths:
           $ref: '#/components/responses/CreateFactoryConflict'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions:
+    get:
+      tags:
+        - Factory
+      operationId: listFactorySessions
+      summary: List live factory sessions
+      description: Lists every live factory session that the shared runtime host is currently keeping open, including the reserved default session.
+      responses:
+        '200':
+          description: Live factory sessions that can be rendered as workspace tabs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFactorySessionsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags:
+        - Factory
+      operationId: openFactorySession
+      summary: Open another live factory session
+      description: Opens another live factory session from a folder path and optional target selection. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenFactorySessionRequest'
+      responses:
+        '200':
+          description: Session was opened or the caller needs to choose one of the returned runnable targets.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenFactorySessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory/~current:
     get:
       tags:
@@ -1046,6 +1085,92 @@ components:
           $ref: '#/components/schemas/ProviderSessionSourceMetadata'
         parse:
           $ref: '#/components/schemas/CodexSessionParseSummary'
+    FactorySessionTargetRef:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - default
+            - named
+        name:
+          type: string
+    FactorySessionTarget:
+      type: object
+      additionalProperties: false
+      required:
+        - ref
+        - label
+        - folderPath
+        - factoryDir
+        - project
+      properties:
+        ref:
+          $ref: '#/components/schemas/FactorySessionTargetRef'
+        label:
+          type: string
+        folderPath:
+          type: string
+        factoryDir:
+          type: string
+        project:
+          type: string
+    FactorySessionSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - target
+        - folderPath
+        - factoryDir
+        - project
+        - isDefault
+      properties:
+        id:
+          type: string
+        target:
+          $ref: '#/components/schemas/FactorySessionTargetRef'
+        folderPath:
+          type: string
+        factoryDir:
+          type: string
+        project:
+          type: string
+        isDefault:
+          type: boolean
+    ListFactorySessionsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - sessions
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorySessionSummary'
+    OpenFactorySessionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - folderPath
+      properties:
+        folderPath:
+          type: string
+        target:
+          $ref: '#/components/schemas/FactorySessionTargetRef'
+    OpenFactorySessionResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        session:
+          $ref: '#/components/schemas/FactorySessionSummary'
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorySessionTarget'
     LoadableProviderSessionRef:
       type: object
       additionalProperties: false
