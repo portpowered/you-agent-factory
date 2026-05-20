@@ -73,20 +73,20 @@ describe("TerminalWorkSummaryCard", () => {
 
   it("renders terminal summary copy through the current-selection locale provider for a supported non-default locale", () => {
     render(
-      <CurrentSelectionLocaleProvider locale="ja">
-        <TerminalWorkSummaryCard label="失敗したストーリー" status="failed" />
+      <CurrentSelectionLocaleProvider locale="zh-CN">
+        <TerminalWorkSummaryCard label="失败的故事" status="failed" />
       </CurrentSelectionLocaleProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: "現在の選択" })).toBeTruthy();
-    expect(screen.getByText("失敗したストーリー")).toBeTruthy();
-    expect(screen.getByText("ステータス")).toBeTruthy();
-    expect(screen.getByText("失敗")).toBeTruthy();
-    expect(screen.getByText("失敗理由")).toBeTruthy();
-    expect(screen.getByText("失敗理由を利用できません")).toBeTruthy();
-    expect(screen.getByText("失敗メッセージ")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "当前选择" })).toBeTruthy();
+    expect(screen.getByText("失败的故事")).toBeTruthy();
+    expect(screen.getByText("状态")).toBeTruthy();
+    expect(screen.getByText("失败")).toBeTruthy();
+    expect(screen.getByText("失败原因")).toBeTruthy();
+    expect(screen.getByText("暂无失败原因")).toBeTruthy();
+    expect(screen.getByText("失败消息")).toBeTruthy();
     expect(
-      screen.getByText("この失敗した作業項目では失敗の詳細を利用できません。"),
+      screen.getByText("这个失败的工作项暂时没有失败详情。"),
     ).toBeTruthy();
   });
 

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: selection derivation helpers are kept colocated to avoid splitting shared runtime-selection rules mid-story.
 import type {
   DashboardActiveExecution,
   DashboardFailedWorkDetail,

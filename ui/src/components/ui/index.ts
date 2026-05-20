@@ -4,6 +4,7 @@ export * from "./calendar";
 export * from "./chart";
 export * from "./classnames";
 export * from "./collapsible";
+export * from "./dashboard-shell";
 export * from "./dashboard-typography";
 export * from "./data-table";
 export * from "./dialog";

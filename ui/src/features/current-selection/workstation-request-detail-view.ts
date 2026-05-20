@@ -10,8 +10,6 @@ export interface WorkstationRequestDetailView {
   normalizedScriptStderr: string | undefined;
   normalizedScriptStdout: string | undefined;
   outcome: string | undefined;
-  responseMetadataUnavailableCopy: string;
-  scriptResponseUnavailableCopy: string;
   totalDurationMillis: number | undefined;
 }
 
@@ -35,9 +33,6 @@ export function buildWorkstationRequestDetailView(
     normalizedOutcome === "FAILED_EXIT_CODE" ||
     normalizedOutcome === "TIMED_OUT" ||
     normalizedOutcome === "REJECTED";
-  const hasErroredRequest =
-    request.errored_request_count > 0 || hasFailureDetails;
-
   return {
     hasFailureDetails,
     hasFailedOutcome,
@@ -51,14 +46,6 @@ export function buildWorkstationRequestDetailView(
       request.script_response?.stdout,
     ),
     outcome: request.outcome ?? request.script_response?.outcome,
-    responseMetadataUnavailableCopy: hasErroredRequest
-      ? "Response metadata is unavailable because this workstation request ended with an error."
-      : isScriptBackedRequest
-        ? "Response metadata is not available for this script-backed workstation request."
-        : "Response metadata is not available for this workstation request yet.",
-    scriptResponseUnavailableCopy: hasErroredRequest
-      ? "Script response details are unavailable because this workstation request ended with an error."
-      : "Script response details are not available for this workstation request yet.",
     totalDurationMillis:
       request.total_duration_millis ?? request.script_response?.duration_millis,
   };

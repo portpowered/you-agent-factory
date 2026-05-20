@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react-swc";
 import { defineConfig } from "vite";
+import { coverageConfigDefaults } from "vitest/config";
 
 const apiOrigin = process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
 const storybookInteropDeps = [
@@ -60,6 +61,13 @@ export default defineConfig({
     testTimeout: 15000,
     coverage: {
       provider: "v8",
+      exclude: [
+        ...coverageConfigDefaults.exclude,
+        "**/*.jsonl",
+        "scripts/**",
+        "src/styles.css",
+        "**/index.ts",
+      ],
       thresholds: {
         statements: 93.1,
         branches: 80.4,

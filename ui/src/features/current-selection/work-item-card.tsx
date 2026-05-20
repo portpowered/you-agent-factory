@@ -15,6 +15,7 @@ import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import { WORK_SELECTION_BUTTON_CLASS } from "./detail-card-shared";
 import type { WorkItemDetailCardProps } from "./detail-card-types";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
+import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
 import { SelectedWorkDispatchHistorySection } from "./selected-work-dispatch-history";
 
 export function WorkItemDetailCard({
@@ -34,9 +35,11 @@ export function WorkItemDetailCard({
   traceTargetId = "trace",
   widgetId = "current-selection",
 }: WorkItemDetailCardProps) {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
   const workRelationships = buildWorkRelationships(
     selectedTrace,
     selection.workItem.work_id,
+    messages,
   );
 
   return (
@@ -46,24 +49,27 @@ export function WorkItemDetailCard({
       </p>
       <dl>
         <div>
-          <dt>Work ID</dt>
+          <dt>{messages.workIdLabel}</dt>
           <dd>{selection.workItem.work_id}</dd>
         </div>
         <div>
-          <dt>Work type</dt>
-          <dd>{selection.workItem.work_type_id || "Unknown"}</dd>
+          <dt>{messages.workTypeLabel}</dt>
+          <dd>
+            {selection.workItem.work_type_id ||
+              messages.currentSelectionUnavailableValue}
+          </dd>
         </div>
         <div>
-          <dt>Workstation</dt>
+          <dt>{messages.workstationLabel}</dt>
           <dd>
             {selectedNode?.workstation_name ??
               executionDetails.workstationName ??
-              "Unavailable"}
+              messages.workstationUnavailableValue}
           </dd>
         </div>
 
         <div>
-          <dt>Runtime labels</dt>
+          <dt>{messages.runtimeLabelsLabel}</dt>
           <dd>
             {formatList(
               selection.execution?.work_type_ids ??
@@ -72,11 +78,12 @@ export function WorkItemDetailCard({
           </dd>
         </div>
         <div>
-          <dt>Workstation dispatches</dt>
+          <dt>{messages.workstationDispatchesLabel}</dt>
           <dd>{dispatchAttempts.length}</dd>
         </div>
       </dl>
       <WorkRelationshipsSection
+        messages={messages}
         onSelectWorkID={onSelectWorkID}
         relationships={workRelationships}
         selectedWorkLabel={formatWorkItemLabel(selection.workItem)}
@@ -85,6 +92,7 @@ export function WorkItemDetailCard({
         activeTraceID={activeTraceID}
         currentDispatchID={selection.dispatchId}
         fallbackProviderSessions={dispatchAttempts}
+        locale={locale}
         onSelectProviderSession={onSelectProviderSession}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}
@@ -120,14 +128,15 @@ type RelationshipGroupKey =
 interface RelationshipGroup {
   key: RelationshipGroupKey;
   items: RelatedWorkItem[];
-  label: string;
 }
 
 function WorkRelationshipsSection({
+  messages,
   onSelectWorkID,
   relationships,
   selectedWorkLabel,
 }: {
+  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
   onSelectWorkID?: (workID: string) => void;
   relationships: RelatedWorkItem[];
   selectedWorkLabel: string;
@@ -136,54 +145,62 @@ function WorkRelationshipsSection({
 
   return (
     <section
-      aria-label="Work relationships"
+      aria-label={messages.workRelationshipsHeading}
       className="mt-4 grid gap-2.5 [&_h4]:m-0"
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Work relationships</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.workRelationshipsHeading}
+      </h4>
       {relationships.length > 0 ? (
         <div className="grid gap-3 rounded-xl border border-af-overlay/10 bg-af-overlay/3 p-3">
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(14rem,16rem)_minmax(0,1fr)] md:grid-rows-[auto_auto_auto] md:items-start">
             <RelationshipLane
               className="md:col-start-2 md:row-start-1"
               items={findRelationshipItems(relationshipGroups, "parent")}
-              label="Parent"
+              label={messages.relationshipParentLabel}
+              messages={messages}
               onSelectWorkID={onSelectWorkID}
             />
             <RelationshipLane
               className="md:col-start-1 md:row-start-2"
               items={findRelationshipItems(relationshipGroups, "depends-on")}
-              label="Depends on"
+              label={messages.relationshipDependsOnLabel}
+              messages={messages}
               onSelectWorkID={onSelectWorkID}
             />
-            <div className="grid gap-2 rounded-xl border border-af-signal/20 bg-af-signal/8 p-3 md:col-start-2 md:row-start-2">
+            <div className="grid gap-2 rounded-xl border border-on-foreground/20 bg-on-foreground/8 p-3 md:col-start-2 md:row-start-2">
               <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-                Selected work
+                {messages.selectedWorkHeading}
               </span>
-              <code className="text-sm text-af-ink">{selectedWorkLabel}</code>
+              <code className="text-sm text-on-foreground">
+                {selectedWorkLabel}
+              </code>
             </div>
             <RelationshipLane
               className="md:col-start-3 md:row-start-2"
               items={findRelationshipItems(relationshipGroups, "required-by")}
-              label="Required by"
+              label={messages.relationshipRequiredByLabel}
+              messages={messages}
               onSelectWorkID={onSelectWorkID}
             />
             <RelationshipLane
               className="md:col-start-2 md:row-start-3"
               items={findRelationshipItems(relationshipGroups, "child")}
-              label="Child"
+              label={messages.relationshipChildLabel}
+              messages={messages}
               onSelectWorkID={onSelectWorkID}
             />
           </div>
           <RelationshipLane
             items={findRelationshipItems(relationshipGroups, "related")}
-            label="Related"
+            label={messages.relationshipRelatedLabel}
+            messages={messages}
             onSelectWorkID={onSelectWorkID}
           />
         </div>
       ) : (
         <p className="m-0 text-sm text-af-ink/68">
-          No parent, child, or dependency relationships are available for this
-          work item.
+          {messages.workRelationshipsEmpty}
         </p>
       )}
     </section>
@@ -193,9 +210,12 @@ function WorkRelationshipsSection({
 function buildWorkRelationships(
   trace: DashboardTrace | undefined,
   selectedWorkID: string,
+  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
 ): RelatedWorkItem[] {
   return (trace?.relations ?? [])
-    .flatMap((relation) => buildRelationshipItems(relation, selectedWorkID))
+    .flatMap((relation) =>
+      buildRelationshipItems(relation, selectedWorkID, messages),
+    )
     .sort(
       (left, right) =>
         left.description.localeCompare(right.description) ||
@@ -206,16 +226,17 @@ function buildWorkRelationships(
 function buildRelationshipItems(
   relation: DashboardWorkRelation,
   selectedWorkID: string,
+  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
 ): RelatedWorkItem[] {
   const items: RelatedWorkItem[] = [];
   const relationType = relation.type.trim().toUpperCase();
-  const stateSuffix = relation.required_state
-    ? ` (${relation.required_state})`
-    : "";
 
   if (relation.source_work_id === selectedWorkID && relation.target_work_id) {
+    const label = forwardRelationshipLabel(relationType, messages);
     items.push({
-      description: `${forwardRelationshipLabel(relationType)}${stateSuffix}`,
+      description: relation.required_state
+        ? messages.relationshipStateLabel(label, relation.required_state)
+        : label,
       group: forwardRelationshipGroup(relationType),
       key: `${relation.type}:${selectedWorkID}:${relation.target_work_id}:forward`,
       workID: relation.target_work_id,
@@ -224,8 +245,11 @@ function buildRelationshipItems(
   }
 
   if (relation.target_work_id === selectedWorkID && relation.source_work_id) {
+    const label = reverseRelationshipLabel(relationType, messages);
     items.push({
-      description: `${reverseRelationshipLabel(relationType)}${stateSuffix}`,
+      description: relation.required_state
+        ? messages.relationshipStateLabel(label, relation.required_state)
+        : label,
       group: reverseRelationshipGroup(relationType),
       key: `${relation.type}:${relation.source_work_id}:${selectedWorkID}:reverse`,
       workID: relation.source_work_id,
@@ -236,22 +260,28 @@ function buildRelationshipItems(
   return items;
 }
 
-function forwardRelationshipLabel(relationType: string): string {
+function forwardRelationshipLabel(
+  relationType: string,
+  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
+): string {
   if (relationType.includes("PARENT")) {
-    return "Child";
+    return messages.relationshipChildLabel;
   }
   if (relationType.includes("DEPENDS")) {
-    return "Depends on";
+    return messages.relationshipDependsOnLabel;
   }
   return relationType.toLowerCase().replace(/_/g, " ");
 }
 
-function reverseRelationshipLabel(relationType: string): string {
+function reverseRelationshipLabel(
+  relationType: string,
+  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
+): string {
   if (relationType.includes("PARENT")) {
-    return "Parent";
+    return messages.relationshipParentLabel;
   }
   if (relationType.includes("DEPENDS")) {
-    return "Required by";
+    return messages.relationshipRequiredByLabel;
   }
   return relationType.toLowerCase().replace(/_/g, " ");
 }
@@ -260,11 +290,13 @@ function RelationshipLane({
   className,
   items,
   label,
+  messages,
   onSelectWorkID,
 }: {
   className?: string;
   items: RelatedWorkItem[];
   label: string;
+  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
   onSelectWorkID?: (workID: string) => void;
 }) {
   if (items.length === 0) {
@@ -273,7 +305,7 @@ function RelationshipLane({
 
   return (
     <section
-      aria-label={`${label} relationships`}
+      aria-label={messages.relationshipLaneAriaLabel(label)}
       className={`grid gap-2 rounded-xl border border-af-overlay/8 bg-af-overlay/4 p-3 ${className ?? ""}`.trim()}
     >
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
@@ -288,7 +320,7 @@ function RelationshipLane({
             </span>
             {onSelectWorkID ? (
               <button
-                aria-label={`Select related work item ${relationship.workLabel}`}
+                aria-label={messages.relatedWorkSelectLabel(relationship.workLabel)}
                 className={WORK_SELECTION_BUTTON_CLASS}
                 onClick={() => onSelectWorkID(relationship.workID)}
                 type="button"
@@ -317,11 +349,11 @@ function buildRelationshipGroups(
   }
 
   return relationshipGroupOrder
-    .map((group) => ({
-      ...group,
+    .map((groupKey) => ({
+      key: groupKey,
       items:
         grouped
-          .get(group.key)
+          .get(groupKey)
           ?.sort(
             (left, right) =>
               left.description.localeCompare(right.description) ||
@@ -358,13 +390,10 @@ function reverseRelationshipGroup(relationType: string): RelationshipGroupKey {
   return "related";
 }
 
-const relationshipGroupOrder: Array<{
-  key: RelationshipGroupKey;
-  label: string;
-}> = [
-  { key: "parent", label: "Parent" },
-  { key: "depends-on", label: "Depends on" },
-  { key: "required-by", label: "Required by" },
-  { key: "child", label: "Child" },
-  { key: "related", label: "Related" },
+const relationshipGroupOrder: RelationshipGroupKey[] = [
+  "parent",
+  "depends-on",
+  "required-by",
+  "child",
+  "related",
 ];

@@ -1,4 +1,5 @@
 import { cx } from "../../components/ui";
+import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
@@ -6,9 +7,10 @@ import {
 import { useAppLocale } from "../../i18n";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 
-const PANEL_CLASS =
-  "rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-4 shadow-af-panel backdrop-blur-lg md:p-5 md:px-6";
-const STATUS_PANEL_CLASS = cx(PANEL_CLASS, "mb-4");
+const STATUS_PANEL_CLASS = cx(
+  DASHBOARD_PANEL_SHELL_CLASS,
+  "mb-4 p-4 md:p-5 md:px-6",
+);
 const EYEBROW_CLASS =
   "mb-3 text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
 const DASHBOARD_TITLE_CLASS = cx("m-0", DASHBOARD_PAGE_HEADING_CLASS);
@@ -28,13 +30,13 @@ export function DashboardStatusPanel({
   tone = "default",
 }: DashboardStatusPanelProps) {
   const { locale: resolvedLocale } = useAppLocale(locale);
-  const panelClassName =
+  const detailClassName =
     tone === "error"
-      ? cx(STATUS_PANEL_CLASS, "border-af-danger/45")
-      : STATUS_PANEL_CLASS;
+      ? cx(DETAIL_COPY_CLASS, "text-af-danger-ink")
+      : DETAIL_COPY_CLASS;
 
   return (
-    <section className={panelClassName}>
+    <section className={STATUS_PANEL_CLASS}>
       <p className={EYEBROW_CLASS}>
         <DashboardBrandLockup
           className="gap-2"
@@ -43,7 +45,7 @@ export function DashboardStatusPanel({
         />
       </p>
       <h1 className={DASHBOARD_TITLE_CLASS}>{title}</h1>
-      {detail ? <p className={DETAIL_COPY_CLASS}>{detail}</p> : null}
+      {detail ? <p className={detailClassName}>{detail}</p> : null}
     </section>
   );
 }

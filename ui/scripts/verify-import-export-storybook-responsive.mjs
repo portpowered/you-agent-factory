@@ -1,6 +1,8 @@
 import process from "node:process";
 import { chromium } from "playwright";
+import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
 import {
+  verifyLocalizedCurrentSelection,
   verifyLocalizedSubmitWorkCard,
   verifyLocalizedTraceGrid,
   verifyLocalizedWorkflowActivity,
@@ -50,6 +52,11 @@ const storyChecks = [
     label: "dashboard header",
   },
   {
+    assertions: verifyDashboardShellConsolidation,
+    id: "infinite-you-workflow-dashboard--header-action-buttons-verification",
+    label: "dashboard shared shell",
+  },
+  {
     assertions: (page, _dialog, viewport) =>
       verifyLocalizedSubmitWorkCard({
         expectNoHorizontalOverflow,
@@ -92,6 +99,17 @@ const storyChecks = [
       }),
     id: "agent-factory-dashboard-react-flow-current-activity-card--localized-zh-cn",
     label: "workflow activity widget (zh-CN)",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyLocalizedCurrentSelection({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+      }),
+    id: "infinite-you-workflow-dashboard--locale-propagation-verification",
+    label: "current selection widget (zh-CN)",
   },
 ];
 

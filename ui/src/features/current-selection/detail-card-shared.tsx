@@ -17,6 +17,7 @@ import type {
   MetadataSectionProps,
   RequestCountSectionProps,
 } from "./detail-card-types";
+import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
 
 export const EXECUTION_PILL_CLASS = cx(
   "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
@@ -54,27 +55,21 @@ export const RUNTIME_DETAIL_CODE_CLASS = cx(
   "[overflow-wrap:anywhere]",
 );
 export const TRACE_ACTION_LINK_CLASS =
-  "inline-flex w-fit rounded-lg border border-af-accent/35 bg-af-accent/10 px-3 py-2 text-sm font-bold text-af-accent outline-af-accent transition hover:bg-af-accent/15 focus-visible:outline-2 focus-visible:outline-offset-2";
+  "inline-flex w-fit rounded-lg border border-on-foreground/35 bg-on-foreground/10 px-3 py-2 text-sm font-bold text-on-foreground outline-af-accent transition hover:bg-on-foreground/15 focus-visible:outline-2 focus-visible:outline-offset-2";
 export const REQUEST_SELECTION_STATUS_CLASS = cx(
   "m-0 text-af-ink/68",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export const PROVIDER_SESSION_SELECTION_BUTTON_CLASS = cx(
-  "grid w-full gap-1.5 rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-3 py-2.5 text-left text-af-ink/82 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
+  "grid w-full gap-1.5 rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-3 py-2.5 text-left text-on-foreground/82 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 export const WORK_SELECTION_BUTTON_CLASS =
-  "inline-flex w-fit rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-xs font-bold text-af-ink/78 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35";
+  "inline-flex w-fit rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-xs font-bold text-on-foreground/78 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-on-foreground focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35";
 export const REQUEST_HISTORY_TEXT_CLASS = cx(
   "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 [overflow-wrap:anywhere]",
   DASHBOARD_BODY_CODE_CLASS,
 );
-
-const NO_CURRENT_WORK_IN_PLACE_COPY = "No current work is occupying this place.";
-const NO_WORK_RECORDED_AT_SELECTED_TICK_COPY =
-  "No work is recorded for this place at the selected tick.";
-const SELECTED_TICK_WORK_UNAVAILABLE_COPY =
-  "Represented work is unavailable for this place at the selected tick.";
 
 interface RequestAuthoredHeadingBlock {
   level: 1 | 2 | 3 | 4 | 5 | 6;
@@ -136,9 +131,14 @@ export function InferenceAttemptDetail({
 }
 
 export function RequestCountSection({ request }: RequestCountSectionProps) {
+  const messages = useCurrentSelectionDetailMessages();
+
   return (
-    <section aria-label="Request counts" className={RUNTIME_DETAILS_SECTION_CLASS}>
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Request counts</h4>
+    <section
+      aria-label={messages.requestCountsRegionLabel}
+      className={RUNTIME_DETAILS_SECTION_CLASS}
+    >
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.requestCountsHeading}</h4>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <InferenceAttemptDetail label="dispatchedCount" value={request.dispatched_request_count} />
         <InferenceAttemptDetail label="respondedCount" value={request.responded_request_count} />
@@ -183,18 +183,24 @@ export function isTerminalOrFailedPlace(place: DashboardPlaceRef): boolean {
 }
 
 export function emptyStatePlaceMessage(
+  messages: Pick<
+    ReturnType<typeof useCurrentSelectionDetailMessages>,
+    | "noCurrentWorkInPlace"
+    | "noWorkRecordedAtSelectedTick"
+    | "selectedTickWorkUnavailable"
+  >,
   usesRetainedWorkItems: boolean,
   tokenCount: number,
 ): string {
   if (!usesRetainedWorkItems) {
-    return NO_CURRENT_WORK_IN_PLACE_COPY;
+    return messages.noCurrentWorkInPlace;
   }
 
   if (tokenCount > 0) {
-    return SELECTED_TICK_WORK_UNAVAILABLE_COPY;
+    return messages.selectedTickWorkUnavailable;
   }
 
-  return NO_WORK_RECORDED_AT_SELECTED_TICK_COPY;
+  return messages.noWorkRecordedAtSelectedTick;
 }
 
 export function normalizeDetailText(value: string | undefined): string | undefined {

@@ -3,32 +3,16 @@ import type {
 } from "./detail-card-types";
 import type {
   DashboardInferenceAttempt,
+  DashboardWorkItemRef,
   DashboardScriptRequest,
   DashboardScriptResponse,
 } from "../../api/dashboard/types";
+import { formatWorkItemLabel } from "../../components/ui/formatters";
 
 export function isProjectedWorkstationRequest(
   request: SelectedWorkRequestHistoryItem,
 ): request is Extract<SelectedWorkRequestHistoryItem, { workstation_node_id: string }> {
   return "workstation_node_id" in request;
-}
-
-export function requestCounts(request: SelectedWorkRequestHistoryItem) {
-  if (isProjectedWorkstationRequest(request)) {
-    return {
-      dispatchedCount:
-        request.counts?.dispatched_count ?? request.dispatched_request_count ?? 0,
-      erroredCount: request.counts?.errored_count ?? request.errored_request_count ?? 0,
-      respondedCount:
-        request.counts?.responded_count ?? request.responded_request_count ?? 0,
-    };
-  }
-
-  return {
-    dispatchedCount: request.counts.dispatched_count,
-    erroredCount: request.counts.errored_count,
-    respondedCount: request.counts.responded_count,
-  };
 }
 
 export function requestInputWorkItems(request: SelectedWorkRequestHistoryItem) {
@@ -41,6 +25,26 @@ export function requestOutputWorkItems(request: SelectedWorkRequestHistoryItem) 
   return isProjectedWorkstationRequest(request)
     ? request.response_view?.output_work_items ?? []
     : request.response?.output_work_items ?? [];
+}
+
+export function requestTitle(
+  request: SelectedWorkRequestHistoryItem,
+  selectedWorkID: string,
+): string | undefined {
+  const matchingWorkItem = requestWorkItems(request).find(
+    (workItem) => workItem.work_id === selectedWorkID,
+  );
+
+  if (matchingWorkItem) {
+    return formatWorkItemLabel(matchingWorkItem);
+  }
+
+  const firstNamedWorkItem = requestWorkItems(request).find(hasWorkFacingLabel);
+  if (firstNamedWorkItem) {
+    return formatWorkItemLabel(firstNamedWorkItem);
+  }
+
+  return undefined;
 }
 
 export function requestPrompt(request: SelectedWorkRequestHistoryItem) {
@@ -219,4 +223,19 @@ export function hasResponseDetails(request: SelectedWorkRequestHistoryItem) {
 
 export function dedupeWorkItems<TWorkItem extends { work_id: string }>(workItems: TWorkItem[]) {
   return [...new Map(workItems.map((workItem) => [workItem.work_id, workItem])).values()];
+}
+
+function requestWorkItems(request: SelectedWorkRequestHistoryItem): DashboardWorkItemRef[] {
+  if (isProjectedWorkstationRequest(request)) {
+    return request.work_items;
+  }
+
+  return dedupeWorkItems([
+    ...requestInputWorkItems(request),
+    ...requestOutputWorkItems(request),
+  ]);
+}
+
+function hasWorkFacingLabel(workItem: DashboardWorkItemRef): boolean {
+  return Boolean(workItem.display_name?.trim() || workItem.work_id?.trim());
 }

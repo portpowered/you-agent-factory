@@ -1,15 +1,16 @@
 import {
+  type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
   useEffect,
   useId,
   useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
 import type { DashboardStreamState } from "../../api/dashboard/types";
 import { TickSliderControl } from "../../components/dashboard";
 import { cx } from "../../components/ui";
+import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
@@ -29,11 +30,9 @@ import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { getHeaderControlsMessages } from "./messages/header-controls";
 
-const PANEL_CLASS =
-  "rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-3 shadow-af-panel backdrop-blur-lg md:px-4 md:py-3";
 const DASHBOARD_TOOLBAR_CLASS = cx(
-  PANEL_CLASS,
-  "mb-4 flex flex-wrap items-center gap-3",
+  DASHBOARD_PANEL_SHELL_CLASS,
+  "mb-4 flex flex-wrap items-center gap-3 p-3 md:px-4 md:py-3",
 );
 const DASHBOARD_TITLE_CLASS = cx("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
 const DASHBOARD_CONTROLS_CLASS = cx(
@@ -386,10 +385,7 @@ function useLocaleMenuSelectionFocus({
 
 function shouldOpenLocaleMenuFromKey(key: string): boolean {
   return (
-    key === "ArrowDown" ||
-    key === "ArrowUp" ||
-    key === "Enter" ||
-    key === " "
+    key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === " "
   );
 }
 

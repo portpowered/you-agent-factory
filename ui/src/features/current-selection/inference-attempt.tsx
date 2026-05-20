@@ -20,7 +20,7 @@ import {
 } from "./detail-card-shared";
 import type { InferenceAttemptCardProps } from "./detail-card-types";
 import {
-  useCurrentSelectionDispatchHistoryMessages,
+  useCurrentSelectionDetailMessages,
   useCurrentSelectionWorkstationDetailMessages,
 } from "./current-selection-locale";
 import {
@@ -33,8 +33,8 @@ export function InferenceAttemptCard({
   onSelectProviderSession,
   selectedProviderSessionKey,
 }: InferenceAttemptCardProps) {
-  const dispatchHistoryMessages = useCurrentSelectionDispatchHistoryMessages();
-  const messages = useCurrentSelectionWorkstationDetailMessages();
+  const detailMessages = useCurrentSelectionDetailMessages();
+  const workstationMessages = useCurrentSelectionWorkstationDetailMessages();
   const provider = attempt.diagnostics?.provider?.provider ?? attempt.provider_session?.provider;
   const model = attempt.diagnostics?.provider?.model;
   const providerSessionLogTarget = getProviderSessionLogTarget(
@@ -55,47 +55,49 @@ export function InferenceAttemptCard({
 
   return (
     <article
-      aria-label={dispatchHistoryMessages.inferenceAttemptAccessibleLabel(
-        attempt.attempt,
-      )}
+      aria-label={detailMessages.attemptAriaLabel(attempt.attempt)}
       className={INFERENCE_ATTEMPT_CARD_CLASS}
     >
       <div className="flex items-start justify-between gap-3">
-        <strong>{dispatchHistoryMessages.inferenceAttemptLabel(attempt.attempt)}</strong>
-        <span className={EXECUTION_PILL_CLASS}>{attempt.outcome ?? "PENDING"}</span>
+        <strong>{detailMessages.attemptTitle(attempt.attempt)}</strong>
+        <span className={EXECUTION_PILL_CLASS}>
+          {attempt.outcome ?? detailMessages.pendingOutcome}
+        </span>
       </div>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <InferenceAttemptDetail
           code
-          label="inferenceRequestId"
+          label={detailMessages.inferenceRequestIdLabel}
           value={attempt.inference_request_id}
         />
-        <InferenceAttemptDetail code label="provider" value={provider} />
-        <InferenceAttemptDetail code label="model" value={model} />
-        <InferenceAttemptDetail code label="dispatchId" value={attempt.dispatch_id} />
-        <InferenceAttemptDetail code label="transitionId" value={attempt.transition_id} />
-        <InferenceAttemptDetail code label="workingDirectory" value={attempt.working_directory} />
-        <InferenceAttemptDetail code label="worktree" value={attempt.worktree} />
-        <InferenceAttemptDetail code label="requestTime" value={attempt.request_time} />
-        <InferenceAttemptDetail code label="outcome" value={attempt.outcome} />
+        <InferenceAttemptDetail code label={detailMessages.providerLabel} value={provider} />
+        <InferenceAttemptDetail code label={detailMessages.modelLabel} value={model} />
         <InferenceAttemptDetail
-          label="elapsedTime"
+          code
+          label={detailMessages.workingDirectoryLabel}
+          value={attempt.working_directory}
+        />
+        <InferenceAttemptDetail code label={detailMessages.worktreeLabel} value={attempt.worktree} />
+        <InferenceAttemptDetail code label={detailMessages.requestTimeLabel} value={attempt.request_time} />
+        <InferenceAttemptDetail code label={detailMessages.outcomeLabel} value={attempt.outcome} />
+        <InferenceAttemptDetail
+          label={detailMessages.elapsedTimeLabel}
           value={
             attempt.duration_millis !== undefined
               ? formatDurationMillis(attempt.duration_millis)
               : undefined
           }
         />
-        <InferenceAttemptDetail code label="responseTime" value={attempt.response_time} />
-        <InferenceAttemptDetail label="exitCode" value={attempt.exit_code} />
-        <InferenceAttemptDetail code label="errorClass" value={attempt.error_class} />
+        <InferenceAttemptDetail code label={detailMessages.responseTimeLabel} value={attempt.response_time} />
+        <InferenceAttemptDetail label={detailMessages.exitCodeLabel} value={attempt.exit_code} />
+        <InferenceAttemptDetail code label={detailMessages.errorClassLabel} value={attempt.error_class} />
       </dl>
       {providerSessionLabel ? (
         loadableProviderSession && onSelectProviderSession ? (
           <div className="grid gap-1">
-            <span>{dispatchHistoryMessages.providerSessionLabel}</span>
+            <span>{detailMessages.providerSessionLabel}</span>
             <button
-              aria-label={messages.selectProviderSessionLabel(
+              aria-label={workstationMessages.selectProviderSessionLabel(
                 providerSessionLabel,
                 attempt.dispatch_id,
               )}
@@ -110,35 +112,35 @@ export function InferenceAttemptCard({
             >
               <span className={DASHBOARD_SUPPORTING_TEXT_CLASS}>
                 {providerSessionSelected
-                  ? messages.providerSessionSelectedAction
-                  : messages.providerSessionSelectAction}
+                  ? workstationMessages.providerSessionSelectedAction
+                  : workstationMessages.providerSessionSelectAction}
               </span>
               <code className={DASHBOARD_BODY_CODE_CLASS}>{providerSessionLabel}</code>
             </button>
           </div>
         ) : (
           <div className="grid gap-1">
-            <span>{dispatchHistoryMessages.providerSessionLabel}</span>
+            <span>{detailMessages.providerSessionLabel}</span>
             <code>{providerSessionLabel}</code>
             <p className={REQUEST_SELECTION_STATUS_CLASS}>
-              {messages.providerSessionSelectionUnavailable}
+              {workstationMessages.providerSessionSelectionUnavailable}
             </p>
           </div>
         )
       ) : (
         <InferenceAttemptDetail
           code={!providerSessionLogTarget}
-          label="providerSession"
+          label={detailMessages.providerSessionLabel}
           value={providerSessionLabel}
         />
       )}
-      <InferenceAttemptTextSection label="Request body" value={attempt.prompt} />
+      <InferenceAttemptTextSection label={detailMessages.requestBodyLabel} value={attempt.prompt} />
       {attempt.response !== undefined ? (
-        <InferenceAttemptTextSection label="Response body" value={attempt.response} />
+        <InferenceAttemptTextSection label={detailMessages.responseBodyLabel} value={attempt.response} />
       ) : attempt.outcome ? (
-        <p className={DETAIL_COPY_CLASS}>{dispatchHistoryMessages.providerResponseUnavailable}</p>
+        <p className={DETAIL_COPY_CLASS}>{detailMessages.providerResponseUnavailable}</p>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{dispatchHistoryMessages.awaitingProviderResponse}</p>
+        <p className={DETAIL_COPY_CLASS}>{detailMessages.awaitingProviderResponse}</p>
       )}
     </article>
   );

@@ -1,6 +1,10 @@
 import "@xyflow/react/dist/style.css";
 
-import { applyNodeChanges, type FitViewOptions, type NodeChange } from "@xyflow/react";
+import {
+  applyNodeChanges,
+  type FitViewOptions,
+  type NodeChange,
+} from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
@@ -9,6 +13,7 @@ import type {
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
 import type { FactoryValue } from "../../api/named-factory";
+import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { cx } from "../../lib/cx";
 import { FactoryGraphEditorDraftActions } from "../factory-graph-editor/factory-graph-editor-draft-actions";
@@ -57,8 +62,10 @@ export {
 
 const GRAPH_LAYOUT_CACHE = new Map<string, GraphLayout>();
 const GRAPH_LAYOUT_PROMISE_CACHE = new Map<string, Promise<GraphLayout>>();
-const CURRENT_ACTIVITY_CARD_CLASS =
-  "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-4 shadow-af-panel backdrop-blur-lg md:p-5";
+const CURRENT_ACTIVITY_CARD_CLASS = cx(
+  DASHBOARD_PANEL_SHELL_CLASS,
+  "relative flex h-full min-h-0 min-w-0 flex-col p-4 md:p-5",
+);
 const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
 const CURRENT_ACTIVITY_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 

@@ -14,10 +14,11 @@ import type {
   EditableWorkstationWorkerOptionsState,
 } from "./detail-card-types";
 import { resolveEditableWorkstationOverwriteFields } from "./editable-workstation-overwrite-fields";
+import {
+  getWorkstationDetailMessages,
+  type WorkstationDetailMessages,
+} from "./messages";
 import type { DashboardSelection } from "./types";
-
-const EMPTY_EDITABLE_CONFIGURATION_MESSAGE =
-  "This running factory definition does not expose editable worker and prompt values for the selected workstation.";
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;
@@ -29,7 +30,9 @@ interface EditableWorkstationSessionState {
 export function useEditableWorkstationConfigurationState(
   selection: DashboardSelection | null,
   selectedNode: DashboardWorkstationNode | null,
+  locale?: string | null,
 ): EditableWorkstationConfigurationState | undefined {
+  const messages = getWorkstationDetailMessages(locale);
   const editableDefinition = useCurrentEditableFactoryDefinition(
     selection?.kind === "node" && selectedNode != null,
   );
@@ -57,7 +60,7 @@ export function useEditableWorkstationConfigurationState(
 
   if (!editableDefinition.data || !selectedEditableValues || !sessionState) {
     return {
-      message: EMPTY_EDITABLE_CONFIGURATION_MESSAGE,
+      message: messages.editableConfigurationEmpty,
       status: "empty",
     };
   }
@@ -65,6 +68,7 @@ export function useEditableWorkstationConfigurationState(
   const resolvedValidationErrors = validateEditableWorkstationDraft(
     sessionState.draft,
     selectedEditableValues,
+    messages,
   );
   const pendingFactoryDefinition = hasEditableWorkstationValidationErrors(
     resolvedValidationErrors,
@@ -78,8 +82,9 @@ export function useEditableWorkstationConfigurationState(
 
   return {
     draft: sessionState.draft,
-    hasValidationErrors:
-      hasEditableWorkstationValidationErrors(resolvedValidationErrors),
+    hasValidationErrors: hasEditableWorkstationValidationErrors(
+      resolvedValidationErrors,
+    ),
     initialValues: selectedEditableValues,
     isDirty: !areEditableDraftsEqual(
       sessionState.draft,
@@ -131,6 +136,7 @@ export function useEditableWorkstationConfigurationState(
     workerOptionsState: resolveWorkerOptionsState(
       sessionState.draft,
       selectedEditableValues,
+      messages,
     ),
   };
 }
@@ -176,22 +182,27 @@ function useEditableWorkstationSession(
 export function validateEditableWorkstationDraft(
   draft: EditableWorkstationDraft,
   selectedEditableValues?: ReturnType<typeof resolveEditableWorkstationValues>,
+  messages: Pick<
+    WorkstationDetailMessages,
+    | "editableConfigurationPromptRequired"
+    | "editableConfigurationWorkerRequired"
+    | "editableConfigurationWorkerUnavailable"
+  > = getWorkstationDetailMessages(undefined),
 ): EditableWorkstationValidationErrors {
   const validationErrors: EditableWorkstationValidationErrors = {};
 
   if (draft.workerName.trim().length === 0) {
-    validationErrors.workerName =
-      "Select a worker before saving this workstation.";
+    validationErrors.workerName = messages.editableConfigurationWorkerRequired;
   } else if (
     selectedEditableValues &&
     !selectedEditableValues.workerOptions.includes(draft.workerName)
   ) {
     validationErrors.workerName =
-      "The selected worker is no longer available. Choose another worker before saving this workstation.";
+      messages.editableConfigurationWorkerUnavailable;
   }
 
   if (draft.prompt.trim().length === 0) {
-    validationErrors.prompt = "Enter a prompt before saving this workstation.";
+    validationErrors.prompt = messages.editableConfigurationPromptRequired;
   }
 
   return validationErrors;
@@ -213,26 +224,30 @@ function areEditableDraftsEqual(
 function resolveWorkerOptionsState(
   draft: EditableWorkstationDraft,
   selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
+  messages: Pick<
+    WorkstationDetailMessages,
+    | "editableConfigurationEmpty"
+    | "editableConfigurationWorkerMissing"
+    | "editableConfigurationWorkerOptionsEmpty"
+  >,
 ): EditableWorkstationWorkerOptionsState {
   if (!selectedEditableValues) {
     return {
-      message: EMPTY_EDITABLE_CONFIGURATION_MESSAGE,
+      message: messages.editableConfigurationEmpty,
       status: "error",
     };
   }
 
   if (selectedEditableValues.workerOptions.length === 0) {
     return {
-      message:
-        "No current workers are available for this workstation. Add a worker to the factory before editing this field.",
+      message: messages.editableConfigurationWorkerOptionsEmpty,
       status: "empty",
     };
   }
 
   if (!selectedEditableValues.workerOptions.includes(draft.workerName)) {
     return {
-      message:
-        "The selected workstation references a worker that is no longer available in the current factory definition. Reload current selection and choose another worker.",
+      message: messages.editableConfigurationWorkerMissing,
       status: "error",
     };
   }

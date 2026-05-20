@@ -9,8 +9,11 @@ export const PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const READY_TIMEOUT_MS = 30000;
 const POST_READY_SETTLE_MS = 1000;
 const POST_TEST_RUNNER_SETTLE_MS = 1000;
+const STORYBOOK_SMOKE_STORY_ID =
+  "infinite-you-dashboard-export-factory-dialog--ready";
 const STORYBOOK_URL = `http://${HOST}:${PORT}`;
 const STORYBOOK_INDEX_URL = `${STORYBOOK_URL}/index.json`;
+const STORYBOOK_IFRAME_URL = `${STORYBOOK_URL}/iframe.html?id=${STORYBOOK_SMOKE_STORY_ID}&viewMode=story`;
 
 function formatExit(code, signal) {
   if (code !== null) {
@@ -88,6 +91,15 @@ export function createStorybookIndexTimeoutError(url = STORYBOOK_INDEX_URL, time
   );
 }
 
+export function createStorybookIframeTimeoutError(
+  url = STORYBOOK_IFRAME_URL,
+  timeoutMs = READY_TIMEOUT_MS,
+) {
+  return new Error(
+    `Timed out waiting for Storybook iframe shell at ${url} within ${timeoutMs}ms.`,
+  );
+}
+
 export async function verifyStorybookIndex({
   fetchFn = fetch,
   url = STORYBOOK_INDEX_URL,
@@ -115,6 +127,37 @@ export async function verifyStorybookIndex({
   }
 }
 
+export async function verifyStorybookIframe({
+  fetchFn = fetch,
+  url = STORYBOOK_IFRAME_URL,
+  maxAttempts = 10,
+  retryDelayMs = 250,
+  delayFn = delay,
+} = {}) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetchFn(url);
+
+      if (!response.ok) {
+        throw new Error(`Received ${response.status} from ${url}.`);
+      }
+
+      const html = await response.text();
+      if (!/id=(["'])storybook-root\1/.test(html)) {
+        throw new Error(`Storybook iframe shell at ${url} did not contain #storybook-root.`);
+      }
+
+      return;
+    } catch (error) {
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+
+      await delayFn(retryDelayMs);
+    }
+  }
+}
+
 export async function waitForStableStorybookIndex({
   verifyIndex = () => verifyStorybookIndex(),
   delayFn = delay,
@@ -125,6 +168,26 @@ export async function waitForStableStorybookIndex({
 
   while (nowFn() < deadline) {
     await verifyIndex();
+
+    const remainingMs = deadline - nowFn();
+    if (remainingMs <= 0) {
+      return;
+    }
+
+    await delayFn(Math.min(250, remainingMs));
+  }
+}
+
+export async function waitForStableStorybookIframe({
+  verifyIframe = () => verifyStorybookIframe(),
+  delayFn = delay,
+  settleMs = POST_READY_SETTLE_MS,
+  nowFn = Date.now,
+} = {}) {
+  const deadline = nowFn() + settleMs;
+
+  while (nowFn() < deadline) {
+    await verifyIframe();
 
     const remainingMs = deadline - nowFn();
     if (remainingMs <= 0) {
@@ -179,6 +242,7 @@ export async function waitForStorybookReady({
       STORYBOOK_INDEX_URL,
     ]),
   waitForStableIndex = () => waitForStableStorybookIndex(),
+  waitForStableIframe = () => waitForStableStorybookIframe(),
   serverExit,
 } = {}) {
   await Promise.race([
@@ -190,22 +254,32 @@ export async function waitForStorybookReady({
     serverExit,
   ]);
   await waitForStableIndex();
+  await waitForStableIframe();
 }
 
-export async function main() {
-  await assertPortAvailable(HOST, PORT);
+export async function runStorybookCI({
+  assertAvailable = () => assertPortAvailable(HOST, PORT),
+  runCommand = runBun,
+  settle = delay,
+  spawnServer = () =>
+    spawnBun([
+      "x",
+      "--no-install",
+      "http-server",
+      "storybook-static",
+      "-p",
+      PORT,
+      "-a",
+      HOST,
+      "-s",
+    ]),
+  stop = stopServer,
+  waitForReady = waitForStorybookReady,
+  waitForStableIndex = waitForStableStorybookIndex,
+} = {}) {
+  await assertAvailable();
 
-  const server = spawnBun([
-    "x",
-    "--no-install",
-    "http-server",
-    "storybook-static",
-    "-p",
-    PORT,
-    "-a",
-    HOST,
-    "-s",
-  ]);
+  const server = spawnServer();
   let shuttingDown = false;
 
   const serverExit = new Promise((_, reject) => {
@@ -224,15 +298,19 @@ export async function main() {
   });
 
   try {
-    await waitForStorybookReady({ serverExit });
-    await Promise.race([runBun(["run", "storybook:test-runner:ci"]), serverExit]);
-    await delay(POST_TEST_RUNNER_SETTLE_MS);
-    await waitForStableStorybookIndex();
-    await Promise.race([runBun(["run", "storybook:responsive-check"]), serverExit]);
+    await waitForReady({ serverExit });
+    await Promise.race([runCommand(["run", "storybook:test-runner:ci"]), serverExit]);
+    await settle(POST_TEST_RUNNER_SETTLE_MS);
+    await waitForStableIndex();
+    await Promise.race([runCommand(["run", "storybook:responsive-check"]), serverExit]);
   } finally {
     shuttingDown = true;
-    await stopServer(server);
+    await stop(server);
   }
+}
+
+export async function main() {
+  await runStorybookCI();
 }
 
 if (import.meta.main) {
