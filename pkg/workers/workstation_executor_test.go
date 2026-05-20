@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
 type wsMockExecutor struct {
@@ -67,6 +68,35 @@ func newTestWorkstationExecutor(runtimeConfig interfaces.RuntimeConfigLookup, ex
 		RuntimeConfig: runtimeConfig,
 		Executor:      executor,
 		Renderer:      &DefaultPromptRenderer{},
+	}
+}
+
+func TestWorkstationExecutor_ModelWorkstationResolvesRunnerSelection(t *testing.T) {
+	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}}
+	we := newTestWorkstationExecutor(
+		runtimefixtures.RuntimeConfigLookupFixture{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system", ModelProvider: interfaces.RunnerIDCodex},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"standard": {Type: interfaces.WorkstationTypeModel, Runner: interfaces.RunnerIDGemini, PromptTemplate: "Process work"},
+			},
+		},
+		mock,
+	)
+	we.DefaultRunnerID = interfaces.RunnerIDCursorCLI
+
+	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-1",
+		TransitionID:    "t-1",
+		WorkerType:      "worker-a",
+		WorkstationName: "standard",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.dispatch.RunnerID != interfaces.RunnerIDGemini {
+		t.Fatalf("dispatch runner id = %q, want %q", mock.dispatch.RunnerID, interfaces.RunnerIDGemini)
 	}
 }
 

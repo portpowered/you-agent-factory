@@ -119,6 +119,7 @@ type FactoryWorkstationConfig struct {
 	Kind                  WorkstationKind   `json:"behavior,omitempty" yaml:"behavior,omitempty"`
 	Type                  string            `json:"type,omitempty" yaml:"type,omitempty"`
 	WorkerTypeName        string            `json:"worker" yaml:"worker,omitempty"`
+	Runner                string            `json:"-" yaml:"runner,omitempty"`
 	PromptFile            string            `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
 	OutputSchema          string            `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`
 	Timeout               string            `json:"timeout,omitempty" yaml:"timeout,omitempty"`

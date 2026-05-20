@@ -41,11 +41,12 @@ type OutputParser interface {
 // For MODEL_WORKSTATION: render prompt → call executor → parse output → WorkResult
 // For LOGICAL_MOVE:      pass-through input colors → WorkResult (no worker call)
 type WorkstationExecutor struct {
-	RuntimeConfig interfaces.RuntimeConfigLookup
-	Executor      WorkstationRequestExecutor
-	Renderer      PromptRenderer
-	Parser        OutputParser
-	Logger        logging.Logger // optional; nil → noop
+	RuntimeConfig   interfaces.RuntimeConfigLookup
+	DefaultRunnerID string
+	Executor        WorkstationRequestExecutor
+	Renderer        PromptRenderer
+	Parser          OutputParser
+	Logger          logging.Logger // optional; nil → noop
 }
 
 const defaultSubprocessExecutionTimeout = 2 * time.Hour
@@ -245,6 +246,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 		Dispatch:         interfaces.CloneWorkDispatch(dispatch),
 		WorkerType:       workerName,
 		WorkstationType:  dispatch.WorkstationName,
+		RunnerID:         interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider).RunnerID,
 		ProjectID:        requestContext.ProjectID,
 		InputTokens:      InputTokens(requestContext.InputTokens...),
 		SystemPrompt:     workerDef.Body,

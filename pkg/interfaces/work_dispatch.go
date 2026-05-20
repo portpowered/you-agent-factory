@@ -37,6 +37,7 @@ type WorkstationExecutionRequest struct {
 	Dispatch         WorkDispatch      `json:"dispatch"`
 	WorkerType       string            `json:"worker_type,omitempty"`
 	WorkstationType  string            `json:"workstation_type,omitempty"`
+	RunnerID         string            `json:"runner_id,omitempty"`
 	ProjectID        string            `json:"project_id,omitempty"`
 	InputTokens      []any             `json:"input_tokens,omitempty"`
 	SystemPrompt     string            `json:"system_prompt,omitempty"`
@@ -53,6 +54,7 @@ type ProviderInferenceRequest struct {
 	Dispatch                     WorkDispatch               `json:"dispatch"`
 	WorkerType                   string                     `json:"worker_type,omitempty"`
 	WorkstationType              string                     `json:"workstation_type,omitempty"`
+	RunnerID                     string                     `json:"runner_id,omitempty"`
 	ProjectID                    string                     `json:"project_id,omitempty"`
 	InputTokens                  []any                      `json:"input_tokens,omitempty"`
 	SystemPrompt                 string                     `json:"system_prompt,omitempty"`

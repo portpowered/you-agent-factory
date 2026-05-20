@@ -83,6 +83,12 @@ func withAgentWorkingDirectory(workingDirectory string) func(*interfaces.Worksta
 	}
 }
 
+func withAgentRunnerID(runnerID string) func(*interfaces.WorkstationExecutionRequest) {
+	return func(req *interfaces.WorkstationExecutionRequest) {
+		req.RunnerID = runnerID
+	}
+}
+
 func TestAgentExecutor_SuccessfulResponse_PopulatesOutput(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "The answer is 42."}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
@@ -357,6 +363,7 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	}
 	request := testAgentRequest(
 		dispatch,
+		withAgentRunnerID(interfaces.RunnerIDCodex),
 		withAgentWorktree("feature-worktree"),
 		withAgentWorkingDirectory("C:\\repo"),
 		withAgentEnvVars(map[string]string{"PORTOS_TEST_ENV": "enabled"}),
@@ -375,6 +382,9 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	}
 	if req.Dispatch.WorkstationName != dispatch.WorkstationName || req.WorkstationType != dispatch.WorkstationName {
 		t.Fatalf("request workstation fields = name %q type %q, want %q", req.Dispatch.WorkstationName, req.WorkstationType, dispatch.WorkstationName)
+	}
+	if req.RunnerID != interfaces.RunnerIDCodex {
+		t.Fatalf("request runner id = %q, want %q", req.RunnerID, interfaces.RunnerIDCodex)
 	}
 	if req.SystemPrompt != request.SystemPrompt || req.UserMessage != request.UserMessage || req.OutputSchema != request.OutputSchema {
 		t.Fatalf("request prompt fields differ from execution request: %#v", req)

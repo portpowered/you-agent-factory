@@ -151,6 +151,7 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 		Dispatch:                     interfaces.CloneWorkDispatch(request.Dispatch),
 		WorkerType:                   request.WorkerType,
 		WorkstationType:              inferenceWorkstationType(request),
+		RunnerID:                     request.RunnerID,
 		ProjectID:                    request.ProjectID,
 		InputTokens:                  cloneRawInputTokens(request.InputTokens),
 		SystemPrompt:                 request.SystemPrompt,

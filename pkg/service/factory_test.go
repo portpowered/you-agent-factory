@@ -5931,7 +5931,7 @@ func TestLoadWorkersFromConfig_PromptTemplateFromBody(t *testing.T) {
 		},
 	)
 
-	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -5987,7 +5987,7 @@ func TestLoadWorkersFromConfig_PromptTemplateFromFile(t *testing.T) {
 		},
 	)
 
-	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6043,7 +6043,7 @@ You are a helpful assistant.
 		},
 	)
 
-	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6105,7 +6105,7 @@ func TestLoadWorkersFromConfig_ReplayEmbeddedRuntimeUsesCanonicalLookup(t *testi
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
 
-	opts, err := loadWorkersFromConfig(runtimeCfg.FactoryDir(), runtimeCfg.Factory, runtimeCfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(runtimeCfg.FactoryDir(), runtimeCfg.Factory, "", runtimeCfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6158,7 +6158,7 @@ func TestLoadWorkersFromConfig_LoadedRuntimeBaseDirOverrideFlowsThroughCanonical
 	)
 	loaded.SetRuntimeBaseDir(runtimeBaseDir)
 
-	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), loaded, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6209,7 +6209,7 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupDrivesScriptExecutionWorkin
 	loaded.SetRuntimeBaseDir(runtimeBaseDir)
 
 	runner := &capturingCommandRunner{}
-	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), loaded, logging.NoopLogger{}, nil, nil, runner, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, nil, nil, runner, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6283,7 +6283,7 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupResolvesPortableFactoryScri
 	loaded.SetRuntimeBaseDir(rootDir)
 
 	runner := &capturingCommandRunner{}
-	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), loaded, logging.NoopLogger{}, nil, nil, runner, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, nil, nil, runner, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6364,7 +6364,7 @@ func TestLoadWorkersFromConfig_ReplayRuntimeLookupDrivesScriptExecutionWorkingDi
 	}
 
 	runner := &capturingCommandRunner{}
-	opts, err := loadWorkersFromConfig(runtimeCfg.FactoryDir(), runtimeCfg.Factory, runtimeCfg, logging.NoopLogger{}, nil, nil, runner, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(runtimeCfg.FactoryDir(), runtimeCfg.Factory, "", runtimeCfg, logging.NoopLogger{}, nil, nil, runner, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6427,7 +6427,7 @@ func TestLoadWorkersFromConfig_ScriptWorkerUsesWorkstationExecutor(t *testing.T)
 		},
 	)
 
-	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), cfg, logging.NoopLogger{}, nil, nil, &stubCommandRunner{}, scriptRecorder, nil, nil)
+	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, logging.NoopLogger{}, nil, nil, &stubCommandRunner{}, scriptRecorder, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6484,7 +6484,7 @@ func TestLoadWorkersFromConfig_RegistersWorkerlessLogicalWorkstationByName(t *te
 		},
 	})
 
-	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}

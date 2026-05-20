@@ -121,6 +121,9 @@ var _ apisurface.APISurface = (*FactoryService)(nil)
 type FactoryServiceConfig struct {
 	// Dir is the factory root directory containing factory.json and inputs/.
 	Dir string
+	// RunnerID sets the factory-level runner override used when a workstation
+	// does not declare its own runner selection.
+	RunnerID string
 	// ExecutionBaseDir overrides the base directory used to resolve relative
 	// runtime execution paths such as workstation workingDirectory values.
 	// Empty defaults to the loaded factory directory.
@@ -284,6 +287,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	workerOpts, err := loadWorkersFromConfig(
 		loadedFactoryCfg.FactoryDir(),
 		loadedFactoryCfg.FactoryConfig(),
+		cfg.RunnerID,
 		loadedFactoryCfg,
 		logging.NewZapLogger(logger, cfg.Verbose),
 		providerOverrideForMode(cfg, replaySideEffects),
@@ -440,6 +444,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, fa
 	workerOpts, err := loadWorkersFromConfig(
 		loadedFactoryCfg.FactoryDir(),
 		loadedFactoryCfg.FactoryConfig(),
+		fs.cfg.RunnerID,
 		loadedFactoryCfg,
 		logging.NewZapLogger(logger, fs.cfg.Verbose),
 		providerOverrideForMode(fs.cfg, nil),
@@ -1868,6 +1873,7 @@ func dirExists(path string) bool {
 func loadWorkersFromConfig(
 	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
+	factoryRunnerID string,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	logger logging.Logger,
 	providerOverride workers.Provider,
@@ -1882,6 +1888,9 @@ func loadWorkersFromConfig(
 	if factoryCfg == nil {
 		return nil, fmt.Errorf("factory config is required")
 	}
+	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg); err != nil {
+		return nil, err
+	}
 	for _, workerCfg := range factoryCfg.Workers {
 		logger.Debug("loading worker", "worker", workerCfg.Name)
 		def, ok := runtimeCfg.Worker(workerCfg.Name)
@@ -1890,7 +1899,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workers.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, workerCfg.Name, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, now)
+		executor := buildWorkerExecutor(runtimeCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, now)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -1910,9 +1919,10 @@ func loadWorkersFromConfig(
 		}
 		logger.Info("loading workerless logical workstation", "workstation", workstationCfg.Name)
 		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workers.WorkstationExecutor{
-			RuntimeConfig: runtimeCfg,
-			Renderer:      &workers.DefaultPromptRenderer{},
-			Logger:        logger,
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
 		}))
 	}
 	return opts, nil
@@ -1923,6 +1933,7 @@ func loadWorkersFromConfig(
 func buildWorkerExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workerName string,
+	factoryRunnerID string,
 	logger logging.Logger,
 	providerOverride workers.Provider,
 	providerCommandRunner workers.CommandRunner,
@@ -1963,17 +1974,19 @@ func buildWorkerExecutor(
 		}
 		agentExec := workers.NewAgentExecutor(runtimeCfg, provider, agentOpts...)
 		return &workers.WorkstationExecutor{
-			RuntimeConfig: runtimeCfg,
-			Executor:      agentExec,
-			Renderer:      &workers.DefaultPromptRenderer{},
-			Logger:        logger,
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Executor:        agentExec,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
 		}
 	case interfaces.WorkstationTypeLogical:
 		// LOGICAL_MOVE workers pass input token colors through without calling any LLM.
 		return &workers.WorkstationExecutor{
-			RuntimeConfig: runtimeCfg,
-			Renderer:      &workers.DefaultPromptRenderer{},
-			Logger:        logger,
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
 		}
 	case interfaces.WorkerTypeScript:
 		var scriptOpts []workers.ScriptExecutorOption
@@ -1990,10 +2003,11 @@ func buildWorkerExecutor(
 			scriptExec = workers.NewScriptExecutor(def, logger, scriptOpts...)
 		}
 		return &workers.WorkstationExecutor{
-			RuntimeConfig: runtimeCfg,
-			Executor:      scriptExec,
-			Renderer:      &workers.DefaultPromptRenderer{},
-			Logger:        logger,
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Executor:        scriptExec,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
 		}
 	default:
 		return nil
