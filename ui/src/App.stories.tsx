@@ -12,8 +12,6 @@ import {
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "./components/ui/dashboard-typography";
-import { DashboardScreen } from "./features/dashboard";
-import { AppLocaleProvider, useAppLocale } from "./i18n";
 import { LocalePropagationStory } from "./stories/localePropagationStory";
 import { buttonVisibleStyle, expectGraphWorkstation, fillSubmitWorkCard } from "./stories/dashboardStoryTestUtils";
 
