@@ -23,6 +23,7 @@ import {
 } from "./components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "./components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
+import { formatTimeOfDay } from "./components/ui/formatters";
 import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
 import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
 import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
@@ -1157,11 +1158,30 @@ describe("App current selection", () => {
     expect(stateSelectionSlot?.getAttribute("data-bento-card-id")).toBe(
       "current-selection",
     );
+    const summaryDetails = within(stateInfo)
+      .getByText("Count")
+      .closest("dl");
     expect(within(stateInfo).getByTitle("story:implemented")).toBeTruthy();
+    expect(within(stateInfo).getByText("story: implemented")).toBeTruthy();
+    expect(summaryDetails).toBeTruthy();
+    expect(
+      within(summaryDetails ?? stateInfo).queryByText("Work type"),
+    ).toBeNull();
+    expect(within(summaryDetails ?? stateInfo).queryByText("State")).toBeNull();
+    expect(
+      within(summaryDetails ?? stateInfo).queryByText("State node ID"),
+    ).toBeNull();
     expect(within(stateInfo).getByText("Count")).toBeTruthy();
     expect(within(stateInfo).getByText("Current work")).toBeTruthy();
     expect(within(stateInfo).getByText(activeWorkLabel)).toBeTruthy();
-    expect(within(stateInfo).getByText(activeWorkID)).toBeTruthy();
+    expect(
+      within(stateInfo).getByText(
+        `Started at ${formatTimeOfDay("2026-04-08T12:00:01Z")}`,
+      ),
+    ).toBeTruthy();
+    expect(within(stateInfo).queryByText(activeWorkID)).toBeNull();
+    expect(within(stateInfo).queryByText("trace-active-story")).toBeNull();
+    expect(within(stateInfo).queryByText(/^story$/)).toBeNull();
 
     fireEvent.click(
       within(stateInfo).getByRole("button", {
@@ -1185,9 +1205,7 @@ describe("App current selection", () => {
     const emptyStateInfo = await screen.findByRole("article", {
       name: "Current selection",
     });
-    expect(
-      within(emptyStateInfo).getAllByText("blocked").length,
-    ).toBeGreaterThan(0);
+    expect(within(emptyStateInfo).getByText("story: blocked")).toBeTruthy();
     expect(within(emptyStateInfo).getByTitle("story:blocked")).toBeTruthy();
     expect(
       within(emptyStateInfo).getByText(
@@ -1901,7 +1919,8 @@ describe("App current selection terminal states", () => {
     expect(within(completedDetail).getByText("Count")).toBeTruthy();
     expect(within(completedDetail).getByText("Current work")).toBeTruthy();
     expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
-    expect(within(completedDetail).getByText(completedWorkID)).toBeTruthy();
+    expect(within(completedDetail).queryByText(completedWorkID)).toBeNull();
+    expect(within(completedDetail).queryByText(/^Started at /)).toBeNull();
     expect(
       within(completedDetail).queryByText(
         "No current work is occupying this place.",
@@ -1936,13 +1955,12 @@ describe("App current selection terminal states", () => {
         name: "Current selection",
       });
 
-      expect(
-        within(failedDetail).getAllByText("blocked").length,
-      ).toBeGreaterThan(0);
+      expect(within(failedDetail).getByText("story: blocked")).toBeTruthy();
       expect(within(failedDetail).getByText("Count")).toBeTruthy();
       expect(within(failedDetail).getByText("Current work")).toBeTruthy();
       expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();
-      expect(within(failedDetail).getByText(failedWorkID)).toBeTruthy();
+      expect(within(failedDetail).queryByText(failedWorkID)).toBeNull();
+      expect(within(failedDetail).queryByText(/^Started at /)).toBeNull();
       expect(
         within(failedDetail).getAllByText("Failure reason").length,
       ).toBeGreaterThan(0);

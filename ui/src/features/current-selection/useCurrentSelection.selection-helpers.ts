@@ -18,10 +18,15 @@ import type {
   TerminalWorkItem,
   TerminalWorkStatus,
 } from "../terminal-work/terminal-work-card";
-import type { DashboardSelection, TerminalWorkDetail } from "./types";
+import type {
+  DashboardSelection,
+  StatePositionWorkItem,
+  TerminalWorkDetail,
+} from "./types";
 import {
   isScriptBackedWorkstationRequest,
   requestDispatchID,
+  requestStartedAt,
   requestTransitionID,
   requestWorkstationNodeID,
   requestWorkstationName,
@@ -123,19 +128,63 @@ export function findStatePlace(snapshot: DashboardSnapshot, placeId: string): Da
 export function currentWorkItemsForPlace(
   snapshot: DashboardSnapshot | null | undefined,
   placeId: string | undefined,
-): DashboardWorkItemRef[] {
+  workstationRequestsByDispatchID?: Record<string, DispatchWorkstationRequest>,
+): StatePositionWorkItem[] {
   return snapshot && placeId
-    ? snapshot.runtime.current_work_items_by_place_id?.[placeId] ?? []
+    ? enrichStatePositionWorkItems(
+        snapshot.runtime.current_work_items_by_place_id?.[placeId] ?? [],
+        snapshot,
+        workstationRequestsByDispatchID,
+      )
     : [];
 }
 
 export function terminalHistoryItemsForPlace(
   snapshot: DashboardSnapshot | null | undefined,
   placeId: string | undefined,
-): DashboardWorkItemRef[] {
+  workstationRequestsByDispatchID?: Record<string, DispatchWorkstationRequest>,
+): StatePositionWorkItem[] {
   return snapshot && placeId
-    ? snapshot.runtime.place_occupancy_work_items_by_place_id?.[placeId] ?? []
+    ? enrichStatePositionWorkItems(
+        snapshot.runtime.place_occupancy_work_items_by_place_id?.[placeId] ?? [],
+        snapshot,
+        workstationRequestsByDispatchID,
+      )
     : [];
+}
+
+function enrichStatePositionWorkItems(
+  workItems: DashboardWorkItemRef[],
+  snapshot: DashboardSnapshot,
+  workstationRequestsByDispatchID?: Record<string, DispatchWorkstationRequest>,
+): StatePositionWorkItem[] {
+  const activeExecutions = Object.values(
+    snapshot.runtime.active_executions_by_dispatch_id ?? {},
+  );
+  const sortedRequests = sortWorkstationRequests(
+    Object.values(
+      workstationRequestsByDispatchID ??
+        snapshot.runtime.workstation_requests_by_dispatch_id ??
+        {},
+    ),
+  );
+
+  return workItems.map((workItem) => {
+    const matchingRequest = sortedRequests.find((request) =>
+      requestWorkItems(request).some(
+        (candidate) => candidate.work_id === workItem.work_id,
+      ),
+    );
+    const startedAt =
+      activeExecutions.find((execution) =>
+        execution.work_items?.some(
+          (candidate) => candidate.work_id === workItem.work_id,
+        ),
+      )?.started_at ??
+      (matchingRequest ? requestStartedAt(matchingRequest) : undefined);
+
+    return startedAt ? { ...workItem, started_at: startedAt } : workItem;
+  });
 }
 
 export function activeExecutionsForSelectedWorkstation(

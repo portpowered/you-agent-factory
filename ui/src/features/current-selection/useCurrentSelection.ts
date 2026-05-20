@@ -3,7 +3,6 @@ import type {
   DashboardPlaceRef,
   DashboardProviderSessionAttempt,
   DashboardSnapshot,
-  DashboardWorkItemRef,
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
@@ -12,7 +11,11 @@ import type {
   TerminalWorkItem,
   TerminalWorkStatus,
 } from "../terminal-work/terminal-work-card";
-import type { DashboardSelection, TerminalWorkDetail } from "./types";
+import type {
+  DashboardSelection,
+  StatePositionWorkItem,
+  TerminalWorkDetail,
+} from "./types";
 import { useCurrentSelectionActions } from "./useCurrentSelection.actions";
 import {
   useCurrentSelectionDerivedState,
@@ -32,9 +35,9 @@ export interface CurrentSelectionState {
   selectedNodeActiveExecutions: DashboardActiveExecution[];
   selectedNodeProviderSessions: DashboardProviderSessionAttempt[];
   selectedNodeWorkstationRequests: DashboardWorkstationRequest[];
-  selectedStateCurrentWorkItems: DashboardWorkItemRef[];
+  selectedStateCurrentWorkItems: StatePositionWorkItem[];
   selectedStatePlace: DashboardPlaceRef | null;
-  selectedStateTerminalHistoryWorkItems: DashboardWorkItemRef[];
+  selectedStateTerminalHistoryWorkItems: StatePositionWorkItem[];
   selectedStateTokenCount: number;
   selectedWorkDispatchAttempts: DashboardProviderSessionAttempt[];
   selectedWorkID: string | null;
@@ -44,13 +47,13 @@ export interface CurrentSelectionState {
   selectedWorkstationRequest: DashboardWorkstationRequest | null;
   selection: DashboardSelection | null;
   selectStateNode: (placeId: string) => void;
-  selectStateWorkItem: (place: DashboardPlaceRef, workItem: DashboardWorkItemRef) => void;
+  selectStateWorkItem: (place: DashboardPlaceRef, workItem: StatePositionWorkItem) => void;
   selectWorkByID: (workID: string) => void;
   selectWorkItem: (
     dispatchId: string,
     nodeId: string,
     execution: DashboardActiveExecution,
-    workItem: DashboardWorkItemRef,
+    workItem: StatePositionWorkItem,
   ) => void;
   selectWorkstation: (nodeId: string) => void;
   selectWorkstationRequest: (request: DashboardWorkstationRequest) => void;
