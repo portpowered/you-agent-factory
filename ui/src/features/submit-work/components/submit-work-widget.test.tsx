@@ -8,8 +8,8 @@ import {
   within,
 } from "@testing-library/react";
 
-import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
-import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { SubmitWorkWidget } from "./submit-work-widget";
 
 describe("SubmitWorkWidget", () => {

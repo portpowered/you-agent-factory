@@ -161,6 +161,10 @@ describe("verifyDashboardHeader", () => {
 
 describe("verifyDashboardSessionTabs", () => {
   test("verifyDashboardSessionTabs exercises the open-session flow", async () => {
+    const defaultTab = {
+      getAttribute: vi.fn().mockResolvedValue("true"),
+      isVisible: vi.fn().mockResolvedValue(true),
+    };
     const reviewTab = {
       getAttribute: vi.fn().mockResolvedValue("true"),
       isVisible: vi.fn().mockResolvedValue(true),
@@ -197,6 +201,10 @@ describe("verifyDashboardSessionTabs", () => {
       click: vi.fn().mockResolvedValue(undefined),
       isVisible: vi.fn().mockResolvedValue(true),
     };
+    const closeReviewButton = {
+      click: vi.fn().mockResolvedValue(undefined),
+      isVisible: vi.fn().mockResolvedValue(true),
+    };
     const page = {
       evaluate: vi.fn().mockResolvedValue({ clientWidth: 768, scrollWidth: 768 }),
       getByRole: vi.fn((role, options) => {
@@ -212,8 +220,18 @@ describe("verifyDashboardSessionTabs", () => {
         if (role === "region") {
           return targetPicker;
         }
+        if (role === "tab" && options?.name === "root / default root") {
+          return defaultTab;
+        }
         if (role === "tab" && options?.name === "catalog / review catalog") {
           return reviewTab;
+        }
+        if (
+          role === "button" &&
+          options?.name instanceof RegExp &&
+          options.name.test("Close catalog / review session")
+        ) {
+          return closeReviewButton;
         }
         return { isVisible: vi.fn().mockResolvedValue(true) };
       }),
