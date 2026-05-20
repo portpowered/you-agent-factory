@@ -101,11 +101,11 @@ export async function verifyTraceFactoryGraphVisualConsistency({
   await expectVisible(dispatchViewport, "Trace dispatch graph region");
   await expectVisible(relationViewport, "Trace relation graph region");
   await expectVisible(
-    page.getByText("Reviewed Story"),
+    dispatchViewport.getByText('Out: story:"Reviewed Story"'),
     "Trace dispatch story content",
   );
   await expectVisible(
-    page.getByText("Repair story"),
+    relationViewport.getByText("Repair story"),
     "Trace relation story content",
   );
 

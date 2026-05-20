@@ -64,10 +64,16 @@ describe("graph-storybook-responsive", () => {
       waitFor: vi.fn().mockResolvedValue(undefined),
     };
     const dispatchViewport = {
+      getByText: vi.fn().mockReturnValue({
+        waitFor: vi.fn().mockResolvedValue(undefined),
+      }),
       locator: vi.fn().mockReturnValue(controlLocatorWrapper),
       waitFor: vi.fn().mockResolvedValue(undefined),
     };
     const relationViewport = {
+      getByText: vi.fn().mockReturnValue({
+        waitFor: vi.fn().mockResolvedValue(undefined),
+      }),
       locator: vi.fn().mockReturnValue(controlLocatorWrapper),
       waitFor: vi.fn().mockResolvedValue(undefined),
     };
@@ -115,8 +121,10 @@ describe("graph-storybook-responsive", () => {
       name: "Batch relation graph",
     });
     expect(page.getByText).toHaveBeenCalledWith("Observe mode");
-    expect(page.getByText).toHaveBeenCalledWith("Reviewed Story");
-    expect(page.getByText).toHaveBeenCalledWith("Repair story");
+    expect(dispatchViewport.getByText).toHaveBeenCalledWith(
+      'Out: story:"Reviewed Story"',
+    );
+    expect(relationViewport.getByText).toHaveBeenCalledWith("Repair story");
     expect(page.goto).toHaveBeenCalledWith(
       "http://127.0.0.1:6008/iframe.html?id=agent-factory-dashboard-trace-graph-surfaces--visual-consistency&viewMode=story",
       { waitUntil: "domcontentloaded" },
