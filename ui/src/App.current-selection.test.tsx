@@ -428,6 +428,39 @@ function expandDispatchAttemptSection(
   return section;
 }
 
+function expandAttemptDetails(
+  container: HTMLElement,
+  attemptNumber: number,
+): HTMLElement {
+  const attemptCard = within(container).getByRole("article", {
+    name: `Inference attempt ${attemptNumber}`,
+  });
+  const toggle = within(attemptCard).getByRole("button", {
+    name: `Expand attempt ${attemptNumber}`,
+  });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return attemptCard;
+}
+
+function expandAttemptBody(
+  attemptCard: HTMLElement,
+  bodyLabel: "Request body" | "Response body",
+): HTMLElement {
+  const toggle = within(attemptCard).getByRole("button", {
+    name: `Expand ${bodyLabel.toLowerCase()}`,
+  });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return within(attemptCard).getByRole("region", { name: bodyLabel });
+}
+
 function expectDefinitionValue(
   section: HTMLElement,
   label: string,
@@ -739,43 +772,25 @@ describe("App current selection", () => {
       readyCard,
       "Inference attempts",
     );
-    const readyAttempt = within(readyInferenceAttempts).getByRole("article", {
-      name: "Inference attempt 2",
-    });
+    const readyAttemptDetails = expandAttemptDetails(readyInferenceAttempts, 2);
+    const readyRequestBody = expandAttemptBody(readyAttemptDetails, "Request body");
+    const readyResponseBody = expandAttemptBody(readyAttemptDetails, "Response body");
     expect(
       within(readyRequestDetails).getByText(
         "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
-    expect(within(readyRequestDetails).queryByText(
-      "Review the active story and decide whether it is ready.",
-    )).toBeNull();
-    const readyRequestBody = within(readyAttempt).getByRole("region", {
-      name: "Request body",
-    });
-    const readyResponseBody = within(readyAttempt).getByRole("region", {
-      name: "Response body",
-    });
-    fireEvent.click(
-      within(readyRequestBody).getByRole("button", { name: "Expand" }),
-    );
-    fireEvent.click(
-      within(readyResponseBody).getByRole("button", { name: "Expand" }),
-    );
     expect(
-      within(readyRequestBody).getByText(
-        "Retry the review with the latest context.",
+      within(readyRequestDetails).queryByText(
+        "Review the active story and decide whether it is ready.",
       ),
-    ).toBeTruthy();
-    expect(
-      within(readyResponseBody).getByText(
-        "Ready for the next workstation.",
-      ),
-    ).toBeTruthy();
-    expect(within(readyAttempt).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();
-    expect(within(readyAttempt).getByText("gpt-5.4")).toBeTruthy();
-    expect(within(readyAttempt).getByText("C:\\work\\portos")).toBeTruthy();
-    expect(within(readyAttempt).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();
+    ).toBeNull();
+    expect(within(readyRequestBody).getByText("Retry the review with the latest context.")).toBeTruthy();
+    expect(within(readyResponseBody).getByText("Ready for the next workstation.")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("gpt-5.4")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("C:\\work\\portos")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();
     expect(
       within(readyRequestDetails).queryByText("Provider", { selector: "dt" }),
     ).toBeNull();
@@ -804,26 +819,22 @@ describe("App current selection", () => {
       rejectedCard,
       "Inference attempts",
     );
-    const rejectedAttempt = within(rejectedInferenceAttempts).getByRole("article", {
-      name: "Inference attempt 1",
-    });
-    fireEvent.click(
-      within(
-        within(rejectedAttempt).getByRole("region", { name: "Request body" }),
-      ).getByRole("button", { name: "Expand" }),
+    const rejectedAttemptDetails = expandAttemptDetails(rejectedInferenceAttempts, 1);
+    const rejectedRequestBody = expandAttemptBody(
+      rejectedAttemptDetails,
+      "Request body",
     );
-    fireEvent.click(
-      within(
-        within(rejectedAttempt).getByRole("region", { name: "Response body" }),
-      ).getByRole("button", { name: "Expand" }),
+    const rejectedResponseBody = expandAttemptBody(
+      rejectedAttemptDetails,
+      "Response body",
     );
     expect(
-      within(rejectedAttempt).getByText(
+      within(rejectedRequestBody).getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeTruthy();
     expect(
-      within(rejectedAttempt).getByText(
+      within(rejectedResponseBody).getByText(
         "The active story needs revision before it can continue.",
       ),
     ).toBeTruthy();
@@ -839,16 +850,14 @@ describe("App current selection", () => {
       erroredCard,
       "Inference attempts",
     );
-    const erroredAttempt = within(erroredInferenceAttempts).getByRole("article", {
-      name: "Inference attempt 1",
-    });
+    const erroredAttemptDetails = expandAttemptDetails(erroredInferenceAttempts, 1);
     expect(
       within(erroredCard).getByText(
         "Provider rate limit exceeded while reviewing the story.",
       ),
     ).toBeTruthy();
     expect(
-      within(erroredAttempt).getByText("provider_rate_limit"),
+      within(erroredAttemptDetails).getByText("provider_rate_limit"),
     ).toBeTruthy();
     expect(
       within(erroredRequestDetails).queryByText(

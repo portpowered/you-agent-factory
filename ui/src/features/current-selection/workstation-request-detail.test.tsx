@@ -6,12 +6,8 @@ import { inferenceAttempt, workstationRequest } from "./detail-card-test-helpers
 import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "./detail-card-shared";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
-function expandDisclosure(region: HTMLElement) {
-  fireEvent.click(within(region).getByRole("button", { name: "Expand" }));
-}
-
 describe("WorkstationRequestDetailCard", () => {
-  it("keeps inference-backed request and response detail inside inference attempts", () => {
+  it("keeps inference-backed request and response detail inside inference attempts without visible request counts", () => {
     render(
       <WorkstationRequestDetailCard
         request={workstationRequest("dispatch-review-ready", {
@@ -71,22 +67,32 @@ describe("WorkstationRequestDetailCard", () => {
     const requestDetails = within(screen.getByRole("region", { name: "Request details" }));
     const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
     const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
-    const attemptTwo = within(
-      inferenceAttempts.getByRole("article", { name: "Inference attempt 2" }),
-    );
 
     expect(within(currentSelection).getByRole("heading", { name: "Current selection" })).toBeTruthy();
-    expect(within(currentSelection).getAllByText("request-ready-story").length).toBeGreaterThan(0);
+    expect(
+      within(currentSelection).getByText("Active Story", {
+        selector: "p",
+      }),
+    ).toBeTruthy();
+    expect(within(currentSelection).getAllByText("request-ready-story")).toHaveLength(1);
     expect(within(currentSelection).getAllByText("Dispatch ID").length).toBeGreaterThan(0);
     expect(
       within(currentSelection).queryByRole("heading", { name: "Request counts" }),
     ).toBeNull();
+    expect(within(currentSelection).queryByText("dispatchedCount")).toBeNull();
+    expect(within(currentSelection).queryByText("respondedCount")).toBeNull();
+    expect(within(currentSelection).queryByText("erroredCount")).toBeNull();
     expect(responseDetails.getByText("trace-active-story")).toBeTruthy();
-    expandDisclosure(attemptTwo.getByRole("region", { name: "Request body" }));
-    expandDisclosure(attemptTwo.getByRole("region", { name: "Response body" }));
-    expect(attemptTwo.getByText("Retry the review with the latest context.")).toBeTruthy();
-    expect(attemptTwo.getByText("Ready for the next workstation.")).toBeTruthy();
-    expect(inferenceAttempts.getByText("codex / session_id / sess-ready-request")).toBeTruthy();
+    expect(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    ).toBeTruthy();
+    expect(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 2" }),
+    ).toBeTruthy();
+    expect(
+      inferenceAttempts.queryByText("Retry the review with the latest context."),
+    ).toBeNull();
+    expect(inferenceAttempts.queryByText("Ready for the next workstation.")).toBeNull();
     expect(requestDetails.queryByText(/Inference attempts when available/)).toBeNull();
     expect(responseDetails.queryByText(/Inference attempts when available/)).toBeNull();
     expect(
@@ -97,6 +103,20 @@ describe("WorkstationRequestDetailCard", () => {
     expect(screen.queryByRole("region", { name: "Response metadata" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Workstation summary" })).toBeNull();
     expect(screen.queryByText("Runtime labels")).toBeNull();
+
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 2" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand response body" }),
+    );
+
+    expect(inferenceAttempts.getByText("Retry the review with the latest context.")).toBeTruthy();
+    expect(inferenceAttempts.getByText("Ready for the next workstation.")).toBeTruthy();
+    expect(inferenceAttempts.getByText("codex / session_id / sess-ready-request")).toBeTruthy();
   });
 
   it("renders no-response workstation-request details with clear inference-attempt pending copy", () => {
@@ -114,7 +134,8 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    expect(screen.getAllByText("request-pending-story").length).toBeGreaterThan(0);
+    expect(screen.getByText("Active Story", { selector: "p" })).toBeTruthy();
+    expect(screen.getAllByText("request-pending-story")).toHaveLength(1);
     expect(
       screen.getByText("Total duration is not available for this workstation request yet."),
     ).toBeTruthy();
@@ -131,6 +152,10 @@ describe("WorkstationRequestDetailCard", () => {
       <WorkstationRequestDetailCard
         request={workstationRequest("dispatch-review-sparse", {
           request_id: "",
+          request_view: {
+            input_work_items: [],
+          },
+          work_items: [],
           trace_ids: [],
           transition_id: "review",
           workstation_name: "",
@@ -269,11 +294,18 @@ describe("WorkstationRequestDetailCard", () => {
     );
 
     const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand response body" }),
+    );
 
     const requestBodyRegion = inferenceAttempts.getByRole("region", { name: "Request body" });
     const responseBodyRegion = inferenceAttempts.getByRole("region", { name: "Response body" });
-    expandDisclosure(requestBodyRegion);
-    expandDisclosure(responseBodyRegion);
     const requestBody = within(requestBodyRegion);
     const responseBody = within(responseBodyRegion);
     const requestListItems = requestBody.getAllByRole("listitem");
@@ -311,9 +343,13 @@ describe("WorkstationRequestDetailCard", () => {
     );
 
     const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
-    const requestBodyRegion = inferenceAttempts.getByRole("region", { name: "Request body" });
-    expandDisclosure(requestBodyRegion);
-    const requestBody = within(requestBodyRegion);
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    );
+    const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
     const requestListItems = requestBody.getAllByRole("listitem");
 
     expect(requestBody.getByRole("list")).toBeTruthy();
@@ -342,9 +378,14 @@ describe("WorkstationRequestDetailCard", () => {
 
     const inferenceAttemptsRegion = screen.getByRole("region", { name: "Inference attempts" });
     const inferenceAttempts = within(inferenceAttemptsRegion);
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    );
 
     const requestBodyRegion = inferenceAttempts.getByRole("region", { name: "Request body" });
-    expandDisclosure(requestBodyRegion);
     const requestBody = within(requestBodyRegion);
 
     expect(requestBody.queryByRole("heading", { level: 1 })).toBeNull();
@@ -378,15 +419,17 @@ describe("WorkstationRequestDetailCard", () => {
     );
 
     const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
-    const attemptOne = within(
-      inferenceAttempts.getByRole("article", { name: "Inference attempt 1" }),
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
     );
-    expandDisclosure(attemptOne.getByRole("region", { name: "Request body" }));
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    );
 
     expect(inferenceAttempts.queryByRole("button", { name: "danger" })).toBeNull();
     expect(container.querySelector("script")).toBeNull();
-    expect(attemptOne.getByText(/<button>danger<\/button>/)).toBeTruthy();
-    expect(attemptOne.getByText(/<script>alert\("xss"\)<\/script>/)).toBeTruthy();
+    expect(inferenceAttempts.getByText(/<button>danger<\/button>/)).toBeTruthy();
+    expect(inferenceAttempts.getByText(/<script>alert\("xss"\)<\/script>/)).toBeTruthy();
   });
 
   it("keeps explicit pending and unavailable inference response states readable", () => {
@@ -413,18 +456,26 @@ describe("WorkstationRequestDetailCard", () => {
     );
 
     const inferenceAttemptsRegion = screen.getByRole("region", { name: "Inference attempts" });
+    const inferenceAttempts = within(inferenceAttemptsRegion);
+
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 2" }),
+    );
 
     expect(
-      within(inferenceAttemptsRegion).getByText(
+      inferenceAttempts.getByText(
         "Provider response text is not available for this inference attempt.",
       ),
     ).toBeTruthy();
-    expect(within(inferenceAttemptsRegion).getByText("Awaiting provider response.")).toBeTruthy();
+    expect(inferenceAttempts.getByText("Awaiting provider response.")).toBeTruthy();
   });
 
   it("renders request and response timestamps through the shared local-time formatter", () => {
     const requestTime = "2026-04-08T12:00:01Z";
-    const responseTime = "2026-04-08T12:00:02Z";
+    const responseTime = "2026-04-08T12:01:02Z";
 
     render(
       <WorkstationRequestDetailCard
@@ -445,9 +496,15 @@ describe("WorkstationRequestDetailCard", () => {
     const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
     const expectedRequestTime = formatLocalDateTime(requestTime, "Unavailable");
     const expectedResponseTime = formatLocalDateTime(responseTime, "Unavailable");
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    );
 
-    expect(inferenceAttempts.getAllByText(expectedRequestTime)).toHaveLength(2);
-    expect(inferenceAttempts.getAllByText(expectedResponseTime)).toHaveLength(2);
+    expect(inferenceAttempts.getAllByText(expectedRequestTime)).toHaveLength(1);
+    expect(inferenceAttempts.getAllByText(expectedResponseTime)).toHaveLength(1);
+    expect(
+      inferenceAttempts.getByText(`Response time: ${expectedResponseTime}`),
+    ).toBeTruthy();
     expect(inferenceAttempts.queryByText(requestTime)).toBeNull();
     expect(inferenceAttempts.queryByText(responseTime)).toBeNull();
   });
@@ -472,6 +529,9 @@ describe("WorkstationRequestDetailCard", () => {
     );
 
     const inferenceAttempts = within(screen.getByRole("region", { name: "推理尝试" }));
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "展开尝试 1" }),
+    );
 
     expect(inferenceAttempts.getAllByText("不可用")).toHaveLength(2);
     expect(inferenceAttempts.queryByText("not-a-date")).toBeNull();
@@ -739,11 +799,14 @@ describe("WorkstationRequestDetailCard", () => {
     expect(screen.getByRole("region", { name: "请求详情" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "响应详情" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "推理尝试" })).toBeTruthy();
+    expect(screen.getByText("trace-zh-story")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开尝试 2" }));
+
     expect(screen.getByText("推理请求 ID")).toBeTruthy();
     expect(screen.getByText("Provider session")).toBeTruthy();
     expect(screen.getByText("响应正文")).toBeTruthy();
     expect(screen.getByText("dispatch-review-zh/inference-request/2")).toBeTruthy();
     expect(screen.getByText("codex / session_id / sess-zh")).toBeTruthy();
-    expect(screen.getByText("trace-zh-story")).toBeTruthy();
   });
 });

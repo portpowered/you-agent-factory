@@ -7,6 +7,9 @@ import {
 export interface CurrentSelectionDetailMessages {
   attemptAriaLabel: (attemptNumber: number) => string;
   attemptTitle: (attemptNumber: number) => string;
+  collapseAttemptAction: (attemptNumber: number) => string;
+  collapseRequestBodyAction: string;
+  collapseResponseBodyAction: string;
   awaitingProviderResponse: string;
   commandLabel: string;
   commandUnavailable: string;
@@ -40,6 +43,9 @@ export interface CurrentSelectionDetailMessages {
   providerSessionLabel: string;
   collapseAction: string;
   expandAction: string;
+  expandAttemptAction: (attemptNumber: number) => string;
+  expandRequestBodyAction: string;
+  expandResponseBodyAction: string;
   noCurrentWorkInPlace: string;
   noWorkRecordedAtSelectedTick: string;
   requestBodyLabel: string;
@@ -131,6 +137,10 @@ const currentSelectionDetailMessagesByLocale = {
     attemptAriaLabel: (attemptNumber: number) =>
       `Inference attempt ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `Attempt ${attemptNumber}`,
+    collapseAttemptAction: (attemptNumber: number) =>
+      `Collapse attempt ${attemptNumber}`,
+    collapseRequestBodyAction: "Collapse request body",
+    collapseResponseBodyAction: "Collapse response body",
     awaitingProviderResponse: "Awaiting provider response.",
     commandLabel: "Command",
     commandUnavailable:
@@ -171,6 +181,10 @@ const currentSelectionDetailMessagesByLocale = {
     providerSessionLabel: "Provider session",
     collapseAction: "Collapse",
     expandAction: "Expand",
+    expandAttemptAction: (attemptNumber: number) =>
+      `Expand attempt ${attemptNumber}`,
+    expandRequestBodyAction: "Expand request body",
+    expandResponseBodyAction: "Expand response body",
     requestBodyLabel: "Request body",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
@@ -245,6 +259,10 @@ const currentSelectionDetailMessagesByLocale = {
     attemptAriaLabel: (attemptNumber: number) =>
       `Inference attempt ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `Attempt ${attemptNumber}`,
+    collapseAttemptAction: (attemptNumber: number) =>
+      `Collapse attempt ${attemptNumber}`,
+    collapseRequestBodyAction: "Collapse request body",
+    collapseResponseBodyAction: "Collapse response body",
     awaitingProviderResponse: "Awaiting provider response.",
     commandLabel: "Command",
     commandUnavailable:
@@ -285,6 +303,10 @@ const currentSelectionDetailMessagesByLocale = {
     providerSessionLabel: "Provider session",
     collapseAction: "Collapse",
     expandAction: "Expand",
+    expandAttemptAction: (attemptNumber: number) =>
+      `Expand attempt ${attemptNumber}`,
+    expandRequestBodyAction: "Expand request body",
+    expandResponseBodyAction: "Expand response body",
     requestBodyLabel: "Request body",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
@@ -359,6 +381,10 @@ const currentSelectionDetailMessagesByLocale = {
     attemptAriaLabel: (attemptNumber: number) =>
       `Inference attempt ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `Attempt ${attemptNumber}`,
+    collapseAttemptAction: (attemptNumber: number) =>
+      `Collapse attempt ${attemptNumber}`,
+    collapseRequestBodyAction: "Collapse request body",
+    collapseResponseBodyAction: "Collapse response body",
     awaitingProviderResponse: "Awaiting provider response.",
     commandLabel: "Command",
     commandUnavailable:
@@ -399,6 +425,10 @@ const currentSelectionDetailMessagesByLocale = {
     providerSessionLabel: "Provider session",
     collapseAction: "Collapse",
     expandAction: "Expand",
+    expandAttemptAction: (attemptNumber: number) =>
+      `Expand attempt ${attemptNumber}`,
+    expandRequestBodyAction: "Expand request body",
+    expandResponseBodyAction: "Expand response body",
     requestBodyLabel: "Request body",
     requestDetailsTitle: "Request details",
     requestIdLabel: "Request ID",
@@ -470,6 +500,9 @@ const currentSelectionDetailMessagesByLocale = {
   "zh-CN": {
     attemptAriaLabel: (attemptNumber: number) => `推理尝试 ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `尝试 ${attemptNumber}`,
+    collapseAttemptAction: (attemptNumber: number) => `收起尝试 ${attemptNumber}`,
+    collapseRequestBodyAction: "收起请求正文",
+    collapseResponseBodyAction: "收起响应正文",
     awaitingProviderResponse: "正在等待提供方响应。",
     commandLabel: "命令",
     commandUnavailable: "此工作站请求没有可用的脚本命令详情。",
@@ -505,6 +538,9 @@ const currentSelectionDetailMessagesByLocale = {
     providerSessionLabel: "Provider session",
     collapseAction: "折叠",
     expandAction: "展开",
+    expandAttemptAction: (attemptNumber: number) => `展开尝试 ${attemptNumber}`,
+    expandRequestBodyAction: "展开请求正文",
+    expandResponseBodyAction: "展开响应正文",
     noCurrentWorkInPlace: "当前没有工作占用这个位置。",
     noWorkRecordedAtSelectedTick:
       "在所选时间刻度，这个位置暂时没有记录到工作。",

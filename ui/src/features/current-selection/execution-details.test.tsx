@@ -205,7 +205,7 @@ describe("ExecutionDetailsSection", () => {
 });
 
 describe("InferenceAttemptsSection", () => {
-  it("renders nested inference attempt cards when attempts exist", () => {
+  it("renders inference attempt cards collapsed by default and expands them independently", () => {
     render(
       <InferenceAttemptsSection
         attempts={[
@@ -223,31 +223,136 @@ describe("InferenceAttemptsSection", () => {
             response: "Looks good.",
             response_time: "2026-04-08T12:00:03Z",
           }),
+          inferenceAttempt("dispatch-review", {
+            attempt: 2,
+            diagnostics: {
+              provider: {
+                model: "gpt-5.4",
+                provider: "codex",
+              },
+            },
+            duration_millis: 740,
+            inference_request_id: "dispatch-review/inference-request/2",
+            outcome: "FAILED",
+            prompt: "Retry the story.",
+            response: "Needs more evidence.",
+          }),
         ]}
       />,
     );
 
     const section = screen.getByRole("region", { name: "Inference attempts" });
+    const expandAttempt1 = within(section).getByRole("button", {
+      name: "Expand attempt 1",
+    });
+    const expandAttempt2 = within(section).getByRole("button", {
+      name: "Expand attempt 2",
+    });
+
     expect(within(section).getByText("Attempt 1")).toBeTruthy();
+    expect(within(section).getByText("Attempt 2")).toBeTruthy();
+    expect(expandAttempt1.getAttribute("aria-expanded")).toBe("false");
+    expect(expandAttempt2.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      within(section).getByText(
+        `Response time: ${formatLocalDateTime("2026-04-08T12:00:03Z", "Unavailable")}`,
+      ),
+    ).toBeTruthy();
+    expect(within(section).getByText("Elapsed time: 740ms")).toBeTruthy();
+    expect(
+      within(section).queryByText("dispatch-review/inference-request/1"),
+    ).toBeNull();
+    expect(within(section).queryByText("Review the story.")).toBeNull();
+    expect(within(section).queryByText("Looks good.")).toBeNull();
+    expect(within(section).queryByText("Retry the story.")).toBeNull();
+
+    fireEvent.click(expandAttempt1);
+
+    expect(expandAttempt1.getAttribute("aria-expanded")).toBe("true");
     expect(
       within(section).getByText("dispatch-review/inference-request/1"),
     ).toBeTruthy();
-    const requestBody = within(section).getByRole("region", {
-      name: "Request body",
+    const expandRequestBody = within(section).getByRole("button", {
+      name: "Expand request body",
     });
-    const responseBody = within(section).getByRole("region", {
-      name: "Response body",
+    const expandResponseBody = within(section).getByRole("button", {
+      name: "Expand response body",
     });
+    expect(expandRequestBody.getAttribute("aria-expanded")).toBe("false");
+    expect(expandResponseBody.getAttribute("aria-expanded")).toBe("false");
+    expect(within(section).queryByText("Review the story.")).toBeNull();
+    expect(within(section).queryByText("Looks good.")).toBeNull();
 
-    fireEvent.click(within(requestBody).getByRole("button", { name: "Expand" }));
-    fireEvent.click(within(responseBody).getByRole("button", { name: "Expand" }));
+    fireEvent.click(expandRequestBody);
 
-    expect(within(requestBody).getByText("Review the story.")).toBeTruthy();
-    expect(within(responseBody).getByText("Looks good.")).toBeTruthy();
+    expect(expandRequestBody.getAttribute("aria-expanded")).toBe("true");
+    expect(within(section).getByText("Review the story.")).toBeTruthy();
+    expect(within(section).queryByText("Looks good.")).toBeNull();
+
+    fireEvent.click(expandResponseBody);
+
+    expect(expandResponseBody.getAttribute("aria-expanded")).toBe("true");
+    expect(within(section).getByText("Looks good.")).toBeTruthy();
+    expect(within(section).queryByText("Retry the story.")).toBeNull();
+
+    fireEvent.click(expandAttempt2);
+
+    expect(expandAttempt2.getAttribute("aria-expanded")).toBe("true");
+    expect(within(section).getByText("dispatch-review/inference-request/2")).toBeTruthy();
+    expect(within(section).queryByText("Retry the story.")).toBeNull();
+    expect(within(section).queryByText("Needs more evidence.")).toBeNull();
     expect(
       within(section).queryByText(
         "No inference events are available for this selected work item.",
       ),
     ).toBeNull();
+  });
+
+  it("keeps unavailable and pending response states explicit instead of rendering empty disclosure controls", () => {
+    render(
+      <InferenceAttemptsSection
+        attempts={[
+          inferenceAttempt("dispatch-review", {
+            attempt: 1,
+            outcome: "FAILED",
+            prompt: "Investigate the failure.",
+            response: "   ",
+          }),
+          inferenceAttempt("dispatch-review", {
+            attempt: 2,
+            outcome: undefined,
+            prompt: "Wait for completion.",
+            response: undefined,
+          }),
+        ]}
+      />,
+    );
+
+    const section = screen.getByRole("region", { name: "Inference attempts" });
+    fireEvent.click(
+      within(section).getByRole("button", {
+        name: "Expand attempt 1",
+      }),
+    );
+    fireEvent.click(
+      within(section).getByRole("button", {
+        name: "Expand attempt 2",
+      }),
+    );
+
+    expect(
+      within(section).getAllByRole("button", { name: "Expand request body" }),
+    ).toHaveLength(2);
+    expect(
+      within(section).queryByRole("button", { name: "Expand response body" }),
+    ).toBeNull();
+    expect(
+      within(section).getByText(
+        "Provider response text is not available for this inference attempt.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(section).getByText("Awaiting provider response."),
+    ).toBeTruthy();
   });
 });

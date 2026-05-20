@@ -71,14 +71,37 @@ function expandDispatchSection(
   return section;
 }
 
-function expandAttemptBody(
+function expandInferenceAttempt(
   container: HTMLElement,
-  title: "Request body" | "Response body",
-  expandLabel = "Expand",
-) {
-  const region = within(container).getByRole("region", { name: title });
-  fireEvent.click(within(region).getByRole("button", { name: expandLabel }));
-  return region;
+  attemptNumber: number,
+): HTMLElement {
+  const attemptCard = within(container).getByRole("article", {
+    name: `Inference attempt ${attemptNumber}`,
+  });
+  const toggle = within(attemptCard).getByRole("button", {
+    name: `Expand attempt ${attemptNumber}`,
+  });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return attemptCard;
+}
+
+function expandAttemptBody(
+  attemptCard: HTMLElement,
+  bodyLabel: "Request body" | "Response body",
+): HTMLElement {
+  const toggle = within(attemptCard).getByRole("button", {
+    name: `Expand ${bodyLabel.toLowerCase()}`,
+  });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return within(attemptCard).getByRole("region", { name: bodyLabel });
 }
 
 function buildSelectedTrace(workItem: DashboardWorkItemRef): DashboardTrace {
@@ -201,6 +224,7 @@ describe("WorkItemDetailCard summary", () => {
       "Inference attempts",
     );
     const inferenceAttempts = within(inferenceAttemptsSection);
+    expandInferenceAttempt(inferenceAttemptsSection, 1);
     const selectSessionButton = inferenceAttempts.getByRole("button", {
       name: "Select provider session codex / session_id / sess-ready-request for dispatch dispatch-review-active",
     });
@@ -283,6 +307,7 @@ describe("WorkItemDetailCard summary", () => {
         name: "Select provider session codex / path / sess-unsupported for dispatch dispatch-review-active",
       }),
     ).toBeNull();
+    expandInferenceAttempt(inferenceAttemptsSection, 1);
     expect(
       inferenceAttempts.getByText("Session details unavailable"),
     ).toBeTruthy();
@@ -1147,6 +1172,7 @@ describe("WorkItemDetailCard localization", () => {
     const inferenceAttempts = within(
       expandDispatchSection(dispatchCard, "推論試行", "展開"),
     );
+    expandInferenceAttempt(dispatchCard, 1);
 
     expect(
       inferenceAttempts.queryByRole("button", {
@@ -1259,9 +1285,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
 
     expect(activeToggle.getAttribute("aria-expanded")).toBe("true");
     expect(historicalToggle.getAttribute("aria-expanded")).toBe("false");
-    expandAttemptBody(activeCard, "Request body");
+    const expandedActiveAttempt = expandInferenceAttempt(activeSection, 1);
+    const activeRequestBody = expandAttemptBody(expandedActiveAttempt, "Request body");
     expect(
-      within(activeSection).getByText("Active attempt prompt."),
+      within(activeRequestBody).getByText("Active attempt prompt."),
     ).toBeTruthy();
     expect(
       within(historicalSection).queryByText("Historical attempt prompt."),
@@ -1408,26 +1435,28 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(attemptCards).toHaveLength(2);
     expect(within(attemptCards[0]).getByText("Attempt 1")).toBeTruthy();
     expect(within(attemptCards[1]).getByText("Attempt 2")).toBeTruthy();
+    const firstAttemptCard = expandInferenceAttempt(inferenceAttemptsSection, 1);
+    const secondAttemptCard = expandInferenceAttempt(inferenceAttemptsSection, 2);
+    const secondRequestBody = expandAttemptBody(secondAttemptCard, "Request body");
+    const secondResponseBody = expandAttemptBody(secondAttemptCard, "Response body");
     expect(
-      within(attemptCards[0]).getByText(`${dispatchID}/inference-request/1`),
+      within(firstAttemptCard).getByText(`${dispatchID}/inference-request/1`),
     ).toBeTruthy();
-    expect(within(attemptCards[0]).getByText("gpt-5.4-mini")).toBeTruthy();
-    expect(within(attemptCards[1]).getByText("codex")).toBeTruthy();
+    expect(within(firstAttemptCard).getByText("gpt-5.4-mini")).toBeTruthy();
+    expect(within(secondAttemptCard).getByText("codex")).toBeTruthy();
     expect(
-      within(attemptCards[1]).getByText(
+      within(secondAttemptCard).getByText(
         "codex / session_id / sess-ready-request",
       ),
     ).toBeTruthy();
-    expect(within(attemptCards[1]).getByText("740ms")).toBeTruthy();
-    expandAttemptBody(attemptCards[1], "Request body");
-    expandAttemptBody(attemptCards[1], "Response body");
+    expect(within(secondAttemptCard).getByText("740ms")).toBeTruthy();
     expect(
-      within(attemptCards[1]).getByText(
+      within(secondRequestBody).getByText(
         "Retry the review with the latest context.",
       ),
     ).toBeTruthy();
     expect(
-      within(attemptCards[1]).getByText("Ready for the next workstation."),
+      within(secondResponseBody).getByText("Ready for the next workstation."),
     ).toBeTruthy();
     expectLocalizedTimestampRow(dispatchCard, "Started at", requestStartedAt);
     [
@@ -2051,18 +2080,16 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     const inferenceAttempts = within(
       expandDispatchSection(dispatchCard, "Inference attempts"),
     );
-    const attempt = inferenceAttempts.getByRole("article", {
-      name: "Inference attempt 1",
-    });
-    expandAttemptBody(attempt, "Request body");
-    expandAttemptBody(attempt, "Response body");
+    const expandedAttempt = expandInferenceAttempt(dispatchCard, 1);
+    const requestBody = expandAttemptBody(expandedAttempt, "Request body");
+    const responseBody = expandAttemptBody(expandedAttempt, "Response body");
     expect(
-      within(attempt).getByText(
+      within(requestBody).getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeTruthy();
     expect(
-      within(attempt).getAllByText(
+      within(responseBody).getAllByText(
         "The active story needs revision before it can continue.",
       ).length,
     ).toBeGreaterThan(0);

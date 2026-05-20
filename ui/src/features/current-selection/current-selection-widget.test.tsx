@@ -1013,13 +1013,15 @@ describe("CurrentSelectionWidget", () => {
     const inferenceAttempts = within(
       within(currentSelection).getByRole("region", { name: "Inference attempts" }),
     );
-    const requestBodyRegion = inferenceAttempts.getByRole("region", {
-      name: "Request body",
-    });
     fireEvent.click(
-      within(requestBodyRegion).getByRole("button", { name: "Expand" }),
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
     );
-    const requestBody = within(requestBodyRegion);
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    );
+    const requestBody = within(
+      inferenceAttempts.getByRole("region", { name: "Request body" }),
+    );
 
     expect(
       requestBody.getByRole("heading", {

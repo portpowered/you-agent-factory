@@ -1,4 +1,4 @@
-import { Fragment, useId, useState } from "react";
+import { Fragment } from "react";
 import type { ReactNode } from "react";
 import type { DashboardPlaceRef } from "../../api/dashboard/types";
 import { cn } from "../../lib/cn";
@@ -16,7 +16,7 @@ import type {
   InferenceAttemptTextSectionProps,
   MetadataSectionProps,
 } from "./detail-card-types";
-import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
+import type { CurrentSelectionDetailMessages } from "./messages/current-selection-detail";
 
 export const EXECUTION_PILL_CLASS = cn(
   "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
@@ -102,30 +102,10 @@ export function InferenceAttemptTextSection({
   label,
   value,
 }: InferenceAttemptTextSectionProps) {
-  const messages = useCurrentSelectionDetailMessages();
-  const [expanded, setExpanded] = useState(false);
-  const sectionId = useId();
-  const panelId = `${sectionId}-panel`;
-
   return (
     <section aria-label={label} className="grid gap-1">
-      <div className={HISTORY_HEADER_CLASS}>
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-        <button
-          aria-controls={panelId}
-          aria-expanded={expanded}
-          className={HISTORY_TOGGLE_CLASS}
-          onClick={() => setExpanded((current) => !current)}
-          type="button"
-        >
-          {expanded ? messages.collapseAction : messages.expandAction}
-        </button>
-      </div>
-      {expanded ? (
-        <div id={panelId}>
-          <AuthoredBodyText className={INFERENCE_ATTEMPT_TEXT_CLASS} value={value} />
-        </div>
-      ) : null}
+      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+      <AuthoredBodyText className={INFERENCE_ATTEMPT_TEXT_CLASS} value={value} />
     </section>
   );
 }
@@ -185,10 +165,8 @@ export function isTerminalOrFailedPlace(place: DashboardPlaceRef): boolean {
 
 export function emptyStatePlaceMessage(
   messages: Pick<
-    ReturnType<typeof useCurrentSelectionDetailMessages>,
-    | "noCurrentWorkInPlace"
-    | "noWorkRecordedAtSelectedTick"
-    | "selectedTickWorkUnavailable"
+    CurrentSelectionDetailMessages,
+    "noCurrentWorkInPlace" | "noWorkRecordedAtSelectedTick" | "selectedTickWorkUnavailable"
   >,
   usesRetainedWorkItems: boolean,
   tokenCount: number,

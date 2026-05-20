@@ -43,24 +43,6 @@ export const WorkstationRequestSelection = {
     const formattedAttempt = within(
       inferenceAttempts.getByRole("article", { name: "Inference attempt 2" }),
     );
-    const requestBodyRegion = formattedAttempt.getByRole("region", {
-      name: "Request body",
-    });
-    const responseBodyRegion = formattedAttempt.getByRole("region", {
-      name: "Response body",
-    });
-    await userEvent.click(
-      within(requestBodyRegion).getByRole("button", { name: "Expand" }),
-    );
-    await userEvent.click(
-      within(responseBodyRegion).getByRole("button", { name: "Expand" }),
-    );
-    const requestBody = within(requestBodyRegion);
-    const responseBody = within(responseBodyRegion);
-
-    expect(
-      currentSelection.queryByRole("heading", { name: "Request counts" }),
-    ).toBeNull();
     await expect(
       currentSelection.getByRole("heading", { name: "Response details" }),
     ).toBeVisible();
@@ -71,6 +53,42 @@ export const WorkstationRequestSelection = {
     await expect(
       currentSelection.getAllByText("request-ready-story").length,
     ).toBeGreaterThan(0);
+    expect(
+      currentSelection.queryByRole("heading", { name: "Request counts" }),
+    ).toBeNull();
+    await expect(
+      formattedAttempt.getByRole("button", { name: "Expand attempt 2" }),
+    ).toBeVisible();
+    expect(
+      formattedAttempt.queryByRole("region", { name: "Request body" }),
+    ).toBeNull();
+    expect(
+      formattedAttempt.queryByRole("region", { name: "Response body" }),
+    ).toBeNull();
+
+    await userEvent.click(
+      formattedAttempt.getByRole("button", { name: "Expand attempt 2" }),
+    );
+
+    await expect(
+      formattedAttempt.getByRole("button", { name: "Expand request body" }),
+    ).toBeVisible();
+    await expect(
+      formattedAttempt.getByRole("button", { name: "Expand response body" }),
+    ).toBeVisible();
+    expect(
+      formattedAttempt.queryByRole("region", { name: "Request body" }),
+    ).toBeNull();
+    expect(
+      formattedAttempt.queryByRole("region", { name: "Response body" }),
+    ).toBeNull();
+
+    await userEvent.click(
+      formattedAttempt.getByRole("button", { name: "Expand request body" }),
+    );
+    const requestBody = within(
+      formattedAttempt.getByRole("region", { name: "Request body" }),
+    );
     await expect(
       requestBody.getByRole("heading", { level: 2, name: "Review checklist" }),
     ).toBeVisible();
@@ -78,6 +96,13 @@ export const WorkstationRequestSelection = {
     await expect(requestBody.getByText("Check the latest diff")).toBeVisible();
     expect(requestBody.queryByText("## Review checklist")).toBeNull();
     expect(requestBody.queryByText("```text")).toBeNull();
+
+    await userEvent.click(
+      formattedAttempt.getByRole("button", { name: "Expand response body" }),
+    );
+    const responseBody = within(
+      formattedAttempt.getByRole("region", { name: "Response body" }),
+    );
     await expect(
       responseBody.getByRole("heading", {
         level: 3,
@@ -163,36 +188,51 @@ export const WorkstationRequestSelectionRejected = {
     const inferenceAttempts = within(
       currentSelection.getByRole("region", { name: "Inference attempts" }),
     );
-    const rejectedAttempt = within(
-      inferenceAttempts.getByRole("article", { name: "Inference attempt 1" }),
-    );
-    const requestBodyRegion = rejectedAttempt.getByRole("region", {
-      name: "Request body",
-    });
-    const responseBodyRegion = rejectedAttempt.getByRole("region", {
-      name: "Response body",
-    });
     const responseDetails = within(
       currentSelection.getByRole("region", { name: "Response details" }),
-    );
-
-    await userEvent.click(
-      within(requestBodyRegion).getByRole("button", { name: "Expand" }),
-    );
-    await userEvent.click(
-      within(responseBodyRegion).getByRole("button", { name: "Expand" }),
     );
 
     expect(
       currentSelection.getAllByText("request-rejected-story").length,
     ).toBeGreaterThan(0);
     await expect(
-      within(requestBodyRegion).getByText(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    ).toBeVisible();
+    expect(
+      currentSelection.queryByText(
+        "Review the active story and explain what needs to change before approval.",
+      ),
+    ).toBeNull();
+    await userEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    );
+    await expect(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    ).toBeVisible();
+    await expect(
+      inferenceAttempts.getByRole("button", { name: "Expand response body" }),
+    ).toBeVisible();
+    expect(
+      inferenceAttempts.queryByRole("region", { name: "Request body" }),
+    ).toBeNull();
+    await userEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    );
+    await expect(
+      within(inferenceAttempts.getByRole("region", { name: "Request body" })).getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeVisible();
+    expect(
+      inferenceAttempts.queryByText(
+        "The active story needs revision before it can continue.",
+      ),
+    ).toBeNull();
+    await userEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand response body" }),
+    );
     await expect(
-      within(responseBodyRegion).getByText(
+      within(inferenceAttempts.getByRole("region", { name: "Response body" })).getByText(
         "The active story needs revision before it can continue.",
       ),
     ).toBeVisible();
@@ -227,15 +267,6 @@ export const WorkstationRequestSelectionErrored = {
     );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
-    const inferenceAttempts = within(
-      currentSelection.getByRole("region", { name: "Inference attempts" }),
-    );
-    const erroredAttempt = within(
-      inferenceAttempts.getByRole("article", { name: "Inference attempt 1" }),
-    );
-    const requestBodyRegion = erroredAttempt.getByRole("region", {
-      name: "Request body",
-    });
     const errorDetails = within(
       currentSelection.getByRole("region", { name: "Error details" }),
     );
@@ -244,10 +275,6 @@ export const WorkstationRequestSelectionErrored = {
       .map((label) => label.closest("div"))
       .find((row) => row?.textContent?.includes("provider_rate_limit"));
 
-    await userEvent.click(
-      within(requestBodyRegion).getByRole("button", { name: "Expand" }),
-    );
-
     expect(
       currentSelection.getAllByText("request-error-story").length,
     ).toBeGreaterThan(0);
@@ -255,10 +282,13 @@ export const WorkstationRequestSelectionErrored = {
       currentSelection.getByRole("heading", { name: "Inference attempts" }),
     ).toBeVisible();
     await expect(
-      within(requestBodyRegion).getByText(
+      currentSelection.getByRole("button", { name: "Expand attempt 1" }),
+    ).toBeVisible();
+    expect(
+      currentSelection.queryByText(
         "Review the blocked story and explain the failure.",
       ),
-    ).toBeVisible();
+    ).toBeNull();
     expect(
       currentSelection.getAllByText("provider_rate_limit").length,
     ).toBeGreaterThan(0);
@@ -273,6 +303,20 @@ export const WorkstationRequestSelectionErrored = {
     await expect(
       errorDetails.getByText(
         "Provider rate limit exceeded while reviewing the story.",
+      ),
+    ).toBeVisible();
+    await userEvent.click(
+      currentSelection.getByRole("button", { name: "Expand attempt 1" }),
+    );
+    await expect(
+      currentSelection.getByRole("button", { name: "Expand request body" }),
+    ).toBeVisible();
+    await userEvent.click(
+      currentSelection.getByRole("button", { name: "Expand request body" }),
+    );
+    await expect(
+      within(currentSelection.getByRole("region", { name: "Request body" })).getByText(
+        "Review the blocked story and explain the failure.",
       ),
     ).toBeVisible();
     expect(
