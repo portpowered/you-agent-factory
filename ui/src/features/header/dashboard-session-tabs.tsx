@@ -217,6 +217,7 @@ function SessionTabsContent({
   sessions: FactorySessionSummary[];
 }) {
   const sessionButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const sessionTabsID = useId();
 
   if (isPending) {
     return (
@@ -263,53 +264,67 @@ function SessionTabsContent({
 
   return (
     <>
-      <nav aria-label={messages.sessionTabsLabel} className={SESSION_TAB_LIST_CLASS}>
-        {sessions.map((session, index) => (
-          <SessionTabButton
-            active={session.id === activeSession?.id}
-            key={session.id}
-            buttonRef={(element) => {
-              sessionButtonRefs.current[index] = element;
-            }}
-            onKeyDown={(event) => {
-              switch (event.key) {
-                case "ArrowLeft":
-                case "ArrowUp":
-                  event.preventDefault();
-                  moveSessionFocus(index, -1);
-                  return;
-                case "ArrowRight":
-                case "ArrowDown":
-                  event.preventDefault();
-                  moveSessionFocus(index, 1);
-                  return;
-                case "Home":
-                  event.preventDefault();
-                  onSelectSession(sessions[0]?.id ?? session.id);
-                  focusSessionButton(0);
-                  return;
-                case "End":
-                  event.preventDefault();
-                  onSelectSession(
-                    sessions[sessions.length - 1]?.id ?? session.id,
-                  );
-                  focusSessionButton(sessions.length - 1);
-                  return;
-                default:
-                  return;
-              }
-            }}
-            onClick={() => {
-              onSelectSession(session.id);
-            }}
-            session={session}
-          />
-        ))}
+      <nav aria-label={messages.sessionTabsLabel}>
+        <div
+          aria-orientation="horizontal"
+          className={SESSION_TAB_LIST_CLASS}
+          role="tablist"
+        >
+          {sessions.map((session, index) => (
+            <SessionTabButton
+              active={session.id === activeSession?.id}
+              buttonRef={(element) => {
+                sessionButtonRefs.current[index] = element;
+              }}
+              controlsID={sessionPanelID(sessionTabsID, session.id)}
+              key={session.id}
+              onKeyDown={(event) => {
+                switch (event.key) {
+                  case "ArrowLeft":
+                  case "ArrowUp":
+                    event.preventDefault();
+                    moveSessionFocus(index, -1);
+                    return;
+                  case "ArrowRight":
+                  case "ArrowDown":
+                    event.preventDefault();
+                    moveSessionFocus(index, 1);
+                    return;
+                  case "Home":
+                    event.preventDefault();
+                    onSelectSession(sessions[0]?.id ?? session.id);
+                    focusSessionButton(0);
+                    return;
+                  case "End":
+                    event.preventDefault();
+                    onSelectSession(
+                      sessions[sessions.length - 1]?.id ?? session.id,
+                    );
+                    focusSessionButton(sessions.length - 1);
+                    return;
+                  default:
+                    return;
+                }
+              }}
+              onClick={() => {
+                onSelectSession(session.id);
+              }}
+              session={session}
+              tabID={sessionTabID(sessionTabsID, session.id)}
+            />
+          ))}
+        </div>
       </nav>
       {activeSession ? (
-        <p className={cn("text-xs text-af-ink/58", DASHBOARD_BODY_TEXT_CLASS)}>
-          {messages.activeSessionPathLabel}: {activeSession.folderPath}
-        </p>
+        <div
+          aria-labelledby={sessionTabID(sessionTabsID, activeSession.id)}
+          id={sessionPanelID(sessionTabsID, activeSession.id)}
+          role="tabpanel"
+        >
+          <p className={cn("text-xs text-af-ink/58", DASHBOARD_BODY_TEXT_CLASS)}>
+            {messages.activeSessionPathLabel}: {activeSession.folderPath}
+          </p>
+        </div>
       ) : null}
     </>
   );
@@ -339,27 +354,35 @@ function SessionErrorState({
 function SessionTabButton({
   active,
   buttonRef,
+  controlsID,
   onKeyDown,
   onClick,
   session,
+  tabID,
 }: {
   active: boolean;
   buttonRef: (element: HTMLButtonElement | null) => void;
+  controlsID: string;
   onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   onClick: () => void;
   session: FactorySessionSummary;
+  tabID: string;
 }) {
   const label = sessionTabLabel(session);
   return (
     <button
-      aria-pressed={active}
+      aria-controls={controlsID}
+      aria-selected={active}
       className={cn(
         SESSION_TAB_BUTTON_CLASS,
         active ? SESSION_TAB_ACTIVE_CLASS : SESSION_TAB_INACTIVE_CLASS,
       )}
+      id={tabID}
       onClick={onClick}
       onKeyDown={onKeyDown}
       ref={buttonRef}
+      role="tab"
+      tabIndex={active ? 0 : -1}
       title={`${session.folderPath} (${session.id})`}
       type="button"
     >
@@ -492,6 +515,18 @@ function sessionTabLabel(session: FactorySessionSummary): string {
 function basename(path: string): string {
   const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
   return segments[segments.length - 1] ?? "";
+}
+
+function sessionTabID(sessionTabsID: string, sessionID: string): string {
+  return `${sessionTabsID}-tab-${sessionDOMIDFragment(sessionID)}`;
+}
+
+function sessionPanelID(sessionTabsID: string, sessionID: string): string {
+  return `${sessionTabsID}-panel-${sessionDOMIDFragment(sessionID)}`;
+}
+
+function sessionDOMIDFragment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, "-");
 }
 
 function normalizeFactorySessionsError(error: unknown): FactorySessionsAPIError {

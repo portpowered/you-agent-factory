@@ -83,14 +83,16 @@ describe("DashboardSessionTabs", () => {
       ).toBeTruthy();
     });
 
-    expect(screen.getByRole("button", { name: /root \/ default/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /root \/ beta/i })).toBeTruthy();
+    expect(screen.getByRole("tablist")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /root \/ default/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /root \/ beta/i })).toBeTruthy();
+    expect(screen.getByRole("tabpanel")).toBeTruthy();
     expect(
       screen.getByText(`${messages.activeSessionPathLabel}: /workspace/root`),
     ).toBeTruthy();
   });
 
-  it("supports keyboard navigation across session tabs", async () => {
+  it("supports keyboard navigation across session tabs with roving tab focus", async () => {
     listFactorySessions.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
@@ -135,28 +137,33 @@ describe("DashboardSessionTabs", () => {
       ).toBeTruthy();
     });
 
-    const rootTab = screen.getByRole("button", { name: /root \/ default/i });
-    const betaTab = screen.getByRole("button", { name: /root \/ beta/i });
-    const gammaTab = screen.getByRole("button", { name: /root \/ gamma/i });
+    const rootTab = screen.getByRole("tab", { name: /root \/ default/i });
+    const betaTab = screen.getByRole("tab", { name: /root \/ beta/i });
+    const gammaTab = screen.getByRole("tab", { name: /root \/ gamma/i });
 
-    expect(rootTab.getAttribute("aria-pressed")).toBe("true");
+    expect(rootTab.getAttribute("aria-selected")).toBe("true");
+    expect(rootTab.getAttribute("tabindex")).toBe("0");
+    expect(betaTab.getAttribute("tabindex")).toBe("-1");
     rootTab.focus();
 
     fireEvent.keyDown(rootTab, { key: "ArrowRight" });
     await waitFor(() => {
-      expect(betaTab.getAttribute("aria-pressed")).toBe("true");
+      expect(betaTab.getAttribute("aria-selected")).toBe("true");
     });
     expect(document.activeElement).toBe(betaTab);
+    expect(betaTab.getAttribute("tabindex")).toBe("0");
+    expect(rootTab.getAttribute("tabindex")).toBe("-1");
 
     fireEvent.keyDown(betaTab, { key: "End" });
     await waitFor(() => {
-      expect(gammaTab.getAttribute("aria-pressed")).toBe("true");
+      expect(gammaTab.getAttribute("aria-selected")).toBe("true");
     });
     expect(document.activeElement).toBe(gammaTab);
+    expect(gammaTab.getAttribute("tabindex")).toBe("0");
 
     fireEvent.keyDown(gammaTab, { key: "Home" });
     await waitFor(() => {
-      expect(rootTab.getAttribute("aria-pressed")).toBe("true");
+      expect(rootTab.getAttribute("aria-selected")).toBe("true");
     });
     expect(document.activeElement).toBe(rootTab);
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe("~default");
@@ -261,7 +268,7 @@ describe("DashboardSessionTabs", () => {
       });
     });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /other \/ default/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: /other \/ default/i })).toBeTruthy();
     });
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
       "session-other",
