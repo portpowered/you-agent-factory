@@ -43,7 +43,6 @@ export const WorkstationRequestSelection = {
     const formattedAttempt = within(
       inferenceAttempts.getByRole("article", { name: "Inference attempt 2" }),
     );
-
     await expect(
       currentSelection.getByRole("heading", { name: "Response details" }),
     ).toBeVisible();
@@ -381,8 +380,11 @@ export const SelectedWorkDispatchHistorySmoke = {
       within(activeCard).getByText("Current dispatch"),
     ).toBeVisible();
     await expect(
-      within(activeCard).getByText("Active Story"),
+      within(activeCard).getByRole("strong"),
     ).toBeVisible();
+    expect(within(activeCard).getByRole("strong")).toHaveTextContent(
+      "Active Story",
+    );
     await expect(
       within(activeCard).getByText("Started at"),
     ).toBeVisible();

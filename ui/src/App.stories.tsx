@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: app-level story scenarios stay together so shared fixtures and browser interactions remain traceable in one harness.
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import { App } from "./App";
