@@ -59,6 +59,7 @@ Date: `2026-05-19`
 Date: `2026-05-20`
 
 - `cd ui && bun run build-storybook` passed.
+- `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6013 bun x vitest run --config vitest.storybook.config.ts --project=storybook src/App.workstation-requests.stories.tsx` passed in a browser-backed runner, confirming current-selection request and response timestamps render as browser-local date/time text instead of raw UTC ISO strings, while the no-response and errored workstation-request stories keep explicit empty and error messaging visible.
 - `cd ui && bun run test-storybook` passed in a browser-backed runner, including the selected-work dispatch history smoke story that proves compact summary fields, collapsed-by-default inference and script attempt disclosures, and successful expansion of both attempt paths.
 - `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6012 bun run test-storybook` passed in a browser-backed runner, including the submit-work `StableActionAlignment` story that proves the primary button keeps the same measured right edge across ready, submitting, success, error, and wrapped validation states.
 - `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6010 bun run test-storybook` passed in a browser-backed runner, including tagged header stories for icon-only branding, slider alignment, keyboard-driven return/export actions, and the dedicated responsive verification script.
