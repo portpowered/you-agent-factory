@@ -4,8 +4,8 @@ import type {
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
 } from "./detail-card-types";
-import type { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
-import type { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
+import type { useCurrentWorkstationPromptTemplateContract } from "./hooks/useCurrentWorkstationPromptTemplateContract";
+import type { useCurrentWorkstationPromptTemplateValidation } from "./hooks/useCurrentWorkstationPromptTemplateValidation";
 
 export function resolvePromptHelpState(
   promptTemplateContract: ReturnType<

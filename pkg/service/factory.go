@@ -417,7 +417,7 @@ func (fs *FactoryService) ActivateNamedFactory(ctx context.Context, name string)
 
 	replacement, err := fs.buildReplacementFactoryRuntime(ctx, factoryDir)
 	if err != nil {
-		return fmt.Errorf("%w: build replacement factory %q: %v", ErrInvalidNamedFactory, name, err)
+		return fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
 	}
 	if err := fs.requireIdleRuntime(ctx); err != nil {
 		return err
@@ -575,7 +575,7 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 		sidecars.Add(1)
 		go func() {
 			defer sidecars.Done()
-			if err := fs.listener.Watch(runCtx); err != nil && err != context.Canceled {
+			if err := fs.listener.Watch(runCtx); err != nil && !errors.Is(err, context.Canceled) {
 				fs.logger.Error("file watcher error", zap.Error(err))
 			}
 		}()
@@ -651,7 +651,7 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 
 	err := fs.waitForActiveRuntime(ctx)
 	currentRuntime = fs.currentLiveRuntime()
-	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && stopErr != context.Canceled && err == nil {
+	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) && err == nil {
 		err = stopErr
 	}
 	fs.clearRunState()
@@ -674,7 +674,7 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 		fs.renderDashboard(ctx)
 	}
 
-	if err != nil && err != context.Canceled {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("factory run: %w", err)
 	}
 	return nil
@@ -734,7 +734,7 @@ func (fs *FactoryService) activateReplacementRuntime(
 	restoreCurrentSidecars = false
 	fs.swapActiveRuntime(replacement)
 	fs.setRunState(runState.ctx, replacementHandle)
-	if err := fs.stopLiveRuntime(runState.runtime); err != nil && err != context.Canceled {
+	if err := fs.stopLiveRuntime(runState.runtime); err != nil && !errors.Is(err, context.Canceled) {
 		fs.logger.Warn("prior runtime shutdown failed", zap.Error(err))
 	}
 	return nil
@@ -875,7 +875,7 @@ func (fs *FactoryService) startLiveRuntimeSidecars(ctx context.Context, handle *
 		handle.sidecars.Add(1)
 		go func() {
 			defer handle.sidecars.Done()
-			if err := handle.runtime.listener.Watch(sidecarCtx); err != nil && err != context.Canceled {
+			if err := handle.runtime.listener.Watch(sidecarCtx); err != nil && !errors.Is(err, context.Canceled) {
 				fs.logger.Error("file watcher error", zap.Error(err))
 			}
 		}()
@@ -1053,7 +1053,9 @@ func (fs *FactoryService) setRunState(ctx context.Context, runtime *liveRuntimeH
 }
 
 func (fs *FactoryService) clearRunState() {
-	fs.setRunState(nil, nil)
+	fs.runMu.Lock()
+	defer fs.runMu.Unlock()
+	fs.runState = nil
 }
 
 func (h *liveRuntimeHandle) completed() bool {
@@ -1271,7 +1273,7 @@ func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory f
 		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
 			return factoryapi.Factory{}, factoryconfig.ErrNamedFactoryAlreadyExists
 		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
-			return factoryapi.Factory{}, fmt.Errorf("%w: %v", ErrInvalidNamedFactory, err)
+			return factoryapi.Factory{}, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 		default:
 			return factoryapi.Factory{}, err
 		}
@@ -1356,7 +1358,7 @@ func (fs *FactoryService) SaveEditableFactoryDefinition(ctx context.Context, req
 	if err != nil {
 		switch {
 		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
-			return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: %v", ErrInvalidNamedFactory, err)
+			return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 		default:
 			return factoryapi.EditableFactoryDefinition{}, err
 		}
@@ -1364,7 +1366,7 @@ func (fs *FactoryService) SaveEditableFactoryDefinition(ctx context.Context, req
 
 	replacement, err := fs.buildReplacementFactoryRuntime(ctx, factoryDir)
 	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: build replacement factory %q: %v", ErrInvalidNamedFactory, request.FactoryDefinition.Name, err)
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, request.FactoryDefinition.Name, err)
 	}
 	if err := fs.requireIdleRuntime(ctx); err != nil {
 		return factoryapi.EditableFactoryDefinition{}, err

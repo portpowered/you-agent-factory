@@ -38,6 +38,7 @@ interface DashboardGraphFrameProps extends HTMLAttributes<HTMLElement> {
 export function DashboardGraphFrame({
   children,
   className,
+  role,
   ...props
 }: DashboardGraphFrameProps) {
   return (
@@ -47,6 +48,7 @@ export function DashboardGraphFrame({
         className,
       )}
       data-dashboard-graph-frame="true"
+      role={role ?? "region"}
       {...props}
     >
       {children}

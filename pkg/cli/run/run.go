@@ -232,7 +232,11 @@ func Run(ctx context.Context, cfg RunConfig) error {
 		return err
 	}
 	if reservedAPIServer != nil {
-		defer reservedAPIServer.CloseIfUnused()
+		defer func() {
+			if err := reservedAPIServer.CloseIfUnused(); err != nil {
+				logger.Warn("release reserved API server listener failed", zap.Error(err))
+			}
+		}()
 		cfg.Port = reservedAPIServer.Port()
 	}
 

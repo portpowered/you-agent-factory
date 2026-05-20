@@ -399,7 +399,8 @@ func TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEv
 		t.Fatal("expected Infer to fail")
 	}
 
-	providerErr, ok := err.(*ProviderError)
+	var providerErr *ProviderError
+	ok := errors.As(err, &providerErr)
 	if !ok {
 		t.Fatalf("expected ProviderError, got %T", err)
 	}

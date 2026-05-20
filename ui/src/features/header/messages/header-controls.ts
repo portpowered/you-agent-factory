@@ -26,7 +26,7 @@ export const HEADER_MAX_TICK_TOKEN = "{{maxTick}}";
 const headerControlsMessagesByLocale = {
   en: {
     brandWordmark: "Infinite You",
-    currentTickStatusTemplate: `Tick ${HEADER_CURRENT_TICK_TOKEN} of ${HEADER_MAX_TICK_TOKEN}`,
+    currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "dashboard summary",
     dashboardUnavailableTitle: "Dashboard unavailable",
     languageLabel: "Language",
@@ -42,7 +42,7 @@ const headerControlsMessagesByLocale = {
   },
   ja: {
     brandWordmark: "Infinite You",
-    currentTickStatusTemplate: `${HEADER_MAX_TICK_TOKEN} 件中 ${HEADER_CURRENT_TICK_TOKEN} 件目のティック`,
+    currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "ダッシュボードの概要",
     dashboardUnavailableTitle: "ダッシュボードを利用できません",
     languageLabel: "言語",
@@ -59,7 +59,7 @@ const headerControlsMessagesByLocale = {
   },
   ko: {
     brandWordmark: "Infinite You",
-    currentTickStatusTemplate: `틱 ${HEADER_CURRENT_TICK_TOKEN} / ${HEADER_MAX_TICK_TOKEN}`,
+    currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "대시보드 요약",
     dashboardUnavailableTitle: "대시보드를 사용할 수 없음",
     languageLabel: "언어",
@@ -76,7 +76,7 @@ const headerControlsMessagesByLocale = {
   },
   "zh-CN": {
     brandWordmark: "Infinite You",
-    currentTickStatusTemplate: `第 ${HEADER_CURRENT_TICK_TOKEN} 个刻度，共 ${HEADER_MAX_TICK_TOKEN} 个`,
+    currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "仪表板概览",
     dashboardUnavailableTitle: "仪表板不可用",
     languageLabel: "语言",

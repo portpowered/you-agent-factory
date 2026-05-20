@@ -1,6 +1,6 @@
 import { expect, within } from "storybook/test";
 
-import { NoSelectionDetailCard } from "../../features/current-selection/no-selection-detail-card";
+import { NoSelectionDetailCard } from "../../features/current-selection/components/no-selection-detail-card";
 import "../../styles.css";
 import { DashboardWidgetFrame } from "./widget-frame";
 
@@ -28,4 +28,3 @@ export const CurrentSelectionEmptyState = {
     ).toBeVisible();
   },
 };
-

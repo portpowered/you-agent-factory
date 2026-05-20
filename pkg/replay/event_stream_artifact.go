@@ -187,17 +187,12 @@ func hydrateArtifactFromAdjacentFactory(eventStreamPath string, artifact *interf
 	if !ok {
 		return nil
 	}
-	loaded, err := config.LoadRuntimeConfig(factoryDir, nil)
-	if err != nil {
+	loaded, ok := loadAdjacentRuntimeConfig(factoryDir)
+	if !ok {
 		return nil
 	}
-	generated, err := GeneratedFactoryFromRuntimeConfig(
-		loaded.FactoryDir(),
-		loaded.FactoryConfig(),
-		loaded,
-		WithGeneratedFactorySourceDirectory(loaded.FactoryDir()),
-	)
-	if err != nil {
+	generated, ok := generateAdjacentFactoryRuntimeConfig(loaded)
+	if !ok {
 		return nil
 	}
 	merged := mergeGeneratedFactoryMissingRuntimeFields(artifact.Factory, generated)
@@ -222,6 +217,27 @@ func adjacentFactoryDir(eventStreamPath string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func loadAdjacentRuntimeConfig(factoryDir string) (*config.LoadedFactoryConfig, bool) {
+	loaded, err := config.LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		return nil, false
+	}
+	return loaded, true
+}
+
+func generateAdjacentFactoryRuntimeConfig(loaded *config.LoadedFactoryConfig) (factoryapi.Factory, bool) {
+	generated, err := GeneratedFactoryFromRuntimeConfig(
+		loaded.FactoryDir(),
+		loaded.FactoryConfig(),
+		loaded,
+		WithGeneratedFactorySourceDirectory(loaded.FactoryDir()),
+	)
+	if err != nil {
+		return factoryapi.Factory{}, false
+	}
+	return generated, true
 }
 
 func mergeGeneratedFactoryMissingRuntimeFields(recorded factoryapi.Factory, authored factoryapi.Factory) factoryapi.Factory {

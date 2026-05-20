@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -431,7 +432,7 @@ func TestDocsCommand_SupportedTopicReturnsConfiguredWriterFailure(t *testing.T) 
 	if err == nil {
 		t.Fatal("expected docs topic write to fail")
 	}
-	if err != wantErr {
+	if !errors.Is(err, wantErr) {
 		t.Fatalf("docs topic write error = %v, want %v", err, wantErr)
 	}
 }
@@ -773,7 +774,8 @@ func TestExecute_ExitsWithStatusOneWhenRootCommandFails(t *testing.T) {
 		t.Fatal("expected Execute helper process to exit with failure")
 	}
 
-	exitErr, ok := err.(*exec.ExitError)
+	var exitErr *exec.ExitError
+	ok := errors.As(err, &exitErr)
 	if !ok {
 		t.Fatalf("Execute helper error = %T, want *exec.ExitError", err)
 	}
