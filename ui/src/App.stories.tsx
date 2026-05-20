@@ -1497,6 +1497,10 @@ export const HeaderLocalizationVerification = {
     await expect(await canvas.findByText("5/5")).toBeVisible();
 
     await userEvent.tab();
+    await expect(
+      within(englishToolbar).getByRole("slider", { name: "Timeline tick" }),
+    ).toHaveFocus();
+    await userEvent.tab();
     await expect(languageButton).toHaveFocus();
     await userEvent.click(languageButton);
     await userEvent.click(

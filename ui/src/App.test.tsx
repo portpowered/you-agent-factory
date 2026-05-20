@@ -2742,6 +2742,45 @@ describe("App timeline reconstruction flows", () => {
     });
   });
 
+  it("renders the updated dashboard header formatting through the app shell", async () => {
+    renderApp({
+      snapshot: terminalSnapshot,
+      timelineSnapshots: [historicalTimelineSnapshot, terminalSnapshot],
+    });
+
+    const toolbar = await screen.findByRole("region", {
+      name: "dashboard summary",
+    });
+    const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
+      name: "Timeline tick",
+    });
+    const languageButton = within(toolbar).getByRole("button", {
+      name: "Change language",
+    });
+    const exportButton = within(toolbar).getByRole("button", {
+      name: "Export PNG",
+    });
+    const streamStatus = within(toolbar).getByRole("status", {
+      name: "Infinite You event stream connecting",
+    });
+    const headerControls = Array.from(
+      toolbar.querySelectorAll(
+        '[aria-label="Timeline tick"], [aria-label="Change language"], [aria-label="Export PNG"], [role="status"]',
+      ),
+    );
+
+    expect(headerControls).toHaveLength(4);
+    expect(headerControls[0]).toBe(slider);
+    expect(headerControls[1]).toBe(languageButton);
+    expect(headerControls[2]).toBe(exportButton);
+    expect(headerControls[3]).toBe(streamStatus);
+    expect(within(toolbar).getByText("4/4")).toBeTruthy();
+    expect(within(toolbar).queryByText(/Tick \d+ of \d+/)).toBeNull();
+    expect(within(toolbar).getByText("Timeline tick").className).toContain(
+      "sr-only",
+    );
+  });
+
   it("renders totals and selection panels from the selected event tick", async () => {
     renderApp({
       snapshot: baselineSnapshot,
