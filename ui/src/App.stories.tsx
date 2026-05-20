@@ -4,25 +4,14 @@ import { App } from "./App";
 import type {
   DashboardSnapshot,
   DashboardTrace,
-  DashboardWorkstationRequest,
 } from "./api/dashboard";
 import type { FactoryValue } from "./api/named-factory";
-import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
 import {
   semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,
   twentyNodeDashboardSnapshot,
 } from "./components/dashboard/test-fixtures";
 import { formatTimeOfDay } from "./components/ui/formatters";
-import { DashboardScreen } from "./features/dashboard";
-import { AppLocaleProvider, useAppLocale } from "./i18n";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_PAGE_HEADING_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "./components/ui/dashboard-typography";
 import { LocalePropagationStory } from "./stories/localePropagationStory";
 import {
   buttonVisibleStyle,
