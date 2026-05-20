@@ -25,6 +25,7 @@ const (
 )
 
 var safeProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var codexTimestampPrefixedSessionPattern = regexp.MustCompile(`^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-[A-Za-z0-9_-]+\.jsonl$`)
 
 var (
 	errInvalidProviderSessionIdentifier = errors.New("invalid provider session identifier")
@@ -139,7 +140,7 @@ func resolveCodexSessionFile(root, id string) (resolvedCodexSessionFile, error) 
 		if entry.Type()&fs.ModeType != 0 && entry.Type()&fs.ModeSymlink == 0 {
 			return nil
 		}
-		if filepath.Base(path) == targetName {
+		if matchesCodexSessionBaseName(filepath.Base(path), id, targetName) {
 			matches = append(matches, path)
 		}
 		return nil
@@ -182,6 +183,16 @@ func resolveCodexSessionFile(root, id string) (resolvedCodexSessionFile, error) 
 	}
 
 	return resolvedCodexSessionFile{}, errProviderSessionNotFound
+}
+
+func matchesCodexSessionBaseName(baseName, id, exactName string) bool {
+	if baseName == exactName {
+		return true
+	}
+	if !codexTimestampPrefixedSessionPattern.MatchString(baseName) {
+		return false
+	}
+	return strings.HasSuffix(baseName, "-"+id+".jsonl")
 }
 
 func pathInsideRoot(root, path string) bool {

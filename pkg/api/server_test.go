@@ -57,6 +57,19 @@ func writeProviderSessionFixture(t *testing.T, root, id, contents string) {
 	}
 }
 
+func writeNamedProviderSessionFixture(t *testing.T, root, fileName, contents string) {
+	t.Helper()
+
+	dir := filepath.Join(root, "2026", "05", "18")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create provider session fixture directory: %v", err)
+	}
+	path := filepath.Join(dir, fileName)
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatalf("write named provider session fixture: %v", err)
+	}
+}
+
 func readSSEFactoryEvent(t *testing.T, reader *bufio.Reader) factoryapi.FactoryEvent {
 	t.Helper()
 
@@ -477,6 +490,45 @@ func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testin
 	}
 }
 
+func TestGetProviderSessionDetails_LoadsTimestampPrefixedCodexSessionFromConfiguredRoot(t *testing.T) {
+	root := t.TempDir()
+	writeNamedProviderSessionFixture(
+		t,
+		root,
+		"rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl",
+		strings.Join([]string{
+			`{"type":"session_meta","id":"019e44f4-580e-7f32-981e-1e54ec6907d6"}`,
+			`{"type":"response_item","payload":{"type":"reasoning"}}`,
+		}, "\n"),
+	)
+
+	srv := newTestServerWithCodexRoot(root)
+	req := httptest.NewRequest(
+		"GET",
+		"/provider-sessions/detail?provider=codex&kind=session_id&id=019e44f4-580e-7f32-981e-1e54ec6907d6",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var resp factoryapi.ProviderSessionDetailResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode provider session response: %v", err)
+	}
+	if resp.Source.RelativePath != "2026/05/18/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl" {
+		t.Fatalf("relative path = %q, want timestamp-prefixed rollout path", resp.Source.RelativePath)
+	}
+	if resp.ProviderSession.Id != "019e44f4-580e-7f32-981e-1e54ec6907d6" {
+		t.Fatalf("provider session id = %q, want canonical session id", resp.ProviderSession.Id)
+	}
+	if resp.Parse.EventCount != 2 {
+		t.Fatalf("parse event count = %d, want 2", resp.Parse.EventCount)
+	}
+}
+
 func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 	session := strings.Join([]string{
 		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
@@ -552,6 +604,23 @@ func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 func TestGetProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {
 	srv := newTestServerWithCodexRoot(t.TempDir())
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+}
+
+func TestGetProviderSessionDetails_IgnoresUnsupportedRolloutFileNames(t *testing.T) {
+	root := t.TempDir()
+	writeNamedProviderSessionFixture(
+		t,
+		root,
+		"rollout-backup-sess_123.jsonl",
+		`{"type":"session_meta","id":"sess_123"}`,
+	)
+
+	srv := newTestServerWithCodexRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
