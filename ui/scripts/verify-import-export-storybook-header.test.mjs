@@ -18,8 +18,12 @@ describe("verifyDashboardHeader", () => {
       focus: vi.fn().mockResolvedValue(undefined),
       isVisible: vi.fn().mockResolvedValue(true),
     };
+    const languageButton = {
+      boundingBox: vi.fn().mockResolvedValue({ height: 20, width: 120, x: 380, y: 0 }),
+      isVisible: vi.fn().mockResolvedValue(true),
+    };
     const streamStatus = {
-      boundingBox: vi.fn().mockResolvedValue({ height: 20, width: 180, x: 380, y: 0 }),
+      boundingBox: vi.fn().mockResolvedValue({ height: 20, width: 180, x: 640, y: 0 }),
       isVisible: vi.fn().mockResolvedValue(true),
     };
     const currentButton = {
@@ -27,7 +31,7 @@ describe("verifyDashboardHeader", () => {
       isVisible: vi.fn().mockResolvedValue(true),
     };
     const exportButton = {
-      boundingBox: vi.fn().mockResolvedValue({ height: 20, width: 120, x: 580, y: 0 }),
+      boundingBox: vi.fn().mockResolvedValue({ height: 20, width: 120, x: 520, y: 0 }),
       isVisible: vi.fn().mockResolvedValue(true),
     };
     const currentTick = { isVisible: vi.fn().mockResolvedValue(true) };
@@ -36,15 +40,17 @@ describe("verifyDashboardHeader", () => {
       getByRole: vi.fn((role, options) => {
         if (role === "heading") return heading;
         if (role === "slider") return slider;
+        if (options?.name === "Change language") return languageButton;
         if (role === "status") return streamStatus;
         if (options?.name === "Return to current tick") return currentButton;
         return exportButton;
       }),
       getByText: vi
         .fn()
-        .mockReturnValueOnce({ first: vi.fn().mockReturnValue(currentTick) })
-        .mockReturnValueOnce({ isVisible: vi.fn().mockResolvedValue(true) })
-        .mockReturnValueOnce(currentTick),
+        .mockImplementation(() => ({
+          first: vi.fn().mockReturnValue(currentTick),
+          isVisible: vi.fn().mockResolvedValue(true),
+        })),
       keyboard: {
         press: vi.fn().mockResolvedValue(undefined),
       },
@@ -81,6 +87,11 @@ describe("verifyDashboardHeader", () => {
             isVisible: vi.fn().mockResolvedValue(true),
           };
         }
+        if (options?.name === "Change language") {
+          return {
+            isVisible: vi.fn().mockResolvedValue(true),
+          };
+        }
         if (role === "status") return { isVisible: vi.fn().mockResolvedValue(true) };
         if (options?.name === "Return to current tick") {
           return {
@@ -90,14 +101,12 @@ describe("verifyDashboardHeader", () => {
         }
         return { isVisible: vi.fn().mockResolvedValue(true) };
       }),
-      getByText: vi
-        .fn()
-        .mockReturnValueOnce({
-          first: vi.fn().mockReturnValue({
-            isVisible: vi.fn().mockResolvedValue(true),
-          }),
-        })
-        .mockReturnValue({ isVisible: vi.fn().mockResolvedValue(true) }),
+      getByText: vi.fn().mockImplementation(() => ({
+        first: vi.fn().mockReturnValue({
+          isVisible: vi.fn().mockResolvedValue(true),
+        }),
+        isVisible: vi.fn().mockResolvedValue(true),
+      })),
       keyboard: {
         press: vi.fn().mockResolvedValue(undefined),
       },

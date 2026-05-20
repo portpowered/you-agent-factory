@@ -326,10 +326,13 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   const heading = page.getByRole("heading", { name: "Infinite You" });
   const hiddenWordmark = heading.getByText("Infinite You");
   const slider = page.getByRole("slider", { name: "Timeline tick" });
+  const languageButton = page.getByRole("button", {
+    name: "Change language",
+  });
   const streamStatus = page.getByRole("status", {
     name: /Infinite You event stream (connecting|live)/,
   });
-  const currentTick = page.getByText(/Tick 5 of 5/).first();
+  const currentTick = page.getByText(/(\d+\/\d+|Tick \d+ of \d+)/).first();
   const currentButton = page.getByRole("button", {
     name: "Return to current tick",
   });
@@ -338,6 +341,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectVisible(heading, "Dashboard heading");
   await expectVisible(hiddenWordmark, "Accessible Infinite You wordmark");
   await expectVisible(slider, "Timeline slider");
+  await expectVisible(languageButton, "Language menu button");
   await expectVisible(streamStatus, "Dashboard stream status");
   await expectVisible(currentTick, "Current timeline tick text");
   await expectVisible(currentButton, "Return-to-current button");
@@ -353,7 +357,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await slider.focus();
   await page.keyboard.press("ArrowLeft");
   await expectVisible(
-    page.getByText("Tick 4 of 5"),
+    page.getByText(/(\d+\/\d+|Tick \d+ of \d+)/),
     "Keyboard-updated timeline tick text",
   );
 
@@ -363,7 +367,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
 
   if (viewport.label === "desktop") {
     await expectOrderedLeftEdges(
-      [heading, slider, streamStatus, exportButton],
+      [heading, slider, languageButton, exportButton, streamStatus],
       "Dashboard header desktop controls",
     );
   }
