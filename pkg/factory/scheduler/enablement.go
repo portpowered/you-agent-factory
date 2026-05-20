@@ -192,20 +192,45 @@ func (e *EnablementEvaluator) findSingleTokenBindingTransition(
 	if tr == nil || snapshot == nil || len(tr.InputArcs) == 0 {
 		return interfaces.EnabledTransition{}, false
 	}
+	if !singleTokenGuardedTransition(tr) {
+		return interfaces.EnabledTransition{}, false
+	}
+	search := singleTokenBindingSearch{
+		evaluator:           e,
+		transition:          tr,
+		snapshot:            snapshot,
+		runtime:             singleTokenRuntimeContext(e, tr, snapshot),
+		order:               singleTokenBindingOrder(tr),
+		bindings:            make(map[string]*interfaces.Token, len(tr.InputArcs)),
+		result:              make(map[string][]interfaces.Token, len(tr.InputArcs)),
+		arcModes:            make(map[string]interfaces.ArcMode, len(tr.InputArcs)),
+		usedConsumeTokenIDs: make(map[string]bool),
+	}
+	if !search.search(0) {
+		return interfaces.EnabledTransition{}, false
+	}
+	return interfaces.EnabledTransition{
+		TransitionID: tr.ID,
+		WorkerType:   tr.WorkerType,
+		Bindings:     search.result,
+		ArcModes:     search.arcModes,
+	}, true
+}
 
+func singleTokenGuardedTransition(tr *petri.Transition) bool {
 	hasGuard := false
 	for i := range tr.InputArcs {
 		if !isSingleTokenCardinality(tr.InputArcs[i].Cardinality) {
-			return interfaces.EnabledTransition{}, false
+			return false
 		}
 		if tr.InputArcs[i].Guard != nil {
 			hasGuard = true
 		}
 	}
-	if !hasGuard {
-		return interfaces.EnabledTransition{}, false
-	}
+	return hasGuard
+}
 
+func singleTokenBindingOrder(tr *petri.Transition) []int {
 	order := make([]int, 0, len(tr.InputArcs))
 	for i := range tr.InputArcs {
 		if tr.InputArcs[i].Guard == nil {
@@ -217,80 +242,87 @@ func (e *EnablementEvaluator) findSingleTokenBindingTransition(
 			order = append(order, i)
 		}
 	}
+	return order
+}
 
-	runtime := petri.RuntimeGuardContext{
+func singleTokenRuntimeContext(e *EnablementEvaluator, tr *petri.Transition, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) petri.RuntimeGuardContext {
+	return petri.RuntimeGuardContext{
 		Now:                 e.now(),
 		CurrentTransitionID: tr.ID,
 		DispatchHistory:     snapshot.DispatchHistory,
 		RuntimeConfig:       e.runtimeConfig,
 		TransitionWorkers:   transitionWorkerTypes(snapshot.Topology, tr),
 	}
+}
 
-	bindings := make(map[string]*interfaces.Token, len(tr.InputArcs))
-	result := make(map[string][]interfaces.Token, len(tr.InputArcs))
-	arcModes := make(map[string]interfaces.ArcMode, len(tr.InputArcs))
-	usedConsumeTokenIDs := make(map[string]bool)
+type singleTokenBindingSearch struct {
+	evaluator           *EnablementEvaluator
+	transition          *petri.Transition
+	snapshot            *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	runtime             petri.RuntimeGuardContext
+	order               []int
+	bindings            map[string]*interfaces.Token
+	result              map[string][]interfaces.Token
+	arcModes            map[string]interfaces.ArcMode
+	usedConsumeTokenIDs map[string]bool
+}
 
-	var search func(position int) bool
-	search = func(position int) bool {
-		if position >= len(order) {
-			return true
-		}
+func (s *singleTokenBindingSearch) search(position int) bool {
+	if position >= len(s.order) {
+		return true
+	}
 
-		arc := &tr.InputArcs[order[position]]
-		key := arcKey(arc)
-		candidates := stableTokens(snapshot.Marking.TokensInPlace(arc.PlaceID))
-		if len(candidates) == 0 {
-			return false
-		}
-
-		matched := candidates
-		if arc.Guard != nil {
-			guardMatched, ok := e.evaluateGuard(arc.Guard, runtime, candidates, bindings, &snapshot.Marking)
-			if !ok || len(guardMatched) == 0 {
-				return false
-			}
-			matched = stableTokens(guardMatched)
-		}
-
-		for _, candidate := range matched {
-			if arc.Mode != interfaces.ArcModeObserve && usedConsumeTokenIDs[candidate.ID] {
-				continue
-			}
-
-			candidateCopy := candidate
-			bindings[key] = &candidateCopy
-			result[key] = []interfaces.Token{candidateCopy}
-			arcModes[key] = arc.Mode
-			if arc.Mode != interfaces.ArcModeObserve {
-				usedConsumeTokenIDs[candidate.ID] = true
-			}
-
-			if search(position + 1) {
-				return true
-			}
-
-			delete(bindings, key)
-			delete(result, key)
-			delete(arcModes, key)
-			if arc.Mode != interfaces.ArcModeObserve {
-				delete(usedConsumeTokenIDs, candidate.ID)
-			}
-		}
-
+	arc := &s.transition.InputArcs[s.order[position]]
+	key := arcKey(arc)
+	candidates := stableTokens(s.snapshot.Marking.TokensInPlace(arc.PlaceID))
+	if len(candidates) == 0 {
 		return false
 	}
 
-	if !search(0) {
-		return interfaces.EnabledTransition{}, false
+	for _, candidate := range s.matchedCandidates(arc, candidates) {
+		if !s.tryCandidate(position, arc, key, candidate) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func (s *singleTokenBindingSearch) matchedCandidates(arc *petri.Arc, candidates []interfaces.Token) []interfaces.Token {
+	if arc.Guard == nil {
+		return candidates
+	}
+	guardMatched, ok := s.evaluator.evaluateGuard(arc.Guard, s.runtime, candidates, s.bindings, &s.snapshot.Marking)
+	if !ok || len(guardMatched) == 0 {
+		return nil
+	}
+	return stableTokens(guardMatched)
+}
+
+func (s *singleTokenBindingSearch) tryCandidate(position int, arc *petri.Arc, key string, candidate interfaces.Token) bool {
+	if arc.Mode != interfaces.ArcModeObserve && s.usedConsumeTokenIDs[candidate.ID] {
+		return false
 	}
 
-	return interfaces.EnabledTransition{
-		TransitionID: tr.ID,
-		WorkerType:   tr.WorkerType,
-		Bindings:     result,
-		ArcModes:     arcModes,
-	}, true
+	candidateCopy := candidate
+	s.bindings[key] = &candidateCopy
+	s.result[key] = []interfaces.Token{candidateCopy}
+	s.arcModes[key] = arc.Mode
+	if arc.Mode != interfaces.ArcModeObserve {
+		s.usedConsumeTokenIDs[candidate.ID] = true
+	}
+
+	if s.search(position + 1) {
+		return true
+	}
+
+	delete(s.bindings, key)
+	delete(s.result, key)
+	delete(s.arcModes, key)
+	if arc.Mode != interfaces.ArcModeObserve {
+		delete(s.usedConsumeTokenIDs, candidate.ID)
+	}
+	return false
 }
 
 func (e *EnablementEvaluator) evaluateGuard(guard petri.Guard, runtime petri.RuntimeGuardContext, candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *petri.MarkingSnapshot) ([]interfaces.Token, bool) {
