@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { formatLocalDateTime } from "../../components/ui/formatters";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import { DETAIL_CARD_NOW, inferenceAttempt } from "./detail-card-test-helpers";
 import {
@@ -70,10 +71,16 @@ describe("ExecutionDetailsSection", () => {
     const workstationRequest = within(section).getByRole("region", {
       name: "Workstation request",
     });
+    const expectedStartedAt = formatLocalDateTime(
+      details.workstationRequest?.request.startedAt,
+      "Elapsed time is not available for this selected run.",
+    );
     expect(within(workstationRequest).getByText("2")).toBeTruthy();
     expect(within(workstationRequest).getAllByText("1")).toHaveLength(2);
     expect(within(workstationRequest).getByText("FAILED")).toBeTruthy();
     expect(within(workstationRequest).getByText("640ms")).toBeTruthy();
+    expect(within(workstationRequest).getByText(expectedStartedAt)).toBeTruthy();
+    expect(within(workstationRequest).queryByText("2026-04-08T12:00:00Z")).toBeNull();
     expect(
       within(workstationRequest).getByText("provider_timeout"),
     ).toBeTruthy();

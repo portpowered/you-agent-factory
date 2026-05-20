@@ -128,3 +128,39 @@ export function CurrentActivityGraphEditorHeader({
     </div>
   );
 }
+
+const FACTORY_GRAPH_HEADER_ACTIONS_CLASS =
+  "flex min-w-0 flex-wrap items-center justify-end gap-2";
+
+export function CurrentActivityGraphHeaderActions({
+  editorMode,
+  hasChanges,
+  isDefinitionLoading,
+  loadErrorMessage,
+  locale,
+  onToggle,
+}: {
+  editorMode: boolean;
+  hasChanges: boolean;
+  isDefinitionLoading: boolean;
+  loadErrorMessage?: string;
+  locale?: string;
+  onToggle: () => void;
+}) {
+  return (
+    <div className={FACTORY_GRAPH_HEADER_ACTIONS_CLASS}>
+      <FactoryGraphEditorStatus
+        editorMode={editorMode}
+        hasChanges={hasChanges}
+        isDefinitionLoading={isDefinitionLoading}
+        locale={locale}
+        loadErrorMessage={loadErrorMessage}
+      />
+      <FactoryGraphEditorModeToggle
+        editorMode={editorMode}
+        locale={locale}
+        onClick={onToggle}
+      />
+    </div>
+  );
+}

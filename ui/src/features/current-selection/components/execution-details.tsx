@@ -1,6 +1,7 @@
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import {
+  formatLocalDateTime,
   formatDurationFromISO,
   formatDurationMillis,
 } from "../../../components/ui/formatters";
@@ -155,6 +156,10 @@ function WorkstationRequestProjectionSection({
   }
 
   const { counts, request, response } = requestProjection;
+  const startedAt = formatLocalDateTime(
+    request.startedAt ?? request.started_at,
+    messages.elapsedUnavailable,
+  );
 
   return (
     <section
@@ -178,9 +183,8 @@ function WorkstationRequestProjectionSection({
           value={counts.erroredCount ?? counts.errored_count}
         />
         <InferenceAttemptDetail
-          code
           label="startedAt"
-          value={request.startedAt ?? request.started_at}
+          value={startedAt}
         />
         <InferenceAttemptDetail
           code

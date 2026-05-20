@@ -1161,7 +1161,7 @@ describe("App current selection", () => {
     expect(within(stateInfo).getByText("Count")).toBeTruthy();
     expect(within(stateInfo).getByText("Current work")).toBeTruthy();
     expect(within(stateInfo).getByText(activeWorkLabel)).toBeTruthy();
-    expect(within(stateInfo).getByText(activeWorkID)).toBeTruthy();
+    expect(within(stateInfo).queryByText(activeWorkID)).toBeNull();
 
     fireEvent.click(
       within(stateInfo).getByRole("button", {
@@ -1185,9 +1185,7 @@ describe("App current selection", () => {
     const emptyStateInfo = await screen.findByRole("article", {
       name: "Current selection",
     });
-    expect(
-      within(emptyStateInfo).getAllByText("blocked").length,
-    ).toBeGreaterThan(0);
+    expect(within(emptyStateInfo).getByText("story: blocked")).toBeTruthy();
     expect(within(emptyStateInfo).getByTitle("story:blocked")).toBeTruthy();
     expect(
       within(emptyStateInfo).getByText(
@@ -1901,7 +1899,7 @@ describe("App current selection terminal states", () => {
     expect(within(completedDetail).getByText("Count")).toBeTruthy();
     expect(within(completedDetail).getByText("Current work")).toBeTruthy();
     expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
-    expect(within(completedDetail).getByText(completedWorkID)).toBeTruthy();
+    expect(within(completedDetail).queryByText(completedWorkID)).toBeNull();
     expect(
       within(completedDetail).queryByText(
         "No current work is occupying this place.",
@@ -1936,13 +1934,11 @@ describe("App current selection terminal states", () => {
         name: "Current selection",
       });
 
-      expect(
-        within(failedDetail).getAllByText("blocked").length,
-      ).toBeGreaterThan(0);
+      expect(within(failedDetail).getByText("story: blocked")).toBeTruthy();
       expect(within(failedDetail).getByText("Count")).toBeTruthy();
       expect(within(failedDetail).getByText("Current work")).toBeTruthy();
       expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();
-      expect(within(failedDetail).getByText(failedWorkID)).toBeTruthy();
+      expect(within(failedDetail).queryByText(failedWorkID)).toBeNull();
       expect(
         within(failedDetail).getAllByText("Failure reason").length,
       ).toBeGreaterThan(0);

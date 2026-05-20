@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 
 import type {
   DashboardSnapshot,
+  DashboardPlaceRef,
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
@@ -71,6 +72,53 @@ function useSelectedNode(
     return snapshot.topology.workstation_nodes_by_id[selection.nodeId] ?? null;
   }
   return null;
+}
+
+function useSelectedStatePlaceData({
+  projectedWorkstationRequestsByDispatchID,
+  selectedStatePlace,
+  snapshot,
+}: {
+  projectedWorkstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> | undefined;
+  selectedStatePlace: DashboardPlaceRef | null;
+  snapshot: DashboardSnapshot | null | undefined;
+}) {
+  const selectedStateCurrentWorkItems = useMemo(
+    () =>
+      currentWorkItemsForPlace(
+        snapshot,
+        selectedStatePlace?.place_id,
+        projectedWorkstationRequestsByDispatchID,
+      ),
+    [
+      projectedWorkstationRequestsByDispatchID,
+      snapshot,
+      selectedStatePlace?.place_id,
+    ],
+  );
+  const selectedStateTerminalHistoryWorkItems = useMemo(
+    () =>
+      terminalHistoryItemsForPlace(
+        snapshot,
+        selectedStatePlace?.place_id,
+        projectedWorkstationRequestsByDispatchID,
+      ),
+    [
+      projectedWorkstationRequestsByDispatchID,
+      snapshot,
+      selectedStatePlace?.place_id,
+    ],
+  );
+  const selectedStateTokenCount =
+    selectedStatePlace && snapshot
+      ? snapshot.runtime.place_token_counts?.[selectedStatePlace.place_id] ?? 0
+      : 0;
+
+  return {
+    selectedStateCurrentWorkItems,
+    selectedStateTerminalHistoryWorkItems,
+    selectedStateTokenCount,
+  };
 }
 
 function useSelectedWorkData({
@@ -153,16 +201,15 @@ export function useCurrentSelectionDerivedState({
     selection?.kind === "workstation-request" ? selection.request : null;
   const selectedStatePlace =
     selection?.kind === "state-node" && snapshot ? findStatePlace(snapshot, selection.placeId) : null;
-  const selectedStateCurrentWorkItems = useMemo(
-    () => currentWorkItemsForPlace(snapshot, selectedStatePlace?.place_id),
-    [snapshot, selectedStatePlace?.place_id],
-  );
-  const selectedStateTerminalHistoryWorkItems = useMemo(
-    () => terminalHistoryItemsForPlace(snapshot, selectedStatePlace?.place_id),
-    [snapshot, selectedStatePlace?.place_id],
-  );
-  const selectedStateTokenCount =
-    selectedStatePlace && snapshot ? snapshot.runtime.place_token_counts?.[selectedStatePlace.place_id] ?? 0 : 0;
+  const {
+    selectedStateCurrentWorkItems,
+    selectedStateTerminalHistoryWorkItems,
+    selectedStateTokenCount,
+  } = useSelectedStatePlaceData({
+    projectedWorkstationRequestsByDispatchID,
+    selectedStatePlace,
+    snapshot,
+  });
   const selectedNodeProviderSessions =
     selection?.kind && selectedNode && snapshot
       ? filterProviderSessionAttempts(

@@ -274,6 +274,130 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     ).toBeTruthy();
   });
 
+  it("renders selected provider-session details for timestamp-prefixed Codex session files", async () => {
+    const user = userEvent.setup();
+    const { dispatchId, execution, selectedNode, selection, snapshot, workItem } =
+      buildSelectedWorkItemFixture();
+    const codexSessionID = "019e44f4-580e-7f32-981e-1e54ec6907d6";
+    const requestWithTimestampPrefixedSession = buildDashboardWorkstationRequestFixture(
+      dispatchId,
+      {
+        inference_attempts: [
+          buildDashboardInferenceAttemptFixture(dispatchId, {
+            outcome: "SUCCEEDED",
+            provider_session: {
+              id: codexSessionID,
+              kind: "session_id",
+              provider: "codex",
+            },
+            response: "Resolved from the on-disk Codex session artifact.",
+          }),
+        ],
+      },
+    );
+    const executionDetails = selectWorkItemExecutionDetails({
+      activeExecution: execution,
+      dispatchID: dispatchId,
+      inferenceAttemptsByDispatchID: snapshot.runtime.inference_attempts_by_dispatch_id,
+      providerSessions: [],
+      selectedNode,
+      workItem,
+    });
+
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      const requestURL = String(input);
+      if (!requestURL.includes(`id=${codexSessionID}`)) {
+        throw new Error(`unexpected provider-session request: ${requestURL}`);
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            parse: {
+              eventCount: 2,
+              functionCalls: [],
+              lineCount: 2,
+              malformedLineCount: 0,
+              parseErrors: [],
+              reasoning: [],
+              turns: [
+                {
+                  eventCount: 2,
+                  functionCallCount: 0,
+                  index: 1,
+                  reasoningCount: 0,
+                  responseItemCount: 1,
+                  startedAt: "2026-05-20T10:35:24Z",
+                },
+              ],
+              unknownEventCount: 0,
+              unknownEvents: [],
+            },
+            providerSession: {
+              id: codexSessionID,
+              kind: "session_id",
+              provider: "codex",
+            },
+            source: {
+              relativePath:
+                "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl",
+              sizeBytes: 2048,
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          },
+        ),
+      );
+    });
+
+    renderWithQueryClient(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selectedWorkDispatchAttempts: [],
+          selectedWorkProviderSessions: [],
+          selectedWorkRequestHistory: [requestWithTimestampPrefixedSession],
+          selection,
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={executionDetails}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    const inferenceAttempts = within(currentSelection).getByRole("region", {
+      name: "Inference attempts",
+    });
+    await user.click(
+      within(inferenceAttempts).getByRole("button", { name: "Expand" }),
+    );
+
+    await user.click(
+      within(currentSelection).getByRole("button", {
+        name: `Select provider session codex / session_id / ${codexSessionID} for dispatch dispatch-review-active`,
+      }),
+    );
+
+    expect(
+      await within(currentSelection).findByRole("heading", {
+        name: "Selected session details",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(currentSelection).getByText(
+        "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl",
+      ),
+    ).toBeTruthy();
+    expect(within(currentSelection).getByText("Turn 1")).toBeTruthy();
+  });
+
   it("refreshes the shared session-detail panel when switching between inference-attempt sessions", async () => {
     const user = userEvent.setup();
     const { dispatchId, execution, selectedNode, selection, workItem } =

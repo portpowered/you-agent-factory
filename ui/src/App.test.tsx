@@ -2995,8 +2995,11 @@ describe("App streamed replay smoke flows", () => {
       within(currentPositionDetail).getByText("Queued Analysis Story"),
     ).toBeTruthy();
     expect(
-      within(currentPositionDetail).getByText("work-queued-analysis"),
-    ).toBeTruthy();
+      within(currentPositionDetail).queryByText("work-queued-analysis"),
+    ).toBeNull();
+    expect(
+      within(currentPositionDetail).queryByText(/^Started at /),
+    ).toBeNull();
 
     fireEvent.change(slider, { target: { value: "3" } });
 
@@ -3359,14 +3362,17 @@ describe("App streamed replay smoke flows", () => {
       within(completedDetail).getByText("Completed Smoke Story One"),
     ).toBeTruthy();
     expect(
-      within(completedDetail).getByText("work-smoke-complete-one"),
-    ).toBeTruthy();
-    expect(
       within(completedDetail).getByText("Completed Smoke Story Two"),
     ).toBeTruthy();
     expect(
-      within(completedDetail).getByText("work-smoke-complete-two"),
-    ).toBeTruthy();
+      within(completedDetail).queryByText("work-smoke-complete-one"),
+    ).toBeNull();
+    expect(
+      within(completedDetail).queryByText("work-smoke-complete-two"),
+    ).toBeNull();
+    expect(within(completedDetail).queryAllByText(/^Started at /)).toHaveLength(
+      2,
+    );
 
     fireEvent.click(
       screen.getByRole("button", { name: "Select story:failed state" }),
@@ -3379,7 +3385,10 @@ describe("App streamed replay smoke flows", () => {
 
       expect(within(failedDetail).getByText("Current work")).toBeTruthy();
       expect(within(failedDetail).getByText("Failed Smoke Story")).toBeTruthy();
-      expect(within(failedDetail).getByText("work-smoke-failed")).toBeTruthy();
+      expect(within(failedDetail).queryByText("work-smoke-failed")).toBeNull();
+      expect(within(failedDetail).queryAllByText(/^Started at /)).toHaveLength(
+        1,
+      );
       expect(
         within(failedDetail).getByText("provider_rate_limit"),
       ).toBeTruthy();
