@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -403,6 +404,7 @@ func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID 
 	})
 }
 
+//nolint:contextcheck // The request context bounds startup waiting, while the active service runtime context owns the long-lived session runtime and sidecars.
 func (fs *FactoryService) startBackgroundSessionWithMetadata(
 	ctx context.Context,
 	sessionID string,
@@ -415,17 +417,16 @@ func (fs *FactoryService) startBackgroundSessionWithMetadata(
 	if runtimeBundle == nil {
 		return fmt.Errorf("runtime bundle is required")
 	}
-	parentCtx := ctx
 	if runState := fs.currentRunState(); runState != nil && runState.ctx != nil {
-		parentCtx = runState.ctx
+		ctx = runState.ctx
 	}
-	handle := fs.startLiveRuntime(parentCtx, runtimeBundle)
+	handle := fs.startLiveRuntime(ctx, runtimeBundle)
 	if err := fs.waitForLiveRuntimeStart(ctx, handle); err != nil {
 		_ = fs.stopLiveRuntime(handle)
 		return fmt.Errorf("start runtime session: %w", err)
 	}
 	if fs.cfg != nil && runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService {
-		if err := fs.startLiveRuntimeSidecars(parentCtx, handle); err != nil {
+		if err := fs.startLiveRuntimeSidecars(ctx, handle); err != nil {
 			_ = fs.stopLiveRuntime(handle)
 			return fmt.Errorf("start runtime session sidecars: %w", err)
 		}
@@ -458,13 +459,13 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 			fs.setRunState(runState.ctx, successor.id, successor.handle)
 			fs.swapActiveRuntime(successor.handle.runtime)
 		} else {
-			fs.setRunState(runState.ctx, "", nil)
+			fs.clearRunState()
 			fs.clearActiveRuntime()
 		}
 	}
 
 	fs.unregisterLiveSession(sessionID)
-	if err := fs.stopLiveRuntime(session.handle); err != nil && err != context.Canceled {
+	if err := fs.stopLiveRuntime(session.handle); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 	return nil

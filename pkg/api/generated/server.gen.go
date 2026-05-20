@@ -70,8 +70,8 @@ const (
 
 // Defines values for FactorySessionTargetRefKind.
 const (
-	Default FactorySessionTargetRefKind = "default"
-	Named   FactorySessionTargetRefKind = "named"
+	FactorySessionTargetRefKindDefault FactorySessionTargetRefKind = "default"
+	FactorySessionTargetRefKindNamed   FactorySessionTargetRefKind = "named"
 )
 
 // Defines values for FactoryState.

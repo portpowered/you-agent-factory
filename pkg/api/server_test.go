@@ -744,7 +744,7 @@ func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
 					IsDefault:  true,
 					Project:    "root",
 					Target: factoryapi.FactorySessionTargetRef{
-						Kind: factoryapi.Default,
+						Kind: factoryapi.FactorySessionTargetRefKindDefault,
 					},
 				},
 				{
@@ -754,7 +754,7 @@ func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
 					IsDefault:  false,
 					Project:    "beta",
 					Target: factoryapi.FactorySessionTargetRef{
-						Kind: factoryapi.Named,
+						Kind: factoryapi.FactorySessionTargetRefKindNamed,
 						Name: stringPointerForAPITest("beta"),
 					},
 				},
@@ -788,7 +788,7 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 				IsDefault:  false,
 				Project:    "beta",
 				Target: factoryapi.FactorySessionTargetRef{
-					Kind: factoryapi.Named,
+					Kind: factoryapi.FactorySessionTargetRefKindNamed,
 					Name: stringPointerForAPITest("beta"),
 				},
 			},
@@ -810,7 +810,7 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 		t.Fatalf("opened session folder = %q, want /workspace/fleet", mf.OpenedFactorySessions[0].FolderPath)
 	}
 	if mf.OpenedFactorySessions[0].Target == nil ||
-		mf.OpenedFactorySessions[0].Target.Kind != factoryapi.Named ||
+		mf.OpenedFactorySessions[0].Target.Kind != factoryapi.FactorySessionTargetRefKindNamed ||
 		mf.OpenedFactorySessions[0].Target.Name == nil ||
 		*mf.OpenedFactorySessions[0].Target.Name != "beta" {
 		t.Fatalf("opened session target = %#v, want named beta", mf.OpenedFactorySessions[0].Target)
@@ -1737,7 +1737,9 @@ func TestSubmitWorkAutoTraceID(t *testing.T) {
 	}
 
 	var resp factoryapi.SubmitWorkResponse
-	json.NewDecoder(rec.Body).Decode(&resp)
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode submit response: %v", err)
+	}
 	if resp.TraceId == "" {
 		t.Error("expected auto-generated trace_id, got empty")
 	}
@@ -2342,7 +2344,9 @@ func TestGetWork(t *testing.T) {
 	}
 
 	var resp factoryapi.TokenResponse
-	json.NewDecoder(rec.Body).Decode(&resp)
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode token response: %v", err)
+	}
 	if resp.Id != "tok-prd-1" {
 		t.Errorf("expected tok-prd-1, got %s", resp.Id)
 	}

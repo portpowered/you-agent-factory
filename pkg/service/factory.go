@@ -1181,7 +1181,9 @@ func (fs *FactoryService) setRunState(ctx context.Context, sessionID string, run
 }
 
 func (fs *FactoryService) clearRunState() {
-	fs.setRunState(nil, "", nil)
+	fs.runMu.Lock()
+	defer fs.runMu.Unlock()
+	fs.runState = nil
 }
 
 func (h *liveRuntimeHandle) completed() bool {

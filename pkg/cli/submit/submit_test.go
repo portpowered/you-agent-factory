@@ -2,7 +2,6 @@ package submit
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -152,8 +151,14 @@ func TestSubmit_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	var port int
-	fmt.Sscanf(srv.URL, "http://127.0.0.1:%d", &port)
+	parsedURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+	port, err := strconv.Atoi(parsedURL.Port())
+	if err != nil {
+		t.Fatalf("parse server port: %v", err)
+	}
 
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "work.json")
@@ -161,7 +166,7 @@ func TestSubmit_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := Submit(SubmitConfig{
+	err = Submit(SubmitConfig{
 		Name:         "scoped-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
