@@ -474,6 +474,43 @@ func TestPersistNamedFactory_StripsSupportedBundledFileInlineContentFromFactoryJ
 	}
 }
 
+func TestPersistNamedFactory_WritesStarterInputBundledFilesToInputsDirectory(t *testing.T) {
+	rootDir := t.TempDir()
+
+	factoryDir, err := PersistNamedFactory(rootDir, "alpha", namedFactoryPayloadWithStarterInputs(t, "alpha"))
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "seed.md"), "starter markdown\n")
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "notes.txt"), "starter text payload\n")
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "request"), "extensionless payload\n")
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "task", "exec-123", "seed.json"), "{\"payload\":\"starter json\"}\n")
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, interfaces.InputsDir, "BATCH", interfaces.DefaultChannelName, "seed-batch.json"), "{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"alpha\",\"workTypeName\":\"task\",\"payload\":\"batch payload\"}]}\n")
+
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(factoryJSON, &payload); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	resourceManifest, ok := payload["supportingFiles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected supportingFiles object, got %#v", payload["supportingFiles"])
+	}
+	bundledFiles, ok := resourceManifest["bundledFiles"].([]any)
+	if !ok || len(bundledFiles) != 5 {
+		t.Fatalf("expected five starter bundled files, got %#v", resourceManifest["bundledFiles"])
+	}
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[0].(map[string]any), "INPUT", "factory/inputs/BATCH/default/seed-batch.json")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[1].(map[string]any), "INPUT", "factory/inputs/task/default/notes.txt")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[2].(map[string]any), "INPUT", "factory/inputs/task/default/request")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[3].(map[string]any), "INPUT", "factory/inputs/task/default/seed.md")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[4].(map[string]any), "INPUT", "factory/inputs/task/exec-123/seed.json")
+}
+
 func TestPersistNamedFactory_RejectsDuplicateNames(t *testing.T) {
 	rootDir := t.TempDir()
 
@@ -2478,6 +2515,91 @@ func namedFactoryPayloadWithBundledFiles(t *testing.T, project string) []byte {
 	return data
 }
 
+func namedFactoryPayloadWithStarterInputs(t *testing.T, project string) []byte {
+	t.Helper()
+
+	cfg := map[string]any{
+		"name": project,
+		"id":   project,
+		"supportingFiles": map[string]any{
+			"bundledFiles": []map[string]any{
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/task/default/seed.md",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "starter markdown\n",
+					},
+				},
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/task/exec-123/seed.json",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "{\"payload\":\"starter json\"}\n",
+					},
+				},
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/task/default/notes.txt",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "starter text payload\n",
+					},
+				},
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/task/default/request",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "extensionless payload\n",
+					},
+				},
+				{
+					"type":       "INPUT",
+					"targetPath": "factory/inputs/BATCH/default/seed-batch.json",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"alpha\",\"workTypeName\":\"task\",\"payload\":\"batch payload\"}]}\n",
+					},
+				},
+			},
+		},
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name": "executor",
+				"type": "MODEL_WORKER",
+				"body": "You are the executor.",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-" + project,
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+				"type":    "MODEL_WORKSTATION",
+				"body":    "Implement {{ .WorkID }}.",
+			},
+		},
+	}
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("Marshal(namedFactoryPayloadWithStarterInputs): %v", err)
+	}
+	return data
+}
+
 func assertRuntimeFactoryFileContent(t *testing.T, path, want string) {
 	t.Helper()
 	got, err := os.ReadFile(path)
@@ -2486,6 +2608,27 @@ func assertRuntimeFactoryFileContent(t *testing.T, path, want string) {
 	}
 	if string(got) != want {
 		t.Fatalf("%s content = %q, want %q", path, string(got), want)
+	}
+}
+
+func assertBundledFilePayloadWithoutInline(t *testing.T, payload map[string]any, wantType, wantTargetPath string) {
+	t.Helper()
+
+	if got := payload["type"]; got != wantType {
+		t.Fatalf("bundled file type = %#v, want %q", got, wantType)
+	}
+	if got := payload["targetPath"]; got != wantTargetPath {
+		t.Fatalf("bundled file targetPath = %#v, want %q", got, wantTargetPath)
+	}
+	content, ok := payload["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("bundled file content = %#v, want object", payload["content"])
+	}
+	if got := content["encoding"]; got != "utf-8" {
+		t.Fatalf("bundled file encoding = %#v, want utf-8", got)
+	}
+	if _, ok := content["inline"]; ok {
+		t.Fatalf("bundled file inline content = %#v, want omitted field", content["inline"])
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -539,9 +540,9 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 		t.Fatalf("created factory bundled files = %#v, want 3 entries", created.SupportingFiles.BundledFiles)
 	}
 	bundledFiles := *created.SupportingFiles.BundledFiles
-	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
-	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md")
-	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1")
+	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1")
 
 	importedDir := filepath.Join(rootDir, "beta")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "Makefile"), "test:\n\tgo test ./...\n")
@@ -593,6 +594,63 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 			t.Fatalf("unexpected persisted bundled file targetPath = %#v", targetPath)
 		}
 	}
+}
+
+func TestFactoryService_CreateNamedFactory_CopiesStarterInputsAsDetachedRecipientState(t *testing.T) {
+	rootDir := t.TempDir()
+	persistNamedFactoryAndSelectCurrent(t, rootDir, "alpha")
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "starter.md"), "alpha starter\n")
+
+	svc := buildNamedFactoryServiceForTest(t, rootDir)
+
+	shared, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory(alpha): %v", err)
+	}
+	shared.Name = factoryapi.FactoryName("beta")
+	betaID := "beta"
+	shared.Id = &betaID
+
+	created, err := svc.CreateNamedFactory(context.Background(), shared)
+	if err != nil {
+		t.Fatalf("CreateNamedFactory(beta): %v", err)
+	}
+	if created.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("created factory name = %q, want beta", created.Name)
+	}
+
+	betaStarterPath := filepath.Join(rootDir, "beta", interfaces.InputsDir, "task", interfaces.DefaultChannelName, "starter.md")
+	alphaStarterPath := filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "starter.md")
+	assertPortableServiceBundledFile(t, betaStarterPath, "alpha starter\n")
+
+	writePortableServiceBundledFile(t, betaStarterPath, "beta edited starter\n")
+	assertPortableServiceBundledFile(t, betaStarterPath, "beta edited starter\n")
+	assertPortableServiceBundledFile(t, alphaStarterPath, "alpha starter\n")
+
+	writePortableServiceBundledFile(t, alphaStarterPath, "alpha edited after share\n")
+	assertPortableServiceBundledFile(t, alphaStarterPath, "alpha edited after share\n")
+	assertPortableServiceBundledFile(t, betaStarterPath, "beta edited starter\n")
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory(beta): %v", err)
+	}
+
+	var starterFiles []factoryapi.BundledFile
+	if current.SupportingFiles == nil || current.SupportingFiles.BundledFiles == nil {
+		t.Fatal("expected beta current factory to include starter bundled files")
+	}
+	for _, bundledFile := range *current.SupportingFiles.BundledFiles {
+		if bundledFile.Type == factoryapi.BundledFileType(interfaces.BundledFileTypeInput) {
+			starterFiles = append(starterFiles, bundledFile)
+		}
+	}
+	if len(starterFiles) != 1 {
+		t.Fatalf("beta starter bundled files = %#v, want 1 copied input", starterFiles)
+	}
+	assertServiceBundledFactoryEntry(t, starterFiles[0], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/starter.md", "beta edited starter\n")
 }
 
 func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(t *testing.T) {
@@ -1039,9 +1097,101 @@ func TestFactoryService_GetCurrentNamedFactory_CollectsSupportedPortableBundledF
 		t.Fatalf("expected 3 bundled files, got %#v", current.SupportingFiles.BundledFiles)
 	}
 	bundledFiles := *current.SupportingFiles.BundledFiles
-	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", "# Portable factory\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+}
+
+func TestFactoryService_GetCurrentNamedFactory_SnapshotsCurrentInputsAsStarterBundledFiles(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "starter.md"), "starter markdown\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", "exec-123", "starter.json"), "{\"payload\":\"starter json\"}\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "notes.txt"), "starter text payload\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "request"), "extensionless payload\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "BATCH", interfaces.DefaultChannelName, "seed-batch.json"), "{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"alpha\",\"workTypeName\":\"task\",\"payload\":\"batch payload\"}]}\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "unknown", interfaces.DefaultChannelName, "ignored.md"), "ignored\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, ".gitkeep"), "")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "ignored.tmp"), "ignored\n")
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory: %v", err)
+	}
+	if current.SupportingFiles == nil || current.SupportingFiles.BundledFiles == nil {
+		t.Fatal("expected current factory to include starter bundled files")
+	}
+
+	var starterFiles []factoryapi.BundledFile
+	for _, bundledFile := range *current.SupportingFiles.BundledFiles {
+		if bundledFile.Type == factoryapi.BundledFileType(interfaces.BundledFileTypeInput) {
+			starterFiles = append(starterFiles, bundledFile)
+		}
+	}
+	if len(starterFiles) != 5 {
+		t.Fatalf("starter bundled files = %#v, want 5 current inputs", starterFiles)
+	}
+	assertServiceBundledFactoryEntry(t, starterFiles[0], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/BATCH/default/seed-batch.json", "{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"alpha\",\"workTypeName\":\"task\",\"payload\":\"batch payload\"}]}\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[1], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/notes.txt", "starter text payload\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[2], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/request", "extensionless payload\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[3], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/starter.md", "starter markdown\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[4], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/exec-123/starter.json", "{\"payload\":\"starter json\"}\n")
+}
+
+func TestFactoryService_GetCurrentNamedFactory_FailsWhenStarterWorkCopyCannotReadInput(t *testing.T) {
+	if os.Getenv("CI") != "" && runtime.GOOS == "windows" {
+		t.Skip("permission-based starter input read failures are not reliable on Windows CI")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("permission-based starter input read failures are not reliable on Windows")
+	}
+
+	rootDir := t.TempDir()
+	persistNamedFactoryAndSelectCurrent(t, rootDir, "alpha")
+	alphaDir := filepath.Join(rootDir, "alpha")
+
+	starterPath := filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "restricted.txt")
+	writePortableServiceBundledFile(t, starterPath, "starter payload\n")
+	if err := os.Chmod(starterPath, 0o000); err != nil {
+		t.Fatalf("Chmod(%s): %v", starterPath, err)
+	}
+	defer func() {
+		_ = os.Chmod(starterPath, 0o644)
+	}()
+
+	svc := buildNamedFactoryServiceForTest(t, rootDir)
+
+	_, err := svc.GetCurrentNamedFactory(context.Background())
+	if err == nil {
+		t.Fatal("expected starter-work copy failure")
+	}
+	if !strings.Contains(err.Error(), "inline shared factory starter work") {
+		t.Fatalf("GetCurrentNamedFactory error = %q, want shared starter-work context", err)
+	}
+	if !strings.Contains(err.Error(), "read starter work") {
+		t.Fatalf("GetCurrentNamedFactory error = %q, want read starter work context", err)
+	}
+	if !strings.Contains(err.Error(), "restricted.txt") {
+		t.Fatalf("GetCurrentNamedFactory error = %q, want offending starter file", err)
+	}
 }
 
 func TestFactoryService_GetCurrentNamedFactory_FallsBackToRootRuntimeWhenPointerMissing(t *testing.T) {

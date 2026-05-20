@@ -1198,6 +1198,14 @@ func TestConfigValidator_BundledFilesAcceptCanonicalScriptAndDocTargets(t *testi
 					Inline:   "test:\n\tgo test ./...\n",
 				},
 			},
+			{
+				Type:       interfaces.BundledFileTypeInput,
+				TargetPath: "factory/inputs/task/default/seed.md",
+				Content: interfaces.BundledFileContentConfig{
+					Encoding: interfaces.BundledFileEncodingUTF8,
+					Inline:   "starter work\n",
+				},
+			},
 		},
 	}
 
@@ -1216,6 +1224,23 @@ func TestRuleBundledFiles_RejectsTargetOutsideCanonicalRootForType(t *testing.T)
 			Content: interfaces.BundledFileContentConfig{
 				Encoding: "utf-8",
 				Inline:   "# Usage\n",
+			},
+		}},
+	}
+
+	findings := ruleBundledFiles(cfg)
+	assertFindingExists(t, findings, "bundled-file-target-root")
+}
+
+func TestRuleBundledFiles_RejectsInputTargetOutsideCanonicalRootForType(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
+		BundledFiles: []interfaces.BundledFileConfig{{
+			Type:       interfaces.BundledFileTypeInput,
+			TargetPath: "factory/docs/seed.md",
+			Content: interfaces.BundledFileContentConfig{
+				Encoding: interfaces.BundledFileEncodingUTF8,
+				Inline:   "starter work\n",
 			},
 		}},
 	}

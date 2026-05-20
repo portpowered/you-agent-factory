@@ -59,6 +59,36 @@ manifest field contract belongs in
 this page only records that bundled files are restored beside the expanded
 factory layout.
 
+In v1 shared-factory flows, that same portability manifest also carries starter
+work copied from the source factory's live `inputs/` tree. Sharing snapshots
+every valid work item present under `inputs/<work-type-or-BATCH>/<channel>/` at
+the moment the share operation runs, including the case where the directory is
+empty.
+
+That share-time copy is detached after the recipient factory is created:
+
+- Later edits to the original factory or its `inputs/` files do not retroactively
+  update earlier shared copies.
+- Recipient edits inside the copied factory's `inputs/` tree do not mutate the
+  original author factory.
+
+Example shared-factory starter work:
+
+```text
+source factory before share
+  inputs/
+    task/default/customer-bug.md
+    BATCH/default/release-sweep.json
+
+shared recipient after import or create
+  inputs/
+    task/default/customer-bug.md
+    BATCH/default/release-sweep.json
+```
+
+The recipient copy is ready to inspect or run immediately, but it is no longer
+live-linked to the source factory.
+
 ## Bootstrap Checklist
 
 - Start with `factory.json`, then add split `AGENTS.md` files for any
