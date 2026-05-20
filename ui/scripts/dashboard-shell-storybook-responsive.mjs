@@ -1,38 +1,8 @@
-const OVERFLOW_TOLERANCE_PX = 1;
-const STORY_RENDER_TIMEOUT_MS = 30000;
-
-async function expectNoHorizontalOverflow(page, label) {
-  const metrics = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-
-  if (metrics.scrollWidth > metrics.clientWidth + OVERFLOW_TOLERANCE_PX) {
-    throw new Error(
-      `${label} overflowed horizontally: scrollWidth=${metrics.scrollWidth}, clientWidth=${metrics.clientWidth}.`,
-    );
-  }
-}
-
-async function expectVisible(locator, label) {
-  if (typeof locator.waitFor === "function") {
-    await locator.waitFor({
-      state: "visible",
-      timeout: STORY_RENDER_TIMEOUT_MS,
-    });
-    return;
-  }
-
-  if (!(await locator.isVisible())) {
-    throw new Error(`${label} was not visible.`);
-  }
-}
-
-async function waitForStoryRegion(page, regionName) {
-  const region = page.getByRole("region", { name: regionName });
-  await region.waitFor({ state: "visible" });
-  return region;
-}
+import {
+  expectNoHorizontalOverflow,
+  expectVisible,
+  waitForStoryRegion,
+} from "./storybook-responsive-helpers.mjs";
 
 async function dashboardShellStyle(locator) {
   return locator.evaluate((element) => {
@@ -89,7 +59,7 @@ export async function verifyDashboardShellConsolidation(
 ) {
   const toolbar = await waitForStoryRegion(page, "dashboard summary");
   const board = await waitForStoryRegion(page, "Infinite You bento board");
-  const workTotalsCard = board.getByRole("article", { name: "Work totals" });
+  const workTotalsCard = page.getByRole("article", { name: "Work totals" });
   const headerExportButton = toolbar.getByRole("button", {
     name: "Export PNG",
   });

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -299,6 +300,11 @@ func sortListWorkItems(items []listWorkItem, mode listWorkSortModeValue) {
 		if leftOrder != rightOrder {
 			return leftOrder < rightOrder
 		}
+		if isFinishedListWorkState(left.work.State) && isFinishedListWorkState(right.work.State) {
+			if less, decided := lessListWorkByCompletedAt(left, right); decided {
+				return less
+			}
+		}
 
 		leftStateType := listWorkStateType(left.work.State)
 		rightStateType := listWorkStateType(right.work.State)
@@ -316,7 +322,40 @@ func lessListWorkByStateType(left, right listWorkItem) bool {
 	if leftStateType != rightStateType {
 		return leftStateType < rightStateType
 	}
+	if isFinishedListWorkState(left.work.State) && isFinishedListWorkState(right.work.State) {
+		if less, decided := lessListWorkByCompletedAt(left, right); decided {
+			return less
+		}
+	}
 	return left.cursorID < right.cursorID
+}
+
+func lessListWorkByCompletedAt(left, right listWorkItem) (bool, bool) {
+	leftCompletedAt := left.work.CompletedAt
+	rightCompletedAt := right.work.CompletedAt
+	switch {
+	case leftCompletedAt != nil && rightCompletedAt != nil:
+		if !leftCompletedAt.Equal(*rightCompletedAt) {
+			return leftCompletedAt.After(*rightCompletedAt), true
+		}
+	case leftCompletedAt != nil:
+		return true, true
+	case rightCompletedAt != nil:
+		return false, true
+	}
+	return false, false
+}
+
+func isFinishedListWorkState(workState *factoryapi.WorkState) bool {
+	if workState == nil {
+		return false
+	}
+	switch workState.Type {
+	case factoryapi.WorkStateTypeTERMINAL, factoryapi.WorkStateTypeFAILED:
+		return true
+	default:
+		return false
+	}
 }
 
 func listWorkStateOrder(workState *factoryapi.WorkState) int {
@@ -485,17 +524,32 @@ func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenR
 
 func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
 	name := firstNonEmptyString(t.Color.Name, t.Color.WorkID, t.ID)
+	workState := workStateForToken(t, net)
 	return factoryapi.Work{
 		Name:                     name,
 		WorkId:                   stringPtrIfNotEmpty(t.Color.WorkID),
 		WorkTypeName:             stringPtrIfNotEmpty(t.Color.WorkTypeID),
-		State:                    workStateForToken(t, net),
+		State:                    workState,
+		CompletedAt:              completedAtForWorkToken(t, workState),
 		ChainingTraceDepth:       intPtrIfPositive(t.Color.ChainingTraceDepth),
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
 		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
 		TraceId:                  stringPtrIfNotEmpty(t.Color.TraceID),
 		Content:                  domainWorkContentToGeneratedPtr(t.Color.Content),
 		Tags:                     stringMapPtr(t.Color.Tags),
+	}
+}
+
+func completedAtForWorkToken(t *interfaces.Token, workState *factoryapi.WorkState) *time.Time {
+	if t == nil || t.EnteredAt.IsZero() || workState == nil {
+		return nil
+	}
+	switch workState.Type {
+	case factoryapi.WorkStateTypeTERMINAL, factoryapi.WorkStateTypeFAILED:
+		completedAt := t.EnteredAt
+		return &completedAt
+	default:
+		return nil
 	}
 }
 
@@ -858,73 +912,17 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 }
 
 func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
-	parts, err := generatedWorkContentToDomainAtPath(content, "content")
-	if err != nil {
-		return nil
-	}
-	return parts
+	return interfaces.BestEffortWorkContentFromGenerated(content)
 }
 
 func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
-	if len(parts) == 0 {
-		return nil
-	}
-	content := make(factoryapi.WorkContent, 0, len(parts))
-	for _, part := range parts {
-		var generated factoryapi.WorkContentPart
-		switch part.Type {
-		case interfaces.WorkContentPartTypeText:
-			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-				Type: factoryapi.WorkContentPartTypeText,
-				Text: part.Text,
-			}); err != nil {
-				continue
-			}
-		case interfaces.WorkContentPartTypeImage:
-			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
-				Type: factoryapi.WorkContentPartTypeImage,
-				File: part.File,
-			}); err != nil {
-				continue
-			}
-		default:
-			continue
-		}
-		content = append(content, generated)
-	}
-	if len(content) == 0 {
-		return nil
-	}
-	return &content
+	return interfaces.GeneratedWorkContentPtr(parts)
 }
 
 func generatedWorkContentToDomainAtPath(content *factoryapi.WorkContent, fieldPath string) ([]interfaces.WorkContentPart, error) {
-	if content == nil || len(*content) == 0 {
-		return nil, nil
-	}
-
-	parts := make([]interfaces.WorkContentPart, 0, len(*content))
-	for i, part := range *content {
-		pathPrefix := fmt.Sprintf("%s[%d].", fieldPath, i)
-		textPart, textErr := part.AsWorkTextContentPart()
-		if textErr == nil && textPart.Type == factoryapi.WorkContentPartTypeText {
-			parts = append(parts, interfaces.WorkContentPart{
-				Type: interfaces.WorkContentPartTypeText,
-				Text: textPart.Text,
-			})
-			continue
-		}
-
-		imagePart, imageErr := part.AsWorkImageContentPart()
-		if imageErr == nil && imagePart.Type == factoryapi.WorkContentPartTypeImage {
-			parts = append(parts, interfaces.WorkContentPart{
-				Type: interfaces.WorkContentPartTypeImage,
-				File: imagePart.File,
-			})
-			continue
-		}
-
-		return nil, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", pathPrefix)}
+	parts, err := interfaces.WorkContentFromGeneratedAtPath(content, fieldPath)
+	if err != nil {
+		return nil, requestFieldValidationError{message: err.Error()}
 	}
 	return parts, nil
 }

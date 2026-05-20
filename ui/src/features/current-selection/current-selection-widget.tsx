@@ -61,20 +61,22 @@ function useSelectedProviderSessionState({
   const visibleProviderSessionKeys = useMemo(
     () =>
       new Set(
-        (
-          selectionKind === "work-item"
-            ? [
-                ...selectedWorkDispatchAttempts,
-                ...selectedWorkRequestHistory.flatMap((request) =>
-                  requestInferenceAttempts(request),
-                ),
-              ]
-            : selectedNode
-              ? selectedNodeProviderSessions
-              : []
+        (selectionKind === "work-item"
+          ? [
+              ...selectedWorkDispatchAttempts,
+              ...selectedWorkRequestHistory.flatMap((request) =>
+                requestInferenceAttempts(request),
+              ),
+            ]
+          : selectedNode
+            ? selectedNodeProviderSessions
+            : []
         )
           .map((attempt) => getLoadableProviderSessionRef(attempt))
-          .filter((session): session is LoadableProviderSessionRef => session !== null)
+          .filter(
+            (session): session is LoadableProviderSessionRef =>
+              session !== null,
+          )
           .map((session) => providerSessionSelectionKey(session)),
       ),
     [
@@ -94,7 +96,11 @@ function useSelectedProviderSessionState({
       return;
     }
 
-    if (!visibleProviderSessionKeys.has(providerSessionSelectionKey(selectedProviderSession))) {
+    if (
+      !visibleProviderSessionKeys.has(
+        providerSessionSelectionKey(selectedProviderSession),
+      )
+    ) {
       setSelectedProviderSession(null);
     }
   }, [selectedProviderSession, visibleProviderSessionKeys]);
@@ -125,13 +131,17 @@ function renderCurrentSelectionDetailCard({
 }: {
   activeTraceID?: string | null;
   currentSelection: CurrentSelectionState;
-  editableConfigurationState: ReturnType<typeof useEditableWorkstationConfigurationState>;
+  editableConfigurationState: ReturnType<
+    typeof useEditableWorkstationConfigurationState
+  >;
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
   headerAction: ReactNode;
   locale?: string;
   now: number;
   onSelectTraceID?: (traceID: string) => void;
-  saveState: ReturnType<typeof useSaveEditableWorkstationConfiguration>["saveState"];
+  saveState: ReturnType<
+    typeof useSaveEditableWorkstationConfiguration
+  >["saveState"];
   selectedProviderSession: LoadableProviderSessionRef | null;
   selectedProviderSessionKey: string | null;
   selectedTrace?: DashboardTrace;
@@ -255,6 +265,7 @@ export function CurrentSelectionWidget({
   const editableConfigurationState = useEditableWorkstationConfigurationState(
     selection,
     selectedNode,
+    locale,
   );
   const workstationSaveScopeKey =
     selection?.kind === "node" && selectedNode
@@ -262,20 +273,20 @@ export function CurrentSelectionWidget({
       : null;
   const workstationSave = useSaveEditableWorkstationConfiguration({
     editableConfigurationState,
+    locale,
     scopeKey: workstationSaveScopeKey,
   });
   const {
     selectedProviderSession,
     selectedProviderSessionKey,
     setSelectedProviderSession,
-  } =
-    useSelectedProviderSessionState({
-      selectedNode,
-      selectedNodeProviderSessions,
-      selectedWorkDispatchAttempts,
-      selectedWorkRequestHistory,
-      selectionKind: selection?.kind,
-    });
+  } = useSelectedProviderSessionState({
+    selectedNode,
+    selectedNodeProviderSessions,
+    selectedWorkDispatchAttempts,
+    selectedWorkRequestHistory,
+    selectionKind: selection?.kind,
+  });
   const headerAction = (
     <EditableWorkstationSaveHeaderAction
       canSave={workstationSave.canSave}

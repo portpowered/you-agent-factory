@@ -55,18 +55,18 @@ export function DispatchInferenceAttemptsSection({
   return (
     <CollapsibleDispatchAttemptSection title={messages.inferenceAttemptsTitle}>
       <div className="grid gap-2.5">
-        {attempts.length > 0
-          ? attempts.map((attempt) => (
-              <InferenceAttemptCard
-                attempt={attempt}
-                key={attempt.inference_request_id}
-                onSelectProviderSession={onSelectProviderSession}
-                selectedProviderSessionKey={selectedProviderSessionKey}
-              />
-            ))
-          : emptyCopy
-            ? <p className={DETAIL_COPY_CLASS}>{emptyCopy}</p>
-            : null}
+        {attempts.length > 0 ? (
+          attempts.map((attempt) => (
+            <InferenceAttemptCard
+              attempt={attempt}
+              key={attempt.inference_request_id}
+              onSelectProviderSession={onSelectProviderSession}
+              selectedProviderSessionKey={selectedProviderSessionKey}
+            />
+          ))
+        ) : emptyCopy ? (
+          <p className={DETAIL_COPY_CLASS}>{emptyCopy}</p>
+        ) : null}
       </div>
     </CollapsibleDispatchAttemptSection>
   );
@@ -91,7 +91,10 @@ export function DispatchScriptAttemptsSection({
     <CollapsibleDispatchAttemptSection title={messages.scriptAttemptsTitle}>
       <div className="grid gap-2.5">
         {scriptRequest ? (
-          <ScriptRequestAttemptCard request={request} scriptRequest={scriptRequest} />
+          <ScriptRequestAttemptCard
+            request={request}
+            scriptRequest={scriptRequest}
+          />
         ) : null}
         {scriptResponse ? (
           <ScriptResponseAttemptCard
@@ -102,7 +105,9 @@ export function DispatchScriptAttemptsSection({
             scriptResponse={scriptResponse}
           />
         ) : (
-          <p className={DETAIL_COPY_CLASS}>{messages.noScriptAttemptRecordedYet}</p>
+          <p className={DETAIL_COPY_CLASS}>
+            {messages.noScriptAttemptRecordedYet}
+          </p>
         )}
       </div>
     </CollapsibleDispatchAttemptSection>
@@ -123,7 +128,10 @@ function CollapsibleDispatchAttemptSection({
   const headingId = `${sectionId}-heading`;
 
   return (
-    <section aria-labelledby={headingId} className="mt-3 grid gap-2.5 border-t border-af-overlay/8 pt-3">
+    <section
+      aria-labelledby={headingId}
+      className="mt-3 grid gap-2.5 border-t border-af-overlay/8 pt-3"
+    >
       <div className={HISTORY_HEADER_CLASS}>
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
           {title}
@@ -179,7 +187,9 @@ function ScriptRequestAttemptCard({
         />
         <InferenceAttemptDetail
           label={messages.scriptAttemptLabel}
-          value={attemptNumber !== undefined ? String(attemptNumber) : undefined}
+          value={
+            attemptNumber !== undefined ? String(attemptNumber) : undefined
+          }
         />
         <InferenceAttemptDetail
           label={messages.providerLabel}
@@ -207,7 +217,10 @@ function ScriptRequestAttemptCard({
           value={scriptRequest.command}
         />
       </dl>
-      <ScriptArgsSection args={scriptRequest.args} label={messages.resolvedArgsLabel} />
+      <ScriptArgsSection
+        args={scriptRequest.args}
+        label={messages.resolvedArgsLabel}
+      />
     </article>
   );
 }
@@ -225,7 +238,8 @@ function ScriptResponseAttemptCard({
   request: SelectedWorkRequestHistoryItem;
   scriptResponse: DashboardScriptResponse;
 }) {
-  const attemptNumber = scriptAttemptNumber(scriptResponse) ?? fallbackAttemptNumber;
+  const attemptNumber =
+    scriptAttemptNumber(scriptResponse) ?? fallbackAttemptNumber;
   const requestID = scriptRequestID(scriptResponse);
   const durationMillis = scriptResponseDurationMillis(scriptResponse);
   const exitCode = scriptResponseExitCode(scriptResponse);
@@ -257,7 +271,9 @@ function ScriptResponseAttemptCard({
         />
         <InferenceAttemptDetail
           label={messages.scriptAttemptLabel}
-          value={attemptNumber !== undefined ? String(attemptNumber) : undefined}
+          value={
+            attemptNumber !== undefined ? String(attemptNumber) : undefined
+          }
         />
         <InferenceAttemptDetail
           label={messages.providerLabel}
@@ -279,7 +295,10 @@ function ScriptResponseAttemptCard({
           code
           value={requestWorktree(request)}
         />
-        <InferenceAttemptDetail label={messages.outcomeLabel} value={scriptResponse.outcome} />
+        <InferenceAttemptDetail
+          label={messages.outcomeLabel}
+          value={scriptResponse.outcome}
+        />
         <InferenceAttemptDetail
           label={messages.durationLabel}
           value={

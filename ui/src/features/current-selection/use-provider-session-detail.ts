@@ -15,7 +15,7 @@ export const PROVIDER_SESSION_DETAIL_QUERY_KEY = [
 export type ProviderSessionDetailViewState =
   | { status: "idle" }
   | { sessionDetail: ProviderSessionDetailResponse; status: "empty" }
-  | { message: string; status: "error" }
+  | { message?: string; status: "error" }
   | { status: "loading" }
   | { status: "not-found" }
   | { sessionDetail: ProviderSessionDetailResponse; status: "parse-error" }
@@ -66,7 +66,6 @@ export function useProviderSessionDetail(
 
     if (!query.data) {
       return {
-        message: "Provider-session details are unavailable.",
         status: "error",
       };
     }

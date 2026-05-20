@@ -2,6 +2,7 @@ import { formatDurationMillis } from "../../components/ui/formatters";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
 import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
+import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   RUNTIME_DETAIL_CODE_CLASS,
@@ -20,12 +21,14 @@ export function ResponseDetailsSection({
   request: WorkstationRequestDetailCardProps["request"];
   view: WorkstationRequestDetailView;
 }) {
+  const messages = useCurrentSelectionDetailMessages();
+
   return (
     <section
-      aria-label="Response details"
+      aria-label={messages.responseDetailsTitle}
       className={RUNTIME_DETAILS_SECTION_CLASS}
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Response details</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.responseDetailsTitle}</h4>
       {view.isScriptBackedRequest ? (
         <ScriptResponseDetails request={request} view={view} />
       ) : (
@@ -40,29 +43,29 @@ export function ErrorDetailsSection({
 }: {
   view: WorkstationRequestDetailView;
 }) {
+  const messages = useCurrentSelectionDetailMessages();
+
   if (!view.hasFailureDetails) {
     return null;
   }
 
   return (
     <section
-      aria-label="Error details"
+      aria-label={messages.errorDetailsTitle}
       className={RUNTIME_DETAILS_SECTION_CLASS}
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Error details</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.errorDetailsTitle}</h4>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <div>
-          <dt>Failure reason</dt>
+          <dt>{messages.failureReasonLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {view.normalizedFailureReason ??
-              "Failure reason is not available for this request."}
+            {view.normalizedFailureReason ?? messages.failureReasonUnavailable}
           </dd>
         </div>
         <div>
-          <dt>Failure message</dt>
+          <dt>{messages.failureMessageLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {view.normalizedFailureMessage ??
-              "Failure message is not available for this request."}
+            {view.normalizedFailureMessage ?? messages.failureMessageUnavailable}
           </dd>
         </div>
       </dl>
@@ -77,6 +80,7 @@ function ScriptResponseDetails({
   request: WorkstationRequestDetailCardProps["request"];
   view: WorkstationRequestDetailView;
 }) {
+  const messages = useCurrentSelectionDetailMessages();
   const scriptResponse = request.script_response;
 
   return (
@@ -86,61 +90,57 @@ function ScriptResponseDetails({
         {scriptResponse ? (
           <>
             <div>
-              <dt>Script request ID</dt>
+              <dt>{messages.scriptRequestIdLabel}</dt>
               <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
                 {scriptResponse.script_request_id ? (
                   <code className={RUNTIME_DETAIL_CODE_CLASS}>
                     {scriptResponse.script_request_id}
                   </code>
                 ) : (
-                  "Script response details are not available for this workstation request."
+                  messages.scriptResponseUnavailableSummary
                 )}
               </dd>
             </div>
             <div>
-              <dt>Script attempt</dt>
+              <dt>{messages.scriptAttemptLabel}</dt>
               <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                {scriptResponse.attempt ??
-                  "Script attempt is not available yet."}
+                {scriptResponse.attempt ?? messages.scriptAttemptUnavailable}
               </dd>
             </div>
             <div>
-              <dt>Outcome</dt>
+              <dt>{messages.outcomeLabel}</dt>
               <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                {scriptResponse.outcome ??
-                  "Outcome details are not available yet."}
+                {scriptResponse.outcome ?? messages.outcomeUnavailable}
               </dd>
             </div>
             <div>
-              <dt>Duration</dt>
+              <dt>{messages.durationLabel}</dt>
               <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
                 {scriptResponse.duration_millis !== undefined
                   ? formatDurationMillis(scriptResponse.duration_millis)
-                  : "Duration details are not available for this script response yet."}
+                  : messages.durationUnavailable}
               </dd>
             </div>
             <div>
-              <dt>Exit code</dt>
+              <dt>{messages.exitCodeLabel}</dt>
               <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                {scriptResponse.exit_code ??
-                  "Exit code is not available for this script response."}
+                {scriptResponse.exit_code ?? messages.exitCodeUnavailable}
               </dd>
             </div>
             <div>
-              <dt>Failure type</dt>
+              <dt>{messages.failureTypeLabel}</dt>
               <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                {scriptResponse.failure_type ??
-                  "Failure type is not available for this script response."}
+                {scriptResponse.failure_type ?? messages.failureTypeUnavailable}
               </dd>
             </div>
             <ScriptOutputField
-              emptyMessage="No stdout was recorded for this script response."
-              title="Stdout"
+              emptyMessage={messages.stdoutEmpty}
+              title={messages.stdoutLabel}
               value={view.normalizedScriptStdout}
             />
             <ScriptOutputField
-              emptyMessage="No stderr was recorded for this script response."
-              title="Stderr"
+              emptyMessage={messages.stderrEmpty}
+              title={messages.stderrLabel}
               value={view.normalizedScriptStderr}
             />
           </>
@@ -148,7 +148,9 @@ function ScriptResponseDetails({
       </dl>
       {request.script_response ? null : (
         <p className={DETAIL_COPY_CLASS}>
-          {view.scriptResponseUnavailableCopy}
+          {request.errored_request_count > 0 || view.hasFailureDetails
+            ? messages.scriptResponseUnavailableErrored
+            : messages.scriptResponseUnavailablePending}
         </p>
       )}
     </>
@@ -172,9 +174,11 @@ function TraceIDField({
 }: {
   traceIDs: WorkstationRequestDetailCardProps["request"]["trace_ids"];
 }) {
+  const messages = useCurrentSelectionDetailMessages();
+
   return (
     <div>
-      <dt>Trace IDs</dt>
+      <dt>{messages.traceIdsLabel}</dt>
       <dd className="grid gap-1">
         {traceIDs && traceIDs.length > 0 ? (
           traceIDs.map((traceId: string) => (
@@ -184,7 +188,7 @@ function TraceIDField({
           ))
         ) : (
           <span className={RUNTIME_DETAIL_VALUE_CLASS}>
-            Trace details are not available for this workstation request yet.
+            {messages.traceUnavailable}
           </span>
         )}
       </dd>

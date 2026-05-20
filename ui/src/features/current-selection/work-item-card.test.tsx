@@ -1108,7 +1108,7 @@ describe("WorkItemDetailCard localization", () => {
     );
 
     const dispatchCard = within(
-      screen.getByRole("region", { name: "Workstation dispatches" }),
+      screen.getByRole("region", { name: "ワークステーションのディスパッチ" }),
     ).getAllByRole("article")[0];
 
     if (!(dispatchCard instanceof HTMLElement)) {
@@ -1753,7 +1753,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     );
 
     const dispatchHistory = screen.getByRole("region", {
-      name: "Workstation dispatches",
+      name: "ワークステーションのディスパッチ",
     });
     const dispatchCard = within(dispatchHistory)
       .getByText(dashboardWorkstationRequestFixtures.scriptPending.dispatch_id)
@@ -2164,7 +2164,7 @@ describe("WorkItemDetailCard localized script attempts", () => {
     );
 
     const dispatchHistory = screen.getByRole("region", {
-      name: "Workstation dispatches",
+      name: "ワークステーションのディスパッチ",
     });
     const dispatchCard = within(dispatchHistory)
       .getByText(dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id)

@@ -229,7 +229,10 @@ export const WorkstationRequestSelectionErrored = {
     const errorDetails = within(
       currentSelection.getByRole("region", { name: "Error details" }),
     );
-    const outcomeRow = currentSelection.getByText("Outcome").closest("div");
+    const outcomeRow = currentSelection
+      .getAllByText("Outcome")
+      .map((label) => label.closest("div"))
+      .find((row) => row?.textContent?.includes("provider_rate_limit"));
 
     expect(
       currentSelection.getAllByText("request-error-story").length,
