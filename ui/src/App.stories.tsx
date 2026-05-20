@@ -496,6 +496,12 @@ async function expectFactoryGraphHeaderBrowserFlow(
       name: "Factory graph editor tools",
     }),
   ).toBeVisible();
+  await userEvent.click(
+    headerScope.getByRole("button", {
+      name: "Leave factory graph editor",
+    }),
+  );
+  await expect(headerScope.getByText("Observe mode")).toBeVisible();
 }
 
 async function expectPromptHintBrowserFlow(
