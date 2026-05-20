@@ -95,20 +95,11 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
         />
       </h1>
       <div className={DASHBOARD_CONTROLS_CLASS}>
+        <TickSliderControl locale={resolvedLocale} />
         <DashboardLocaleMenu
           locale={resolvedLocale}
           onChangeLocale={setLocale}
         />
-        <TickSliderControl locale={resolvedLocale} />
-        <div className={STREAM_STATUS_SHELL_CLASS}>
-          <div
-            aria-label={streamStatusLabel(streamState.status, resolvedLocale)}
-            className={streamStatusClassName(streamState.status)}
-            role="status"
-          >
-            <StreamStatusIcon status={streamState.status} />
-          </div>
-        </div>
         <DashboardHeaderActionButton
           aria-label={exportMessages.triggerLabel}
           aria-expanded={isExportDialogOpen}
@@ -132,6 +123,15 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
             <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
           </svg>
         </DashboardHeaderActionButton>
+        <div className={STREAM_STATUS_SHELL_CLASS}>
+          <div
+            aria-label={streamStatusLabel(streamState.status, resolvedLocale)}
+            className={streamStatusClassName(streamState.status)}
+            role="status"
+          >
+            <StreamStatusIcon status={streamState.status} />
+          </div>
+        </div>
       </div>
     </section>
   );

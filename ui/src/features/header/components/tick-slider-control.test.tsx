@@ -107,7 +107,7 @@ describe("TickSliderControl", () => {
     });
 
     expect(slider.value).toBe("9");
-    expect(screen.getByText("Tick 9 of 9")).toBeTruthy();
+    expect(screen.getByText("9/9")).toBeTruthy();
     expect(currentButton.disabled).toBe(true);
     expect(currentButton.className).toContain("opacity-75");
     expect(screen.queryByText("Current")).toBeNull();
@@ -116,7 +116,7 @@ describe("TickSliderControl", () => {
     fireEvent.change(slider, { target: { value: "2" } });
 
     await waitFor(() => {
-      expect(screen.getByText("Tick 2 of 9")).toBeTruthy();
+      expect(screen.getByText("2/9")).toBeTruthy();
     });
     expect(currentButton.disabled).toBe(false);
     expect(currentButton.className).not.toContain("opacity-75");
@@ -126,7 +126,7 @@ describe("TickSliderControl", () => {
     fireEvent.click(currentButton);
 
     await waitFor(() => {
-      expect(screen.getByText("Tick 9 of 9")).toBeTruthy();
+      expect(screen.getByText("9/9")).toBeTruthy();
     });
     expect(currentButton.disabled).toBe(true);
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
@@ -189,7 +189,7 @@ describe("TickSliderControl", () => {
     expect(slider.min).toBe("2");
     expect(slider.max).toBe("4");
     expect(slider.value).toBe("4");
-    expect(screen.getByText("Tick 4 of 4")).toBeTruthy();
+    expect(screen.getByText("4/4")).toBeTruthy();
     expect(currentButton.disabled).toBe(false);
     expect(currentButton.className).not.toContain("opacity-75");
   });
@@ -210,7 +210,9 @@ describe("TickSliderControl", () => {
       name: messages.returnToCurrentTickLabel,
     });
 
-    expect(screen.getByText(messages.sliderLabel)).toBeTruthy();
+    expect(screen.getByText(messages.sliderLabel).className).toContain(
+      "sr-only",
+    );
     expect(screen.getByText(currentTickStatus("ja", 9, 9))).toBeTruthy();
     expect(currentButton.disabled).toBe(true);
 
@@ -219,6 +221,25 @@ describe("TickSliderControl", () => {
     await waitFor(() => {
       expect(screen.getByText(currentTickStatus("ja", 3, 9))).toBeTruthy();
     });
+  });
+
+  it("keeps the visible timeline label hidden while preserving the slider accessible name", () => {
+    useFactoryTimelineStore
+      .getState()
+      .replaceEvents(graphStateSmokeTimelineEvents);
+
+    const messages = getHeaderControlsMessages("en");
+
+    render(<TickSliderControl />);
+
+    expect(
+      screen.getByRole<HTMLInputElement>("slider", {
+        name: messages.sliderAriaLabel,
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText(messages.sliderLabel).className).toContain(
+      "sr-only",
+    );
   });
 
   it("renders the localized disabled-state copy from the requested locale catalog", () => {

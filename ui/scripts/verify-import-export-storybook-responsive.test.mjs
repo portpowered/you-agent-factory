@@ -6,12 +6,12 @@ import {
   expectVisible,
   verifyExportDialog,
   verifyImportDialog,
-  verifyProviderSessionDetailSuccess,
   verifyStory,
   waitForDialog,
   waitForStoryRegion,
   waitForStoryRender,
 } from "./verify-import-export-storybook-responsive.mjs";
+import { verifyProviderSessionDetailSuccess } from "./verify-provider-session-storybook-responsive.mjs";
 describe("waitForStoryRender", () => {
   test("waits for the Storybook root selector and rendered children", async () => {
     const page = {
@@ -414,10 +414,15 @@ describe("provider-session story assertions", () => {
       }),
     };
 
-    await verifyProviderSessionDetailSuccess(page, null, {
-      height: 844,
-      label: "mobile",
-      width: 390,
+    await verifyProviderSessionDetailSuccess({
+      expectNoHorizontalOverflow,
+      expectVisible,
+      page,
+      viewport: {
+        height: 844,
+        label: "mobile",
+        width: 390,
+      },
     });
 
     expect(page.getByRole).toHaveBeenCalledWith("heading", {

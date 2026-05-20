@@ -2699,7 +2699,7 @@ describe("App timeline reconstruction flows", () => {
       name: "Timeline tick",
     });
     expect(slider.value).toBe("4");
-    expect(screen.getByText("Tick 4 of 4")).toBeTruthy();
+    expect(screen.getByText("4/4")).toBeTruthy();
     expect(
       within(screen.getByLabelText("work totals")).getAllByText("1").length,
     ).toBeGreaterThan(0);
@@ -2709,7 +2709,7 @@ describe("App timeline reconstruction flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("1");
-      expect(screen.getByText("Tick 1 of 4")).toBeTruthy();
+      expect(screen.getByText("1/4")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Done Story" })).toBeNull();
     });
     expect(screen.queryByText("sess-done-story")).toBeNull();
@@ -2737,9 +2737,48 @@ describe("App timeline reconstruction flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("4");
-      expect(screen.getByText("Tick 4 of 4")).toBeTruthy();
+      expect(screen.getByText("4/4")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Done Story" })).toBeTruthy();
     });
+  });
+
+  it("renders the updated dashboard header formatting through the app shell", async () => {
+    renderApp({
+      snapshot: terminalSnapshot,
+      timelineSnapshots: [historicalTimelineSnapshot, terminalSnapshot],
+    });
+
+    const toolbar = await screen.findByRole("region", {
+      name: "dashboard summary",
+    });
+    const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
+      name: "Timeline tick",
+    });
+    const languageButton = within(toolbar).getByRole("button", {
+      name: "Change language",
+    });
+    const exportButton = within(toolbar).getByRole("button", {
+      name: "Export PNG",
+    });
+    const streamStatus = within(toolbar).getByRole("status", {
+      name: "Infinite You event stream connecting",
+    });
+    const headerControls = Array.from(
+      toolbar.querySelectorAll(
+        '[aria-label="Timeline tick"], [aria-label="Change language"], [aria-label="Export PNG"], [role="status"]',
+      ),
+    );
+
+    expect(headerControls).toHaveLength(4);
+    expect(headerControls[0]).toBe(slider);
+    expect(headerControls[1]).toBe(languageButton);
+    expect(headerControls[2]).toBe(exportButton);
+    expect(headerControls[3]).toBe(streamStatus);
+    expect(within(toolbar).getByText("4/4")).toBeTruthy();
+    expect(within(toolbar).queryByText(/Tick \d+ of \d+/)).toBeNull();
+    expect(within(toolbar).getByText("Timeline tick").className).toContain(
+      "sr-only",
+    );
   });
 
   it("renders totals and selection panels from the selected event tick", async () => {
@@ -2753,7 +2792,7 @@ describe("App timeline reconstruction flows", () => {
     });
     const totals = screen.getByLabelText("work totals");
     expect(slider.value).toBe("4");
-    expect(screen.getByText("Tick 4 of 4")).toBeTruthy();
+    expect(screen.getByText("4/4")).toBeTruthy();
     expect(within(totals).getByText("Completed")).toBeTruthy();
     expect(within(totals).getAllByText("1").length).toBeGreaterThan(0);
     const eventSelection = await screen.findByRole("article", {
@@ -2769,7 +2808,7 @@ describe("App timeline reconstruction flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("3");
-      expect(screen.getByText("Tick 3 of 4")).toBeTruthy();
+      expect(screen.getByText("3/4")).toBeTruthy();
       expect(screen.queryByText("sess-event-story")).toBeNull();
       expect(screen.queryByRole("article", { name: "Event Story" })).toBeNull();
     });
@@ -2780,7 +2819,7 @@ describe("App timeline reconstruction flows", () => {
     fireEvent.change(slider, { target: { value: "2" } });
 
     await waitFor(() => {
-      expect(screen.getByText("Tick 2 of 4")).toBeTruthy();
+      expect(screen.getByText("2/4")).toBeTruthy();
       expectStateNodeDotCount("story:new", 1);
     });
   });
@@ -2942,7 +2981,7 @@ describe("App streamed replay smoke flows", () => {
     });
     await waitFor(() => {
       expect(slider.value).toBe("4");
-      expect(screen.getByText("Tick 4 of 4")).toBeTruthy();
+      expect(screen.getByText("4/4")).toBeTruthy();
       expect(
         screen.getByRole("button", { name: "Select Review workstation" }),
       ).toBeTruthy();
@@ -2953,7 +2992,7 @@ describe("App streamed replay smoke flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("3");
-      expect(screen.getByText("Tick 3 of 4")).toBeTruthy();
+      expect(screen.getByText("3/4")).toBeTruthy();
       expect(screen.queryByText("sess-event-story")).toBeNull();
       expect(
         within(screen.getByLabelText("work totals"))
@@ -2982,7 +3021,7 @@ describe("App streamed replay smoke flows", () => {
     });
     await waitFor(() => {
       expect(slider.value).toBe("4");
-      expect(screen.getByText("Tick 4 of 4")).toBeTruthy();
+      expect(screen.getByText("4/4")).toBeTruthy();
       expect(
         screen.getByRole("button", { name: "Blocked Analysis Story" }),
       ).toBeTruthy();
@@ -3040,7 +3079,7 @@ describe("App streamed replay smoke flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("3");
-      expect(screen.getByText("Tick 3 of 4")).toBeTruthy();
+      expect(screen.getByText("3/4")).toBeTruthy();
       expect(
         screen.queryByRole("button", { name: "Blocked Analysis Story" }),
       ).toBeNull();
@@ -3053,7 +3092,7 @@ describe("App streamed replay smoke flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("4");
-      expect(screen.getByText("Tick 4 of 4")).toBeTruthy();
+      expect(screen.getByText("4/4")).toBeTruthy();
       expect(
         screen.getByRole("button", { name: "Blocked Analysis Story" }),
       ).toBeTruthy();
@@ -3096,7 +3135,7 @@ describe("App streamed replay smoke flows", () => {
     });
     await waitFor(() => {
       expect(slider.value).toBe("4");
-      expect(screen.getByText("Tick 4 of 4")).toBeTruthy();
+      expect(screen.getByText("4/4")).toBeTruthy();
       expectRenderedResourceCountMatchesBackendWorldView(4);
     });
 
@@ -3104,7 +3143,7 @@ describe("App streamed replay smoke flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("3");
-      expect(screen.getByText("Tick 3 of 4")).toBeTruthy();
+      expect(screen.getByText("3/4")).toBeTruthy();
       expectRenderedResourceCountMatchesBackendWorldView(3);
     });
 
@@ -3112,7 +3151,7 @@ describe("App streamed replay smoke flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("1");
-      expect(screen.getByText("Tick 1 of 4")).toBeTruthy();
+      expect(screen.getByText("1/4")).toBeTruthy();
       expectRenderedResourceCountMatchesBackendWorldView(1);
     });
 
@@ -3129,7 +3168,7 @@ describe("App streamed replay smoke flows", () => {
       name: "Timeline tick",
     });
     expect(slider.value).toBe("11");
-    expect(screen.getByText("Tick 11 of 11")).toBeTruthy();
+    expect(screen.getByText("11/11")).toBeTruthy();
     expect(
       screen.getByRole("button", {
         name: runtimeDetailsFixtureIDs.completedWorkLabel,
@@ -3241,7 +3280,7 @@ describe("App streamed replay smoke flows", () => {
       name: "Timeline tick",
     });
     expect(slider.value).toBe("14");
-    expect(screen.getByText("Tick 14 of 14")).toBeTruthy();
+    expect(screen.getByText("14/14")).toBeTruthy();
     expect(
       useFactoryTimelineStore.getState().worldViewCache[14]?.runtime
         .workstation_requests_by_dispatch_id,
@@ -3379,7 +3418,7 @@ describe("App streamed replay smoke flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("9");
-      expect(screen.getByText("Tick 9 of 9")).toBeTruthy();
+      expect(screen.getByText("9/9")).toBeTruthy();
       expectFixedReviewWorkstationDimensions();
       expect(
         getStateNodeByLabel("story:done").querySelector(
@@ -3446,7 +3485,7 @@ describe("App streamed replay smoke flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("3");
-      expect(screen.getByText("Tick 3 of 9")).toBeTruthy();
+      expect(screen.getByText("3/9")).toBeTruthy();
       expect(
         screen.getByRole("button", { name: /Completed Smoke Story One/ }),
       ).toBeTruthy();
@@ -3457,7 +3496,7 @@ describe("App streamed replay smoke flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("2");
-      expect(screen.getByText("Tick 2 of 9")).toBeTruthy();
+      expect(screen.getByText("2/9")).toBeTruthy();
       expectSeparatedStateMarkerZones("story:new", 3);
     });
 
@@ -3465,7 +3504,7 @@ describe("App streamed replay smoke flows", () => {
 
     await waitFor(() => {
       expect(slider.value).toBe("9");
-      expect(screen.getByText("Tick 9 of 9")).toBeTruthy();
+      expect(screen.getByText("9/9")).toBeTruthy();
       expectFixedReviewWorkstationDimensions();
       expect(
         getStateNodeByLabel("story:done").querySelector(

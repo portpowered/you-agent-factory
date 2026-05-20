@@ -210,6 +210,9 @@ export async function expectTimelineToolbarAlignment(
   const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
     name: "Timeline tick",
   });
+  const languageButton = within(toolbar).getByRole("button", {
+    name: "Change language",
+  });
   const streamStatus = within(toolbar).getByRole("status", {
     name: /Infinite You event stream (connecting|live)/,
   });
@@ -220,14 +223,16 @@ export async function expectTimelineToolbarAlignment(
   );
   const headingRect = heading.getBoundingClientRect();
   const sliderRect = sliderShell.getBoundingClientRect();
+  const languageButtonRect = languageButton.getBoundingClientRect();
   const streamStatusRect = streamStatus.getBoundingClientRect();
   const exportButtonRect = exportButton.getBoundingClientRect();
 
   expect(sliderRect.left).toBeGreaterThanOrEqual(headingRect.right - 1);
-  expect(streamStatusRect.left).toBeGreaterThanOrEqual(sliderRect.right - 1);
+  expect(languageButtonRect.left).toBeGreaterThanOrEqual(sliderRect.right - 1);
   expect(exportButtonRect.left).toBeGreaterThanOrEqual(
-    streamStatusRect.right - 1,
+    languageButtonRect.right - 1,
   );
+  expect(streamStatusRect.left).toBeGreaterThanOrEqual(exportButtonRect.right - 1);
 }
 
 export async function selectWorkstationRequest(

@@ -635,6 +635,10 @@ async function countButtons(page, buttonName) {
   return await page.getByRole("button", { name: buttonName }).count();
 }
 
+function formatVisibleTickStatus(currentTick, maxTick) {
+  return `${currentTick}/${maxTick}`;
+}
+
 async function waitForTickLabel(page, label) {
   try {
     await page.getByText(label).waitFor({
@@ -650,7 +654,7 @@ async function waitForTickLabel(page, label) {
       .evaluateAll((elements) =>
         elements
           .map((element) => element.textContent?.trim() ?? "")
-          .filter((text) => /^Tick \d+ of \d+$/.test(text)),
+          .filter((text) => /^\d+\/\d+$/.test(text)),
       );
     throw new Error(
       `Timed out waiting for ${label}; slider=${sliderValue}; visibleTicks=${statusTexts.join(", ") || "<none>"}`,
@@ -669,10 +673,13 @@ async function exerciseHistoricalTimelineView(page, options) {
   });
   const liveTick = inFlightSelectionTick ?? finalTick;
   const previousTick = liveTick - 1;
-  const liveTickLabel = `Tick ${liveTick} of ${liveTick}`;
-  const historicalTickLabel = `Tick ${previousTick} of ${liveTick}`;
-  const pinnedHistoricalTickLabel = `Tick ${previousTick} of ${finalTick}`;
-  const finalTickLabel = `Tick ${finalTick} of ${finalTick}`;
+  const liveTickLabel = formatVisibleTickStatus(liveTick, liveTick);
+  const historicalTickLabel = formatVisibleTickStatus(previousTick, liveTick);
+  const pinnedHistoricalTickLabel = formatVisibleTickStatus(
+    previousTick,
+    finalTick,
+  );
+  const finalTickLabel = formatVisibleTickStatus(finalTick, finalTick);
 
   expect(previousTick).toBeGreaterThan(0);
 
@@ -799,9 +806,11 @@ async function assertReplayScenarioRenders({
     await page.getByRole("button", { name: workstationName }).waitFor();
     if (!inFlightSelectionTick) {
       await replayCompleted;
-      await page.getByText(`Tick ${finalTick} of ${finalTick}`).waitFor({
-        timeout: uiInteractionTimeoutMs,
-      });
+      await page
+        .getByText(formatVisibleTickStatus(finalTick, finalTick))
+        .waitFor({
+          timeout: uiInteractionTimeoutMs,
+        });
     }
     await exerciseTimelineSlider(page, {
       finalTick,

@@ -103,7 +103,7 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
   return (
     <div className={TICK_SLIDER_SHELL_CLASS}>
       <label className={TICK_SLIDER_LABEL_CLASS}>
-        {messages.sliderLabel}
+        <span className="sr-only">{messages.sliderLabel}</span>
         <input
           aria-label={messages.sliderAriaLabel}
           className={TICK_SLIDER_INPUT_CLASS}
