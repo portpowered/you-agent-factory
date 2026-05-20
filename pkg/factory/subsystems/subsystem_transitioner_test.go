@@ -1,7 +1,6 @@
 package subsystems
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"testing"
@@ -69,41 +68,7 @@ func TestCalculateArcs(t *testing.T) {
 
 // portos:func-length-exception owner=agent-factory reason=legacy-transitioner-table-fixture review=2026-07-18 removal=split-outcome-cases-before-next-transitioner-mutation-change
 func TestCalculateMutations(t *testing.T) {
-	now := time.Date(2026, time.April, 6, 12, 0, 0, 0, time.UTC)
-	createdAt := now.Add(-2 * time.Hour)
-	baseHistory := interfaces.TokenHistory{
-		TotalVisits:         map[string]int{"t0": 1},
-		ConsecutiveFailures: map[string]int{},
-		PlaceVisits:         map[string]int{"wt-code:init": 1},
-	}
-	places := map[string]*petri.Place{
-		"wt-code:init":   {ID: "wt-code:init", TypeID: "wt-code", State: "init"},
-		"wt-code:done":   {ID: "wt-code:done", TypeID: "wt-code", State: "done"},
-		"wt-code:failed": {ID: "wt-code:failed", TypeID: "wt-code", State: "failed"},
-		"wt-review:init": {ID: "wt-review:init", TypeID: "wt-review", State: "init"},
-	}
-	workTypes := map[string]*state.WorkType{
-		"wt-code":   {ID: "wt-code"},
-		"wt-review": {ID: "wt-review"},
-	}
-	consumed := []interfaces.Token{{
-		ID:        "tok-1",
-		PlaceID:   "wt-code:init",
-		CreatedAt: createdAt,
-		EnteredAt: createdAt,
-		Color: interfaces.TokenColor{
-			WorkID:     "w1",
-			WorkTypeID: "wt-code",
-			Name:       "story-1",
-		},
-		History: interfaces.TokenHistory{
-			TotalVisits:         map[string]int{},
-			ConsecutiveFailures: map[string]int{},
-			PlaceVisits:         map[string]int{},
-		},
-	}}
-	inputColors := tokenColorsFromTokens(consumed)
-	transition := &petri.Transition{ID: "t1"}
+	fixture := newCalculateMutationsFixture()
 
 	tests := []struct {
 		name            string
@@ -130,7 +95,7 @@ func TestCalculateMutations(t *testing.T) {
 			wantWorkTypeID: "wt-code",
 			wantWorkID:     "w1",
 			wantPayload:    []byte("compiled"),
-			wantCreatedAt:  createdAt,
+			wantCreatedAt:  fixture.consumed[0].CreatedAt,
 		},
 		{
 			name: "Rejected_AddsRejectionFeedbackTag",
@@ -144,7 +109,7 @@ func TestCalculateMutations(t *testing.T) {
 			wantWorkTypeID: "wt-code",
 			wantWorkID:     "w1",
 			wantFeedback:   "try again",
-			wantCreatedAt:  createdAt,
+			wantCreatedAt:  fixture.consumed[0].CreatedAt,
 		},
 		{
 			name: "Failed_AppendsFailureHistory",
@@ -159,7 +124,7 @@ func TestCalculateMutations(t *testing.T) {
 			wantWorkID:      "w1",
 			wantLastError:   "agent crashed",
 			wantFailureSize: 1,
-			wantCreatedAt:   createdAt,
+			wantCreatedAt:   fixture.consumed[0].CreatedAt,
 		},
 		{
 			name: "AcceptedCrossType_GeneratesNewWorkID",
@@ -171,57 +136,17 @@ func TestCalculateMutations(t *testing.T) {
 			wantPlace:      "wt-review:init",
 			wantWorkTypeID: "wt-review",
 			wantWorkID:     "work-wt-review-1",
-			wantCreatedAt:  now,
+			wantCreatedAt:  fixture.now,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mutations, err := calculateMutations(mutationCalculationInput{
-				transition:  transition,
-				arcs:        tt.arcs,
-				consumed:    consumed,
-				result:      tt.result,
-				now:         now,
-				history:     baseHistory,
-				inputColors: inputColors,
-				transformer: token_transformer.New(places, workTypes, token_transformer.WithWorkIDGenerator(petri.NewWorkIDGenerator())),
-			})
+			mutations, err := fixture.calculate(tt.arcs, tt.result)
 			if err != nil {
 				t.Fatalf("calculateMutations() error = %v", err)
 			}
-			if len(mutations) != 1 {
-				t.Fatalf("expected 1 mutation, got %d", len(mutations))
-			}
-
-			token := mutations[0].NewToken
-			if mutations[0].ToPlace != tt.wantPlace {
-				t.Fatalf("ToPlace = %s, want %s", mutations[0].ToPlace, tt.wantPlace)
-			}
-			if token.Color.WorkTypeID != tt.wantWorkTypeID {
-				t.Fatalf("WorkTypeID = %s, want %s", token.Color.WorkTypeID, tt.wantWorkTypeID)
-			}
-			if token.Color.WorkID != tt.wantWorkID {
-				t.Fatalf("WorkID = %s, want %s", token.Color.WorkID, tt.wantWorkID)
-			}
-			if !token.CreatedAt.Equal(tt.wantCreatedAt) {
-				t.Fatalf("CreatedAt = %v, want %v", token.CreatedAt, tt.wantCreatedAt)
-			}
-			if !token.EnteredAt.Equal(now) {
-				t.Fatalf("EnteredAt = %v, want %v", token.EnteredAt, now)
-			}
-			if !bytes.Equal(token.Color.Payload, tt.wantPayload) {
-				t.Fatalf("Payload = %q, want %q", token.Color.Payload, tt.wantPayload)
-			}
-			if got := token.Color.Tags[interfaces.RejectionFeedback]; got != tt.wantFeedback {
-				t.Fatalf("rejection feedback = %q, want %q", got, tt.wantFeedback)
-			}
-			if token.History.LastError != tt.wantLastError {
-				t.Fatalf("LastError = %q, want %q", token.History.LastError, tt.wantLastError)
-			}
-			if len(token.History.FailureLog) != tt.wantFailureSize {
-				t.Fatalf("FailureLog length = %d, want %d", len(token.History.FailureLog), tt.wantFailureSize)
-			}
+			assertCalculatedMutation(t, mutations, tt, fixture.now)
 		})
 	}
 }
