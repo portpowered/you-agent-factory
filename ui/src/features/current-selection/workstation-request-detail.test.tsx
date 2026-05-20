@@ -69,7 +69,8 @@ describe("WorkstationRequestDetailCard", () => {
     const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
 
     expect(within(currentSelection).getByRole("heading", { name: "Current selection" })).toBeTruthy();
-    expect(within(currentSelection).getAllByText("request-ready-story").length).toBeGreaterThan(0);
+    expect(within(currentSelection).getByText("Active Story")).toBeTruthy();
+    expect(within(currentSelection).getAllByText("request-ready-story")).toHaveLength(1);
     expect(within(currentSelection).getAllByText("Dispatch ID").length).toBeGreaterThan(0);
     expect(within(currentSelection).getByRole("heading", { name: "Request counts" })).toBeTruthy();
     expect(responseDetails.getByText("trace-active-story")).toBeTruthy();
@@ -103,7 +104,8 @@ describe("WorkstationRequestDetailCard", () => {
       />,
     );
 
-    expect(screen.getAllByText("request-pending-story").length).toBeGreaterThan(0);
+    expect(screen.getByText("Active Story")).toBeTruthy();
+    expect(screen.getAllByText("request-pending-story")).toHaveLength(1);
     expect(
       screen.getByText("Total duration is not available for this workstation request yet."),
     ).toBeTruthy();
@@ -120,6 +122,10 @@ describe("WorkstationRequestDetailCard", () => {
       <WorkstationRequestDetailCard
         request={workstationRequest("dispatch-review-sparse", {
           request_id: "",
+          request_view: {
+            input_work_items: [],
+          },
+          work_items: [],
           trace_ids: [],
           transition_id: "review",
           workstation_name: "",

@@ -82,9 +82,7 @@ function WorkstationRequestSummary({
 
   return (
     <>
-      <p className={WIDGET_SUBTITLE_CLASS}>
-        {request.request_id || request.dispatch_id}
-      </p>
+      <p className={WIDGET_SUBTITLE_CLASS}>{view.requestTitle}</p>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <div>
           <dt>{messages.dispatchIdLabel}</dt>
