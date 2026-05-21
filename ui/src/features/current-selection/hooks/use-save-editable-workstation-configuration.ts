@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { normalizeFactoryDefinition } from "../../../api/factory-definition";
 import {
@@ -91,17 +91,13 @@ export function useSaveEditableWorkstationConfiguration({
     setLastErroredScope,
     setLastSuccessfulScopeKey,
   });
-
-  useEffect(() => {
-    if (
-      editableConfigurationState?.status === "ready" &&
-      editableConfigurationState.isDirty
-    ) {
-      setLastSuccessfulScopeKey((currentScopeKey) =>
-        currentScopeKey === scopeKey ? null : currentScopeKey,
-      );
-    }
-  }, [editableConfigurationState, scopeKey]);
+  const previousScopeKeyRef = useRef<string | null>(scopeKey);
+  const hasScopeChanged = previousScopeKeyRef.current !== scopeKey;
+  useResetSuccessfulSaveStateOnDraftChange({
+    editableConfigurationState,
+    scopeKey,
+    setLastSuccessfulScopeKey,
+  });
 
   const canSave =
     editableConfigurationState?.status === "ready" &&
@@ -113,6 +109,7 @@ export function useSaveEditableWorkstationConfiguration({
   const saveState = useMemo(
     () =>
       resolveEditableWorkstationSaveState({
+        hasScopeChanged,
         isConfirming,
         lastErroredScope,
         lastSuccessfulScopeKey,
@@ -120,6 +117,7 @@ export function useSaveEditableWorkstationConfiguration({
         submittingScopeKey,
       }),
     [
+      hasScopeChanged,
       isConfirming,
       lastErroredScope,
       lastSuccessfulScopeKey,
@@ -172,12 +170,14 @@ export function useSaveEditableWorkstationConfiguration({
 }
 
 function resolveEditableWorkstationSaveState({
+  hasScopeChanged,
   isConfirming,
   lastErroredScope,
   lastSuccessfulScopeKey,
   scopeKey,
   submittingScopeKey,
 }: {
+  hasScopeChanged: boolean;
   isConfirming: boolean;
   lastErroredScope: EditableWorkstationErrorState | null;
   lastSuccessfulScopeKey: string | null;
@@ -186,6 +186,9 @@ function resolveEditableWorkstationSaveState({
 }): EditableWorkstationSaveState {
   if (submittingScopeKey !== null && submittingScopeKey === scopeKey) {
     return { status: "submitting" };
+  }
+  if (hasScopeChanged) {
+    return { status: "idle" };
   }
   if (isConfirming) {
     return { status: "confirming" };
@@ -218,20 +221,44 @@ function useResetExitedSaveScope({
   setLastErroredScope: (value: EditableWorkstationErrorState | null) => void;
   setLastSuccessfulScopeKey: (value: string | null) => void;
 }) {
+  const previousScopeKeyRef = useRef<string | null>(scopeKey);
+
   useEffect(() => {
-    if (scopeKey == null) {
+    if (previousScopeKeyRef.current !== scopeKey) {
       setIsConfirming(false);
       setLastErroredScope(null);
       setLastSuccessfulScopeKey(null);
-      return;
+      previousScopeKeyRef.current = scopeKey;
     }
-    setIsConfirming(false);
   }, [
     scopeKey,
     setIsConfirming,
     setLastErroredScope,
     setLastSuccessfulScopeKey,
   ]);
+}
+
+function useResetSuccessfulSaveStateOnDraftChange({
+  editableConfigurationState,
+  scopeKey,
+  setLastSuccessfulScopeKey,
+}: {
+  editableConfigurationState?: EditableWorkstationConfigurationState;
+  scopeKey: string | null;
+  setLastSuccessfulScopeKey: (
+    value: string | null | ((currentScopeKey: string | null) => string | null),
+  ) => void;
+}) {
+  useEffect(() => {
+    if (
+      editableConfigurationState?.status === "ready" &&
+      editableConfigurationState.isDirty
+    ) {
+      setLastSuccessfulScopeKey((currentScopeKey) =>
+        currentScopeKey === scopeKey ? null : currentScopeKey,
+      );
+    }
+  }, [editableConfigurationState, scopeKey, setLastSuccessfulScopeKey]);
 }
 
 function normalizeSaveError(error: unknown, fallbackMessage: string): string {

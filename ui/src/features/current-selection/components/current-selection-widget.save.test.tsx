@@ -607,6 +607,108 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     ).not.toBeNull();
   });
 
+  it("clears saved feedback after switching to another workstation and returning", async () => {
+    const savedFactory = buildMultiWorkstationEditableFactoryDefinition({
+      reviewPrompt: "Review the saved factory before approval.",
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { retry: false },
+        queries: { retry: false },
+      },
+    });
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
+    const planNode = snapshot.topology.workstation_nodes_by_id.plan;
+
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+    );
+    vi.mocked(createFactory).mockResolvedValue(savedFactory);
+
+    const { rerender } = renderWithExistingQueryClient(
+      queryClient,
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode: reviewNode,
+          selection: { kind: "node", nodeId: reviewNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expandEditableConfiguration();
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Review the saved factory before approval." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+        ),
+      ).toBeTruthy();
+    });
+
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(savedFactory),
+    );
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <CurrentSelectionWidget
+          currentSelection={buildCurrentSelection({
+            selectedNode: planNode,
+            selection: { kind: "node", nodeId: planNode.node_id },
+          })}
+          now={DETAIL_CARD_NOW}
+          selectedWorkExecutionDetails={null}
+        />
+      </QueryClientProvider>,
+    );
+
+    expandEditableConfiguration();
+
+    expect(
+      screen.queryByText(
+        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+      ),
+    ).toBeNull();
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <CurrentSelectionWidget
+          currentSelection={buildCurrentSelection({
+            selectedNode: reviewNode,
+            selection: { kind: "node", nodeId: reviewNode.node_id },
+          })}
+          now={DETAIL_CARD_NOW}
+          selectedWorkExecutionDetails={null}
+        />
+      </QueryClientProvider>,
+    );
+
+    expandEditableConfiguration();
+
+    expect(
+      screen.queryByText(
+        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+      ),
+    ).toBeNull();
+    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
+      "Review the saved factory before approval.",
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
+  });
+
   it("does not leak a failed save message into a different workstation after switching selections", async () => {
     const deferredSave = createDeferredPromise<FactoryValue>();
     const queryClient = new QueryClient({
@@ -747,6 +849,104 @@ describe("CurrentSelectionWidget workstation save flow", () => {
         />
       </QueryClientProvider>,
     );
+
+    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <CurrentSelectionWidget
+          currentSelection={buildCurrentSelection({
+            selectedNode: reviewNode,
+            selection: { kind: "node", nodeId: reviewNode.node_id },
+          })}
+          now={DETAIL_CARD_NOW}
+          selectedWorkExecutionDetails={null}
+        />
+      </QueryClientProvider>,
+    );
+
+    expandEditableConfiguration();
+
+    expect(screen.queryByText(/^Saving failed\./)).toBeNull();
+    expect(
+      screen.queryByText(
+        "Saving failed. Current factory runtime must be idle before activation.",
+      ),
+    ).toBeNull();
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
+      "Review the latest story changes before approval.",
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
+  });
+
+  it("clears failed save feedback after switching to another workstation and returning", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { retry: false },
+        queries: { retry: false },
+      },
+    });
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
+    const planNode = snapshot.topology.workstation_nodes_by_id.plan;
+
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
+    );
+    vi.mocked(createFactory).mockRejectedValue(
+      new NamedFactoryAPIError(
+        "Current factory runtime must be idle before activation.",
+        {
+          code: "FACTORY_NOT_IDLE",
+        },
+      ),
+    );
+
+    const { rerender } = renderWithExistingQueryClient(
+      queryClient,
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode: reviewNode,
+          selection: { kind: "node", nodeId: reviewNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expandEditableConfiguration();
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Keep this failed draft from leaking back in." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Saving failed. Current factory runtime must be idle before activation.",
+        ),
+      ).toBeTruthy();
+    });
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <CurrentSelectionWidget
+          currentSelection={buildCurrentSelection({
+            selectedNode: planNode,
+            selection: { kind: "node", nodeId: planNode.node_id },
+          })}
+          now={DETAIL_CARD_NOW}
+          selectedWorkExecutionDetails={null}
+        />
+      </QueryClientProvider>,
+    );
+
+    expandEditableConfiguration();
 
     expect(screen.queryByText(/^Saving failed\./)).toBeNull();
 
