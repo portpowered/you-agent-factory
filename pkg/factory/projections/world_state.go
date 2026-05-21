@@ -108,11 +108,7 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		if err != nil {
 			return err
 		}
-		r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload{
-			Factory:         payload.Factory,
-			Metadata:        payload.Metadata,
-			SourceDirectory: payload.SourceDirectory,
-		}))
+		r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload(payload)))
 	case factoryapi.FactoryEventTypeWorkRequest:
 		payload, err := event.Payload.AsWorkRequestEventPayload()
 		if err != nil {
@@ -654,108 +650,6 @@ func sortedStrings(values []string) []string {
 		previous = value
 	}
 	return deduped
-}
-
-// portos:func-length-exception owner=agent-factory reason=generated-initial-structure-adapter review=2026-07-18 removal=split-resource-worktype-worker-and-workstation-converters-before-next-projection-expansion
-func initialStructureFromGenerated(payload factoryapi.InitialStructureRequestEventPayload) interfaces.InitialStructurePayload {
-	factoryPayload := payload.Factory
-	resources := make([]interfaces.FactoryResource, 0, len(sliceValue(factoryPayload.Resources)))
-	places := make([]interfaces.FactoryPlace, 0)
-	for _, resource := range sliceValue(factoryPayload.Resources) {
-		resources = append(resources, interfaces.FactoryResource{
-			ID:       resource.Name,
-			Name:     resource.Name,
-			Capacity: resource.Capacity,
-		})
-		places = append(places, interfaces.FactoryPlace{
-			ID:       generatedPlaceID(resource.Name, "available"),
-			TypeID:   resource.Name,
-			State:    "available",
-			Category: "PROCESSING",
-		})
-	}
-
-	workTypes := make([]interfaces.FactoryWorkType, 0, len(sliceValue(factoryPayload.WorkTypes)))
-	for _, workType := range sliceValue(factoryPayload.WorkTypes) {
-		converted := interfaces.FactoryWorkType{
-			ID:   workType.Name,
-			Name: workType.Name,
-		}
-		for _, stateDef := range workType.States {
-			category := string(stateDef.Type)
-			converted.States = append(converted.States, interfaces.FactoryStateDefinition{
-				Value:    stateDef.Name,
-				Category: category,
-			})
-			places = append(places, interfaces.FactoryPlace{
-				ID:       generatedPlaceID(workType.Name, stateDef.Name),
-				TypeID:   workType.Name,
-				State:    stateDef.Name,
-				Category: category,
-			})
-		}
-		workTypes = append(workTypes, converted)
-	}
-
-	workers := make([]interfaces.FactoryWorker, 0, len(sliceValue(factoryPayload.Workers)))
-	for _, worker := range sliceValue(factoryPayload.Workers) {
-		config := map[string]string{}
-		if workerType := enumStringValue(worker.Type); workerType != "" {
-			config["type"] = workerType
-		}
-		workers = append(workers, interfaces.FactoryWorker{
-			ID:            worker.Name,
-			Name:          worker.Name,
-			Provider:      enumStringValue(worker.ExecutorProvider),
-			ModelProvider: enumStringValue(worker.ModelProvider),
-			Model:         stringValue(worker.Model),
-			Config:        nilIfEmptyStringMap(config),
-		})
-	}
-
-	workstations := make([]interfaces.FactoryWorkstation, 0, len(sliceValue(factoryPayload.Workstations)))
-	for _, workstation := range sliceValue(factoryPayload.Workstations) {
-		id := stringValue(workstation.Id)
-		if id == "" {
-			id = workstation.Name
-		}
-		config := map[string]string{}
-		if runtimeType := enumStringValue(workstation.Type); runtimeType != "" {
-			config["type"] = runtimeType
-		}
-		if workstation.Worker != "" {
-			config["worker"] = workstation.Worker
-			config["configured_worker"] = workstation.Worker
-		}
-		workstations = append(workstations, interfaces.FactoryWorkstation{
-			ID:                id,
-			Name:              workstation.Name,
-			WorkerID:          workstation.Worker,
-			Kind:              workstationKindString(workstation.Behavior),
-			Config:            nilIfEmptyStringMap(config),
-			InputPlaceIDs:     placeIDsFromGeneratedIOs(workstation.Inputs),
-			OutputPlaceIDs:    placeIDsFromGeneratedIOs(workstation.Outputs),
-			ContinuePlaceIDs:  placeIDsFromGeneratedIOsPtr(workstation.OnContinue),
-			RejectionPlaceIDs: placeIDsFromGeneratedIOsPtr(workstation.OnRejection),
-			FailurePlaceIDs:   placeIDsFromGeneratedIOsPtr(workstation.OnFailure),
-		})
-	}
-
-	return interfaces.InitialStructurePayload{
-		Name:         string(factoryPayload.Name),
-		Resources:    resources,
-		Workers:      workers,
-		WorkTypes:    workTypes,
-		Workstations: workstations,
-		Places:       places,
-	}
-}
-
-func nilIfEmptyStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	return values
 }
 
 func factoryWorkItemsFromGenerated(works *[]factoryapi.Work) []interfaces.FactoryWorkItem {
