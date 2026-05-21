@@ -95,7 +95,7 @@ func TestFactoryEventHistory_RecordInitialStructure_EmitsCanonicalPublicWorkstat
 		func() time.Time { return time.Unix(0, 0).UTC() },
 		eventHistoryRuntimeConfig{
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"build": {Name: "Build", Kind: interfaces.WorkstationKindRepeater},
+				"Build": {Name: "Build", Kind: interfaces.WorkstationKindRepeater},
 			},
 		},
 	)
@@ -170,7 +170,7 @@ func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnum
 			},
 		},
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-			"build": {
+			"Build": {
 				Name:           "Build",
 				Kind:           interfaces.WorkstationKind("  REPEATER  "),
 				Type:           "  LOGICAL_MOVE  ",
@@ -213,10 +213,10 @@ func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnum
 	}
 
 	workstation := (*payload.Factory.Workstations)[0]
-	if got, want := stringValueForEventHistoryTest(workstation.Type), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkstationTypePtr(runtimeConfig.Workstations["build"].Type)); got != want {
+	if got, want := stringValueForEventHistoryTest(workstation.Type), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkstationTypePtr(runtimeConfig.Workstations["Build"].Type)); got != want {
 		t.Fatalf("workstation type = %q, want %q", got, want)
 	}
-	if got, want := stringValueForEventHistoryTest(workstation.Behavior), stringValueForEventHistoryTest(interfaces.GeneratedPublicWorkstationKindPtr(runtimeConfig.Workstations["build"].Kind)); got != want {
+	if got, want := stringValueForEventHistoryTest(workstation.Behavior), stringValueForEventHistoryTest(interfaces.GeneratedPublicWorkstationKindPtr(runtimeConfig.Workstations["Build"].Kind)); got != want {
 		t.Fatalf("workstation behavior = %q, want %q", got, want)
 	}
 }
