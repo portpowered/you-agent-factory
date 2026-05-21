@@ -976,6 +976,64 @@ func TestFactoryService_OpenFactorySessionFromFolder_RejectsInvalidFolderAndTarg
 	}
 }
 
+func TestFactoryService_OpenFactorySessionFromFolder_CanceledRequestDoesNotRegisterSession(t *testing.T) {
+	rootDir := t.TempDir()
+	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "beta"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(beta): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default beta runtime")
+	beforeIDs := svc.sessions.ids()
+	if len(beforeIDs) != 1 || beforeIDs[0] != defaultFactorySessionID {
+		t.Fatalf("session ids before canceled open = %v, want [%s]", beforeIDs, defaultFactorySessionID)
+	}
+
+	openCtx, cancelOpen := context.WithCancel(context.Background())
+	cancelOpen()
+
+	if _, err := svc.OpenFactorySessionFromFolder(openCtx, betaDir, nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("OpenFactorySessionFromFolder(canceled) error = %v, want context canceled", err)
+	}
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if got := svc.sessions.ids(); len(got) == 1 && got[0] == defaultFactorySessionID {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		t.Fatalf("canceled open mutated live sessions to %v, want only [%s]", svc.sessions.ids(), defaultFactorySessionID)
+	}
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
 func waitForSessionRuntimeStatus(
 	t *testing.T,
 	svc *FactoryService,

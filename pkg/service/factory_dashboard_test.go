@@ -123,6 +123,7 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 		APIServerStarter: func(ctx context.Context, runtime apisurface.APISurface, port int, l *zap.Logger) error {
 			observation := starterObservation{}
 			workRequest := factory.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+				WorkID:     "starter-task",
 				Name:       "starter-task",
 				WorkTypeID: "task",
 				TraceID:    "trace-api-surface-starter",
@@ -133,7 +134,6 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 			observation.snapshot, observation.snapshotErr = runtime.GetEngineStateSnapshot(ctx)
 			observation.current, observation.currentErr = runtime.GetCurrentNamedFactory(ctx)
 			observedCh <- observation
-			cancelRun()
 			return nil
 		},
 	})
@@ -178,6 +178,8 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 		t.Fatalf("APIServerStarter current factory name = %q, want %q", observation.current.Name, apisurface.DefaultCurrentFactoryName)
 	}
 
+	waitForTokenInPlaceByWorkID(t, svc, "task:complete", "starter-task", time.Second)
+	cancelRun()
 	if err := <-errCh; err != nil {
 		t.Fatalf("Run: %v", err)
 	}

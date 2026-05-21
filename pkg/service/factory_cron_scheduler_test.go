@@ -158,6 +158,7 @@ func TestFactoryService_ServiceModeCronScheduleConfigStartsAndStopsService(t *te
 		errCh <- svc.Run(runCtx)
 	}()
 
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default cron runtime")
 	cancelRun()
 	select {
 	case err := <-errCh:

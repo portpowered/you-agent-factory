@@ -1079,10 +1079,6 @@ func (fs *FactoryService) waitForLiveRuntimeStart(ctx context.Context, handle *l
 	for {
 		select {
 		case <-startCtx.Done():
-			if errors.Is(startCtx.Err(), context.Canceled) {
-				_ = handle.wait()
-				return handle.result()
-			}
 			if handle.completed() {
 				return handle.result()
 			}

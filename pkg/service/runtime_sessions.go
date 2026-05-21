@@ -512,16 +512,17 @@ func (fs *FactoryService) startBackgroundSessionWithMetadata(
 	if runtimeBundle == nil {
 		return fmt.Errorf("runtime bundle is required")
 	}
+	serviceCtx := ctx
 	if runState := fs.currentRunState(); runState != nil && runState.ctx != nil {
-		ctx = runState.ctx
+		serviceCtx = runState.ctx
 	}
-	handle := fs.startLiveRuntime(ctx, runtimeBundle)
+	handle := fs.startLiveRuntime(serviceCtx, runtimeBundle)
 	if err := fs.waitForLiveRuntimeStart(ctx, handle); err != nil {
 		_ = fs.stopLiveRuntime(handle)
 		return fmt.Errorf("start runtime session: %w", err)
 	}
 	if fs.cfg != nil && runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService {
-		if err := fs.startLiveRuntimeSidecars(ctx, handle); err != nil {
+		if err := fs.startLiveRuntimeSidecars(serviceCtx, handle); err != nil {
 			_ = fs.stopLiveRuntime(handle)
 			return fmt.Errorf("start runtime session sidecars: %w", err)
 		}
