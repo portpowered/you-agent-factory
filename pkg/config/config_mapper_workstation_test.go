@@ -196,6 +196,61 @@ Retry work.
 	}
 }
 
+func TestConfigMapping_DefaultNonRepeaterFanInRejectionUsesFailureDestinations(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "init", Type: interfaces.StateTypeInitial},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
+				},
+			},
+			{
+				Name: "page",
+				States: []interfaces.StateConfig{
+					{Name: "ready", Type: interfaces.StateTypeInitial},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
+				},
+			},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name: "fan-in",
+				Inputs: []interfaces.IOConfig{
+					{StateName: "init", WorkTypeName: "task"},
+					{StateName: "ready", WorkTypeName: "page"},
+				},
+				Outputs: []interfaces.IOConfig{
+					{StateName: "complete", WorkTypeName: "task"},
+					{StateName: "complete", WorkTypeName: "page"},
+				},
+			},
+		},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tr := net.Transitions["fan-in"]
+	if tr == nil {
+		t.Fatal("expected mapped transition for fan-in")
+	}
+	if len(tr.FailureArcs) != 2 {
+		t.Fatalf("expected default failure routing to both failed states, got %+v", tr.FailureArcs)
+	}
+	assertTransitionArcPlaces(t, tr.FailureArcs, "task:failed", "page:failed")
+	if len(tr.RejectionArcs) != 2 {
+		t.Fatalf("expected default rejection routing to clone failure destinations, got %+v", tr.RejectionArcs)
+	}
+	assertTransitionArcPlaces(t, tr.RejectionArcs, "task:failed", "page:failed")
+}
+
 // portos:func-length-exception owner=agent-factory reason=cron-mapping-fixture review=2026-07-18 removal=split-cron-fixture-before-next-cron-topology-change
 func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 	input := &interfaces.FactoryConfig{
@@ -292,6 +347,20 @@ func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 	}
 	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
 		t.Fatalf("expected cron failure to route to task:failed, got %+v", tr.FailureArcs)
+	}
+}
+
+func assertTransitionArcPlaces(t *testing.T, arcs []petri.Arc, wantPlaces ...string) {
+	t.Helper()
+
+	places := make(map[string]struct{}, len(arcs))
+	for _, arc := range arcs {
+		places[arc.PlaceID] = struct{}{}
+	}
+	for _, want := range wantPlaces {
+		if _, ok := places[want]; !ok {
+			t.Fatalf("arc places = %+v, want %s destination", arcs, want)
+		}
 	}
 }
 
