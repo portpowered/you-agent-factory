@@ -205,91 +205,15 @@ func TestLivelockExecutionTimeout(t *testing.T) {
 
 	start := time.Now()
 
-	// Run all three variants sequentially within the timeout.
 	t.Run("InfiniteLoop", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
-			WorkTypes: []interfaces.WorkTypeConfig{{
-				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "processing", Type: interfaces.StateTypeProcessing},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
-					{Name: "failed", Type: interfaces.StateTypeFailed},
-				},
-			}},
-			Workers: []interfaces.WorkerConfig{{Name: "wa"}, {Name: "wb"}},
-			Workstations: []interfaces.FactoryWorkstationConfig{
-				{
-					Name: "step-a", WorkerTypeName: "wa",
-					Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-					Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}},
-				},
-				{
-					Name: "step-b", WorkerTypeName: "wb",
-					Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}},
-					Outputs:     []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-					OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-					OnFailure:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
-				},
-				guardedLoopBreakerWorkstation(
-					"exhausted",
-					"step-a",
-					10,
-					interfaces.IOConfig{WorkTypeName: "task", StateName: "init"},
-					interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
-				),
-			},
-		})
-		h := testutil.NewServiceTestHarness(t, dir)
-		aRes := make([]interfaces.WorkResult, 20)
-		bRes := make([]interfaces.WorkResult, 20)
-		for i := range 20 {
-			aRes[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
-			bRes[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeRejected}
-		}
-		h.MockWorker("wa", aRes...)
-		h.MockWorker("wb", bRes...)
+		h := newInfiniteLoopTimeoutHarness(t)
 		h.SubmitWork("task", []byte(`{}`))
 		h.RunUntilComplete(t, 10*time.Second)
 		h.Assert().HasTokenInPlace("task:failed").TokenCount(1)
 	})
 
 	t.Run("TriangleLoop", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
-			WorkTypes: []interfaces.WorkTypeConfig{{
-				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "mid", Type: interfaces.StateTypeProcessing},
-					{Name: "end", Type: interfaces.StateTypeProcessing},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
-					{Name: "failed", Type: interfaces.StateTypeFailed},
-				},
-			}},
-			Workers: []interfaces.WorkerConfig{{Name: "w1"}, {Name: "w2"}, {Name: "w3"}},
-			Workstations: []interfaces.FactoryWorkstationConfig{
-				{Name: "s1", WorkerTypeName: "w1", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "mid"}}},
-				{Name: "s2", WorkerTypeName: "w2", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "mid"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "end"}}},
-				{Name: "s3", WorkerTypeName: "w3", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "end"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}, OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
-				guardedLoopBreakerWorkstation(
-					"ex",
-					"s1",
-					5,
-					interfaces.IOConfig{WorkTypeName: "task", StateName: "init"},
-					interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
-				),
-			},
-		})
-		h := testutil.NewServiceTestHarness(t, dir)
-		r := make([]interfaces.WorkResult, 20)
-		rr := make([]interfaces.WorkResult, 20)
-		for i := range 20 {
-			r[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
-			rr[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeRejected}
-		}
-		h.MockWorker("w1", r...)
-		h.MockWorker("w2", r...)
-		h.MockWorker("w3", rr...)
+		h := newTriangleLoopTimeoutHarness(t)
 		h.SubmitWork("task", []byte(`{}`))
 		h.RunUntilComplete(t, 10*time.Second)
 		h.Assert().HasTokenInPlace("task:failed").TokenCount(1)
@@ -300,4 +224,67 @@ func TestLivelockExecutionTimeout(t *testing.T) {
 		t.Fatalf("all livelock tests took %v, expected < 5s", elapsed)
 	}
 	t.Logf("all livelock variants completed in %v", elapsed)
+}
+
+func newInfiniteLoopTimeoutHarness(t *testing.T) *testutil.ServiceTestHarness {
+	t.Helper()
+
+	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "processing", Type: interfaces.StateTypeProcessing},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "wa"}, {Name: "wb"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{Name: "step-a", WorkerTypeName: "wa", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}}},
+			{Name: "step-b", WorkerTypeName: "wb", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}, OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+			guardedLoopBreakerWorkstation("exhausted", "step-a", 10, interfaces.IOConfig{WorkTypeName: "task", StateName: "init"}, interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"}),
+		},
+	})
+	h := testutil.NewServiceTestHarness(t, dir)
+	h.MockWorker("wa", acceptedWorkResults(20)...)
+	h.MockWorker("wb", rejectedWorkResults(20, "")...)
+	return h
+}
+
+func newTriangleLoopTimeoutHarness(t *testing.T) *testutil.ServiceTestHarness {
+	t.Helper()
+
+	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "mid", Type: interfaces.StateTypeProcessing},
+				{Name: "end", Type: interfaces.StateTypeProcessing},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "w1"}, {Name: "w2"}, {Name: "w3"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{Name: "s1", WorkerTypeName: "w1", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "mid"}}},
+			{Name: "s2", WorkerTypeName: "w2", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "mid"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "end"}}},
+			{Name: "s3", WorkerTypeName: "w3", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "end"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}, OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+			guardedLoopBreakerWorkstation("ex", "s1", 5, interfaces.IOConfig{WorkTypeName: "task", StateName: "init"}, interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"}),
+		},
+	})
+	h := testutil.NewServiceTestHarness(t, dir)
+	h.MockWorker("w1", acceptedWorkResults(20)...)
+	h.MockWorker("w2", acceptedWorkResults(20)...)
+	h.MockWorker("w3", rejectedWorkResults(20, "")...)
+	return h
+}
+
+func rejectedWorkResults(count int, feedback string) []interfaces.WorkResult {
+	results := make([]interfaces.WorkResult, count)
+	for i := range results {
+		results[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Feedback: feedback}
+	}
+	return results
 }
