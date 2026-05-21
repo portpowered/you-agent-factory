@@ -230,6 +230,28 @@ func (h *ServiceTestHarness) waitToComplete() <-chan struct{} {
 	return h.svc.WaitToComplete()
 }
 
+func (h *ServiceTestHarness) waitForRuntimeAvailability(ctx context.Context, runErrCh <-chan error) error {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		if _, err := h.svc.GetEngineStateSnapshot(context.Background()); err == nil {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-runErrCh:
+			if err == nil || errors.Is(err, context.Canceled) {
+				return fmt.Errorf("factory run exited before runtime became available")
+			}
+			return fmt.Errorf("factory run error: %w", err)
+		case <-ticker.C:
+		}
+	}
+}
+
 // run delegates to the underlying FactoryService.
 func (h *ServiceTestHarness) run(ctx context.Context) error {
 	return h.svc.Run(ctx)
@@ -349,6 +371,10 @@ func (h *ServiceTestHarness) RunUntilCompleteError(timeout time.Duration) error 
 	go func() {
 		errCh <- h.run(ctx)
 	}()
+
+	if err := h.waitForRuntimeAvailability(ctx, errCh); err != nil {
+		return err
+	}
 
 	select {
 	case <-h.waitToComplete():
