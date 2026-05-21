@@ -125,7 +125,7 @@ func TestCircuitBreaker_MaxTotalVisits(t *testing.T) {
 func TestCircuitBreaker_MaxRetries(t *testing.T) {
 	n := buildTestNet()
 	n.Transitions["coding"] = &petri.Transition{
-		ID:   "coding",
+		ID:   "coding-transition-id",
 		Name: "coding",
 		Type: petri.TransitionNormal,
 	}
@@ -142,7 +142,7 @@ func TestCircuitBreaker_MaxRetries(t *testing.T) {
 
 	marking := petri.NewMarking("test-wf")
 	tok := makeToken("tok-1", "task:init", time.Now())
-	tok.History.ConsecutiveFailures["coding"] = 3 // exactly at limit
+	tok.History.ConsecutiveFailures["coding-transition-id"] = 3 // exactly at limit for this transition ID
 	marking.AddToken(tok)
 
 	markingSnap := marking.Snapshot()
@@ -156,6 +156,40 @@ func TestCircuitBreaker_MaxRetries(t *testing.T) {
 	}
 	if result.Mutations[0].ToPlace != "task:failed" {
 		t.Errorf("expected task:failed, got %s", result.Mutations[0].ToPlace)
+	}
+}
+
+func TestCircuitBreaker_MaxRetries_DoesNotUseTransitionIDFallback(t *testing.T) {
+	n := buildTestNet()
+	n.Transitions["coding"] = &petri.Transition{
+		ID:   "coding-transition-id",
+		Name: "coding",
+		Type: petri.TransitionNormal,
+	}
+	runtimeConfig := runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"coding-transition-id": {
+				Name:   "coding-transition-id",
+				Limits: interfaces.WorkstationLimits{MaxRetries: 3},
+			},
+		},
+	}
+
+	cb := subsystems.NewCircuitBreaker(n, nil, subsystems.WithCircuitBreakerRuntimeConfig(runtimeConfig))
+
+	marking := petri.NewMarking("test-wf")
+	tok := makeToken("tok-1", "task:init", time.Now())
+	tok.History.ConsecutiveFailures["coding-transition-id"] = 3
+	marking.AddToken(tok)
+
+	markingSnap := marking.Snapshot()
+	snap := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
+	result, err := cb.Execute(context.Background(), &snap)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("expected no mutation when only transition ID matches runtime workstation lookup, got %+v", result)
 	}
 }
 

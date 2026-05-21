@@ -241,7 +241,7 @@ func projectionNetAndRuntimeConfigWithConstraints() (*state.Net, projectionRunti
 			},
 		},
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-			"build": {
+			"Build": {
 				Name:           "Build",
 				Kind:           interfaces.WorkstationKindCron,
 				Type:           interfaces.WorkstationTypeModel,
@@ -379,7 +379,7 @@ func TestProjectInitialStructure_RuntimeConfig_LimitsConstraintUsesRuntimeConfig
 	net := representativeProjectionNet()
 	runtimeConfig := projectionRuntimeConfig{
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-			"build": {
+			"Build": {
 				Name:   "Build",
 				Limits: interfaces.WorkstationLimits{MaxRetries: 2, MaxExecutionTime: "10m"},
 			},
@@ -403,6 +403,45 @@ func TestProjectInitialStructure_RuntimeConfig_LimitsConstraintUsesRuntimeConfig
 	}
 
 	t.Fatalf("missing workstation/build/limits constraint in %#v", got.Constraints)
+}
+
+func TestProjectInitialStructure_RuntimeConfig_UsesTransitionNameForWorkstationMetadata(t *testing.T) {
+	net := representativeProjectionNet()
+	runtimeConfig := projectionRuntimeConfig{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"Build": {
+				Name: "Build",
+				Kind: interfaces.WorkstationKindCron,
+			},
+		},
+	}
+
+	got := ProjectInitialStructure(net, runtimeConfig)
+
+	if got.Workstations[0].Kind != "CRON" {
+		t.Fatalf("Workstations[0].Kind = %q, want CRON from authored transition name lookup", got.Workstations[0].Kind)
+	}
+}
+
+func TestProjectInitialStructure_RuntimeConfig_DoesNotUseTransitionIDFallback(t *testing.T) {
+	net := representativeProjectionNet()
+	runtimeConfig := projectionRuntimeConfig{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"build": {
+				Name: "build",
+				Kind: interfaces.WorkstationKindCron,
+			},
+		},
+	}
+
+	got := ProjectInitialStructure(net, runtimeConfig)
+
+	if got.Workstations[0].Kind != "" {
+		t.Fatalf("Workstations[0].Kind = %q, want empty kind when only transition ID matches runtime workstation lookup", got.Workstations[0].Kind)
+	}
+	if got.Workstations[0].Config != nil {
+		t.Fatalf("Workstations[0].Config = %#v, want nil when only transition ID matches runtime workstation lookup", got.Workstations[0].Config)
+	}
 }
 
 func assertSingleConstraint(t *testing.T, constraints []interfaces.FactoryConstraint, id string) {
