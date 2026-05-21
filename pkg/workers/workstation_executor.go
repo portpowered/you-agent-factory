@@ -53,6 +53,7 @@ type WorkstationExecutor struct {
 
 const defaultSubprocessExecutionTimeout = 2 * time.Hour
 const codexWorktreeValidationTimeout = 5 * time.Second
+const codexWorktreeCreationTimeout = 30 * time.Second
 
 type resolvedWorkstationExecutionContext struct {
 	ProjectID        string
@@ -226,10 +227,11 @@ func pathExists(value string) bool {
 const (
 	codexWorktreeHandlingReuseWorkingDirectory = "reuse_working_directory_overlap"
 	codexWorktreeHandlingReuseExistingWorktree = "reuse_existing_worktree"
+	codexWorktreeHandlingCreateMissingWorktree = "create_missing_worktree"
 )
 
-func (we *WorkstationExecutor) prepareCodexWorktreeRequest(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkstationExecutionRequest, error) {
-	if interfaces.NormalizeRunnerID(request.RunnerID) != interfaces.RunnerIDCodex {
+func (we *WorkstationExecutor) prepareCodexWorktreeRequest(ctx context.Context, request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig) (interfaces.WorkstationExecutionRequest, error) {
+	if !shouldPrepareCodexWorktree(request, workerDef) {
 		return request, nil
 	}
 
@@ -247,18 +249,21 @@ func (we *WorkstationExecutor) prepareCodexWorktreeRequest(ctx context.Context, 
 		return request, nil
 	}
 
-	reusable, err := we.codexCanReuseExistingWorktree(ctx, resolvedWorktreePath)
+	worktreeState, err := we.inspectCodexWorktree(ctx, resolvedWorktreePath)
 	if err != nil {
 		return interfaces.WorkstationExecutionRequest{}, err
 	}
-	if !reusable {
+	if worktreeState.reusable {
+		request.WorktreeHandling = codexWorktreeHandlingReuseExistingWorktree
+		request.WorkingDirectory = resolvedWorktreePath
+		request.Worktree = ""
+		return request, nil
+	}
+	if worktreeState.exists {
 		return request, nil
 	}
 
-	request.WorktreeHandling = codexWorktreeHandlingReuseExistingWorktree
-	request.WorkingDirectory = resolvedWorktreePath
-	request.Worktree = ""
-	return request, nil
+	return we.codexCreateMissingWorktree(ctx, request, resolvedWorktreePath)
 }
 
 func pathsOverlapForCodexReuse(workingDirectory, worktree string) bool {
@@ -302,7 +307,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(ctx context.Cont
 		Worktree:              requestContext.Worktree,
 		WorkingDirectory:      requestContext.WorkingDirectory,
 	}
-	request, err = we.prepareCodexWorktreeRequest(ctx, request)
+	request, err = we.prepareCodexWorktreeRequest(ctx, request, workerDef)
 	if err != nil {
 		logger.Error("codex worktree preparation failed",
 			WorkLogFields(dispatch.Execution,
@@ -353,19 +358,38 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(ctx context.Cont
 	return request, nil
 }
 
-func (we *WorkstationExecutor) codexCanReuseExistingWorktree(ctx context.Context, worktreePath string) (bool, error) {
+func shouldPrepareCodexWorktree(request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig) bool {
+	if interfaces.NormalizeRunnerID(request.RunnerID) != interfaces.RunnerIDCodex {
+		return false
+	}
+	if workerDef == nil || workerDef.Type != interfaces.WorkerTypeModel {
+		return false
+	}
+	if strings.EqualFold(workerDef.ModelProvider, string(ModelProviderCodex)) {
+		return true
+	}
+	return request.RunnerSelectionSource == interfaces.RunnerSelectionSourceWorkstation ||
+		request.RunnerSelectionSource == interfaces.RunnerSelectionSourceFactory
+}
+
+type codexWorktreeInspection struct {
+	exists   bool
+	reusable bool
+}
+
+func (we *WorkstationExecutor) inspectCodexWorktree(ctx context.Context, worktreePath string) (codexWorktreeInspection, error) {
 	if worktreePath == "" {
-		return false, nil
+		return codexWorktreeInspection{}, nil
 	}
 	info, err := os.Stat(worktreePath)
 	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return codexWorktreeInspection{}, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("stat %q: %w", worktreePath, err)
+		return codexWorktreeInspection{}, fmt.Errorf("stat %q: %w", worktreePath, err)
 	}
 	if !info.IsDir() {
-		return false, nil
+		return codexWorktreeInspection{exists: true}, nil
 	}
 
 	validateCtx, cancel := context.WithTimeout(ctx, codexWorktreeValidationTimeout)
@@ -373,18 +397,48 @@ func (we *WorkstationExecutor) codexCanReuseExistingWorktree(ctx context.Context
 
 	topLevel, err := we.gitRevParse(validateCtx, worktreePath, "--show-toplevel")
 	if err != nil {
-		return false, nil
+		return codexWorktreeInspection{exists: true}, nil
 	}
-	return pathsEquivalentForCodex(topLevel, worktreePath), nil
+	return codexWorktreeInspection{
+		exists:   true,
+		reusable: pathsEquivalentForCodex(topLevel, worktreePath),
+	}, nil
+}
+
+func (we *WorkstationExecutor) codexCreateMissingWorktree(ctx context.Context, request interfaces.WorkstationExecutionRequest, worktreePath string) (interfaces.WorkstationExecutionRequest, error) {
+	if worktreePath == "" {
+		return request, nil
+	}
+	if request.WorkingDirectory == "" {
+		return request, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(worktreePath), 0o755); err != nil {
+		return interfaces.WorkstationExecutionRequest{}, fmt.Errorf("create worktree parent for %q: %w", worktreePath, err)
+	}
+
+	createCtx, cancel := context.WithTimeout(ctx, codexWorktreeCreationTimeout)
+	defer cancel()
+
+	repoRoot, err := we.gitRevParse(createCtx, request.WorkingDirectory, "--show-toplevel")
+	if err != nil {
+		return interfaces.WorkstationExecutionRequest{}, fmt.Errorf("resolve source repository for %q: %w", request.WorkingDirectory, err)
+	}
+	headCommit, err := we.gitRevParse(createCtx, repoRoot, "HEAD")
+	if err != nil {
+		return interfaces.WorkstationExecutionRequest{}, fmt.Errorf("resolve source commit for %q: %w", repoRoot, err)
+	}
+	if err := we.gitWorktreeAddDetached(createCtx, repoRoot, worktreePath, headCommit); err != nil {
+		return interfaces.WorkstationExecutionRequest{}, fmt.Errorf("create worktree %q from %q: %w", worktreePath, repoRoot, err)
+	}
+
+	request.WorktreeHandling = codexWorktreeHandlingCreateMissingWorktree
+	request.WorkingDirectory = worktreePath
+	request.Worktree = ""
+	return request, nil
 }
 
 func (we *WorkstationExecutor) gitRevParse(ctx context.Context, workDir string, args ...string) (string, error) {
-	result, err := we.commandRunner().Run(ctx, CommandRequest{
-		Command: "git",
-		Args:    append([]string{"rev-parse"}, args...),
-		Env:     isolatedGitEnv(os.Environ()),
-		WorkDir: workDir,
-	})
+	result, err := we.runGitCommand(ctx, workDir, append([]string{"rev-parse"}, args...)...)
 	if err != nil {
 		return "", err
 	}
@@ -392,6 +446,26 @@ func (we *WorkstationExecutor) gitRevParse(ctx context.Context, workDir string, 
 		return "", fmt.Errorf("git rev-parse %s exit code %d: %s", strings.Join(args, " "), result.ExitCode, strings.TrimSpace(string(result.Stderr)))
 	}
 	return strings.TrimSpace(string(result.Stdout)), nil
+}
+
+func (we *WorkstationExecutor) gitWorktreeAddDetached(ctx context.Context, workDir, worktreePath, headCommit string) error {
+	result, err := we.runGitCommand(ctx, workDir, "worktree", "add", "--detach", worktreePath, headCommit)
+	if err != nil {
+		return err
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("git worktree add --detach %s %s exit code %d: %s", worktreePath, headCommit, result.ExitCode, strings.TrimSpace(string(result.Stderr)))
+	}
+	return nil
+}
+
+func (we *WorkstationExecutor) runGitCommand(ctx context.Context, workDir string, args ...string) (CommandResult, error) {
+	return we.commandRunner().Run(ctx, CommandRequest{
+		Command: "git",
+		Args:    args,
+		Env:     isolatedGitEnv(os.Environ()),
+		WorkDir: workDir,
+	})
 }
 
 func (we *WorkstationExecutor) commandRunner() CommandRunner {

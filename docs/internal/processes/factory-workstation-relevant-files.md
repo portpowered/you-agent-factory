@@ -24,6 +24,7 @@ work inputs.
 
 ## Notes for future iterations
 
+- Create missing distinct Codex worktrees in `pkg/workers/workstation_executor.go` from the source repository `HEAD` with `git worktree add --detach`, then rewrite execution onto the created worktree directory and clear provider-facing `worktree`.
 - Treat `factory/inputs/idea/default/` as the live standalone idea inbox, not as a checked-in template catalog; clean checkouts may only contain `.gitkeep`.
 - Treat `factory/inputs/task/default/` as the live standalone task inbox, not as a checked-in template catalog; clean checkouts may only contain `.gitkeep`.
 - Treat `factory/internal/{asks,view,progress,meta}.md` as one control surface; if maintainer guidance mentions one of these files, keep the other three aligned in the same `factory/internal/` family.
