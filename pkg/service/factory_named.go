@@ -662,6 +662,9 @@ func (fs *FactoryService) serializeNamedFactory(
 		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, true); err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("inline named factory bundled files: %w", err)
 		}
+		if err := factoryconfig.ApplySharedFactoryStarterWork(current.FactoryDir(), clonedFactoryCfg); err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("inline shared factory starter work: %w", err)
+		}
 		factoryCfg = clonedFactoryCfg
 	}
 	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(

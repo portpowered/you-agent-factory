@@ -479,7 +479,7 @@ func checkRequiredToolOnPath(tool interfaces.RequiredToolConfig) RequiredToolChe
 
 func isSupportedBundledFileType(fileType string) bool {
 	switch fileType {
-	case interfaces.BundledFileTypeScript, interfaces.BundledFileTypeDoc, interfaces.BundledFileTypeRootHelper:
+	case interfaces.BundledFileTypeScript, interfaces.BundledFileTypeDoc, interfaces.BundledFileTypeInput, interfaces.BundledFileTypeRootHelper:
 		return true
 	default:
 		return false
@@ -507,6 +507,8 @@ func bundledFileRootForType(fileType string) string {
 		return portableBundledScriptRoot
 	case interfaces.BundledFileTypeDoc:
 		return portableBundledDocRoot
+	case interfaces.BundledFileTypeInput:
+		return portableBundledInputRoot
 	default:
 		return ""
 	}

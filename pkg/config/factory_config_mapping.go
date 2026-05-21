@@ -314,7 +314,7 @@ func shouldOmitSupportedPortableBundledInline(file interfaces.BundledFileConfig)
 		return false
 	}
 	switch file.Type {
-	case interfaces.BundledFileTypeScript, interfaces.BundledFileTypeDoc:
+	case interfaces.BundledFileTypeScript, interfaces.BundledFileTypeDoc, interfaces.BundledFileTypeInput:
 		return true
 	default:
 		return false

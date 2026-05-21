@@ -214,7 +214,7 @@ func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.Typ
 	return func(d interfaces.WorkDispatch) {
 		tr := net.Transitions[d.TransitionID]
 		workerType := dispatchRunnerKey(tr, d)
-		result := executeDispatchSynchronously(d, workerType, executors)
+		result := executeDispatchSynchronously(context.Background(), d, workerType, executors)
 		resultBuffer.Write(context.Background(), result)
 	}
 }
