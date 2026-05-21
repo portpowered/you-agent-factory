@@ -7,6 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenResponse {
@@ -19,7 +20,7 @@ func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenR
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
 		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
 		TraceId:                  t.Color.TraceID,
-		Content:                  domainWorkContentToGeneratedPtr(t.Color.Content),
+		Content:                  workcontent.GeneratedPtrFromParts(t.Color.Content),
 		Tags:                     stringMapPtr(t.Color.Tags),
 		CreatedAt:                t.CreatedAt,
 		EnteredAt:                t.EnteredAt,
@@ -52,7 +53,7 @@ func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
 		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
 		TraceId:                  stringPtrIfNotEmpty(t.Color.TraceID),
-		Content:                  domainWorkContentToGeneratedPtr(t.Color.Content),
+		Content:                  workcontent.GeneratedPtrFromParts(t.Color.Content),
 		Tags:                     stringMapPtr(t.Color.Tags),
 	}
 }
