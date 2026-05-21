@@ -239,6 +239,53 @@ func (r *factoryWorldReducer) state() interfaces.FactoryWorldState {
 	return r.stateValue
 }
 
+func (r *factoryWorldReducer) factoryRelationFromGenerated(relation factoryapi.Relation, context factoryapi.FactoryEventContext) interfaces.FactoryRelation {
+	requestItems := r.requestWorkItems(stringValue(context.RequestId))
+	targetWorkID := stringValue(relation.TargetWorkId)
+	if targetWorkID == "" {
+		targetWorkID = workIDForRequestName(requestItems, relation.TargetWorkName)
+	}
+	sourceWorkID := workIDForRequestName(requestItems, relation.SourceWorkName)
+	if sourceWorkID == "" {
+		sourceWorkID = sourceWorkIDFromContext(context, targetWorkID)
+	}
+	return factoryRelationFromGenerated(
+		relation,
+		stringValue(context.RequestId),
+		firstString(context.TraceIds),
+		sourceWorkID,
+		targetWorkID,
+	)
+}
+
+func (r *factoryWorldReducer) requestWorkItems(requestID string) []interfaces.FactoryWorkItem {
+	if requestID == "" {
+		return nil
+	}
+	return r.stateValue.WorkRequestsByID[requestID].WorkItems
+}
+
+func workIDForRequestName(items []interfaces.FactoryWorkItem, workName string) string {
+	if workName == "" {
+		return ""
+	}
+	for _, item := range items {
+		if item.DisplayName == workName {
+			return item.ID
+		}
+	}
+	return ""
+}
+
+func sourceWorkIDFromContext(context factoryapi.FactoryEventContext, targetWorkID string) string {
+	for _, workID := range sliceValue(context.WorkIds) {
+		if workID != "" && workID != targetWorkID {
+			return workID
+		}
+	}
+	return ""
+}
+
 func (r *factoryWorldReducer) addWorkToken(tokenID string, placeID string, item interfaces.FactoryWorkItem) {
 	if tokenID == "" || placeID == "" {
 		return

@@ -19,16 +19,13 @@ func (r *factoryWorldReducer) factoryRelationsFromGenerated(relations *[]factory
 	return out
 }
 
-func (r *factoryWorldReducer) factoryRelationFromGenerated(relation factoryapi.Relation, context factoryapi.FactoryEventContext) interfaces.FactoryRelation {
-	requestItems := r.requestWorkItems(stringValue(context.RequestId))
-	targetWorkID := stringValue(relation.TargetWorkId)
-	if targetWorkID == "" {
-		targetWorkID = workIDForRequestName(requestItems, relation.TargetWorkName)
-	}
-	sourceWorkID := workIDForRequestName(requestItems, relation.SourceWorkName)
-	if sourceWorkID == "" {
-		sourceWorkID = sourceWorkIDFromContext(context, targetWorkID)
-	}
+func factoryRelationFromGenerated(
+	relation factoryapi.Relation,
+	requestID string,
+	traceID string,
+	sourceWorkID string,
+	targetWorkID string,
+) interfaces.FactoryRelation {
 	return interfaces.FactoryRelation{
 		Type:           string(relation.Type),
 		SourceWorkID:   sourceWorkID,
@@ -36,35 +33,7 @@ func (r *factoryWorldReducer) factoryRelationFromGenerated(relation factoryapi.R
 		TargetWorkID:   targetWorkID,
 		TargetWorkName: relation.TargetWorkName,
 		RequiredState:  stringValue(relation.RequiredState),
-		RequestID:      stringValue(context.RequestId),
-		TraceID:        firstString(context.TraceIds),
+		RequestID:      requestID,
+		TraceID:        traceID,
 	}
-}
-
-func (r *factoryWorldReducer) requestWorkItems(requestID string) []interfaces.FactoryWorkItem {
-	if requestID == "" {
-		return nil
-	}
-	return r.stateValue.WorkRequestsByID[requestID].WorkItems
-}
-
-func workIDForRequestName(items []interfaces.FactoryWorkItem, workName string) string {
-	if workName == "" {
-		return ""
-	}
-	for _, item := range items {
-		if item.DisplayName == workName {
-			return item.ID
-		}
-	}
-	return ""
-}
-
-func sourceWorkIDFromContext(context factoryapi.FactoryEventContext, targetWorkID string) string {
-	for _, workID := range sliceValue(context.WorkIds) {
-		if workID != "" && workID != targetWorkID {
-			return workID
-		}
-	}
-	return ""
 }
