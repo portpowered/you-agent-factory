@@ -76,88 +76,42 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 }
 
 func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
-	if content == nil || len(*content) == 0 {
+	parts, err := generatedWorkContentToDomainAtPath(content, "content")
+	if err != nil {
 		return nil
-	}
-
-	parts := make([]interfaces.WorkContentPart, 0, len(*content))
-	for _, part := range *content {
-		parts = append(parts, generatedWorkContentPartToDomain(part))
 	}
 	return parts
 }
 
-func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
-	if len(parts) == 0 {
-		return nil
+func generatedWorkContentToDomainAtPath(content *factoryapi.WorkContent, fieldPath string) ([]interfaces.WorkContentPart, error) {
+	if content == nil || len(*content) == 0 {
+		return nil, nil
 	}
-	content := make(factoryapi.WorkContent, 0, len(parts))
-	for _, part := range parts {
-		var generated factoryapi.WorkContentPart
-		switch part.Type {
-		case interfaces.WorkContentPartTypeText:
-			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-				Type: factoryapi.WorkContentPartTypeText,
-				Text: part.Text,
-			}); err != nil {
-				continue
-			}
-		case interfaces.WorkContentPartTypeImage:
-			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
-				Type: factoryapi.WorkContentPartTypeImage,
-				File: part.File,
-			}); err != nil {
-				continue
-			}
-		default:
+
+	parts := make([]interfaces.WorkContentPart, 0, len(*content))
+	for i, part := range *content {
+		pathPrefix := fmt.Sprintf("%s[%d].", fieldPath, i)
+		textPart, textErr := part.AsWorkTextContentPart()
+		if textErr == nil && textPart.Type == factoryapi.WorkContentPartTypeText {
+			parts = append(parts, interfaces.WorkContentPart{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: textPart.Text,
+			})
 			continue
 		}
-		content = append(content, generated)
-	}
-	if len(content) == 0 {
-		return nil
-	}
-	return &content
-}
 
-func generatedWorkContentPartToDomain(part factoryapi.WorkContentPart) interfaces.WorkContentPart {
-	var contentType struct {
-		Type factoryapi.WorkContentPartType `json:"type"`
-	}
-	if err := unmarshalGeneratedWorkContentPart(part, &contentType); err != nil {
-		return interfaces.WorkContentPart{}
-	}
+		imagePart, imageErr := part.AsWorkImageContentPart()
+		if imageErr == nil && imagePart.Type == factoryapi.WorkContentPartTypeImage {
+			parts = append(parts, interfaces.WorkContentPart{
+				Type: interfaces.WorkContentPartTypeImage,
+				File: imagePart.File,
+			})
+			continue
+		}
 
-	switch contentType.Type {
-	case factoryapi.WorkContentPartTypeText:
-		var textPart factoryapi.WorkTextContentPart
-		if err := unmarshalGeneratedWorkContentPart(part, &textPart); err != nil {
-			return interfaces.WorkContentPart{}
-		}
-		return interfaces.WorkContentPart{
-			Type: interfaces.WorkContentPartTypeText,
-			Text: textPart.Text,
-		}
-	case factoryapi.WorkContentPartTypeImage:
-		var imagePart factoryapi.WorkImageContentPart
-		if err := unmarshalGeneratedWorkContentPart(part, &imagePart); err != nil {
-			return interfaces.WorkContentPart{}
-		}
-		return interfaces.WorkContentPart{
-			Type: interfaces.WorkContentPartTypeImage,
-			File: imagePart.File,
-		}
-	default:
-		return interfaces.WorkContentPart{}
+		return nil, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", pathPrefix)}
 	}
-}
-
-func unmarshalGeneratedWorkContentPart(part factoryapi.WorkContentPart, target any) error {
-	rawPart, err := part.MarshalJSON()
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(rawPart, target)
+	return parts, nil
 }
 
 type requestFieldValidationError struct {

@@ -55,6 +55,55 @@ func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTra
 	})
 }
 
+func TestFactoryEventHistory_RecordWorkRequest_UsesCanonicalGeneratedWorkContentTranslation(t *testing.T) {
+	eventTime := time.Date(2026, 4, 22, 18, 1, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	history.RecordWorkRequest(7, interfaces.WorkRequestRecord{
+		RequestID: "request-generated-content",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		TraceID:   "trace-generated-content",
+		WorkItems: []interfaces.FactoryWorkItem{
+			{
+				ID:          "work-generated-content",
+				WorkTypeID:  "task",
+				DisplayName: "generated-content",
+				TraceID:     "trace-generated-content",
+				Content: []interfaces.WorkContentPart{
+					{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
+					{Type: interfaces.WorkContentPartType("audio"), File: "fixtures/ignored.wav"},
+					{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/diagram.png"},
+				},
+			},
+			{
+				ID:          "work-empty-content",
+				WorkTypeID:  "task",
+				DisplayName: "empty-content",
+				TraceID:     "trace-empty-content",
+			},
+		},
+	}, eventTime)
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsWorkRequestEventPayload()
+	if err != nil {
+		t.Fatalf("work request payload: %v", err)
+	}
+	if payload.Works == nil || len(*payload.Works) != 2 {
+		t.Fatalf("payload works = %#v, want two generated work items", payload.Works)
+	}
+	assertEventHistoryWorkContent(t, (*payload.Works)[0].Content, []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/diagram.png"},
+	})
+	if (*payload.Works)[1].Content != nil {
+		t.Fatalf("work content = %#v, want nil for empty content", (*payload.Works)[1].Content)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationEvents_PreserveChainingTraceLineage(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 18, 5, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
