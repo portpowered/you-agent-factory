@@ -44,7 +44,6 @@ func requireOmitsAll(t *testing.T, label, content string, disallowed []string) {
 	}
 }
 
-// portos:func-length-exception owner=agent-factory reason=legacy-cli-init-fixture review=2026-07-19 removal=split-directory-skeleton-and-file-content-assertions-before-next-cli-init-change
 func TestInit_CreatesDirectoryStructure(t *testing.T) {
 	dir := t.TempDir()
 	base := filepath.Join(dir, "factory")
@@ -54,112 +53,10 @@ func TestInit_CreatesDirectoryStructure(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 
-	for _, d := range initDirs {
-		path := filepath.Join(base, d)
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Errorf("expected directory %s to exist: %v", d, err)
-			continue
-		}
-		if !info.IsDir() {
-			t.Errorf("expected %s to be a directory", d)
-		}
-
-		readmePath := filepath.Join(path, "README.md")
-		if _, err := os.Stat(readmePath); err != nil {
-			t.Errorf("expected README.md in %s: %v", d, err)
-		}
-	}
-
-	factoryConfigPath := filepath.Join(base, "factory.json")
-	data, err := os.ReadFile(factoryConfigPath)
-	if err != nil {
-		t.Fatalf("expected factory.json to be created: %v", err)
-	}
-	var cfg map[string]any
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		t.Errorf("factory.json is not valid JSON: %v", err)
-	}
-	if _, ok := cfg["workTypes"]; !ok {
-		t.Error("factory.json missing 'workTypes' field")
-	}
-	if _, ok := cfg["work_types"]; ok {
-		t.Error("factory.json should not include retired 'work_types' field")
-	}
-	if _, ok := cfg["workstations"]; !ok {
-		t.Error("factory.json missing 'workstations' field")
-	}
-	factoryJSON := string(data)
-	if !strings.Contains(factoryJSON, `"workType"`) {
-		t.Fatalf("generated factory.json = %q, want canonical workType keys", factoryJSON)
-	}
-	if !strings.Contains(factoryJSON, `"onFailure"`) {
-		t.Fatalf("generated factory.json = %q, want canonical onFailure key", factoryJSON)
-	}
-	if !strings.Contains(factoryJSON, `"onFailure": [{`) {
-		t.Fatalf("generated factory.json = %q, want array-valued onFailure scaffold", factoryJSON)
-	}
-	if strings.Contains(factoryJSON, `"work_type"`) {
-		t.Fatalf("generated factory.json = %q, should not contain retired work_type keys", factoryJSON)
-	}
-	if strings.Contains(factoryJSON, `"on_failure"`) {
-		t.Fatalf("generated factory.json = %q, should not contain retired on_failure key", factoryJSON)
-	}
-
-	if _, ok := cfg["workers"]; !ok {
-		t.Error("factory.json missing 'workers' field")
-	}
-
-	defaultInputDir := filepath.Join(base, "inputs", DefaultFactoryInputType, "default")
-	info, err := os.Stat(defaultInputDir)
-	if err != nil {
-		t.Fatalf("expected inputs/%s/default/ to be created: %v", DefaultFactoryInputType, err)
-	}
-	if !info.IsDir() {
-		t.Errorf("expected inputs/%s/default/ to be a directory", DefaultFactoryInputType)
-	}
-
-	workerAgentsPath := filepath.Join(base, "workers", "processor", "AGENTS.md")
-	if _, err := os.Stat(workerAgentsPath); os.IsNotExist(err) {
-		t.Error("expected workers/processor/AGENTS.md to be created")
-	}
-	workerAgents, err := os.ReadFile(workerAgentsPath)
-	if err != nil {
-		t.Fatalf("read generated worker AGENTS.md: %v", err)
-	}
-	if !strings.Contains(string(workerAgents), "modelProvider: CODEX") {
-		t.Fatalf("generated worker AGENTS.md = %q, want modelProvider: CODEX", string(workerAgents))
-	}
-	if strings.Contains(string(workerAgents), "model:") {
-		t.Fatalf("generated worker AGENTS.md = %q, should not contain a default model", string(workerAgents))
-	}
-	if !strings.Contains(string(workerAgents), "executorProvider: SCRIPT_WRAP") {
-		t.Fatalf("generated worker AGENTS.md = %q, want executorProvider: SCRIPT_WRAP", string(workerAgents))
-	}
-	if strings.Contains(string(workerAgents), "model_provider: codex") {
-		t.Fatalf("generated worker AGENTS.md = %q, should not contain model_provider", string(workerAgents))
-	}
-	if strings.Contains(string(workerAgents), "provider: script_wrap") {
-		t.Fatalf("generated worker AGENTS.md = %q, should not contain retired provider", string(workerAgents))
-	}
-	if strings.Contains(string(workerAgents), "concurrency:") {
-		t.Fatalf("generated worker AGENTS.md = %q, should not contain retired concurrency", string(workerAgents))
-	}
-	if !strings.Contains(string(workerAgents), "timeout: 1h") {
-		t.Fatalf("generated worker AGENTS.md = %q, want timeout: 1h", string(workerAgents))
-	}
-	if !strings.Contains(string(workerAgents), "skipPermissions: true") {
-		t.Fatalf("generated worker AGENTS.md = %q, want skipPermissions: true", string(workerAgents))
-	}
-	if !strings.Contains(string(workerAgents), defaultProcessorSystemBody) {
-		t.Fatalf("generated worker AGENTS.md = %q, want default processor system prompt", string(workerAgents))
-	}
-	if strings.Contains(string(workerAgents), "skip_permissions: true") {
-		t.Fatalf("generated worker AGENTS.md = %q, should not contain skip_permissions", string(workerAgents))
-	}
-	if strings.Contains(string(workerAgents), "timeout: 2h") {
-		t.Fatal("generated worker AGENTS.md should not use the subprocess fallback as the emitted default")
-	}
+	assertInitDirectoryTree(t, base)
+	assertDefaultFactoryJSONLayout(t, base)
+	assertDefaultInputDirExists(t, base)
+	assertDefaultWorkerScaffold(t, base)
 	assertInitScaffoldFilesCanonical(t, base, "codex")
 
 	workstationAgentsPath := filepath.Join(base, "workstations", "process", "AGENTS.md")
@@ -264,7 +161,6 @@ func TestInit_DoesNotOverwriteExistingFactoryJSON(t *testing.T) {
 	}
 }
 
-// portos:func-length-exception owner=agent-factory reason=ralph-init-topology-fixture review=2026-07-21 removal=split-runtime-load-assertions-from-file-layout-checks-before-next-ralph-init-topology-change
 func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 	dir := t.TempDir()
 	base := filepath.Join(dir, "ralph-factory")
@@ -273,13 +169,124 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 		t.Fatalf("Init Ralph scaffold: %v", err)
 	}
 
-	factoryConfigPath := filepath.Join(base, "factory.json")
-	data, err := os.ReadFile(factoryConfigPath)
+	assertRalphFactoryJSONLayout(t, base)
+	assertRalphScaffoldPaths(t, base)
+	assertRalphRuntimeConfig(t, base)
+}
+
+func TestInit_RalphScaffoldTemplatesUsePublicContractAndArtifactFlow(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "ralph-factory")
+
+	if err := Init(InitConfig{Dir: base, Type: string(RalphScaffoldType)}); err != nil {
+		t.Fatalf("Init Ralph scaffold: %v", err)
+	}
+
+	assertRalphWorkerTemplateContracts(t, base)
+	assertRalphPromptTemplateContracts(t, base)
+	assertRalphReadmeContracts(t, base)
+}
+
+func assertInitDirectoryTree(t *testing.T, base string) {
+	t.Helper()
+
+	for _, d := range initDirs {
+		path := filepath.Join(base, d)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Errorf("expected directory %s to exist: %v", d, err)
+			continue
+		}
+		if !info.IsDir() {
+			t.Errorf("expected %s to be a directory", d)
+		}
+		if _, err := os.Stat(filepath.Join(path, "README.md")); err != nil {
+			t.Errorf("expected README.md in %s: %v", d, err)
+		}
+	}
+}
+
+func assertDefaultFactoryJSONLayout(t *testing.T, base string) {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join(base, "factory.json"))
+	if err != nil {
+		t.Fatalf("expected factory.json to be created: %v", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Errorf("factory.json is not valid JSON: %v", err)
+	}
+	if _, ok := cfg["workTypes"]; !ok {
+		t.Error("factory.json missing 'workTypes' field")
+	}
+	if _, ok := cfg["workstations"]; !ok {
+		t.Error("factory.json missing 'workstations' field")
+	}
+	if _, ok := cfg["workers"]; !ok {
+		t.Error("factory.json missing 'workers' field")
+	}
+	if _, ok := cfg["work_types"]; ok {
+		t.Error("factory.json should not include retired 'work_types' field")
+	}
+	factoryJSON := string(data)
+	requireContainsAll(t, "generated factory.json", factoryJSON, []string{`"workType"`, `"onFailure"`, `"onFailure": [{`})
+	requireOmitsAll(t, "generated factory.json", factoryJSON, []string{`"work_type"`, `"on_failure"`})
+}
+
+func assertDefaultInputDirExists(t *testing.T, base string) {
+	t.Helper()
+
+	defaultInputDir := filepath.Join(base, "inputs", DefaultFactoryInputType, "default")
+	info, err := os.Stat(defaultInputDir)
+	if err != nil {
+		t.Fatalf("expected inputs/%s/default/ to be created: %v", DefaultFactoryInputType, err)
+	}
+	if !info.IsDir() {
+		t.Errorf("expected inputs/%s/default/ to be a directory", DefaultFactoryInputType)
+	}
+}
+
+func assertDefaultWorkerScaffold(t *testing.T, base string) {
+	t.Helper()
+
+	workerAgentsPath := filepath.Join(base, "workers", "processor", "AGENTS.md")
+	if _, err := os.Stat(workerAgentsPath); os.IsNotExist(err) {
+		t.Error("expected workers/processor/AGENTS.md to be created")
+	}
+	workerAgents, err := os.ReadFile(workerAgentsPath)
+	if err != nil {
+		t.Fatalf("read generated worker AGENTS.md: %v", err)
+	}
+	contents := string(workerAgents)
+	requireContainsAll(t, "generated worker AGENTS.md", contents, []string{
+		"modelProvider: CODEX",
+		"executorProvider: SCRIPT_WRAP",
+		"timeout: 1h",
+		"skipPermissions: true",
+		defaultProcessorSystemBody,
+	})
+	requireOmitsAll(t, "generated worker AGENTS.md", contents, []string{
+		"model:",
+		"model_provider: codex",
+		"provider: script_wrap",
+		"concurrency:",
+		"skip_permissions: true",
+	})
+	if strings.Contains(contents, "timeout: 2h") {
+		t.Fatal("generated worker AGENTS.md should not use the subprocess fallback as the emitted default")
+	}
+}
+
+func assertRalphFactoryJSONLayout(t *testing.T, base string) {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join(base, "factory.json"))
 	if err != nil {
 		t.Fatalf("read Ralph factory.json: %v", err)
 	}
 	factoryJSON := string(data)
-	for _, expected := range []string{
+	requireContainsAll(t, "Ralph factory.json", factoryJSON, []string{
 		`"name": "request"`,
 		`"name": "story"`,
 		`"name": "plan-request"`,
@@ -290,17 +297,18 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 		`"onContinue": [{`,
 		`"onContinue"`,
 		`"maxVisits": 8`,
-	} {
-		if !strings.Contains(factoryJSON, expected) {
-			t.Fatalf("Ralph factory.json missing %q:\n%s", expected, factoryJSON)
-		}
-	}
-	for _, disallowed := range []string{`"name": "tasks"`, `"name": "process"`} {
-		if strings.Contains(factoryJSON, disallowed) {
-			t.Fatalf("Ralph factory.json should not contain %q:\n%s", disallowed, factoryJSON)
-		}
-	}
-	requireOmitsAll(t, "Ralph factory.json", factoryJSON, []string{`"work_type"`, `"on_failure"`, `"on_rejection"`})
+	})
+	requireOmitsAll(t, "Ralph factory.json", factoryJSON, []string{
+		`"name": "tasks"`,
+		`"name": "process"`,
+		`"work_type"`,
+		`"on_failure"`,
+		`"on_rejection"`,
+	})
+}
+
+func assertRalphScaffoldPaths(t *testing.T, base string) {
+	t.Helper()
 
 	for _, path := range []string{
 		filepath.Join(base, "workers", "planner", "AGENTS.md"),
@@ -313,10 +321,13 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 			t.Fatalf("expected Ralph scaffold path %s: %v", path, err)
 		}
 	}
-
 	if _, err := os.Stat(filepath.Join(base, "workstations", "execute-story-loop-breaker", "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("expected topology-only loop-breaker to omit split AGENTS.md, got err=%v", err)
 	}
+}
+
+func assertRalphRuntimeConfig(t *testing.T, base string) {
+	t.Helper()
 
 	loaded, err := factoryconfig.LoadRuntimeConfig(base, nil)
 	if err != nil {
@@ -328,7 +339,6 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 	if len(loaded.FactoryConfig().Workstations) != 3 {
 		t.Fatalf("loaded Ralph scaffold workstations = %d, want 3", len(loaded.FactoryConfig().Workstations))
 	}
-
 	planner, ok := loaded.Workstation("plan-request")
 	if !ok {
 		t.Fatal("expected plan-request workstation to load")
@@ -339,7 +349,6 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 	if planner.WorkingDirectory != "." {
 		t.Fatalf("plan-request workingDirectory = %q, want %q", planner.WorkingDirectory, ".")
 	}
-
 	executor, ok := loaded.Workstation("execute-story")
 	if !ok {
 		t.Fatal("expected execute-story workstation to load")
@@ -353,7 +362,6 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 	if len(executor.OnContinue) != 1 || executor.OnContinue[0].WorkTypeName != "story" || executor.OnContinue[0].StateName != "init" {
 		t.Fatalf("execute-story onContinue = %#v, want story:init", executor.OnContinue)
 	}
-
 	loopBreaker, ok := loaded.Workstation("execute-story-loop-breaker")
 	if !ok {
 		t.Fatal("expected execute-story-loop-breaker workstation to load")
@@ -367,7 +375,6 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 	if guard := loopBreaker.Guards[0]; guard.Type != interfaces.GuardTypeVisitCount || guard.Workstation != "execute-story" || guard.MaxVisits != 8 {
 		t.Fatalf("loop-breaker guard = %#v, want VISIT_COUNT on execute-story max 8", guard)
 	}
-
 	for _, unexpected := range []string{"review-story", "thoughts", "cron"} {
 		if _, ok := loaded.Workstation(unexpected); ok {
 			t.Fatalf("did not expect Ralph scaffold workstation %q", unexpected)
@@ -375,14 +382,8 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 	}
 }
 
-// portos:func-length-exception owner=agent-factory reason=ralph-init-content-contract-fixture review=2026-07-21 removal=split-worker-prompt-readme-contract-assertions-before-next-ralph-init-content-change
-func TestInit_RalphScaffoldTemplatesUsePublicContractAndArtifactFlow(t *testing.T) {
-	dir := t.TempDir()
-	base := filepath.Join(dir, "ralph-factory")
-
-	if err := Init(InitConfig{Dir: base, Type: string(RalphScaffoldType)}); err != nil {
-		t.Fatalf("Init Ralph scaffold: %v", err)
-	}
+func assertRalphWorkerTemplateContracts(t *testing.T, base string) {
+	t.Helper()
 
 	for _, workerName := range []string{"planner", "executor"} {
 		workerPath := filepath.Join(base, "workers", workerName, "AGENTS.md")
@@ -404,6 +405,10 @@ func TestInit_RalphScaffoldTemplatesUsePublicContractAndArtifactFlow(t *testing.
 			"sessionId:",
 		})
 	}
+}
+
+func assertRalphPromptTemplateContracts(t *testing.T, base string) {
+	t.Helper()
 
 	planPromptPath := filepath.Join(base, "workstations", "plan-request", "AGENTS.md")
 	planPrompt := readFileString(t, planPromptPath)
@@ -437,6 +442,10 @@ func TestInit_RalphScaffoldTemplatesUsePublicContractAndArtifactFlow(t *testing.
 		`"<CONTINUE>"`,
 		`"<COMPLETE>"`,
 	})
+}
+
+func assertRalphReadmeContracts(t *testing.T, base string) {
+	t.Helper()
 
 	workstationsReadmePath := filepath.Join(base, "workstations", "README.md")
 	workstationsReadme := readFileString(t, workstationsReadmePath)

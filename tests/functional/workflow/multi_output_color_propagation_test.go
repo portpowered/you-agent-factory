@@ -4,7 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -80,6 +82,31 @@ func TestNtoN_TypeMatching(t *testing.T) {
 }
 
 func TestMultiOutputReviewerFanoutPreservesSharedNameDownstream(t *testing.T) {
+	dir := scaffoldReviewerFanoutFactory(t)
+
+	h := testutil.NewServiceTestHarness(t, dir,
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("done")),
+		testutil.WithFullWorkerPoolAndScriptWrap(),
+	)
+
+	h.RunUntilComplete(t, 5*time.Second)
+
+	h.Assert().
+		HasTokenInPlace("document:complete").
+		HasTokenInPlace("review-alpha:complete").
+		HasTokenInPlace("review-beta:complete")
+
+	snapshot, err := h.GetEngineStateSnapshot()
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	assertReviewerFanoutDispatches(t, snapshot)
+	assertReviewerFanoutTerminalNames(t, h.Marking(), []string{"review-alpha:complete", "review-beta:complete"}, "source-doc-alpha")
+}
+
+func scaffoldReviewerFanoutFactory(t *testing.T) string {
+	t.Helper()
+
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "reviewer_fanout_name_propagation",
 		"workTypes": []map[string]any{
@@ -108,9 +135,7 @@ func TestMultiOutputReviewerFanoutPreservesSharedNameDownstream(t *testing.T) {
 				},
 			},
 		},
-		"workers": []map[string]any{
-			{"name": "reviewer-worker"},
-		},
+		"workers": []map[string]any{{"name": "reviewer-worker"}},
 		"workstations": []map[string]any{
 			{
 				"name": "split-review",
@@ -162,7 +187,6 @@ command: echo
 type: SCRIPT_WORKER
 ---
 `)
-
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		Name:       "source-doc-alpha",
 		WorkID:     "work-document-1",
@@ -170,23 +194,14 @@ type: SCRIPT_WORKER
 		TraceID:    "trace-reviewer-fanout",
 		Payload:    []byte("review this document"),
 	})
+	return dir
+}
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("done")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("document:complete").
-		HasTokenInPlace("review-alpha:complete").
-		HasTokenInPlace("review-beta:complete")
-
-	snapshot, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
+func assertReviewerFanoutDispatches(
+	t *testing.T,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) {
+	t.Helper()
 
 	splitDispatches := dispatchesForWorkstation(snapshot.DispatchHistory, "split-review")
 	if len(splitDispatches) != 1 {
@@ -225,15 +240,18 @@ type: SCRIPT_WORKER
 			t.Fatalf("%s consumed input name = %q, want source-doc-alpha", workstationName, got)
 		}
 	}
+}
 
-	marking := h.Marking()
-	for _, placeID := range []string{"review-alpha:complete", "review-beta:complete"} {
+func assertReviewerFanoutTerminalNames(t *testing.T, marking *petri.MarkingSnapshot, placeIDs []string, wantName string) {
+	t.Helper()
+
+	for _, placeID := range placeIDs {
 		tokens := marking.TokensInPlace(placeID)
 		if len(tokens) != 1 {
 			t.Fatalf("%s token count = %d, want 1", placeID, len(tokens))
 		}
-		if tokens[0].Color.Name != "source-doc-alpha" {
-			t.Fatalf("%s terminal name = %q, want source-doc-alpha", placeID, tokens[0].Color.Name)
+		if tokens[0].Color.Name != wantName {
+			t.Fatalf("%s terminal name = %q, want %s", placeID, tokens[0].Color.Name, wantName)
 		}
 	}
 }

@@ -476,6 +476,15 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 
 // portos:func-length-exception owner=agent-factory reason=legacy-resource-release-fixture review=2026-07-18 removal=split-resource-setup-and-failure-release-assertions-before-next-history-transitioner-change
 func TestHistoryTransitionerPipeline_FailureReleasesConsumedResourceTokenIdentity(t *testing.T) {
+	tp, snapshot, resourceConsumed := newFailureReleasesConsumedResourceFixture()
+	result, err := tp.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertReleasedResourceMutation(t, result, resourceConsumed)
+}
+
+func newFailureReleasesConsumedResourceFixture() (*testPipeline, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], interfaces.Token) {
 	n := &state.Net{
 		Places: map[string]*petri.Place{
 			"wt-code:init":       {ID: "wt-code:init", TypeID: "wt-code", State: "init"},
@@ -508,13 +517,13 @@ func TestHistoryTransitionerPipeline_FailureReleasesConsumedResourceTokenIdentit
 	}
 	tp := newTestPipeline(n)
 	tp.WriteResult(interfaces.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: interfaces.OutcomeFailed, Error: "agent crashed"})
+
 	now := time.Date(2026, time.April, 6, 11, 0, 0, 0, time.UTC)
-	resourceCreatedAt := now.Add(-3 * time.Hour)
 	resourceConsumed := interfaces.Token{
 		ID:        "executor:resource:0",
 		PlaceID:   "executor:available",
-		CreatedAt: resourceCreatedAt,
-		EnteredAt: resourceCreatedAt,
+		CreatedAt: now.Add(-3 * time.Hour),
+		EnteredAt: now.Add(-3 * time.Hour),
 		Color: interfaces.TokenColor{
 			WorkID:     "executor:0",
 			WorkTypeID: "executor",
@@ -541,7 +550,7 @@ func TestHistoryTransitionerPipeline_FailureReleasesConsumedResourceTokenIdentit
 		},
 	}
 
-	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: petri.MarkingSnapshot{
 			Tokens: map[string]*interfaces.Token{
 				workConsumed.ID:     &workConsumed,
@@ -563,11 +572,11 @@ func TestHistoryTransitionerPipeline_FailureReleasesConsumedResourceTokenIdentit
 			},
 		},
 	}
+	return tp, snapshot, resourceConsumed
+}
 
-	result, err := tp.Execute(context.Background(), &snapshot)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+func assertReleasedResourceMutation(t *testing.T, result *interfaces.TickResult, resourceConsumed interfaces.Token) {
+	t.Helper()
 	if result == nil || len(result.Mutations) != 2 {
 		t.Fatalf("expected 2 mutations, got %+v", result)
 	}
@@ -585,14 +594,11 @@ func TestHistoryTransitionerPipeline_FailureReleasesConsumedResourceTokenIdentit
 	if released.ToPlace != "executor:available" {
 		t.Fatalf("ToPlace = %q, want %q", released.ToPlace, "executor:available")
 	}
-	if released.NewToken.ID != resourceConsumed.ID {
-		t.Fatalf("resource ID = %q, want %q", released.NewToken.ID, resourceConsumed.ID)
+	if released.NewToken.ID != resourceConsumed.ID || released.NewToken.Color.WorkID != resourceConsumed.Color.WorkID {
+		t.Fatalf("released resource token = %#v, want preserved identity from %#v", released.NewToken, resourceConsumed)
 	}
-	if released.NewToken.Color.WorkID != resourceConsumed.Color.WorkID {
-		t.Fatalf("resource WorkID = %q, want %q", released.NewToken.Color.WorkID, resourceConsumed.Color.WorkID)
-	}
-	if !released.NewToken.CreatedAt.Equal(resourceCreatedAt) {
-		t.Fatalf("CreatedAt = %v, want %v", released.NewToken.CreatedAt, resourceCreatedAt)
+	if !released.NewToken.CreatedAt.Equal(resourceConsumed.CreatedAt) {
+		t.Fatalf("CreatedAt = %v, want %v", released.NewToken.CreatedAt, resourceConsumed.CreatedAt)
 	}
 	if released.NewToken.Color.Tags["pool"] != "shared" {
 		t.Fatalf("tag pool = %q, want %q", released.NewToken.Color.Tags["pool"], "shared")

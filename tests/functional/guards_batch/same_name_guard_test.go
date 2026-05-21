@@ -170,6 +170,27 @@ func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 }
 
 func TestSameNameGuard_LaterMatchingTokenStillCompletesJoin(t *testing.T) {
+	dir := scaffoldLaterMatchingSameNameGuardFactory(t)
+
+	h := testutil.NewServiceTestHarness(t, dir)
+	matcher := h.MockWorker("matcher", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	submitLaterMatchingSameNameGuardWork(h)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
+
+	assertLaterMatchingSameNameGuardOutcome(t, h, matcher.CallCount)
+
+	cancel()
+	if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("factory run error: %v", err)
+	}
+}
+
+func scaffoldLaterMatchingSameNameGuardFactory(t *testing.T) string {
+	t.Helper()
+
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "same_name_guard_later_match",
 		"workTypes": []map[string]any{
@@ -187,9 +208,7 @@ func TestSameNameGuard_LaterMatchingTokenStillCompletesJoin(t *testing.T) {
 				},
 			},
 		},
-		"workers": []map[string]any{
-			{"name": "matcher"},
-		},
+		"workers": []map[string]any{{"name": "matcher"}},
 		"workstations": []map[string]any{
 			{
 				"name":   "consume",
@@ -199,14 +218,10 @@ func TestSameNameGuard_LaterMatchingTokenStillCompletesJoin(t *testing.T) {
 					{
 						"workType": "idea",
 						"state":    "to-complete",
-						"guards": []map[string]any{
-							{"type": "SAME_NAME", "matchInput": "task"},
-						},
+						"guards":   []map[string]any{{"type": "SAME_NAME", "matchInput": "task"}},
 					},
 				},
-				"outputs": []map[string]any{
-					{"workType": "task", "state": "matched"},
-				},
+				"outputs": []map[string]any{{"workType": "task", "state": "matched"}},
 			},
 		},
 	})
@@ -218,32 +233,21 @@ stopToken: COMPLETE
 ---
 Match the later token.
 `)
+	return dir
+}
 
-	h := testutil.NewServiceTestHarness(t, dir)
-	matcher := h.MockWorker("matcher", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+func submitLaterMatchingSameNameGuardWork(h *testutil.ServiceTestHarness) {
+	for _, req := range []interfaces.SubmitRequest{
+		{Name: "zeta", WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-same-name-idea-zeta"},
+		{Name: "alpha", WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-same-name-task-alpha"},
+		{Name: "zeta", WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-same-name-task-zeta"},
+	} {
+		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
+	}
+}
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
-		Name:        "zeta",
-		WorkTypeID:  "idea",
-		TargetState: "to-complete",
-		TraceID:     "trace-same-name-idea-zeta",
-	}})
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
-		Name:        "alpha",
-		WorkTypeID:  "task",
-		TargetState: "to-complete",
-		TraceID:     "trace-same-name-task-alpha",
-	}})
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
-		Name:        "zeta",
-		WorkTypeID:  "task",
-		TargetState: "to-complete",
-		TraceID:     "trace-same-name-task-zeta",
-	}})
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
+func assertLaterMatchingSameNameGuardOutcome(t *testing.T, h *testutil.ServiceTestHarness, matcherCallCount func() int) {
+	t.Helper()
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:to-complete", 0, time.Second)
@@ -261,14 +265,8 @@ Match the later token.
 	if !hasNamedTokenInPlace(snapshot.Marking, "task:to-complete", "alpha") {
 		t.Fatalf("expected unmatched task-alpha token to remain queued, marking=%#v", snapshot.Marking.PlaceTokens)
 	}
-
-	if matcher.CallCount() != 1 {
-		t.Fatalf("expected matcher provider call once for the later matching pair, got %d", matcher.CallCount())
-	}
-
-	cancel()
-	if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
-		t.Fatalf("factory run error: %v", err)
+	if matcherCallCount() != 1 {
+		t.Fatalf("expected matcher provider call once for the later matching pair, got %d", matcherCallCount())
 	}
 }
 

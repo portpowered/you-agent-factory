@@ -46,8 +46,8 @@ endif
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_MIN ?= 80.0
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint pkg-lint deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint pkg-lint deadcode ui-deadcode verify-build-contracts verify-tests verify test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size deadcode ui-deadcode verify-build-contracts verify-tests verify test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -125,11 +125,12 @@ artifact-contract-closeout:
 lint:
 	$(MAKE) ui-lint
 	$(MAKE) ui-deadcode
-	$(MAKE) pkg-lint
+	$(GO) vet ./...
+	$(MAKE) backend-size
 	$(MAKE) deadcode
 
-pkg-lint:
-	$(GO) run ./cmd/pkglintcheck
+backend-size:
+	$(GO) run ./cmd/backendsizecheck
 
 deadcode:
 	$(GO) run ./cmd/deadcodecheck

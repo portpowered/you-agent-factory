@@ -465,54 +465,18 @@ func (e *FactoryEngine) RunningDispatches() map[string][]interfaces.MarkingMutat
 // atomically between each subsystem execution. Returns (mutated, shouldTerminate, error).
 // mutated is true if any mutations were applied (another tick may be needed).
 // shouldTerminate is true if the TerminationCheck subsystem signaled completion.
-// portos:func-length-exception owner=agent-factory reason=legacy-engine-tick-orchestration review=2026-07-18 removal=split-hook-dispatch-and-retirement-phases-before-next-tick-pipeline-change
 func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
-	e.runtimeState.TickCount++
-	e.runtimeState.Marking.TickCount = e.runtimeState.TickCount
-	if logicalClock, ok := e.clock.(factory.LogicalClock); ok {
-		logicalClock.SetTick(e.runtimeState.TickCount)
-	}
-
-	// Drain any results enqueued since the last tick (from async pool bridge
-	// or previous sync dispatch handlers).
-	e.drainPendingResults()
-	dispatchResults, err := e.invokeDispatchResultHook(ctx)
+	rtSnapshot, mutated, keepAlive, err := e.beginTick(ctx)
 	if err != nil {
 		return false, false, err
 	}
-	hookSubmissions, keepAlive, err := e.invokeSubmissionHooks(ctx)
-	if err != nil {
-		return false, false, err
-	}
-
-	rtSnapshot := e.runtimeState.Snapshot()
-
-	mutated := false
 	shouldTerminate := false
 	totalDispatches := 0
 	completedDispatches := make(map[string]interfaces.CompletedDispatch)
-	if hookSubmissions > 0 || dispatchResults > 0 || keepAlive {
-		mutated = true
-	}
-
 	e.logger.Info("engine: [START] running engine tick", "tick", e.runtimeState.TickCount)
 	for _, sub := range e.subsystems {
-		// Drain pending results before subsystems that can process them
-		// (TickGroup <= Transitioner). This picks up results written by sync
-		// dispatchers into the shared runtime result buffer in time
-		// for the collector pipeline. We intentionally skip draining for
-		// subsystems after the Transitioner to prevent async pool results from
-		// being drained late, added to runtimeState.Results, and then cleared
-		// at end of tick without ever being processed.
-		if sub.TickGroup() <= subsystems.Transitioner {
-			e.drainPendingResults()
-			if len(e.runtimeState.Results) > 0 && sub.TickGroup() > subsystems.Dispatcher {
-				rtSnapshot = e.runtimeState.Snapshot()
-			}
-		}
-
-		e.logger.Debug("engine: executing subsystem", "subsystem", sub.TickGroup())
-		result, err := sub.Execute(ctx, &rtSnapshot)
+		rtSnapshot = e.refreshSnapshotBeforeSubsystem(sub, rtSnapshot)
+		result, err := e.executeSubsystem(ctx, sub, &rtSnapshot)
 		if err != nil {
 			return false, false, fmt.Errorf("subsystem tick-group %d: %w", sub.TickGroup(), err)
 		}
@@ -524,67 +488,17 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 			shouldTerminate = true
 		}
 
-		// Apply mutations atomically.
-		if len(result.Mutations) > 0 {
-			if err := applyMutations(e.runtimeState.Marking, e.state.Places, result.Mutations); err != nil {
-				return false, false, fmt.Errorf("applying mutations from tick-group %d: %w", sub.TickGroup(), err)
-			}
-			// Re-snapshot after mutations for subsequent subsystems.
-			rtSnapshot = e.runtimeState.Snapshot()
-			mutated = true
+		rtSnapshot, mutated, err = e.applySubsystemResult(ctx, sub.TickGroup(), result, rtSnapshot, mutated)
+		if err != nil {
+			return false, false, err
 		}
-		if len(result.GeneratedBatches) > 0 {
-			if _, err := e.processGeneratedSubmissionBatches(result.GeneratedBatches, "tick-result"); err != nil {
-				return false, false, fmt.Errorf("processing generated batches from tick-group %d: %w", sub.TickGroup(), err)
-			}
-			rtSnapshot = e.runtimeState.Snapshot()
-			mutated = true
+		dispatched, updatedSnapshot, err := e.forwardDispatches(ctx, result.Dispatches, rtSnapshot)
+		if err != nil {
+			return false, false, err
 		}
-
-		if e.dispatchHandler != nil || e.dispatchHook != nil {
-			dispatched := false
-			for _, rec := range result.Dispatches {
-				now := e.clock.Now()
-				rec.Dispatch.Execution.DispatchCreatedTick = e.runtimeState.TickCount
-				rec.Dispatch.Execution.CurrentTick = e.runtimeState.TickCount
-				e.runtimeState.Dispatches[rec.Dispatch.DispatchID] = &interfaces.DispatchEntry{
-					DispatchID:      rec.Dispatch.DispatchID,
-					TransitionID:    rec.Dispatch.TransitionID,
-					WorkstationName: rec.Dispatch.WorkstationName,
-					StartTime:       now,
-					ConsumedTokens:  workers.WorkDispatchInputTokens(rec.Dispatch),
-					HeldMutations:   rec.Mutations,
-				}
-				e.runtimeState.InFlightCount++
-				if e.recordDispatch != nil {
-					e.recordDispatch(interfaces.FactoryDispatchRecord{
-						DispatchID:     rec.Dispatch.DispatchID,
-						CreatedTick:    e.runtimeState.TickCount,
-						Dispatch:       rec.Dispatch,
-						HeldMutations:  rec.Mutations,
-						ConsumedTokens: consumedTokenIDs(workers.WorkDispatchInputTokens(rec.Dispatch)),
-					})
-				}
-				if e.dispatchHook != nil {
-					if err := e.dispatchHook.SubmitDispatch(ctx, rec.Dispatch); err != nil {
-						return false, false, fmt.Errorf("dispatch/result hook submit dispatch %q: %w", rec.Dispatch.DispatchID, err)
-					}
-				}
-				if e.dispatchHandler != nil {
-					e.dispatchHandler(rec.Dispatch)
-				}
-				totalDispatches++
-				dispatched = true
-			}
-
-			// Re-snapshot after dispatches: dispatch entries were added to
-			// runtimeState.Dispatches, and sync handlers may have enqueued
-			// results. Subsequent subsystems (especially TerminationCheck)
-			// must see in-flight dispatches to avoid false deadlock detection.
-			if dispatched {
-				e.drainPendingResults()
-				rtSnapshot = e.runtimeState.Snapshot()
-			}
+		if dispatched {
+			rtSnapshot = updatedSnapshot
+			totalDispatches += len(result.Dispatches)
 		}
 
 		for _, completedDispatch := range result.CompletedDispatches {
@@ -600,24 +514,122 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 	// happen AFTER all subsystems (including TerminationCheck) have run, so
 	// dispatch entries remain visible throughout the tick — preventing false
 	// deadlock detection when async results arrive mid-tick.
+	shouldTerminate = e.finishTick(keepAlive, shouldTerminate, totalDispatches, completedDispatches, rtSnapshot, mutated)
+	return mutated, shouldTerminate, nil
+}
+
+func (e *FactoryEngine) beginTick(ctx context.Context) (interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], bool, bool, error) {
+	e.runtimeState.TickCount++
+	e.runtimeState.Marking.TickCount = e.runtimeState.TickCount
+	if logicalClock, ok := e.clock.(factory.LogicalClock); ok {
+		logicalClock.SetTick(e.runtimeState.TickCount)
+	}
+	e.drainPendingResults()
+	dispatchResults, err := e.invokeDispatchResultHook(ctx)
+	if err != nil {
+		return interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{}, false, false, err
+	}
+	hookSubmissions, keepAlive, err := e.invokeSubmissionHooks(ctx)
+	if err != nil {
+		return interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{}, false, false, err
+	}
+	mutated := hookSubmissions > 0 || dispatchResults > 0 || keepAlive
+	return e.runtimeState.Snapshot(), mutated, keepAlive, nil
+}
+
+func (e *FactoryEngine) refreshSnapshotBeforeSubsystem(sub subsystems.Subsystem, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	if sub.TickGroup() > subsystems.Transitioner {
+		return snapshot
+	}
+	e.drainPendingResults()
+	if len(e.runtimeState.Results) > 0 && sub.TickGroup() > subsystems.Dispatcher {
+		return e.runtimeState.Snapshot()
+	}
+	return snapshot
+}
+
+func (e *FactoryEngine) executeSubsystem(ctx context.Context, sub subsystems.Subsystem, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+	e.logger.Debug("engine: executing subsystem", "subsystem", sub.TickGroup())
+	return sub.Execute(ctx, snapshot)
+}
+
+func (e *FactoryEngine) applySubsystemResult(ctx context.Context, tickGroup subsystems.TickGroup, result *interfaces.TickResult, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], mutated bool) (interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], bool, error) {
+	if len(result.Mutations) > 0 {
+		if err := applyMutations(e.runtimeState.Marking, e.state.Places, result.Mutations); err != nil {
+			return snapshot, mutated, fmt.Errorf("applying mutations from tick-group %d: %w", tickGroup, err)
+		}
+		snapshot = e.runtimeState.Snapshot()
+		mutated = true
+	}
+	if len(result.GeneratedBatches) > 0 {
+		if _, err := e.processGeneratedSubmissionBatches(result.GeneratedBatches, "tick-result"); err != nil {
+			return snapshot, mutated, fmt.Errorf("processing generated batches from tick-group %d: %w", tickGroup, err)
+		}
+		snapshot = e.runtimeState.Snapshot()
+		mutated = true
+	}
+	return snapshot, mutated, nil
+}
+
+func (e *FactoryEngine) forwardDispatches(ctx context.Context, records []interfaces.DispatchRecord, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (bool, interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	if len(records) == 0 || (e.dispatchHandler == nil && e.dispatchHook == nil) {
+		return false, snapshot, nil
+	}
+	for _, rec := range records {
+		if err := e.forwardDispatchRecord(ctx, rec); err != nil {
+			return false, snapshot, err
+		}
+	}
+	e.drainPendingResults()
+	return true, e.runtimeState.Snapshot(), nil
+}
+
+func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interfaces.DispatchRecord) error {
+	now := e.clock.Now()
+	rec.Dispatch.Execution.DispatchCreatedTick = e.runtimeState.TickCount
+	rec.Dispatch.Execution.CurrentTick = e.runtimeState.TickCount
+	e.runtimeState.Dispatches[rec.Dispatch.DispatchID] = &interfaces.DispatchEntry{
+		DispatchID:      rec.Dispatch.DispatchID,
+		TransitionID:    rec.Dispatch.TransitionID,
+		WorkstationName: rec.Dispatch.WorkstationName,
+		StartTime:       now,
+		ConsumedTokens:  workers.WorkDispatchInputTokens(rec.Dispatch),
+		HeldMutations:   rec.Mutations,
+	}
+	e.runtimeState.InFlightCount++
+	if e.recordDispatch != nil {
+		e.recordDispatch(interfaces.FactoryDispatchRecord{
+			DispatchID:     rec.Dispatch.DispatchID,
+			CreatedTick:    e.runtimeState.TickCount,
+			Dispatch:       rec.Dispatch,
+			HeldMutations:  rec.Mutations,
+			ConsumedTokens: consumedTokenIDs(workers.WorkDispatchInputTokens(rec.Dispatch)),
+		})
+	}
+	if e.dispatchHook != nil {
+		if err := e.dispatchHook.SubmitDispatch(ctx, rec.Dispatch); err != nil {
+			return fmt.Errorf("dispatch/result hook submit dispatch %q: %w", rec.Dispatch.DispatchID, err)
+		}
+	}
+	if e.dispatchHandler != nil {
+		e.dispatchHandler(rec.Dispatch)
+	}
+	return nil
+}
+
+func (e *FactoryEngine) finishTick(keepAlive bool, shouldTerminate bool, totalDispatches int, completedDispatches map[string]interfaces.CompletedDispatch, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], mutated bool) bool {
 	e.retireCompletedDispatches(e.runtimeState.Results, completedDispatches)
-
-	// Clear processed results at end of tick so they don't carry over to the
-	// next tick cycle.
 	e.runtimeState.Results = nil
-
 	if keepAlive {
 		shouldTerminate = false
 	}
-
 	e.logger.Info("engine: [END] tick complete",
 		"tick", e.runtimeState.TickCount,
 		"mutations", mutated,
 		"dispatches", totalDispatches,
 		"shouldTerminate", shouldTerminate,
-		"tokens", len(rtSnapshot.Marking.Tokens))
-
-	return mutated, shouldTerminate, nil
+		"tokens", len(snapshot.Marking.Tokens))
+	return shouldTerminate
 }
 
 func cloneActiveThrottlePauses(pauses []interfaces.ActiveThrottlePause) []interfaces.ActiveThrottlePause {

@@ -79,133 +79,17 @@ func (d *DispatcherSubsystem) TickGroup() TickGroup {
 
 // Execute finds enabled transitions, selects firings via the scheduler,
 // and produces CONSUME mutations + WorkDispatches for each firing.
-// portos:func-length-exception owner=agent-factory reason=dispatcher-main-loop review=2026-07-18 removal=extract-decision-token-claim-and-dispatch-builders-before-next-dispatcher-expansion
 func (d *DispatcherSubsystem) Execute(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 	d.logger.Debug("dispatcher: dispatching work based on current snapshot", "snapshot", snapshot)
 	activeThrottlePauses := d.activeThrottlePauses(snapshot)
 	observedThrottlePauses := d.throttlePausesObserved(snapshot, activeThrottlePauses)
-	enabled := d.evaluator.FindEnabledTransitionsWithSnapshot(ctx, d.state, d.schedulerSnapshot(snapshot))
-	if len(enabled) == 0 {
+	decisions := d.dispatchDecisions(ctx, snapshot)
+	if len(decisions) == 0 {
 		d.logger.Debug("dispatcher: no enabled transitions")
 		return d.throttlePauseSnapshotResult(activeThrottlePauses, observedThrottlePauses), nil
 	}
-	if scheduler.SupportsRepeatedTransitionBindings(d.sched) {
-		expanded := scheduler.ExpandRepeatedBindings(d.state, &snapshot.Marking, enabled)
-		if len(expanded) != len(enabled) {
-			d.logger.Debug("dispatcher: expanded repeated transition bindings",
-				"enabled", len(enabled),
-				"expanded", len(expanded))
-		}
-		enabled = expanded
-	}
-
-	decisions := d.sched.Select(enabled, d.schedulerSnapshot(snapshot))
-	if len(decisions) == 0 {
-		d.logger.Debug("dispatcher: no decisions")
-		return d.throttlePauseSnapshotResult(activeThrottlePauses, observedThrottlePauses), nil
-	}
-
-	d.logger.Debug("dispatcher: firing transitions",
-		"enabled", len(enabled), "decisions", len(decisions))
-
-	var mutations []interfaces.MarkingMutation
-	var dispatchRecords []interfaces.DispatchRecord
-	claimedTokens := make(map[string]bool)
-
-	for _, decision := range decisions {
-		if decision.TransitionID == "" {
-			d.logger.Warn("dispatcher: skipping firing decision with missing transition id")
-			continue
-		}
-
-		tr, ok := d.state.Transitions[decision.TransitionID]
-		if !ok {
-			d.logger.Warn("dispatcher: transition from firing decision not found in net",
-				"transitionID", decision.TransitionID,
-				"workerType", decision.WorkerType)
-			continue
-		}
-
-		// Collect and validate all tokens before mutating state.
-		inputTokens := make([]interfaces.Token, 0, len(decision.ConsumeTokens))
-		seenTokens := make(map[string]bool)
-
-		duplicateDecision := false
-		for _, tokenID := range decision.ConsumeTokens {
-			if seenTokens[tokenID] {
-				continue
-			}
-			seenTokens[tokenID] = true
-			if claimedTokens[tokenID] {
-				d.logger.Warn("dispatcher: skipping decision due to duplicate token claim",
-					"transitionID", decision.TransitionID,
-					"tokenID", tokenID,
-					"workerType", decision.WorkerType)
-				duplicateDecision = true
-				break
-			}
-			tok, ok := snapshot.Marking.Tokens[tokenID]
-			if !ok {
-				d.logger.Warn("dispatcher: token referenced by firing decision not found in snapshot",
-					"transitionID", decision.TransitionID,
-					"tokenID", tokenID,
-					"workerType", decision.WorkerType)
-				duplicateDecision = true
-				break
-			}
-			inputTokens = append(inputTokens, *tok)
-		}
-		if duplicateDecision {
-			continue
-		}
-
-		// CONSUME mutations for all input tokens.
-		var consumeMutations []interfaces.MarkingMutation
-		for _, token := range inputTokens {
-			m := interfaces.MarkingMutation{
-				Type:      interfaces.MutationConsume,
-				TokenID:   token.ID,
-				FromPlace: token.PlaceID,
-				Reason:    fmt.Sprintf("consumed by transition %s", decision.TransitionID),
-			}
-			consumeMutations = append(consumeMutations, m)
-			claimedTokens[token.ID] = true
-		}
-		mutations = append(mutations, consumeMutations...)
-		// Determine work type for metrics.
-		dispatchWorkType := d.workTypeFromTokens(inputTokens)
-		dispatchWorkID := d.workIDFromTokens(inputTokens)
-
-		// Create a WorkDispatch for the worker.
-		execution := executionMetadataForDispatch(decision.TransitionID, snapshot.TickCount, inputTokens)
-		dispatch := interfaces.WorkDispatch{
-			DispatchID:               uuid.NewString(),
-			TransitionID:             decision.TransitionID,
-			WorkerType:               decision.WorkerType,
-			CurrentChainingTraceID:   interfaces.CurrentChainingTraceIDFromTokens(inputTokens),
-			PreviousChainingTraceIDs: interfaces.PreviousChainingTraceIDsFromTokens(inputTokens),
-			Execution:                execution,
-			InputTokens:              workers.InputTokens(inputTokens...),
-			InputBindings:            cloneDispatchInputBindings(decision.InputBindings),
-			WorkstationName:          tr.Name,
-		}
-		if d.wfCtx != nil {
-			dispatch.ProjectID = d.wfCtx.ProjectID
-		}
-		d.logger.Info("dispatcher: dispatching work to worker",
-			workers.WorkLogFields(dispatch.Execution,
-				"transition_id", decision.TransitionID,
-				"worker_type", decision.WorkerType,
-				"work_type", dispatchWorkType,
-				"work_id", dispatchWorkID,
-				"input_tokens", len(inputTokens))...)
-		dispatchRecords = append(dispatchRecords, interfaces.DispatchRecord{
-			Dispatch:  dispatch,
-			Mutations: consumeMutations,
-		})
-
-	}
-
+	d.logger.Debug("dispatcher: firing transitions", "decisions", len(decisions))
+	mutations, dispatchRecords := d.buildDispatchRecords(snapshot, decisions)
 	if len(mutations) == 0 && len(dispatchRecords) == 0 {
 		return d.throttlePauseSnapshotResult(activeThrottlePauses, observedThrottlePauses), nil
 	}
@@ -218,6 +102,135 @@ func (d *DispatcherSubsystem) Execute(ctx context.Context, snapshot *interfaces.
 		ActiveThrottlePauses:   activeThrottlePauses,
 		ThrottlePausesObserved: observedThrottlePauses,
 	}, nil
+}
+
+func (d *DispatcherSubsystem) dispatchDecisions(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []interfaces.FiringDecision {
+	enabled := d.evaluator.FindEnabledTransitionsWithSnapshot(ctx, d.state, d.schedulerSnapshot(snapshot))
+	if len(enabled) == 0 {
+		return nil
+	}
+	if scheduler.SupportsRepeatedTransitionBindings(d.sched) {
+		expanded := scheduler.ExpandRepeatedBindings(d.state, &snapshot.Marking, enabled)
+		if len(expanded) != len(enabled) {
+			d.logger.Debug("dispatcher: expanded repeated transition bindings", "enabled", len(enabled), "expanded", len(expanded))
+		}
+		enabled = expanded
+	}
+	decisions := d.sched.Select(enabled, d.schedulerSnapshot(snapshot))
+	if len(decisions) == 0 {
+		d.logger.Debug("dispatcher: no decisions")
+	}
+	return decisions
+}
+
+func (d *DispatcherSubsystem) buildDispatchRecords(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decisions []interfaces.FiringDecision) ([]interfaces.MarkingMutation, []interfaces.DispatchRecord) {
+	var mutations []interfaces.MarkingMutation
+	var dispatchRecords []interfaces.DispatchRecord
+	claimedTokens := make(map[string]bool)
+
+	for _, decision := range decisions {
+		dispatchRecord, ok := d.dispatchRecordFromDecision(snapshot, decision, claimedTokens)
+		if !ok {
+			continue
+		}
+		mutations = append(mutations, dispatchRecord.Mutations...)
+		dispatchRecords = append(dispatchRecords, dispatchRecord)
+	}
+	return mutations, dispatchRecords
+}
+
+func (d *DispatcherSubsystem) dispatchRecordFromDecision(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, claimedTokens map[string]bool) (interfaces.DispatchRecord, bool) {
+	if decision.TransitionID == "" {
+		d.logger.Warn("dispatcher: skipping firing decision with missing transition id")
+		return interfaces.DispatchRecord{}, false
+	}
+
+	tr, ok := d.state.Transitions[decision.TransitionID]
+	if !ok {
+		d.logger.Warn("dispatcher: transition from firing decision not found in net",
+			"transitionID", decision.TransitionID,
+			"workerType", decision.WorkerType)
+		return interfaces.DispatchRecord{}, false
+	}
+
+	inputTokens, ok := d.collectDecisionTokens(snapshot, decision, claimedTokens)
+	if !ok {
+		return interfaces.DispatchRecord{}, false
+	}
+	consumeMutations := consumeMutationsForDecision(decision.TransitionID, inputTokens, claimedTokens)
+	dispatch := d.buildWorkDispatch(snapshot, decision, tr, inputTokens)
+	d.logDispatch(decision, inputTokens, dispatch)
+	return interfaces.DispatchRecord{Dispatch: dispatch, Mutations: consumeMutations}, true
+}
+
+func (d *DispatcherSubsystem) collectDecisionTokens(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, claimedTokens map[string]bool) ([]interfaces.Token, bool) {
+	inputTokens := make([]interfaces.Token, 0, len(decision.ConsumeTokens))
+	seenTokens := make(map[string]bool)
+	for _, tokenID := range decision.ConsumeTokens {
+		if seenTokens[tokenID] {
+			continue
+		}
+		seenTokens[tokenID] = true
+		if claimedTokens[tokenID] {
+			d.logger.Warn("dispatcher: skipping decision due to duplicate token claim",
+				"transitionID", decision.TransitionID,
+				"tokenID", tokenID,
+				"workerType", decision.WorkerType)
+			return nil, false
+		}
+		tok, ok := snapshot.Marking.Tokens[tokenID]
+		if !ok {
+			d.logger.Warn("dispatcher: token referenced by firing decision not found in snapshot",
+				"transitionID", decision.TransitionID,
+				"tokenID", tokenID,
+				"workerType", decision.WorkerType)
+			return nil, false
+		}
+		inputTokens = append(inputTokens, *tok)
+	}
+	return inputTokens, true
+}
+
+func consumeMutationsForDecision(transitionID string, inputTokens []interfaces.Token, claimedTokens map[string]bool) []interfaces.MarkingMutation {
+	consumeMutations := make([]interfaces.MarkingMutation, 0, len(inputTokens))
+	for _, token := range inputTokens {
+		consumeMutations = append(consumeMutations, interfaces.MarkingMutation{
+			Type:      interfaces.MutationConsume,
+			TokenID:   token.ID,
+			FromPlace: token.PlaceID,
+			Reason:    fmt.Sprintf("consumed by transition %s", transitionID),
+		})
+		claimedTokens[token.ID] = true
+	}
+	return consumeMutations
+}
+
+func (d *DispatcherSubsystem) buildWorkDispatch(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, tr *petri.Transition, inputTokens []interfaces.Token) interfaces.WorkDispatch {
+	dispatch := interfaces.WorkDispatch{
+		DispatchID:               uuid.NewString(),
+		TransitionID:             decision.TransitionID,
+		WorkerType:               decision.WorkerType,
+		CurrentChainingTraceID:   interfaces.CurrentChainingTraceIDFromTokens(inputTokens),
+		PreviousChainingTraceIDs: interfaces.PreviousChainingTraceIDsFromTokens(inputTokens),
+		Execution:                executionMetadataForDispatch(decision.TransitionID, snapshot.TickCount, inputTokens),
+		InputTokens:              workers.InputTokens(inputTokens...),
+		InputBindings:            cloneDispatchInputBindings(decision.InputBindings),
+		WorkstationName:          tr.Name,
+	}
+	if d.wfCtx != nil {
+		dispatch.ProjectID = d.wfCtx.ProjectID
+	}
+	return dispatch
+}
+
+func (d *DispatcherSubsystem) logDispatch(decision interfaces.FiringDecision, inputTokens []interfaces.Token, dispatch interfaces.WorkDispatch) {
+	d.logger.Info("dispatcher: dispatching work to worker",
+		workers.WorkLogFields(dispatch.Execution,
+			"transition_id", decision.TransitionID,
+			"worker_type", decision.WorkerType,
+			"work_type", d.workTypeFromTokens(inputTokens),
+			"work_id", d.workIDFromTokens(inputTokens),
+			"input_tokens", len(inputTokens))...)
 }
 
 func (d *DispatcherSubsystem) schedulerSnapshot(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {

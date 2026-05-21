@@ -112,123 +112,120 @@ func TestProviderErrorSmoke_CodexAndTimeoutFailuresNormalizeThroughWorkerPool(t 
 	support.SkipLongFunctional(t, "slow provider worker-pool smoke")
 	capacityEntry := providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model")
 	t.Run(providerErrorCorpusEntryLabel(capacityEntry)+"_BoundedErrorLine_RequeuesWithConciseFailureReason", func(t *testing.T) {
-		conciseError := providerErrorCorpusLastErrorLine(t, capacityEntry)
-		const transcriptMarker = "full inference transcript should not be retained"
-		rawOutput := strings.Join([]string{
-			"OpenAI Codex v0.118.0 (research preview)",
-			transcriptMarker,
-			strings.Repeat("reasoning transcript ", 200),
-			conciseError,
-			"cleanup complete",
-		}, "\n")
-
-		smokeHarness := testutil.NewProviderErrorSmokeHarness(
-			t,
-			support.LegacyFixtureDir(t, "worktree_passthrough"),
-			workers.ModelProviderCodex,
-			"gpt-5-codex",
-			testutil.WithProviderErrorSmokeServiceOptions(
-				testutil.WithFullWorkerPoolAndScriptWrap(),
-			),
-		)
-		testutil.AppendFactoryInferenceThrottleGuard(
-			t,
-			smokeHarness.Dir,
-			workers.ModelProviderCodex,
-			"gpt-5-codex",
-			3*time.Second,
-		)
-		smokeHarness.QueueProviderResults(
-			workers.CommandResult{ExitCode: capacityEntry.ExitCode, Stdout: []byte(rawOutput)},
-			workers.CommandResult{ExitCode: capacityEntry.ExitCode, Stdout: []byte(rawOutput)},
-			workers.CommandResult{ExitCode: capacityEntry.ExitCode, Stdout: []byte(rawOutput)},
-		)
-		work := testutil.ProviderErrorSmokeWork{
-			Name:       "codex-late-error-line",
-			WorkID:     "work-codex-late-error-line",
-			WorkTypeID: "task",
-			TraceID:    "trace-codex-late-error-line",
-			Payload:    []byte("codex late error smoke payload"),
-		}
-		smokeHarness.SeedWork(t, work)
-
-		h := smokeHarness.BuildRunningServiceHarness(t, 5*time.Second)
-		outcome := smokeHarness.WaitForThrottleRequeue(t, h, work, 5*time.Second)
-
-		if smokeHarness.ProviderRunner().CallCount() < 3 {
-			t.Fatalf("provider command count = %d, want at least 3", smokeHarness.ProviderRunner().CallCount())
-		}
-		if len(outcome.Dispatches) != 1 {
-			t.Fatalf("DispatchHistory length = %d, want 1", len(outcome.Dispatches))
-		}
-		dispatch := outcome.Dispatches[0]
-		if dispatch.ProviderFailure == nil {
-			t.Fatal("ProviderFailure is nil, want throttled metadata")
-		}
-		if dispatch.ProviderFailure.Type != capacityEntry.ExpectedType {
-			t.Fatalf("provider failure type = %s, want %s", dispatch.ProviderFailure.Type, capacityEntry.ExpectedType)
-		}
-		assertContainsAll(t, dispatch.Reason, []string{"provider error: " + string(capacityEntry.ExpectedType), conciseError})
-		if strings.Contains(dispatch.Reason, transcriptMarker) {
-			t.Fatalf("dispatch reason retained raw transcript marker: %q", dispatch.Reason)
-		}
+		assertCodexCapacityFailureNormalizesThroughWorkerPool(t, capacityEntry)
 	})
 
-	t.Run("CodexTimeoutLine_RetriesAndRecordsRetryableTimeout", func(t *testing.T) {
-		const conciseError = "ERROR: command timed out while waiting for codex"
-		const transcriptMarker = "timeout transcript should not be retained"
-		rawOutput := strings.Join([]string{
-			"OpenAI Codex v0.118.0 (research preview)",
-			transcriptMarker,
-			conciseError,
-			"post-error diagnostics",
-		}, "\n")
+	t.Run("CodexTimeoutLine_RetriesAndRecordsRetryableTimeout", assertCodexTimeoutFailureNormalizesThroughWorkerPool)
+}
 
-		smokeHarness := testutil.NewProviderErrorSmokeHarness(
-			t,
-			support.LegacyFixtureDir(t, "worktree_passthrough"),
-			workers.ModelProviderCodex,
-			"gpt-5-codex",
-			testutil.WithProviderErrorSmokeServiceOptions(testutil.WithFullWorkerPoolAndScriptWrap()),
-		)
-		smokeHarness.QueueProviderResults(
-			workers.CommandResult{ExitCode: 1, Stderr: []byte(rawOutput)},
-			workers.CommandResult{ExitCode: 1, Stderr: []byte(rawOutput)},
-			workers.CommandResult{ExitCode: 1, Stderr: []byte(rawOutput)},
-		)
-		work := testutil.ProviderErrorSmokeWork{
-			Name:       "codex-timeout-line",
-			WorkID:     "work-codex-timeout-line",
-			WorkTypeID: "task",
-			TraceID:    "trace-codex-timeout-line",
-			Payload:    []byte("codex timeout smoke payload"),
-		}
-		smokeHarness.SeedWork(t, work)
+func assertCodexCapacityFailureNormalizesThroughWorkerPool(t *testing.T, capacityEntry workers.ProviderErrorCorpusEntry) {
+	t.Helper()
 
-		h := smokeHarness.BuildRunningServiceHarness(t, 5*time.Second)
-		outcome := smokeHarness.WaitForRetryableRequeue(t, h, work, 5*time.Second)
+	conciseError := providerErrorCorpusLastErrorLine(t, capacityEntry)
+	const transcriptMarker = "full inference transcript should not be retained"
+	rawOutput := strings.Join([]string{
+		"OpenAI Codex v0.118.0 (research preview)",
+		transcriptMarker,
+		strings.Repeat("reasoning transcript ", 200),
+		conciseError,
+		"cleanup complete",
+	}, "\n")
 
-		if smokeHarness.ProviderRunner().CallCount() < 3 {
-			t.Fatalf("provider command count = %d, want at least 3", smokeHarness.ProviderRunner().CallCount())
-		}
-		if len(outcome.Dispatches) != 1 {
-			t.Fatalf("DispatchHistory length = %d, want 1", len(outcome.Dispatches))
-		}
-		dispatch := outcome.Dispatches[0]
-		if dispatch.ProviderFailure == nil {
-			t.Fatal("ProviderFailure is nil, want timeout metadata")
-		}
-		if dispatch.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
-			t.Fatalf("provider failure type = %s, want %s", dispatch.ProviderFailure.Type, interfaces.ProviderErrorTypeTimeout)
-		}
-		if dispatch.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
-			t.Fatalf("provider failure family = %s, want %s", dispatch.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
-		}
-		assertContainsAll(t, dispatch.Reason, []string{"provider error: timeout", conciseError})
-		if strings.Contains(dispatch.Reason, transcriptMarker) {
-			t.Fatalf("dispatch reason retained raw transcript marker: %q", dispatch.Reason)
-		}
-	})
+	smokeHarness := testutil.NewProviderErrorSmokeHarness(
+		t,
+		support.LegacyFixtureDir(t, "worktree_passthrough"),
+		workers.ModelProviderCodex,
+		"gpt-5-codex",
+		testutil.WithProviderErrorSmokeServiceOptions(testutil.WithFullWorkerPoolAndScriptWrap()),
+	)
+	testutil.AppendFactoryInferenceThrottleGuard(
+		t,
+		smokeHarness.Dir,
+		workers.ModelProviderCodex,
+		"gpt-5-codex",
+		3*time.Second,
+	)
+	smokeHarness.QueueProviderResults(
+		workers.CommandResult{ExitCode: capacityEntry.ExitCode, Stdout: []byte(rawOutput)},
+		workers.CommandResult{ExitCode: capacityEntry.ExitCode, Stdout: []byte(rawOutput)},
+		workers.CommandResult{ExitCode: capacityEntry.ExitCode, Stdout: []byte(rawOutput)},
+	)
+	work := providerErrorSmokeWork("codex-late-error-line", "codex late error smoke payload")
+	smokeHarness.SeedWork(t, work)
+
+	h := smokeHarness.BuildRunningServiceHarness(t, 5*time.Second)
+	outcome := smokeHarness.WaitForThrottleRequeue(t, h, work, 5*time.Second)
+
+	assertProviderErrorDispatchCount(t, smokeHarness.ProviderRunner().CallCount(), outcome)
+	dispatch := outcome.Dispatches[0]
+	if dispatch.ProviderFailure == nil {
+		t.Fatal("ProviderFailure is nil, want throttled metadata")
+	}
+	if dispatch.ProviderFailure.Type != capacityEntry.ExpectedType {
+		t.Fatalf("provider failure type = %s, want %s", dispatch.ProviderFailure.Type, capacityEntry.ExpectedType)
+	}
+	assertContainsAll(t, dispatch.Reason, []string{"provider error: " + string(capacityEntry.ExpectedType), conciseError})
+	if strings.Contains(dispatch.Reason, transcriptMarker) {
+		t.Fatalf("dispatch reason retained raw transcript marker: %q", dispatch.Reason)
+	}
+}
+
+func assertCodexTimeoutFailureNormalizesThroughWorkerPool(t *testing.T) {
+	t.Helper()
+
+	const conciseError = "ERROR: command timed out while waiting for codex"
+	const transcriptMarker = "timeout transcript should not be retained"
+	rawOutput := strings.Join([]string{
+		"OpenAI Codex v0.118.0 (research preview)",
+		transcriptMarker,
+		conciseError,
+		"post-error diagnostics",
+	}, "\n")
+
+	smokeHarness := testutil.NewProviderErrorSmokeHarness(
+		t,
+		support.LegacyFixtureDir(t, "worktree_passthrough"),
+		workers.ModelProviderCodex,
+		"gpt-5-codex",
+		testutil.WithProviderErrorSmokeServiceOptions(testutil.WithFullWorkerPoolAndScriptWrap()),
+	)
+	smokeHarness.QueueProviderResults(
+		workers.CommandResult{ExitCode: 1, Stderr: []byte(rawOutput)},
+		workers.CommandResult{ExitCode: 1, Stderr: []byte(rawOutput)},
+		workers.CommandResult{ExitCode: 1, Stderr: []byte(rawOutput)},
+	)
+	work := providerErrorSmokeWork("codex-timeout-line", "codex timeout smoke payload")
+	smokeHarness.SeedWork(t, work)
+
+	h := smokeHarness.BuildRunningServiceHarness(t, 5*time.Second)
+	outcome := smokeHarness.WaitForRetryableRequeue(t, h, work, 5*time.Second)
+
+	assertProviderErrorDispatchCount(t, smokeHarness.ProviderRunner().CallCount(), outcome)
+	dispatch := outcome.Dispatches[0]
+	if dispatch.ProviderFailure == nil {
+		t.Fatal("ProviderFailure is nil, want timeout metadata")
+	}
+	if dispatch.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
+		t.Fatalf("provider failure type = %s, want %s", dispatch.ProviderFailure.Type, interfaces.ProviderErrorTypeTimeout)
+	}
+	if dispatch.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
+		t.Fatalf("provider failure family = %s, want %s", dispatch.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
+	}
+	assertContainsAll(t, dispatch.Reason, []string{"provider error: timeout", conciseError})
+	if strings.Contains(dispatch.Reason, transcriptMarker) {
+		t.Fatalf("dispatch reason retained raw transcript marker: %q", dispatch.Reason)
+	}
+}
+
+func assertProviderErrorDispatchCount(t *testing.T, callCount int, outcome testutil.ProviderErrorSmokeOutcome) {
+	t.Helper()
+
+	if callCount < 3 {
+		t.Fatalf("provider command count = %d, want at least 3", callCount)
+	}
+	if len(outcome.Dispatches) != 1 {
+		t.Fatalf("DispatchHistory length = %d, want 1", len(outcome.Dispatches))
+	}
 }
 
 func TestProviderErrorSmoke_CodexTemporaryServerErrorsRequeueWithoutThrottlePause(t *testing.T) {

@@ -217,61 +217,75 @@ func TestMergeGeneratedWorkers_ReplacesExistingEntriesAndAppendsRuntimeOnlyInSor
 }
 
 func TestMergeGeneratedWorkstations_ReplacesExistingEntriesAndAppendsRuntimeOnlyInSortedOrder(t *testing.T) {
-	factory := &factoryapi.Factory{
-		Workstations: &[]factoryapi.Workstation{
-			{
-				Name:     "alpha",
-				Worker:   "stale-worker",
-				Behavior: workstationKindPtr(factoryapi.WorkstationKindCron),
-				Cron: &factoryapi.WorkstationCron{
-					Schedule: "0 * * * *",
-				},
-				Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "stale"}},
-				Outputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "stale-done"}},
-			},
-			{
-				Name:    "zeta",
-				Worker:  "keep-worker",
-				Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "ready"}},
-				Outputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
-			},
-		},
-	}
-
-	runtimeWorkstations := map[string]interfaces.FactoryWorkstationConfig{
-		"charlie": {
-			Name:           "charlie",
-			Kind:           interfaces.WorkstationKindStandard,
-			Type:           interfaces.WorkstationTypeLogical,
-			WorkerTypeName: "charlie-worker",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "queued"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-		},
-		"alpha": {
-			Kind:             interfaces.WorkstationKindCron,
-			Type:             interfaces.WorkstationTypeLogical,
-			WorkerTypeName:   "fresh-worker",
-			Cron:             &interfaces.CronConfig{Schedule: "*/5 * * * *", TriggerAtStart: true, ExpiryWindow: "30s"},
-			Inputs:           []interfaces.IOConfig{{WorkTypeName: "story", StateName: "review"}},
-			Outputs:          []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
-			OnFailure:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
-			Resources:        []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 2}},
-			WorkingDirectory: "/repo/runtime",
-		},
-		"bravo": {
-			Name:           "bravo",
-			Kind:           interfaces.WorkstationKindStandard,
-			Type:           interfaces.WorkstationTypeLogical,
-			WorkerTypeName: "bravo-worker",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "ready"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-			Resources:      []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
-		},
-	}
-
+	factory, runtimeWorkstations := mergeGeneratedWorkstationsFixture()
 	if err := mergeGeneratedWorkstations(factory, runtimeWorkstations); err != nil {
 		t.Fatalf("mergeGeneratedWorkstations() error = %v", err)
 	}
+	assertMergedGeneratedWorkstations(t, factory)
+}
+
+func workstationKindPtr(value factoryapi.WorkstationKind) *factoryapi.WorkstationKind {
+	return &value
+}
+
+func boolValue(value *bool) bool {
+	return value != nil && *value
+}
+
+func mergeGeneratedWorkstationsFixture() (*factoryapi.Factory, map[string]interfaces.FactoryWorkstationConfig) {
+	return &factoryapi.Factory{
+			Workstations: &[]factoryapi.Workstation{
+				{
+					Name:     "alpha",
+					Worker:   "stale-worker",
+					Behavior: workstationKindPtr(factoryapi.WorkstationKindCron),
+					Cron: &factoryapi.WorkstationCron{
+						Schedule: "0 * * * *",
+					},
+					Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "stale"}},
+					Outputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "stale-done"}},
+				},
+				{
+					Name:    "zeta",
+					Worker:  "keep-worker",
+					Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "ready"}},
+					Outputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
+				},
+			},
+		}, map[string]interfaces.FactoryWorkstationConfig{
+			"charlie": {
+				Name:           "charlie",
+				Kind:           interfaces.WorkstationKindStandard,
+				Type:           interfaces.WorkstationTypeLogical,
+				WorkerTypeName: "charlie-worker",
+				Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "queued"}},
+				Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
+			},
+			"alpha": {
+				Kind:             interfaces.WorkstationKindCron,
+				Type:             interfaces.WorkstationTypeLogical,
+				WorkerTypeName:   "fresh-worker",
+				Cron:             &interfaces.CronConfig{Schedule: "*/5 * * * *", TriggerAtStart: true, ExpiryWindow: "30s"},
+				Inputs:           []interfaces.IOConfig{{WorkTypeName: "story", StateName: "review"}},
+				Outputs:          []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+				OnFailure:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
+				Resources:        []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 2}},
+				WorkingDirectory: "/repo/runtime",
+			},
+			"bravo": {
+				Name:           "bravo",
+				Kind:           interfaces.WorkstationKindStandard,
+				Type:           interfaces.WorkstationTypeLogical,
+				WorkerTypeName: "bravo-worker",
+				Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "ready"}},
+				Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+				Resources:      []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
+			},
+		}
+}
+
+func assertMergedGeneratedWorkstations(t *testing.T, factory *factoryapi.Factory) {
+	t.Helper()
 	if factory.Workstations == nil {
 		t.Fatal("merged workstations = nil, want generated workstation list")
 	}
@@ -319,12 +333,4 @@ func TestMergeGeneratedWorkstations_ReplacesExistingEntriesAndAppendsRuntimeOnly
 	if got[3].Behavior == nil || *got[3].Behavior != factoryapi.WorkstationKindStandard {
 		t.Fatalf("merged charlie behavior = %#v, want STANDARD", got[3].Behavior)
 	}
-}
-
-func workstationKindPtr(value factoryapi.WorkstationKind) *factoryapi.WorkstationKind {
-	return &value
-}
-
-func boolValue(value *bool) bool {
-	return value != nil && *value
 }
