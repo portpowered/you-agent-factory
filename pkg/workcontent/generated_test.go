@@ -35,6 +35,59 @@ func TestPartsFromGeneratedReturnsNilForNilOrEmptyContent(t *testing.T) {
 	}
 }
 
+func TestGeneratedPtrFromPartsPreservesSupportedPartOrderAndValues(t *testing.T) {
+	parts := []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+		{Type: interfaces.WorkContentPartTypeText, Text: "omega"},
+	}
+
+	got := GeneratedPtrFromParts(parts)
+
+	if got == nil {
+		t.Fatalf("GeneratedPtrFromParts(parts) = nil, want content")
+	}
+	assertGeneratedWorkContentPartsEqual(t, got, parts)
+}
+
+func TestGeneratedPtrFromPartsReturnsNilForNilOrEmptyContent(t *testing.T) {
+	if got := GeneratedPtrFromParts(nil); got != nil {
+		t.Fatalf("GeneratedPtrFromParts(nil) = %#v, want nil", got)
+	}
+
+	if got := GeneratedPtrFromParts([]interfaces.WorkContentPart{}); got != nil {
+		t.Fatalf("GeneratedPtrFromParts(empty) = %#v, want nil", got)
+	}
+}
+
+func TestGeneratedPtrFromPartsSkipsUnsupportedParts(t *testing.T) {
+	parts := []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
+		{Type: interfaces.WorkContentPartType("audio"), File: "fixtures/ignored.wav"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+	}
+
+	got := GeneratedPtrFromParts(parts)
+
+	if got == nil {
+		t.Fatalf("GeneratedPtrFromParts(parts) = nil, want supported content")
+	}
+	assertGeneratedWorkContentPartsEqual(t, got, []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+	})
+}
+
+func TestGeneratedPtrFromPartsReturnsNilWhenAllPartsAreUnsupported(t *testing.T) {
+	parts := []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartType("audio"), File: "fixtures/ignored.wav"},
+	}
+
+	if got := GeneratedPtrFromParts(parts); got != nil {
+		t.Fatalf("GeneratedPtrFromParts(unsupported) = %#v, want nil", got)
+	}
+}
+
 func mustGeneratedTextPart(t *testing.T, text string) factoryapi.WorkContentPart {
 	t.Helper()
 
@@ -72,4 +125,17 @@ func assertWorkContentPartsEqual(t *testing.T, got, want []interfaces.WorkConten
 			t.Fatalf("part[%d] = %#v, want %#v", i, got[i], want[i])
 		}
 	}
+}
+
+func assertGeneratedWorkContentPartsEqual(t *testing.T, got *factoryapi.WorkContent, want []interfaces.WorkContentPart) {
+	t.Helper()
+
+	if got == nil {
+		t.Fatalf("generated work content = nil, want %#v", want)
+	}
+	if len(*got) != len(want) {
+		t.Fatalf("len(generated parts) = %d, want %d", len(*got), len(want))
+	}
+	roundTrip := PartsFromGenerated(got)
+	assertWorkContentPartsEqual(t, roundTrip, want)
 }
