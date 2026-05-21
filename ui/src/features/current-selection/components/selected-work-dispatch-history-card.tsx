@@ -275,11 +275,7 @@ function DispatchRequestSection({
         <p className={DETAIL_COPY_CLASS}>
           {messages.promptDetailsNotApplicable}
         </p>
-      ) : (
-        <p className={DETAIL_COPY_CLASS}>
-          {messages.inferenceRequestGuidance}
-        </p>
-      )}
+      ) : null}
       <WorkItemActionGroup
         items={view.inputWorkItems}
         label={messages.inputWorkLabel}

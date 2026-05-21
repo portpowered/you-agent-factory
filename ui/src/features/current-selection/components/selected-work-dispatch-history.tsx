@@ -1,7 +1,5 @@
-import { cn } from "../../../lib/cn";
 import {
   DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import { getWorkstationDetailMessages } from "../messages";
@@ -52,17 +50,12 @@ export function SelectedWorkDispatchHistorySection({
       aria-labelledby="selected-work-dispatch-history-heading"
       className="mt-4 grid gap-2.5"
     >
-      <div className="grid gap-1">
-        <h4
-          className={DASHBOARD_SECTION_HEADING_CLASS}
-          id="selected-work-dispatch-history-heading"
-        >
-          {messages.dispatchHistoryHeading}
-        </h4>
-        <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-          {messages.dispatchHistoryCountLabel(requests.length)}
-        </p>
-      </div>
+      <h4
+        className={DASHBOARD_SECTION_HEADING_CLASS}
+        id="selected-work-dispatch-history-heading"
+      >
+        {messages.dispatchHistoryHeading}
+      </h4>
       {requests.length > 0 ? (
         <div className="grid gap-3">
           {requests.map((request) => (

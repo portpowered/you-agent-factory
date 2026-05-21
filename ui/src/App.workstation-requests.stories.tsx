@@ -358,9 +358,7 @@ export const SelectedWorkDispatchHistorySmoke = {
         name: "Work session runs list",
       }),
     ).toBeNull();
-    await expect(
-      within(dispatchHistory).getByText("6 dispatches"),
-    ).toBeVisible();
+    expect(within(dispatchHistory).queryByText("6 dispatches")).toBeNull();
     [
       "dispatch-review-active",
       dashboardWorkstationRequestFixtures.errored.dispatch_id,

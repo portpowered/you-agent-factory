@@ -445,10 +445,10 @@ describe("WorkItemDetailCard summary", () => {
     expect(screen.getByText("Current dispatch")).toBeTruthy();
     expect(dispatchHistory.getByText("trace-active-story")).toBeTruthy();
     expect(
-      requestDetails.getByText(
+      requestDetails.queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       inferenceAttempts.getByText(
         "No inference attempt details have been recorded for this dispatch yet.",
@@ -921,10 +921,12 @@ describe("WorkItemDetailCard summary", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(screen.getByRole("region", { name: "Request details" })).getByText(
+      within(
+        screen.getByRole("region", { name: "Request details" }),
+      ).queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       inferenceAttempts.getByText(
         "No inference attempt details have been recorded for this dispatch yet.",
@@ -1062,10 +1064,10 @@ describe("WorkItemDetailCard summary", () => {
     );
 
     expect(
-      requestDetails.getByText(
+      requestDetails.queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       requestDetails.queryByRole("heading", {
         level: 2,
@@ -2106,10 +2108,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(
         within(dispatchCard).getByRole("region", { name: "Request details" }),
-      ).getByText(
+      ).queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       inferenceAttempts.getByText(
         `codex / session_id / ${dashboardWorkstationRequestFixtures.rejected.inference_attempts?.[0]?.provider_session?.id}`,

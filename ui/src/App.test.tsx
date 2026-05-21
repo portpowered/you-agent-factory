@@ -3258,10 +3258,10 @@ describe("App streamed replay smoke flows", () => {
       ),
     ).toBeNull();
     expect(
-      within(pendingSelection).getByText(
+      within(pendingSelection).queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       screen.queryByText(runtimeDetailsFixtureIDs.unsafeSystemPromptBody),
     ).toBeNull();
