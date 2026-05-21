@@ -1,6 +1,11 @@
 import type { components } from "../generated/openapi";
 import { factoryAPIURL } from "../baseUrl";
 import { factorySessionScopedPath } from "../session-routing";
+import {
+  extractAPIErrorPayload,
+  isAPIRecord,
+  readAPIResponseBody,
+} from "../transport";
 
 export type FactoryValue = components["schemas"]["Factory"];
 
@@ -28,11 +33,6 @@ export interface CreateFactoryOptions {
 export interface GetCurrentFactoryOptions {
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
-}
-
-interface APIErrorResponse {
-  code?: string;
-  message?: string;
 }
 
 const CREATE_NAMED_FACTORY_ENDPOINT = "/factory";
@@ -82,9 +82,9 @@ export async function createFactory(
     });
   }
 
-  const responseBody = await readResponseBody(response);
+  const responseBody = await readAPIResponseBody(response);
   if (!response.ok) {
-    const errorBody = asAPIErrorResponse(responseBody);
+    const errorBody = extractAPIErrorPayload(responseBody);
     throw new NamedFactoryAPIError(
       errorBody?.message ?? "The factory activation API rejected the request.",
       {
@@ -139,9 +139,9 @@ export async function getCurrentFactory(
     });
   }
 
-  const responseBody = await readResponseBody(response);
+  const responseBody = await readAPIResponseBody(response);
   if (!response.ok) {
-    const errorBody = asAPIErrorResponse(responseBody);
+    const errorBody = extractAPIErrorPayload(responseBody);
     throw new NamedFactoryAPIError(
       errorBody?.message ?? "The current factory API rejected the request.",
       {
@@ -165,30 +165,6 @@ export async function getCurrentFactory(
   return responseBody;
 }
 
-async function readResponseBody(response: Response): Promise<unknown> {
-  const rawBody = await response.text();
-  if (rawBody.length === 0) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(rawBody) as unknown;
-  } catch {
-    return rawBody;
-  }
-}
-
-function asAPIErrorResponse(value: unknown): APIErrorResponse | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  return {
-    code: typeof value.code === "string" ? value.code : undefined,
-    message: typeof value.message === "string" ? value.message : undefined,
-  };
-}
-
 function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFactoryAPIErrorCode {
   switch (code) {
     case "BAD_REQUEST":
@@ -206,12 +182,8 @@ function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFacto
 
 function isFactoryValue(value: unknown): value is FactoryValue {
   return (
-    isRecord(value) &&
+    isAPIRecord(value) &&
     typeof value.name === "string" &&
     value.factory === undefined
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

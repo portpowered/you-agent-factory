@@ -6,6 +6,11 @@ import {
   type CanonicalFactoryDefinition,
 } from "../factory-definition";
 import { factorySessionScopedPath } from "../session-routing";
+import {
+  extractAPIErrorPayload,
+  isAPIRecord,
+  readAPIResponseBody,
+} from "../transport";
 
 export type { CanonicalFactoryDefinition } from "../factory-definition";
 
@@ -43,12 +48,6 @@ export interface CurrentEditableFactoryDefinitionErrorDetails {
 export interface GetCurrentEditableFactoryDefinitionOptions {
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
-}
-
-interface APIErrorResponse {
-  code?: string;
-  message?: string;
-  targets?: ErrorTarget[];
 }
 
 export interface SaveCurrentEditableFactoryDefinitionOptions {
@@ -132,9 +131,11 @@ export async function getCurrentEditableFactoryDefinitionDocument(
     );
   }
 
-  const responseBody = await readResponseBody(response);
+  const responseBody = await readAPIResponseBody(response);
   if (!response.ok) {
-    const errorBody = asAPIErrorResponse(responseBody);
+    const errorBody = extractAPIErrorPayload(responseBody, {
+      isTarget: isErrorTarget,
+    });
     throw new CurrentEditableFactoryDefinitionError(
       errorBody?.message ??
         "The current factory editing API rejected the request.",
@@ -204,9 +205,11 @@ export async function saveCurrentEditableFactoryDefinitionDocument(
     );
   }
 
-  const responseBody = await readResponseBody(response);
+  const responseBody = await readAPIResponseBody(response);
   if (!response.ok) {
-    const errorBody = asAPIErrorResponse(responseBody);
+    const errorBody = extractAPIErrorPayload(responseBody, {
+      isTarget: isErrorTarget,
+    });
     throw new CurrentEditableFactoryDefinitionError(
       errorBody?.message ??
         "The current factory editing API rejected the save request.",
@@ -294,33 +297,6 @@ function normalizeEditableFactoryDefinitionVersion(
   };
 }
 
-async function readResponseBody(response: Response): Promise<unknown> {
-  const rawBody = await response.text();
-  if (rawBody.length === 0) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(rawBody) as unknown;
-  } catch {
-    return rawBody;
-  }
-}
-
-function asAPIErrorResponse(value: unknown): APIErrorResponse | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  return {
-    code: typeof value.code === "string" ? value.code : undefined,
-    message: typeof value.message === "string" ? value.message : undefined,
-    targets: Array.isArray(value.targets)
-      ? value.targets.filter(isErrorTarget)
-      : undefined,
-  };
-}
-
 function normalizeCurrentEditableFactoryDefinitionErrorCode(
   code: string | undefined,
 ): CurrentEditableFactoryDefinitionErrorCode {
@@ -344,16 +320,12 @@ function isEditableFactoryDefinitionValue(
   value: unknown,
 ): value is EditableFactoryDefinition {
   return (
-    isRecord(value) &&
+    isAPIRecord(value) &&
     value.factoryDefinition !== undefined &&
-    isRecord(value.version)
+    isAPIRecord(value.version)
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isErrorTarget(value: unknown): value is ErrorTarget {
-  return isRecord(value) && typeof value.kind === "string";
+  return isAPIRecord(value) && typeof value.kind === "string";
 }
