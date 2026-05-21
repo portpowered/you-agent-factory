@@ -96,6 +96,25 @@ describe("useCurrentFactoryExport", () => {
     });
   });
 
+  it("does not fetch export data when no session is selected", () => {
+    useDashboardSessionStore.setState({ selectedSessionID: null });
+
+    const { result } = renderHook(() => useCurrentFactoryExport(true), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    expect(getCurrentFactory).not.toHaveBeenCalled();
+    expect(result.current).toEqual({
+      currentFactoryExport: {
+        code: "FACTORY_DEFINITION_UNAVAILABLE",
+        message:
+          "The current factory definition is not available yet. Wait for the current-factory API to expose the authored definition before exporting.",
+        ok: false,
+      },
+      isPreparing: false,
+    });
+  });
+
   it("maps current-factory not-found errors to the unavailable export copy", async () => {
     vi.mocked(getCurrentFactory).mockRejectedValue(
       new NamedFactoryAPIError("Factory definition missing", { code: "NOT_FOUND" }),

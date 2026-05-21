@@ -24,7 +24,6 @@ import {
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import { useExportDialogStore } from "../../export/state/exportDialogStore";
-import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { DashboardSessionTabs } from "../dashboard-session-tabs";
@@ -67,9 +66,6 @@ export interface DashboardHeaderProps {
 
 export function DashboardHeader({ locale }: DashboardHeaderProps) {
   const { locale: resolvedLocale, setLocale } = useAppLocale(locale);
-  const snapshot = useFactoryTimelineStore(
-    (state) => state.worldViewCache[state.selectedTick],
-  );
   const streamState = useDashboardStreamStore((state) => state.streamState);
   const isExportDialogOpen = useExportDialogStore(
     (state) => state.isExportDialogOpen,
@@ -79,10 +75,6 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
   );
   const exportMessages = getExportDialogMessages(resolvedLocale);
   const headerMessages = getHeaderControlsMessages(resolvedLocale);
-
-  if (!snapshot) {
-    return null;
-  }
 
   return (
     <section

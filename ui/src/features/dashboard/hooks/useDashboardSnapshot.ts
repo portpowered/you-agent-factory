@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES, openFactoryEventStream } from "../../../api/events";
@@ -43,6 +43,51 @@ function resetDashboardSessionScopedState(
     queryKey: [CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
     exact: false,
   });
+}
+
+function clearQueuedFlush(flushHandleRef: RefObject<number | null>): void {
+  if (flushHandleRef.current === null) {
+    return;
+  }
+  if (typeof window.cancelAnimationFrame === "function") {
+    window.cancelAnimationFrame(flushHandleRef.current);
+  } else {
+    window.clearTimeout(flushHandleRef.current);
+  }
+  flushHandleRef.current = null;
+}
+
+function resetDashboardSessionStateForSelectionChange({
+  hasOpenedStreamRef,
+  queryClient,
+  queuedEventsRef,
+  refreshToken,
+  resetStreamState,
+  resetTimeline,
+  selectedSessionID,
+}: {
+  hasOpenedStreamRef: RefObject<boolean>;
+  queryClient: ReturnType<typeof useQueryClient>;
+  queuedEventsRef: RefObject<FactoryEvent[]>;
+  refreshToken: number;
+  resetStreamState: () => void;
+  resetTimeline: () => void;
+  selectedSessionID: string | null;
+}): boolean {
+  if (selectedSessionID == null) {
+    queuedEventsRef.current = [];
+    resetDashboardSessionScopedState(queryClient, resetStreamState, resetTimeline);
+    return false;
+  }
+
+  if (hasOpenedStreamRef.current || refreshToken !== 0) {
+    queuedEventsRef.current = [];
+    resetDashboardSessionScopedState(queryClient, resetStreamState, resetTimeline);
+  } else {
+    hasOpenedStreamRef.current = true;
+  }
+
+  return true;
 }
 
 export function useDashboardSnapshot({
@@ -91,20 +136,26 @@ export function useDashboardSnapshot({
   }, [flushQueuedEvents]);
 
   useEffect(() => {
-    if (hasOpenedStreamRef.current || refreshToken !== 0) {
-      queuedEventsRef.current = [];
-      resetDashboardSessionScopedState(
-        queryClient,
-        resetStreamState,
-        resetTimeline,
-      );
-    } else {
-      hasOpenedStreamRef.current = true;
+    const shouldOpenStream = resetDashboardSessionStateForSelectionChange({
+      hasOpenedStreamRef,
+      queryClient,
+      queuedEventsRef,
+      refreshToken,
+      resetStreamState,
+      resetTimeline,
+      selectedSessionID,
+    });
+    if (!shouldOpenStream) {
+      return;
     }
+    if (selectedSessionID == null) {
+      return;
+    }
+    const sessionID = selectedSessionID;
 
     const stream = openFactoryEventStream(
       (event) => {
-        syncCurrentEditableFactoryDefinition(queryClient, event, selectedSessionID);
+        syncCurrentEditableFactoryDefinition(queryClient, event, sessionID);
         queuedEventsRef.current.push(
           compactFactoryEventForTimeline(event, debugOptions),
         );
@@ -113,17 +164,10 @@ export function useDashboardSnapshot({
       (status, message) => {
         setStreamState({ status, message });
       },
-      selectedSessionID,
+      sessionID,
     );
     return () => {
-      if (flushHandleRef.current !== null) {
-        if (typeof window.cancelAnimationFrame === "function") {
-          window.cancelAnimationFrame(flushHandleRef.current);
-        } else {
-          window.clearTimeout(flushHandleRef.current);
-        }
-        flushHandleRef.current = null;
-      }
+      clearQueuedFlush(flushHandleRef);
       flushQueuedEvents();
       stream?.close();
     };
@@ -165,7 +209,8 @@ export function useDashboardSnapshot({
     persistFactoryTimelineMemorySummary(window.localStorage, summary);
   }, [debugOptions, eventCount]);
 
-  const isInitialLoading = selectedTick === 0 && eventCount === 0;
+  const isInitialLoading =
+    selectedSessionID != null && selectedTick === 0 && eventCount === 0;
 
   return useMemo(
     () => ({

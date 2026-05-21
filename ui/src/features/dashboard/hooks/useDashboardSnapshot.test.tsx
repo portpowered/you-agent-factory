@@ -319,15 +319,17 @@ describe("useDashboardSnapshot", () => {
 
     expect(replayHarness.getStreams()[0]?.url).toBe("/events");
 
-    useFactoryTimelineStore.setState({
-      events: CANONICAL_SELECTED_TICK_EVENTS,
-      latestTick: 6,
-      mode: "current",
-      receivedEventIDs: CANONICAL_SELECTED_TICK_EVENTS.map((event) => event.id),
-      selectedTick: 6,
-      worldViewCache: {
-        6: timelineSnapshot(REFRESHED_SNAPSHOT),
-      },
+    act(() => {
+      useFactoryTimelineStore.setState({
+        events: CANONICAL_SELECTED_TICK_EVENTS,
+        latestTick: 6,
+        mode: "current",
+        receivedEventIDs: CANONICAL_SELECTED_TICK_EVENTS.map((event) => event.id),
+        selectedTick: 6,
+        worldViewCache: {
+          6: timelineSnapshot(REFRESHED_SNAPSHOT),
+        },
+      });
     });
 
     act(() => {
@@ -342,6 +344,35 @@ describe("useDashboardSnapshot", () => {
     );
     expect(useFactoryTimelineStore.getState().events).toEqual([]);
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+  });
+
+  it("clears timeline state and closes the stream when the last live session is deselected", async () => {
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    expect(replayHarness.getStreams()).toHaveLength(1);
+    useFactoryTimelineStore.setState({
+      events: CANONICAL_SELECTED_TICK_EVENTS,
+      latestTick: 6,
+      mode: "current",
+      receivedEventIDs: CANONICAL_SELECTED_TICK_EVENTS.map((event) => event.id),
+      selectedTick: 6,
+      worldViewCache: {
+        6: timelineSnapshot(REFRESHED_SNAPSHOT),
+      },
+    });
+
+    act(() => {
+      useDashboardSessionStore.getState().setSelectedSessionID(null);
+    });
+
+    await waitFor(() => {
+      expect(useFactoryTimelineStore.getState().events).toEqual([]);
+    });
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+    expect(useFactoryTimelineStore.getState().worldViewCache[6]).toBeUndefined();
+    expect(replayHarness.getStreams()).toHaveLength(1);
   });
 
   it("reduces raw canonical /events messages into the current timeline projection", async () => {

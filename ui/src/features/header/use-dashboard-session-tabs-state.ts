@@ -9,7 +9,6 @@ import {
   listFactorySessions,
   openFactorySession,
 } from "../../api/factory-sessions";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
 import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
 
 export const FACTORY_SESSIONS_QUERY_KEY = ["factory-sessions"] as const;
@@ -83,7 +82,7 @@ export function useDashboardSessionTabsState() {
       const nextSessionID =
         sessionID === activeSessionID
           ? sessions.find((session) => session.id !== sessionID)?.id ??
-            DEFAULT_FACTORY_SESSION_ID
+            null
           : activeSessionID;
       setActiveSessionID(nextSessionID);
       await queryClient.invalidateQueries({

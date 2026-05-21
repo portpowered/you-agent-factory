@@ -468,6 +468,7 @@ describe("DashboardSessionTabs", () => {
     await waitFor(() => {
       expect(screen.getByText(messages.sessionsEmptyTitle)).toBeTruthy();
     });
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBeNull();
     expect(
       screen.getByRole("button", { name: messages.openSessionButtonLabel }),
     ).toBeTruthy();

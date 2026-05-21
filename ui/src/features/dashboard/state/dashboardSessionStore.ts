@@ -3,8 +3,8 @@ import { create } from "zustand";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 
 interface DashboardSessionStoreState {
-  selectedSessionID: string;
-  setSelectedSessionID: (sessionID: string) => void;
+  selectedSessionID: string | null;
+  setSelectedSessionID: (sessionID: string | null) => void;
 }
 
 export const useDashboardSessionStore = create<DashboardSessionStoreState>((set) => ({
@@ -12,7 +12,11 @@ export const useDashboardSessionStore = create<DashboardSessionStoreState>((set)
   setSelectedSessionID: (sessionID) => {
     set({
       selectedSessionID:
-        sessionID.trim().length > 0 ? sessionID : DEFAULT_FACTORY_SESSION_ID,
+        sessionID == null
+          ? null
+          : sessionID.trim().length > 0
+            ? sessionID
+            : DEFAULT_FACTORY_SESSION_ID,
     });
   },
 }));

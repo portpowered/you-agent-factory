@@ -48,7 +48,15 @@ export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
   }
 
   if (!snapshot) {
-    return null;
+    return (
+      <main className={DASHBOARD_SHELL_CLASS}>
+        <DashboardHeader locale={locale} />
+        <DashboardStatusPanel
+          locale={resolvedLocale}
+          title={messages.sessionsEmptyTitle}
+        />
+      </main>
+    );
   }
 
   return (

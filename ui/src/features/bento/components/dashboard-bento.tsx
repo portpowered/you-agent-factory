@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useAppLocale } from "../../../i18n";
 import {
   CurrentSelectionWidget,
@@ -85,7 +86,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const snapshot = selectedSnapshot ?? EMPTY_DASHBOARD_SNAPSHOT;
 
   const currentSelection = useCurrentSelection({
-    sessionID: selectedSessionID,
+    sessionID: selectedSessionID ?? DEFAULT_FACTORY_SESSION_ID,
     snapshot,
     workstationRequestsByDispatchID,
   });

@@ -1,4 +1,5 @@
 import type { DashboardSubmitWorkType } from "../../../api/dashboard/types";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmitWorkCard } from "./submit-work-card";
@@ -27,7 +28,11 @@ export function SubmitWorkWidget({
     status,
     submitWorkTypeNames,
     validationErrors,
-  } = useSubmitWorkWidget(selectedSessionID, submitWorkTypes, messages);
+  } = useSubmitWorkWidget(
+    selectedSessionID ?? DEFAULT_FACTORY_SESSION_ID,
+    submitWorkTypes,
+    messages,
+  );
 
   return (
     <SubmitWorkCard
