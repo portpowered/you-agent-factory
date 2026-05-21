@@ -1,72 +1,29 @@
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { App } from "./App";
-import type {
-  DashboardSnapshot,
-  DashboardTrace,
-} from "./api/dashboard";
 import type { FactoryValue } from "./api/named-factory";
 import {
-  semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,
+  semanticWorkflowDashboardSnapshot,
   twentyNodeDashboardSnapshot,
 } from "./components/dashboard/test-fixtures";
 import { formatTimeOfDay } from "./components/ui/formatters";
 import { DashboardScreen } from "./features/dashboard";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
 import {
+  activeStoryTrace,
   buttonVisibleStyle,
+  currentSelectionCard,
+  expectWorkOutcomeSeries,
+  expectCurrentSelectionCardID,
   expectGraphWorkstation,
+  expectNoPageHorizontalOverflow,
   fillSubmitWorkCard,
-} from "./stories/dashboardStoryTestUtils";
+  historicalWorkOutcomeSnapshot,
+  liveWorkOutcomeSnapshot,
+  requireValue,
+  submitWorkCardControls,
+} from "./stories/dashboardStorySupport";
 
-const activeStoryTrace: DashboardTrace = {
-  trace_id: "trace-active-story",
-  work_ids: ["work-active-story"],
-  transition_ids: ["plan", "review"],
-  workstation_sequence: ["Plan", "Review"],
-  dispatches: [
-    {
-      dispatch_id: "dispatch-review-active",
-      transition_id: "review",
-      workstation_name: "Review",
-      outcome: "ACCEPTED",
-      start_time: "2026-04-08T12:00:00Z",
-      end_time: "2026-04-08T12:00:01Z",
-      duration_millis: 1000,
-      consumed_tokens: [],
-      output_mutations: [],
-    },
-  ],
-};
-
-const historicalWorkOutcomeSnapshot = workOutcomeSnapshot(
-  semanticWorkflowDashboardSnapshot,
-  2,
-  {
-    completed: 2,
-    completedLabels: ["Historical Story"],
-    dispatched: 3,
-    failed: 1,
-    failedByWorkType: { story: 1 },
-    failedLabels: ["Historical Failure"],
-    inFlight: 1,
-    queued: 2,
-  },
-);
-const liveWorkOutcomeSnapshot = workOutcomeSnapshot(
-  semanticWorkflowDashboardSnapshot,
-  5,
-  {
-    completed: 11,
-    completedLabels: ["Historical Story", "Live Story"],
-    dispatched: 14,
-    failed: 4,
-    failedByWorkType: { story: 3, task: 1 },
-    failedLabels: ["Historical Failure", "Live Failure"],
-    inFlight: 2,
-    queued: 3,
-  },
-);
 const editableConfigurationFactoryDefinition =
   buildEditableConfigurationFactoryDefinition();
 const editableConfigurationDocument = buildEditableConfigurationDocument();
@@ -94,73 +51,6 @@ const promptTemplateContractResponse = {
     },
   ],
 };
-
-interface WorkOutcomeCounts {
-  completed: number;
-  failed: number;
-  inFlight: number;
-  queued: number;
-}
-
-interface WorkOutcomeSnapshotOptions extends WorkOutcomeCounts {
-  completedLabels: string[];
-  dispatched: number;
-  failedByWorkType: Record<string, number>;
-  failedLabels: string[];
-}
-
-function workOutcomeSnapshot(
-  source: DashboardSnapshot,
-  tickCount: number,
-  options: WorkOutcomeSnapshotOptions,
-): DashboardSnapshot {
-  return {
-    ...source,
-    tick_count: tickCount,
-    runtime: {
-      ...source.runtime,
-      in_flight_dispatch_count: options.inFlight,
-      place_token_counts: {
-        ...(source.runtime.place_token_counts ?? {}),
-        "story:init": options.queued,
-      },
-      session: {
-        ...source.runtime.session,
-        completed_count: options.completed,
-        completed_work_labels: options.completedLabels,
-        dispatched_count: options.dispatched,
-        failed_by_work_type: options.failedByWorkType,
-        failed_count: options.failed,
-        failed_work_labels: options.failedLabels,
-      },
-    },
-  };
-}
-
-function expectCurrentSelectionCardID(canvasElement: HTMLElement): void {
-  const canvas = within(canvasElement);
-  const currentSelection = canvas.getByRole("article", {
-    name: "Current selection",
-  });
-  expect(
-    currentSelection.closest<HTMLElement>("[data-bento-card-id]")?.dataset
-      .bentoCardId,
-  ).toBe("current-selection");
-}
-
-function currentSelectionCard(canvasElement: HTMLElement): HTMLElement {
-  return within(canvasElement).getByRole("article", {
-    name: "Current selection",
-  });
-}
-
-function requireValue<T>(value: T | null | undefined, message: string): T {
-  if (value === null || value === undefined) {
-    throw new Error(message);
-  }
-
-  return value;
-}
 
 function buildEditableConfigurationFactoryDefinition(
   overrides: { prompt?: string; workerName?: string } = {},
@@ -443,62 +333,6 @@ async function expectPromptHintBrowserFlow(
     "mark.decoration-wavy",
   ) as HTMLElement | null;
   expect(diagnosticUnderline?.textContent).toContain("(index .Inputs 1)");
-}
-
-function expectNoPageHorizontalOverflow(canvasElement: HTMLElement): void {
-  const documentElement = canvasElement.ownerDocument.documentElement;
-  const overflowTolerance = 1;
-
-  expect(
-    documentElement.scrollWidth <=
-      documentElement.clientWidth + overflowTolerance,
-  ).toBe(true);
-}
-
-async function submitWorkCardControls(canvasElement: HTMLElement): Promise<{
-  requestNameField: HTMLElement;
-  requestField: HTMLElement;
-  scope: ReturnType<typeof within>;
-  submitButton: HTMLElement;
-  workTypeField: HTMLElement;
-}> {
-  const canvas = within(canvasElement);
-  const submitWorkCard = await canvas.findByRole("article", {
-    name: "Submit work",
-  });
-  const submitWorkScope = within(submitWorkCard);
-  const workTypeField = submitWorkScope.getByRole("combobox", {
-    name: "Work type",
-  });
-  const requestNameField = submitWorkScope.getByRole("textbox", {
-    name: "Request name",
-  });
-  const requestField = submitWorkScope.getByRole("textbox", {
-    name: "Request",
-  });
-
-  return {
-    requestNameField,
-    requestField,
-    scope: submitWorkScope,
-    submitButton: submitWorkScope.getByRole("button", { name: "Submit work" }),
-    workTypeField,
-  };
-}
-
-function expectWorkOutcomeSeries(outcomeChart: HTMLElement): void {
-  expect(
-    outcomeChart.querySelector('[data-chart-series="queued"]'),
-  ).not.toBeNull();
-  expect(
-    outcomeChart.querySelector('[data-chart-series="inFlight"]'),
-  ).not.toBeNull();
-  expect(
-    outcomeChart.querySelector('[data-chart-series="completed"]'),
-  ).not.toBeNull();
-  expect(
-    outcomeChart.querySelector('[data-chart-series="failed"]'),
-  ).not.toBeNull();
 }
 
 function LocalePropagationStory() {
@@ -980,7 +814,7 @@ export const CurrentSelectionPromptHintVerification = {
           method: "POST",
           path: "/factory",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
-            body: submittedFactoryBody(init),
+            body: submittedFactoryDefinitionBody(init),
             status: 201,
           }),
         },

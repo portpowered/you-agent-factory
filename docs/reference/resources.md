@@ -75,5 +75,6 @@ should be throttled.
 - [Package docs index](../README.md)
 - [Factory JSON and work configuration](work.md)
 - [Author AGENTS.md](authoring-agents-md.md)
-- [Workstations and workers](workstations-and-workers.md)
+- [Workstations](workstations.md)
+- [Workers](workers.md)
 - [Workstation guards and guarded loop breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)

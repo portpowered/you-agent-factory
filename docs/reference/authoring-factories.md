@@ -1,10 +1,10 @@
 ---
 author: Agent Factory Team
 last-modified: 2026-04-21
-doc-id: agent-factory/authoring-workflows
+doc-id: agent-factory/authoring-factories
 ---
 
-# Authoring Workflows
+# Authoring Factories
 
 Use this guide to create and run a current Agent Factory workflow with the
 public `factory.json` contract. Keep topology in `factory.json`, worker runtime
@@ -364,5 +364,5 @@ If no entry matches, mock-worker mode returns the default accepted result.
 - [Batch Inputs](batch-inputs.md)
 - [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md)
 - [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
-- [Prompt Template Variables](prompt-variables.md)
+- [Templates](templates.md)
 - [README](../README.md)

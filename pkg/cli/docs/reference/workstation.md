@@ -1,10 +1,15 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-04-22
+last-modified: 2026-05-21
 doc-id: agent-factory/reference/workstation
 ---
 
 # Workstation
+
+`you docs workstation` stays available as the stable packaged workstation quick
+reference. Use
+[`docs/reference/workstations.md`](../../../docs/reference/workstations.md) for
+the maintained workstation guide.
 
 Workstations are the dispatch steps in `factory.json`. A workstation consumes
 input places, optionally dispatches to a worker, and routes the result to its

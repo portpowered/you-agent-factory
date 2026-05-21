@@ -27,6 +27,23 @@ factory/
 `factory.json` declares the worker by name. The worker directory supplies the
 runtime backend details for that name.
 
+## How Workers Fit The Workflow
+
+Workers are runtime executors that workstation steps invoke. Keep the split
+between the two concepts explicit:
+
+- `factory.json` declares the workflow topology, states, routing, workers, and
+  workstations.
+- A workstation names one worker through `worker` and controls the
+  step-specific prompt, routing, limits, output validation, and execution
+  environment.
+- The bound worker supplies the execution backend and shared system
+  instructions for every workstation that references it.
+
+Use this page when you need the backend-facing worker contract. Use
+[Workstations](workstations.md) when you need to understand when a step runs,
+what it renders, and where it routes results.
+
 ## Current Contract
 
 - Workers define the execution backend and system instructions.
@@ -144,4 +161,3 @@ legacy fallback path when no explicit runner is configured.
 - [Workstations reference](workstations.md)
 - [Factory JSON and work configuration](work.md)
 - [Author AGENTS.md](authoring-agents-md.md)
-- [Workstations and workers](workstations-and-workers.md)
