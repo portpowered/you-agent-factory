@@ -378,9 +378,10 @@ func TestResolveWorkResult_MissingRuntimeConfigPreservesOriginalOutcome(t *testi
 	}
 }
 
-func TestResolveWorkResult_RuntimeConfigFallsBackToTransitionID(t *testing.T) {
+func TestResolveWorkResult_RuntimeConfigUsesTransitionName(t *testing.T) {
 	transition := &petri.Transition{
-		ID: "runtime-station-id",
+		ID:   "runtime-station-id",
+		Name: "runtime-station",
 	}
 	result := &interfaces.WorkResult{
 		DispatchID:   "dispatch-1",
@@ -391,12 +392,12 @@ func TestResolveWorkResult_RuntimeConfigFallsBackToTransitionID(t *testing.T) {
 
 	resolved := resolveWorkResult(transition, result, runtimefixtures.RuntimeWorkstationLookupFixture{
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-			"runtime-station-id": {StopWords: []string{"DONE"}},
+			"runtime-station": {StopWords: []string{"DONE"}},
 		},
 	})
 
 	if resolved.outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("resolved outcome = %s, want ACCEPTED from transition ID fallback", resolved.outcome)
+		t.Fatalf("resolved outcome = %s, want ACCEPTED from transition name lookup", resolved.outcome)
 	}
 }
 

@@ -5,25 +5,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
-// Workstation returns the runtime workstation definition for a transition,
-// falling back from Name to ID in one place.
+// Workstation returns the runtime workstation definition for a transition name.
 func Workstation(transition *petri.Transition, runtimeConfig interfaces.RuntimeWorkstationLookup) (*interfaces.FactoryWorkstationConfig, bool) {
 	if transition == nil || runtimeConfig == nil {
 		return nil, false
 	}
 
-	if transition.Name != "" {
-		workstation, ok := runtimeConfig.Workstation(transition.Name)
-		if ok && workstation != nil {
-			return workstation, true
-		}
-	}
-
-	if transition.ID == "" || transition.ID == transition.Name {
+	if transition.Name == "" {
 		return nil, false
 	}
 
-	workstation, ok := runtimeConfig.Workstation(transition.ID)
+	workstation, ok := runtimeConfig.Workstation(transition.Name)
 	if ok && workstation != nil {
 		return workstation, true
 	}

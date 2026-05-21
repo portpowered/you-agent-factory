@@ -62,7 +62,7 @@ func TestWorkstationPrefersTransitionName(t *testing.T) {
 	}
 }
 
-func TestWorkstationFallsBackToIDWhenNameEmpty(t *testing.T) {
+func TestWorkstationReturnsFalseWhenNameEmptyEvenIfIDMatchesRuntimeConfig(t *testing.T) {
 	t.Parallel()
 
 	runtimeConfig := runtimefixtures.RuntimeWorkstationLookupFixture{
@@ -81,21 +81,18 @@ func TestWorkstationFallsBackToIDWhenNameEmpty(t *testing.T) {
 	transition := &petri.Transition{ID: "transition-id"}
 
 	workstation, ok := Workstation(transition, runtimeConfig)
-	if !ok || workstation == nil {
-		t.Fatalf("Workstation(id-only) = (%#v, %t), want configured workstation", workstation, ok)
+	if ok || workstation != nil {
+		t.Fatalf("Workstation(id-only) = (%#v, %t), want (nil, false)", workstation, ok)
 	}
-	if workstation.Name != "Transition ID" {
-		t.Fatalf("Workstation(id-only).Name = %q, want %q", workstation.Name, "Transition ID")
+	if got := Kind(transition, runtimeConfig); got != "" {
+		t.Fatalf("Kind(id-only) = %q, want empty kind", got)
 	}
-	if got := Kind(transition, runtimeConfig); got != interfaces.WorkstationTypeModel {
-		t.Fatalf("Kind(id-only) = %q, want %q", got, interfaces.WorkstationTypeModel)
-	}
-	if got := MaxRetries(transition, runtimeConfig); got != 3 {
-		t.Fatalf("MaxRetries(id-only) = %d, want %d", got, 3)
+	if got := MaxRetries(transition, runtimeConfig); got != 0 {
+		t.Fatalf("MaxRetries(id-only) = %d, want 0", got)
 	}
 }
 
-func TestWorkstationFallsBackToDistinctIDAfterNameMiss(t *testing.T) {
+func TestWorkstationReturnsFalseWhenNameMissesAndOnlyIDMatchesRuntimeConfig(t *testing.T) {
 	t.Parallel()
 
 	runtimeConfig := runtimefixtures.RuntimeWorkstationLookupFixture{
@@ -114,17 +111,14 @@ func TestWorkstationFallsBackToDistinctIDAfterNameMiss(t *testing.T) {
 	transition := &petri.Transition{Name: "missing-name", ID: "transition-id"}
 
 	workstation, ok := Workstation(transition, runtimeConfig)
-	if !ok || workstation == nil {
-		t.Fatalf("Workstation(name-miss-id-hit) = (%#v, %t), want configured workstation", workstation, ok)
+	if ok || workstation != nil {
+		t.Fatalf("Workstation(name-miss-id-hit) = (%#v, %t), want (nil, false)", workstation, ok)
 	}
-	if workstation.Name != "Transition ID" {
-		t.Fatalf("Workstation(name-miss-id-hit).Name = %q, want %q", workstation.Name, "Transition ID")
+	if got := Kind(transition, runtimeConfig); got != "" {
+		t.Fatalf("Kind(name-miss-id-hit) = %q, want empty kind", got)
 	}
-	if got := Kind(transition, runtimeConfig); got != interfaces.WorkstationTypeModel {
-		t.Fatalf("Kind(name-miss-id-hit) = %q, want %q", got, interfaces.WorkstationTypeModel)
-	}
-	if got := MaxRetries(transition, runtimeConfig); got != 4 {
-		t.Fatalf("MaxRetries(name-miss-id-hit) = %d, want %d", got, 4)
+	if got := MaxRetries(transition, runtimeConfig); got != 0 {
+		t.Fatalf("MaxRetries(name-miss-id-hit) = %d, want 0", got)
 	}
 }
 
