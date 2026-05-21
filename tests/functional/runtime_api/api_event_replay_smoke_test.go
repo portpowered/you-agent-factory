@@ -32,78 +32,111 @@ func TestAPIEventReplaySmoke_BackendEventsReconstructSelectedTicksForWebsiteTime
 		t.Fatal("POST /work returned an empty trace ID")
 	}
 
-	events := []factoryapi.FactoryEvent{runStarted, first}
-	var workRequest *factoryapi.FactoryEvent
-	var request *factoryapi.FactoryEvent
-	var response *factoryapi.FactoryEvent
-	var activeView *DashboardResponse
-	released := false
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) && response == nil {
-		event := stream.next(time.Until(deadline))
-		events = append(events, event)
-		switch event.Type {
-		case factoryapi.FactoryEventTypeWorkRequest:
-			candidate := event
-			workRequest = &candidate
-		case factoryapi.FactoryEventTypeDispatchRequest:
-			candidate := event
-			request = &candidate
-			if !released {
-				view := server.GetDashboard(t)
-				activeView = &view
-				close(releaseDispatch)
-				released = true
-			}
-		case factoryapi.FactoryEventTypeDispatchResponse:
-			candidate := event
-			response = &candidate
-		}
-	}
-	if !released {
-		close(releaseDispatch)
-	}
-	if workRequest == nil || request == nil || response == nil {
-		t.Fatalf("event replay smoke missing required events: workRequest=%v request=%v response=%v", workRequest != nil, request != nil, response != nil)
-	}
-	if first.Context.Tick > request.Context.Tick {
-		t.Fatalf("historical replay tick %d arrived after live dispatch tick %d", first.Context.Tick, request.Context.Tick)
-	}
-	if !(runStarted.Context.Sequence < first.Context.Sequence &&
-		first.Context.Sequence < workRequest.Context.Sequence &&
-		workRequest.Context.Sequence < request.Context.Sequence &&
-		request.Context.Sequence < response.Context.Sequence) {
-		t.Fatalf(
-			"event sequences = run_request:%d initial_structure_request:%d work_request:%d dispatch_request:%d dispatch_response:%d, want increasing",
-			runStarted.Context.Sequence,
-			first.Context.Sequence,
-			workRequest.Context.Sequence,
-			request.Context.Sequence,
-			response.Context.Sequence,
-		)
-	}
-	workRequestPayload, err := workRequest.Payload.AsWorkRequestEventPayload()
+	outcome := collectEventReplayOutcome(t, server, stream, releaseDispatch, runStarted, first)
+	assertEventReplayTimeline(t, outcome, runStarted, first)
+	workRequestPayload, err := outcome.workRequest.Payload.AsWorkRequestEventPayload()
 	if err != nil {
 		t.Fatalf("decode generated work request payload: %v", err)
 	}
 	if workRequestPayload.Works == nil || len(*workRequestPayload.Works) != 1 {
 		t.Fatalf("generated WORK_REQUEST works = %#v, want one normalized work item", workRequestPayload.Works)
 	}
-	if len(uniqueEventTicks(events)) < 3 {
-		t.Fatalf("event replay smoke used %d ticks, want at least 3: %#v", len(uniqueEventTicks(events)), eventTicks(events))
+	if len(uniqueEventTicks(outcome.events)) < 3 {
+		t.Fatalf("event replay smoke used %d ticks, want at least 3: %#v", len(uniqueEventTicks(outcome.events)), eventTicks(outcome.events))
 	}
 
-	if activeView == nil {
-		t.Fatal("active tick dashboard was not captured before dispatch release")
+	assertEventReplayActiveDashboard(t, outcome.activeView)
+	completedView := server.GetDashboard(t)
+	assertEventReplayCompletedDashboard(t, completedView)
+
+	work := server.ListWork(t)
+	if len(work.Results) != 1 || stringPointerValue(work.Results[0].TraceId) != traceID {
+		t.Fatalf("completed work = %#v, want one result for trace %q", work.Results, traceID)
 	}
+}
+
+type eventReplayOutcome struct {
+	events      []factoryapi.FactoryEvent
+	workRequest factoryapi.FactoryEvent
+	request     factoryapi.FactoryEvent
+	response    factoryapi.FactoryEvent
+	activeView  DashboardResponse
+}
+
+func collectEventReplayOutcome(
+	t *testing.T,
+	server *functionalAPIServer,
+	stream *factoryEventHTTPStream,
+	releaseDispatch chan struct{},
+	runStarted factoryapi.FactoryEvent,
+	first factoryapi.FactoryEvent,
+) eventReplayOutcome {
+	t.Helper()
+
+	outcome := eventReplayOutcome{events: []factoryapi.FactoryEvent{runStarted, first}}
+	released := false
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) && outcome.response.Id == "" {
+		event := stream.next(time.Until(deadline))
+		outcome.events = append(outcome.events, event)
+		switch event.Type {
+		case factoryapi.FactoryEventTypeWorkRequest:
+			outcome.workRequest = event
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			outcome.request = event
+			if !released {
+				outcome.activeView = server.GetDashboard(t)
+				close(releaseDispatch)
+				released = true
+			}
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			outcome.response = event
+		}
+	}
+	if !released {
+		close(releaseDispatch)
+	}
+	if outcome.workRequest.Id == "" || outcome.request.Id == "" || outcome.response.Id == "" {
+		t.Fatalf("event replay smoke missing required events: workRequest=%v request=%v response=%v", outcome.workRequest.Id != "", outcome.request.Id != "", outcome.response.Id != "")
+	}
+	return outcome
+}
+
+func assertEventReplayTimeline(t *testing.T, outcome eventReplayOutcome, runStarted, first factoryapi.FactoryEvent) {
+	t.Helper()
+
+	if first.Context.Tick > outcome.request.Context.Tick {
+		t.Fatalf("historical replay tick %d arrived after live dispatch tick %d", first.Context.Tick, outcome.request.Context.Tick)
+	}
+	if !(runStarted.Context.Sequence < first.Context.Sequence &&
+		first.Context.Sequence < outcome.workRequest.Context.Sequence &&
+		outcome.workRequest.Context.Sequence < outcome.request.Context.Sequence &&
+		outcome.request.Context.Sequence < outcome.response.Context.Sequence) {
+		t.Fatalf(
+			"event sequences = run_request:%d initial_structure_request:%d work_request:%d dispatch_request:%d dispatch_response:%d, want increasing",
+			runStarted.Context.Sequence,
+			first.Context.Sequence,
+			outcome.workRequest.Context.Sequence,
+			outcome.request.Context.Sequence,
+			outcome.response.Context.Sequence,
+		)
+	}
+}
+
+func assertEventReplayActiveDashboard(t *testing.T, activeView DashboardResponse) {
+	t.Helper()
+
 	if activeView.Runtime.InFlightDispatchCount != 1 {
 		t.Fatalf("active tick in-flight dispatch count = %d, want 1", activeView.Runtime.InFlightDispatchCount)
 	}
 	if activeView.Runtime.ActiveWorkstationNodeIds == nil || len(*activeView.Runtime.ActiveWorkstationNodeIds) == 0 {
 		t.Fatal("active tick graph state missing active workstation nodes")
 	}
+}
 
-	completedView := server.GetDashboard(t)
+func assertEventReplayCompletedDashboard(t *testing.T, completedView DashboardResponse) {
+	t.Helper()
+
 	if completedView.Runtime.InFlightDispatchCount != 0 {
 		t.Fatalf("completed tick in-flight dispatch count = %d, want 0", completedView.Runtime.InFlightDispatchCount)
 	}
@@ -115,11 +148,6 @@ func TestAPIEventReplaySmoke_BackendEventsReconstructSelectedTicksForWebsiteTime
 	}
 	if completedView.Runtime.Session.ProviderSessions != nil && len(*completedView.Runtime.Session.ProviderSessions) != 0 {
 		t.Fatalf("completed tick provider sessions = %#v, want no provider sessions without inference response events", completedView.Runtime.Session.ProviderSessions)
-	}
-
-	work := server.ListWork(t)
-	if len(work.Results) != 1 || stringPointerValue(work.Results[0].TraceId) != traceID {
-		t.Fatalf("completed work = %#v, want one result for trace %q", work.Results, traceID)
 	}
 }
 

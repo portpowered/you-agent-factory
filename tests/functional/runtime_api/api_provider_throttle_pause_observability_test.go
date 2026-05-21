@@ -17,7 +17,94 @@ import (
 // portos:func-length-exception owner=agent-factory reason=provider-throttle-runtime-observability-smoke review=2026-07-19 removal=split-pause-setup-runtime-polling-and-dashboard-assertions-before-next-throttle-observability-change
 func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapshotAndDashboard(t *testing.T) {
 	support.SkipLongFunctional(t, "slow throttle-pause observability smoke")
-	pauseDuration := 2 * time.Second
+	fixture := newThrottlePauseObservabilityFixture(t)
+
+	activeEngineState := waitForRuntimeAPIEngineStateSnapshot(
+		t,
+		fixture.server,
+		10*time.Second,
+		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+			return len(snapshot.ActiveThrottlePauses) == 1 &&
+				support.HasWorkTokenInPlace(snapshot.Marking, fixture.throttledWork.WorkTypeID+":init", fixture.throttledWork.WorkID)
+		},
+	)
+	assertActiveThrottlePause(t, activeEngineState, workers.ModelProviderClaude, "claude-sonnet-4-5-20250514")
+	assertDashboardThrottlePausesMatchEngineState(t, "active pause dashboard", activeEngineState, fixture.server.GetDashboard(t))
+	submitThrottlePauseWork(t, fixture.server, fixture.unaffectedWork)
+
+	isolatedEngineState := waitForRuntimeAPIEngineStateSnapshot(
+		t,
+		fixture.server,
+		5*time.Second,
+		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+			return len(snapshot.ActiveThrottlePauses) == 1 &&
+				support.HasWorkTokenInPlace(snapshot.Marking, fixture.throttledWork.WorkTypeID+":init", fixture.throttledWork.WorkID) &&
+				support.HasWorkTokenInPlace(snapshot.Marking, fixture.unaffectedWork.WorkTypeID+":complete", fixture.unaffectedWork.WorkID)
+		},
+	)
+	assertDashboardThrottlePausesMatchEngineState(t, "pause isolation dashboard", isolatedEngineState, fixture.server.GetDashboard(t))
+
+	if wait := time.Until(activeEngineState.ActiveThrottlePauses[0].PausedUntil.Add(100 * time.Millisecond)); wait > 0 {
+		time.Sleep(wait)
+	}
+	submitThrottlePauseWork(t, fixture.server, fixture.reconcileWork)
+
+	recoveredEngineState := waitForRuntimeAPIEngineStateSnapshot(
+		t,
+		fixture.server,
+		10*time.Second,
+		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+			return len(snapshot.ActiveThrottlePauses) == 0 &&
+				support.HasWorkTokenInPlace(snapshot.Marking, fixture.throttledWork.WorkTypeID+":complete", fixture.throttledWork.WorkID) &&
+				support.HasWorkTokenInPlace(snapshot.Marking, fixture.unaffectedWork.WorkTypeID+":complete", fixture.unaffectedWork.WorkID) &&
+				support.HasWorkTokenInPlace(snapshot.Marking, fixture.reconcileWork.WorkTypeID+":complete", fixture.reconcileWork.WorkID)
+		},
+	)
+	recoveredDashboard := waitForRuntimeAPIDashboardSnapshot(
+		t,
+		5*time.Second,
+		func() (DashboardResponse, bool) {
+			dashboard := fixture.server.GetDashboard(t)
+			return dashboard, len(sliceValue(dashboard.Runtime.ActiveThrottlePauses)) == 0 &&
+				dashboard.Runtime.InFlightDispatchCount == 0 &&
+				dashboard.Runtime.Session.CompletedCount >= 3
+		},
+	)
+
+	assertThrottlePauseRequestSequence(t, fixture.runner.Requests())
+
+	throttledDispatches := dispatchesForProviderSmokeWork(recoveredEngineState.DispatchHistory, fixture.throttledWork)
+	unaffectedDispatches := dispatchesForProviderSmokeWork(recoveredEngineState.DispatchHistory, fixture.unaffectedWork)
+	if len(throttledDispatches) == 0 {
+		t.Fatal("throttled lane dispatch count = 0, want at least one failed dispatch")
+	}
+	if len(unaffectedDispatches) != 1 {
+		t.Fatalf("unaffected lane dispatch count = %d, want 1", len(unaffectedDispatches))
+	}
+	if throttledDispatches[0].Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("first throttled dispatch outcome = %s, want %s", throttledDispatches[0].Outcome, interfaces.OutcomeFailed)
+	}
+	if len(throttledDispatches) > 1 && throttledDispatches[1].Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("second throttled dispatch outcome = %s, want %s", throttledDispatches[1].Outcome, interfaces.OutcomeAccepted)
+	}
+	if unaffectedDispatches[0].Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("unaffected dispatch outcome = %s, want %s", unaffectedDispatches[0].Outcome, interfaces.OutcomeAccepted)
+	}
+	assertDashboardThrottlePausesMatchEngineState(t, "recovered dashboard", recoveredEngineState, recoveredDashboard)
+}
+
+type throttlePauseObservabilityFixture struct {
+	server         *functionalAPIServer
+	runner         *testutil.ProviderCommandRunner
+	throttledWork  testutil.ProviderErrorSmokeWork
+	unaffectedWork testutil.ProviderErrorSmokeWork
+	reconcileWork  testutil.ProviderErrorSmokeWork
+}
+
+func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabilityFixture {
+	t.Helper()
+
+	const pauseDuration = 2 * time.Second
 	pauseHarness := testutil.NewProviderErrorSmokePauseIsolationHarness(
 		t,
 		testutil.ProviderErrorSmokeLane{
@@ -47,28 +134,31 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 		workers.CommandResult{Stdout: []byte("codex reconciliation lane completed. COMPLETE")},
 	)
 
-	throttledWork := testutil.ProviderErrorSmokeWork{
-		Name:       "claude-observable-throttle-lane",
-		WorkID:     "work-claude-observable-throttle-lane",
-		WorkTypeID: "claude-task",
-		TraceID:    "trace-claude-observable-throttle-lane",
-		Payload:    []byte("claude observable throttle payload"),
+	fixture := throttlePauseObservabilityFixture{
+		runner: runner,
+		throttledWork: testutil.ProviderErrorSmokeWork{
+			Name:       "claude-observable-throttle-lane",
+			WorkID:     "work-claude-observable-throttle-lane",
+			WorkTypeID: "claude-task",
+			TraceID:    "trace-claude-observable-throttle-lane",
+			Payload:    []byte("claude observable throttle payload"),
+		},
+		unaffectedWork: testutil.ProviderErrorSmokeWork{
+			Name:       "codex-observable-healthy-lane",
+			WorkID:     "work-codex-observable-healthy-lane",
+			WorkTypeID: "codex-task",
+			TraceID:    "trace-codex-observable-healthy-lane",
+			Payload:    []byte("codex observable healthy payload"),
+		},
+		reconcileWork: testutil.ProviderErrorSmokeWork{
+			Name:       "codex-reconcile-after-pause-expiry",
+			WorkID:     "work-codex-reconcile-after-pause-expiry",
+			WorkTypeID: "codex-task",
+			TraceID:    "trace-codex-reconcile-after-pause-expiry",
+			Payload:    []byte("codex reconciliation payload"),
+		},
 	}
-	unaffectedWork := testutil.ProviderErrorSmokeWork{
-		Name:       "codex-observable-healthy-lane",
-		WorkID:     "work-codex-observable-healthy-lane",
-		WorkTypeID: "codex-task",
-		TraceID:    "trace-codex-observable-healthy-lane",
-		Payload:    []byte("codex observable healthy payload"),
-	}
-	reconcileWork := testutil.ProviderErrorSmokeWork{
-		Name:       "codex-reconcile-after-pause-expiry",
-		WorkID:     "work-codex-reconcile-after-pause-expiry",
-		WorkTypeID: "codex-task",
-		TraceID:    "trace-codex-reconcile-after-pause-expiry",
-		Payload:    []byte("codex reconciliation payload"),
-	}
-	pauseHarness.SeedWork(t, throttledWork)
+	pauseHarness.SeedWork(t, fixture.throttledWork)
 	testutil.AppendFactoryInferenceThrottleGuard(
 		t,
 		pauseHarness.Dir,
@@ -76,8 +166,7 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 		"claude-sonnet-4-5-20250514",
 		pauseDuration,
 	)
-
-	server := startFunctionalServerWithConfig(
+	fixture.server = startFunctionalServerWithConfig(
 		t,
 		pauseHarness.Dir,
 		false,
@@ -86,73 +175,24 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 		},
 		factory.WithServiceMode(),
 	)
+	return fixture
+}
 
-	activeEngineState := waitForRuntimeAPIEngineStateSnapshot(
-		t,
-		server,
-		10*time.Second,
-		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
-			return len(snapshot.ActiveThrottlePauses) == 1 &&
-				support.HasWorkTokenInPlace(snapshot.Marking, throttledWork.WorkTypeID+":init", throttledWork.WorkID)
-		},
-	)
-	assertActiveThrottlePause(t, activeEngineState, workers.ModelProviderClaude, "claude-sonnet-4-5-20250514")
-	assertDashboardThrottlePausesMatchEngineState(t, "active pause dashboard", activeEngineState, server.GetDashboard(t))
+func submitThrottlePauseWork(t *testing.T, server *functionalAPIServer, work testutil.ProviderErrorSmokeWork) {
+	t.Helper()
 
 	server.SubmitRuntimeWork(t, interfaces.SubmitRequest{
-		Name:       unaffectedWork.Name,
-		WorkID:     unaffectedWork.WorkID,
-		WorkTypeID: unaffectedWork.WorkTypeID,
-		TraceID:    unaffectedWork.TraceID,
-		Payload:    unaffectedWork.Payload,
+		Name:       work.Name,
+		WorkID:     work.WorkID,
+		WorkTypeID: work.WorkTypeID,
+		TraceID:    work.TraceID,
+		Payload:    work.Payload,
 	})
+}
 
-	isolatedEngineState := waitForRuntimeAPIEngineStateSnapshot(
-		t,
-		server,
-		5*time.Second,
-		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
-			return len(snapshot.ActiveThrottlePauses) == 1 &&
-				support.HasWorkTokenInPlace(snapshot.Marking, throttledWork.WorkTypeID+":init", throttledWork.WorkID) &&
-				support.HasWorkTokenInPlace(snapshot.Marking, unaffectedWork.WorkTypeID+":complete", unaffectedWork.WorkID)
-		},
-	)
-	assertDashboardThrottlePausesMatchEngineState(t, "pause isolation dashboard", isolatedEngineState, server.GetDashboard(t))
+func assertThrottlePauseRequestSequence(t *testing.T, requests []workers.CommandRequest) {
+	t.Helper()
 
-	if wait := time.Until(activeEngineState.ActiveThrottlePauses[0].PausedUntil.Add(100 * time.Millisecond)); wait > 0 {
-		time.Sleep(wait)
-	}
-	server.SubmitRuntimeWork(t, interfaces.SubmitRequest{
-		Name:       reconcileWork.Name,
-		WorkID:     reconcileWork.WorkID,
-		WorkTypeID: reconcileWork.WorkTypeID,
-		TraceID:    reconcileWork.TraceID,
-		Payload:    reconcileWork.Payload,
-	})
-
-	recoveredEngineState := waitForRuntimeAPIEngineStateSnapshot(
-		t,
-		server,
-		10*time.Second,
-		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
-			return len(snapshot.ActiveThrottlePauses) == 0 &&
-				support.HasWorkTokenInPlace(snapshot.Marking, throttledWork.WorkTypeID+":complete", throttledWork.WorkID) &&
-				support.HasWorkTokenInPlace(snapshot.Marking, unaffectedWork.WorkTypeID+":complete", unaffectedWork.WorkID) &&
-				support.HasWorkTokenInPlace(snapshot.Marking, reconcileWork.WorkTypeID+":complete", reconcileWork.WorkID)
-		},
-	)
-	recoveredDashboard := waitForRuntimeAPIDashboardSnapshot(
-		t,
-		5*time.Second,
-		func() (DashboardResponse, bool) {
-			dashboard := server.GetDashboard(t)
-			return dashboard, len(sliceValue(dashboard.Runtime.ActiveThrottlePauses)) == 0 &&
-				dashboard.Runtime.InFlightDispatchCount == 0 &&
-				dashboard.Runtime.Session.CompletedCount >= 3
-		},
-	)
-
-	requests := runner.Requests()
 	if len(requests) < 4 {
 		t.Fatalf("provider command count = %d, want at least 4", len(requests))
 	}
@@ -164,25 +204,6 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 	if requests[3].Command != string(workers.ModelProviderCodex) {
 		t.Fatalf("request 3 command = %q, want %q", requests[3].Command, workers.ModelProviderCodex)
 	}
-
-	throttledDispatches := dispatchesForProviderSmokeWork(recoveredEngineState.DispatchHistory, throttledWork)
-	unaffectedDispatches := dispatchesForProviderSmokeWork(recoveredEngineState.DispatchHistory, unaffectedWork)
-	if len(throttledDispatches) == 0 {
-		t.Fatal("throttled lane dispatch count = 0, want at least one failed dispatch")
-	}
-	if len(unaffectedDispatches) != 1 {
-		t.Fatalf("unaffected lane dispatch count = %d, want 1", len(unaffectedDispatches))
-	}
-	if throttledDispatches[0].Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("first throttled dispatch outcome = %s, want %s", throttledDispatches[0].Outcome, interfaces.OutcomeFailed)
-	}
-	if len(throttledDispatches) > 1 && throttledDispatches[1].Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("second throttled dispatch outcome = %s, want %s", throttledDispatches[1].Outcome, interfaces.OutcomeAccepted)
-	}
-	if unaffectedDispatches[0].Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("unaffected dispatch outcome = %s, want %s", unaffectedDispatches[0].Outcome, interfaces.OutcomeAccepted)
-	}
-	assertDashboardThrottlePausesMatchEngineState(t, "recovered dashboard", recoveredEngineState, recoveredDashboard)
 }
 
 func waitForRuntimeAPIEngineStateSnapshot(
