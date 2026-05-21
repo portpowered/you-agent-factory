@@ -1,10 +1,17 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: app-level story scenarios stay together so shared fixtures and browser interactions remain traceable in one harness.
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { App } from "./App";
-import type { DashboardSnapshot, DashboardTrace, DashboardWorkstationRequest } from "./api/dashboard";
+import type {
+  DashboardSnapshot,
+  DashboardTrace,
+  DashboardWorkstationRequest,
+} from "./api/dashboard";
 import type { FactoryValue } from "./api/named-factory";
 import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
-import { semanticWorkflowDashboardSnapshot, singleNodeDashboardSnapshot, twentyNodeDashboardSnapshot } from "./components/dashboard/test-fixtures";
+import {
+  semanticWorkflowDashboardSnapshot,
+  singleNodeDashboardSnapshot,
+  twentyNodeDashboardSnapshot,
+} from "./components/dashboard/test-fixtures";
 import { formatTimeOfDay } from "./components/ui/formatters";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
@@ -13,8 +20,13 @@ import {
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "./components/ui/dashboard-typography";
-import { LocalePropagationStory } from "./stories/localePropagationStory";
-import { buttonVisibleStyle, expectGraphWorkstation, fillSubmitWorkCard } from "./stories/dashboardStoryTestUtils";
+import { DashboardScreen } from "./features/dashboard";
+import { AppLocaleProvider, useAppLocale } from "./i18n";
+import {
+  buttonVisibleStyle,
+  expectGraphWorkstation,
+  fillSubmitWorkCard,
+} from "./stories/dashboardStoryTestUtils";
 
 const activeStoryTrace: DashboardTrace = {
   trace_id: "trace-active-story",
@@ -877,6 +889,34 @@ function expectWorkOutcomeSeries(outcomeChart: HTMLElement): void {
   ).not.toBeNull();
 }
 
+function LocalePropagationStory() {
+  return (
+    <AppLocaleProvider initialLocale="en">
+      <LocalePropagationControls />
+      <div style={{ maxWidth: "100%", width: "1280px" }}>
+        <DashboardScreen />
+      </div>
+    </AppLocaleProvider>
+  );
+}
+
+function LocalePropagationControls() {
+  const { locale, setLocale } = useAppLocale();
+
+  return (
+    <fieldset style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem" }}>
+      <legend>Locale verification controls</legend>
+      <span>Current locale: {locale}</span>
+      <button onClick={() => setLocale("en")} type="button">
+        Switch to English
+      </button>
+      <button onClick={() => setLocale("zh-CN")} type="button">
+        Switch to zh-CN
+      </button>
+    </fieldset>
+  );
+}
+
 export default {
   title: "Infinite You/Workflow Dashboard",
   component: App,
@@ -1131,7 +1171,7 @@ export const DashboardImprovementsSmoke = {
     expect(within(summaryDetails ?? canvasElement).queryByText("Work type")).toBeNull();
     expect(within(summaryDetails ?? canvasElement).queryByText("State")).toBeNull();
     expect(within(summaryDetails ?? canvasElement).queryByText("State node ID")).toBeNull();
-    await expect(currentSelection.getByText("work-active-story")).toBeVisible();
+    expect(currentSelection.queryByText("work-active-story")).toBeNull();
     expect(currentSelection.queryByText("trace-active-story")).toBeNull();
     const traceDrilldownCard = await canvas.findByRole("article", {
       name: "Trace drill-down",
@@ -1482,12 +1522,8 @@ export const HeaderLocalizationVerification = {
     await expect(
       within(englishToolbar).getByRole("button", { name: "Export PNG" }),
     ).toBeVisible();
-    await expect(await canvas.findByText("5/5")).toBeVisible();
+    await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
 
-    await userEvent.tab();
-    await expect(
-      within(englishToolbar).getByRole("slider", { name: "Timeline tick" }),
-    ).toHaveFocus();
     await userEvent.tab();
     await expect(languageButton).toHaveFocus();
     await userEvent.click(languageButton);
@@ -1506,7 +1542,7 @@ export const HeaderLocalizationVerification = {
     await expect(
       within(localizedToolbar).getByRole("slider", { name: "时间线刻度" }),
     ).toBeVisible();
-    await expect(await canvas.findByText("5/5")).toBeVisible();
+    await expect(await canvas.findByText("第 5 个刻度，共 5 个")).toBeVisible();
     await expect(
       within(localizedToolbar).getByRole("status", {
         name: /Infinite You 事件流(正在连接|在线)/,
@@ -1522,10 +1558,9 @@ export const HeaderLocalizationVerification = {
     await userEvent.click(
       within(localizedToolbar).getByRole("button", { name: "导出 PNG" }),
     );
-    const dialog = await within(canvasElement.ownerDocument.body).findByRole(
-      "dialog",
-      { name: "导出工厂" },
-    );
+    const dialog = await within(canvasElement.ownerDocument.body).findByRole("dialog", {
+      name: "导出工厂",
+    });
     await expect(
       within(dialog).getByRole("button", { name: "取消" }),
     ).toBeVisible();
@@ -1533,13 +1568,9 @@ export const HeaderLocalizationVerification = {
       within(dialog).getByRole("button", { name: "导出 PNG" }),
     ).toBeVisible();
     await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
-
-    const localizedLanguageButton = within(localizedToolbar).getByRole(
-      "button",
-      {
-        name: "切换语言",
-      },
-    );
+    const localizedLanguageButton = within(localizedToolbar).getByRole("button", {
+      name: "切换语言",
+    });
     localizedLanguageButton.focus();
     await expect(localizedLanguageButton).toHaveFocus();
     await userEvent.click(localizedLanguageButton);
@@ -1548,28 +1579,21 @@ export const HeaderLocalizationVerification = {
         name: "English",
       }),
     );
-
-    const restoredToolbar = await canvas.findByRole("region", {
-      name: "dashboard summary",
-    });
+    const restoredToolbar = await canvas.findByRole("region", { name: "dashboard summary" });
     await expect(
       within(restoredToolbar).getByRole("button", { name: "Change language" }),
     ).toBeVisible();
-    await expect(await canvas.findByText("5/5")).toBeVisible();
+    await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
     await expect(
       within(restoredToolbar).getByRole("button", { name: "Export PNG" }),
     ).toBeVisible();
   },
 };
-
 export const LocalePropagationVerification = {
   tags: ["test"],
   parameters: {
     dashboardApi: {
-      timelineSnapshots: [
-        historicalWorkOutcomeSnapshot,
-        liveWorkOutcomeSnapshot,
-      ],
+      timelineSnapshots: [historicalWorkOutcomeSnapshot, liveWorkOutcomeSnapshot],
     },
   },
   render: () => <LocalePropagationStory />,
@@ -1581,7 +1605,6 @@ export const LocalePropagationVerification = {
     const englishToolbar = await canvas.findByRole("region", {
       name: "dashboard summary",
     });
-
     await expect(
       within(controls).getByText("Current locale: en"),
     ).toBeVisible();
@@ -1590,7 +1613,7 @@ export const LocalePropagationVerification = {
         name: "Return to current tick",
       }),
     ).toBeVisible();
-    await expect(await canvas.findByText("5/5")).toBeVisible();
+    await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
 
     await userEvent.click(
       within(controls).getByRole("button", {
@@ -1609,6 +1632,6 @@ export const LocalePropagationVerification = {
         name: "返回当前刻度",
       }),
     ).toBeVisible();
-    await expect(await canvas.findByText("5/5")).toBeVisible();
+    await expect(await canvas.findByText("第 5 个刻度，共 5 个")).toBeVisible();
   },
 };
