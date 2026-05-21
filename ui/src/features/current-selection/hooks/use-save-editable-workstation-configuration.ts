@@ -85,14 +85,12 @@ export function useSaveEditableWorkstationConfiguration({
     },
   });
 
-  useEffect(() => {
-    if (scopeKey == null) {
-      setIsConfirming(false);
-      return;
-    }
-
-    setIsConfirming(false);
-  }, [scopeKey]);
+  useResetExitedSaveScope({
+    scopeKey,
+    setIsConfirming,
+    setLastErroredScope,
+    setLastSuccessfulScopeKey,
+  });
 
   useEffect(() => {
     if (
@@ -207,6 +205,33 @@ function resolveEditableWorkstationSaveState({
   }
 
   return { status: "idle" };
+}
+
+function useResetExitedSaveScope({
+  scopeKey,
+  setIsConfirming,
+  setLastErroredScope,
+  setLastSuccessfulScopeKey,
+}: {
+  scopeKey: string | null;
+  setIsConfirming: (value: boolean) => void;
+  setLastErroredScope: (value: EditableWorkstationErrorState | null) => void;
+  setLastSuccessfulScopeKey: (value: string | null) => void;
+}) {
+  useEffect(() => {
+    if (scopeKey == null) {
+      setIsConfirming(false);
+      setLastErroredScope(null);
+      setLastSuccessfulScopeKey(null);
+      return;
+    }
+    setIsConfirming(false);
+  }, [
+    scopeKey,
+    setIsConfirming,
+    setLastErroredScope,
+    setLastSuccessfulScopeKey,
+  ]);
 }
 
 function normalizeSaveError(error: unknown, fallbackMessage: string): string {
