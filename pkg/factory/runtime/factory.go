@@ -63,7 +63,6 @@ var _ TickableFactory = (*factoryImpl)(nil)
 // New constructs a Factory from functional options. It wires the engine,
 // worker pool, and subsystems together. Returns an error if required
 // options (WithNet) are missing.
-// portos:func-length-exception owner=agent-factory reason=legacy-runtime-constructor-wiring review=2026-07-18 removal=split-subsystem-engine-and-dispatch-mode-builders-before-next-runtime-wiring-change
 func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 	cfg := &factory.FactoryConfig{
 		RuntimeMode: interfaces.RuntimeModeBatch,
@@ -77,62 +76,63 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 		return nil, fmt.Errorf("a factory specification is required")
 	}
 
-	// Default scheduler.
-	var sched scheduler.Scheduler
+	sched := buildRuntimeScheduler(cfg)
+	logger := logging.EnsureLogger(cfg.Logger)
+	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, logger)
+	marking := buildRuntimeMarking(cfg)
+	resultBuffer := buffers.NewTypedBuffer[interfaces.WorkResult](defaultRuntimeBufferSize)
+	eventHistory := ensureEventHistory(cfg)
+	engineOpts := buildRuntimeEngineOptions(cfg, logger, sharedTransformer, resultBuffer, eventHistory)
+	usePool := !cfg.IsInlineDispatch()
+	pool, dispatchHook, engineOpts := configureRuntimeDispatch(cfg, logger, resultBuffer, usePool, engineOpts)
+	eng := engine.NewFactoryEngine(cfg.GetNet(), marking, subs, engineOpts...)
+	return newFactoryImpl(cfg, eng, pool, logger, resultBuffer, dispatchHook, eventHistory, usePool), nil
+}
+
+func buildRuntimeScheduler(cfg *factory.FactoryConfig) scheduler.Scheduler {
 	if cfg.Scheduler != nil {
 		scheduler.ApplyRuntimeConfig(cfg.Scheduler, cfg.RuntimeConfig)
-		sched = &schedulerAdapter{inner: cfg.Scheduler}
-	} else {
-		sched = scheduler.NewWorkInQueueScheduler(50, scheduler.WithRuntimeConfig(cfg.RuntimeConfig))
+		return &schedulerAdapter{inner: cfg.Scheduler}
 	}
+	return scheduler.NewWorkInQueueScheduler(50, scheduler.WithRuntimeConfig(cfg.RuntimeConfig))
+}
 
-	// Resolve logger — use NoopLogger if none provided.
-	logger := logging.EnsureLogger(cfg.Logger)
-
-	// Build subsystems.
+func buildRuntimeSubsystems(cfg *factory.FactoryConfig, sched scheduler.Scheduler, logger logging.Logger) (*token_transformer.Transformer, []subsystems.Subsystem) {
 	workIDGen := petri.NewWorkIDGenerator()
 	sharedTransformer := token_transformer.New(
 		cfg.GetNet().Places,
 		cfg.GetNet().WorkTypes,
 		token_transformer.WithWorkIDGenerator(workIDGen),
 	)
-	historySubsystem := subsystems.NewHistory(logger)
-	transitionerSubsystem := subsystems.NewTransitioner(
-		cfg.GetNet(),
-		logger,
-		subsystems.WithTokenTransformer(sharedTransformer),
-		subsystems.WithTransitionerClock(cfg.Clock.Now),
-		subsystems.WithTransitionerRuntimeConfig(cfg.RuntimeConfig),
-	)
-	dispatcher := subsystems.NewDispatcher(
-		cfg.GetNet(),
-		sched,
-		cfg.WorkflowContext,
-		logger,
-		subsystems.WithDispatcherRuntimeConfig(cfg.RuntimeConfig),
-		subsystems.WithDispatcherClock(cfg.Clock.Now),
-	)
-
-	circuitBreaker := subsystems.NewCircuitBreakerWithClock(
-		cfg.GetNet(),
-		cfg.Clock.Now,
-		logger,
-		subsystems.WithCircuitBreakerRuntimeConfig(cfg.RuntimeConfig),
-	)
-	cascadingFailure := subsystems.NewCascadingFailure(cfg.GetNet(), logger)
-	termSub := subsystems.NewTerminationCheck(cfg.GetNet(), logger, cfg.RuntimeMode)
-
-	subs := []subsystems.Subsystem{
-		circuitBreaker,
-		dispatcher,
-		historySubsystem,
-		transitionerSubsystem,
-		cascadingFailure,
+	return sharedTransformer, []subsystems.Subsystem{
+		subsystems.NewCircuitBreakerWithClock(
+			cfg.GetNet(),
+			cfg.Clock.Now,
+			logger,
+			subsystems.WithCircuitBreakerRuntimeConfig(cfg.RuntimeConfig),
+		),
+		subsystems.NewDispatcher(
+			cfg.GetNet(),
+			sched,
+			cfg.WorkflowContext,
+			logger,
+			subsystems.WithDispatcherRuntimeConfig(cfg.RuntimeConfig),
+			subsystems.WithDispatcherClock(cfg.Clock.Now),
+		),
+		subsystems.NewHistory(logger),
+		subsystems.NewTransitioner(
+			cfg.GetNet(),
+			logger,
+			subsystems.WithTokenTransformer(sharedTransformer),
+			subsystems.WithTransitionerClock(cfg.Clock.Now),
+			subsystems.WithTransitionerRuntimeConfig(cfg.RuntimeConfig),
+		),
+		subsystems.NewCascadingFailure(cfg.GetNet(), logger),
+		subsystems.NewTerminationCheck(cfg.GetNet(), logger, cfg.RuntimeMode),
 	}
+}
 
-	subs = append(subs, termSub)
-
-	// Create marking and pre-load resource tokens.
+func buildRuntimeMarking(cfg *factory.FactoryConfig) *petri.Marking {
 	marking := petri.NewMarking(cfg.GetNet().ID)
 	for _, rd := range cfg.GetNet().Resources {
 		_, tokens := state.GenerateResourcePlaces(rd)
@@ -140,9 +140,10 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 			marking.AddToken(tok)
 		}
 	}
+	return marking
+}
 
-	// Build engine options.
-	resultBuffer := buffers.NewTypedBuffer[interfaces.WorkResult](defaultRuntimeBufferSize)
+func ensureEventHistory(cfg *factory.FactoryConfig) *factory.FactoryEventHistory {
 	eventHistory := cfg.EventHistory
 	if eventHistory == nil {
 		eventHistory = factory.NewFactoryEventHistory(cfg.GetNet(), cfg.Clock.Now, cfg.RuntimeConfig)
@@ -150,6 +151,10 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 	eventHistory.RecordRunRequest()
 	eventHistory.AddGeneratedRecorder(cfg.FactoryEventRecorder)
 	eventHistory.RecordInitialStructure()
+	return eventHistory
+}
+
+func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger, sharedTransformer *token_transformer.Transformer, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], eventHistory *factory.FactoryEventHistory) []engine.Option {
 	engineOpts := []engine.Option{
 		engine.WithLogger(logger),
 		engine.WithClock(cfg.Clock),
@@ -164,86 +169,57 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 		engine.WithWorkstationResponseRecorder(func(tick int, result interfaces.WorkResult, completed interfaces.CompletedDispatch) {
 			eventHistory.RecordWorkstationResponse(tick, result, completed)
 		}),
+		engine.WithDispatchRecorder(func(record interfaces.FactoryDispatchRecord) {
+			eventHistory.RecordWorkstationRequest(record.Dispatch.Execution.DispatchCreatedTick, record, cfg.Clock.Now())
+			if cfg.DispatchRecorder != nil {
+				cfg.DispatchRecorder(record)
+			}
+		}),
 	}
 	if cfg.SubmissionRecorder != nil {
 		engineOpts = append(engineOpts, engine.WithSubmissionRecorder(cfg.SubmissionRecorder))
 	}
-	engineOpts = append(engineOpts, engine.WithDispatchRecorder(func(record interfaces.FactoryDispatchRecord) {
-		eventHistory.RecordWorkstationRequest(record.Dispatch.Execution.DispatchCreatedTick, record, cfg.Clock.Now())
-		if cfg.DispatchRecorder != nil {
-			cfg.DispatchRecorder(record)
-		}
-	}))
 	if cfg.CompletionRecorder != nil {
 		engineOpts = append(engineOpts, engine.WithCompletionRecorder(cfg.CompletionRecorder))
 	}
 	for _, hook := range cfg.SubmissionHooks {
 		engineOpts = append(engineOpts, engine.WithSubmissionHook(hook))
 	}
+	return engineOpts
+}
 
-	// Determine whether to use the real worker pool or synchronous inline dispatch.
-	usePool := !cfg.IsInlineDispatch()
-
-	var pool *workers.WorkerPool
-	var dispatchHook *workerPoolDispatchResultHook
-	if usePool {
-		// Build worker pool.
-		pool = workers.NewWorkerPool(logger)
-		for typ, exec := range cfg.WorkerExecutors {
-			pool.Register(typ, exec)
-		}
-
-		dispatchHook = newWorkerPoolDispatchResultHook(
-			cfg.GetNet(),
-			pool,
-			cfg.WorkerExecutors,
-			logger,
-			defaultRuntimeBufferSize,
-			cfg.CompletionDeliveryPlanner,
-		)
-		engineOpts = append(engineOpts, engine.WithDispatchResultHook(dispatchHook))
-	} else {
-		// Inline dispatch mode: execute worker executors synchronously and enqueue
-		// results to the engine so they are processed in the same tick (engine
-		// drains pending results after dispatches are forwarded).
-		executors := cfg.WorkerExecutors
-		net := cfg.GetNet()
-		engineOpts = append(engineOpts, engine.WithDispatchHandler(func(d interfaces.WorkDispatch) {
-			tr := net.Transitions[d.TransitionID]
-			workerType := dispatchRunnerKey(tr, d)
-			result := executeDispatchSynchronously(context.Background(), d, workerType, executors)
-			resultBuffer.Write(context.Background(), result)
-		}))
-
-		builtEng := engine.NewFactoryEngine(
-			cfg.GetNet(),
-			marking,
-			subs,
-			engineOpts...,
-		)
-		return &factoryImpl{
-			engine:       builtEng,
-			pool:         pool,
-			cfg:          cfg,
-			topology:     cfg.GetNet(),
-			logger:       logger,
-			resultBuffer: resultBuffer,
-			dispatchHook: dispatchHook,
-			eventHistory: eventHistory,
-			state:        interfaces.FactoryStateIdle,
-			clock:        cfg.Clock,
-			completeCh:   make(chan struct{}),
-			usePool:      usePool,
-		}, nil
+func configureRuntimeDispatch(cfg *factory.FactoryConfig, logger logging.Logger, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], usePool bool, engineOpts []engine.Option) (*workers.WorkerPool, *workerPoolDispatchResultHook, []engine.Option) {
+	if !usePool {
+		return nil, nil, append(engineOpts, engine.WithDispatchHandler(inlineDispatchHandler(cfg, resultBuffer)))
 	}
 
-	eng := engine.NewFactoryEngine(
+	pool := workers.NewWorkerPool(logger)
+	for typ, exec := range cfg.WorkerExecutors {
+		pool.Register(typ, exec)
+	}
+	dispatchHook := newWorkerPoolDispatchResultHook(
 		cfg.GetNet(),
-		marking,
-		subs,
-		engineOpts...,
+		pool,
+		cfg.WorkerExecutors,
+		logger,
+		defaultRuntimeBufferSize,
+		cfg.CompletionDeliveryPlanner,
 	)
+	return pool, dispatchHook, append(engineOpts, engine.WithDispatchResultHook(dispatchHook))
+}
 
+func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult]) func(interfaces.WorkDispatch) {
+	executors := cfg.WorkerExecutors
+	net := cfg.GetNet()
+	return func(d interfaces.WorkDispatch) {
+		tr := net.Transitions[d.TransitionID]
+		workerType := dispatchRunnerKey(tr, d)
+		result := executeDispatchSynchronously(context.Background(), d, workerType, executors)
+		resultBuffer.Write(context.Background(), result)
+	}
+}
+
+func newFactoryImpl(cfg *factory.FactoryConfig, eng *engine.FactoryEngine, pool *workers.WorkerPool, logger logging.Logger, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], dispatchHook *workerPoolDispatchResultHook, eventHistory *factory.FactoryEventHistory, usePool bool) *factoryImpl {
 	return &factoryImpl{
 		engine:       eng,
 		pool:         pool,
@@ -257,7 +233,7 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 		clock:        cfg.Clock,
 		completeCh:   make(chan struct{}),
 		usePool:      usePool,
-	}, nil
+	}
 }
 
 // Run starts the factory. Blocks until ctx is cancelled or the engine

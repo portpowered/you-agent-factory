@@ -16,8 +16,9 @@ export interface WorkChartCardProps {
   widgetId?: string;
 }
 
-const WORK_CHART_BODY_CLASS = "!flex !gap-0 !overflow-hidden !p-0";
-const WORK_CHART_REGION_CLASS = "min-h-0 flex-1 px-4 sm:px-5";
+const WORK_CHART_BODY_CLASS =
+  "!flex !min-h-0 !flex-col !gap-0 !overflow-hidden !p-0";
+const WORK_CHART_REGION_CLASS = "flex min-h-0 flex-1 px-4 sm:px-5";
 
 export function WorkChartCard({
   chartState,

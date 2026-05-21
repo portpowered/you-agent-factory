@@ -23,110 +23,42 @@ func TestPoisonTokenMalformedSubmissions(t *testing.T) {
 		t.Skip("skipping stress test in short mode")
 	}
 
-	poisonSubmitCfg := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "processing", Type: interfaces.StateTypeProcessing},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
-			},
-		}},
-		Workers: []interfaces.WorkerConfig{{Name: "w"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{
-			{
-				Name: "process", WorkerTypeName: "w",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}},
-			},
-			{
-				Name: "finish", WorkerTypeName: "w",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-			},
-		},
-	}
-
 	t.Run("empty_work_type_name", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, poisonSubmitCfg)
-		h := testutil.NewServiceTestHarness(t, dir)
-		h.MockWorker("w")
-
+		h := newPoisonSubmitHarness(t)
 		requireSubmitRejected(t, h, "", []byte(`{"test": "empty-type"}`), "missing workTypeName")
-
 		assertNoWorkTokens(t, h, "empty WorkTypeID")
 	})
 
 	t.Run("invalid_work_type_name", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, poisonSubmitCfg)
-		h := testutil.NewServiceTestHarness(t, dir)
-		h.MockWorker("w")
-
+		h := newPoisonSubmitHarness(t)
 		requireSubmitRejected(t, h, "nonexistent-type", []byte(`{"test": "bad-type"}`), "unknown work type")
-
 		assertNoWorkTokens(t, h, "invalid WorkTypeID")
 	})
 
 	t.Run("nil_payload", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, poisonSubmitCfg)
-		h := testutil.NewServiceTestHarness(t, dir)
-		h.MockWorker("w")
-
-		// Submit with nil payload — should succeed.
+		h := newPoisonSubmitHarness(t)
 		h.SubmitWork("task", nil)
-		h.RunUntilComplete(t, 10*time.Second)
-
-		snap := h.Marking()
-		completeCount := len(snap.TokensInPlace("task:complete"))
-		if completeCount != 1 {
-			t.Errorf("expected 1 complete token with nil payload, got %d", completeCount)
-		}
+		assertSingleCompletedSubmission(t, h, "nil payload")
 	})
 
 	t.Run("empty_payload", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, poisonSubmitCfg)
-		h := testutil.NewServiceTestHarness(t, dir)
-		h.MockWorker("w")
-
-		// Submit with empty payload — should succeed.
+		h := newPoisonSubmitHarness(t)
 		h.SubmitWork("task", []byte{})
-		h.RunUntilComplete(t, 10*time.Second)
-
-		snap := h.Marking()
-		completeCount := len(snap.TokensInPlace("task:complete"))
-		if completeCount != 1 {
-			t.Errorf("expected 1 complete token with empty payload, got %d", completeCount)
-		}
+		assertSingleCompletedSubmission(t, h, "empty payload")
 	})
 
 	t.Run("extremely_large_payload", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, poisonSubmitCfg)
-		h := testutil.NewServiceTestHarness(t, dir)
-		h.MockWorker("w")
-
-		// Submit with 1MB payload — should succeed without panic.
+		h := newPoisonSubmitHarness(t)
 		largePayload := make([]byte, 1024*1024)
 		for i := range largePayload {
 			largePayload[i] = byte('A' + (i % 26))
 		}
 		h.SubmitWork("task", largePayload)
-		h.RunUntilComplete(t, 10*time.Second)
-
-		snap := h.Marking()
-		completeCount := len(snap.TokensInPlace("task:complete"))
-		if completeCount != 1 {
-			t.Errorf("expected 1 complete token with large payload, got %d", completeCount)
-		}
+		assertSingleCompletedSubmission(t, h, "large payload")
 	})
 
 	t.Run("mixed_valid_and_invalid_submissions", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, poisonSubmitCfg)
-		h := testutil.NewServiceTestHarness(t, dir)
-		h.MockWorker("w")
-
-		// Submit a mix of rejected and valid work. Invalid submissions are
-		// rejected at the boundary and must not poison later valid work.
+		h := newPoisonSubmitHarness(t)
 		requireSubmitRejected(t, h, "", []byte(`{"bad": 1}`), "missing workTypeName")
 		requireSubmitRejected(t, h, "nonexistent", []byte(`{"bad": 2}`), "unknown work type")
 		h.SubmitWork("task", []byte(`{"good": 1}`))
@@ -143,10 +75,7 @@ func TestPoisonTokenMalformedSubmissions(t *testing.T) {
 	})
 
 	t.Run("mixed_batch_rejects_without_partial_submit", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, poisonSubmitCfg)
-		h := testutil.NewServiceTestHarness(t, dir)
-		h.MockWorker("w")
-
+		h := newPoisonSubmitHarness(t)
 		err := h.SubmitFullError(context.Background(), []interfaces.SubmitRequest{
 			{WorkTypeID: "task", Payload: []byte(`{"good": 1}`)},
 			{WorkTypeID: "missing", Payload: []byte(`{"bad": 1}`)},
@@ -170,157 +99,31 @@ func TestPoisonTokenMalformedExecutorResults(t *testing.T) {
 		t.Skip("skipping stress test in short mode")
 	}
 
-	t.Run("unknown_outcome_enum", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, poisonExecCfg("poison-worker"))
-		h := testutil.NewServiceTestHarness(t, dir)
-
-		// Custom executor returns an unknown outcome.
-		h.SetCustomExecutor("poison-worker", &poisonExecutor{
-			outcome: "TOTALLY_INVALID_OUTCOME",
+	for _, tc := range []struct {
+		name       string
+		workerName string
+		executor   workers.WorkerExecutor
+	}{
+		{name: "unknown_outcome_enum", workerName: "poison-worker", executor: &poisonExecutor{outcome: "TOTALLY_INVALID_OUTCOME"}},
+		{name: "empty_result_from_executor", workerName: "empty-worker", executor: &emptyResultExecutor{}},
+		{name: "result_with_non_existent_transition_id", workerName: "bad-transition-worker", executor: &poisonExecutor{overrideTransitionID: "totally-fake-transition", outcome: interfaces.OutcomeAccepted}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newPoisonExecHarness(t, tc.workerName)
+			h.SetCustomExecutor(tc.workerName, tc.executor)
+			h.SubmitWork("task", []byte(`{"test": "executor-malformed"}`))
+			if err := <-h.RunInBackground(context.Background()); err == nil {
+				t.Error("expected engine error for malformed executor result")
+			}
 		})
-
-		h.SubmitWork("task", []byte(`{"test": "unknown-outcome"}`))
-
-		// The transitioner returns an error for unknown outcomes, causing the
-		// engine to terminate with an error. No timeout needed — the engine
-		// exits promptly. No panic is the key assertion.
-		errCh := h.RunInBackground(context.Background())
-		err := <-errCh
-		if err == nil {
-			t.Error("expected engine error for unknown outcome")
-		}
-	})
-
-	t.Run("empty_result_from_executor", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, poisonExecCfg("empty-worker"))
-		h := testutil.NewServiceTestHarness(t, dir)
-
-		// Custom executor returns a completely empty WorkResult.
-		// The inline dispatch carries forward InputHistory and default OutputTokens.
-		// But TransitionID is empty → transitioner can't find the transition.
-		h.SetCustomExecutor("empty-worker", &emptyResultExecutor{})
-
-		h.SubmitWork("task", []byte(`{"test": "empty-result"}`))
-
-		// The transitioner errors on empty/invalid transition ID, causing
-		// the engine to terminate with an error. No panic.
-		errCh := h.RunInBackground(context.Background())
-		err := <-errCh
-		if err == nil {
-			t.Error("expected engine error for empty result")
-		}
-	})
-
-	t.Run("result_with_non_existent_transition_id", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, poisonExecCfg("bad-transition-worker"))
-		h := testutil.NewServiceTestHarness(t, dir)
-
-		// Custom executor returns a result with a non-existent TransitionID.
-		h.SetCustomExecutor("bad-transition-worker", &poisonExecutor{
-			overrideTransitionID: "totally-fake-transition",
-			outcome:              interfaces.OutcomeAccepted,
-		})
-
-		h.SubmitWork("task", []byte(`{"test": "bad-transition"}`))
-
-		// The transitioner errors because the transition doesn't exist,
-		// causing the engine to terminate with an error. No panic.
-		errCh := h.RunInBackground(context.Background())
-		err := <-errCh
-		if err == nil {
-			t.Error("expected engine error for bad transition ID")
-		}
-	})
+	}
 
 	t.Run("result_with_massive_spawned_work", func(t *testing.T) {
-		dir := testutil.ScaffoldFactoryDir(t, poisonExecCfg("spawn-worker"))
-		h := testutil.NewServiceTestHarness(t, dir)
-
-		// Executor returns result with 10000 spawned tokens.
-		// All reference a non-existent work type → silently skipped.
-		h.SetCustomExecutor("spawn-worker", &massiveSpawnExecutor{
-			spawnCount:  10000,
-			spawnTypeID: "nonexistent-type",
-			realOutcome: interfaces.OutcomeAccepted,
-		})
-
-		h.SubmitWork("task", []byte(`{"test": "massive-spawn"}`))
-		h.RunUntilComplete(t, 10*time.Second)
-
-		// The parent token should complete. Spawned tokens should be skipped
-		// (invalid work type).
-		snap := h.Marking()
-		completeCount := len(snap.TokensInPlace("task:complete"))
-		if completeCount != 1 {
-			t.Errorf("expected 1 complete token, got %d", completeCount)
-		}
-
-		// No phantom tokens from the invalid spawned work.
-		workTokens := countWorkTokens(snap)
-		if workTokens != 1 {
-			t.Errorf("expected 1 total token (no phantom spawns), got %d", workTokens)
-		}
+		assertMassiveInvalidSpawnHandled(t)
 	})
 
 	t.Run("result_with_massive_valid_spawned_work", func(t *testing.T) {
-		// Spawn into a valid work type to verify the engine handles large
-		// volumes without crashing.
-		dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
-			WorkTypes: []interfaces.WorkTypeConfig{
-				{Name: "task", States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
-					{Name: "failed", Type: interfaces.StateTypeFailed},
-				}},
-				{Name: "child", States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
-					{Name: "failed", Type: interfaces.StateTypeFailed},
-				}},
-			},
-			Workers: []interfaces.WorkerConfig{{Name: "spawn-worker"}, {Name: "child-worker"}},
-			Workstations: []interfaces.FactoryWorkstationConfig{
-				{
-					Name: "process", WorkerTypeName: "spawn-worker",
-					Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-					Outputs:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-					OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
-				},
-				{
-					Name: "child-process", WorkerTypeName: "child-worker",
-					Inputs:  []interfaces.IOConfig{{WorkTypeName: "child", StateName: "init"}},
-					Outputs: []interfaces.IOConfig{{WorkTypeName: "child", StateName: "complete"}},
-				},
-			},
-		})
-		h := testutil.NewServiceTestHarness(t, dir)
-		h.MockWorker("child-worker")
-
-		const spawnCount = 500 // Use 500 to keep test fast but stress the engine.
-		h.SetCustomExecutor("spawn-worker", &massiveSpawnExecutor{
-			spawnCount:  spawnCount,
-			spawnTypeID: "child",
-			realOutcome: interfaces.OutcomeAccepted,
-		})
-
-		h.SubmitWork("task", []byte(`{"test": "valid-spawn"}`))
-
-		h.RunUntilComplete(t, 30*time.Second)
-
-		snap := h.Marking()
-		parentComplete := len(snap.TokensInPlace("task:complete"))
-		if parentComplete != 1 {
-			t.Errorf("expected 1 parent complete, got %d", parentComplete)
-		}
-
-		childComplete := len(snap.TokensInPlace("child:complete"))
-		if childComplete != spawnCount {
-			childInit := len(snap.TokensInPlace("child:init"))
-			t.Errorf("expected %d children complete, got %d (init=%d)",
-				spawnCount, childComplete, childInit)
-		}
-
-		t.Logf("successfully processed parent + %d spawned children", childComplete)
+		assertMassiveValidSpawnHandled(t)
 	})
 }
 
@@ -476,25 +279,11 @@ func TestPoisonTokenNoGlobalStateCorruption(t *testing.T) {
 	hA.RunUntilComplete(t, 10*time.Second)
 	hB.RunUntilComplete(t, 10*time.Second)
 
-	// Assert workflow A completed all items normally.
 	snapA := hA.Marking()
-	completeA := len(snapA.TokensInPlace("task:complete"))
-	if completeA != itemsPerWorkflow {
-		t.Errorf("workflow A: expected %d complete, got %d", itemsPerWorkflow, completeA)
-	}
-	if len(snapA.Tokens) != itemsPerWorkflow {
-		t.Errorf("workflow A: expected %d total tokens, got %d (corruption?)", itemsPerWorkflow, len(snapA.Tokens))
-	}
+	assertPoisonIsolationMarking(t, snapA, itemsPerWorkflow, "workflow A")
 
-	// Assert workflow B: invalid submissions skipped, valid ones completed.
 	snapB := hB.Marking()
-	completeB := len(snapB.TokensInPlace("task:complete"))
-	if completeB != itemsPerWorkflow {
-		t.Errorf("workflow B: expected %d complete (from valid submissions), got %d", itemsPerWorkflow, completeB)
-	}
-	if len(snapB.Tokens) != itemsPerWorkflow {
-		t.Errorf("workflow B: expected %d total tokens (invalid skipped), got %d", itemsPerWorkflow, len(snapB.Tokens))
-	}
+	assertPoisonIsolationMarking(t, snapB, itemsPerWorkflow, "workflow B")
 
 	// Cross-check: no token payloads from A leaked into B's marking or vice versa.
 	// Token IDs may coincide across independent engines (same counter + transition name)
@@ -511,6 +300,81 @@ func TestPoisonTokenNoGlobalStateCorruption(t *testing.T) {
 			t.Errorf("workflow B contains token with A's payload: %s", payload)
 		}
 	}
+}
+
+func newPoisonExecHarness(t *testing.T, workerName string) *testutil.ServiceTestHarness {
+	t.Helper()
+
+	dir := testutil.ScaffoldFactoryDir(t, poisonExecCfg(workerName))
+	return testutil.NewServiceTestHarness(t, dir)
+}
+
+func assertMassiveInvalidSpawnHandled(t *testing.T) {
+	t.Helper()
+
+	h := newPoisonExecHarness(t, "spawn-worker")
+	h.SetCustomExecutor("spawn-worker", &massiveSpawnExecutor{
+		spawnCount:  10000,
+		spawnTypeID: "nonexistent-type",
+		realOutcome: interfaces.OutcomeAccepted,
+	})
+	h.SubmitWork("task", []byte(`{"test": "massive-spawn"}`))
+	h.RunUntilComplete(t, 10*time.Second)
+
+	snap := h.Marking()
+	if completeCount := len(snap.TokensInPlace("task:complete")); completeCount != 1 {
+		t.Errorf("expected 1 complete token, got %d", completeCount)
+	}
+	if workTokens := countWorkTokens(snap); workTokens != 1 {
+		t.Errorf("expected 1 total token (no phantom spawns), got %d", workTokens)
+	}
+}
+
+func assertMassiveValidSpawnHandled(t *testing.T) {
+	t.Helper()
+
+	const spawnCount = 500
+
+	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{Name: "task", States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			}},
+			{Name: "child", States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			}},
+		},
+		Workers: []interfaces.WorkerConfig{{Name: "spawn-worker"}, {Name: "child-worker"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{Name: "process", WorkerTypeName: "spawn-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+			{Name: "child-process", WorkerTypeName: "child-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "child", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "child", StateName: "complete"}}},
+		},
+	})
+	h := testutil.NewServiceTestHarness(t, dir)
+	h.MockWorker("child-worker")
+	h.SetCustomExecutor("spawn-worker", &massiveSpawnExecutor{
+		spawnCount:  spawnCount,
+		spawnTypeID: "child",
+		realOutcome: interfaces.OutcomeAccepted,
+	})
+	h.SubmitWork("task", []byte(`{"test": "valid-spawn"}`))
+	h.RunUntilComplete(t, 30*time.Second)
+
+	snap := h.Marking()
+	if parentComplete := len(snap.TokensInPlace("task:complete")); parentComplete != 1 {
+		t.Errorf("expected 1 parent complete, got %d", parentComplete)
+	}
+
+	childComplete := len(snap.TokensInPlace("child:complete"))
+	if childComplete != spawnCount {
+		childInit := len(snap.TokensInPlace("child:init"))
+		t.Errorf("expected %d children complete, got %d (init=%d)", spawnCount, childComplete, childInit)
+	}
+	t.Logf("successfully processed parent + %d spawned children", childComplete)
 }
 
 // TestPoisonTokenNoPanic uses recover() to verify that various edge cases

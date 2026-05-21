@@ -1,3 +1,4 @@
+// backendsizecheck:ignore-file this legacy service orchestration file remains oversized until dedicated refactor work lands.
 package service
 
 import (
@@ -2135,7 +2136,6 @@ func loadWorkersFromConfig(
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
 		} else {
-			// Continue regardless, intentional to deal with badly configured workers.
 			logger.Error("failed to load worker", "worker", workerCfg.Name)
 			return nil, fmt.Errorf("unsupported worker type for worker %q: %s", workerCfg.Name, def.Type)
 		}
@@ -2222,7 +2222,6 @@ func buildWorkerExecutor(
 			Logger:          logger,
 		}
 	case interfaces.WorkstationTypeLogical:
-		// LOGICAL_MOVE workers pass input token colors through without calling any LLM.
 		return &workers.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,

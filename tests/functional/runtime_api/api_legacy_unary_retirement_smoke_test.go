@@ -22,131 +22,162 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 	support.SkipLongFunctional(t, "slow legacy unary retirement boundary smoke")
 
 	t.Run("direct_POST_and_idempotent_PUT", func(t *testing.T) {
-		dir := support.ScaffoldFactory(t, simplePipelineConfig())
-		server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
-
-		traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-			WorkTypeName: "task",
-			Payload:      map[string]string{"title": "direct post canonical submit"},
-		})
-		if traceID == "" {
-			t.Fatal("POST /work returned an empty trace ID")
-		}
-		waitForGeneratedWorkComplete(t, server.URL(), traceID, 10*time.Second)
-
-		workTypeName := "task"
-		workID := "work-retired-unary-put"
-		request := factoryapi.WorkRequest{
-			RequestId: "request-retired-unary-put",
-			Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
-			Works: &[]factoryapi.Work{{
-				Name:         "idempotent-put",
-				WorkId:       &workID,
-				WorkTypeName: &workTypeName,
-				Payload:      map[string]string{"title": "idempotent put canonical submit"},
-			}},
-		}
-		first := putGeneratedWorkRequest(t, server.URL(), request.RequestId, request)
-		retry := putGeneratedWorkRequest(t, server.URL(), request.RequestId, request)
-		if retry.TraceId != first.TraceId {
-			t.Fatalf("idempotent PUT trace_id changed: first=%q retry=%q", first.TraceId, retry.TraceId)
-		}
-		waitForGeneratedWorkIDsComplete(t, server.URL(), []string{workID}, 10*time.Second)
-
-		events := server.GetFactoryEvents(t)
-		support.AssertSingleWorkRequestEvent(t, events, request.RequestId, workID, "task")
+		assertLegacyUnaryDirectSubmitAndPut(t)
 	})
 
 	t.Run("startup_work_file_batch", func(t *testing.T) {
-		dir := support.ScaffoldFactory(t, simplePipelineConfig())
-		workFile := filepath.Join(dir, "startup-work.json")
-		support.WriteWorkRequestFile(t, workFile, interfaces.SubmitRequest{
-			RequestID:  "request-retired-unary-work-file",
-			Name:       "startup-file",
-			WorkID:     "work-retired-unary-work-file",
-			WorkTypeID: "task",
-			Payload:    []byte(`{"title":"startup file canonical submit"}`),
-		})
-
-		svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
-			Dir:               dir,
-			WorkFile:          workFile,
-			MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-			Logger:            zap.NewNop(),
-		})
-		if err != nil {
-			t.Fatalf("BuildFactoryService: %v", err)
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := svc.Run(ctx); err != nil {
-			t.Fatalf("FactoryService.Run: %v", err)
-		}
-
-		events, err := svc.GetFactoryEvents(context.Background())
-		if err != nil {
-			t.Fatalf("GetFactoryEvents: %v", err)
-		}
-		support.AssertSingleWorkRequestEvent(t, events, "request-retired-unary-work-file", "work-retired-unary-work-file", "task")
+		assertLegacyUnaryStartupWorkFileBatch(t)
 	})
 
 	t.Run("file_watcher_non_batch_JSON", func(t *testing.T) {
-		dir := support.ScaffoldFactory(t, simplePipelineConfig())
-		inputDir := filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
-		if err := os.MkdirAll(inputDir, 0o755); err != nil {
-			t.Fatalf("create input dir: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(inputDir, "non-batch.json"), []byte(`{"title":"raw JSON file input"}`), 0o644); err != nil {
-			t.Fatalf("write non-batch seed: %v", err)
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		svc, err := service.BuildFactoryService(ctx, &service.FactoryServiceConfig{
-			Dir:               dir,
-			MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-			Logger:            zap.NewNop(),
-		})
-		if err != nil {
-			t.Fatalf("BuildFactoryService: %v", err)
-		}
-		if err := svc.Run(ctx); err != nil {
-			t.Fatalf("FactoryService.Run: %v", err)
-		}
-
-		events, err := svc.GetFactoryEvents(context.Background())
-		if err != nil {
-			t.Fatalf("GetFactoryEvents: %v", err)
-		}
-		support.AssertSingleWorkRequestEventByWorkName(t, events, "non-batch", "task")
+		assertLegacyUnaryFileWatcherBatchConversion(t)
 	})
 
 	t.Run("cron_internal_time_work", func(t *testing.T) {
-		start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
-		fakeClock := clockwork.NewFakeClockAt(start)
-		dir := support.ScaffoldFactory(t, retiredUnaryCronFactoryConfig("* * * * *"))
-		observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
-		server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
-			cfg.RuntimeMode = interfaces.RuntimeModeService
-			cfg.Clock = fakeClock
-		}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
-			observedSubmissions <- record
-		}))
-
-		waitForFakeClockWaiters(t, fakeClock, 1)
-		nominalAt := start.Add(time.Minute)
-		fakeClock.Advance(time.Minute)
-		record := waitForCronSubmissionRecord(t, observedSubmissions, "poll-for-work", nominalAt, time.Second)
-		if record.Source != "external-submit" {
-			t.Fatalf("cron submission source = %q, want external-submit", record.Source)
-		}
-		if record.Request.WorkTypeID != interfaces.SystemTimeWorkTypeID {
-			t.Fatalf("cron work type = %q, want %q", record.Request.WorkTypeID, interfaces.SystemTimeWorkTypeID)
-		}
-
-		events := server.GetFactoryEvents(t)
-		assertWorkRequestEventIncludesWorkID(t, events, record.Request.WorkID, "poll-for-work")
+		assertLegacyUnaryCronSubmitPath(t)
 	})
+}
+
+func assertLegacyUnaryDirectSubmitAndPut(t *testing.T) {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+
+	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": "direct post canonical submit"},
+	})
+	if traceID == "" {
+		t.Fatal("POST /work returned an empty trace ID")
+	}
+	waitForGeneratedWorkComplete(t, server.URL(), traceID, 10*time.Second)
+
+	workTypeName := "task"
+	workID := "work-retired-unary-put"
+	request := factoryapi.WorkRequest{
+		RequestId: "request-retired-unary-put",
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         "idempotent-put",
+			WorkId:       &workID,
+			WorkTypeName: &workTypeName,
+			Payload:      map[string]string{"title": "idempotent put canonical submit"},
+		}},
+	}
+	first := putGeneratedWorkRequest(t, server.URL(), request.RequestId, request)
+	retry := putGeneratedWorkRequest(t, server.URL(), request.RequestId, request)
+	if retry.TraceId != first.TraceId {
+		t.Fatalf("idempotent PUT trace_id changed: first=%q retry=%q", first.TraceId, retry.TraceId)
+	}
+	waitForGeneratedWorkIDsComplete(t, server.URL(), []string{workID}, 10*time.Second)
+	support.AssertSingleWorkRequestEvent(t, server.GetFactoryEvents(t), request.RequestId, workID, "task")
+}
+
+func assertLegacyUnaryStartupWorkFileBatch(t *testing.T) {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	workFile := filepath.Join(dir, "startup-work.json")
+	support.WriteWorkRequestFile(t, workFile, interfaces.SubmitRequest{
+		RequestID:  "request-retired-unary-work-file",
+		Name:       "startup-file",
+		WorkID:     "work-retired-unary-work-file",
+		WorkTypeID: "task",
+		Payload:    []byte(`{"title":"startup file canonical submit"}`),
+	})
+
+	svc := buildLegacyUnaryService(t, context.Background(), dir, func(cfg *service.FactoryServiceConfig) {
+		cfg.WorkFile = workFile
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := svc.Run(ctx); err != nil {
+		t.Fatalf("FactoryService.Run: %v", err)
+	}
+
+	events, err := svc.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents: %v", err)
+	}
+	support.AssertSingleWorkRequestEvent(t, events, "request-retired-unary-work-file", "work-retired-unary-work-file", "task")
+}
+
+func assertLegacyUnaryFileWatcherBatchConversion(t *testing.T) {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	inputDir := filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
+		t.Fatalf("create input dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(inputDir, "non-batch.json"), []byte(`{"title":"raw JSON file input"}`), 0o644); err != nil {
+		t.Fatalf("write non-batch seed: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	svc := buildLegacyUnaryService(t, ctx, dir, nil)
+	if err := svc.Run(ctx); err != nil {
+		t.Fatalf("FactoryService.Run: %v", err)
+	}
+
+	events, err := svc.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents: %v", err)
+	}
+	support.AssertSingleWorkRequestEventByWorkName(t, events, "non-batch", "task")
+}
+
+func assertLegacyUnaryCronSubmitPath(t *testing.T) {
+	t.Helper()
+
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	dir := support.ScaffoldFactory(t, retiredUnaryCronFactoryConfig("* * * * *"))
+	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.Clock = fakeClock
+	}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+		observedSubmissions <- record
+	}))
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	nominalAt := start.Add(time.Minute)
+	fakeClock.Advance(time.Minute)
+	record := waitForCronSubmissionRecord(t, observedSubmissions, "poll-for-work", nominalAt, time.Second)
+	if record.Source != "external-submit" {
+		t.Fatalf("cron submission source = %q, want external-submit", record.Source)
+	}
+	if record.Request.WorkTypeID != interfaces.SystemTimeWorkTypeID {
+		t.Fatalf("cron work type = %q, want %q", record.Request.WorkTypeID, interfaces.SystemTimeWorkTypeID)
+	}
+
+	assertWorkRequestEventIncludesWorkID(t, server.GetFactoryEvents(t), record.Request.WorkID, "poll-for-work")
+}
+
+func buildLegacyUnaryService(
+	t *testing.T,
+	ctx context.Context,
+	dir string,
+	configure func(*service.FactoryServiceConfig),
+) *service.FactoryService {
+	t.Helper()
+
+	cfg := &service.FactoryServiceConfig{
+		Dir:               dir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	}
+	if configure != nil {
+		configure(cfg)
+	}
+	svc, err := service.BuildFactoryService(ctx, cfg)
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	return svc
 }
 
 func retiredUnaryCronFactoryConfig(schedule string) map[string]any {

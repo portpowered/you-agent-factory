@@ -141,14 +141,23 @@ describe("D3CompletionInformationCard", () => {
     expect(within(chart).getByText("Work count")).toBeTruthy();
     expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
     const chartRegion = within(card).getByLabelText("Work outcome chart region");
+    expect(chartRegion.className).toContain("flex");
+    expect(chartRegion.className).toContain("flex-1");
+    expect(chartRegion.className).toContain("min-h-0");
     expect(chartRegion.className).toContain("px-4");
     expect(chartRegion.className).toContain("sm:px-5");
+    expect(chart.className).toContain("h-full");
+    expect(chart.className).toContain("w-full");
+    expect(chart.className).toContain("min-w-0");
+    expect(chart.className).toContain("min-h-[14rem]");
     expect(chart.className).toContain("px-5");
     expect(chart.className).toContain("pb-5");
     expect(chart.className).toContain("pt-4");
     expect(chart.className).toContain("sm:px-6");
     expect(chart.className).toContain("sm:pb-6");
     expect(chart.className).toContain("sm:pt-5");
+    expect(chart.style.height).toBe("");
+    expect(chart.style.minHeight).toBe("14rem");
     const overlay = chart.querySelector<HTMLElement>("[data-work-chart-overlay='true']");
     expect(overlay).toBeTruthy();
     expect(overlay?.className).toContain("px-5");
@@ -171,6 +180,13 @@ describe("D3CompletionInformationCard", () => {
     expect(
       screen.getByText("Work outcome data appears after the event stream receives work history."),
     ).toBeTruthy();
+    const emptyState = screen.getByRole("status");
+    expect(emptyState.className).toContain("h-full");
+    expect(emptyState.className).toContain("w-full");
+    expect(emptyState.className).toContain("min-w-0");
+    expect(emptyState.className).toContain("flex-1");
+    expect(emptyState.className).toContain("justify-center");
+    expect(emptyState.className).toContain("min-h-[14rem]");
   });
 
   it("renders an explicit loading state without dropping chart summary controls", () => {
@@ -183,8 +199,15 @@ describe("D3CompletionInformationCard", () => {
 
     const card = screen.getByRole("article", { name: "Work outcome chart" });
     expect(within(card).queryByRole("combobox", { name: "Time range" })).toBeNull();
-    expect(within(card).getByRole("status")).toBeTruthy();
+    const loadingState = within(card).getByRole("status");
+    expect(loadingState).toBeTruthy();
     expect(within(card).getByText("Loading work outcome samples")).toBeTruthy();
+    expect(loadingState.className).toContain("h-full");
+    expect(loadingState.className).toContain("w-full");
+    expect(loadingState.className).toContain("min-w-0");
+    expect(loadingState.className).toContain("flex-1");
+    expect(loadingState.className).toContain("justify-center");
+    expect(loadingState.className).toContain("min-h-[14rem]");
     expect(
       within(card).queryByRole("img", { name: "Work outcome chart for 15m" }),
     ).toBeNull();
@@ -210,5 +233,11 @@ describe("D3CompletionInformationCard", () => {
     expect(
       within(card).queryByRole("img", { name: "Work outcome chart for 15m" }),
     ).toBeNull();
+    expect(alert.className).toContain("h-full");
+    expect(alert.className).toContain("w-full");
+    expect(alert.className).toContain("min-w-0");
+    expect(alert.className).toContain("flex-1");
+    expect(alert.className).toContain("justify-center");
+    expect(alert.className).toContain("min-h-[14rem]");
   });
 });

@@ -2,7 +2,6 @@ package stress_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -30,87 +29,17 @@ func TestCrossWorkflowPipeline(t *testing.T) {
 		t.Skip("skipping stress test in short mode")
 	}
 
-	// --- Workflow A: code-pipeline ---
-	dirA := testutil.ScaffoldFactoryDir(t, codePipelineCfg())
-	hA := testutil.NewServiceTestHarness(t, dirA, testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithExtraOptions(
-			factory.WithWorkerExecutor("coder", testutil.NewMockExecutor()),
-			factory.WithWorkerExecutor("review-submitter", testutil.NewMockExecutor()),
-			factory.WithWorkerExecutor("reviewer", testutil.NewMockExecutor()),
-		))
-
-	// --- Workflow B: meta-pipeline ---
-	dirB := testutil.ScaffoldFactoryDir(t, metaPipelineCfg())
-	hB := testutil.NewServiceTestHarness(t, dirB)
-
-	// Scanner returns 3 findings as JSON.
-	type finding struct {
-		ID          string `json:"id"`
-		Description string `json:"description"`
-	}
-	findings := []finding{
+	hA := setupCrossWorkflowCodePipelineHarness(t)
+	hB := setupCrossWorkflowMetaPipelineHarness(t)
+	findings := []crossWorkflowFinding{
 		{ID: "refactor-x", Description: "Refactor function X for readability"},
 		{ID: "add-test-y", Description: "Add unit test for module Y"},
 		{ID: "fix-lint-z", Description: "Fix lint warning Z in package P"},
 	}
-	findingsJSON, _ := json.Marshal(findings)
-
-	hB.SetCustomExecutor("scanner", &staticExecutor{
-		outcome: interfaces.OutcomeAccepted,
-		tags:    map[string]string{"findings": string(findingsJSON)},
-	})
-
-	// Work generator reads findings and produces a comma-separated list of work IDs.
-	hB.SetCustomExecutor("work-generator", &funcExecutor{fn: func(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-		findingsStr := ""
-		if len(dispatch.InputTokens) > 0 {
-			findingsStr = string(firstInputToken(dispatch.InputTokens).Color.Payload)
-		}
-		var fs []finding
-		_ = json.Unmarshal([]byte(findingsStr), &fs)
-
-		ids := make([]string, len(fs))
-		for i, f := range fs {
-			ids[i] = f.ID
-		}
-		idsJSON, _ := json.Marshal(ids)
-
-		return interfaces.WorkResult{
-			DispatchID:   dispatch.DispatchID,
-			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeAccepted,
-			Output:       string(idsJSON),
-		}, nil
-	}})
-
-	// Cross-submitter reads work IDs and submits each to Workflow A's engine.
 	var submittedCount atomic.Int32
-	hB.SetCustomExecutor("cross-submitter", &funcExecutor{fn: func(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-		workIDsStr := ""
-		if len(dispatch.InputTokens) > 0 {
-			workIDsStr = string(firstInputToken(dispatch.InputTokens).Color.Payload)
-		}
-
-		var workIDs []string
-		_ = json.Unmarshal([]byte(workIDsStr), &workIDs)
-
-		// Submit each finding as a code-change to Workflow A.
-		for _, id := range workIDs {
-			payload := fmt.Appendf(nil, `{"finding_id": %q}`, id)
-			hA.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
-				WorkTypeID: "code-change",
-				TraceID:    fmt.Sprintf("meta-%s", id),
-				Payload:    payload,
-			}})
-			submittedCount.Add(1)
-		}
-
-		return interfaces.WorkResult{
-			DispatchID:   dispatch.DispatchID,
-			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeAccepted,
-		}, nil
-	}})
+	installStaticFindingsExecutor(hB, findings)
+	installWorkGeneratorExecutor(hB)
+	installCrossSubmitterExecutor(hB, hA, &submittedCount)
 
 	// --- Execute Workflow B ---
 	hB.SubmitWork("analysis", []byte(`{"target": "codebase-v1"}`))
@@ -124,48 +53,20 @@ func TestCrossWorkflowPipeline(t *testing.T) {
 		HasNoTokenInPlace("analysis:generated").
 		HasNoTokenInPlace("analysis:failed")
 
-	// --- Assert: Workflow B submitted exactly 3 items to Workflow A ---
 	if got := submittedCount.Load(); got != 3 {
 		t.Errorf("expected 3 cross-workflow submissions, got %d", got)
 	}
 
-	// --- Run Workflow A after B has submitted all work into its queue ---
 	hA.RunUntilComplete(t, 10*time.Second)
-
-	// --- Assert: all 3 code-change items in Workflow A reached terminal state ---
+	completeA := assertCrossWorkflowCodePipelineState(t, hA, 3)
 	snapA := hA.Marking()
-	completeA := len(snapA.TokensInPlace("code-change:complete"))
-	failedA := len(snapA.TokensInPlace("code-change:failed"))
-	initA := len(snapA.TokensInPlace("code-change:init"))
-	codingA := len(snapA.TokensInPlace("code-change:coding"))
-	reviewA := len(snapA.TokensInPlace("code-change:in-review"))
-
-	if completeA+failedA != 3 {
-		t.Errorf("Workflow A: expected 3 tokens in terminal state, got %d complete + %d failed (init=%d, coding=%d, in-review=%d)",
-			completeA, failedA, initA, codingA, reviewA)
-	}
-	if completeA != 3 {
-		t.Errorf("Workflow A: expected 3 complete, got %d", completeA)
-	}
-
-	// --- Assert: no cross-workflow token contamination ---
-	// Workflow A should have no tokens with analysis work type.
 	for id, tok := range snapA.Tokens {
 		if tok.Color.WorkTypeID == "analysis" {
 			t.Errorf("Workflow A: found foreign token %s with WorkTypeID 'analysis' — cross-contamination", id)
 		}
 	}
-	// Workflow B should have no tokens with code-change work type.
 	snapB := hB.Marking()
-	for id, tok := range snapB.Tokens {
-		if tok.Color.WorkTypeID == "code-change" {
-			t.Errorf("Workflow B: found foreign token %s with WorkTypeID 'code-change' — cross-contamination", id)
-		}
-	}
-
-	// --- Assert: Workflow B completion did NOT depend on Workflow A finishing ---
-	// This is proven by the test structure: hB.RunUntilComplete() returns before
-	// we poll Workflow A. If B depended on A, RunUntilComplete would hang.
+	assertNoForeignWorkTypeTokens(t, snapB, "code-change", "Workflow B")
 
 	t.Logf("cross-workflow pipeline: B submitted %d items to A, A completed %d/%d",
 		submittedCount.Load(), completeA, 3)
@@ -250,138 +151,17 @@ func TestCrossWorkflowPipelineRecursive(t *testing.T) {
 		t.Skip("skipping stress test in short mode")
 	}
 
-	// --- Workflow A: code-pipeline (same as basic test) ---
-	dirA := testutil.ScaffoldFactoryDir(t, codePipelineCfg())
-	hA := testutil.NewServiceTestHarness(t, dirA, testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithExtraOptions(
-			factory.WithWorkerExecutor("coder", testutil.NewMockExecutor()),
-			factory.WithWorkerExecutor("review-submitter", testutil.NewMockExecutor()),
-			factory.WithWorkerExecutor("reviewer", testutil.NewMockExecutor()),
-		))
-
-	// --- Workflow B: meta-pipeline with recursion ---
-	dirB := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "analysis",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "scanned", Type: interfaces.StateTypeProcessing},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
-			},
-		}},
-		Workers: []interfaces.WorkerConfig{{Name: "recursive-scanner"}, {Name: "recursive-submitter"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{
-			{Name: "scan-codebase", WorkerTypeName: "recursive-scanner",
-				Inputs:    []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "init"}},
-				Outputs:   []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "scanned"}},
-				OnFailure: []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "failed"}}},
-			{Name: "submit-and-finalize", WorkerTypeName: "recursive-submitter",
-				Inputs:    []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "scanned"}},
-				Outputs:   []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "complete"}},
-				OnFailure: []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "failed"}}},
-			guardedLoopBreakerWorkstation(
-				"max-scan-iterations",
-				"scan-codebase",
-				3,
-				interfaces.IOConfig{WorkTypeName: "analysis", StateName: "init"},
-				interfaces.IOConfig{WorkTypeName: "analysis", StateName: "failed"},
-			),
-		},
-	})
-	hB := testutil.NewServiceTestHarness(t, dirB)
+	hA := setupCrossWorkflowCodePipelineHarness(t)
+	hB := setupRecursiveMetaPipelineHarness(t)
 
 	var totalSubmittedToA atomic.Int32
 	var scanCount atomic.Int32
-
-	// Scanner: iteration 0 returns 3 findings (one with "needs-rescan" flag).
-	// Iteration 1 (rescan) returns 2 additional findings (no more rescans).
-	hB.SetCustomExecutor("recursive-scanner", &funcExecutor{fn: func(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-		iteration := scanCount.Add(1)
-
-		type scanFinding struct {
-			ID          string `json:"id"`
-			NeedsRescan bool   `json:"needs_rescan"`
-		}
-
-		var results []scanFinding
-		if iteration == 1 {
-			// First scan: 3 findings, one triggers rescan.
-			results = []scanFinding{
-				{ID: "refactor-x", NeedsRescan: false},
-				{ID: "add-test-y", NeedsRescan: false},
-				{ID: "deep-issue-z", NeedsRescan: true}, // triggers rescan
-			}
-		} else {
-			// Rescan: 2 more findings, no more rescans.
-			results = []scanFinding{
-				{ID: "fix-lint-a", NeedsRescan: false},
-				{ID: "fix-lint-b", NeedsRescan: false},
-			}
-		}
-
-		findingsJSON, _ := json.Marshal(results)
-		return interfaces.WorkResult{
-			DispatchID:   dispatch.DispatchID,
-			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeAccepted,
-			Output:       string(findingsJSON),
-		}, nil
-	}})
-
-	// Submitter: submits findings to Workflow A and spawns rescan if needed.
-	hB.SetCustomExecutor("recursive-submitter", &funcExecutor{fn: func(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-		findingsStr := ""
-		if len(dispatch.InputTokens) > 0 {
-			findingsStr = string(firstInputToken(dispatch.InputTokens).Color.Payload)
-		}
-
-		type scanFinding struct {
-			ID          string `json:"id"`
-			NeedsRescan bool   `json:"needs_rescan"`
-		}
-		var findings []scanFinding
-		_ = json.Unmarshal([]byte(findingsStr), &findings)
-
-		// Submit each finding to Workflow A.
-		needsRescan := false
-		for _, f := range findings {
-			hA.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
-				WorkTypeID: "code-change",
-				TraceID:    fmt.Sprintf("recursive-meta-%s", f.ID),
-				Payload:    fmt.Appendf(nil, `{"finding_id": %q}`, f.ID),
-			}})
-			totalSubmittedToA.Add(1)
-			if f.NeedsRescan {
-				needsRescan = true
-			}
-		}
-
-		result := interfaces.WorkResult{
-			DispatchID:   dispatch.DispatchID,
-			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeAccepted,
-		}
-
-		// If any finding needs rescan, spawn a new analysis work item.
-		if needsRescan {
-			result.SpawnedWork = []interfaces.TokenColor{{
-				WorkTypeID: "analysis",
-				WorkID:     "rescan",
-				Tags: map[string]string{
-					"reason": "deep-issue-found",
-				},
-			}}
-		}
-
-		return result, nil
-	}})
+	installRecursiveExecutors(hB, hA, &scanCount, &totalSubmittedToA)
 
 	// --- Execute Workflow B ---
 	hB.SubmitWork("analysis", []byte(`{"target": "codebase-v2"}`))
 	hB.RunUntilComplete(t, 10*time.Second)
 
-	// --- Assert: Workflow B completed (2 analysis tokens: original + rescan) ---
 	snapB := hB.Marking()
 	completeB := len(snapB.TokensInPlace("analysis:complete"))
 	failedB := len(snapB.TokensInPlace("analysis:failed"))
@@ -392,41 +172,18 @@ func TestCrossWorkflowPipelineRecursive(t *testing.T) {
 			completeB, initB, failedB)
 	}
 
-	// --- Assert: scanner called exactly 2 times (initial + rescan) ---
 	if got := scanCount.Load(); got != 2 {
 		t.Errorf("expected scanner called 2 times, got %d", got)
 	}
 
-	// --- Assert: exactly 5 items submitted to Workflow A (3 + 2) ---
 	if got := totalSubmittedToA.Load(); got != 5 {
 		t.Errorf("expected 5 total submissions to Workflow A, got %d", got)
 	}
 
-	// --- Run Workflow A after B has submitted all recursive follow-up work ---
 	hA.RunUntilComplete(t, 10*time.Second)
-
-	snapA := hA.Marking()
-	completeA := len(snapA.TokensInPlace("code-change:complete"))
-	failedA := len(snapA.TokensInPlace("code-change:failed"))
-
-	if completeA+failedA != 5 {
-		t.Errorf("Workflow A: expected 5 terminal tokens, got %d complete + %d failed", completeA, failedA)
-	}
-	if completeA != 5 {
-		t.Errorf("Workflow A: expected 5 complete, got %d", completeA)
-	}
-
-	// --- Assert: no cross-workflow token contamination ---
-	for id, tok := range snapA.Tokens {
-		if tok.Color.WorkTypeID == "analysis" {
-			t.Errorf("Workflow A: foreign token %s with WorkTypeID 'analysis'", id)
-		}
-	}
-	for id, tok := range snapB.Tokens {
-		if tok.Color.WorkTypeID == "code-change" {
-			t.Errorf("Workflow B: foreign token %s with WorkTypeID 'code-change'", id)
-		}
-	}
+	completeA := assertCrossWorkflowCodePipelineState(t, hA, 5)
+	assertNoForeignWorkTypeTokens(t, hA.Marking(), "analysis", "Workflow A")
+	assertNoForeignWorkTypeTokens(t, snapB, "code-change", "Workflow B")
 
 	t.Logf("recursive cross-workflow: %d scans, %d items submitted to A, A completed %d/%d",
 		scanCount.Load(), totalSubmittedToA.Load(), completeA, 5)

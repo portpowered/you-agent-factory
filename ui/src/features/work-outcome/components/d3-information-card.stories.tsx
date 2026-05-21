@@ -1,9 +1,16 @@
-import { expect, within } from "storybook/test";
+import type { ReactNode } from "react";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import "../../../styles.css";
+import {
+  AgentBentoLayout,
+  type AgentBentoLayoutItem,
+} from "../../bento/components/agent-bento";
 import { getDashboardWorkChartSeriesDefinitions } from "../chart-contract";
-import { D3CompletionInformationCard } from "./d3-information-card";
 import type { WorkChartModel } from "../trends";
+import { D3CompletionInformationCard } from "./d3-information-card";
+import type { WorkChartState } from "./work-chart";
+import { WorkOutcomeWidget } from "./work-outcome-widget";
 
 const populatedTrend: WorkChartModel = {
   delta: {
@@ -135,6 +142,9 @@ const WORK_OUTCOME_CHART_SERIES = getDashboardWorkChartSeriesDefinitions([
   { key: "completed", label: "Completed" },
   { key: "failed", label: "Failed/retried" },
 ]);
+const RESIZABLE_WORK_OUTCOME_LAYOUT: AgentBentoLayoutItem[] = [
+  { id: "work-outcome-chart", x: 0, y: 0, w: 6, h: 3 },
+];
 
 function expectWorkOutcomeChartContract(card: HTMLElement): void {
   const chart = within(card).getByRole("img", {
@@ -194,16 +204,200 @@ function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
   expect((shell?.scrollWidth ?? 0) <= (shell?.clientWidth ?? 0) + 1).toBe(true);
 }
 
+function renderWorkOutcomeStoryShell({
+  children,
+  height,
+  maxWidth = "640px",
+}: {
+  children: ReactNode;
+  height?: string;
+  maxWidth?: string;
+}) {
+  return (
+    <div
+      data-story-shell="work-outcome"
+      style={{ height, maxWidth, padding: "1rem", width: "100%" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function renderResizableWorkOutcomeStoryShell({
+  chartState,
+  maxWidth = "1180px",
+  model,
+}: {
+  chartState?: WorkChartState;
+  maxWidth?: string;
+  model: WorkChartModel;
+}) {
+  return (
+    <div
+      data-story-shell="work-outcome"
+      style={{ height: "48rem", maxWidth, padding: "1rem", width: "100%" }}
+    >
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "work-outcome-chart",
+            children: chartState ? (
+              <D3CompletionInformationCard
+                chartState={chartState}
+                model={model}
+                widgetId="work-outcome-chart-story"
+              />
+            ) : (
+              <WorkOutcomeWidget
+                model={model}
+                widgetId="work-outcome-chart-story"
+              />
+            ),
+          },
+        ]}
+        initialWidth={maxWidth === "360px" ? 360 : 1180}
+        layout={RESIZABLE_WORK_OUTCOME_LAYOUT}
+      />
+    </div>
+  );
+}
+
+async function expectChartExpandsAfterResize(
+  canvasElement: HTMLElement,
+  handleSelector: ".react-resizable-handle-s" | ".react-resizable-handle-se",
+  endCoordinates: { x: number; y: number },
+): Promise<void> {
+  const canvas = within(canvasElement);
+  const card = await canvas.findByRole("article", {
+    name: "Work outcome chart",
+  });
+  const gridItem = card.closest<HTMLElement>("[data-bento-card-id='work-outcome-chart']");
+
+  if (!(gridItem instanceof HTMLElement)) {
+    throw new Error("expected work outcome grid item");
+  }
+
+  const resizeHandle = gridItem.querySelector<HTMLElement>(handleSelector);
+  const chart = within(card).getByRole("img", {
+    name: "Work outcome chart for 15m",
+  });
+
+  if (!(resizeHandle instanceof HTMLElement)) {
+    throw new Error(`expected ${handleSelector} resize handle`);
+  }
+
+  const initialCardHeight = card.getBoundingClientRect().height;
+  const initialChartHeight = chart.getBoundingClientRect().height;
+
+  await userEvent.pointer([
+    {
+      keys: "[MouseLeft>]",
+      target: resizeHandle,
+      coords: { x: 8, y: 8 },
+    },
+    {
+      target: resizeHandle,
+      coords: endCoordinates,
+    },
+    {
+      keys: "[/MouseLeft]",
+      target: resizeHandle,
+      coords: endCoordinates,
+    },
+  ]);
+
+  await waitFor(() => {
+    expect(card.getBoundingClientRect().height).toBeGreaterThan(initialCardHeight + 24);
+    expect(chart.getBoundingClientRect().height).toBeGreaterThan(initialChartHeight + 24);
+  });
+
+  expectWorkOutcomeChartContract(card);
+}
+
+function expectCenteredStatusPanel(statePanel: HTMLElement): void {
+  expect(statePanel.className).toContain("h-full");
+  expect(statePanel.className).toContain("flex-1");
+  expect(statePanel.className).toContain("justify-center");
+  expect(statePanel).toBeVisible();
+}
+
+async function expectStatusPanelExpandsAfterResize(
+  canvasElement: HTMLElement,
+  {
+    endCoordinates,
+    expectedRole,
+    handleSelector,
+  }: {
+    endCoordinates: { x: number; y: number };
+    expectedRole: "alert" | "status";
+    handleSelector: ".react-resizable-handle-s" | ".react-resizable-handle-se";
+  },
+): Promise<void> {
+  const canvas = within(canvasElement);
+  const card = await canvas.findByRole("article", {
+    name: "Work outcome chart",
+  });
+  const gridItem = card.closest<HTMLElement>("[data-bento-card-id='work-outcome-chart']");
+
+  if (!(gridItem instanceof HTMLElement)) {
+    throw new Error("expected work outcome grid item");
+  }
+
+  const resizeHandle = gridItem.querySelector<HTMLElement>(handleSelector);
+  const statePanel = within(card).getByRole(expectedRole);
+
+  if (!(resizeHandle instanceof HTMLElement)) {
+    throw new Error(`expected ${handleSelector} resize handle`);
+  }
+
+  expectCenteredStatusPanel(statePanel);
+
+  const initialCardHeight = card.getBoundingClientRect().height;
+  const initialStateHeight = statePanel.getBoundingClientRect().height;
+
+  await userEvent.pointer([
+    {
+      keys: "[MouseLeft>]",
+      target: resizeHandle,
+      coords: { x: 8, y: 8 },
+    },
+    {
+      target: resizeHandle,
+      coords: endCoordinates,
+    },
+    {
+      keys: "[/MouseLeft]",
+      target: resizeHandle,
+      coords: endCoordinates,
+    },
+  ]);
+
+  await waitFor(() => {
+    expect(card.getBoundingClientRect().height).toBeGreaterThan(initialCardHeight + 24);
+    expect(statePanel.getBoundingClientRect().height).toBeGreaterThan(
+      initialStateHeight + 24,
+    );
+  });
+
+  expectCenteredStatusPanel(statePanel);
+}
+
 export default {
   title: "Agent Factory/Dashboard/Work Outcome Chart Card",
   component: D3CompletionInformationCard,
 };
 
 export const Populated = {
-  args: {
-    model: populatedTrend,
-    widgetId: "work-outcome-chart-story",
-  },
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          model={populatedTrend}
+          widgetId="work-outcome-chart-story"
+        />
+      ),
+      height: "28rem",
+    }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const card = await canvas.findByRole("article", {
@@ -215,32 +409,89 @@ export const Populated = {
 };
 
 export const EmptyData = {
-  args: {
-    model: emptyTrend,
-    widgetId: "work-outcome-chart-empty-story",
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          model={emptyTrend}
+          widgetId="work-outcome-chart-empty-story"
+        />
+      ),
+      height: "28rem",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
+
+    const emptyState = within(card).getByRole("status");
+    expectCenteredStatusPanel(emptyState);
   },
 };
 
 export const LoadingData = {
-  args: {
-    chartState: { status: "loading" },
-    model: emptyTrend,
-    widgetId: "work-outcome-chart-loading-story",
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          chartState={{ status: "loading" }}
+          model={emptyTrend}
+          widgetId="work-outcome-chart-loading-story"
+        />
+      ),
+      height: "32rem",
+      maxWidth: "360px",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
+
+    const loadingState = within(card).getByRole("status");
+    expectCenteredStatusPanel(loadingState);
+    expectNoOverflowInStoryShell(canvasElement);
+  },
+};
+
+export const ErrorState = {
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          chartState={{ status: "error" }}
+          model={emptyTrend}
+          widgetId="work-outcome-chart-error-story"
+        />
+      ),
+      height: "32rem",
+      maxWidth: "360px",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
+
+    const alert = within(card).getByRole("alert");
+    expectCenteredStatusPanel(alert);
+    expectNoOverflowInStoryShell(canvasElement);
   },
 };
 
 export const ConstrainedWidth = {
-  render: () => (
-    <div
-      data-story-shell="work-outcome"
-      style={{ maxWidth: "360px", padding: "1rem" }}
-    >
-      <D3CompletionInformationCard
-        model={populatedTrend}
-        widgetId="work-outcome-chart-narrow-story"
-      />
-    </div>
-  ),
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          model={populatedTrend}
+          widgetId="work-outcome-chart-narrow-story"
+        />
+      ),
+      height: "28rem",
+      maxWidth: "360px",
+    }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const card = await canvas.findByRole("article", {
@@ -253,11 +504,17 @@ export const ConstrainedWidth = {
 };
 
 export const LocalizedZhCN = {
-  args: {
-    locale: "zh-CN",
-    model: populatedTrend,
-    widgetId: "work-outcome-chart-zh-cn-story",
-  },
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          locale="zh-CN"
+          model={populatedTrend}
+          widgetId="work-outcome-chart-zh-cn-story"
+        />
+      ),
+      height: "28rem",
+    }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const card = await canvas.findByRole("article", { name: "工作结果图表" });
@@ -269,5 +526,82 @@ export const LocalizedZhCN = {
     await expect(within(card).getByText("已完成")).toBeVisible();
     await expect(within(card).getByText("刻度")).toBeVisible();
     await expect(within(card).getByText("工作计数")).toBeVisible();
+  },
+};
+
+export const ResizableDesktop = {
+  render: () =>
+    renderResizableWorkOutcomeStoryShell({
+      model: populatedTrend,
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectChartExpandsAfterResize(
+      canvasElement,
+      ".react-resizable-handle-s",
+      { x: 8, y: 144 },
+    );
+  },
+};
+
+export const ResizableConstrainedWidth = {
+  render: () =>
+    renderResizableWorkOutcomeStoryShell({
+      maxWidth: "360px",
+      model: populatedTrend,
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectChartExpandsAfterResize(
+      canvasElement,
+      ".react-resizable-handle-se",
+      { x: 64, y: 144 },
+    );
+    expectNoOverflowInStoryShell(canvasElement);
+  },
+};
+
+export const ResizableEmptyState = {
+  render: () =>
+    renderResizableWorkOutcomeStoryShell({
+      chartState: { status: "empty" },
+      model: emptyTrend,
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectStatusPanelExpandsAfterResize(canvasElement, {
+      expectedRole: "status",
+      handleSelector: ".react-resizable-handle-s",
+      endCoordinates: { x: 8, y: 144 },
+    });
+  },
+};
+
+export const ResizableLoadingStateConstrainedWidth = {
+  render: () =>
+    renderResizableWorkOutcomeStoryShell({
+      chartState: { status: "loading" },
+      maxWidth: "360px",
+      model: emptyTrend,
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectStatusPanelExpandsAfterResize(canvasElement, {
+      expectedRole: "status",
+      handleSelector: ".react-resizable-handle-se",
+      endCoordinates: { x: 64, y: 144 },
+    });
+    expectNoOverflowInStoryShell(canvasElement);
+  },
+};
+
+export const ResizableErrorState = {
+  render: () =>
+    renderResizableWorkOutcomeStoryShell({
+      chartState: { status: "error" },
+      model: emptyTrend,
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectStatusPanelExpandsAfterResize(canvasElement, {
+      expectedRole: "alert",
+      handleSelector: ".react-resizable-handle-s",
+      endCoordinates: { x: 8, y: 144 },
+    });
   },
 };

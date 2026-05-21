@@ -277,7 +277,6 @@
           "capacity": 1
         }
       ],
-      "worktree": "{{ (index .Inputs 0).Name }}",
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
     },
     {
@@ -313,7 +312,6 @@
           "capacity": 1
         }
       ],
-      "worktree": "{{ (index .Inputs 0).Name }}",
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
     },
     {

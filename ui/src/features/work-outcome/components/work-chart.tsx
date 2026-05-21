@@ -42,8 +42,11 @@ export const WORK_CHART_AXIS_LABEL_CLASS = DASHBOARD_CHART_AXIS_LABEL_CLASS;
 const WORK_CHART_MARGIN = { bottom: 40, left: 18, right: 28, top: 28 };
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_READY_CLASS =
-  "h-[16rem] min-h-[14rem] px-5 pb-5 pt-4 sm:h-[18rem] sm:px-6 sm:pb-6 sm:pt-5";
-const WORK_CHART_SHELL_CLASS = "flex flex-col gap-3";
+  "h-full min-h-[14rem] min-w-0 w-full px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5";
+// tailwind-exception: intrinsic-sizing
+const WORK_CHART_STATUS_PANEL_CLASS =
+  "flex h-full min-h-[14rem] min-w-0 w-full flex-1 flex-col justify-center";
+const WORK_CHART_SHELL_CLASS = "flex h-full min-h-0 min-w-0 w-full flex-1 flex-col gap-3";
 const WORK_CHART_TOOLBAR_CLASS =
   "flex flex-wrap items-center justify-end gap-2";
 const WORK_CHART_OVERLAY_CLASS =
@@ -268,7 +271,7 @@ function ReadyWorkChart({
             .map((row) => row.tick)
             .join(","),
         }}
-        style={{ height: "16rem", minHeight: "14rem" }}
+        style={{ minHeight: "14rem" }}
         title={ariaLabel}
       >
         <LineChart
@@ -390,7 +393,11 @@ function WorkChartStatusPanel({
     <div
       aria-busy={ariaBusy || undefined}
       aria-live={role === "alert" ? "assertive" : "polite"}
-      className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}
+      className={cn(
+        EMPTY_STATE_CLASS,
+        EMPTY_STATE_COMPACT_CLASS,
+        WORK_CHART_STATUS_PANEL_CLASS,
+      )}
       role={role}
     >
       {loading ? (

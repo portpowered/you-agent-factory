@@ -40,6 +40,7 @@ make verify-tests
 make verify
 make release-surface-smoke
 make lint
+make backend-size
 make ui-deadcode
 make script-timeout-companion-smoke-100
 make current-factory-watcher-switch-smoke
@@ -73,9 +74,9 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 
 `make typecheck` is the root-level dashboard typecheck command and should stay aligned with the CI `bun run tsc` step.
 
-`make pkg-lint` is the direct repository-owned backend `pkg/` lint command. It runs `go run ./cmd/pkglintcheck`, which pins `golangci-lint`, applies the checked-in `.golangci.pkg.yml` policy, and keeps the first blocking rollout scoped to `./pkg/...`.
+`make backend-size` is the direct maintainer command for the repo-owned backend size gate. It runs `go run ./cmd/backendsizecheck` and fails when maintained backend Go files exceed 1000 lines or maintained backend Go functions exceed 100 lines under the scanner's explicit owned-source rules. When a legacy oversized surface must stay intact temporarily, use an inline `backendsizecheck:ignore-file` or `backendsizecheck:ignore-function` comment with a concrete justification at the owning file or function instead of adding shell-only allowlists.
 
-`make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `make pkg-lint`, and the pinned Go deadcode analyzer. That means `govet` now runs through the owned `golangci-lint` path for `pkg/` instead of a separate standalone `go vet ./...` step. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/development/frontend-deadcode-baseline.json`. The backend deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/development/deadcode-baseline.txt`. Review any drift before updating either baseline.
+`make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, `make backend-size`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/development/frontend-deadcode-baseline.json`. The backend deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/development/deadcode-baseline.txt`. Review any drift before updating either baseline.
 
 Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for handwritten frontend code, not as a prompt to add new suppressions. Generated API artifacts under `ui/src/api/generated/` may keep generated-code-specific exceptions, but handwritten app code, tests, stories, and fixtures should stay under the standard limits by decomposing the surface into smaller feature components, story modules, shared fixtures, or named test helpers. Review-ready proof for that decomposition is the normal `make typecheck`, `make lint`, and behavior-specific test or Storybook evidence for the touched surface, not a separate source-inventory audit.
 
@@ -84,6 +85,12 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 `make verify-tests` is the repository-owned test lane used by CI after Playwright setup. It runs `make ui-test`, `make ui-test-coverage`, `make ui-replay-coverage-check`, `make test-coverage-go`, and `make test-functional`.
 
 `make verify` composes both aggregate lanes for a full review-ready local pass once dependencies and browser prerequisites are already installed. It does not install packages or browsers itself, so routine verification stays network-free after setup.
+
+To reproduce the backend size gate directly, run:
+
+```bash
+make backend-size
+```
 
 To reproduce the backend dead-code gate directly, run:
 
@@ -119,7 +126,7 @@ make ui-deadcode
 
 The seeded command should exit non-zero and point reviewers at `bin/frontend-deadcode-current.json`; remove the seed file before continuing normal verification.
 
-To run both dead-code gates through the normal integrated lint path, run:
+To run the backend size gate and both dead-code gates through the normal integrated lint path, run:
 
 ```bash
 make lint
@@ -205,7 +212,7 @@ projections, or export-only field aliases.
 
 ### Cron Workstation Changes
 
-Cron behavior crosses service tick production, Petri-net guards, dispatcher identity, event history, API read models, and dashboard projections. Keep [Workstation Kinds and Parameterized Fields](../reference/workstations-and-workers.md#cron-kind) as the canonical authoring and migration guide instead of duplicating the full cron model in local notes.
+Cron behavior crosses service tick production, Petri-net guards, dispatcher identity, event history, API read models, and dashboard projections. Keep [Workstation Kinds and Parameterized Fields](../reference/workstations.md#cron-kind) as the canonical authoring and migration guide instead of duplicating the full cron model in local notes.
 
 `TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews` is the end-to-end integration smoke for the token-backed cron flow. It starts service mode, observes missing-input time work, verifies stale tick expiry and retry, submits the required input, proves normal worker dispatch/output, checks canonical cron metadata, and confirms normal API/dashboard projections hide internal time work.
 

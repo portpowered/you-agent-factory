@@ -1,3 +1,4 @@
+// backendsizecheck:ignore-file these multi-session integration tests stay together to preserve end-to-end runtime assertions until dedicated extraction work lands.
 package service
 
 import (

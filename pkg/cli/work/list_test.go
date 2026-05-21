@@ -414,52 +414,11 @@ func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPag
 		requestCount++
 		switch requestCount {
 		case 1:
-			if r.URL.Query().Get("maxResults") != "1" {
-				t.Fatalf("maxResults query = %q, want 1", r.URL.Query().Get("maxResults"))
-			}
-			if r.URL.Query().Get("nextToken") != "" {
-				t.Fatalf("nextToken query = %q, want empty on first page", r.URL.Query().Get("nextToken"))
-			}
-			if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
-				Results: []factoryapi.Work{{
-					Name:         "Plan feature",
-					WorkId:       stringPtr("work-1"),
-					WorkTypeName: stringPtr("story"),
-					State: &factoryapi.WorkState{
-						Name: "init",
-						Type: factoryapi.WorkStateTypeINITIAL,
-					},
-				}},
-				PaginationContext: &factoryapi.PaginationContext{
-					MaxResults: 1,
-					NextToken:  &secondToken,
-				},
-			}); err != nil {
-				t.Fatalf("encode first response: %v", err)
-			}
+			assertListPageRequest(t, r, "1", "")
+			encodeListPageResponse(t, w, "Plan feature", "work-1", "init", factoryapi.WorkStateTypeINITIAL, &secondToken, "first")
 		case 2:
-			if r.URL.Query().Get("maxResults") != "1" {
-				t.Fatalf("maxResults query = %q, want 1", r.URL.Query().Get("maxResults"))
-			}
-			if r.URL.Query().Get("nextToken") != secondToken {
-				t.Fatalf("nextToken query = %q, want %q", r.URL.Query().Get("nextToken"), secondToken)
-			}
-			if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
-				Results: []factoryapi.Work{{
-					Name:         "Review PRD",
-					WorkId:       stringPtr("work-2"),
-					WorkTypeName: stringPtr("story"),
-					State: &factoryapi.WorkState{
-						Name: "review",
-						Type: factoryapi.WorkStateTypePROCESSING,
-					},
-				}},
-				PaginationContext: &factoryapi.PaginationContext{
-					MaxResults: 1,
-				},
-			}); err != nil {
-				t.Fatalf("encode second response: %v", err)
-			}
+			assertListPageRequest(t, r, "1", secondToken)
+			encodeListPageResponse(t, w, "Review PRD", "work-2", "review", factoryapi.WorkStateTypePROCESSING, nil, "second")
 		default:
 			t.Fatalf("unexpected request count %d", requestCount)
 		}
@@ -479,17 +438,7 @@ func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPag
 	if bytes.Contains(firstOut.Bytes(), []byte("executor-slot")) {
 		t.Fatalf("first page JSON included runtime resource text: %q", firstOut.String())
 	}
-
-	var firstResp factoryapi.ListWorkResponse
-	if err := json.Unmarshal(firstOut.Bytes(), &firstResp); err != nil {
-		t.Fatalf("first page JSON is invalid: %v\n%s", err, firstOut.String())
-	}
-	if len(firstResp.Results) != 1 || stringValue(firstResp.Results[0].WorkId) != "work-1" {
-		t.Fatalf("first page results = %#v, want only work-1", firstResp.Results)
-	}
-	if firstResp.PaginationContext == nil || stringValue(firstResp.PaginationContext.NextToken) != secondToken {
-		t.Fatalf("first page pagination context = %#v, want nextToken=%q", firstResp.PaginationContext, secondToken)
-	}
+	assertListJSONPage(t, firstOut.Bytes(), "work-1", &secondToken, "first")
 
 	var secondOut bytes.Buffer
 	err = List(ListConfig{
@@ -505,17 +454,7 @@ func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPag
 	if bytes.Contains(secondOut.Bytes(), []byte("executor-slot")) {
 		t.Fatalf("second page JSON included runtime resource text: %q", secondOut.String())
 	}
-
-	var secondResp factoryapi.ListWorkResponse
-	if err := json.Unmarshal(secondOut.Bytes(), &secondResp); err != nil {
-		t.Fatalf("second page JSON is invalid: %v\n%s", err, secondOut.String())
-	}
-	if len(secondResp.Results) != 1 || stringValue(secondResp.Results[0].WorkId) != "work-2" {
-		t.Fatalf("second page results = %#v, want only work-2", secondResp.Results)
-	}
-	if secondResp.PaginationContext == nil || secondResp.PaginationContext.NextToken != nil {
-		t.Fatalf("second page pagination context = %#v, want no next token", secondResp.PaginationContext)
-	}
+	assertListJSONPage(t, secondOut.Bytes(), "work-2", nil, "second")
 }
 
 func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
@@ -726,6 +665,60 @@ func TestList_InvalidSortBy(t *testing.T) {
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func assertListPageRequest(t *testing.T, r *http.Request, wantMaxResults string, wantNextToken string) {
+	t.Helper()
+	if got := r.URL.Query().Get("maxResults"); got != wantMaxResults {
+		t.Fatalf("maxResults query = %q, want %q", got, wantMaxResults)
+	}
+	if got := r.URL.Query().Get("nextToken"); got != wantNextToken {
+		t.Fatalf("nextToken query = %q, want %q", got, wantNextToken)
+	}
+}
+
+func encodeListPageResponse(
+	t *testing.T,
+	w http.ResponseWriter,
+	workName string,
+	workID string,
+	stateName string,
+	stateType factoryapi.WorkStateType,
+	nextToken *string,
+	pageLabel string,
+) {
+	t.Helper()
+	if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+		Results: []factoryapi.Work{{
+			Name:         workName,
+			WorkId:       stringPtr(workID),
+			WorkTypeName: stringPtr("story"),
+			State: &factoryapi.WorkState{
+				Name: stateName,
+				Type: stateType,
+			},
+		}},
+		PaginationContext: &factoryapi.PaginationContext{
+			MaxResults: 1,
+			NextToken:  nextToken,
+		},
+	}); err != nil {
+		t.Fatalf("encode %s response: %v", pageLabel, err)
+	}
+}
+
+func assertListJSONPage(t *testing.T, payload []byte, wantWorkID string, wantNextToken *string, pageLabel string) {
+	t.Helper()
+	var response factoryapi.ListWorkResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		t.Fatalf("%s page JSON is invalid: %v\n%s", pageLabel, err, string(payload))
+	}
+	if len(response.Results) != 1 || stringValue(response.Results[0].WorkId) != wantWorkID {
+		t.Fatalf("%s page results = %#v, want only %s", pageLabel, response.Results, wantWorkID)
+	}
+	if response.PaginationContext == nil || stringValue(response.PaginationContext.NextToken) != stringValue(wantNextToken) {
+		t.Fatalf("%s page pagination context = %#v, want nextToken=%q", pageLabel, response.PaginationContext, stringValue(wantNextToken))
+	}
 }
 
 func selectJSONRelationByType(t *testing.T, work map[string]any, relationType string) map[string]any {

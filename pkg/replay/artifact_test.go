@@ -16,92 +16,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
-// portos:func-length-exception owner=agent-factory reason=replay-artifact-roundtrip-fixture review=2026-07-18 removal=split-artifact-fixture-event-builders-and-storage-assertions-before-next-replay-artifact-change
 func TestSaveLoad_PreservesReplayArtifactFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "run.replay.json")
 	recordedAt := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
-	generatedFactory := artifactTestFactory()
-	runStarted, err := runStartedEventFromFactory(recordedAt, generatedFactory, &interfaces.ReplayWallClockMetadata{
-		StartedAt:  recordedAt,
-		FinishedAt: recordedAt.Add(time.Second),
-	}, interfaces.ReplayDiagnostics{})
-	if err != nil {
-		t.Fatalf("runStartedEvent: %v", err)
-	}
-	submission := replayWorkRequestEvent(t, "request-1", 2, "api", []factoryapi.Work{{
-		Name:         "story-1",
-		WorkId:       stringPtrIfNotEmpty("work-1"),
-		RequestId:    stringPtrIfNotEmpty("request-1"),
-		WorkTypeName: stringPtrIfNotEmpty("story"),
-		TraceId:      stringPtrIfNotEmpty("trace-1"),
-		Payload:      map[string]any{"title": "first"},
-	}}, nil)
-	dispatch := replayDispatchCreatedEvent(t, interfaces.WorkDispatch{
-		DispatchID:   "dispatch-1",
-		TransitionID: "transition-1",
-		WorkerType:   "executor",
-		InputTokens: workers.InputTokens(interfaces.Token{
-			ID: "token-1",
-			Color: interfaces.TokenColor{
-				WorkID:     "work-1",
-				WorkTypeID: "story",
-				DataType:   interfaces.DataTypeWork,
-				TraceID:    "trace-1",
-			},
-		}),
-		Execution: interfaces.ExecutionMetadata{
-			ReplayKey: "transition-1/work-1",
-			TraceID:   "trace-1",
-			WorkIDs:   []string{"work-1"},
-		},
-	}, 3)
-	inference := replayInferenceResponseEvent(
-		t,
-		interfaces.WorkDispatch{
-			DispatchID: "dispatch-1",
-			Execution: interfaces.ExecutionMetadata{
-				RequestID: "request-1",
-				TraceID:   "trace-1",
-				WorkIDs:   []string{"work-1"},
-			},
-		},
-		"dispatch-1/inference-request/1",
-		1,
-		4,
-		"done",
-		nil,
-		&interfaces.WorkDiagnostics{
-			Provider: &interfaces.ProviderDiagnostic{
-				Provider: "mock",
-				Model:    "mock-model",
-				ResponseMetadata: map[string]string{
-					"request_id": "provider-request-1",
-				},
-			},
-		},
-		"",
-	)
-	completion := replayDispatchCompletedEvent(t, "completion-1", interfaces.WorkResult{
-		DispatchID:   "dispatch-1",
-		TransitionID: "transition-1",
-		Outcome:      interfaces.OutcomeAccepted,
-		Output:       "done",
-	}, 5)
-	events := []factoryapi.FactoryEvent{runStarted, submission, dispatch, inference, completion, runFinishedEvent(recordedAt.Add(time.Second), &interfaces.ReplayWallClockMetadata{
-		StartedAt:  recordedAt,
-		FinishedAt: recordedAt.Add(time.Second),
-	}, interfaces.ReplayDiagnostics{})}
-	assignEventSequences(events)
-	artifact := &interfaces.ReplayArtifact{
-		SchemaVersion: CurrentSchemaVersion,
-		RecordedAt:    recordedAt,
-		Events:        events,
-		Factory:       generatedFactory,
-		WallClock: &interfaces.ReplayWallClockMetadata{
-			StartedAt:  recordedAt,
-			FinishedAt: recordedAt.Add(time.Second),
-		},
-	}
+	artifact := replayArtifactFieldsFixture(t, recordedAt)
 
 	if err := Save(path, artifact); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -112,100 +30,12 @@ func TestSaveLoad_PreservesReplayArtifactFields(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	dispatchPayload := requireReplayDispatchCreated(t, loaded.Events, "dispatch-1")
-	if dispatchPayload.TransitionId != "transition-1" {
-		t.Fatalf("dispatch transition = %q, want transition-1", dispatchPayload.TransitionId)
-	}
-	completionPayload := requireReplayDispatchCompleted(t, loaded.Events, "dispatch-1")
-	if stringValue(completionPayload.CompletionId) != "completion-1" {
-		t.Fatalf("completion ID = %q, want completion-1", stringValue(completionPayload.CompletionId))
-	}
-	if loaded.Events[1].Context.Tick != 2 || loaded.Events[2].Context.Tick != 3 || loaded.Events[3].Context.Tick != 4 || loaded.Events[4].Context.Tick != 5 {
-		t.Fatalf("logical ticks were not preserved: request=%d dispatch=%d inference=%d completion=%d",
-			loaded.Events[1].Context.Tick,
-			loaded.Events[2].Context.Tick,
-			loaded.Events[3].Context.Tick,
-			loaded.Events[4].Context.Tick)
-	}
-	inferencePayload := requireReplayInferenceResponse(t, loaded.Events, "dispatch-1/inference-request/1")
-	if got := (*inferencePayload.Diagnostics.Provider.ResponseMetadata)["request_id"]; got != "provider-request-1" {
-		t.Fatalf("provider diagnostic request_id = %q, want provider-request-1", got)
-	}
-	if inferencePayload.Diagnostics == nil {
-		t.Fatalf("inference diagnostics = nil, want safe diagnostics")
-	}
+	assertReplayArtifactFieldPreservation(t, loaded)
 }
 
-// portos:func-length-exception owner=agent-factory reason=replay-safe-diagnostics-regression-fixture review=2026-07-21 removal=extract-unsafe-diagnostics-fixture-builder-before-next-replay-artifact-expansion
 func TestSaveLoad_StripsUnsafeCompletionDiagnosticsFromStoredReplayEvents(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "safe-diagnostics.replay.json")
-	artifact := testReplayArtifact(
-		t,
-		replayInferenceResponseEvent(
-			t,
-			interfaces.WorkDispatch{DispatchID: "dispatch-safe"},
-			"dispatch-safe/inference-request/1",
-			1,
-			2,
-			"completed",
-			&interfaces.ProviderSessionMetadata{
-				Provider: "codex",
-				Kind:     "response_id",
-				ID:       "resp-safe-123",
-			},
-			&interfaces.WorkDiagnostics{
-				RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
-					SystemPromptHash: "system-hash-123",
-					UserMessageHash:  "user-hash-456",
-					Variables: map[string]string{
-						"prompt_source":  "factory-renderer",
-						"work_type_name": "story",
-						"system_prompt":  "raw rendered system prompt must stay private",
-						"user_message":   "raw rendered user message must stay private",
-						"stdin":          "raw rendered stdin must stay private",
-						"env":            "raw rendered environment must stay private",
-					},
-				},
-				Provider: &interfaces.ProviderDiagnostic{
-					Provider: "codex",
-					Model:    "gpt-5.4",
-					RequestMetadata: map[string]string{
-						"prompt_source":      "provider-renderer",
-						"worker_type":        "builder",
-						"system_prompt_body": "raw prompt body must stay private",
-						"stdin_payload":      "raw stdin payload must stay private",
-						"env_secret":         "raw env secret must stay private",
-					},
-					ResponseMetadata: map[string]string{
-						"retry_count":         "1",
-						"provider_session_id": "resp-safe-123",
-						"system_prompt_body":  "raw response prompt body must stay private",
-						"stdin_payload":       "raw response stdin payload must stay private",
-						"env_secret":          "raw response env secret must stay private",
-					},
-				},
-				Command: &interfaces.CommandDiagnostic{
-					Command: "echo",
-					Stdin:   "raw command stdin must stay private",
-					Env: map[string]string{
-						"AGENT_FACTORY_AUTH_TOKEN": "raw environment value must stay private",
-					},
-				},
-				Panic: &interfaces.PanicDiagnostic{Stack: "panic stack should not be stored"},
-			},
-			"",
-		),
-		replayDispatchCompletedEvent(t, "completion-safe", interfaces.WorkResult{
-			DispatchID:   "dispatch-safe",
-			TransitionID: "transition-safe",
-			Outcome:      interfaces.OutcomeAccepted,
-			Output:       "completed",
-			ProviderFailure: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyRetryable,
-				Type:   interfaces.ProviderErrorTypeThrottled,
-			},
-		}, 3),
-	)
+	artifact := safeDiagnosticsReplayArtifact(t)
 
 	if err := Save(path, artifact); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -226,6 +56,187 @@ func TestSaveLoad_StripsUnsafeCompletionDiagnosticsFromStoredReplayEvents(t *tes
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
+	assertStoredReplayDiagnosticsAreSafe(t, loaded)
+}
+
+func replayArtifactFieldsFixture(t *testing.T, recordedAt time.Time) *interfaces.ReplayArtifact {
+	t.Helper()
+
+	generatedFactory := artifactTestFactory()
+	events := replayArtifactFieldEvents(t, recordedAt, generatedFactory)
+	return &interfaces.ReplayArtifact{
+		SchemaVersion: CurrentSchemaVersion,
+		RecordedAt:    recordedAt,
+		Events:        events,
+		Factory:       generatedFactory,
+		WallClock:     replayWallClockMetadata(recordedAt),
+	}
+}
+
+func replayArtifactFieldEvents(t *testing.T, recordedAt time.Time, generatedFactory factoryapi.Factory) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	runStarted, err := runStartedEventFromFactory(recordedAt, generatedFactory, replayWallClockMetadata(recordedAt), interfaces.ReplayDiagnostics{})
+	if err != nil {
+		t.Fatalf("runStartedEvent: %v", err)
+	}
+	events := []factoryapi.FactoryEvent{
+		runStarted,
+		replayWorkRequestEvent(t, "request-1", 2, "api", []factoryapi.Work{{
+			Name:         "story-1",
+			WorkId:       stringPtrIfNotEmpty("work-1"),
+			RequestId:    stringPtrIfNotEmpty("request-1"),
+			WorkTypeName: stringPtrIfNotEmpty("story"),
+			TraceId:      stringPtrIfNotEmpty("trace-1"),
+			Payload:      map[string]any{"title": "first"},
+		}}, nil),
+		replayDispatchCreatedEvent(t, replayArtifactFieldDispatch(), 3),
+		replayInferenceResponseEvent(t, replayArtifactFieldInferenceDispatch(), "dispatch-1/inference-request/1", 1, 4, "done", nil, replayArtifactFieldDiagnostics(), ""),
+		replayDispatchCompletedEvent(t, "completion-1", interfaces.WorkResult{
+			DispatchID: "dispatch-1", TransitionID: "transition-1", Outcome: interfaces.OutcomeAccepted, Output: "done",
+		}, 5),
+		runFinishedEvent(recordedAt.Add(time.Second), replayWallClockMetadata(recordedAt), interfaces.ReplayDiagnostics{}),
+	}
+	assignEventSequences(events)
+	return events
+}
+
+func replayArtifactFieldDispatch() interfaces.WorkDispatch {
+	return interfaces.WorkDispatch{
+		DispatchID:   "dispatch-1",
+		TransitionID: "transition-1",
+		WorkerType:   "executor",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "token-1",
+			Color: interfaces.TokenColor{
+				WorkID: "work-1", WorkTypeID: "story", DataType: interfaces.DataTypeWork, TraceID: "trace-1",
+			},
+		}),
+		Execution: interfaces.ExecutionMetadata{
+			ReplayKey: "transition-1/work-1",
+			TraceID:   "trace-1",
+			WorkIDs:   []string{"work-1"},
+		},
+	}
+}
+
+func replayArtifactFieldInferenceDispatch() interfaces.WorkDispatch {
+	return interfaces.WorkDispatch{
+		DispatchID: "dispatch-1",
+		Execution: interfaces.ExecutionMetadata{
+			RequestID: "request-1",
+			TraceID:   "trace-1",
+			WorkIDs:   []string{"work-1"},
+		},
+	}
+}
+
+func replayArtifactFieldDiagnostics() *interfaces.WorkDiagnostics {
+	return &interfaces.WorkDiagnostics{
+		Provider: &interfaces.ProviderDiagnostic{
+			Provider: "mock",
+			Model:    "mock-model",
+			ResponseMetadata: map[string]string{
+				"request_id": "provider-request-1",
+			},
+		},
+	}
+}
+
+func replayWallClockMetadata(recordedAt time.Time) *interfaces.ReplayWallClockMetadata {
+	return &interfaces.ReplayWallClockMetadata{
+		StartedAt:  recordedAt,
+		FinishedAt: recordedAt.Add(time.Second),
+	}
+}
+
+func assertReplayArtifactFieldPreservation(t *testing.T, loaded *interfaces.ReplayArtifact) {
+	t.Helper()
+
+	dispatchPayload := requireReplayDispatchCreated(t, loaded.Events, "dispatch-1")
+	if dispatchPayload.TransitionId != "transition-1" {
+		t.Fatalf("dispatch transition = %q, want transition-1", dispatchPayload.TransitionId)
+	}
+	completionPayload := requireReplayDispatchCompleted(t, loaded.Events, "dispatch-1")
+	if stringValue(completionPayload.CompletionId) != "completion-1" {
+		t.Fatalf("completion ID = %q, want completion-1", stringValue(completionPayload.CompletionId))
+	}
+	if loaded.Events[1].Context.Tick != 2 || loaded.Events[2].Context.Tick != 3 || loaded.Events[3].Context.Tick != 4 || loaded.Events[4].Context.Tick != 5 {
+		t.Fatalf("logical ticks were not preserved: request=%d dispatch=%d inference=%d completion=%d",
+			loaded.Events[1].Context.Tick, loaded.Events[2].Context.Tick, loaded.Events[3].Context.Tick, loaded.Events[4].Context.Tick)
+	}
+	inferencePayload := requireReplayInferenceResponse(t, loaded.Events, "dispatch-1/inference-request/1")
+	if got := (*inferencePayload.Diagnostics.Provider.ResponseMetadata)["request_id"]; got != "provider-request-1" {
+		t.Fatalf("provider diagnostic request_id = %q, want provider-request-1", got)
+	}
+	if inferencePayload.Diagnostics == nil {
+		t.Fatalf("inference diagnostics = nil, want safe diagnostics")
+	}
+}
+
+func safeDiagnosticsReplayArtifact(t *testing.T) *interfaces.ReplayArtifact {
+	t.Helper()
+
+	return testReplayArtifact(
+		t,
+		replayInferenceResponseEvent(
+			t,
+			interfaces.WorkDispatch{DispatchID: "dispatch-safe"},
+			"dispatch-safe/inference-request/1",
+			1,
+			2,
+			"completed",
+			&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
+			unsafeReplayDiagnosticsFixture(),
+			"",
+		),
+		replayDispatchCompletedEvent(t, "completion-safe", interfaces.WorkResult{
+			DispatchID:   "dispatch-safe",
+			TransitionID: "transition-safe",
+			Outcome:      interfaces.OutcomeAccepted,
+			Output:       "completed",
+			ProviderFailure: &interfaces.ProviderFailureMetadata{
+				Family: interfaces.ProviderErrorFamilyRetryable,
+				Type:   interfaces.ProviderErrorTypeThrottled,
+			},
+		}, 3),
+	)
+}
+
+func unsafeReplayDiagnosticsFixture() *interfaces.WorkDiagnostics {
+	return &interfaces.WorkDiagnostics{
+		RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
+			SystemPromptHash: "system-hash-123",
+			UserMessageHash:  "user-hash-456",
+			Variables: map[string]string{
+				"prompt_source": "factory-renderer", "work_type_name": "story", "system_prompt": "raw rendered system prompt must stay private",
+				"user_message": "raw rendered user message must stay private", "stdin": "raw rendered stdin must stay private", "env": "raw rendered environment must stay private",
+			},
+		},
+		Provider: &interfaces.ProviderDiagnostic{
+			Provider: "codex",
+			Model:    "gpt-5.4",
+			RequestMetadata: map[string]string{
+				"prompt_source": "provider-renderer", "worker_type": "builder", "system_prompt_body": "raw prompt body must stay private",
+				"stdin_payload": "raw stdin payload must stay private", "env_secret": "raw env secret must stay private",
+			},
+			ResponseMetadata: map[string]string{
+				"retry_count": "1", "provider_session_id": "resp-safe-123", "system_prompt_body": "raw response prompt body must stay private",
+				"stdin_payload": "raw response stdin payload must stay private", "env_secret": "raw response env secret must stay private",
+			},
+		},
+		Command: &interfaces.CommandDiagnostic{
+			Command: "echo",
+			Stdin:   "raw command stdin must stay private",
+			Env:     map[string]string{"AGENT_FACTORY_AUTH_TOKEN": "raw environment value must stay private"},
+		},
+		Panic: &interfaces.PanicDiagnostic{Stack: "panic stack should not be stored"},
+	}
+}
+
+func assertStoredReplayDiagnosticsAreSafe(t *testing.T, loaded *interfaces.ReplayArtifact) {
+	t.Helper()
+
 	inferencePayload := requireReplayInferenceResponse(t, loaded.Events, "dispatch-safe/inference-request/1")
 	if inferencePayload.Diagnostics == nil || inferencePayload.Diagnostics.Provider == nil || inferencePayload.Diagnostics.RenderedPrompt == nil {
 		t.Fatalf("inference diagnostics = %#v, want provider and rendered prompt", inferencePayload.Diagnostics)
