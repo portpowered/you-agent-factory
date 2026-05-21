@@ -239,7 +239,10 @@ func TestTickResultGeneratedBatchesRecordedBeforeInputsAndIdempotent(t *testing.
 	if requests[0].Source != "generator:test" {
 		t.Fatalf("work request source = %q, want generator:test", requests[0].Source)
 	}
-	if len(requests[0].Relations) != 1 || requests[0].Relations[0].SourceWorkID != "work-review" {
+	if len(requests[0].Relations) != 1 ||
+		requests[0].Relations[0].SourceWorkID != "work-review" ||
+		requests[0].Relations[0].TargetWorkID != "work-draft" ||
+		requests[0].Relations[0].RequiredState != "complete" {
 		t.Fatalf("request relations = %#v, want canonical relation", requests[0].Relations)
 	}
 	if len(inputs) != 2 {

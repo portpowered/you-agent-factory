@@ -542,6 +542,15 @@ func assertGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryEvent) 
 	if requestPayload.Works == nil || len(*requestPayload.Works) != 2 {
 		t.Fatalf("request works = %#v, want generated work metadata", requestPayload.Works)
 	}
+	if requestPayload.Relations == nil || len(*requestPayload.Relations) != 1 {
+		t.Fatalf("request relations = %#v, want canonical generated dependency", requestPayload.Relations)
+	}
+	if got := (*requestPayload.Relations)[0]; got.SourceWorkName != "review" ||
+		got.TargetWorkName != "draft" ||
+		stringValueForRuntimeTest(got.TargetWorkId) != "work-draft" ||
+		stringValueForRuntimeTest(got.RequiredState) != "done" {
+		t.Fatalf("request relation = %#v, want review depends on draft", got)
+	}
 	for _, work := range *requestPayload.Works {
 		if stringValueForRuntimeTest(work.CurrentChainingTraceId) != "trace-generated" {
 			t.Fatalf("generated work current chaining trace ID = %q, want trace-generated", stringValueForRuntimeTest(work.CurrentChainingTraceId))
@@ -555,7 +564,8 @@ func assertGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryEvent) 
 	if err != nil {
 		t.Fatalf("relationship payload: %v", err)
 	}
-	if stringValueForRuntimeTest(relationPayload.Relation.TargetWorkId) != "work-draft" ||
+	if relationPayload.Relation.SourceWorkName != "review" ||
+		stringValueForRuntimeTest(relationPayload.Relation.TargetWorkId) != "work-draft" ||
 		stringValueForRuntimeTest(events[3].Context.RequestId) != "generated-request-events" ||
 		firstRuntimeTestString(events[3].Context.TraceIds) != "trace-generated" {
 		t.Fatalf("relationship payload = %#v, want generated request dependency", relationPayload)
@@ -574,5 +584,12 @@ func assertGeneratedBatchProjection(t *testing.T, events []factoryapi.FactoryEve
 	}
 	if len(replayed.WorkItems) != 2 {
 		t.Fatalf("replayed work items = %#v, want generated request work", replayed.WorkItems)
+	}
+	relations := world.RelationsByWorkID["work-review"]
+	if len(relations) != 1 ||
+		relations[0].TargetWorkID != "work-draft" ||
+		relations[0].TargetWorkName != "draft" ||
+		relations[0].RequiredState != "done" {
+		t.Fatalf("replayed generated relations = %#v, want review depends on draft", relations)
 	}
 }
