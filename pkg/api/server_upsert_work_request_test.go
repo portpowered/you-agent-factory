@@ -26,9 +26,39 @@ func TestUpsertWorkRequest_NormalizesLegacyStringPayloadIntoCanonicalContent(t *
 }
 
 func TestUpsertWorkRequest_RejectsInvalidContentPartShape(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
 	rec := upsertWorkRequest(t, srv, "/work-requests/request-1", `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","content":[{"type":"text","file":"wrong"}]}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].content[0].file is not supported")
+	if len(mf.Submitted) != 0 || len(mf.WorkRequests) != 0 {
+		t.Fatalf("submissions = workRequests:%d submitted:%d, want 0/0", len(mf.WorkRequests), len(mf.Submitted))
+	}
+}
+
+func TestUpsertWorkRequest_AcceptsCanonicalContent(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := upsertWorkRequest(t, srv, "/work-requests/request-canonical", `{
+		"requestId":"request-canonical",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{"name":"draft","workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","file":"fixtures/ui.png"}]}]
+	}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	}
+	if len(mf.Submitted[0].Content) != 2 {
+		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
+	}
+	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
+		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
+	}
+	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].File != "fixtures/ui.png" {
+		t.Fatalf("submitted content[1] = %#v, want canonical image content", mf.Submitted[0].Content[1])
+	}
 }
 
 func TestUpsertWorkRequest_FirstSubmitAndRepeatedRequestID(t *testing.T) {

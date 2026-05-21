@@ -58,11 +58,29 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	if len(mf.Submitted) != 1 {
 		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
 	}
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 {
+		t.Fatalf("work requests = %#v, want one submitted work request", mf.WorkRequests)
+	}
 	if string(mf.Submitted[0].Payload) != "Review this UI." {
 		t.Fatalf("payload = %q, want legacy text fallback", mf.Submitted[0].Payload)
 	}
 	if len(mf.Submitted[0].Content) != 2 {
 		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
+	}
+	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
+		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
+	}
+	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].File != "fixtures/ui.png" {
+		t.Fatalf("submitted content[1] = %#v, want canonical image content", mf.Submitted[0].Content[1])
+	}
+	if len(mf.WorkRequests[0].Works[0].Content) != 2 {
+		t.Fatalf("submitted work request content count = %d, want 2", len(mf.WorkRequests[0].Works[0].Content))
+	}
+	if mf.WorkRequests[0].Works[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.WorkRequests[0].Works[0].Content[0].Text != "Review this UI." {
+		t.Fatalf("submitted work request content[0] = %#v, want canonical text content", mf.WorkRequests[0].Works[0].Content[0])
+	}
+	if mf.WorkRequests[0].Works[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.WorkRequests[0].Works[0].Content[1].File != "fixtures/ui.png" {
+		t.Fatalf("submitted work request content[1] = %#v, want canonical image content", mf.WorkRequests[0].Works[0].Content[1])
 	}
 }
 
@@ -73,9 +91,13 @@ func TestSubmitWork_RejectsConflictingContentAndPayload(t *testing.T) {
 }
 
 func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
 	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"image","text":"wrong-field"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].text is not supported")
+	if len(mf.Submitted) != 0 || len(mf.WorkRequests) != 0 {
+		t.Fatalf("submissions = workRequests:%d submitted:%d, want 0/0", len(mf.WorkRequests), len(mf.Submitted))
+	}
 }
 
 func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T) {
