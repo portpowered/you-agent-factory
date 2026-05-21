@@ -297,6 +297,7 @@ func isSafeProviderMetadataKey(key string) bool {
 		"source",
 		"worker_type",
 		"workstation_type",
+		"worktree_handling",
 		"working_directory",
 		"worktree":
 		return true

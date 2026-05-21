@@ -58,8 +58,9 @@ func TestSafeWorkDiagnosticsRoundTrip_PreservesSafeFieldsOnly(t *testing.T) {
 			Provider: "openai",
 			Model:    "gpt-5.4",
 			RequestMetadata: map[string]string{
-				"session_id": "sess-1",
-				"unsafe":     "drop-me",
+				"session_id":        "sess-1",
+				"worktree_handling": "reuse_working_directory_overlap",
+				"unsafe":            "drop-me",
 			},
 			ResponseMetadata: map[string]string{
 				"retry_count": "0",
@@ -93,7 +94,8 @@ func TestSafeWorkDiagnosticsRoundTrip_PreservesSafeFieldsOnly(t *testing.T) {
 			Provider: "openai",
 			Model:    "gpt-5.4",
 			RequestMetadata: map[string]string{
-				"session_id": "sess-1",
+				"session_id":        "sess-1",
+				"worktree_handling": "reuse_working_directory_overlap",
 			},
 			ResponseMetadata: map[string]string{
 				"retry_count": "0",

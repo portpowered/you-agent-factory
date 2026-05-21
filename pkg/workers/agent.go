@@ -164,6 +164,7 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 		ToolExecutionMode:            interfaces.RunnerToolExecutionModeRequired,
 		RequiredOptionalCapabilities: requiredRunnerOptionalCapabilities(request),
 		EnvVars:                      cloneEnvVars(request.EnvVars),
+		WorktreeHandling:             request.WorktreeHandling,
 		Worktree:                     request.Worktree,
 		WorkingDirectory:             request.WorkingDirectory,
 	}

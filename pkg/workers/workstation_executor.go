@@ -55,6 +55,7 @@ type resolvedWorkstationExecutionContext struct {
 	ProjectID        string
 	InputTokens      []interfaces.Token
 	EnvVars          map[string]string
+	WorktreeHandling string
 	Worktree         string
 	WorkingDirectory string
 }
@@ -219,6 +220,46 @@ func pathExists(value string) bool {
 	return err == nil || !errors.Is(err, os.ErrNotExist)
 }
 
+const codexWorktreeHandlingReuseWorkingDirectory = "reuse_working_directory_overlap"
+
+func prepareCodexWorktreeRequest(request interfaces.WorkstationExecutionRequest) interfaces.WorkstationExecutionRequest {
+	if interfaces.NormalizeRunnerID(request.RunnerID) != interfaces.RunnerIDCodex {
+		return request
+	}
+	if !pathsOverlapForCodexReuse(request.WorkingDirectory, request.Worktree) {
+		return request
+	}
+	request.WorktreeHandling = codexWorktreeHandlingReuseWorkingDirectory
+	if request.WorkingDirectory == "" {
+		request.WorkingDirectory = request.Worktree
+	}
+	request.Worktree = ""
+	return request
+}
+
+func pathsOverlapForCodexReuse(workingDirectory, worktree string) bool {
+	if workingDirectory == "" || worktree == "" {
+		return false
+	}
+	workingDirectory = filepath.Clean(filepath.FromSlash(workingDirectory))
+	worktree = filepath.Clean(filepath.FromSlash(worktree))
+	return sameOrNestedPath(workingDirectory, worktree) || sameOrNestedPath(worktree, workingDirectory)
+}
+
+func sameOrNestedPath(root, candidate string) bool {
+	if root == "" || candidate == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfaces.WorkDispatch, workerName string, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (interfaces.WorkstationExecutionRequest, *interfaces.WorkResult) {
 	rendered, err := we.Renderer.Render(
 		workstationDef.PromptTemplate,
@@ -243,7 +284,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 	}
 
 	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
-	return interfaces.WorkstationExecutionRequest{
+	request := interfaces.WorkstationExecutionRequest{
 		Dispatch:              interfaces.CloneWorkDispatch(dispatch),
 		WorkerType:            workerName,
 		WorkstationType:       dispatch.WorkstationName,
@@ -255,9 +296,20 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 		UserMessage:           rendered,
 		OutputSchema:          workstationDef.OutputSchema,
 		EnvVars:               cloneEnvVars(requestContext.EnvVars),
+		WorktreeHandling:      requestContext.WorktreeHandling,
 		Worktree:              requestContext.Worktree,
 		WorkingDirectory:      requestContext.WorkingDirectory,
-	}, nil
+	}
+	request = prepareCodexWorktreeRequest(request)
+	if request.WorktreeHandling != "" {
+		logger.Info("workstation: prepared codex worktree handling",
+			WorkLogFields(dispatch.Execution,
+				"transition_id", dispatch.TransitionID,
+				"dispatch_id", dispatch.DispatchID,
+				"worktree_handling", request.WorktreeHandling,
+				"working_directory", request.WorkingDirectory)...)
+	}
+	return request, nil
 }
 
 func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (interfaces.WorkResult, error) {

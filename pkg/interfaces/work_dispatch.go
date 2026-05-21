@@ -45,6 +45,7 @@ type WorkstationExecutionRequest struct {
 	UserMessage           string                `json:"user_message,omitempty"`
 	OutputSchema          string                `json:"output_schema,omitempty"`
 	EnvVars               map[string]string     `json:"env_vars,omitempty"`
+	WorktreeHandling      string                `json:"worktree_handling,omitempty"`
 	Worktree              string                `json:"worktree,omitempty"`
 	WorkingDirectory      string                `json:"working_directory,omitempty"`
 }
@@ -64,6 +65,7 @@ type ProviderInferenceRequest struct {
 	ToolExecutionMode            RunnerToolExecutionMode    `json:"tool_execution_mode,omitempty"`
 	RequiredOptionalCapabilities []RunnerOptionalCapability `json:"required_optional_capabilities,omitempty"`
 	EnvVars                      map[string]string          `json:"env_vars,omitempty"`
+	WorktreeHandling             string                     `json:"worktree_handling,omitempty"`
 	Worktree                     string                     `json:"worktree,omitempty"`
 	WorkingDirectory             string                     `json:"working_directory,omitempty"`
 	Model                        string                     `json:"model,omitempty"`

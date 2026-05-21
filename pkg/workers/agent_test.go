@@ -83,6 +83,18 @@ func withAgentWorkingDirectory(workingDirectory string) func(*interfaces.Worksta
 	}
 }
 
+func withAgentWorktreeHandling(worktreeHandling string) func(*interfaces.WorkstationExecutionRequest) {
+	return func(req *interfaces.WorkstationExecutionRequest) {
+		req.WorktreeHandling = worktreeHandling
+	}
+}
+
+func withAgentRunnerID(runnerID string) func(*interfaces.WorkstationExecutionRequest) {
+	return func(req *interfaces.WorkstationExecutionRequest) {
+		req.RunnerID = runnerID
+	}
+}
+
 func TestAgentExecutor_SuccessfulResponse_PopulatesOutput(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "The answer is 42."}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
@@ -138,6 +150,7 @@ func TestAgentExecutor_AttachesProviderDiagnosticsToWorkResult(t *testing.T) {
 			WorkerType:      "worker-a",
 			WorkstationName: "review",
 		},
+		withAgentWorktreeHandling(codexWorktreeHandlingReuseWorkingDirectory),
 		withAgentPrompts("System prompt", "User prompt"),
 	))
 	if err != nil {
@@ -157,6 +170,9 @@ func TestAgentExecutor_AttachesProviderDiagnosticsToWorkResult(t *testing.T) {
 	}
 	if result.Diagnostics.Provider.RequestMetadata["workstation_type"] != "review" {
 		t.Fatalf("diagnostic workstation = %q, want review", result.Diagnostics.Provider.RequestMetadata["workstation_type"])
+	}
+	if result.Diagnostics.Provider.RequestMetadata["worktree_handling"] != codexWorktreeHandlingReuseWorkingDirectory {
+		t.Fatalf("diagnostic worktree handling = %q", result.Diagnostics.Provider.RequestMetadata["worktree_handling"])
 	}
 	if result.Diagnostics.Provider.ResponseMetadata["request_id"] != "provider-request-1" {
 		t.Fatalf("diagnostic response metadata = %#v", result.Diagnostics.Provider.ResponseMetadata)
@@ -382,6 +398,9 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	if req.Worktree != request.Worktree || req.WorkingDirectory != request.WorkingDirectory {
 		t.Fatalf("request paths = worktree %q working_directory %q", req.Worktree, req.WorkingDirectory)
 	}
+	if req.WorktreeHandling != request.WorktreeHandling {
+		t.Fatalf("request worktree handling = %q, want %q", req.WorktreeHandling, request.WorktreeHandling)
+	}
 	if req.Model != "claude-sonnet-4-20250514" || req.ModelProvider != string(ModelProviderClaude) || req.SessionID != "session-1" {
 		t.Fatalf("request provider fields = model %q provider %q session %q", req.Model, req.ModelProvider, req.SessionID)
 	}
@@ -423,6 +442,40 @@ func TestAgentExecutor_ClaudeSessionIDFromRuntimeConfigFlowsIntoProviderRequest(
 	}
 	if provider.lastReq.SessionID != "claude-session-123" {
 		t.Fatalf("provider request session id = %q, want %q", provider.lastReq.SessionID, "claude-session-123")
+	}
+}
+
+func TestAgentExecutor_CodexOverlapReuseDoesNotRequireWorktreeCapability(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {Model: "gpt-5-codex", ModelProvider: string(ModelProviderCodex)},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:      "d-codex",
+			TransitionID:    "t-codex",
+			WorkerType:      "worker-a",
+			WorkstationName: "review",
+		},
+		withAgentRunnerID(interfaces.RunnerIDCodex),
+		withAgentWorktreeHandling(codexWorktreeHandlingReuseWorkingDirectory),
+		withAgentWorkingDirectory("/workspace/project"),
+		withAgentPrompts("system", "user"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderCodex) {
+		t.Fatalf("model provider = %q, want codex", provider.lastReq.ModelProvider)
+	}
+	for _, capability := range provider.lastReq.RequiredOptionalCapabilities {
+		if capability == interfaces.RunnerOptionalCapabilityWorktree {
+			t.Fatalf("required capabilities = %#v, want codex overlap reuse to omit worktree", provider.lastReq.RequiredOptionalCapabilities)
+		}
 	}
 }
 

@@ -403,6 +403,102 @@ func TestWorkstationExecutor_ResolvesPortableRootedWorkingDirectoryAgainstRuntim
 	}
 }
 
+func TestWorkstationExecutor_PreparesCodexOverlapWorktreeByReusingWorkingDirectory(t *testing.T) {
+	workingDirectory := t.TempDir()
+	worktree := filepath.Join(workingDirectory, ".claude", "worktrees", "story-1")
+
+	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system", ModelProvider: string(ModelProviderCodex)},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"review": {
+					Type:             interfaces.WorkstationTypeModel,
+					PromptTemplate:   "Review {{ .Context.WorkDir }}",
+					WorkingDirectory: filepath.ToSlash(workingDirectory),
+					Worktree:         filepath.ToSlash(worktree),
+				},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-codex-overlap",
+		TransitionID:    "t-codex-overlap",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if mock.dispatch.RunnerID != interfaces.RunnerIDCodex {
+		t.Fatalf("runner ID = %q, want %q", mock.dispatch.RunnerID, interfaces.RunnerIDCodex)
+	}
+	if mock.dispatch.WorkingDirectory != filepath.Clean(workingDirectory) {
+		t.Fatalf("working directory = %q, want %q", mock.dispatch.WorkingDirectory, filepath.Clean(workingDirectory))
+	}
+	if mock.dispatch.Worktree != "" {
+		t.Fatalf("worktree = %q, want empty after codex overlap reuse", mock.dispatch.Worktree)
+	}
+	if mock.dispatch.WorktreeHandling != codexWorktreeHandlingReuseWorkingDirectory {
+		t.Fatalf("worktree handling = %q, want %q", mock.dispatch.WorktreeHandling, codexWorktreeHandlingReuseWorkingDirectory)
+	}
+	if mock.dispatch.UserMessage != "Review "+filepath.Clean(workingDirectory) {
+		t.Fatalf("user message = %q", mock.dispatch.UserMessage)
+	}
+}
+
+func TestWorkstationExecutor_PreservesDistinctWorktreeForNonCodexRunner(t *testing.T) {
+	workingDirectory := t.TempDir()
+	worktree := filepath.Join(workingDirectory, ".claude", "worktrees", "story-1")
+
+	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system", ModelProvider: string(ModelProviderCursor)},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"review": {
+					Type:             interfaces.WorkstationTypeModel,
+					Runner:           interfaces.RunnerIDCursorCLI,
+					PromptTemplate:   "Review {{ .Context.WorkDir }}",
+					WorkingDirectory: filepath.ToSlash(workingDirectory),
+					Worktree:         filepath.ToSlash(worktree),
+				},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-claude-overlap",
+		TransitionID:    "t-claude-overlap",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if mock.dispatch.Worktree != filepath.ToSlash(worktree) {
+		t.Fatalf("worktree = %q, want original overlap path for non-codex", mock.dispatch.Worktree)
+	}
+	if mock.dispatch.WorktreeHandling != "" {
+		t.Fatalf("worktree handling = %q, want empty for non-codex", mock.dispatch.WorktreeHandling)
+	}
+}
+
 func TestWorkstationExecutor_PreservesExistingUnixAbsoluteWorkingDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix absolute path semantics do not apply on Windows")
