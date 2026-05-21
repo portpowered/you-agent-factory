@@ -171,17 +171,42 @@ function editableConfigurationSection(
   return section;
 }
 
+async function expectSingleEditableConfigurationSection(
+  currentSelection: HTMLElement,
+): Promise<HTMLElement> {
+  await expect(
+    within(currentSelection).getAllByRole("heading", {
+      name: "Configuration",
+    }),
+  ).toHaveLength(1);
+
+  return editableConfigurationSection(currentSelection);
+}
+
 async function expectEditableConfigurationBrowserFlow(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
 
-  await userEvent.click(
-    await canvas.findByRole("button", { name: "Select Review workstation" }),
-  );
+  for (const workstationName of ["Plan", "Implement", "Review"]) {
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: `Select ${workstationName} workstation`,
+      }),
+    );
+
+    const currentSelection = currentSelectionCard(canvasElement);
+    await expectSingleEditableConfigurationSection(currentSelection);
+    await expect(
+      within(currentSelection).getByText(workstationName, {
+        selector: "p",
+      }),
+    ).toBeVisible();
+  }
 
   const currentSelection = currentSelectionCard(canvasElement);
-  const section = editableConfigurationSection(currentSelection);
+  const section =
+    await expectSingleEditableConfigurationSection(currentSelection);
   const sectionScope = within(section);
   const expandButton = sectionScope.getByRole("button", {
     name: "Expand editable configuration",

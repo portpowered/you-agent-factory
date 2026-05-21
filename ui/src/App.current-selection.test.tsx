@@ -579,6 +579,59 @@ function resizeDashboardViewport(width: number): void {
   window.dispatchEvent(new Event("resize"));
 }
 
+function buildEditableFactoryDefinitionForCurrentSelection() {
+  return {
+    name: "Current Factory",
+    workers: [
+      {
+        model: "gpt-5.5",
+        name: "planner",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5.5",
+        name: "implementer",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5.5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        body: "Plan the active story before implementation.",
+        id: "plan",
+        inputs: [{ state: "init", workType: "story" }],
+        name: "Plan",
+        outputs: [{ state: "ready", workType: "story" }],
+        promptFile: "prompts/plan.md",
+        worker: "planner",
+      },
+      {
+        body: "Implement the active story changes.",
+        id: "implement",
+        inputs: [{ state: "ready", workType: "story" }],
+        name: "Implement",
+        outputs: [{ state: "implemented", workType: "story" }],
+        promptFile: "prompts/implement.md",
+        worker: "implementer",
+      },
+      {
+        body: "Review the active story before approval.",
+        id: "review",
+        inputs: [{ state: "implemented", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "complete", workType: "story" }],
+        promptFile: "prompts/review.md",
+        worker: "reviewer",
+      },
+    ],
+    workTypes: [],
+  };
+}
+
 describe("App current selection", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -1177,6 +1230,121 @@ describe("App current selection", () => {
       ).toBeTruthy();
       expect(within(implementInfo).queryByText(activeWorkLabel)).toBeNull();
       expect(within(implementInfo).queryByText("Plan Active")).toBeNull();
+    });
+  });
+
+  it("keeps one editable configuration section bound to the latest workstation across repeated switches", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+      data: buildEditableFactoryDefinitionForCurrentSelection(),
+      error: null,
+      failureCount: 0,
+      failureReason: null,
+      fetchStatus: "idle",
+      isError: false,
+      isFetched: true,
+      isFetchedAfterMount: true,
+      isFetching: false,
+      isInitialLoading: false,
+      isLoading: false,
+      isLoadingError: false,
+      isPaused: false,
+      isPending: false,
+      isPlaceholderData: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isStale: true,
+      isSuccess: true,
+      promise: Promise.resolve(
+        buildEditableFactoryDefinitionForCurrentSelection(),
+      ),
+      refetch: vi.fn(),
+      status: "success",
+    } as never);
+
+    renderApp({ snapshot: activeSnapshot });
+
+    const expectSingleConfigurationForWorkstation = async ({
+      actionLabel,
+      prompt,
+      worker,
+      workstationName,
+    }: {
+      actionLabel: string;
+      prompt: string;
+      worker: string;
+      workstationName: string;
+    }) => {
+      fireEvent.click(await screen.findByRole("button", { name: actionLabel }));
+
+      const currentSelection = await screen.findByRole("article", {
+        name: "Current selection",
+      });
+
+      const configurationHeadings = within(currentSelection).getAllByRole(
+        "heading",
+        {
+          name: "Configuration",
+        },
+      );
+      expect(configurationHeadings).toHaveLength(1);
+      expect(
+        within(currentSelection).getByText(workstationName, {
+          selector: "p",
+        }),
+      ).toBeTruthy();
+
+      const configurationSection = configurationHeadings[0]?.closest("section");
+      if (!configurationSection) {
+        throw new Error("expected editable configuration section");
+      }
+
+      fireEvent.click(
+        within(configurationSection).getByRole("button", {
+          name: "Expand editable configuration",
+        }),
+      );
+
+      await waitFor(() => {
+        expect(
+          within(currentSelection).getByDisplayValue(worker),
+        ).toBeTruthy();
+        expect(
+          within(currentSelection).getByDisplayValue(prompt),
+        ).toBeTruthy();
+      });
+
+      for (const otherPrompt of [
+        "Plan the active story before implementation.",
+        "Implement the active story changes.",
+        "Review the active story before approval.",
+      ]) {
+        if (otherPrompt === prompt) {
+          continue;
+        }
+
+        expect(
+          within(currentSelection).queryByDisplayValue(otherPrompt),
+        ).toBeNull();
+      }
+    };
+
+    await expectSingleConfigurationForWorkstation({
+      actionLabel: "Select Plan workstation",
+      prompt: "Plan the active story before implementation.",
+      worker: "planner",
+      workstationName: "Plan",
+    });
+    await expectSingleConfigurationForWorkstation({
+      actionLabel: "Select Implement workstation",
+      prompt: "Implement the active story changes.",
+      worker: "implementer",
+      workstationName: "Implement",
+    });
+    await expectSingleConfigurationForWorkstation({
+      actionLabel: "Select Review workstation",
+      prompt: "Review the active story before approval.",
+      worker: "reviewer",
+      workstationName: "Review",
     });
   });
 

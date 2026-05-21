@@ -63,7 +63,7 @@ export function WorkstationDetailCard({
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
       <p className={WIDGET_SUBTITLE_CLASS}>{selectedNode.workstation_name}</p>
       <EditableConfigurationSection
-        key={selectedNode.node_id}
+        key={`editable-configuration:${selectedNode.node_id}`}
         messages={messages}
         saveState={saveState}
         state={editableConfigurationState}
@@ -97,7 +97,7 @@ export function WorkstationDetailCard({
       />
       {hasProjectedRequestHistory ? (
         <CollapsibleWorkstationRequests
-          key={selectedNode.node_id}
+          key={`workstation-request-history:${selectedNode.node_id}`}
           messages={messages}
           now={now}
           onSelectWorkstationRequest={onSelectWorkstationRequest}
@@ -106,7 +106,7 @@ export function WorkstationDetailCard({
         />
       ) : (
         <CollapsibleProviderSessionAttempts
-          key={selectedNode.node_id}
+          key={`workstation-run-history:${selectedNode.node_id}`}
           attempts={providerSessions}
           collapseActionLabel={messages.collapseAction}
           emptyMessage={messages.noWorkstationRuns}
