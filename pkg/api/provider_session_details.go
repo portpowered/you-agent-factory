@@ -261,12 +261,23 @@ func parseCodexSessionSummary(reader io.Reader) (factoryapi.CodexSessionParseSum
 			UnknownEvents: []factoryapi.CodexSessionUnknownEvent{},
 		},
 	}
-	scanner := bufio.NewScanner(reader)
+	bufferedReader := bufio.NewReader(reader)
 	lineNumber := 0
-	for scanner.Scan() {
+	for {
+		lineBytes, err := bufferedReader.ReadBytes('\n')
+		if errors.Is(err, io.EOF) && len(lineBytes) == 0 {
+			break
+		}
+		if err != nil && !errors.Is(err, io.EOF) {
+			return factoryapi.CodexSessionParseSummary{}, fmt.Errorf("read provider session stream: %w", err)
+		}
+
 		lineNumber++
-		line := strings.TrimSpace(scanner.Text())
+		line := strings.TrimSpace(string(lineBytes))
 		if line == "" {
+			if errors.Is(err, io.EOF) {
+				break
+			}
 			continue
 		}
 		parser.summary.LineCount++
@@ -281,9 +292,9 @@ func parseCodexSessionSummary(reader io.Reader) (factoryapi.CodexSessionParseSum
 		}
 		parser.summary.EventCount++
 		parser.recordEvent(lineNumber, event)
-	}
-	if err := scanner.Err(); err != nil {
-		return factoryapi.CodexSessionParseSummary{}, fmt.Errorf("read provider session stream: %w", err)
+		if errors.Is(err, io.EOF) {
+			break
+		}
 	}
 	return parser.summary, nil
 }
