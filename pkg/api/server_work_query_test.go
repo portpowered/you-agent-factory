@@ -259,6 +259,37 @@ func TestGetWork_HidesInternalTimeWorkToken(t *testing.T) {
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "token not found")
 }
 
+func TestListWork_HidesResourceTokens(t *testing.T) {
+	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+		"tok-story":           {ID: "tok-story", PlaceID: "story:init", Color: interfaces.TokenColor{WorkID: "work-story", WorkTypeID: "story", TraceID: "trace-story"}, CreatedAt: now, EnteredAt: now},
+		"agent-slot:resource": {ID: "agent-slot:resource", PlaceID: "agent-slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource, WorkID: "resource-work", WorkTypeID: "agent-slot"}, CreatedAt: now, EnteredAt: now},
+	}}})
+
+	req := httptest.NewRequest(http.MethodGet, "/work", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /work status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.ListWorkResponse](t, rec)
+	if len(resp.Results) != 1 || stringValue(resp.Results[0].WorkId) != "work-story" {
+		t.Fatalf("listed work = %#v, want only non-resource work", resp.Results)
+	}
+}
+
+func TestGetWork_HidesResourceToken(t *testing.T) {
+	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+		"agent-slot:resource": {ID: "agent-slot:resource", PlaceID: "agent-slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource, WorkID: "resource-work", WorkTypeID: "agent-slot"}, CreatedAt: now, EnteredAt: now},
+	}}})
+	req := httptest.NewRequest(http.MethodGet, "/work/agent-slot:resource", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "token not found")
+}
+
 func TestListWork(t *testing.T) {
 	tokens := makeListWorkTokens("prd", 3, time.Now())
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: tokens}})
