@@ -38,7 +38,14 @@ func (cm *ConfigMapper) Map(ctx context.Context, cfg *interfaces.FactoryConfig) 
 		n.FanoutGroups = fanoutGroups
 	}
 
-	state.NormalizeTransitionTopology(n, transitionTopologyWorkstationKinds(cfg))
+	var workstationKinds map[string]interfaces.WorkstationKind
+	if cfg != nil && len(cfg.Workstations) > 0 {
+		workstationKinds = make(map[string]interfaces.WorkstationKind, len(cfg.Workstations))
+		for _, workstation := range cfg.Workstations {
+			workstationKinds[workstation.Name] = workstation.Kind
+		}
+	}
+	state.NormalizeTransitionTopology(n, workstationKinds)
 	cm.applyFactoryGuards(cfg, n.Transitions)
 	if err := validateNetTopology(n); err != nil {
 		return nil, err
@@ -59,17 +66,6 @@ func validateNetTopology(n *state.Net) error {
 	}
 
 	return nil
-}
-
-func transitionTopologyWorkstationKinds(cfg *interfaces.FactoryConfig) map[string]interfaces.WorkstationKind {
-	if cfg == nil || len(cfg.Workstations) == 0 {
-		return nil
-	}
-	kinds := make(map[string]interfaces.WorkstationKind, len(cfg.Workstations))
-	for _, workstation := range cfg.Workstations {
-		kinds[workstation.Name] = workstation.Kind
-	}
-	return kinds
 }
 
 // portos:func-length-exception owner=agent-factory reason=legacy-topology-construction review=2026-07-18 removal=split-transition-assembly-before-next-topology-expansion

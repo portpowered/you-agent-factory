@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -806,6 +807,66 @@ func TestFactoryConfigWithRuntimeDefinitions_MergesRuntimeDefinitionsOntoCanonic
 
 	assertMergedWorkerConfig(t, inlined)
 	assertMergedWorkstationConfig(t, inlined)
+}
+
+func TestFactoryConfigWithRuntimeDefinitions_PreservesCanonicalWorkstationKindForMapping(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "ready", Type: interfaces.StateTypeProcessing},
+				{Name: "approved", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{
+			Name:  "executor",
+			Type:  interfaces.WorkerTypeModel,
+			Model: "canonical-model",
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			Kind:           interfaces.WorkstationKindRepeater,
+			Type:           interfaces.WorkstationTypeLogical,
+			WorkerTypeName: "executor",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "approved"}},
+		}},
+	}
+	runtimeDefs := newRuntimeDefinitionLookupMaps(0, 1)
+	runtimeDefs.workstations["review"] = &interfaces.FactoryWorkstationConfig{
+		Type:           interfaces.WorkstationTypeModel,
+		WorkerTypeName: "executor",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "approved"}},
+		Limits:         interfaces.WorkstationLimits{MaxRetries: 3},
+	}
+
+	inlined, err := FactoryConfigWithRuntimeDefinitions(cfg, runtimeDefs)
+	if err != nil {
+		t.Fatalf("FactoryConfigWithRuntimeDefinitions: %v", err)
+	}
+	if inlined.Workstations[0].Kind != interfaces.WorkstationKindRepeater {
+		t.Fatalf("merged workstation kind = %q, want repeater", inlined.Workstations[0].Kind)
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), inlined)
+	if err != nil {
+		t.Fatalf("Map merged factory config: %v", err)
+	}
+
+	transition := net.Transitions["review"]
+	if transition == nil {
+		t.Fatal("expected review transition")
+	}
+	if len(transition.RejectionArcs) != 1 || transition.RejectionArcs[0].PlaceID != "story:ready" {
+		t.Fatalf("merged repeater rejection arcs = %+v, want loopback to story:ready", transition.RejectionArcs)
+	}
+	if len(transition.FailureArcs) != 1 || transition.FailureArcs[0].PlaceID != "story:failed" {
+		t.Fatalf("merged repeater failure arcs = %+v, want story:failed", transition.FailureArcs)
+	}
 }
 
 func TestFactoryConfigWithRuntimeDefinitions_UsesCanonicalDefinitionsWhenRuntimeDefinitionsAreMissing(t *testing.T) {
