@@ -73,9 +73,13 @@ func TestSubmitWork_RejectsConflictingContentAndPayload(t *testing.T) {
 }
 
 func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
 	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"image","text":"wrong-field"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].text is not supported")
+	if len(mf.Submitted) != 0 {
+		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	}
 }
 
 func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T) {
