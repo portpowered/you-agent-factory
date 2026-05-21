@@ -207,7 +207,7 @@ func waitForOOTBSmokeServiceStartup(
 		return captured
 	case err := <-errCh:
 		t.Fatalf("Run returned before service startup: %v", err)
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("timed out waiting for factory service startup")
 	}
 	return capturedOOTBSmokeRun{}

@@ -655,17 +655,6 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 		}()
 	}
 
-	// Start API server if configured.
-	if fs.cfg.APIServerStarter != nil && fs.cfg.Port > 0 {
-		sidecars.Add(1)
-		go func() {
-			defer sidecars.Done()
-			if err := fs.cfg.APIServerStarter(runCtx, fs, fs.cfg.Port, fs.logger); err != nil {
-				fs.logger.Error("API server error", zap.Error(err))
-			}
-		}()
-	}
-
 	// Start dashboard loop if a renderer is provided.
 	fs.startTime = fs.clock.Now()
 	if fs.cfg.SimpleDashboardRenderer != nil {
@@ -705,6 +694,18 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 			_ = fs.stopLiveRuntime(currentRuntime)
 			return err
 		}
+	}
+
+	// Start the API server only after the default runtime is fully started so
+	// callers never observe a partially initialized service surface.
+	if fs.cfg.APIServerStarter != nil && fs.cfg.Port > 0 {
+		sidecars.Add(1)
+		go func() {
+			defer sidecars.Done()
+			if err := fs.cfg.APIServerStarter(runCtx, fs, fs.cfg.Port, fs.logger); err != nil {
+				fs.logger.Error("API server error", zap.Error(err))
+			}
+		}()
 	}
 
 	runtimeLogConfig := fs.logSink.Config()
