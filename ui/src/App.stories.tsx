@@ -157,6 +157,17 @@ function validPromptTemplateValidationResponse() {
   };
 }
 
+async function delayedValidPromptTemplateValidationMock() {
+  await new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 25);
+  });
+
+  return {
+    body: validPromptTemplateValidationResponse(),
+    status: 200,
+  };
+}
+
 function editableConfigurationSection(
   currentSelection: HTMLElement,
 ): HTMLElement {
@@ -171,17 +182,42 @@ function editableConfigurationSection(
   return section;
 }
 
+async function expectSingleEditableConfigurationSection(
+  currentSelection: HTMLElement,
+): Promise<HTMLElement> {
+  await expect(
+    within(currentSelection).getAllByRole("heading", {
+      name: "Configuration",
+    }),
+  ).toHaveLength(1);
+
+  return editableConfigurationSection(currentSelection);
+}
+
 async function expectEditableConfigurationBrowserFlow(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
 
-  await userEvent.click(
-    await canvas.findByRole("button", { name: "Select Review workstation" }),
-  );
+  for (const workstationName of ["Plan", "Implement", "Review"]) {
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: `Select ${workstationName} workstation`,
+      }),
+    );
+
+    const currentSelection = currentSelectionCard(canvasElement);
+    await expectSingleEditableConfigurationSection(currentSelection);
+    await expect(
+      within(currentSelection).getByText(workstationName, {
+        selector: "p",
+      }),
+    ).toBeVisible();
+  }
 
   const currentSelection = currentSelectionCard(canvasElement);
-  const section = editableConfigurationSection(currentSelection);
+  const section =
+    await expectSingleEditableConfigurationSection(currentSelection);
   const sectionScope = within(section);
   const expandButton = sectionScope.getByRole("button", {
     name: "Expand editable configuration",
@@ -191,7 +227,8 @@ async function expectEditableConfigurationBrowserFlow(
   expect(sectionScope.queryByLabelText("Worker")).toBeNull();
   expect(sectionScope.queryByLabelText("Prompt")).toBeNull();
 
-  await userEvent.click(expandButton);
+  expandButton.focus();
+  await userEvent.keyboard("{Enter}");
 
   const workerField = await sectionScope.findByRole("combobox", {
     name: "Worker",
@@ -205,39 +242,72 @@ async function expectEditableConfigurationBrowserFlow(
   await expect(promptField).toHaveValue(
     "Review the latest story changes before approval.",
   );
+  await expect(expandButton).toHaveAttribute(
+    "aria-controls",
+    expect.stringContaining("-content"),
+  );
   expect(sectionScope.queryByLabelText("Model")).toBeNull();
   expect(sectionScope.queryByLabelText("Template")).toBeNull();
 
   await userEvent.selectOptions(workerField, "planner");
   await userEvent.clear(promptField);
-  await userEvent.type(promptField, "Browser verified prompt update.");
+  await userEvent.click(promptField);
+  await userEvent.paste("Browser verified prompt update.");
 
   await expect(workerField).toHaveValue("planner");
   await expect(promptField).toHaveValue("Browser verified prompt update.");
 
   const currentSelectionScope = within(currentSelection);
-  await userEvent.click(
-    currentSelectionScope.getByRole("button", { name: "Save changes" }),
-  );
+  const saveButton = currentSelectionScope.getByRole("button", {
+    name: "Save changes",
+  });
 
-  await expect(
-    await canvas.findByRole("heading", {
-      name: "Overwrite the running factory definition?",
-    }),
-  ).toBeVisible();
-  await userEvent.click(
-    canvas.getByRole("button", { name: "Overwrite factory" }),
-  );
-
-  await expect(
-    await sectionScope.findByText(
-      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-    ),
-  ).toBeVisible();
+  await waitFor(() => {
+    expect(
+      sectionScope.queryByText(
+        "Validating prompt variables for the current draft.",
+      ),
+    ).toBeNull();
+    expect(saveButton).toBeEnabled();
+  });
   await expect(workerField).toHaveValue("planner");
   await expect(promptField).toHaveValue("Browser verified prompt update.");
+
+  await userEvent.click(
+    await canvas.findByRole("button", {
+      name: "Select Plan workstation",
+    }),
+  );
+
+  const reboundCurrentSelection = currentSelectionCard(canvasElement);
+  const reboundSection = await expectSingleEditableConfigurationSection(
+    reboundCurrentSelection,
+  );
+  const reboundScope = within(reboundSection);
+  const reboundExpandButton = reboundScope.getByRole("button", {
+    name: "Expand editable configuration",
+  });
+
   await expect(
-    currentSelectionScope.getByRole("button", { name: "Save changes" }),
+    within(reboundCurrentSelection).getByText("Plan", { selector: "p" }),
+  ).toBeVisible();
+  await expect(
+    within(reboundCurrentSelection).getAllByRole("heading", {
+      name: "Configuration",
+    }),
+  ).toHaveLength(1);
+
+  await userEvent.click(reboundExpandButton);
+
+  await expect(
+    await reboundScope.findByText(
+      "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
+    ),
+  ).toBeVisible();
+  await expect(
+    within(reboundCurrentSelection).getByRole("button", {
+      name: "Save changes",
+    }),
   ).toBeDisabled();
 }
 
@@ -711,10 +781,7 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
         {
           method: "POST",
           path: "/factory/~current/workstations/Review/prompt-template-validation",
-          response: {
-            body: validPromptTemplateValidationResponse(),
-            status: 200,
-          },
+          response: delayedValidPromptTemplateValidationMock,
         },
         {
           method: "POST",
@@ -754,10 +821,7 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
         {
           method: "POST",
           path: "/factory/~current/workstations/Review/prompt-template-validation",
-          response: {
-            body: validPromptTemplateValidationResponse(),
-            status: 200,
-          },
+          response: delayedValidPromptTemplateValidationMock,
         },
         {
           method: "POST",

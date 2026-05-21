@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { WorkstationDetailCard } from "./workstation-detail-card";
@@ -169,6 +170,46 @@ function buildReadyEditableConfigurationState(overrides?: {
 }
 
 describe("WorkstationDetailCard editable configuration", () => {
+  it("supports keyboard disclosure toggling for the editable configuration section", async () => {
+    const user = userEvent.setup();
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const toggle = within(editableConfigurationSection()).getByRole("button", {
+      name: "Expand editable configuration",
+    });
+
+    toggle.focus();
+    await user.keyboard("{Enter}");
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("Worker")).toBeTruthy();
+    expect(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Collapse editable configuration",
+      }),
+    ).toBeTruthy();
+
+    await user.keyboard(" ");
+
+    expect(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("Worker")).toBeNull();
+  });
+
   it("starts collapsed and expands with accessible disclosure behavior", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
