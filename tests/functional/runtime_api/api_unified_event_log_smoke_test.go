@@ -21,12 +21,37 @@ func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameT
 	if testing.Short() {
 		t.Skip("slow unified event-log smoke")
 	}
+	fixture := newUnifiedEventLogSmokeFixture(t)
+	server := fixture.server
+	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
+	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
+	assertUnifiedEventLogUpsert(t, server, fixture)
+
+	liveEvents := collectUnifiedSmokeEvents(t, stream, []factoryapi.FactoryEvent{runStarted, first}, 4, 10*time.Second)
+	assertUnifiedEventLogCompletedWork(t, server, fixture)
+
+	stopFunctionalServerForRecording(t, server)
+	liveEvents = collectUnifiedSmokeEventsUntilRunResponse(t, stream, liveEvents, 10*time.Second)
+	stream.close()
+	artifact := assertUnifiedEventLogRecording(t, liveEvents, fixture)
+	assertUnifiedEventLogReconstruction(t, artifact, fixture)
+	testutil.AssertReplaySucceeds(t, fixture.artifactPath, 10*time.Second)
+}
+
+type unifiedEventLogSmokeFixture struct {
+	server       *functionalAPIServer
+	artifactPath string
+	traceID      string
+	requestID    string
+	draftWorkID  string
+	reviewWorkID string
+}
+
+func newUnifiedEventLogSmokeFixture(t *testing.T) unifiedEventLogSmokeFixture {
+	t.Helper()
+
 	dir := testutil.CopyFixtureDir(t, testutil.MustRepoPath(t, "tests/functional_test/testdata/service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "unified-event-log.replay.json")
-	const traceID = "trace-unified-event-log-smoke"
-	const requestID = "request-unified-event-log-smoke"
-	const draftWorkID = "work-unified-event-log-draft"
-	const reviewWorkID = "work-unified-event-log-review"
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"worker-a": {{
 			Content: "draft stage one complete. COMPLETE",
@@ -59,8 +84,14 @@ func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameT
 			},
 		}},
 	})
-
-	server := startFunctionalServerWithConfig(
+	fixture := unifiedEventLogSmokeFixture{
+		artifactPath: artifactPath,
+		traceID:      "trace-unified-event-log-smoke",
+		requestID:    "request-unified-event-log-smoke",
+		draftWorkID:  "work-unified-event-log-draft",
+		reviewWorkID: "work-unified-event-log-review",
+	}
+	fixture.server = startFunctionalServerWithConfig(
 		t,
 		dir,
 		false,
@@ -72,32 +103,31 @@ func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameT
 		},
 		factory.WithServiceMode(),
 	)
-	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
-	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
+	return fixture
+}
+
+func assertUnifiedEventLogUpsert(t *testing.T, server *functionalAPIServer, fixture unifiedEventLogSmokeFixture) {
+	t.Helper()
 
 	requiredState := "complete"
 	workTypeName := "task"
-	upserted := putGeneratedWorkRequest(t, server.URL(), requestID, factoryapi.WorkRequest{
-		RequestId: requestID,
+	upserted := putGeneratedWorkRequest(t, server.URL(), fixture.requestID, factoryapi.WorkRequest{
+		RequestId: fixture.requestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
 		Works: &[]factoryapi.Work{
 			{
 				Name:         "draft",
-				WorkId:       stringPointer(draftWorkID),
+				WorkId:       stringPointer(fixture.draftWorkID),
 				WorkTypeName: &workTypeName,
-				TraceId:      stringPointer(traceID),
-				Payload: map[string]string{
-					"title": "draft unified event log smoke",
-				},
+				TraceId:      stringPointer(fixture.traceID),
+				Payload:      map[string]string{"title": "draft unified event log smoke"},
 			},
 			{
 				Name:         "review",
-				WorkId:       stringPointer(reviewWorkID),
+				WorkId:       stringPointer(fixture.reviewWorkID),
 				WorkTypeName: &workTypeName,
-				TraceId:      stringPointer(traceID),
-				Payload: map[string]string{
-					"title": "review unified event log smoke",
-				},
+				TraceId:      stringPointer(fixture.traceID),
+				Payload:      map[string]string{"title": "review unified event log smoke"},
 			},
 		},
 		Relations: &[]factoryapi.Relation{{
@@ -107,31 +137,34 @@ func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameT
 			RequiredState:  &requiredState,
 		}},
 	})
-	if upserted.RequestId != requestID {
-		t.Fatalf("PUT /work-requests request_id = %q, want %q", upserted.RequestId, requestID)
+	if upserted.RequestId != fixture.requestID {
+		t.Fatalf("PUT /work-requests request_id = %q, want %q", upserted.RequestId, fixture.requestID)
 	}
-	if upserted.TraceId != traceID {
-		t.Fatalf("PUT /work-requests trace_id = %q, want %q", upserted.TraceId, traceID)
+	if upserted.TraceId != fixture.traceID {
+		t.Fatalf("PUT /work-requests trace_id = %q, want %q", upserted.TraceId, fixture.traceID)
 	}
+}
 
-	liveEvents := collectUnifiedSmokeEvents(t, stream, []factoryapi.FactoryEvent{runStarted, first}, 4, 10*time.Second)
-	completedWork := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{draftWorkID, reviewWorkID}, 10*time.Second)
+func assertUnifiedEventLogCompletedWork(t *testing.T, server *functionalAPIServer, fixture unifiedEventLogSmokeFixture) {
+	t.Helper()
+
+	completedWork := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{fixture.draftWorkID, fixture.reviewWorkID}, 10*time.Second)
 	if len(completedWork) != 2 {
 		t.Fatalf("completed work count = %d, want 2", len(completedWork))
 	}
 	for _, item := range completedWork {
-		if stringPointerValue(item.TraceId) != traceID || generatedWorkStateName(item.State) != "complete" {
-			t.Fatalf("completed work item = %#v, want completed task work for trace %q", item, traceID)
+		if stringPointerValue(item.TraceId) != fixture.traceID || generatedWorkStateName(item.State) != "complete" {
+			t.Fatalf("completed work item = %#v, want completed task work for trace %q", item, fixture.traceID)
 		}
 	}
+}
 
-	stopFunctionalServerForRecording(t, server)
-	liveEvents = collectUnifiedSmokeEventsUntilRunResponse(t, stream, liveEvents, 10*time.Second)
-	stream.close()
-	assertUnifiedSmokeCanonicalEventCoverage(t, liveEvents, traceID, requestID)
+func assertUnifiedEventLogRecording(t *testing.T, liveEvents []factoryapi.FactoryEvent, fixture unifiedEventLogSmokeFixture) *interfaces.ReplayArtifact {
+	t.Helper()
 
-	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	assertUnifiedSmokeCanonicalEventCoverage(t, artifact.Events, traceID, requestID)
+	assertUnifiedSmokeCanonicalEventCoverage(t, liveEvents, fixture.traceID, fixture.requestID)
+	artifact := testutil.LoadReplayArtifact(t, fixture.artifactPath)
+	assertUnifiedSmokeCanonicalEventCoverage(t, artifact.Events, fixture.traceID, fixture.requestID)
 	assertUnifiedSmokeArtifactHasEventTypes(t, artifact, []factoryapi.FactoryEventType{
 		factoryapi.FactoryEventTypeRunRequest,
 		factoryapi.FactoryEventTypeInitialStructureRequest,
@@ -145,6 +178,11 @@ func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameT
 		factoryapi.FactoryEventTypeRunResponse,
 	})
 	assertLiveEventsMatchRecordedArtifact(t, liveEvents, artifact)
+	return artifact
+}
+
+func assertUnifiedEventLogReconstruction(t *testing.T, artifact *interfaces.ReplayArtifact, fixture unifiedEventLogSmokeFixture) {
+	t.Helper()
 
 	dispatchCreated := requireUnifiedSmokeEvent(t, artifact.Events, factoryapi.FactoryEventTypeDispatchRequest)
 	if _, err := dispatchCreated.Payload.AsDispatchRequestEventPayload(); err != nil {
@@ -172,10 +210,8 @@ func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameT
 	if finalView.Runtime.Session.CompletedCount != 4 {
 		t.Fatalf("final completed dispatch count = %d, want 4", finalView.Runtime.Session.CompletedCount)
 	}
-	assertUnifiedSmokeProjectionRetainsBatchInferenceAndRelations(t, finalState, finalView, traceID, draftWorkID, reviewWorkID)
-	assertUnifiedSmokeTraceLinksEventsToView(t, finalState, traceID, dispatchID, dispatchCreated.Id, finalView.Runtime.Session.DispatchHistory)
-
-	testutil.AssertReplaySucceeds(t, artifactPath, 10*time.Second)
+	assertUnifiedSmokeProjectionRetainsBatchInferenceAndRelations(t, finalState, finalView, fixture.traceID, fixture.draftWorkID, fixture.reviewWorkID)
+	assertUnifiedSmokeTraceLinksEventsToView(t, finalState, fixture.traceID, dispatchID, dispatchCreated.Id, finalView.Runtime.Session.DispatchHistory)
 }
 
 func collectUnifiedSmokeEvents(t *testing.T, stream *factoryEventHTTPStream, initialEvents []factoryapi.FactoryEvent, wantCompletions int, timeout time.Duration) []factoryapi.FactoryEvent {

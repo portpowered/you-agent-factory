@@ -21,6 +21,9 @@ var portableBundledRootHelperFiles = []string{"Makefile"}
 
 var portableBundledFactoryRootHelperFiles = []string{"portable-dependencies.json"}
 
+const portableBundledInputRoot = "factory/inputs/"
+const portableBundledBatchInputDirName = "BATCH"
+
 // ApplySupportedPortableBundledFiles merges supported portable bundled files
 // discovered on disk into cfg, optionally inlining file content for API/export
 // callers that need a self-contained manifest.
@@ -41,6 +44,37 @@ func ApplySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.Facto
 		cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{}
 	}
 	cfg.ResourceManifest.BundledFiles = mergePortableBundledFiles(cfg.ResourceManifest.BundledFiles, collected)
+	return nil
+}
+
+// ApplySharedFactoryStarterWork snapshots eligible inputs/ files into the
+// portability manifest as INPUT bundled files so share/export payloads carry
+// starter work without live links back to the source factory.
+func ApplySharedFactoryStarterWork(factoryDir string, cfg *interfaces.FactoryConfig) error {
+	if cfg == nil {
+		return nil
+	}
+
+	collected, err := collectSharedFactoryStarterWork(factoryDir, cfg)
+	if err != nil {
+		return err
+	}
+
+	existing := removeBundledFilesByType(nil, interfaces.BundledFileTypeInput)
+	if cfg.ResourceManifest != nil {
+		existing = removeBundledFilesByType(cfg.ResourceManifest.BundledFiles, interfaces.BundledFileTypeInput)
+	}
+	if len(collected) == 0 {
+		if cfg.ResourceManifest != nil {
+			cfg.ResourceManifest.BundledFiles = existing
+		}
+		return nil
+	}
+
+	if cfg.ResourceManifest == nil {
+		cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{}
+	}
+	cfg.ResourceManifest.BundledFiles = mergePortableBundledFiles(existing, collected)
 	return nil
 }
 
@@ -115,6 +149,15 @@ func supportedPortableBundledSourcePath(factoryDir string, bundledFile interface
 			return "", false
 		}
 		return filepath.Join(factoryDir, filepath.FromSlash(filepath.Join("docs", relativePath))), true
+	case interfaces.BundledFileTypeInput:
+		if !strings.HasPrefix(targetPath, portableBundledInputRoot) {
+			return "", false
+		}
+		relativePath := strings.TrimPrefix(targetPath, portableBundledInputRoot)
+		if relativePath == "" {
+			return "", false
+		}
+		return filepath.Join(factoryDir, filepath.FromSlash(filepath.Join(interfaces.InputsDir, relativePath))), true
 	case interfaces.BundledFileTypeRootHelper:
 		switch targetPath {
 		case "Makefile":
@@ -274,6 +317,20 @@ func mergePortableBundledFiles(existing, collected []interfaces.BundledFileConfi
 	return merged
 }
 
+func removeBundledFilesByType(bundledFiles []interfaces.BundledFileConfig, fileType string) []interfaces.BundledFileConfig {
+	if len(bundledFiles) == 0 {
+		return nil
+	}
+	filtered := make([]interfaces.BundledFileConfig, 0, len(bundledFiles))
+	for _, bundledFile := range bundledFiles {
+		if bundledFile.Type == fileType {
+			continue
+		}
+		filtered = append(filtered, bundledFile)
+	}
+	return filtered
+}
+
 type PortableBundledFileReplacement struct {
 	TargetPath string
 }
@@ -350,6 +407,88 @@ func preparePortableBundledFileWrites(targetDir string, cfg *interfaces.FactoryC
 		})
 	}
 	return resolvedWrites, nil
+}
+
+func collectSharedFactoryStarterWork(factoryDir string, cfg *interfaces.FactoryConfig) ([]interfaces.BundledFileConfig, error) {
+	inputsDir := filepath.Join(factoryDir, interfaces.InputsDir)
+	info, err := os.Stat(inputsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("stat shared factory inputs %s: %w", inputsDir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("shared factory inputs %s must be a directory", inputsDir)
+	}
+
+	validWorkTypes := map[string]bool{portableBundledBatchInputDirName: true}
+	if cfg != nil {
+		for _, workType := range cfg.WorkTypes {
+			name := strings.TrimSpace(workType.Name)
+			if name != "" {
+				validWorkTypes[name] = true
+			}
+		}
+	}
+
+	bundledFiles := make([]interfaces.BundledFileConfig, 0)
+	if err := filepath.WalkDir(inputsDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !entry.Type().IsRegular() {
+			return nil
+		}
+
+		name := filepath.Base(path)
+		if isPortableStarterWorkIgnoredFile(name) {
+			return nil
+		}
+
+		relativePath, err := filepath.Rel(inputsDir, path)
+		if err != nil {
+			return fmt.Errorf("resolve starter work path %s: %w", path, err)
+		}
+		relativePath = filepath.ToSlash(relativePath)
+		parts := strings.Split(relativePath, "/")
+		if len(parts) != 3 {
+			return nil
+		}
+		if !validWorkTypes[parts[0]] {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read starter work %s: %w", path, err)
+		}
+		bundledFiles = append(bundledFiles, interfaces.BundledFileConfig{
+			Type:       interfaces.BundledFileTypeInput,
+			TargetPath: filepath.ToSlash(filepath.Join(portableFactoryDirName, interfaces.InputsDir, relativePath)),
+			Content: interfaces.BundledFileContentConfig{
+				Encoding: interfaces.BundledFileEncodingUTF8,
+				Inline:   string(content),
+			},
+		})
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("collect shared factory starter work: %w", err)
+	}
+
+	sort.Slice(bundledFiles, func(i, j int) bool {
+		return bundledFiles[i].TargetPath < bundledFiles[j].TargetPath
+	})
+	return bundledFiles, nil
+}
+
+func isPortableStarterWorkIgnoredFile(name string) bool {
+	if name == ".gitkeep" {
+		return true
+	}
+	return strings.HasSuffix(name, ".tmp") ||
+		strings.HasSuffix(name, ".swp") ||
+		strings.HasSuffix(name, "~")
 }
 
 type portableBundledFileWrite struct {

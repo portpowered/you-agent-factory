@@ -23,195 +23,12 @@ const (
 
 // portos:func-length-exception owner=agent-factory reason=projection-regression-fixture review=2026-07-22 removal=split-active-and-completed-workstation-request-cases-before-next-api-projection-change
 func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeyedGeneratedContractFromCanonicalWorldState(t *testing.T) {
-	t0 := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
-	activeWork := interfaces.FactoryWorkItem{
-		ID:                     "work-active",
-		WorkTypeID:             "task",
-		DisplayName:            "Active story",
-		ChainingTraceDepth:     2,
-		CurrentChainingTraceID: "chain-active",
-		TraceID:                "chain-active",
-		PlaceID:                "task:init",
-	}
-	completedInput := interfaces.FactoryWorkItem{
-		ID:                     "work-completed-input",
-		WorkTypeID:             "task",
-		DisplayName:            "Completed story",
-		ChainingTraceDepth:     3,
-		CurrentChainingTraceID: "chain-parent-a",
-		TraceID:                "chain-parent-a",
-		PlaceID:                "task:init",
-	}
-	completedOutput := interfaces.FactoryWorkItem{
-		ID:                       "work-completed-output",
-		WorkTypeID:               "task",
-		DisplayName:              "Completed story",
-		ChainingTraceDepth:       4,
-		CurrentChainingTraceID:   "chain-completed",
-		PreviousChainingTraceIDs: []string{"chain-parent-a", "chain-parent-z"},
-		TraceID:                  "chain-completed",
-		PlaceID:                  "task:done",
-	}
-
-	state := interfaces.FactoryWorldState{
-		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
-			activeWork.ID:      activeWork,
-			completedInput.ID:  completedInput,
-			completedOutput.ID: completedOutput,
-		},
-		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
-			"dispatch-active": {
-				DispatchID:   "dispatch-active",
-				TransitionID: "review",
-				Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
-				Provider:     "codex",
-				Model:        "gpt-5.4",
-				StartedAt:    t0.Add(time.Second),
-				Inputs: []interfaces.WorkstationInput{{
-					TokenID:  "token-active",
-					PlaceID:  activeWork.PlaceID,
-					WorkItem: &activeWork,
-				}},
-				WorkItemIDs:              []string{activeWork.ID},
-				CurrentChainingTraceID:   "chain-active",
-				PreviousChainingTraceIDs: []string{"chain-active"},
-				TraceIDs:                 []string{activeWork.TraceID},
-			},
-		},
-		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
-			DispatchID:   "dispatch-completed",
-			TransitionID: "review",
-			Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
-			StartedAt:    t0.Add(2 * time.Second),
-			CompletedAt:  t0.Add(4 * time.Second),
-			Result: interfaces.WorkstationResult{
-				Outcome:  string(interfaces.OutcomeAccepted),
-				Feedback: "ready",
-				Output:   "fallback output",
-			},
-			DurationMillis: 1200,
-			WorkItemIDs:    []string{completedInput.ID},
-			ConsumedInputs: []interfaces.WorkstationInput{{
-				TokenID:  "token-completed",
-				PlaceID:  completedInput.PlaceID,
-				WorkItem: &completedInput,
-			}},
-			InputWorkItems:           []interfaces.FactoryWorkItem{completedInput},
-			OutputWorkItems:          []interfaces.FactoryWorkItem{completedOutput},
-			CurrentChainingTraceID:   "chain-parent-a",
-			PreviousChainingTraceIDs: []string{"chain-parent-a", "chain-parent-z"},
-			TraceIDs:                 []string{completedInput.TraceID},
-			ProviderSession:          &interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "session_id", ID: "session-1"},
-			Diagnostics: &interfaces.SafeWorkDiagnostics{
-				Provider: &interfaces.SafeProviderDiagnostic{
-					Provider:         "openai",
-					Model:            "gpt-5.4",
-					RequestMetadata:  map[string]string{"prompt_source": "factory-renderer"},
-					ResponseMetadata: map[string]string{"provider_session_id": "session-1", "retry_count": "0"},
-				},
-			},
-			TerminalWork: &interfaces.FactoryTerminalWork{
-				WorkItem: completedOutput,
-				Status:   "TERMINAL",
-			},
-		}},
-		InferenceAttemptsByDispatchID: map[string]map[string]interfaces.FactoryWorldInferenceAttempt{
-			"dispatch-completed": {
-				"dispatch-completed/inference/1": {
-					DispatchID:         "dispatch-completed",
-					TransitionID:       "review",
-					InferenceRequestID: "dispatch-completed/inference/1",
-					Attempt:            1,
-					Prompt:             "Review the completed story.",
-					WorkingDirectory:   "/workspace/completed",
-					Worktree:           "/workspace/completed/.worktree",
-					RequestTime:        t0.Add(3 * time.Second),
-					Response:           "Approved",
-					ResponseTime:       t0.Add(4 * time.Second),
-				},
-			},
-		},
-	}
-
+	state := workstationRequestProjectionStateFixture()
 	slice := BuildFactoryWorldWorkstationRequestProjectionSlice(state)
-	if slice.WorkstationRequestsByDispatchId == nil {
-		t.Fatal("workstation request slice missing generated projection map")
-	}
-	requests := *slice.WorkstationRequestsByDispatchId
-	if len(requests) != 2 {
-		t.Fatalf("workstation request count = %d, want 2", len(requests))
-	}
-	if requests["dispatch-active"].DispatchId != "dispatch-active" {
-		t.Fatalf("active dispatch id = %q, want dispatch-active", requests["dispatch-active"].DispatchId)
-	}
-	if requests["dispatch-completed"].DispatchId != "dispatch-completed" {
-		t.Fatalf("completed dispatch id = %q, want dispatch-completed", requests["dispatch-completed"].DispatchId)
-	}
-
-	active := requests["dispatch-active"]
-	if active.Request.ConsumedTokens == nil || len(*active.Request.ConsumedTokens) != 1 || (*active.Request.ConsumedTokens)[0].TokenId != "token-active" {
-		t.Fatalf("active consumed tokens = %#v, want token-active", active.Request.ConsumedTokens)
-	}
-	if (*active.Request.ConsumedTokens)[0].ChainingTraceDepth == nil || *(*active.Request.ConsumedTokens)[0].ChainingTraceDepth != 2 {
-		t.Fatalf("active consumed token depth = %#v, want 2", active.Request.ConsumedTokens)
-	}
-	if active.Request.CurrentChainingTraceId == nil || *active.Request.CurrentChainingTraceId != "chain-active" {
-		t.Fatalf("active current chaining trace ID = %#v, want chain-active", active.Request.CurrentChainingTraceId)
-	}
-	if active.Response != nil {
-		t.Fatalf("active request response = %#v, want nil", active.Response)
-	}
-
-	completed := requests["dispatch-completed"]
-	if completed.Response == nil || completed.Response.Outcome == nil || *completed.Response.Outcome != "ACCEPTED" {
-		t.Fatalf("completed response = %#v, want accepted outcome", completed.Response)
-	}
-	if completed.Response.OutputMutations == nil ||
-		len(*completed.Response.OutputMutations) != 1 ||
-		(*completed.Response.OutputMutations)[0].TokenId != "work-completed-output" ||
-		(*completed.Response.OutputMutations)[0].Type != string(interfaces.MutationCreate) {
-		t.Fatalf("completed output mutations = %#v, want create mutation for work-completed-output", completed.Response.OutputMutations)
-	}
-	if completed.Response.OutputWorkItems == nil || len(*completed.Response.OutputWorkItems) != 1 {
-		t.Fatalf("completed output work items = %#v, want one output", completed.Response.OutputWorkItems)
-	}
-	if completed.Request.PreviousChainingTraceIds == nil || len(*completed.Request.PreviousChainingTraceIds) != 2 {
-		t.Fatalf("completed previous chaining trace IDs = %#v, want two predecessor chains", completed.Request.PreviousChainingTraceIds)
-	}
-	if completed.Request.InputWorkItems == nil || (*completed.Request.InputWorkItems)[0].ChainingTraceDepth == nil || *(*completed.Request.InputWorkItems)[0].ChainingTraceDepth != 3 {
-		t.Fatalf("completed input work item depth = %#v, want 3", completed.Request.InputWorkItems)
-	}
-	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].PreviousChainingTraceIds == nil || len(*outputItems[0].PreviousChainingTraceIds) != 2 {
-		t.Fatalf("completed output work item chaining lineage = %#v, want explicit previous chaining trace IDs", outputItems)
-	}
-	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].ChainingTraceDepth == nil || *outputItems[0].ChainingTraceDepth != 4 {
-		t.Fatalf("completed output work item depth = %#v, want 4", outputItems)
-	}
-
-	encoded, err := json.Marshal(slice)
-	if err != nil {
-		t.Fatalf("Marshal(slice): %v", err)
-	}
-
-	var roundTripped factoryapi.FactoryWorldWorkstationRequestProjectionSlice
-	if err := json.Unmarshal(encoded, &roundTripped); err != nil {
-		t.Fatalf("Unmarshal(roundTripped): %v", err)
-	}
-	if roundTripped.WorkstationRequestsByDispatchId == nil {
-		t.Fatal("round-tripped projection slice missing request map")
-	}
-	if got := (*roundTripped.WorkstationRequestsByDispatchId)["dispatch-completed"].Response; got == nil {
-		t.Fatalf("round-tripped completed response = %#v, want dispatch status summary", got)
-	}
-
-	state.ActiveDispatches["dispatch-active"].Inputs[0].WorkItem.DisplayName = "mutated active"
-	state.CompletedDispatches[0].OutputWorkItems[0].DisplayName = "mutated output"
-	if got := (*roundTripped.WorkstationRequestsByDispatchId)["dispatch-active"].Request.ConsumedTokens; got == nil || (*got)[0].Name == nil || *(*got)[0].Name != "Active story" {
-		t.Fatalf("round-tripped active consumed token = %#v, want detached Active story", got)
-	}
-	if got := (*roundTripped.WorkstationRequestsByDispatchId)["dispatch-completed"].Response.OutputMutations; got == nil || (*got)[0].Token == nil || (*got)[0].Token.Name == nil || *(*got)[0].Token.Name != "Completed story" {
-		t.Fatalf("round-tripped completed mutation token = %#v, want detached Completed story", got)
-	}
+	requests := requireWorkstationProjectionRequests(t, slice, 2)
+	assertActiveProjectionRequest(t, requests["dispatch-active"])
+	assertCompletedProjectionRequest(t, requests["dispatch-completed"])
+	assertProjectionRoundTripDetachesState(t, state, slice)
 }
 
 func TestBuildFactoryWorldWorkstationRequestProjectionSlice_UsesTerminalWorkFallbackLineage(t *testing.T) {
@@ -384,105 +201,188 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesPendingDisp
 }
 
 func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesScriptBackedDispatchDetails(t *testing.T) {
-	t0 := time.Date(2026, 4, 23, 9, 0, 0, 0, time.UTC)
-	workItem := interfaces.FactoryWorkItem{
-		ID:          "work-scripted",
-		WorkTypeID:  "task",
-		DisplayName: "Scripted story",
-		TraceID:     "trace-scripted",
-		PlaceID:     "task:init",
-	}
-	exitCode := 124
+	slice := BuildFactoryWorldWorkstationRequestProjectionSlice(scriptProjectionStateFixture())
+	requests := requireWorkstationProjectionRequests(t, slice, 2)
+	assertActiveScriptProjection(t, requests[scriptProjectionActiveDispatchID])
+	assertCompletedScriptProjection(t, requests[scriptProjectionCompletedDispatchID])
+}
 
-	slice := BuildFactoryWorldWorkstationRequestProjectionSlice(interfaces.FactoryWorldState{
+func requireWorkstationProjectionRequests(t *testing.T, slice factoryapi.FactoryWorldWorkstationRequestProjectionSlice, want int) map[string]factoryapi.FactoryWorldWorkstationRequestView {
+	t.Helper()
+	if slice.WorkstationRequestsByDispatchId == nil {
+		t.Fatal("workstation request slice missing generated projection map")
+	}
+	requests := *slice.WorkstationRequestsByDispatchId
+	if len(requests) != want {
+		t.Fatalf("workstation request count = %d, want %d", len(requests), want)
+	}
+	return requests
+}
+
+func workstationRequestProjectionStateFixture() interfaces.FactoryWorldState {
+	t0 := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+	activeWork := interfaces.FactoryWorkItem{ID: "work-active", WorkTypeID: "task", DisplayName: "Active story", ChainingTraceDepth: 2, CurrentChainingTraceID: "chain-active", TraceID: "chain-active", PlaceID: "task:init"}
+	completedInput := interfaces.FactoryWorkItem{ID: "work-completed-input", WorkTypeID: "task", DisplayName: "Completed story", ChainingTraceDepth: 3, CurrentChainingTraceID: "chain-parent-a", TraceID: "chain-parent-a", PlaceID: "task:init"}
+	completedOutput := interfaces.FactoryWorkItem{ID: "work-completed-output", WorkTypeID: "task", DisplayName: "Completed story", ChainingTraceDepth: 4, CurrentChainingTraceID: "chain-completed", PreviousChainingTraceIDs: []string{"chain-parent-a", "chain-parent-z"}, TraceID: "chain-completed", PlaceID: "task:done"}
+	return interfaces.FactoryWorldState{
 		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
-			workItem.ID: workItem,
+			activeWork.ID:      activeWork,
+			completedInput.ID:  completedInput,
+			completedOutput.ID: completedOutput,
 		},
 		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
-			scriptProjectionActiveDispatchID: {
-				DispatchID:   scriptProjectionActiveDispatchID,
-				TransitionID: "script-review",
-				Workstation:  interfaces.FactoryWorkstationRef{ID: "script-review", Name: "Script Review"},
-				StartedAt:    t0,
-				Inputs: []interfaces.WorkstationInput{{
-					TokenID:  "token-script-active",
-					PlaceID:  workItem.PlaceID,
-					WorkItem: &workItem,
-				}},
-				WorkItemIDs: []string{workItem.ID},
-				TraceIDs:    []string{workItem.TraceID},
+			"dispatch-active": {
+				DispatchID: "dispatch-active", TransitionID: "review", Workstation: interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
+				Provider: "codex", Model: "gpt-5.4", StartedAt: t0.Add(time.Second),
+				Inputs:      []interfaces.WorkstationInput{{TokenID: "token-active", PlaceID: activeWork.PlaceID, WorkItem: &activeWork}},
+				WorkItemIDs: []string{activeWork.ID}, CurrentChainingTraceID: "chain-active", PreviousChainingTraceIDs: []string{"chain-active"}, TraceIDs: []string{activeWork.TraceID},
 			},
 		},
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
-			DispatchID:   scriptProjectionCompletedDispatchID,
-			TransitionID: "script-review",
-			Workstation:  interfaces.FactoryWorkstationRef{ID: "script-review", Name: "Script Review"},
-			StartedAt:    t0.Add(time.Minute),
-			CompletedAt:  t0.Add(2 * time.Minute),
-			Result: interfaces.WorkstationResult{
-				Outcome:        string(interfaces.OutcomeRejected),
-				FailureReason:  "script failed",
-				FailureMessage: "script timed out",
-			},
-			DurationMillis: 12_000,
-			WorkItemIDs:    []string{workItem.ID},
-			ConsumedInputs: []interfaces.WorkstationInput{{
-				TokenID:  "token-script-completed",
-				PlaceID:  workItem.PlaceID,
-				WorkItem: &workItem,
+			DispatchID: "dispatch-completed", TransitionID: "review", Workstation: interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
+			StartedAt: t0.Add(2 * time.Second), CompletedAt: t0.Add(4 * time.Second), DurationMillis: 1200, WorkItemIDs: []string{completedInput.ID},
+			Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted), Feedback: "ready", Output: "fallback output"},
+			ConsumedInputs: []interfaces.WorkstationInput{{TokenID: "token-completed", PlaceID: completedInput.PlaceID, WorkItem: &completedInput}},
+			InputWorkItems: []interfaces.FactoryWorkItem{completedInput}, OutputWorkItems: []interfaces.FactoryWorkItem{completedOutput},
+			CurrentChainingTraceID: "chain-parent-a", PreviousChainingTraceIDs: []string{"chain-parent-a", "chain-parent-z"}, TraceIDs: []string{completedInput.TraceID},
+			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "session_id", ID: "session-1"},
+			Diagnostics: &interfaces.SafeWorkDiagnostics{Provider: &interfaces.SafeProviderDiagnostic{
+				Provider: "openai", Model: "gpt-5.4", RequestMetadata: map[string]string{"prompt_source": "factory-renderer"}, ResponseMetadata: map[string]string{"provider_session_id": "session-1", "retry_count": "0"},
 			}},
-			InputWorkItems: []interfaces.FactoryWorkItem{workItem},
-			TraceIDs:       []string{workItem.TraceID},
+			TerminalWork: &interfaces.FactoryTerminalWork{WorkItem: completedOutput, Status: "TERMINAL"},
+		}},
+		InferenceAttemptsByDispatchID: map[string]map[string]interfaces.FactoryWorldInferenceAttempt{
+			"dispatch-completed": {
+				"dispatch-completed/inference/1": {
+					DispatchID: "dispatch-completed", TransitionID: "review", InferenceRequestID: "dispatch-completed/inference/1", Attempt: 1,
+					Prompt: "Review the completed story.", WorkingDirectory: "/workspace/completed", Worktree: "/workspace/completed/.worktree",
+					RequestTime: t0.Add(3 * time.Second), Response: "Approved", ResponseTime: t0.Add(4 * time.Second),
+				},
+			},
+		},
+	}
+}
+
+func assertActiveProjectionRequest(t *testing.T, active factoryapi.FactoryWorldWorkstationRequestView) {
+	t.Helper()
+	if active.DispatchId != "dispatch-active" {
+		t.Fatalf("active dispatch id = %q, want dispatch-active", active.DispatchId)
+	}
+	if active.Request.ConsumedTokens == nil || len(*active.Request.ConsumedTokens) != 1 || (*active.Request.ConsumedTokens)[0].TokenId != "token-active" {
+		t.Fatalf("active consumed tokens = %#v, want token-active", active.Request.ConsumedTokens)
+	}
+	if (*active.Request.ConsumedTokens)[0].ChainingTraceDepth == nil || *(*active.Request.ConsumedTokens)[0].ChainingTraceDepth != 2 {
+		t.Fatalf("active consumed token depth = %#v, want 2", active.Request.ConsumedTokens)
+	}
+	if active.Request.CurrentChainingTraceId == nil || *active.Request.CurrentChainingTraceId != "chain-active" {
+		t.Fatalf("active current chaining trace ID = %#v, want chain-active", active.Request.CurrentChainingTraceId)
+	}
+	if active.Response != nil {
+		t.Fatalf("active request response = %#v, want nil", active.Response)
+	}
+}
+
+func assertCompletedProjectionRequest(t *testing.T, completed factoryapi.FactoryWorldWorkstationRequestView) {
+	t.Helper()
+	if completed.DispatchId != "dispatch-completed" {
+		t.Fatalf("completed dispatch id = %q, want dispatch-completed", completed.DispatchId)
+	}
+	if completed.Response == nil || completed.Response.Outcome == nil || *completed.Response.Outcome != "ACCEPTED" {
+		t.Fatalf("completed response = %#v, want accepted outcome", completed.Response)
+	}
+	if completed.Response.OutputMutations == nil || len(*completed.Response.OutputMutations) != 1 || (*completed.Response.OutputMutations)[0].TokenId != "work-completed-output" || (*completed.Response.OutputMutations)[0].Type != string(interfaces.MutationCreate) {
+		t.Fatalf("completed output mutations = %#v, want create mutation for work-completed-output", completed.Response.OutputMutations)
+	}
+	if completed.Response.OutputWorkItems == nil || len(*completed.Response.OutputWorkItems) != 1 {
+		t.Fatalf("completed output work items = %#v, want one output", completed.Response.OutputWorkItems)
+	}
+	if completed.Request.PreviousChainingTraceIds == nil || len(*completed.Request.PreviousChainingTraceIds) != 2 {
+		t.Fatalf("completed previous chaining trace IDs = %#v, want two predecessor chains", completed.Request.PreviousChainingTraceIds)
+	}
+	if completed.Request.InputWorkItems == nil || (*completed.Request.InputWorkItems)[0].ChainingTraceDepth == nil || *(*completed.Request.InputWorkItems)[0].ChainingTraceDepth != 3 {
+		t.Fatalf("completed input work item depth = %#v, want 3", completed.Request.InputWorkItems)
+	}
+	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].PreviousChainingTraceIds == nil || len(*outputItems[0].PreviousChainingTraceIds) != 2 {
+		t.Fatalf("completed output work item chaining lineage = %#v, want explicit previous chaining trace IDs", outputItems)
+	}
+	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].ChainingTraceDepth == nil || *outputItems[0].ChainingTraceDepth != 4 {
+		t.Fatalf("completed output work item depth = %#v, want 4", outputItems)
+	}
+}
+
+func assertProjectionRoundTripDetachesState(t *testing.T, state interfaces.FactoryWorldState, slice factoryapi.FactoryWorldWorkstationRequestProjectionSlice) {
+	t.Helper()
+	encoded, err := json.Marshal(slice)
+	if err != nil {
+		t.Fatalf("Marshal(slice): %v", err)
+	}
+	var roundTripped factoryapi.FactoryWorldWorkstationRequestProjectionSlice
+	if err := json.Unmarshal(encoded, &roundTripped); err != nil {
+		t.Fatalf("Unmarshal(roundTripped): %v", err)
+	}
+	if roundTripped.WorkstationRequestsByDispatchId == nil {
+		t.Fatal("round-tripped projection slice missing request map")
+	}
+	if got := (*roundTripped.WorkstationRequestsByDispatchId)["dispatch-completed"].Response; got == nil {
+		t.Fatalf("round-tripped completed response = %#v, want dispatch status summary", got)
+	}
+	state.ActiveDispatches["dispatch-active"].Inputs[0].WorkItem.DisplayName = "mutated active"
+	state.CompletedDispatches[0].OutputWorkItems[0].DisplayName = "mutated output"
+	if got := (*roundTripped.WorkstationRequestsByDispatchId)["dispatch-active"].Request.ConsumedTokens; got == nil || (*got)[0].Name == nil || *(*got)[0].Name != "Active story" {
+		t.Fatalf("round-tripped active consumed token = %#v, want detached Active story", got)
+	}
+	if got := (*roundTripped.WorkstationRequestsByDispatchId)["dispatch-completed"].Response.OutputMutations; got == nil || (*got)[0].Token == nil || (*got)[0].Token.Name == nil || *(*got)[0].Token.Name != "Completed story" {
+		t.Fatalf("round-tripped completed mutation token = %#v, want detached Completed story", got)
+	}
+}
+
+func scriptProjectionStateFixture() interfaces.FactoryWorldState {
+	t0 := time.Date(2026, 4, 23, 9, 0, 0, 0, time.UTC)
+	workItem := interfaces.FactoryWorkItem{ID: "work-scripted", WorkTypeID: "task", DisplayName: "Scripted story", TraceID: "trace-scripted", PlaceID: "task:init"}
+	exitCode := 124
+	return interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{workItem.ID: workItem},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			scriptProjectionActiveDispatchID: {
+				DispatchID: scriptProjectionActiveDispatchID, TransitionID: "script-review", Workstation: interfaces.FactoryWorkstationRef{ID: "script-review", Name: "Script Review"},
+				StartedAt: t0, Inputs: []interfaces.WorkstationInput{{TokenID: "token-script-active", PlaceID: workItem.PlaceID, WorkItem: &workItem}}, WorkItemIDs: []string{workItem.ID}, TraceIDs: []string{workItem.TraceID},
+			},
+		},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+			DispatchID: scriptProjectionCompletedDispatchID, TransitionID: "script-review", Workstation: interfaces.FactoryWorkstationRef{ID: "script-review", Name: "Script Review"},
+			StartedAt: t0.Add(time.Minute), CompletedAt: t0.Add(2 * time.Minute), DurationMillis: 12_000, WorkItemIDs: []string{workItem.ID},
+			Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeRejected), FailureReason: "script failed", FailureMessage: "script timed out"},
+			ConsumedInputs: []interfaces.WorkstationInput{{TokenID: "token-script-completed", PlaceID: workItem.PlaceID, WorkItem: &workItem}},
+			InputWorkItems: []interfaces.FactoryWorkItem{workItem}, TraceIDs: []string{workItem.TraceID},
 		}},
 		ScriptRequestsByDispatchID: map[string]map[string]interfaces.FactoryWorldScriptRequest{
 			scriptProjectionActiveDispatchID: {
 				scriptProjectionActiveRequestID: {
-					DispatchID:      scriptProjectionActiveDispatchID,
-					TransitionID:    "script-review",
-					ScriptRequestID: scriptProjectionActiveRequestID,
-					Attempt:         1,
-					Command:         scriptProjectionCommand,
-					Args:            []string{"--mode", "active"},
-					RequestTime:     t0.Add(5 * time.Second),
+					DispatchID: scriptProjectionActiveDispatchID, TransitionID: "script-review", ScriptRequestID: scriptProjectionActiveRequestID,
+					Attempt: 1, Command: scriptProjectionCommand, Args: []string{"--mode", "active"}, RequestTime: t0.Add(5 * time.Second),
 				},
 			},
 			scriptProjectionCompletedDispatchID: {
 				scriptProjectionCompletedRequestID: {
-					DispatchID:      scriptProjectionCompletedDispatchID,
-					TransitionID:    "script-review",
-					ScriptRequestID: scriptProjectionCompletedRequestID,
-					Attempt:         2,
-					Command:         scriptProjectionCommand,
-					Args:            []string{"--mode", "completed"},
-					RequestTime:     t0.Add(time.Minute + 5*time.Second),
+					DispatchID: scriptProjectionCompletedDispatchID, TransitionID: "script-review", ScriptRequestID: scriptProjectionCompletedRequestID,
+					Attempt: 2, Command: scriptProjectionCommand, Args: []string{"--mode", "completed"}, RequestTime: t0.Add(time.Minute + 5*time.Second),
 				},
 			},
 		},
 		ScriptResponsesByDispatchID: map[string]map[string]interfaces.FactoryWorldScriptResponse{
 			scriptProjectionCompletedDispatchID: {
 				scriptProjectionCompletedRequestID: {
-					DispatchID:      scriptProjectionCompletedDispatchID,
-					TransitionID:    "script-review",
-					ScriptRequestID: scriptProjectionCompletedRequestID,
-					Attempt:         2,
-					Outcome:         scriptProjectionCompletedOutcome,
-					Stdout:          scriptProjectionCompletedStdout,
-					Stderr:          "script stderr\n",
-					DurationMillis:  12_000,
-					ExitCode:        &exitCode,
-					FailureType:     "TIMEOUT",
-					ResponseTime:    t0.Add(2*time.Minute - time.Second),
+					DispatchID: scriptProjectionCompletedDispatchID, TransitionID: "script-review", ScriptRequestID: scriptProjectionCompletedRequestID,
+					Attempt: 2, Outcome: scriptProjectionCompletedOutcome, Stdout: scriptProjectionCompletedStdout, Stderr: "script stderr\n",
+					DurationMillis: 12_000, ExitCode: &exitCode, FailureType: "TIMEOUT", ResponseTime: t0.Add(2*time.Minute - time.Second),
 				},
 			},
 		},
-	})
-
-	if slice.WorkstationRequestsByDispatchId == nil {
-		t.Fatal("workstation request slice missing generated projection map")
 	}
-	requests := *slice.WorkstationRequestsByDispatchId
+}
 
-	active := requests[scriptProjectionActiveDispatchID]
+func assertActiveScriptProjection(t *testing.T, active factoryapi.FactoryWorldWorkstationRequestView) {
+	t.Helper()
 	if active.Request.ScriptRequest == nil {
 		t.Fatalf("active script request = %#v, want projected script request", active.Request)
 	}
@@ -495,8 +395,10 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesScriptBacke
 	if active.Response != nil {
 		t.Fatalf("active response = %#v, want nil without script response", active.Response)
 	}
+}
 
-	completed := requests[scriptProjectionCompletedDispatchID]
+func assertCompletedScriptProjection(t *testing.T, completed factoryapi.FactoryWorldWorkstationRequestView) {
+	t.Helper()
 	if completed.Request.ScriptRequest == nil {
 		t.Fatalf("completed script request = %#v, want projected script request", completed.Request)
 	}
@@ -512,8 +414,8 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesScriptBacke
 	if completed.Response.ScriptResponse.Outcome == nil || *completed.Response.ScriptResponse.Outcome != scriptProjectionCompletedOutcome {
 		t.Fatalf("completed script response outcome = %#v, want %q", completed.Response.ScriptResponse.Outcome, scriptProjectionCompletedOutcome)
 	}
-	if completed.Response.ScriptResponse.ExitCode == nil || *completed.Response.ScriptResponse.ExitCode != exitCode {
-		t.Fatalf("completed script response exit code = %#v, want %d", completed.Response.ScriptResponse.ExitCode, exitCode)
+	if completed.Response.ScriptResponse.ExitCode == nil || *completed.Response.ScriptResponse.ExitCode != 124 {
+		t.Fatalf("completed script response exit code = %#v, want 124", completed.Response.ScriptResponse.ExitCode)
 	}
 	if completed.Response.ScriptResponse.Stdout == nil || *completed.Response.ScriptResponse.Stdout != scriptProjectionCompletedStdout {
 		t.Fatalf("completed script response stdout = %#v, want %q", completed.Response.ScriptResponse.Stdout, scriptProjectionCompletedStdout)

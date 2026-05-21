@@ -1,0 +1,7 @@
+type: string
+enum:
+  - image_input
+  - session_resume
+  - structured_output
+  - working_directory
+  - worktree

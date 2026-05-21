@@ -105,81 +105,9 @@ func TestArtifactFromEventStream_NormalizesLegacyCronPayloads(t *testing.T) {
 
 func TestSaveArtifactFromEventStreamFile_HydratesAdjacentFactoryAndRewritesEmbeddedFactoryPayloads(t *testing.T) {
 	factoryDir := t.TempDir()
-	writeReplayFactoryJSON(t, factoryDir, map[string]any{
-		"name": "customer-project",
-		"id":   "customer-project",
-		"workTypes": []map[string]any{{
-			"name": "story",
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-			},
-		}},
-		"workers": []map[string]any{{
-			"name": "executor",
-		}},
-		"workstations": []map[string]any{{
-			"name":    "execute-story",
-			"worker":  "executor",
-			"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
-			"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
-		}},
-	})
-	writeReplayAgentsMD(t, filepath.Join(factoryDir, "workers", "executor"), `---
-type: SCRIPT_WORKER
-command: go
-args: ["test", "./..."]
-timeout: 30s
----
-Run the test suite.
-`)
-	writeReplayAgentsMD(t, filepath.Join(factoryDir, "workstations", "execute-story"), `---
-type: MODEL_WORKSTATION
-worker: executor
-promptFile: prompt.md
----
-Fallback body.
-`)
-	if err := os.WriteFile(filepath.Join(factoryDir, "workstations", "execute-story", "prompt.md"), []byte("Implement {{ .WorkID }}."), 0o644); err != nil {
-		t.Fatalf("write prompt file: %v", err)
-	}
-
+	writeReplayArtifactHydrationFixture(t, factoryDir)
 	recordedAt := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
-	recordedFactory := factoryapi.Factory{
-		Name: "customer-project",
-		Id:   stringPtrIfNotEmpty("customer-project"),
-		WorkTypes: &[]factoryapi.WorkType{{
-			Name: "story",
-			States: []factoryapi.WorkState{
-				{Name: "init", Type: factoryapi.WorkStateType(interfaces.StateTypeInitial)},
-				{Name: "complete", Type: factoryapi.WorkStateType(interfaces.StateTypeTerminal)},
-			},
-		}},
-		Workers: &[]factoryapi.Worker{{
-			Name: "executor",
-		}},
-		Workstations: &[]factoryapi.Workstation{{
-			Name:    "execute-story",
-			Worker:  "executor",
-			Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
-			Outputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}},
-		}},
-	}
-	runStarted, err := runStartedEventFromFactory(recordedAt, recordedFactory, nil, interfaces.ReplayDiagnostics{})
-	if err != nil {
-		t.Fatalf("runStartedEventFromFactory: %v", err)
-	}
-	initialStructure := replayInitialStructureEvent(t, recordedFactory, recordedAt)
-	events := []factoryapi.FactoryEvent{runStarted, initialStructure}
-	assignEventSequences(events)
-
-	eventStreamPath := filepath.Join(factoryDir, "runs", "runtime.events")
-	if err := os.MkdirAll(filepath.Dir(eventStreamPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(eventStreamPath), err)
-	}
-	if err := os.WriteFile(eventStreamPath, []byte(marshalReplayEventStream(t, events...)), 0o644); err != nil {
-		t.Fatalf("write event stream: %v", err)
-	}
+	eventStreamPath := writeReplayEventStreamFixture(t, factoryDir, recordedAt)
 
 	artifactPath := filepath.Join(factoryDir, "runs", "runtime.replay.json")
 	result, err := SaveArtifactFromEventStreamFile(eventStreamPath, artifactPath)
@@ -207,6 +135,81 @@ Fallback body.
 		t.Fatalf("AsInitialStructureRequestEventPayload: %v", err)
 	}
 	assertReplayHydratedFactoryRuntime(t, initialPayload.Factory)
+}
+
+func writeReplayArtifactHydrationFixture(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	writeReplayFactoryJSON(t, factoryDir, map[string]any{
+		"name": "customer-project",
+		"id":   "customer-project",
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+			},
+		}},
+		"workers":      []map[string]any{{"name": "executor"}},
+		"workstations": []map[string]any{{"name": "execute-story", "worker": "executor", "inputs": []map[string]string{{"workType": "story", "state": "init"}}, "outputs": []map[string]string{{"workType": "story", "state": "complete"}}}},
+	})
+	writeReplayAgentsMD(t, filepath.Join(factoryDir, "workers", "executor"), `---
+type: SCRIPT_WORKER
+command: go
+args: ["test", "./..."]
+timeout: 30s
+---
+Run the test suite.
+`)
+	writeReplayAgentsMD(t, filepath.Join(factoryDir, "workstations", "execute-story"), `---
+type: MODEL_WORKSTATION
+worker: executor
+promptFile: prompt.md
+---
+Fallback body.
+`)
+	if err := os.WriteFile(filepath.Join(factoryDir, "workstations", "execute-story", "prompt.md"), []byte("Implement {{ .WorkID }}."), 0o644); err != nil {
+		t.Fatalf("write prompt file: %v", err)
+	}
+}
+
+func writeReplayEventStreamFixture(t *testing.T, factoryDir string, recordedAt time.Time) string {
+	t.Helper()
+
+	recordedFactory := replayRecordedFactoryFixture()
+	runStarted, err := runStartedEventFromFactory(recordedAt, recordedFactory, nil, interfaces.ReplayDiagnostics{})
+	if err != nil {
+		t.Fatalf("runStartedEventFromFactory: %v", err)
+	}
+	events := []factoryapi.FactoryEvent{runStarted, replayInitialStructureEvent(t, recordedFactory, recordedAt)}
+	assignEventSequences(events)
+
+	eventStreamPath := filepath.Join(factoryDir, "runs", "runtime.events")
+	if err := os.MkdirAll(filepath.Dir(eventStreamPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(eventStreamPath), err)
+	}
+	if err := os.WriteFile(eventStreamPath, []byte(marshalReplayEventStream(t, events...)), 0o644); err != nil {
+		t.Fatalf("write event stream: %v", err)
+	}
+	return eventStreamPath
+}
+
+func replayRecordedFactoryFixture() factoryapi.Factory {
+	return factoryapi.Factory{
+		Name: "customer-project",
+		Id:   stringPtrIfNotEmpty("customer-project"),
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "story",
+			States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateType(interfaces.StateTypeInitial)},
+				{Name: "complete", Type: factoryapi.WorkStateType(interfaces.StateTypeTerminal)},
+			},
+		}},
+		Workers: &[]factoryapi.Worker{{Name: "executor"}},
+		Workstations: &[]factoryapi.Workstation{{
+			Name: "execute-story", Worker: "executor", Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}}, Outputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}},
+		}},
+	}
 }
 
 func TestArtifactFromEventStream_MissingRequiredFieldsReturnsExplicitError(t *testing.T) {

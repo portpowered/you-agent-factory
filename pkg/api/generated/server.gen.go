@@ -15,9 +15,10 @@ import (
 
 // Defines values for BundledFileType.
 const (
-	DOC        BundledFileType = "DOC"
-	ROOTHELPER BundledFileType = "ROOT_HELPER"
-	SCRIPT     BundledFileType = "SCRIPT"
+	BundledFileTypeDOC        BundledFileType = "DOC"
+	BundledFileTypeINPUT      BundledFileType = "INPUT"
+	BundledFileTypeROOTHELPER BundledFileType = "ROOT_HELPER"
+	BundledFileTypeSCRIPT     BundledFileType = "SCRIPT"
 )
 
 // Defines values for BundledFileContentEncoding.
@@ -76,6 +77,27 @@ const (
 	FactoryStateRunning   FactoryState = "RUNNING"
 )
 
+// Defines values for FactoryWorldRunnerBaselineCapability.
+const (
+	PromptSubmission FactoryWorldRunnerBaselineCapability = "prompt_submission"
+	ToolExecution    FactoryWorldRunnerBaselineCapability = "tool_execution"
+)
+
+// Defines values for FactoryWorldRunnerOptionalCapability.
+const (
+	ImageInput       FactoryWorldRunnerOptionalCapability = "image_input"
+	SessionResume    FactoryWorldRunnerOptionalCapability = "session_resume"
+	StructuredOutput FactoryWorldRunnerOptionalCapability = "structured_output"
+	WorkingDirectory FactoryWorldRunnerOptionalCapability = "working_directory"
+	Worktree         FactoryWorldRunnerOptionalCapability = "worktree"
+)
+
+// Defines values for FactoryWorldRunnerOptionalCapabilityStatus.
+const (
+	Supported   FactoryWorldRunnerOptionalCapabilityStatus = "supported"
+	Unsupported FactoryWorldRunnerOptionalCapabilityStatus = "unsupported"
+)
+
 // Defines values for GuardType.
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
@@ -117,11 +139,11 @@ const (
 
 // Defines values for PromptTemplateVariableReferenceCategory.
 const (
-	CONTEXT   PromptTemplateVariableReferenceCategory = "CONTEXT"
-	HISTORY   PromptTemplateVariableReferenceCategory = "HISTORY"
-	INPUT     PromptTemplateVariableReferenceCategory = "INPUT"
-	MAPACCESS PromptTemplateVariableReferenceCategory = "MAP_ACCESS"
-	ROOT      PromptTemplateVariableReferenceCategory = "ROOT"
+	PromptTemplateVariableReferenceCategoryCONTEXT   PromptTemplateVariableReferenceCategory = "CONTEXT"
+	PromptTemplateVariableReferenceCategoryHISTORY   PromptTemplateVariableReferenceCategory = "HISTORY"
+	PromptTemplateVariableReferenceCategoryINPUT     PromptTemplateVariableReferenceCategory = "INPUT"
+	PromptTemplateVariableReferenceCategoryMAPACCESS PromptTemplateVariableReferenceCategory = "MAP_ACCESS"
+	PromptTemplateVariableReferenceCategoryROOT      PromptTemplateVariableReferenceCategory = "ROOT"
 )
 
 // Defines values for RelationType.
@@ -129,6 +151,23 @@ const (
 	RelationTypeDependsOn   RelationType = "DEPENDS_ON"
 	RelationTypeParentChild RelationType = "PARENT_CHILD"
 	RelationTypeSpawnedBy   RelationType = "SPAWNED_BY"
+)
+
+// Defines values for RunnerID.
+const (
+	RunnerIDCodex     RunnerID = "codex"
+	RunnerIDCursorCLI RunnerID = "cursor-cli"
+	RunnerIDGemini    RunnerID = "gemini"
+	RunnerIDKiro      RunnerID = "kiro"
+	RunnerIDOpenCode  RunnerID = "opencode"
+)
+
+// Defines values for RunnerSelectionSource.
+const (
+	RunnerSelectionSourceDefault        RunnerSelectionSource = "default"
+	RunnerSelectionSourceFactory        RunnerSelectionSource = "factory"
+	RunnerSelectionSourceLegacyProvider RunnerSelectionSource = "legacy_provider"
+	RunnerSelectionSourceWorkstation    RunnerSelectionSource = "workstation"
 )
 
 // Defines values for ScriptExecutionOutcome.
@@ -212,7 +251,7 @@ const (
 	ListWorkParamsSortByStateType ListWorkParamsSortBy = "state.type"
 )
 
-// BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile.
+// BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.
 type BundledFile struct {
 	// Content Inline content payload for a portable bundled file.
 	Content BundledFileContent `json:"content"`
@@ -220,11 +259,11 @@ type BundledFile struct {
 	// TargetPath Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected.
 	TargetPath string `json:"targetPath"`
 
-	// Type Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile.
+	// Type Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
 	Type BundledFileType `json:"type"`
 }
 
-// BundledFileType Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile.
+// BundledFileType Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
 type BundledFileType string
 
 // BundledFileContent Inline content payload for a portable bundled file.
@@ -399,6 +438,12 @@ type DispatchConsumedWorkRef struct {
 type DispatchRequestEventMetadata struct {
 	// ReplayKey Stable replay correlation key for recorded dispatch reconstruction.
 	ReplayKey *string `json:"replayKey,omitempty"`
+
+	// RunnerId Stable built-in runner identifiers supported by factory and workstation runner selection.
+	RunnerId *RunnerID `json:"runnerId,omitempty"`
+
+	// RunnerSelectionSource Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+	RunnerSelectionSource *RunnerSelectionSource `json:"runnerSelectionSource,omitempty"`
 }
 
 // DispatchRequestEventPayload Customer-visible dispatch start event. FactoryEvent.context owns dispatch, request, trace, and work identity. This payload keeps only non-derived dispatch facts first known when execution starts; workstation and worker topology must be reconstructed from the initial structure and the retained transition identifier. Ordered inputs carry consumed work references only; work type, trace, display, and other work facts must be rebuilt from prior work-request history.
@@ -504,6 +549,9 @@ type Factory struct {
 
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
 	Resources *[]Resource `json:"resources,omitempty"`
+
+	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
+	Runner *RunnerID `json:"runner,omitempty"`
 
 	// SourceDirectory Original source directory for record/replay and drift diagnostics.
 	SourceDirectory *string `json:"sourceDirectory,omitempty"`
@@ -644,6 +692,28 @@ type FactoryWorldRenderedPromptDiagnostic struct {
 	Variables        *StringMap `json:"variables,omitempty"`
 }
 
+// FactoryWorldRunnerBaselineCapability defines model for FactoryWorldRunnerBaselineCapability.
+type FactoryWorldRunnerBaselineCapability string
+
+// FactoryWorldRunnerCapabilitiesView defines model for FactoryWorldRunnerCapabilitiesView.
+type FactoryWorldRunnerCapabilitiesView struct {
+	BaselineCapabilities []FactoryWorldRunnerBaselineCapability            `json:"baselineCapabilities"`
+	OptionalCapabilities []FactoryWorldRunnerOptionalCapabilitySupportView `json:"optionalCapabilities"`
+}
+
+// FactoryWorldRunnerOptionalCapability defines model for FactoryWorldRunnerOptionalCapability.
+type FactoryWorldRunnerOptionalCapability string
+
+// FactoryWorldRunnerOptionalCapabilityStatus defines model for FactoryWorldRunnerOptionalCapabilityStatus.
+type FactoryWorldRunnerOptionalCapabilityStatus string
+
+// FactoryWorldRunnerOptionalCapabilitySupportView defines model for FactoryWorldRunnerOptionalCapabilitySupportView.
+type FactoryWorldRunnerOptionalCapabilitySupportView struct {
+	Capability FactoryWorldRunnerOptionalCapability       `json:"capability"`
+	Detail     *string                                    `json:"detail,omitempty"`
+	Status     FactoryWorldRunnerOptionalCapabilityStatus `json:"status"`
+}
+
 // FactoryWorldScriptRequestView defines model for FactoryWorldScriptRequestView.
 type FactoryWorldScriptRequestView struct {
 	Args            *[]string `json:"args,omitempty"`
@@ -662,6 +732,18 @@ type FactoryWorldScriptResponseView struct {
 	ScriptRequestId *string `json:"scriptRequestId,omitempty"`
 	Stderr          *string `json:"stderr,omitempty"`
 	Stdout          *string `json:"stdout,omitempty"`
+}
+
+// FactoryWorldSelectedRunnerView defines model for FactoryWorldSelectedRunnerView.
+type FactoryWorldSelectedRunnerView struct {
+	Capabilities *FactoryWorldRunnerCapabilitiesView `json:"capabilities,omitempty"`
+	DisplayName  *string                             `json:"displayName,omitempty"`
+
+	// RunnerId Stable built-in runner identifiers supported by factory and workstation runner selection.
+	RunnerId *RunnerID `json:"runnerId,omitempty"`
+
+	// SelectionSource Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+	SelectionSource *RunnerSelectionSource `json:"selectionSource,omitempty"`
 }
 
 // FactoryWorldTokenView defines model for FactoryWorldTokenView.
@@ -709,14 +791,15 @@ type FactoryWorldWorkstationRequestProjectionSlice struct {
 
 // FactoryWorldWorkstationRequestRequestView defines model for FactoryWorldWorkstationRequestRequestView.
 type FactoryWorldWorkstationRequestRequestView struct {
-	ConsumedTokens           *[]FactoryWorldTokenView       `json:"consumedTokens,omitempty"`
-	CurrentChainingTraceId   *string                        `json:"currentChainingTraceId,omitempty"`
-	InputWorkItems           *[]FactoryWorldWorkItemRef     `json:"inputWorkItems,omitempty"`
-	InputWorkTypeIds         *[]string                      `json:"inputWorkTypeIds,omitempty"`
-	PreviousChainingTraceIds *[]string                      `json:"previousChainingTraceIds,omitempty"`
-	ScriptRequest            *FactoryWorldScriptRequestView `json:"scriptRequest,omitempty"`
-	StartedAt                *string                        `json:"startedAt,omitempty"`
-	TraceIds                 *[]string                      `json:"traceIds,omitempty"`
+	ConsumedTokens           *[]FactoryWorldTokenView        `json:"consumedTokens,omitempty"`
+	CurrentChainingTraceId   *string                         `json:"currentChainingTraceId,omitempty"`
+	InputWorkItems           *[]FactoryWorldWorkItemRef      `json:"inputWorkItems,omitempty"`
+	InputWorkTypeIds         *[]string                       `json:"inputWorkTypeIds,omitempty"`
+	PreviousChainingTraceIds *[]string                       `json:"previousChainingTraceIds,omitempty"`
+	Runner                   *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
+	ScriptRequest            *FactoryWorldScriptRequestView  `json:"scriptRequest,omitempty"`
+	StartedAt                *string                         `json:"startedAt,omitempty"`
+	TraceIds                 *[]string                       `json:"traceIds,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestResponseView defines model for FactoryWorldWorkstationRequestResponseView.
@@ -729,6 +812,7 @@ type FactoryWorldWorkstationRequestResponseView struct {
 	Outcome         *string                         `json:"outcome,omitempty"`
 	OutputMutations *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
 	OutputWorkItems *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
+	Runner          *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
 	ScriptResponse  *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
 }
 
@@ -1065,7 +1149,7 @@ type Resource struct {
 
 // ResourceManifest Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
 type ResourceManifest struct {
-	// BundledFiles Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script or docs roots for SCRIPT or DOC entries, or match the supported root-helper allowlist for ROOT_HELPER entries.
+	// BundledFiles Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies.
 	BundledFiles *[]BundledFile `json:"bundledFiles,omitempty"`
 
 	// RequiredTools Declarative external tools that must already resolve on PATH. These entries are validated but not embedded or installed.
@@ -1104,6 +1188,12 @@ type RunResponseEventPayload struct {
 	State     *FactoryState `json:"state,omitempty"`
 	WallClock *WallClock    `json:"wallClock,omitempty"`
 }
+
+// RunnerID Stable built-in runner identifiers supported by factory and workstation runner selection.
+type RunnerID string
+
+// RunnerSelectionSource Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+type RunnerSelectionSource string
 
 // SafeWorkDiagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
 type SafeWorkDiagnostics struct {
@@ -1517,6 +1607,9 @@ type Workstation struct {
 
 	// Resources Resource capacity this workstation consumes while one dispatch is in flight.
 	Resources *[]ResourceRequirement `json:"resources,omitempty"`
+
+	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
+	Runner *RunnerID `json:"runner,omitempty"`
 
 	// StopWords Stop words authored on the topology entry for model-oriented dispatches.
 	StopWords *[]string `json:"stopWords,omitempty"`

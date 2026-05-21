@@ -274,131 +274,122 @@ func factoryConfigWorkerMatchesLane(cfg *interfaces.FactoryConfig, workerName, p
 // - Finds the parent input arc (by matching parent_input work type) and names it "parent"
 // - Converts the guarded input arc to OBSERVE mode with the appropriate guard
 // - If spawned_by is set, creates a fanout count place + consume arc for dynamic count tracking
-// portos:func-length-exception owner=agent-factory reason=legacy-guard-topology-builder review=2026-07-18 removal=split-dynamic-and-static-input-guard-builders-when-guards-are-next-touched
 func (cm *ConfigMapper) applyInputGuards(ws interfaces.FactoryWorkstationConfig, t *petri.Transition, netPlaces map[string]*petri.Place, fanoutGroups map[string]string) {
-	// Check if any inputs have guards.
-	hasGuards := false
-	for _, input := range ws.Inputs {
-		if input.Guard != nil {
-			hasGuards = true
-			break
-		}
-	}
-	if !hasGuards {
+	if !workstationHasInputGuards(ws) {
 		return
 	}
 
 	parentBinding := "parent"
 	countBinding := "fanout-count"
+	bindParentInputArc(ws, t, parentBinding)
+	cm.applyParentAwareInputGuards(ws, t, netPlaces, fanoutGroups, parentBinding, countBinding)
+	applyPeerInputGuards(ws, t)
+}
 
-	// Find and name the parent input arc. The parent is identified by matching
-	// the parent_input work type from any parent-aware guarded input.
+func workstationHasInputGuards(ws interfaces.FactoryWorkstationConfig) bool {
+	for _, input := range ws.Inputs {
+		if input.Guard != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func bindParentInputArc(ws interfaces.FactoryWorkstationConfig, t *petri.Transition, parentBinding string) {
 	for _, input := range ws.Inputs {
 		if input.Guard == nil || isPeerInputGuardType(input.Guard.Type) {
 			continue
 		}
-		// Find the arc index for the parent input.
+		parentPlaceID := fmt.Sprintf("%s:", input.Guard.ParentInput)
 		for i := range t.InputArcs {
-			parentPlaceID := fmt.Sprintf("%s:", input.Guard.ParentInput)
 			if len(t.InputArcs[i].PlaceID) >= len(parentPlaceID) && t.InputArcs[i].PlaceID[:len(parentPlaceID)] == parentPlaceID {
 				t.InputArcs[i].Name = parentBinding
-				break
+				return
 			}
 		}
-		break // All guarded inputs in a workstation share the same parent binding.
+		return
 	}
+}
 
-	// Process each parent-aware guarded input: replace the original consume arc
-	// with an observe arc and (for dynamic fanout) a count consume arc. The
-	// count arc MUST appear before the observation arc so that the
-	// "fanout-count" binding is available when the FanoutCountGuard evaluates.
+func (cm *ConfigMapper) applyParentAwareInputGuards(ws interfaces.FactoryWorkstationConfig, t *petri.Transition, netPlaces map[string]*petri.Place, fanoutGroups map[string]string, parentBinding string, countBinding string) {
 	for idx, input := range ws.Inputs {
 		if input.Guard == nil || isPeerInputGuardType(input.Guard.Type) {
 			continue
 		}
-		g := input.Guard
-
-		childPlaceID := mapToID(input)
-		childArcName := fmt.Sprintf("%s:%s:observe:%s", input.WorkTypeName, input.StateName, t.Name)
-
-		if g.SpawnedBy != "" {
-			// Dynamic fanout: create a count place and wire up FanoutCountGuard.
-			countPlaceID := fmt.Sprintf("%s:fanout-count", g.SpawnedBy)
-			netPlaces[countPlaceID] = &petri.Place{
-				ID:     countPlaceID,
-				TypeID: "fanout-count",
-				State:  "count",
-			}
-			fanoutGroups[g.SpawnedBy] = countPlaceID
-
-			// Replace the original input arc at [idx] with the count consume arc,
-			// then append the observation arc.
-			t.InputArcs[idx] = petri.Arc{
-				ID:           uuid.NewString(),
-				Name:         countBinding,
-				PlaceID:      countPlaceID,
-				TransitionID: t.ID,
-				Direction:    petri.ArcInput,
-				Mode:         interfaces.ArcModeConsume,
-				Guard: &petri.MatchColorGuard{
-					Field:        "parent_id",
-					MatchBinding: parentBinding,
-					MatchField:   "work_id",
-				},
-				Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
-			}
-
-			var cardinality petri.ArcCardinality
-			var childGuard petri.Guard
-			if g.Type == interfaces.GuardTypeAllChildrenComplete {
-				cardinality = petri.ArcCardinality{Mode: petri.CardinalityZeroOrMore}
-				childGuard = &petri.FanoutCountGuard{
-					MatchBinding: parentBinding,
-					CountBinding: countBinding,
-				}
-			} else {
-				cardinality = petri.ArcCardinality{Mode: petri.CardinalityOne}
-				childGuard = &petri.AnyWithParentGuard{MatchBinding: parentBinding}
-			}
-
-			t.InputArcs = append(t.InputArcs, petri.Arc{
-				ID:           uuid.NewString(),
-				Name:         childArcName,
-				PlaceID:      childPlaceID,
-				TransitionID: t.ID,
-				Direction:    petri.ArcInput,
-				Mode:         interfaces.ArcModeObserve,
-				Guard:        childGuard,
-				Cardinality:  cardinality,
-			})
-		} else {
-			// Static fanout: use AllWithParentGuard/AnyWithParentGuard.
-			var childGuard petri.Guard
-			var cardinality petri.ArcCardinality
-			if g.Type == interfaces.GuardTypeAllChildrenComplete {
-				childGuard = &petri.AllWithParentGuard{MatchBinding: parentBinding}
-				cardinality = petri.ArcCardinality{Mode: petri.CardinalityAll}
-			} else {
-				childGuard = &petri.AnyWithParentGuard{MatchBinding: parentBinding}
-				cardinality = petri.ArcCardinality{Mode: petri.CardinalityOne}
-			}
-
-			// Replace the original input arc with the observation arc.
-			t.InputArcs[idx] = petri.Arc{
-				ID:           uuid.NewString(),
-				Name:         childArcName,
-				PlaceID:      childPlaceID,
-				TransitionID: t.ID,
-				Direction:    petri.ArcInput,
-				Mode:         interfaces.ArcModeObserve,
-				Guard:        childGuard,
-				Cardinality:  cardinality,
-			}
+		if input.Guard.SpawnedBy != "" {
+			cm.applyDynamicFanoutInputGuard(input, idx, t, netPlaces, fanoutGroups, parentBinding, countBinding)
+			continue
 		}
+		replaceStaticFanoutInputArc(input, idx, t, parentBinding)
 	}
+}
 
-	// Peer-input guards stay on the original consume arc and bind against the
-	// referenced peer input's final arc name.
+func (cm *ConfigMapper) applyDynamicFanoutInputGuard(input interfaces.IOConfig, idx int, t *petri.Transition, netPlaces map[string]*petri.Place, fanoutGroups map[string]string, parentBinding string, countBinding string) {
+	countPlaceID := fmt.Sprintf("%s:fanout-count", input.Guard.SpawnedBy)
+	netPlaces[countPlaceID] = &petri.Place{
+		ID:     countPlaceID,
+		TypeID: "fanout-count",
+		State:  "count",
+	}
+	fanoutGroups[input.Guard.SpawnedBy] = countPlaceID
+	t.InputArcs[idx] = fanoutCountArc(countPlaceID, t.ID, parentBinding, countBinding)
+	childGuard, cardinality := dynamicFanoutChildGuard(input.Guard.Type, parentBinding, countBinding)
+	t.InputArcs = append(t.InputArcs, observedChildInputArc(input, t.ID, t.Name, childGuard, cardinality))
+}
+
+func fanoutCountArc(countPlaceID string, transitionID string, parentBinding string, countBinding string) petri.Arc {
+	return petri.Arc{
+		ID:           uuid.NewString(),
+		Name:         countBinding,
+		PlaceID:      countPlaceID,
+		TransitionID: transitionID,
+		Direction:    petri.ArcInput,
+		Mode:         interfaces.ArcModeConsume,
+		Guard: &petri.MatchColorGuard{
+			Field:        "parent_id",
+			MatchBinding: parentBinding,
+			MatchField:   "work_id",
+		},
+		Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+	}
+}
+
+func dynamicFanoutChildGuard(guardType interfaces.GuardType, parentBinding string, countBinding string) (petri.Guard, petri.ArcCardinality) {
+	if guardType == interfaces.GuardTypeAllChildrenComplete {
+		return &petri.FanoutCountGuard{
+			MatchBinding: parentBinding,
+			CountBinding: countBinding,
+		}, petri.ArcCardinality{Mode: petri.CardinalityZeroOrMore}
+	}
+	return &petri.AnyWithParentGuard{MatchBinding: parentBinding}, petri.ArcCardinality{Mode: petri.CardinalityOne}
+}
+
+func replaceStaticFanoutInputArc(input interfaces.IOConfig, idx int, t *petri.Transition, parentBinding string) {
+	childGuard, cardinality := staticFanoutChildGuard(input.Guard.Type, parentBinding)
+	t.InputArcs[idx] = observedChildInputArc(input, t.ID, t.Name, childGuard, cardinality)
+}
+
+func staticFanoutChildGuard(guardType interfaces.GuardType, parentBinding string) (petri.Guard, petri.ArcCardinality) {
+	if guardType == interfaces.GuardTypeAllChildrenComplete {
+		return &petri.AllWithParentGuard{MatchBinding: parentBinding}, petri.ArcCardinality{Mode: petri.CardinalityAll}
+	}
+	return &petri.AnyWithParentGuard{MatchBinding: parentBinding}, petri.ArcCardinality{Mode: petri.CardinalityOne}
+}
+
+func observedChildInputArc(input interfaces.IOConfig, transitionID string, transitionName string, guard petri.Guard, cardinality petri.ArcCardinality) petri.Arc {
+	return petri.Arc{
+		ID:           uuid.NewString(),
+		Name:         fmt.Sprintf("%s:%s:observe:%s", input.WorkTypeName, input.StateName, transitionName),
+		PlaceID:      mapToID(input),
+		TransitionID: transitionID,
+		Direction:    petri.ArcInput,
+		Mode:         interfaces.ArcModeObserve,
+		Guard:        guard,
+		Cardinality:  cardinality,
+	}
+}
+
+func applyPeerInputGuards(ws interfaces.FactoryWorkstationConfig, t *petri.Transition) {
 	for idx, input := range ws.Inputs {
 		if input.Guard == nil || !isPeerInputGuardType(input.Guard.Type) {
 			continue

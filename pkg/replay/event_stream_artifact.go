@@ -242,6 +242,13 @@ func generateAdjacentFactoryRuntimeConfig(loaded *config.LoadedFactoryConfig) (f
 
 func mergeGeneratedFactoryMissingRuntimeFields(recorded factoryapi.Factory, authored factoryapi.Factory) factoryapi.Factory {
 	merged := recorded
+	mergeFactoryMetadataFields(&merged, authored)
+	mergeRuntimeWorkerFields(&merged, authored)
+	mergeRuntimeWorkstationFields(&merged, authored)
+	return merged
+}
+
+func mergeFactoryMetadataFields(merged *factoryapi.Factory, authored factoryapi.Factory) {
 	if merged.FactoryDirectory == nil {
 		merged.FactoryDirectory = authored.FactoryDirectory
 	}
@@ -257,117 +264,132 @@ func mergeGeneratedFactoryMissingRuntimeFields(recorded factoryapi.Factory, auth
 	if merged.InputTypes == nil || len(*merged.InputTypes) == 0 {
 		merged.InputTypes = authored.InputTypes
 	}
-	if merged.Workers != nil && authored.Workers != nil {
-		authoredByName := make(map[string]factoryapi.Worker, len(*authored.Workers))
-		for _, worker := range *authored.Workers {
-			authoredByName[worker.Name] = worker
-		}
-		for i := range *merged.Workers {
-			worker := &(*merged.Workers)[i]
-			authoredWorker, ok := authoredByName[worker.Name]
-			if !ok {
-				continue
-			}
-			if worker.Type == nil {
-				worker.Type = authoredWorker.Type
-			}
-			if worker.Command == nil {
-				worker.Command = authoredWorker.Command
-			}
-			if worker.Args == nil || len(*worker.Args) == 0 {
-				worker.Args = authoredWorker.Args
-			}
-			if worker.ModelProvider == nil {
-				worker.ModelProvider = authoredWorker.ModelProvider
-			}
-			if worker.ExecutorProvider == nil {
-				worker.ExecutorProvider = authoredWorker.ExecutorProvider
-			}
-			if worker.Timeout == nil {
-				worker.Timeout = authoredWorker.Timeout
-			}
-			if worker.StopToken == nil {
-				worker.StopToken = authoredWorker.StopToken
-			}
-			if worker.SkipPermissions == nil {
-				worker.SkipPermissions = authoredWorker.SkipPermissions
-			}
-			if worker.Body == nil {
-				worker.Body = authoredWorker.Body
-			}
-			if worker.Resources == nil || len(*worker.Resources) == 0 {
-				worker.Resources = authoredWorker.Resources
-			}
-		}
+}
+
+func mergeRuntimeWorkerFields(merged *factoryapi.Factory, authored factoryapi.Factory) {
+	if merged.Workers == nil || authored.Workers == nil {
+		return
 	}
-	if merged.Workstations != nil && authored.Workstations != nil {
-		authoredByName := make(map[string]factoryapi.Workstation, len(*authored.Workstations))
-		for _, workstation := range *authored.Workstations {
-			authoredByName[workstation.Name] = workstation
-		}
-		for i := range *merged.Workstations {
-			workstation := &(*merged.Workstations)[i]
-			authoredWorkstation, ok := authoredByName[workstation.Name]
-			if !ok {
-				continue
-			}
-			if workstation.Id == nil {
-				workstation.Id = authoredWorkstation.Id
-			}
-			if workstation.Behavior == nil {
-				workstation.Behavior = authoredWorkstation.Behavior
-			}
-			if workstation.Type == nil {
-				workstation.Type = authoredWorkstation.Type
-			}
-			if workstation.Worker == "" {
-				workstation.Worker = authoredWorkstation.Worker
-			}
-			if len(workstation.Inputs) == 0 {
-				workstation.Inputs = authoredWorkstation.Inputs
-			}
-			if len(workstation.Outputs) == 0 {
-				workstation.Outputs = authoredWorkstation.Outputs
-			}
-			if workstation.OnFailure == nil {
-				workstation.OnFailure = authoredWorkstation.OnFailure
-			}
-			if workstation.OnContinue == nil {
-				workstation.OnContinue = authoredWorkstation.OnContinue
-			}
-			if workstation.OnRejection == nil {
-				workstation.OnRejection = authoredWorkstation.OnRejection
-			}
-			if workstation.Resources == nil || len(*workstation.Resources) == 0 {
-				workstation.Resources = authoredWorkstation.Resources
-			}
-			if workstation.Cron == nil {
-				workstation.Cron = authoredWorkstation.Cron
-			}
-			if workstation.Guards == nil || len(*workstation.Guards) == 0 {
-				workstation.Guards = authoredWorkstation.Guards
-			}
-			if workstation.Limits == nil {
-				workstation.Limits = authoredWorkstation.Limits
-			}
-			if workstation.Worktree == nil {
-				workstation.Worktree = authoredWorkstation.Worktree
-			}
-			if workstation.WorkingDirectory == nil {
-				workstation.WorkingDirectory = authoredWorkstation.WorkingDirectory
-			}
-			if workstation.PromptFile == nil {
-				workstation.PromptFile = authoredWorkstation.PromptFile
-			}
-			if workstation.Body == nil {
-				workstation.Body = authoredWorkstation.Body
-			}
-			if workstation.StopWords == nil || len(*workstation.StopWords) == 0 {
-				workstation.StopWords = authoredWorkstation.StopWords
-			}
-		}
+	authoredByName := make(map[string]factoryapi.Worker, len(*authored.Workers))
+	for _, worker := range *authored.Workers {
+		authoredByName[worker.Name] = worker
 	}
-	return merged
+	for i := range *merged.Workers {
+		worker := &(*merged.Workers)[i]
+		authoredWorker, ok := authoredByName[worker.Name]
+		if !ok {
+			continue
+		}
+		mergeRuntimeWorker(worker, authoredWorker)
+	}
+}
+
+func mergeRuntimeWorker(worker *factoryapi.Worker, authored factoryapi.Worker) {
+	if worker.Type == nil {
+		worker.Type = authored.Type
+	}
+	if worker.Command == nil {
+		worker.Command = authored.Command
+	}
+	if worker.Args == nil || len(*worker.Args) == 0 {
+		worker.Args = authored.Args
+	}
+	if worker.ModelProvider == nil {
+		worker.ModelProvider = authored.ModelProvider
+	}
+	if worker.ExecutorProvider == nil {
+		worker.ExecutorProvider = authored.ExecutorProvider
+	}
+	if worker.Timeout == nil {
+		worker.Timeout = authored.Timeout
+	}
+	if worker.StopToken == nil {
+		worker.StopToken = authored.StopToken
+	}
+	if worker.SkipPermissions == nil {
+		worker.SkipPermissions = authored.SkipPermissions
+	}
+	if worker.Body == nil {
+		worker.Body = authored.Body
+	}
+	if worker.Resources == nil || len(*worker.Resources) == 0 {
+		worker.Resources = authored.Resources
+	}
+}
+
+func mergeRuntimeWorkstationFields(merged *factoryapi.Factory, authored factoryapi.Factory) {
+	if merged.Workstations == nil || authored.Workstations == nil {
+		return
+	}
+	authoredByName := make(map[string]factoryapi.Workstation, len(*authored.Workstations))
+	for _, workstation := range *authored.Workstations {
+		authoredByName[workstation.Name] = workstation
+	}
+	for i := range *merged.Workstations {
+		workstation := &(*merged.Workstations)[i]
+		authoredWorkstation, ok := authoredByName[workstation.Name]
+		if !ok {
+			continue
+		}
+		mergeRuntimeWorkstation(workstation, authoredWorkstation)
+	}
+}
+
+func mergeRuntimeWorkstation(workstation *factoryapi.Workstation, authored factoryapi.Workstation) {
+	if workstation.Id == nil {
+		workstation.Id = authored.Id
+	}
+	if workstation.Behavior == nil {
+		workstation.Behavior = authored.Behavior
+	}
+	if workstation.Type == nil {
+		workstation.Type = authored.Type
+	}
+	if workstation.Worker == "" {
+		workstation.Worker = authored.Worker
+	}
+	if len(workstation.Inputs) == 0 {
+		workstation.Inputs = authored.Inputs
+	}
+	if len(workstation.Outputs) == 0 {
+		workstation.Outputs = authored.Outputs
+	}
+	if workstation.OnFailure == nil {
+		workstation.OnFailure = authored.OnFailure
+	}
+	if workstation.OnContinue == nil {
+		workstation.OnContinue = authored.OnContinue
+	}
+	if workstation.OnRejection == nil {
+		workstation.OnRejection = authored.OnRejection
+	}
+	if workstation.Resources == nil || len(*workstation.Resources) == 0 {
+		workstation.Resources = authored.Resources
+	}
+	if workstation.Cron == nil {
+		workstation.Cron = authored.Cron
+	}
+	if workstation.Guards == nil || len(*workstation.Guards) == 0 {
+		workstation.Guards = authored.Guards
+	}
+	if workstation.Limits == nil {
+		workstation.Limits = authored.Limits
+	}
+	if workstation.Worktree == nil {
+		workstation.Worktree = authored.Worktree
+	}
+	if workstation.WorkingDirectory == nil {
+		workstation.WorkingDirectory = authored.WorkingDirectory
+	}
+	if workstation.PromptFile == nil {
+		workstation.PromptFile = authored.PromptFile
+	}
+	if workstation.Body == nil {
+		workstation.Body = authored.Body
+	}
+	if workstation.StopWords == nil || len(*workstation.StopWords) == 0 {
+		workstation.StopWords = authored.StopWords
+	}
 }
 
 func rewriteArtifactFactoryEvents(artifact *interfaces.ReplayArtifact, generated factoryapi.Factory) error {

@@ -235,73 +235,7 @@ func TestReduceReplayEvents_CompletionsPreserveRecordedOutputWork(t *testing.T) 
 }
 
 func TestReduceReplayEvents_CompletionsRehydrateSafeDiagnosticsThroughInterfaces(t *testing.T) {
-	artifact := testReplayArtifact(
-		t,
-		replayInferenceResponseEvent(
-			t,
-			interfaces.WorkDispatch{
-				DispatchID: "dispatch-safe",
-				Execution: interfaces.ExecutionMetadata{
-					RequestID: "request-safe",
-					TraceID:   "trace-safe",
-					WorkIDs:   []string{"work-safe"},
-				},
-			},
-			"dispatch-safe/inference-request/1",
-			1,
-			3,
-			"recorded provider output",
-			&interfaces.ProviderSessionMetadata{
-				Provider: "codex",
-				Kind:     "response_id",
-				ID:       "resp-safe-123",
-			},
-			&interfaces.WorkDiagnostics{
-				RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
-					SystemPromptHash: "system-hash-123",
-					UserMessageHash:  "user-hash-456",
-					Variables: map[string]string{
-						"prompt_source":  "factory-renderer",
-						"work_type_name": "story",
-						"system_prompt":  "unsafe raw prompt",
-					},
-				},
-				Provider: &interfaces.ProviderDiagnostic{
-					Provider: "codex",
-					Model:    "gpt-5.4",
-					RequestMetadata: map[string]string{
-						"worker_type":        "builder",
-						"system_prompt_body": "unsafe request body",
-					},
-					ResponseMetadata: map[string]string{
-						"provider_session_id": "resp-safe-123",
-						"retry_count":         "1",
-						"env_secret":          "unsafe response secret",
-					},
-				},
-				Command: &interfaces.CommandDiagnostic{
-					Command: "echo",
-					Stdin:   "unsafe stdin",
-				},
-				Panic: &interfaces.PanicDiagnostic{
-					Message: "unsafe panic",
-					Stack:   "unsafe stack",
-				},
-				Metadata: map[string]string{"debug": "unsafe metadata"},
-			},
-			"",
-		),
-		replayDispatchCompletedEvent(t, "completion-safe", interfaces.WorkResult{
-			DispatchID:   "dispatch-safe",
-			TransitionID: "transition-safe",
-			Outcome:      interfaces.OutcomeAccepted,
-			Output:       "recorded provider output",
-			ProviderFailure: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyRetryable,
-				Type:   interfaces.ProviderErrorTypeThrottled,
-			},
-		}, 4),
-	)
+	artifact := safeDiagnosticReductionArtifact(t)
 
 	reduced, err := reduceReplayEvents(artifact)
 	if err != nil {
@@ -311,40 +245,7 @@ func TestReduceReplayEvents_CompletionsRehydrateSafeDiagnosticsThroughInterfaces
 		t.Fatalf("reduced completions = %d, want 1", len(reduced.Completions))
 	}
 
-	completion := reduced.Completions[0]
-	if completion.result.Output != "recorded provider output" {
-		t.Fatalf("completion output = %q, want recorded provider output", completion.result.Output)
-	}
-	if completion.result.ProviderSession == nil || completion.result.ProviderSession.ID != "resp-safe-123" {
-		t.Fatalf("provider session = %#v, want resp-safe-123", completion.result.ProviderSession)
-	}
-	if completion.result.ProviderFailure == nil || completion.result.ProviderFailure.Type != interfaces.ProviderErrorTypeThrottled {
-		t.Fatalf("provider failure = %#v, want throttled", completion.result.ProviderFailure)
-	}
-	if completion.result.Diagnostics == nil || completion.result.Diagnostics.Provider == nil || completion.result.Diagnostics.RenderedPrompt == nil {
-		t.Fatalf("completion diagnostics = %#v, want safe provider and rendered prompt diagnostics", completion.result.Diagnostics)
-	}
-	if got := completion.result.Diagnostics.Provider.ResponseMetadata["provider_session_id"]; got != "resp-safe-123" {
-		t.Fatalf("response metadata provider_session_id = %q, want resp-safe-123", got)
-	}
-	if got := completion.result.Diagnostics.Provider.RequestMetadata["worker_type"]; got != "builder" {
-		t.Fatalf("request metadata worker_type = %q, want builder", got)
-	}
-	if got := completion.result.Diagnostics.RenderedPrompt.Variables["work_type_name"]; got != "story" {
-		t.Fatalf("rendered prompt work_type_name = %q, want story", got)
-	}
-	if _, ok := completion.result.Diagnostics.RenderedPrompt.Variables["system_prompt"]; ok {
-		t.Fatalf("rendered prompt variables leaked unsafe raw prompt: %#v", completion.result.Diagnostics.RenderedPrompt.Variables)
-	}
-	if completion.result.Diagnostics.Command != nil {
-		t.Fatalf("command diagnostics = %#v, want nil", completion.result.Diagnostics.Command)
-	}
-	if completion.result.Diagnostics.Panic != nil {
-		t.Fatalf("panic diagnostics = %#v, want nil", completion.result.Diagnostics.Panic)
-	}
-	if completion.result.Diagnostics.Metadata != nil {
-		t.Fatalf("metadata diagnostics = %#v, want nil", completion.result.Diagnostics.Metadata)
-	}
+	assertReducedCompletionSafeDiagnostics(t, reduced.Completions[0])
 }
 
 func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThem(t *testing.T) {
@@ -440,6 +341,107 @@ func thinDispatchReplayArtifact(t *testing.T) (*interfaces.ReplayArtifact, facto
 	}}, nil)
 	dispatchEvent := replayDispatchCreatedEvent(t, dispatch, 2)
 	return testReplayArtifact(t, workRequest, dispatchEvent), dispatchEvent
+}
+
+func safeDiagnosticReductionArtifact(t *testing.T) *interfaces.ReplayArtifact {
+	t.Helper()
+
+	return testReplayArtifact(
+		t,
+		replayInferenceResponseEvent(
+			t,
+			interfaces.WorkDispatch{
+				DispatchID: "dispatch-safe",
+				Execution: interfaces.ExecutionMetadata{
+					RequestID: "request-safe",
+					TraceID:   "trace-safe",
+					WorkIDs:   []string{"work-safe"},
+				},
+			},
+			"dispatch-safe/inference-request/1",
+			1,
+			3,
+			"recorded provider output",
+			&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
+			safeDiagnosticReductionFixture(),
+			"",
+		),
+		replayDispatchCompletedEvent(t, "completion-safe", interfaces.WorkResult{
+			DispatchID:   "dispatch-safe",
+			TransitionID: "transition-safe",
+			Outcome:      interfaces.OutcomeAccepted,
+			Output:       "recorded provider output",
+			ProviderFailure: &interfaces.ProviderFailureMetadata{
+				Family: interfaces.ProviderErrorFamilyRetryable,
+				Type:   interfaces.ProviderErrorTypeThrottled,
+			},
+		}, 4),
+	)
+}
+
+func safeDiagnosticReductionFixture() *interfaces.WorkDiagnostics {
+	return &interfaces.WorkDiagnostics{
+		RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
+			SystemPromptHash: "system-hash-123",
+			UserMessageHash:  "user-hash-456",
+			Variables: map[string]string{
+				"prompt_source": "factory-renderer", "work_type_name": "story", "system_prompt": "unsafe raw prompt",
+			},
+		},
+		Provider: &interfaces.ProviderDiagnostic{
+			Provider: "codex",
+			Model:    "gpt-5.4",
+			RequestMetadata: map[string]string{
+				"worker_type": "builder", "system_prompt_body": "unsafe request body",
+			},
+			ResponseMetadata: map[string]string{
+				"provider_session_id": "resp-safe-123", "retry_count": "1", "env_secret": "unsafe response secret",
+			},
+		},
+		Command: &interfaces.CommandDiagnostic{Command: "echo", Stdin: "unsafe stdin"},
+		Panic:   &interfaces.PanicDiagnostic{Message: "unsafe panic", Stack: "unsafe stack"},
+		Metadata: map[string]string{
+			"debug": "unsafe metadata",
+		},
+	}
+}
+
+func assertReducedCompletionSafeDiagnostics(t *testing.T, completion replayCompletion) {
+	t.Helper()
+
+	if completion.result.Output != "recorded provider output" {
+		t.Fatalf("completion output = %q, want recorded provider output", completion.result.Output)
+	}
+	if completion.result.ProviderSession == nil || completion.result.ProviderSession.ID != "resp-safe-123" {
+		t.Fatalf("provider session = %#v, want resp-safe-123", completion.result.ProviderSession)
+	}
+	if completion.result.ProviderFailure == nil || completion.result.ProviderFailure.Type != interfaces.ProviderErrorTypeThrottled {
+		t.Fatalf("provider failure = %#v, want throttled", completion.result.ProviderFailure)
+	}
+	if completion.result.Diagnostics == nil || completion.result.Diagnostics.Provider == nil || completion.result.Diagnostics.RenderedPrompt == nil {
+		t.Fatalf("completion diagnostics = %#v, want safe provider and rendered prompt diagnostics", completion.result.Diagnostics)
+	}
+	if got := completion.result.Diagnostics.Provider.ResponseMetadata["provider_session_id"]; got != "resp-safe-123" {
+		t.Fatalf("response metadata provider_session_id = %q, want resp-safe-123", got)
+	}
+	if got := completion.result.Diagnostics.Provider.RequestMetadata["worker_type"]; got != "builder" {
+		t.Fatalf("request metadata worker_type = %q, want builder", got)
+	}
+	if got := completion.result.Diagnostics.RenderedPrompt.Variables["work_type_name"]; got != "story" {
+		t.Fatalf("rendered prompt work_type_name = %q, want story", got)
+	}
+	if _, ok := completion.result.Diagnostics.RenderedPrompt.Variables["system_prompt"]; ok {
+		t.Fatalf("rendered prompt variables leaked unsafe raw prompt: %#v", completion.result.Diagnostics.RenderedPrompt.Variables)
+	}
+	if completion.result.Diagnostics.Command != nil {
+		t.Fatalf("command diagnostics = %#v, want nil", completion.result.Diagnostics.Command)
+	}
+	if completion.result.Diagnostics.Panic != nil {
+		t.Fatalf("panic diagnostics = %#v, want nil", completion.result.Diagnostics.Panic)
+	}
+	if completion.result.Diagnostics.Metadata != nil {
+		t.Fatalf("metadata diagnostics = %#v, want nil", completion.result.Diagnostics.Metadata)
+	}
 }
 
 func assertThinReplayDispatchEventPayload(t *testing.T, dispatchEvent factoryapi.FactoryEvent) {

@@ -47,6 +47,7 @@ type FactoryEventHistory struct {
 	mu             sync.RWMutex
 	net            *state.Net
 	runtimeConfig  interfaces.RuntimeDefinitionLookup
+	factoryRunner  string
 	now            func() time.Time
 	events         []factoryapi.FactoryEvent
 	recorders      []func(factoryapi.FactoryEvent)
@@ -69,6 +70,17 @@ func NewFactoryEventHistory(net *state.Net, now func() time.Time, runtimeConfigs
 		now:           now,
 		streams:       make(map[int]*eventHistorySubscription),
 	}
+}
+
+// SetFactoryRunnerOverride preserves the effective factory-level runner
+// selection when service wiring overrides the authored runtime config.
+func (h *FactoryEventHistory) SetFactoryRunnerOverride(runnerID string) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.factoryRunner = interfaces.NormalizeRunnerID(runnerID)
 }
 
 // Events returns the recorded events in append order.
@@ -277,6 +289,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 		return
 	}
 	inputTokens := workers.WorkDispatchInputTokens(record.Dispatch)
+	runnerSelection := h.resolvedRunnerSelectionForDispatch(record.Dispatch)
 	h.appendGenerated(factoryEvent(
 		factoryapi.FactoryEventTypeDispatchRequest,
 		fmt.Sprintf("%s/%s", eventIDDispatchCreatedPrefix, dispatchID),
@@ -296,7 +309,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 			PreviousChainingTraceIds: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
 			Inputs:                   generatedDispatchConsumedWorkRefsFromTokens(inputTokens),
 			Resources:                h.generatedResourcesPtr(inputTokens),
-			Metadata:                 generatedDispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey),
+			Metadata:                 generatedDispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey, runnerSelection),
 		},
 	))
 }
@@ -493,327 +506,65 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 	return out
 }
 
-func generatedFactory(payload interfaces.InitialStructurePayload) factoryapi.Factory {
-	resources := generatedResources(payload.Resources)
-	workTypes := generatedWorkTypes(payload.WorkTypes)
-	workers := generatedWorkers(payload.Workers)
-	workstations := generatedWorkstations(payload.Workstations, payload.Places)
-
-	return factoryapi.Factory{
-		Name:         generatedFactoryName(payload.Name),
-		Resources:    slicePtr(resources),
-		WorkTypes:    slicePtr(workTypes),
-		Workers:      slicePtr(workers),
-		Workstations: slicePtr(workstations),
+func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch interfaces.WorkDispatch) interfaces.ResolvedRunnerSelection {
+	if h == nil {
+		return interfaces.ResolvedRunnerSelection{}
 	}
+	workstationRunner, workerModelProvider := h.runnerSelectionInputsForDispatch(dispatch)
+	factoryRunner := h.factoryRunnerID()
+	return interfaces.ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider)
 }
 
-func generatedFactoryName(name string) factoryapi.FactoryName {
-	if strings.TrimSpace(name) == "" {
-		return "factory"
+func (h *FactoryEventHistory) runnerSelectionInputsForDispatch(dispatch interfaces.WorkDispatch) (string, string) {
+	if h == nil || h.runtimeConfig == nil {
+		return "", ""
 	}
-	return factoryapi.FactoryName(name)
-}
-
-func generatedResources(resources []interfaces.FactoryResource) []factoryapi.Resource {
-	out := make([]factoryapi.Resource, 0, len(resources))
-	for _, resource := range resources {
-		name := resource.Name
-		if name == "" {
-			name = resource.ID
+	workstationName := strings.TrimSpace(dispatch.WorkstationName)
+	if workstationName == "" && h.net != nil {
+		if transition, ok := h.net.Transitions[dispatch.TransitionID]; ok {
+			workstationName = strings.TrimSpace(transition.Name)
 		}
-		out = append(out, factoryapi.Resource{Name: name, Capacity: resource.Capacity})
 	}
-	return out
-}
-
-func generatedWorkTypes(workTypes []interfaces.FactoryWorkType) []factoryapi.WorkType {
-	out := make([]factoryapi.WorkType, 0, len(workTypes))
-	for _, workType := range workTypes {
-		name := workType.Name
-		if name == "" {
-			name = workType.ID
+	var workstationRunner string
+	if workstationName != "" {
+		if workstation, ok := h.runtimeConfig.Workstation(workstationName); ok && workstation != nil {
+			workstationRunner = workstation.Runner
 		}
-		states := make([]factoryapi.WorkState, 0, len(workType.States))
-		for _, stateDef := range workType.States {
-			states = append(states, factoryapi.WorkState{
-				Name: stateDef.Value,
-				Type: generatedWorkStateType(stateDef.Category),
-			})
+	}
+	worker, ok := h.runtimeConfig.Worker(dispatch.WorkerType)
+	if !ok || worker == nil {
+		return workstationRunner, ""
+	}
+	return workstationRunner, worker.ModelProvider
+}
+
+func (h *FactoryEventHistory) factoryRunnerID() string {
+	if h == nil || h.runtimeConfig == nil {
+		if h == nil {
+			return ""
 		}
-		out = append(out, factoryapi.WorkType{Name: name, States: states})
+		h.mu.RLock()
+		defer h.mu.RUnlock()
+		return h.factoryRunner
 	}
-	return out
-}
-
-func generatedWorkStateType(category string) factoryapi.WorkStateType {
-	switch state.StateCategory(category) {
-	case state.StateCategoryInitial:
-		return factoryapi.WorkStateTypeINITIAL
-	case state.StateCategoryTerminal:
-		return factoryapi.WorkStateTypeTERMINAL
-	case state.StateCategoryFailed:
-		return factoryapi.WorkStateTypeFAILED
-	default:
-		return factoryapi.WorkStateTypePROCESSING
+	h.mu.RLock()
+	override := h.factoryRunner
+	h.mu.RUnlock()
+	if override != "" {
+		return override
 	}
-}
-
-func generatedWorkStatePtr(name string) *factoryapi.WorkState {
-	if name == "" {
-		return nil
+	type factoryConfigProvider interface {
+		FactoryConfig() *interfaces.FactoryConfig
 	}
-	return &factoryapi.WorkState{Name: name, Type: inferredGeneratedWorkStateType(name)}
-}
-
-func inferredGeneratedWorkStateType(name string) factoryapi.WorkStateType {
-	switch name {
-	case "init":
-		return factoryapi.WorkStateTypeINITIAL
-	case "complete", "done":
-		return factoryapi.WorkStateTypeTERMINAL
-	case "failed":
-		return factoryapi.WorkStateTypeFAILED
-	default:
-		return factoryapi.WorkStateTypePROCESSING
-	}
-}
-
-func generatedWorkers(workers []interfaces.FactoryWorker) []factoryapi.Worker {
-	out := make([]factoryapi.Worker, 0, len(workers))
-	for _, worker := range workers {
-		name := worker.Name
-		if name == "" {
-			name = worker.ID
-		}
-		out = append(out, factoryapi.Worker{
-			Name:             name,
-			ExecutorProvider: interfaces.GeneratedPublicFactoryWorkerProviderPtr(worker.Provider),
-			ModelProvider:    interfaces.GeneratedPublicFactoryWorkerModelProviderPtr(worker.ModelProvider),
-			Model:            stringPtrIfNotEmpty(worker.Model),
-			Type:             interfaces.GeneratedPublicFactoryWorkerTypePtr(worker.Config["type"]),
-		})
-	}
-	return out
-}
-
-func generatedWorkstations(workstations []interfaces.FactoryWorkstation, places []interfaces.FactoryPlace) []factoryapi.Workstation {
-	placesByID := make(map[string]interfaces.FactoryPlace, len(places))
-	for _, place := range places {
-		placesByID[place.ID] = place
-	}
-	out := make([]factoryapi.Workstation, 0, len(workstations))
-	for _, workstation := range workstations {
-		name := workstation.Name
-		if name == "" {
-			name = workstation.ID
-		}
-		converted := factoryapi.Workstation{
-			Id:          stringPtrIfNotEmpty(workstation.ID),
-			Name:        name,
-			Worker:      workstation.WorkerID,
-			Type:        interfaces.GeneratedPublicFactoryWorkstationTypePtr(workstation.Config["type"]),
-			Inputs:      generatedWorkstationIOs(workstation.InputPlaceIDs, placesByID),
-			Outputs:     generatedWorkstationIOs(workstation.OutputPlaceIDs, placesByID),
-			OnContinue:  generatedWorkstationIOsPtr(workstation.ContinuePlaceIDs, placesByID),
-			OnRejection: generatedWorkstationIOsPtr(workstation.RejectionPlaceIDs, placesByID),
-			OnFailure:   generatedWorkstationIOsPtr(workstation.FailurePlaceIDs, placesByID),
-		}
-		if workstation.Kind != "" {
-			converted.Behavior = interfaces.GeneratedPublicWorkstationKindPtr(interfaces.WorkstationKind(workstation.Kind))
-		}
-		out = append(out, converted)
-	}
-	return out
-}
-
-func generatedWorkstationIOs(placeIDs []string, places map[string]interfaces.FactoryPlace) []factoryapi.WorkstationIO {
-	out := make([]factoryapi.WorkstationIO, 0, len(placeIDs))
-	for _, placeID := range placeIDs {
-		place, ok := places[placeID]
-		if !ok {
-			workType, stateValue := splitPlaceID(placeID)
-			place = interfaces.FactoryPlace{TypeID: workType, State: stateValue}
-		}
-		out = append(out, factoryapi.WorkstationIO{WorkType: place.TypeID, State: place.State})
-	}
-	return out
-}
-
-func generatedWorkstationIOsPtr(placeIDs []string, places map[string]interfaces.FactoryPlace) *[]factoryapi.WorkstationIO {
-	ios := generatedWorkstationIOs(placeIDs, places)
-	if len(ios) == 0 {
-		return nil
-	}
-	return &ios
-}
-
-func splitPlaceID(placeID string) (string, string) {
-	before, after, ok := strings.Cut(placeID, ":")
+	provider, ok := h.runtimeConfig.(factoryConfigProvider)
 	if !ok {
-		return placeID, ""
+		return ""
 	}
-	return before, after
-}
-
-func generatedWorksPtr(items []interfaces.FactoryWorkItem) *[]factoryapi.Work {
-	works := generatedWorks(items)
-	return slicePtr(works)
-}
-
-func generatedWorks(items []interfaces.FactoryWorkItem) []factoryapi.Work {
-	out := make([]factoryapi.Work, 0, len(items))
-	for _, item := range items {
-		out = append(out, generatedWork(item))
+	cfg := provider.FactoryConfig()
+	if cfg == nil {
+		return ""
 	}
-	return out
-}
-
-func generatedWork(item interfaces.FactoryWorkItem) factoryapi.Work {
-	name := item.DisplayName
-	if name == "" {
-		name = item.ID
-	}
-	currentChainingTraceID := item.CurrentChainingTraceID
-	if currentChainingTraceID == "" {
-		currentChainingTraceID = item.TraceID
-	}
-	return factoryapi.Work{
-		Name:                     name,
-		WorkId:                   stringPtrIfNotEmpty(item.ID),
-		WorkTypeName:             stringPtrIfNotEmpty(item.WorkTypeID),
-		State:                    generatedWorkStatePtr(item.State),
-		ChainingTraceDepth:       intPtrIfPositive(item.ChainingTraceDepth),
-		CurrentChainingTraceId:   stringPtrIfNotEmpty(currentChainingTraceID),
-		PreviousChainingTraceIds: stringSlicePtr(item.PreviousChainingTraceIDs),
-		TraceId:                  stringPtrIfNotEmpty(item.TraceID),
-		Content:                  generatedWorkContentPtr(item.Content),
-		Tags:                     generatedStringMapPtr(item.Tags),
-	}
-}
-
-func generatedWorkContentPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
-	if len(parts) == 0 {
-		return nil
-	}
-	content := make(factoryapi.WorkContent, 0, len(parts))
-	for _, part := range parts {
-		var generated factoryapi.WorkContentPart
-		switch part.Type {
-		case interfaces.WorkContentPartTypeText:
-			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-				Type: factoryapi.WorkContentPartTypeText,
-				Text: part.Text,
-			}); err != nil {
-				continue
-			}
-		case interfaces.WorkContentPartTypeImage:
-			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
-				Type: factoryapi.WorkContentPartTypeImage,
-				File: part.File,
-			}); err != nil {
-				continue
-			}
-		default:
-			continue
-		}
-		content = append(content, generated)
-	}
-	if len(content) == 0 {
-		return nil
-	}
-	return &content
-}
-
-func generatedDispatchConsumedWorkRefsFromTokens(tokens []interfaces.Token) []factoryapi.DispatchConsumedWorkRef {
-	out := make([]factoryapi.DispatchConsumedWorkRef, 0, len(tokens))
-	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
-			continue
-		}
-		workID := token.Color.WorkID
-		if workID == "" {
-			workID = token.ID
-		}
-		if workID == "" {
-			continue
-		}
-		out = append(out, factoryapi.DispatchConsumedWorkRef{WorkId: workID})
-	}
-	return out
-}
-
-func generatedDispatchRequestEventMetadataPtr(replayKey string) *factoryapi.DispatchRequestEventMetadata {
-	if replayKey == "" {
-		return nil
-	}
-	return &factoryapi.DispatchRequestEventMetadata{ReplayKey: stringPtrIfNotEmpty(replayKey)}
-}
-
-func generatedFactoryRelationsPtr(relations []interfaces.FactoryRelation) *[]factoryapi.Relation {
-	out := make([]factoryapi.Relation, 0, len(relations))
-	for _, relation := range relations {
-		out = append(out, generatedFactoryRelation(relation))
-	}
-	return slicePtr(out)
-}
-
-func generatedFactoryRelation(relation interfaces.FactoryRelation) factoryapi.Relation {
-	targetName := relation.TargetWorkName
-	if targetName == "" {
-		targetName = relation.TargetWorkID
-	}
-	return factoryapi.Relation{
-		Type:           factoryapi.RelationType(relation.Type),
-		SourceWorkName: relation.SourceWorkName,
-		TargetWorkName: targetName,
-		TargetWorkId:   stringPtrIfNotEmpty(relation.TargetWorkID),
-		RequiredState:  stringPtrIfNotEmpty(relation.RequiredState),
-	}
-}
-
-func (h *FactoryEventHistory) generatedResourcesPtr(tokens []interfaces.Token) *[]factoryapi.Resource {
-	resources := make([]factoryapi.Resource, 0, len(tokens))
-	for _, token := range tokens {
-		if token.Color.DataType != interfaces.DataTypeResource {
-			continue
-		}
-		resources = append(resources, h.generatedResource(token.Color.WorkTypeID))
-	}
-	return slicePtr(resources)
-}
-
-func (h *FactoryEventHistory) generatedOutputResourcesPtr(mutations []interfaces.TokenMutationRecord) *[]factoryapi.Resource {
-	resources := make([]factoryapi.Resource, 0, len(mutations))
-	for _, mutation := range mutations {
-		if mutation.Token == nil || mutation.Token.Color.DataType != interfaces.DataTypeResource {
-			continue
-		}
-		resources = append(resources, h.generatedResource(mutation.Token.Color.WorkTypeID))
-	}
-	return slicePtr(resources)
-}
-
-func (h *FactoryEventHistory) generatedResource(resourceID string) factoryapi.Resource {
-	resource := factoryapi.Resource{Name: resourceID}
-	if h.net != nil && h.net.Resources != nil {
-		if def := h.net.Resources[resourceID]; def != nil {
-			resource.Name = def.Name
-			if resource.Name == "" {
-				resource.Name = def.ID
-			}
-			resource.Capacity = def.Capacity
-		}
-	}
-	return resource
-}
-
-func generatedFactoryStatePtr(stateValue interfaces.FactoryState) *factoryapi.FactoryState {
-	if stateValue == "" {
-		return nil
-	}
-	converted := factoryapi.FactoryState(stateValue)
-	return &converted
+	return cfg.Runner
 }
 
 func traceIDsFromTokens(tokens []interfaces.Token) []string {

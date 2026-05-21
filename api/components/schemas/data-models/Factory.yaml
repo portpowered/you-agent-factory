@@ -55,6 +55,12 @@ example:
           encoding: utf-8
           inline: |
             # Usage
+      - type: INPUT
+        targetPath: factory/inputs/story/default/seed.md
+        content:
+          encoding: utf-8
+          inline: |
+            Shared starter work
   workers:
     - name: reviewer
       type: MODEL_WORKER
@@ -102,6 +108,9 @@ properties:
   id:
     type: string
     description: Factory identifier used as the factory-level template context fallback.
+  runner:
+    $ref: './RunnerID.yaml'
+    description: Default runner selection for the factory when a workstation does not declare its own runner override.
   factoryDirectory:
     type: string
     description: Directory that contained the factory.json used for this serialized runtime config.
@@ -133,7 +142,7 @@ properties:
       $ref: './Resource.yaml'
   supportingFiles:
     $ref: './ResourceManifest.yaml'
-    description: Optional portability manifest for validation-only external tools and portable bundled files. This contract is distinct from runtime-capacity resources.
+    description: Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources.
   workers:
     type: array
     description: Reusable worker definitions that workstations reference by name when dispatching work.

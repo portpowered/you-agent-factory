@@ -1281,6 +1281,64 @@ components:
           type: integer
         failureType:
           type: string
+    FactoryWorldSelectedRunnerView:
+      type: object
+      additionalProperties: false
+      properties:
+        runnerId:
+          $ref: '#/components/schemas/RunnerID'
+        displayName:
+          type: string
+        selectionSource:
+          $ref: '#/components/schemas/RunnerSelectionSource'
+        capabilities:
+          $ref: '#/components/schemas/FactoryWorldRunnerCapabilitiesView'
+    FactoryWorldRunnerBaselineCapability:
+      type: string
+      enum:
+        - prompt_submission
+        - tool_execution
+    FactoryWorldRunnerOptionalCapability:
+      type: string
+      enum:
+        - image_input
+        - session_resume
+        - structured_output
+        - working_directory
+        - worktree
+    FactoryWorldRunnerOptionalCapabilityStatus:
+      type: string
+      enum:
+        - supported
+        - unsupported
+    FactoryWorldRunnerOptionalCapabilitySupportView:
+      type: object
+      additionalProperties: false
+      required:
+        - capability
+        - status
+      properties:
+        capability:
+          $ref: '#/components/schemas/FactoryWorldRunnerOptionalCapability'
+        status:
+          $ref: '#/components/schemas/FactoryWorldRunnerOptionalCapabilityStatus'
+        detail:
+          type: string
+    FactoryWorldRunnerCapabilitiesView:
+      type: object
+      additionalProperties: false
+      required:
+        - baselineCapabilities
+        - optionalCapabilities
+      properties:
+        baselineCapabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryWorldRunnerBaselineCapability'
+        optionalCapabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryWorldRunnerOptionalCapabilitySupportView'
     FactoryWorldWorkstationRequestCountView:
       type: object
       additionalProperties: false
@@ -1302,6 +1360,8 @@ components:
       type: object
       additionalProperties: false
       properties:
+        runner:
+          $ref: '#/components/schemas/FactoryWorldSelectedRunnerView'
         startedAt:
           type: string
         inputWorkItems:
@@ -1332,6 +1392,8 @@ components:
       type: object
       additionalProperties: false
       properties:
+        runner:
+          $ref: '#/components/schemas/FactoryWorldSelectedRunnerView'
         outcome:
           type: string
         feedback:
@@ -1527,6 +1589,10 @@ components:
         replayKey:
           type: string
           description: Stable replay correlation key for recorded dispatch reconstruction.
+        runnerId:
+          $ref: '#/components/schemas/RunnerID'
+        runnerSelectionSource:
+          $ref: '#/components/schemas/RunnerSelectionSource'
     RunRequestEventPayload:
       type: object
       additionalProperties: false
@@ -2108,6 +2174,12 @@ components:
                 encoding: utf-8
                 inline: |
                   # Usage
+            - type: INPUT
+              targetPath: factory/inputs/story/default/seed.md
+              content:
+                encoding: utf-8
+                inline: |
+                  Shared starter work
         workers:
           - name: reviewer
             type: MODEL_WORKER
@@ -2155,6 +2227,9 @@ components:
         id:
           type: string
           description: Factory identifier used as the factory-level template context fallback.
+        runner:
+          $ref: '#/components/schemas/RunnerID'
+          description: Default runner selection for the factory when a workstation does not declare its own runner override.
         factoryDirectory:
           type: string
           description: Directory that contained the factory.json used for this serialized runtime config.
@@ -2186,7 +2261,7 @@ components:
             $ref: '#/components/schemas/Resource'
         supportingFiles:
           $ref: '#/components/schemas/ResourceManifest'
-          description: Optional portability manifest for validation-only external tools and portable bundled files. This contract is distinct from runtime-capacity resources.
+          description: Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources.
         workers:
           type: array
           description: Reusable worker definitions that workstations reference by name when dispatching work.
@@ -2232,7 +2307,7 @@ components:
             $ref: '#/components/schemas/RequiredTool'
         bundledFiles:
           type: array
-          description: Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script or docs roots for SCRIPT or DOC entries, or match the supported root-helper allowlist for ROOT_HELPER entries.
+          description: Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies.
           items:
             $ref: '#/components/schemas/BundledFile'
     RequiredTool:
@@ -2264,15 +2339,16 @@ components:
         - type
         - targetPath
         - content
-      description: One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile.
+      description: One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.
       properties:
         type:
           type: string
           enum:
             - SCRIPT
             - DOC
+            - INPUT
             - ROOT_HELPER
-          description: Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile.
+          description: Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
         targetPath:
           type: string
           description: Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected.
@@ -2459,6 +2535,40 @@ components:
         - SCRIPT_WRAP
       x-enum-descriptions:
         - Public worker executor adapter that shells out through the configured worker command path.
+    RunnerID:
+      type: string
+      description: Stable built-in runner identifiers supported by factory and workstation runner selection.
+      x-enum-varnames:
+        - RunnerIDCodex
+        - RunnerIDGemini
+        - RunnerIDKiro
+        - RunnerIDCursorCLI
+        - RunnerIDOpenCode
+      enum:
+        - codex
+        - gemini
+        - kiro
+        - cursor-cli
+        - opencode
+      x-enum-descriptions:
+        - Codex runner selected through the shared runner contract.
+        - Gemini runner selected through the shared runner contract.
+        - Kiro runner selected through the shared runner contract.
+        - Cursor CLI runner selected through the shared runner contract.
+        - OpenCode runner selected through the shared runner contract.
+    RunnerSelectionSource:
+      type: string
+      description: Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+      enum:
+        - workstation
+        - factory
+        - legacy_provider
+        - default
+      x-enum-descriptions:
+        - Workstation-level runner override resolved the dispatch target.
+        - Factory-level default runner resolved the dispatch target.
+        - Legacy worker modelProvider compatibility resolved the dispatch target.
+        - The documented default Codex runner resolved the dispatch target.
     Workstation:
       description: A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
       type: object
@@ -2484,6 +2594,9 @@ components:
         worker:
           type: string
           description: Name of a worker declared in the workers list.
+        runner:
+          $ref: '#/components/schemas/RunnerID'
+          description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner.
         promptFile:
           type: string
           description: Path to a prompt template file loaded for model-oriented workstation execution.

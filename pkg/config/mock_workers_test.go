@@ -62,56 +62,9 @@ func TestParseMockWorkersConfig_ValidConfigPreservesSelectorsAndRunTypeOptions(t
 		t.Fatalf("mock worker count = %d, want 3", len(cfg.MockWorkers))
 	}
 
-	accept := cfg.MockWorkers[0]
-	if accept.ID != "accept-reviewer" ||
-		accept.WorkerName != "reviewer" ||
-		accept.WorkstationName != "review" ||
-		accept.RunType != MockWorkerRunTypeAccept {
-		t.Fatalf("accept entry = %#v, want selectors and accept run type preserved", accept)
-	}
-	if len(accept.WorkInputs) != 1 {
-		t.Fatalf("accept work input count = %d, want 1", len(accept.WorkInputs))
-	}
-	input := accept.WorkInputs[0]
-	if input.WorkID != "work-1" ||
-		input.WorkType != "story" ||
-		input.State != "in-review" ||
-		input.InputName != "story" ||
-		input.TraceID != "trace-1" ||
-		input.Channel != "default" ||
-		input.PayloadHash != "sha256:test" {
-		t.Fatalf("accept work input = %#v, want all selectors preserved", input)
-	}
-
-	script := cfg.MockWorkers[1]
-	if script.RunType != MockWorkerRunTypeScript {
-		t.Fatalf("script run type = %q, want %q", script.RunType, MockWorkerRunTypeScript)
-	}
-	if script.ScriptConfig == nil {
-		t.Fatal("scriptConfig was not preserved")
-	}
-	if script.ScriptConfig.Command != "go" ||
-		strings.Join(script.ScriptConfig.Args, " ") != "test ./..." ||
-		script.ScriptConfig.Env["AGENT_FACTORY_MOCK"] != "1" ||
-		script.ScriptConfig.WorkingDirectory != "/tmp/work" ||
-		script.ScriptConfig.Stdin != "script input" ||
-		script.ScriptConfig.Timeout != "30s" {
-		t.Fatalf("script config = %#v, want command options preserved", script.ScriptConfig)
-	}
-
-	reject := cfg.MockWorkers[2]
-	if reject.RunType != MockWorkerRunTypeReject {
-		t.Fatalf("reject run type = %q, want %q", reject.RunType, MockWorkerRunTypeReject)
-	}
-	if reject.RejectConfig == nil {
-		t.Fatal("rejectConfig was not preserved")
-	}
-	if reject.RejectConfig.Stdout != "review output" ||
-		reject.RejectConfig.Stderr != "needs changes" ||
-		reject.RejectConfig.ExitCode == nil ||
-		*reject.RejectConfig.ExitCode != 7 {
-		t.Fatalf("reject config = %#v, want stdout, stderr, and exit code preserved", reject.RejectConfig)
-	}
+	assertMockWorkerAcceptEntry(t, cfg.MockWorkers[0])
+	assertMockWorkerScriptEntry(t, cfg.MockWorkers[1])
+	assertMockWorkerRejectEntry(t, cfg.MockWorkers[2])
 }
 
 func TestParseMockWorkersConfig_RejectsUnknownRunTypeWithActionableError(t *testing.T) {
@@ -203,5 +156,65 @@ func TestLoadMockWorkersConfig_LoadsConfigFromPath(t *testing.T) {
 	}
 	if cfg.MockWorkers[0].ID != "accepted" || cfg.MockWorkers[0].RunType != MockWorkerRunTypeAccept {
 		t.Fatalf("mock worker = %#v, want loaded accept entry", cfg.MockWorkers[0])
+	}
+}
+
+func assertMockWorkerAcceptEntry(t *testing.T, worker MockWorkerConfig) {
+	t.Helper()
+
+	if worker.ID != "accept-reviewer" ||
+		worker.WorkerName != "reviewer" ||
+		worker.WorkstationName != "review" ||
+		worker.RunType != MockWorkerRunTypeAccept {
+		t.Fatalf("accept entry = %#v, want selectors and accept run type preserved", worker)
+	}
+	if len(worker.WorkInputs) != 1 {
+		t.Fatalf("accept work input count = %d, want 1", len(worker.WorkInputs))
+	}
+	input := worker.WorkInputs[0]
+	if input.WorkID != "work-1" ||
+		input.WorkType != "story" ||
+		input.State != "in-review" ||
+		input.InputName != "story" ||
+		input.TraceID != "trace-1" ||
+		input.Channel != "default" ||
+		input.PayloadHash != "sha256:test" {
+		t.Fatalf("accept work input = %#v, want all selectors preserved", input)
+	}
+}
+
+func assertMockWorkerScriptEntry(t *testing.T, worker MockWorkerConfig) {
+	t.Helper()
+
+	if worker.RunType != MockWorkerRunTypeScript {
+		t.Fatalf("script run type = %q, want %q", worker.RunType, MockWorkerRunTypeScript)
+	}
+	if worker.ScriptConfig == nil {
+		t.Fatal("scriptConfig was not preserved")
+	}
+	if worker.ScriptConfig.Command != "go" ||
+		strings.Join(worker.ScriptConfig.Args, " ") != "test ./..." ||
+		worker.ScriptConfig.Env["AGENT_FACTORY_MOCK"] != "1" ||
+		worker.ScriptConfig.WorkingDirectory != "/tmp/work" ||
+		worker.ScriptConfig.Stdin != "script input" ||
+		worker.ScriptConfig.Timeout != "30s" {
+		t.Fatalf("script config = %#v, want command options preserved", worker.ScriptConfig)
+	}
+}
+
+func assertMockWorkerRejectEntry(t *testing.T, worker MockWorkerConfig) {
+	t.Helper()
+
+	if worker.RunType != MockWorkerRunTypeReject {
+		t.Fatalf("reject run type = %q, want %q", worker.RunType, MockWorkerRunTypeReject)
+	}
+	if worker.RejectConfig == nil {
+		t.Fatal("rejectConfig was not preserved")
+	}
+	if worker.RejectConfig.Stdout != "review output" ||
+		worker.RejectConfig.Stderr != "needs changes" ||
+		worker.RejectConfig.ExitCode == nil ||
+		*worker.RejectConfig.ExitCode != 7 {
+		t.Fatalf("reject config = %#v, want stdout, stderr, and exit code preserved", worker.RejectConfig)
 	}
 }

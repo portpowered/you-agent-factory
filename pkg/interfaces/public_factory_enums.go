@@ -25,6 +25,21 @@ var publicFactoryWorkstationTypeAliases = map[string]string{
 	WorkstationTypeModel:   WorkstationTypeModel,
 }
 
+var publicFactoryRunnerIDAliases = map[string]string{
+	RunnerIDCodex:     RunnerIDCodex,
+	RunnerIDGemini:    RunnerIDGemini,
+	RunnerIDKiro:      RunnerIDKiro,
+	RunnerIDCursorCLI: RunnerIDCursorCLI,
+	RunnerIDOpenCode:  RunnerIDOpenCode,
+}
+
+var publicFactoryRunnerSelectionSourceAliases = map[string]string{
+	string(RunnerSelectionSourceWorkstation):    string(RunnerSelectionSourceWorkstation),
+	string(RunnerSelectionSourceFactory):        string(RunnerSelectionSourceFactory),
+	string(RunnerSelectionSourceLegacyProvider): string(RunnerSelectionSourceLegacyProvider),
+	string(RunnerSelectionSourceDefault):        string(RunnerSelectionSourceDefault),
+}
+
 const (
 	publicFactoryWorkerModelProviderClaude = "CLAUDE"
 	publicFactoryWorkerModelProviderCodex  = "CODEX"
@@ -129,6 +144,26 @@ func StrictPublicFactoryWorkstationType(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkstationTypeAliases, false)
 }
 
+// PermissivePublicFactoryRunnerID canonicalizes supported public runner IDs and preserves unknown values.
+func PermissivePublicFactoryRunnerID(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerIDAliases, true)
+}
+
+// StrictPublicFactoryRunnerID canonicalizes supported public runner IDs and rejects unknown values.
+func StrictPublicFactoryRunnerID(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerIDAliases, false)
+}
+
+// PermissivePublicFactoryRunnerSelectionSource canonicalizes supported public runner selection sources and preserves unknown values.
+func PermissivePublicFactoryRunnerSelectionSource(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerSelectionSourceAliases, true)
+}
+
+// StrictPublicFactoryRunnerSelectionSource canonicalizes supported public runner selection sources and rejects unknown values.
+func StrictPublicFactoryRunnerSelectionSource(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerSelectionSourceAliases, false)
+}
+
 // GeneratedPublicFactoryWorkerType returns the generated worker type enum.
 func GeneratedPublicFactoryWorkerType(value string) factoryapi.WorkerType {
 	return factoryapi.WorkerType(PermissivePublicFactoryWorkerType(value))
@@ -167,4 +202,24 @@ func GeneratedPublicFactoryWorkstationType(value string) factoryapi.WorkstationT
 // GeneratedPublicFactoryWorkstationTypePtr returns the generated workstation type enum when non-empty.
 func GeneratedPublicFactoryWorkstationTypePtr(value string) *factoryapi.WorkstationType {
 	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkstationType)
+}
+
+// GeneratedPublicFactoryRunnerID returns the generated runner ID enum.
+func GeneratedPublicFactoryRunnerID(value string) factoryapi.RunnerID {
+	return factoryapi.RunnerID(PermissivePublicFactoryRunnerID(NormalizeRunnerID(value)))
+}
+
+// GeneratedPublicFactoryRunnerIDPtr returns the generated runner ID enum when non-empty.
+func GeneratedPublicFactoryRunnerIDPtr(value string) *factoryapi.RunnerID {
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryRunnerID)
+}
+
+// GeneratedPublicFactoryRunnerSelectionSource returns the generated runner selection source enum.
+func GeneratedPublicFactoryRunnerSelectionSource(value string) factoryapi.RunnerSelectionSource {
+	return factoryapi.RunnerSelectionSource(PermissivePublicFactoryRunnerSelectionSource(value))
+}
+
+// GeneratedPublicFactoryRunnerSelectionSourcePtr returns the generated runner selection source enum when non-empty.
+func GeneratedPublicFactoryRunnerSelectionSourcePtr(value string) *factoryapi.RunnerSelectionSource {
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryRunnerSelectionSource)
 }

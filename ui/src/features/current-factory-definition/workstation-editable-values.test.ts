@@ -39,7 +39,11 @@ describe("resolveEditableWorkstationValues", () => {
     };
 
     expect(resolveEditableWorkstationValues(factory, selectedNode)).toEqual({
+      effectiveRunnerName: "codex",
+      factoryRunnerName: null,
       prompt: "Review the latest story changes before approval.",
+      runnerName: null,
+      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
       workerName: "reviewer",
       workerOptions: ["reviewer"],
       workstationName: "Review",
@@ -91,7 +95,11 @@ describe("resolveEditableWorkstationValues", () => {
     };
 
     expect(resolveEditableWorkstationValues(factory, selectedNode)).toEqual({
+      effectiveRunnerName: "codex",
+      factoryRunnerName: null,
       prompt: "Review the latest story changes before approval.",
+      runnerName: null,
+      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
       workerName: "missing-worker",
       workerOptions: [],
       workstationName: "Review",
@@ -132,6 +140,7 @@ describe("resolveEditableWorkstationValues", () => {
       selectedNode,
       {
         prompt: "Review the updated prompt before approval.",
+        runnerName: null,
         workerName: "reviewer",
       },
     );
@@ -197,7 +206,11 @@ describe("resolveEditableWorkstationValues", () => {
     };
 
     expect(resolveEditableWorkstationValues(factory, selectedNode)).toEqual({
+      effectiveRunnerName: "codex",
+      factoryRunnerName: null,
       prompt: "Review work",
+      runnerName: null,
+      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
       workerName: "processor",
       workerOptions: ["processor"],
       workstationName: "Review",
@@ -251,6 +264,7 @@ describe("resolveEditableWorkstationValues", () => {
     expect(
       applyEditableWorkstationDraft(factory, selectedNode, {
         prompt: "Updated review work",
+        runnerName: "gemini",
         workerName: "reviewer",
       }),
     ).toMatchObject({
@@ -262,6 +276,7 @@ describe("resolveEditableWorkstationValues", () => {
         {
           body: "Updated review work",
           name: "Review",
+          runner: "gemini",
           worker: "reviewer",
         },
         { body: "Plan work", name: "Plan" },
@@ -296,6 +311,7 @@ describe("resolveEditableWorkstationValues", () => {
     expect(
       applyEditableWorkstationDraft(factory, selectedNode, {
         prompt: "Updated review work",
+        runnerName: null,
         workerName: "missing-worker",
       }),
     ).toBeNull();

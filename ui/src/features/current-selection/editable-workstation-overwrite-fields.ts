@@ -15,6 +15,9 @@ export function resolveEditableWorkstationOverwriteFields(
   if (draft.workerName !== latestDefinitionDraft.workerName) {
     fields.push("worker");
   }
+  if (draft.runnerName !== latestDefinitionDraft.runnerName) {
+    fields.push("runner");
+  }
 
   return fields;
 }
@@ -23,7 +26,7 @@ export function formatEditableOverwriteFieldLabels(
   overwriteFieldNames: EditableWorkstationOverwriteField[],
   messages: Pick<
     WorkstationDetailMessages,
-    "promptFieldLabel" | "workerFieldLabel"
+    "promptFieldLabel" | "runnerFieldLabel" | "workerFieldLabel"
   >,
 ) {
   return formatList(
@@ -35,12 +38,14 @@ function fieldLabel(
   field: EditableWorkstationOverwriteField,
   messages: Pick<
     WorkstationDetailMessages,
-    "promptFieldLabel" | "workerFieldLabel"
+    "promptFieldLabel" | "runnerFieldLabel" | "workerFieldLabel"
   >,
 ) {
   switch (field) {
     case "prompt":
       return messages.promptFieldLabel.toLowerCase();
+    case "runner":
+      return messages.runnerFieldLabel.toLowerCase();
     case "worker":
       return messages.workerFieldLabel.toLowerCase();
   }

@@ -47,6 +47,7 @@ These can live inline in `factory.json` or in
 | Field | Description |
 |-------|-------------|
 | `type` | Runtime implementation, typically `MODEL_WORKSTATION` or `LOGICAL_MOVE`. |
+| `runner` | Stable runner override for this workstation: `codex`, `gemini`, `kiro`, `cursor-cli`, or `opencode`. |
 | `promptFile` | Prompt template file relative to the workstation directory. |
 | `promptTemplate` | Inline prompt template string. |
 | `limits.maxExecutionTime` | Per-dispatch timeout. |
@@ -66,6 +67,11 @@ These can live inline in `factory.json` or in
   service mode.
 
 Use a guarded `LOGICAL_MOVE` workstation to cap repeater or review loops.
+
+Runner precedence is explicit: workstation `runner`, then factory `runner`,
+then legacy worker `modelProvider`, then the default `codex` runner. Built-in
+runner selection expects the matching local CLI and auth/setup to already be
+present before execution starts.
 
 ## Related
 

@@ -3,7 +3,6 @@ package stress_test
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -35,129 +34,9 @@ func TestThroughputLargeScale(t *testing.T) {
 		timeout        = 8 * time.Second
 	)
 
-	dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(pipelineStages, "pipeline-worker"))
-
-	// Track per-stage latencies.
-	tracker := newLatencyTracker(pipelineStages)
-
-	executor := &throughputExecutor{delay: workerDelay, tracker: tracker}
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
-	h.SetCustomExecutor("pipeline-worker", executor)
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	// Capture baseline memory.
-	runtime.GC()
-	var memBefore runtime.MemStats
-	runtime.ReadMemStats(&memBefore)
-
-	startTime := time.Now()
-
-	// Run engine in background.
-	errCh := h.RunInBackground(ctx)
-
-	// Submit items in batches to avoid blocking on submitCh (buffer 16).
-	var submitWg sync.WaitGroup
-	const numSubmitters = 10
-	itemsPerSubmitter := totalItems / numSubmitters
-	for g := range numSubmitters {
-		submitWg.Add(1)
-		go func(gid int) {
-			defer submitWg.Done()
-			for i := range itemsPerSubmitter {
-				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
-					WorkTypeID: "task",
-					TraceID:    fmt.Sprintf("trace-%d-%d", gid, i),
-					Payload:    fmt.Appendf(nil, `{"g":%d,"i":%d}`, gid, i),
-				}})
-				// Yield to let the engine drain the submit channel (buffer 16).
-				if i%10 == 9 {
-					time.Sleep(time.Millisecond)
-				}
-			}
-		}(g)
-	}
-	submitWg.Wait()
-
-	// Poll until all tokens reach terminal state.
-	pipelineTerminalPlaces := []string{"task:complete", "task:failed"}
-	pollUntilAllTerminalH(t, h, pipelineTerminalPlaces, totalItems, timeout-2*time.Second)
-
-	totalDuration := time.Since(startTime)
-
-	// Stop engine.
-	cancel()
-	<-errCh
-
-	// Capture peak memory.
-	runtime.GC()
-	var memAfter runtime.MemStats
-	runtime.ReadMemStats(&memAfter)
-
-	// --- Assertions ---
-
-	// All items in terminal state.
-	snap := h.Marking()
-	terminalCount := countTerminalTokens(snap, pipelineTerminalPlaces)
-	if terminalCount != totalItems {
-		t.Errorf("expected %d terminal tokens, got %d", totalItems, terminalCount)
-	}
-
-	// No tokens lost or duplicated.
-	if len(snap.Tokens) != totalItems {
-		t.Errorf("expected %d total tokens, got %d", totalItems, len(snap.Tokens))
-	}
-
-	// No tokens stuck in non-terminal places.
-	for id, tok := range snap.Tokens {
-		if tok.PlaceID != "task:complete" && tok.PlaceID != "task:failed" {
-			t.Errorf("token %s stuck in non-terminal place %s", id, tok.PlaceID)
-		}
-	}
-
-	// No duplicate token IDs.
-	tokenIDs := make(map[string]bool, len(snap.Tokens))
-	for _, tok := range snap.Tokens {
-		if tokenIDs[tok.ID] {
-			t.Errorf("duplicate token ID: %s", tok.ID)
-		}
-		tokenIDs[tok.ID] = true
-	}
-
-	// Memory usage check: heap growth should be < 500MB.
-	heapGrowthMB := bytesGrowthMB(memAfter.HeapAlloc, memBefore.HeapAlloc)
-	totalAllocMB := bytesGrowthMB(memAfter.TotalAlloc, memBefore.TotalAlloc)
-	if heapGrowthMB > 500 {
-		t.Errorf("heap growth %.1fMB exceeds 500MB limit", heapGrowthMB)
-	}
-
-	// Execution time check.
-	if totalDuration > timeout {
-		t.Errorf("execution time %v exceeds %v limit", totalDuration, timeout)
-	}
-
-	// --- Logging ---
-	throughput := float64(totalItems) / totalDuration.Seconds()
-	t.Logf("=== Throughput Results ===")
-	t.Logf("Total items:       %d", totalItems)
-	t.Logf("Pipeline stages:   %d", pipelineStages)
-	t.Logf("Worker delay:      %v", workerDelay)
-	t.Logf("Total duration:    %v", totalDuration)
-	t.Logf("Throughput:         %.1f items/sec", throughput)
-	t.Logf("Heap growth:       %.1f MB", heapGrowthMB)
-	t.Logf("Total alloc:       %.1f MB", totalAllocMB)
-	t.Logf("Executor calls:    %d", executor.callCount())
-
-	// Per-stage latency percentiles.
-	for stage := 1; stage <= pipelineStages; stage++ {
-		stageName := fmt.Sprintf("step%d", stage)
-		p50, p99 := tracker.percentiles(stageName)
-		t.Logf("Stage %s:  p50=%v  p99=%v", stageName, p50, p99)
-	}
-	// Finish stage.
-	p50, p99 := tracker.percentiles("finish")
-	t.Logf("Stage finish:  p50=%v  p99=%v", p50, p99)
+	result := runThroughputLargeScaleScenario(t, totalItems, pipelineStages, workerDelay, timeout)
+	assertThroughputLargeScaleResult(t, result, totalItems, timeout)
+	logThroughputLargeScaleResult(t, result, totalItems, pipelineStages, workerDelay)
 }
 
 // TestThroughputNoTokenLoss is a focused variant that verifies token integrity

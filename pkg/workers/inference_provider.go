@@ -101,6 +101,8 @@ type ScriptWrapProvider struct {
 	exec   CommandRunner
 }
 
+var _ Runner = (*ScriptWrapProvider)(nil)
+
 func (p *ScriptWrapProvider) commandExec() CommandRunner {
 	if p.exec != nil {
 		return commandRunnerWithLogging(p.exec, p.Logger)
@@ -134,6 +136,12 @@ func NewScriptWrapProvider(opts ...ScriptWrapProviderOption) *ScriptWrapProvider
 // Infer shells out to the configured CLI dispatcher with the user message.
 // It merges req.EnvVars into the subprocess environment.
 func (p *ScriptWrapProvider) Infer(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	return p.Execute(ctx, req)
+}
+
+// Execute implements the shared runner contract while preserving the current
+// provider-backed subprocess execution path.
+func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
 	logger := logging.EnsureLogger(p.Logger)
 
 	logger.Info("inferencer: request starting",
@@ -204,8 +212,12 @@ func (p *ScriptWrapProvider) Infer(ctx context.Context, req interfaces.ProviderI
 type ModelProvider string
 
 const (
-	ModelProviderClaude ModelProvider = "claude"
-	ModelProviderCodex  ModelProvider = "codex"
+	ModelProviderClaude   ModelProvider = "claude"
+	ModelProviderCodex    ModelProvider = "codex"
+	ModelProviderGemini   ModelProvider = "gemini"
+	ModelProviderKiro     ModelProvider = "kiro-cli"
+	ModelProviderCursor   ModelProvider = "cursor-agent"
+	ModelProviderOpenCode ModelProvider = "opencode"
 )
 
 // ContainsStopToken checks whether the output text contains the given stop token.
@@ -347,7 +359,7 @@ func effectiveProviderSession(req interfaces.ProviderInferenceRequest, result Co
 	if session != nil {
 		return session
 	}
-	if req.ModelProvider == string(ModelProviderClaude) && req.SessionID != "" {
+	if (req.ModelProvider == string(ModelProviderClaude) || req.ModelProvider == string(ModelProviderCursor) || req.ModelProvider == string(ModelProviderOpenCode)) && req.SessionID != "" {
 		return &interfaces.ProviderSessionMetadata{
 			Provider: req.ModelProvider,
 			Kind:     providerSessionKindSessionID,

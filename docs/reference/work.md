@@ -145,6 +145,7 @@ Each `workType` and `state` pair becomes a place named
 | `workTypes` | Yes | Work categories and lifecycle states. Workstation input and output places must reference these names. |
 | `resources` | No | Bounded concurrency pools. Workers and workstations declare requirements against these pools through their `resources` entries. |
 | `supportingFiles` | No | Portability-only manifest for validation-only external tools and bundled files. This is distinct from runtime-capacity `resources`. |
+| `runner` | No | Factory-level default runner ID. Supported built-ins are `codex`, `gemini`, `kiro`, `cursor-cli`, and `opencode`. |
 | `workers` | Yes | Worker identities that workstations reference by `name`; see [Workers](workers.md) for worker runtime fields. |
 | `workstations` | Yes | Dispatch steps that consume input states and produce output states; see [Workstations](workstations.md) for the workstation field contract. |
 
@@ -203,6 +204,11 @@ that are not runtime-capacity pools.
   portability checks can probe on `PATH`.
 - `bundledFiles` carry portable file content and a canonical factory-relative
   `targetPath`; they are not the same as runtime `resources`.
+- In v1 shared-factory flows, the runtime also uses `bundledFiles` to carry a
+  share-time snapshot of every valid work item currently present under
+  `inputs/<work-type-or-BATCH>/<channel>/`. The copy happens when the share
+  operation runs, so later edits to the original factory or its `inputs/`
+  contents do not change an already shared recipient factory.
 - `config flatten` collects the supported allowlist from `factory/scripts/**`,
   `factory/docs/**`, and supported root helper files such as `Makefile` when
   you flatten a checked-in `factory/` layout.
@@ -210,6 +216,9 @@ that are not runtime-capacity pools.
   `factory/docs/...`, `ROOT_HELPER` entries target supported project-root
   helper files such as `Makefile`, and `content.encoding` is `utf-8` in this
   v1 slice.
+- Shared-factory starter-work copies are restored as detached recipient files.
+  Recipients can inspect, edit, or run the copied files in their own
+  `inputs/` tree without mutating the original author factory.
 - `targetPath` must use forward slashes and must not be absolute or contain `.`
   or `..` path segments.
 
@@ -259,6 +268,9 @@ Keep worker runtime fields, provider values, script commands, permission
 settings, and split-versus-inline worker guidance in
 [Workers](workers.md). This work guide only owns the fact that `workers` is a
 top-level collection and that workstation routing refers to workers by name.
+Runner precedence across those surfaces is explicit: workstation `runner`,
+then factory `runner`, then legacy worker `modelProvider`, then the default
+`codex` runner.
 
 ## Workstations
 

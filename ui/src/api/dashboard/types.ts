@@ -1,4 +1,15 @@
 import type { InferenceOutcome } from "../events";
+import type { components } from "../generated/openapi";
+
+type DashboardRunnerID = components["schemas"]["RunnerID"];
+type DashboardRunnerSelectionSource =
+  components["schemas"]["RunnerSelectionSource"];
+type DashboardRunnerBaselineCapability =
+  components["schemas"]["FactoryWorldRunnerBaselineCapability"];
+type DashboardRunnerOptionalCapability =
+  components["schemas"]["FactoryWorldRunnerOptionalCapability"];
+type DashboardRunnerOptionalCapabilityStatus =
+  components["schemas"]["FactoryWorldRunnerOptionalCapabilityStatus"];
 
 export type StateCategory = "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED";
 export type DashboardPlaceKind =
@@ -185,6 +196,7 @@ export interface DashboardRuntimeWorkstationRequestCounts {
 }
 
 export interface DashboardRuntimeWorkstationRequestRequest {
+  runner?: DashboardSelectedRunner;
   startedAt?: string;
   started_at?: string;
   inputWorkItems?: DashboardWorkItemRef[];
@@ -205,6 +217,7 @@ export interface DashboardRuntimeWorkstationRequestRequest {
 
 export interface DashboardRuntimeWorkstationRequestResponse {
   outcome?: string;
+  runner?: DashboardSelectedRunner;
   feedback?: string;
   failureReason?: string;
   failure_reason?: string;
@@ -232,6 +245,24 @@ export interface DashboardRuntimeWorkstationRequest {
   counts: DashboardRuntimeWorkstationRequestCounts;
   request: DashboardRuntimeWorkstationRequestRequest;
   response?: DashboardRuntimeWorkstationRequestResponse;
+}
+
+export interface DashboardSelectedRunner {
+  capabilities?: DashboardRunnerCapabilities;
+  displayName?: string;
+  runnerId?: DashboardRunnerID;
+  selectionSource?: DashboardRunnerSelectionSource;
+}
+
+export interface DashboardRunnerCapabilities {
+  baselineCapabilities?: DashboardRunnerBaselineCapability[];
+  optionalCapabilities?: DashboardRunnerOptionalCapabilitySupport[];
+}
+
+export interface DashboardRunnerOptionalCapabilitySupport {
+  capability: DashboardRunnerOptionalCapability;
+  detail?: string;
+  status: DashboardRunnerOptionalCapabilityStatus;
 }
 
 export interface DashboardWorkstationRequest {

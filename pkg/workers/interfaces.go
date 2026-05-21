@@ -23,6 +23,12 @@ type WorkstationRequestExecutor interface {
 	Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error)
 }
 
+// Runner executes one shared runner request and returns the normalized runner
+// result used by standard orchestration flows.
+type Runner interface {
+	Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error)
+}
+
 // Dispatcher manages worker execution. It supports two execution modes:
 //   - Synchronous (via Tick): all queued dispatches are executed inline; used
 //     by test harnesses to control execution step-by-step.

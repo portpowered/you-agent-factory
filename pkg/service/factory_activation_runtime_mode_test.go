@@ -83,7 +83,7 @@ func writeNamedFactoryFixture(t *testing.T, rootDir, name string) string {
 
 	payload, err := json.Marshal(map[string]any{
 		"name": name,
-		"id": name,
+		"id":   name,
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -102,12 +102,12 @@ func writeNamedFactoryFixture(t *testing.T, rootDir, name string) string {
 		},
 		"workstations": []map[string]any{
 			{
-				"name":           "execute-" + name,
-				"worker":         "executor",
-				"inputs":         []map[string]string{{"workType": "task", "state": "init"}},
-				"outputs":        []map[string]string{{"workType": "task", "state": "complete"}},
-				"type":           "MODEL_WORKSTATION",
-				"body": "Implement {{ .WorkID }}.",
+				"name":    "execute-" + name,
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+				"type":    "MODEL_WORKSTATION",
+				"body":    "Implement {{ .WorkID }}.",
 			},
 		},
 	})

@@ -34,6 +34,9 @@ runtime backend details for that name.
   execution context.
 - The current worker types are `MODEL_WORKER` and `SCRIPT_WORKER`.
 - Current built-in `modelProvider` values are `CLAUDE` and `CODEX`.
+- Runner selection is separate from `modelProvider`. Use factory or
+  workstation `runner` fields to choose the built-in runner ID: `codex`,
+  `gemini`, `kiro`, `cursor-cli`, or `opencode`.
 - The current public `executorProvider` value is `SCRIPT_WRAP`.
 - Older snake_case and alias frontmatter keys are compatibility-only inputs.
   New docs and authored configs should use canonical camelCase fields.
@@ -129,6 +132,10 @@ Keep `modelProvider` and `executorProvider` separate:
 For a normal model worker, both fields can appear on the same worker because
 they answer different questions: which model backend to use, and which worker
 execution adapter should run it.
+
+Use `runner` when the operator needs to choose the execution family. Keep
+`modelProvider` for worker-local provider compatibility, diagnostics, and the
+legacy fallback path when no explicit runner is configured.
 
 ## Related
 
