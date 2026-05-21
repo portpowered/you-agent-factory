@@ -30,9 +30,15 @@ vi.mock("./useCurrentWorkstationPromptTemplateValidation", () => ({
 
 const selectedNode =
   semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review;
+const planNode =
+  semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.plan;
 const selection: DashboardSelection = {
   kind: "node",
   nodeId: selectedNode.node_id,
+};
+const planSelection: DashboardSelection = {
+  kind: "node",
+  nodeId: planNode.node_id,
 };
 
 describe("useEditableWorkstationConfigurationState", () => {
@@ -180,6 +186,74 @@ describe("useEditableWorkstationConfigurationState", () => {
           workerName: "reviewer",
         },
         isDirty: false,
+        status: "ready",
+      });
+    });
+  });
+
+  it("resets the editable draft when the selected workstation changes", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
+    );
+
+    const { rerender, result } = renderHook(
+      ({
+        currentSelection,
+        currentNode,
+      }: {
+        currentNode: typeof selectedNode;
+        currentSelection: DashboardSelection;
+      }) =>
+        useEditableWorkstationConfigurationState(currentSelection, currentNode),
+      {
+        initialProps: {
+          currentNode: selectedNode,
+          currentSelection: selection,
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onPromptChange("Keep this local review draft.");
+      result.current.onWorkerChange("planner");
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        prompt: "Keep this local review draft.",
+        workerName: "planner",
+      },
+      isDirty: true,
+      status: "ready",
+    });
+
+    rerender({
+      currentNode: planNode,
+      currentSelection: planSelection,
+    });
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        draft: {
+          prompt: "Plan the implementation.",
+          workerName: "planner",
+        },
+        initialValues: {
+          prompt: "Plan the implementation.",
+          workerName: "planner",
+          workstationName: "Plan",
+        },
+        isDirty: false,
+        overwriteFieldNames: [],
         status: "ready",
       });
     });
@@ -420,6 +494,48 @@ function buildEditableFactoryDefinition(overrides?: {
         promptFile: "prompts/review.md",
         runner: overrides?.runnerName ?? "gemini",
         worker: overrides?.workerName ?? "reviewer",
+      },
+    ],
+    workTypes: [],
+  };
+}
+
+function buildMultiWorkstationEditableFactoryDefinition(): CanonicalFactoryDefinition {
+  return {
+    name: "Current Factory",
+    runner: "codex",
+    workers: [
+      {
+        model: "gpt-5.5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5.6",
+        name: "planner",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        body: "Review the latest story changes before approval.",
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/review.md",
+        runner: "gemini",
+        worker: "reviewer",
+      },
+      {
+        body: "Plan the implementation.",
+        id: "plan",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Plan",
+        outputs: [{ state: "planned", workType: "story" }],
+        promptFile: "prompts/plan.md",
+        runner: "codex",
+        worker: "planner",
       },
     ],
     workTypes: [],
