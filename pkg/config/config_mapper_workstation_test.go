@@ -196,6 +196,65 @@ Retry work.
 	}
 }
 
+func TestConfigMapping_AuthoredWorkstationTransitionsUseMatchingIDAndName(t *testing.T) {
+	t.Parallel()
+
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "init", Type: interfaces.StateTypeInitial},
+					{Name: "review", Type: interfaces.StateTypeProcessing},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
+				},
+			},
+		},
+		Workers: []interfaces.WorkerConfig{
+			{Name: "reviewer"},
+			{Name: "publisher"},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name:           "review-task",
+				WorkerTypeName: "reviewer",
+				Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+				Outputs:        []interfaces.IOConfig{{StateName: "review", WorkTypeName: "task"}},
+			},
+			{
+				Name:           "publish-task",
+				WorkerTypeName: "publisher",
+				Inputs:         []interfaces.IOConfig{{StateName: "review", WorkTypeName: "task"}},
+				Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+				OnFailure:      []interfaces.IOConfig{{StateName: "failed", WorkTypeName: "task"}},
+			},
+		},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, workstationName := range []string{"review-task", "publish-task"} {
+		transition := net.Transitions[workstationName]
+		if transition == nil {
+			t.Fatalf("expected transition %q to exist", workstationName)
+		}
+		if transition.ID != workstationName {
+			t.Fatalf("transition %q ID = %q, want %q", workstationName, transition.ID, workstationName)
+		}
+		if transition.Name != workstationName {
+			t.Fatalf("transition %q Name = %q, want %q", workstationName, transition.Name, workstationName)
+		}
+		if transition.ID != transition.Name {
+			t.Fatalf("transition %q invariant failed: ID %q != Name %q", workstationName, transition.ID, transition.Name)
+		}
+	}
+}
+
 func TestConfigMapping_DefaultNonRepeaterFanInRejectionUsesFailureDestinations(t *testing.T) {
 	input := &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{

@@ -51,16 +51,16 @@ func schedulerWorkstationPriorityNet() *state.Net {
 		},
 	}
 	net.Transitions = map[string]*petri.Transition{
-		"tr-a-cron":                             {ID: "tr-a-cron", WorkerType: "agent"},
-		"tr-a-cron-processing":                  {ID: "tr-a-cron-processing", WorkerType: "agent"},
-		"tr-b-repeater":                         {ID: "tr-b-repeater", WorkerType: "agent"},
-		"tr-b-cron-initial":                     {ID: "tr-b-cron-initial", WorkerType: "agent"},
-		"tr-b-standard":                         {ID: "tr-b-standard", WorkerType: "agent"},
-		"tr-c-repeater":                         {ID: "tr-c-repeater", WorkerType: "agent"},
-		"tr-c-repeater-initial":                 {ID: "tr-c-repeater-initial", WorkerType: "agent"},
-		"tr-z-standard":                         {ID: "tr-z-standard", WorkerType: "agent"},
+		"tr-a-cron":                             {ID: "tr-a-cron", Name: "tr-a-cron", WorkerType: "agent"},
+		"tr-a-cron-processing":                  {ID: "tr-a-cron-processing", Name: "tr-a-cron-processing", WorkerType: "agent"},
+		"tr-b-repeater":                         {ID: "tr-b-repeater", Name: "tr-b-repeater", WorkerType: "agent"},
+		"tr-b-cron-initial":                     {ID: "tr-b-cron-initial", Name: "tr-b-cron-initial", WorkerType: "agent"},
+		"tr-b-standard":                         {ID: "tr-b-standard", Name: "tr-b-standard", WorkerType: "agent"},
+		"tr-c-repeater":                         {ID: "tr-c-repeater", Name: "tr-c-repeater", WorkerType: "agent"},
+		"tr-c-repeater-initial":                 {ID: "tr-c-repeater-initial", Name: "tr-c-repeater-initial", WorkerType: "agent"},
+		"tr-z-standard":                         {ID: "tr-z-standard", Name: "tr-z-standard", WorkerType: "agent"},
 		"tr-a-logical":                          {ID: "tr-a-logical"},
-		"tr-z-standard-processing":              {ID: "tr-z-standard-processing", WorkerType: "agent"},
+		"tr-z-standard-processing":              {ID: "tr-z-standard-processing", Name: "tr-z-standard-processing", WorkerType: "agent"},
 		interfaces.SystemTimeExpiryTransitionID: {ID: interfaces.SystemTimeExpiryTransitionID, Type: petri.TransitionExhaustion},
 	}
 	return net

@@ -174,7 +174,7 @@ func TestWorkInQueueScheduler_TreatsStandardAndRepeaterAsEqualKindPriority(t *te
 		{TransitionID: "tr-b-repeater", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {{ID: "tok-repeater", PlaceID: "task:init", EnteredAt: baseTokenTime, Color: interfaces.TokenColor{WorkID: "work-repeater", TraceID: "trace-repeater", WorkTypeID: "task"}}}}},
 	}
 	if decisions := sched.Select(enabled, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Topology: schedulerWorkstationPriorityNet()}); len(decisions) != 1 || decisions[0].TransitionID != "tr-b-repeater" {
-		t.Fatalf("expected transition ID fallback to separate standard/repeater, got %v", firingDecisionIDs(decisions))
+		t.Fatalf("expected authored transition names to preserve standard/repeater ordering, got %v", firingDecisionIDs(decisions))
 	}
 }
 
