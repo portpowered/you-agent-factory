@@ -21,9 +21,31 @@ func TestReconstructFactoryWorldState_BeforeFirstEventReturnsEmptyState(t *testi
 }
 
 func TestReconstructFactoryWorldState_AcceptsJSONDecodedPayloads(t *testing.T) {
+	t0 := time.Date(2026, 4, 23, 11, 0, 0, 0, time.UTC)
+	requestID := "request-json-relations"
+	works := []factoryapi.Work{
+		generatedWorkForProjectionTest(interfaces.FactoryWorkItem{ID: "work-draft", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-json-relations"}, requestID),
+		generatedWorkForProjectionTest(interfaces.FactoryWorkItem{ID: "work-review", WorkTypeID: "task", DisplayName: "review", TraceID: "trace-json-relations"}, requestID),
+	}
+	relation := factoryapi.Relation{
+		Type:           factoryapi.RelationTypeDependsOn,
+		SourceWorkName: "review",
+		TargetWorkName: "draft",
+		TargetWorkId:   stringPtrForProjectionTest("work-draft"),
+		RequiredState:  stringPtrForProjectionTest("done"),
+	}
 	events := []factoryapi.FactoryEvent{
-		initialStructureEvent(time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)),
-		workInputEvent(1, time.Date(2026, 4, 16, 8, 0, 1, 0, time.UTC), interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", PlaceID: "task:init"}),
+		initialStructureEvent(t0),
+		generatedProjectionEvent(factoryapi.FactoryEventTypeWorkRequest, "work-request/request-json-relations", 1, t0.Add(time.Second), factoryapi.FactoryEventContext{
+			RequestId: stringPtrForProjectionTest(requestID),
+			TraceIds:  &[]string{"trace-json-relations"},
+			WorkIds:   &[]string{"work-draft", "work-review"},
+		}, factoryapi.WorkRequestEventPayload{
+			Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+			Works:     &works,
+			Relations: &[]factoryapi.Relation{relation},
+		}),
+		relationshipChangeEvent(1, t0.Add(2*time.Second), requestID, "trace-json-relations", []string{"work-review", "work-draft"}, relation),
 	}
 	raw, err := json.Marshal(events)
 	if err != nil {
@@ -38,8 +60,21 @@ func TestReconstructFactoryWorldState_AcceptsJSONDecodedPayloads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
-	if _, ok := state.ActiveWorkItemsByID["work-1"]; !ok {
-		t.Fatalf("decoded work input should reconstruct active work")
+	request := state.WorkRequestsByID[requestID]
+	if request.RequestID != requestID || request.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("decoded request = %#v, want canonical work-request metadata", request)
+	}
+	if len(request.WorkItems) != 2 || request.WorkItems[0].ID != "work-draft" || request.WorkItems[1].ID != "work-review" {
+		t.Fatalf("decoded request work items = %#v, want draft and review preserved", request.WorkItems)
+	}
+	relations := state.RelationsByWorkID["work-review"]
+	if len(relations) != 1 ||
+		relations[0].RequestID != requestID ||
+		relations[0].TraceID != "trace-json-relations" ||
+		relations[0].TargetWorkID != "work-draft" ||
+		relations[0].TargetWorkName != "draft" ||
+		relations[0].RequiredState != "done" {
+		t.Fatalf("decoded relations = %#v, want replayed canonical request dependency", relations)
 	}
 }
 
