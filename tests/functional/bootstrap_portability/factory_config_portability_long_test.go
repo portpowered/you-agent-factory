@@ -23,119 +23,21 @@ import (
 func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *testing.T) {
 	support.SkipLongFunctional(t, "slow config-portability expand-flatten sweep")
 	dir := t.TempDir()
-	original := []byte(`{
-  "name": "portable-expand-factory",
-  "workTypes": [
-    {
-      "name": "task",
-      "states": [
-        { "name": "init", "type": "INITIAL" },
-        { "name": "complete", "type": "TERMINAL" },
-        { "name": "failed", "type": "FAILED" }
-      ]
-    }
-  ],
-  "resources": [{ "name": "agent-slot", "capacity": 1 }],
-  "workers": [
-    {
-      	"name": "executor",
-		"type": "MODEL_WORKER",
-		"model": "claude-sonnet-4-20250514",
-		"modelProvider": "CLAUDE",
-		"resources": [{ "name": "agent-slot", "capacity": 1 }],
-		"stopToken": "COMPLETE",
-		"body": "You are the portable factory executor."
-    }
-  ],
-  "workstations": [
-    {
-      "id": "execute-task-id",
-      "name": "execute-task",
-      "behavior": "STANDARD",
-      "worker": "executor",
-      "inputs": [{ "workType": "task", "state": "init" }],
-      "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": [{"workType": "task", "state": "failed"}],
-      "resources": [{ "name": "agent-slot", "capacity": 1 }],
-      "definition": {
-        "type": "MODEL_WORKSTATION",
-        "worker": "executor",
-        "body": "Complete {{ (index .Inputs 0).WorkID }}.",
-        "stopWords": ["DONE"]
-      }
-    }
-  ]
-}`)
+	original := portableExpandFactoryFixtureJSON()
 	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
 	writeFatFactoryJSON(t, dir, string(original))
 
-	var expandOut bytes.Buffer
-	expandCmd := cli.NewRootCommand()
-	expandCmd.SetOut(&expandOut)
-	expandCmd.SetErr(&bytes.Buffer{})
-	expandCmd.SetArgs([]string{"config", "expand", factoryPath})
-	if err := expandCmd.Execute(); err != nil {
-		t.Fatalf("execute config expand: %v", err)
-	}
-	if !strings.Contains(expandOut.String(), "Expanded factory config into") {
-		t.Fatalf("expected expand result output, got %q", expandOut.String())
-	}
-
-	if _, err := os.Stat(filepath.Join(dir, "workers", "executor", "AGENTS.md")); err != nil {
-		t.Fatalf("expected expand to create worker AGENTS.md: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "workstations", "execute-task", "AGENTS.md")); err != nil {
-		t.Fatalf("expected expand to create workstation AGENTS.md: %v", err)
-	}
-	workerAgents, err := os.ReadFile(filepath.Join(dir, "workers", "executor", "AGENTS.md"))
-	if err != nil {
-		t.Fatalf("read expanded worker AGENTS.md: %v", err)
-	}
-	if got := string(workerAgents); got != "You are the portable factory executor.\n" {
-		t.Fatalf("expanded worker AGENTS.md = %q, want body-only worker content", got)
-	}
+	assertExpandCommandOutput(t, runFactoryConfigCommand(t, "expand", factoryPath), "Expanded factory config into")
 	loadedExpanded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
 	if err != nil {
 		t.Fatalf("expanded factory should load through runtime config after split expansion: %v", err)
 	}
-	expandedWorkstation, ok := loadedExpanded.Workstation("execute-task")
-	if !ok {
-		t.Fatal("expected expanded fat-factory workstation definition to load")
-	}
-	if expandedWorkstation.WorkerTypeName != "executor" || expandedWorkstation.PromptTemplate != "Complete {{ (index .Inputs 0).WorkID }}." {
-		t.Fatalf("expanded workstation definition did not preserve canonical fields: %#v", expandedWorkstation)
-	}
-
-	var flattenOut bytes.Buffer
-	flattenCmd := cli.NewRootCommand()
-	flattenCmd.SetOut(&flattenOut)
-	flattenCmd.SetErr(&bytes.Buffer{})
-	flattenCmd.SetArgs([]string{"config", "flatten", dir})
-	if err := flattenCmd.Execute(); err != nil {
-		t.Fatalf("execute config flatten: %v", err)
-	}
+	assertExpandedPortableFactoryLayout(t, dir, loadedExpanded)
 
 	want := canonicalFactoryPayload(t, original)
-	got := canonicalFactoryPayload(t, flattenOut.Bytes())
+	got := canonicalFactoryPayload(t, runFactoryConfigCommand(t, "flatten", dir))
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expanded then flattened config changed semantics\nwant: %s\ngot:  %s", prettyJSON(t, want), prettyJSON(t, got))
-	}
-
-	workerDef, ok := loadedExpanded.Worker("executor")
-	if !ok {
-		t.Fatal("expected expanded fat-factory worker definition to load")
-	}
-	if workerDef.Model != "claude-sonnet-4-20250514" || workerDef.ModelProvider != "claude" || workerDef.StopToken != "COMPLETE" {
-		t.Fatalf("expanded worker definition did not preserve canonical fields: %#v", workerDef)
-	}
-	if len(workerDef.Resources) != 1 || workerDef.Resources[0].Name != "agent-slot" || workerDef.Resources[0].Capacity != 1 {
-		t.Fatalf("expanded worker resources = %#v, want agent-slot capacity 1", workerDef.Resources)
-	}
-	if workerDef.Body != "You are the portable factory executor." {
-		t.Fatalf("expanded worker body = %q", workerDef.Body)
-	}
-	if _, ok := loadedExpanded.Workstation("execute-task"); !ok {
-		t.Fatal("expected expanded fat-factory workstation definition to load")
 	}
 }
 
@@ -517,6 +419,114 @@ func assertFlattenedInlineScriptStandaloneExecutes(t *testing.T, standaloneDir s
 		HasNoTokenInPlace("task:init").
 		HasNoTokenInPlace("task:failed").
 		TokenCount(1)
+}
+
+func portableExpandFactoryFixtureJSON() []byte {
+	return []byte(`{
+  "name": "portable-expand-factory",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "resources": [{ "name": "agent-slot", "capacity": 1 }],
+  "workers": [
+    {
+      	"name": "executor",
+		"type": "MODEL_WORKER",
+		"model": "claude-sonnet-4-20250514",
+		"modelProvider": "CLAUDE",
+		"resources": [{ "name": "agent-slot", "capacity": 1 }],
+		"stopToken": "COMPLETE",
+		"body": "You are the portable factory executor."
+    }
+  ],
+  "workstations": [
+    {
+      "id": "execute-task-id",
+      "name": "execute-task",
+      "behavior": "STANDARD",
+      "worker": "executor",
+      "inputs": [{ "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "task", "state": "complete" }],
+      "onFailure": [{"workType": "task", "state": "failed"}],
+      "resources": [{ "name": "agent-slot", "capacity": 1 }],
+      "definition": {
+        "type": "MODEL_WORKSTATION",
+        "worker": "executor",
+        "body": "Complete {{ (index .Inputs 0).WorkID }}.",
+        "stopWords": ["DONE"]
+      }
+    }
+  ]
+}`)
+}
+
+func runFactoryConfigCommand(t *testing.T, subcommand string, target string) []byte {
+	t.Helper()
+
+	var out bytes.Buffer
+	cmd := cli.NewRootCommand()
+	cmd.SetOut(&out)
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"config", subcommand, target})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute config %s: %v", subcommand, err)
+	}
+	return out.Bytes()
+}
+
+func assertExpandCommandOutput(t *testing.T, output []byte, expected string) {
+	t.Helper()
+
+	if !strings.Contains(string(output), expected) {
+		t.Fatalf("expected expand result output containing %q, got %q", expected, string(output))
+	}
+}
+
+func assertExpandedPortableFactoryLayout(t *testing.T, dir string, loadedExpanded *factoryconfig.LoadedFactoryConfig) {
+	t.Helper()
+
+	if _, err := os.Stat(filepath.Join(dir, "workers", "executor", "AGENTS.md")); err != nil {
+		t.Fatalf("expected expand to create worker AGENTS.md: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "workstations", "execute-task", "AGENTS.md")); err != nil {
+		t.Fatalf("expected expand to create workstation AGENTS.md: %v", err)
+	}
+	workerAgents, err := os.ReadFile(filepath.Join(dir, "workers", "executor", "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read expanded worker AGENTS.md: %v", err)
+	}
+	if got := string(workerAgents); got != "You are the portable factory executor.\n" {
+		t.Fatalf("expanded worker AGENTS.md = %q, want body-only worker content", got)
+	}
+
+	workerDef, ok := loadedExpanded.Worker("executor")
+	if !ok {
+		t.Fatal("expected expanded fat-factory worker definition to load")
+	}
+	if workerDef.Model != "claude-sonnet-4-20250514" || workerDef.ModelProvider != "claude" || workerDef.StopToken != "COMPLETE" {
+		t.Fatalf("expanded worker definition did not preserve canonical fields: %#v", workerDef)
+	}
+	if len(workerDef.Resources) != 1 || workerDef.Resources[0].Name != "agent-slot" || workerDef.Resources[0].Capacity != 1 {
+		t.Fatalf("expanded worker resources = %#v, want agent-slot capacity 1", workerDef.Resources)
+	}
+	if workerDef.Body != "You are the portable factory executor." {
+		t.Fatalf("expanded worker body = %q", workerDef.Body)
+	}
+
+	expandedWorkstation, ok := loadedExpanded.Workstation("execute-task")
+	if !ok {
+		t.Fatal("expected expanded fat-factory workstation definition to load")
+	}
+	if expandedWorkstation.WorkerTypeName != "executor" || expandedWorkstation.PromptTemplate != "Complete {{ (index .Inputs 0).WorkID }}." {
+		t.Fatalf("expanded workstation definition did not preserve canonical fields: %#v", expandedWorkstation)
+	}
 }
 
 // NOTE: this shouldn't fail as is.
