@@ -751,7 +751,6 @@ func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []interfaces.G
 
 		if e.recordWorkRequest != nil {
 			record := factory.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
-			record.RelationContext = append([]interfaces.WorkRelation(nil), batch.Metadata.RelationContext...)
 			record.ParentLineage = append([]string(nil), batch.Metadata.ParentLineage...)
 			e.recordWorkRequest(
 				e.runtimeState.TickCount,

@@ -513,13 +513,7 @@ func generatedRuntimeBatchFixture() interfaces.GeneratedSubmissionBatch {
 			}},
 		},
 		Metadata: interfaces.GeneratedSubmissionBatchMetadata{
-			Source: "worker-output:dispatch-parent",
-			RelationContext: []interfaces.WorkRelation{{
-				Type:           interfaces.WorkRelationDependsOn,
-				SourceWorkName: "review",
-				TargetWorkName: "draft",
-				RequiredState:  "done",
-			}},
+			Source:        "worker-output:dispatch-parent",
 			ParentLineage: []string{"request-parent", "work-parent"},
 		},
 		Submissions: []interfaces.SubmitRequest{{

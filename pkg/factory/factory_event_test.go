@@ -92,15 +92,10 @@ func TestWorkInputAndStateChangePayloads_SerializeContractFields(t *testing.T) {
 
 func TestWorkRequestAndRelationshipPayloads_SerializeContractFields(t *testing.T) {
 	requestPayload := marshalPayloadObject(t, interfaces.WorkRequestPayload{
-		RequestID: "request-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		TraceID:   "trace-1",
-		Source:    "external-submit",
-		RelationContext: []interfaces.WorkRelation{{
-			Type:           interfaces.WorkRelationDependsOn,
-			SourceWorkName: "story-2",
-			TargetWorkName: "story-1",
-		}},
+		RequestID:     "request-1",
+		Type:          interfaces.WorkRequestTypeFactoryRequestBatch,
+		TraceID:       "trace-1",
+		Source:        "external-submit",
 		ParentLineage: []string{"request-parent", "work-parent"},
 		WorkItems:     []interfaces.FactoryWorkItem{{ID: "work-1", WorkTypeID: "story", DisplayName: "Story 1", TraceID: "trace-1"}},
 	})
@@ -108,7 +103,7 @@ func TestWorkRequestAndRelationshipPayloads_SerializeContractFields(t *testing.T
 	assertJSONField(t, requestPayload, "type", "FACTORY_REQUEST_BATCH")
 	assertJSONField(t, requestPayload, "trace_id", "trace-1")
 	assertJSONField(t, requestPayload, "source", "external-submit")
-	assertJSONArray(t, requestPayload, "relation_context")
+	assertJSONFieldAbsent(t, requestPayload, "relation_context")
 	assertJSONArray(t, requestPayload, "parent_lineage")
 	assertJSONArray(t, requestPayload, "work_items")
 
@@ -185,4 +180,11 @@ func assertJSONArray(t *testing.T, object map[string]any, field string) []any {
 		t.Fatalf("JSON field %q = %#v, want array", field, got)
 	}
 	return value
+}
+
+func assertJSONFieldAbsent(t *testing.T, object map[string]any, field string) {
+	t.Helper()
+	if _, ok := object[field]; ok {
+		t.Fatalf("unexpected JSON field %q in %#v", field, object)
+	}
 }

@@ -29,13 +29,12 @@ type WorkInputPayload struct {
 
 // WorkRequestPayload describes a canonical work request batch submission.
 type WorkRequestPayload struct {
-	RequestID       string            `json:"request_id"`
-	Type            WorkRequestType   `json:"type"`
-	TraceID         string            `json:"trace_id,omitempty"`
-	Source          string            `json:"source,omitempty"`
-	RelationContext []WorkRelation    `json:"relation_context,omitempty"`
-	ParentLineage   []string          `json:"parent_lineage,omitempty"`
-	WorkItems       []FactoryWorkItem `json:"work_items,omitempty"`
+	RequestID     string            `json:"request_id"`
+	Type          WorkRequestType   `json:"type"`
+	TraceID       string            `json:"trace_id,omitempty"`
+	Source        string            `json:"source,omitempty"`
+	ParentLineage []string          `json:"parent_lineage,omitempty"`
+	WorkItems     []FactoryWorkItem `json:"work_items,omitempty"`
 }
 
 // RelationshipChangePayload describes a relationship added by a request batch.
