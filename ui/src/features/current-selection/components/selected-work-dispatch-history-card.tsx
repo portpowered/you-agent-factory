@@ -248,7 +248,6 @@ function DispatchSummaryDetails({
   return (
     <dl className={cn("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
       <InferenceAttemptDetail label={messages.workstationLabel} value={request.workstation_name} />
-      <InferenceAttemptDetail label={messages.transitionIdLabel} code value={request.transition_id} />
       <InferenceAttemptDetail label={messages.startedAtLabel} value={startedAt} />
       <InferenceAttemptDetail
         label={messages.durationLabel}
@@ -275,11 +274,7 @@ function DispatchRequestSection({
         <p className={DETAIL_COPY_CLASS}>
           {messages.promptDetailsNotApplicable}
         </p>
-      ) : (
-        <p className={DETAIL_COPY_CLASS}>
-          {messages.inferenceRequestGuidance}
-        </p>
-      )}
+      ) : null}
       <WorkItemActionGroup
         items={view.inputWorkItems}
         label={messages.inputWorkLabel}

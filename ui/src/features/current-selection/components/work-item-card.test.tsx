@@ -30,6 +30,15 @@ function getDetailRow(container: HTMLElement, label: string): HTMLElement {
   return row;
 }
 
+function expectDispatchCardToHideTransitionId(
+  dispatchCard: HTMLElement,
+  transitionIdLabel: string,
+  transitionIdValue: string | undefined,
+): void {
+  expect(within(dispatchCard).queryByText(transitionIdLabel)).toBeNull();
+  expect(within(dispatchCard).queryByText(transitionIdValue ?? "")).toBeNull();
+}
+
 function expandDispatchSection(
   container: HTMLElement,
   title: string,
@@ -445,10 +454,10 @@ describe("WorkItemDetailCard summary", () => {
     expect(screen.getByText("Current dispatch")).toBeTruthy();
     expect(dispatchHistory.getByText("trace-active-story")).toBeTruthy();
     expect(
-      requestDetails.getByText(
+      requestDetails.queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       inferenceAttempts.getByText(
         "No inference attempt details have been recorded for this dispatch yet.",
@@ -688,6 +697,14 @@ describe("WorkItemDetailCard summary", () => {
       within(currentSelection).getAllByText(dispatchID).length,
     ).toBeGreaterThan(0);
     expect(
+      within(currentSelection).queryByText(selectedNode.transition_id),
+    ).toBeNull();
+    expect(
+      within(currentSelection).getByText(selectedNode.workstation_name, {
+        selector: "strong",
+      }),
+    ).toBeTruthy();
+    expect(
       within(currentSelection).queryByText(
         "No workstation dispatch has been recorded yet for this work item.",
       ),
@@ -921,10 +938,12 @@ describe("WorkItemDetailCard summary", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(screen.getByRole("region", { name: "Request details" })).getByText(
+      within(
+        screen.getByRole("region", { name: "Request details" }),
+      ).queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       inferenceAttempts.getByText(
         "No inference attempt details have been recorded for this dispatch yet.",
@@ -1062,10 +1081,10 @@ describe("WorkItemDetailCard summary", () => {
     );
 
     expect(
-      requestDetails.getByText(
+      requestDetails.queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       requestDetails.queryByRole("heading", {
         level: 2,
@@ -1662,6 +1681,11 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         formatLocalDateTime("2026-04-08T12:00:01Z", "Unavailable"),
       ),
     ).toBeTruthy();
+    expectDispatchCardToHideTransitionId(
+      dispatchCard,
+      "Transition ID",
+      dashboardWorkstationRequestFixtures.ready.transition_id,
+    );
     expect(within(dispatchCard).queryByText("dispatchedCount")).toBeNull();
     expect(within(dispatchCard).queryByText("respondedCount")).toBeNull();
     expect(within(dispatchCard).queryByText("erroredCount")).toBeNull();
@@ -1721,96 +1745,6 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         dashboardWorkstationRequestFixtures.noResponse.dispatch_id,
         { selector: "strong" },
       ),
-    ).toBeTruthy();
-  });
-
-  it("renders localized dispatch-history card copy for a supported non-default locale", () => {
-    const { dispatchID, execution, selectedNode, workItem } =
-      getSelectedWorkItemFixture();
-
-    render(
-      <CurrentSelectionLocaleProvider locale="ja">
-        <WorkItemDetailCard
-          activeTraceID="trace-active-story"
-          executionDetails={selectWorkItemExecutionDetails({
-            activeExecution: execution,
-            dispatchID,
-            selectedNode,
-            workItem,
-          })}
-          now={DETAIL_CARD_NOW}
-          dispatchAttempts={[]}
-          selectedNode={selectedNode}
-          selection={{
-            dispatchId: dispatchID,
-            execution,
-            kind: "work-item",
-            nodeId: selectedNode.node_id,
-            workItem,
-          }}
-          workstationRequests={[
-            dashboardWorkstationRequestFixtures.scriptPending,
-          ]}
-        />
-      </CurrentSelectionLocaleProvider>,
-    );
-
-    const dispatchHistory = screen.getByRole("region", {
-      name: "ワークステーションのディスパッチ",
-    });
-    const dispatchCard = within(dispatchHistory)
-      .getByText(dashboardWorkstationRequestFixtures.scriptPending.dispatch_id)
-      .closest("article");
-
-    if (!(dispatchCard instanceof HTMLElement)) {
-      throw new Error("expected localized dispatch history card");
-    }
-
-    expect(
-      within(dispatchCard).getByRole("region", {
-        name: "リクエストの詳細",
-      }),
-    ).toBeTruthy();
-    const localizedRequestDetails = within(dispatchCard).getByRole("region", {
-      name: "リクエストの詳細",
-    });
-    expect(
-      within(dispatchCard).getByRole("region", {
-        name: "応答の詳細",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(
-        expandDispatchSection(dispatchCard, "スクリプト試行", "展開"),
-      ).getByText("スクリプト応答の試行はまだ記録されていません。"),
-    ).toBeTruthy();
-    expect(
-      within(dispatchCard).queryByText(
-        "このディスパッチにはまだスクリプト応答がありません。",
-      ),
-    ).toBeNull();
-    expect(within(dispatchCard).getByText("ワークステーション")).toBeTruthy();
-    expect(within(dispatchCard).getByText("遷移 ID")).toBeTruthy();
-    expect(within(dispatchCard).getByText("開始時刻")).toBeTruthy();
-    expect(within(dispatchCard).getAllByText("保留中").length).toBeGreaterThan(
-      0,
-    );
-    expect(within(dispatchCard).queryByText("ディスパッチ数")).toBeNull();
-    expect(within(dispatchCard).queryByText("応答数")).toBeNull();
-    expect(within(dispatchCard).queryByText("エラー数")).toBeNull();
-    expect(
-      within(localizedRequestDetails).queryByText("解決済み引数"),
-    ).toBeNull();
-    expect(
-      within(dispatchCard).getByRole("button", {
-        name: "作業項目 Active Story を選択",
-      }),
-    ).toBeTruthy();
-    expect(within(dispatchCard).getByText("トレース ID")).toBeTruthy();
-    expect(
-      within(dispatchCard).getByRole("link", {
-        name: "trace-active-story（選択中）",
-      }),
     ).toBeTruthy();
   });
 
@@ -2106,10 +2040,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(
         within(dispatchCard).getByRole("region", { name: "Request details" }),
-      ).getByText(
+      ).queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       inferenceAttempts.getByText(
         `codex / session_id / ${dashboardWorkstationRequestFixtures.rejected.inference_attempts?.[0]?.provider_session?.id}`,
@@ -2118,6 +2052,102 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).queryByText("No response yet for this dispatch."),
     ).toBeNull();
+  });
+});
+
+describe("WorkItemDetailCard localized dispatch diagnostics", () => {
+  it("renders localized dispatch-history card copy for a supported non-default locale", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <CurrentSelectionLocaleProvider locale="ja">
+        <WorkItemDetailCard
+          activeTraceID="trace-active-story"
+          executionDetails={selectWorkItemExecutionDetails({
+            activeExecution: execution,
+            dispatchID,
+            selectedNode,
+            workItem,
+          })}
+          now={DETAIL_CARD_NOW}
+          dispatchAttempts={[]}
+          selectedNode={selectedNode}
+          selection={{
+            dispatchId: dispatchID,
+            execution,
+            kind: "work-item",
+            nodeId: selectedNode.node_id,
+            workItem,
+          }}
+          workstationRequests={[
+            dashboardWorkstationRequestFixtures.scriptPending,
+          ]}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "ワークステーションのディスパッチ",
+    });
+    const dispatchCard = within(dispatchHistory)
+      .getByText(dashboardWorkstationRequestFixtures.scriptPending.dispatch_id)
+      .closest("article");
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected localized dispatch history card");
+    }
+
+    expect(
+      within(dispatchCard).getByRole("region", {
+        name: "リクエストの詳細",
+      }),
+    ).toBeTruthy();
+    const localizedRequestDetails = within(dispatchCard).getByRole("region", {
+      name: "リクエストの詳細",
+    });
+    expect(
+      within(dispatchCard).getByRole("region", {
+        name: "応答の詳細",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(
+        expandDispatchSection(dispatchCard, "スクリプト試行", "展開"),
+      ).getByText("スクリプト応答の試行はまだ記録されていません。"),
+    ).toBeTruthy();
+    expect(
+      within(dispatchCard).queryByText(
+        "このディスパッチにはまだスクリプト応答がありません。",
+      ),
+    ).toBeNull();
+    expect(within(dispatchCard).getByText("ワークステーション")).toBeTruthy();
+    expectDispatchCardToHideTransitionId(
+      dispatchCard,
+      "遷移 ID",
+      dashboardWorkstationRequestFixtures.scriptPending.transition_id,
+    );
+    expect(within(dispatchCard).getByText("開始時刻")).toBeTruthy();
+    expect(within(dispatchCard).getAllByText("保留中").length).toBeGreaterThan(
+      0,
+    );
+    expect(within(dispatchCard).queryByText("ディスパッチ数")).toBeNull();
+    expect(within(dispatchCard).queryByText("応答数")).toBeNull();
+    expect(within(dispatchCard).queryByText("エラー数")).toBeNull();
+    expect(
+      within(localizedRequestDetails).queryByText("解決済み引数"),
+    ).toBeNull();
+    expect(
+      within(dispatchCard).getByRole("button", {
+        name: "作業項目 Active Story を選択",
+      }),
+    ).toBeTruthy();
+    expect(within(dispatchCard).getByText("トレース ID")).toBeTruthy();
+    expect(
+      within(dispatchCard).getByRole("link", {
+        name: "trace-active-story（選択中）",
+      }),
+    ).toBeTruthy();
   });
 });
 
