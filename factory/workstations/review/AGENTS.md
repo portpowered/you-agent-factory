@@ -34,6 +34,12 @@ Report any failures. Failing checks are a BLOCKING issue.
 
 If the change involves modification to the website, you should use the playwright browser and READ instructions for docs/internal/processes/manual-qa.md.
 
+### Step 2.1 — Reconcile CI state before commenting
+- Check the live required PR checks on the current head with `gh pr view --json headRefOid,mergeStateStatus,statusCheckRollup` and `gh pr checks`.
+- If required checks are still `PENDING`, `QUEUED`, or `IN_PROGRESS`, do not post a new PR conversation comment yet just to say CI is still running.
+- Wait for CI to complete before posting the review summary unless you already found a concrete code or acceptance-criteria issue that is independent of the unfinished CI state.
+- If a required workflow appears stale or frozen for an unusually long time on the same step, verify that from the live GitHub run surfaces first. In that case, do not submit a new review comment just to narrate the wait; leave the branch on the review loop until CI reaches a terminal state or there is real review feedback to deliver.
+
 ### Step 3 — Verify project acceptance criteria
 
 Go through the acceptance criteria from prd.json **one by one**. For each criterion, as part of the PR comment: 
@@ -60,10 +66,11 @@ whether it is BLOCKING or non-blocking.
 
 ### Step 5 - handle feedback
 
-- Post a PR comment with your review summary, including the acceptance criteria checklist results.
+- Post a PR comment with your review summary, including the acceptance criteria checklist results, only after the required CI state is terminal for the current head or you have concrete independent review findings to report.
 - Include any blocking issues, correctness concerns, missing tests, CI failures, or prompt-rule violations in that comment.
 - If you would have requested changes in a normal review, describe the required fixes plainly in the comment so the executor can act on them.
 - If earlier blocking feedback is no longer applicable, say so explicitly in a newer PR conversation comment so the processor has clear resolution evidence.
+- Do not post a PR comment whose only content is that required CI is still pending or in progress.
 
 Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or `gh pr review --request-changes`.
 
@@ -80,3 +87,5 @@ To terminate the review loop, please respond exactly with
 "<COMPLETE>": if you think the PR was completed, and you have merged the PR. 
 
 "<REJECTED>": if you think the PR was not completed.
+
+If CI is still pending or in progress and you have no concrete independent review findings to report yet, respond `"<REJECTED>"` without posting a new PR comment so the workflow waits silently instead of creating premature review noise.
