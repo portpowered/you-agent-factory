@@ -130,6 +130,21 @@ func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 	}
 }
 
+func TestParseCodexSessionSummary_AcceptsLargeJSONLRecords(t *testing.T) {
+	session := strings.Join([]string{
+		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
+		`{"timestamp":"2026-05-18T10:00:01Z","type":"response_item","payload":{"type":"reasoning","content":"` + strings.Repeat("x", 128*1024) + `"}}`,
+	}, "\n")
+
+	summary, err := parseCodexSessionSummary(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("parse codex session summary: %v", err)
+	}
+	if summary.LineCount != 2 || summary.EventCount != 2 || len(summary.Reasoning) != 1 {
+		t.Fatalf("summary = %#v, want large response item parsed successfully", summary)
+	}
+}
+
 func TestGetProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {
 	srv := newTestServerWithCodexRoot(t.TempDir())
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=missing-session", nil)
