@@ -15,7 +15,7 @@ import (
 // ConfigMapper converts a FactoryConfig into a petri state.
 type ConfigMapper struct{}
 
-func (cm *ConfigMapper) Map(ctx context.Context, cfg *interfaces.FactoryConfig, runtimeConfigs ...interfaces.RuntimeWorkstationLookup) (*state.Net, error) {
+func (cm *ConfigMapper) Map(ctx context.Context, cfg *interfaces.FactoryConfig) (*state.Net, error) {
 	cv := NewConfigValidator()
 	if result := cv.Validate(cfg); result.HasErrors() {
 		return nil, fmt.Errorf("%s", result.Error())
@@ -38,7 +38,14 @@ func (cm *ConfigMapper) Map(ctx context.Context, cfg *interfaces.FactoryConfig, 
 		n.FanoutGroups = fanoutGroups
 	}
 
-	state.NormalizeTransitionTopology(n, transitionTopologyWorkstationKinds(cfg, runtimeConfigs...))
+	var workstationKinds map[string]interfaces.WorkstationKind
+	if cfg != nil && len(cfg.Workstations) > 0 {
+		workstationKinds = make(map[string]interfaces.WorkstationKind, len(cfg.Workstations))
+		for _, workstation := range cfg.Workstations {
+			workstationKinds[workstation.Name] = workstation.Kind
+		}
+	}
+	state.NormalizeTransitionTopology(n, workstationKinds)
 	cm.applyFactoryGuards(cfg, n.Transitions)
 	if err := validateNetTopology(n); err != nil {
 		return nil, err
@@ -59,35 +66,6 @@ func validateNetTopology(n *state.Net) error {
 	}
 
 	return nil
-}
-
-func transitionTopologyWorkstationKinds(cfg *interfaces.FactoryConfig, runtimeConfigs ...interfaces.RuntimeWorkstationLookup) map[string]interfaces.WorkstationKind {
-	if runtimeConfig := interfaces.FirstRuntimeWorkstationLookup(runtimeConfigs...); runtimeConfig != nil {
-		return workstationKindsFromRuntimeLookup(cfg, runtimeConfig)
-	}
-	if cfg == nil || len(cfg.Workstations) == 0 {
-		return nil
-	}
-	kinds := make(map[string]interfaces.WorkstationKind, len(cfg.Workstations))
-	for _, workstation := range cfg.Workstations {
-		kinds[workstation.Name] = workstation.Kind
-	}
-	return kinds
-}
-
-func workstationKindsFromRuntimeLookup(cfg *interfaces.FactoryConfig, runtimeConfig interfaces.RuntimeWorkstationLookup) map[string]interfaces.WorkstationKind {
-	if cfg == nil || runtimeConfig == nil || len(cfg.Workstations) == 0 {
-		return nil
-	}
-	kinds := make(map[string]interfaces.WorkstationKind, len(cfg.Workstations))
-	for _, workstation := range cfg.Workstations {
-		runtimeWorkstation, ok := runtimeConfig.Workstation(workstation.Name)
-		if !ok || runtimeWorkstation == nil {
-			continue
-		}
-		kinds[workstation.Name] = runtimeWorkstation.Kind
-	}
-	return kinds
 }
 
 // portos:func-length-exception owner=agent-factory reason=legacy-topology-construction review=2026-07-18 removal=split-transition-assembly-before-next-topology-expansion

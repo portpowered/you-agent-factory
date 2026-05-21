@@ -294,7 +294,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	}
 
 	mapper := factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig(), loadedFactoryCfg)
+	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig())
 	if err != nil {
 		logger.Error("failed to map factory config", zap.Error(err))
 		return nil, fmt.Errorf("map factory config: %w", err)
@@ -474,7 +474,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 	loadedFactoryCfg.SetRuntimeBaseDir(fs.cfg.ExecutionBaseDir)
 
 	mapper := factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig(), loadedFactoryCfg)
+	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig())
 	if err != nil {
 		return nil, fmt.Errorf("map factory config: %w", err)
 	}

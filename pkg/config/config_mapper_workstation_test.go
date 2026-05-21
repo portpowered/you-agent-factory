@@ -137,6 +137,120 @@ func TestConfigMapping_WorkstationTypeRepeater(t *testing.T) {
 	}
 }
 
+func TestConfigMapping_UsesEffectiveRuntimeConfigWorkstationKindsForNormalization(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{"name": "executor"}},
+		"workstations": []map[string]any{{
+			"name":     "retry-task",
+			"behavior": "REPEATER",
+			"worker":   "executor",
+			"inputs":   []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":  []map[string]string{{"workType": "task", "state": "complete"}},
+		}},
+	})
+	writeRuntimeWorkerAgentsMD(t, factoryDir, "executor", `---
+type: MODEL_WORKER
+modelProvider: openai
+model: gpt-5.4
+---
+Execute work.
+`)
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "retry-task", `---
+type: MODEL_WORKSTATION
+worker: executor
+---
+Retry work.
+`)
+
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), loaded.FactoryConfig())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tr := net.Transitions["retry-task"]
+	if tr == nil {
+		t.Fatal("expected mapped transition for retry-task")
+	}
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:init" {
+		t.Fatalf("effective runtime repeater should reject back to task:init, got %+v", tr.RejectionArcs)
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("effective runtime repeater should still fail through task:failed, got %+v", tr.FailureArcs)
+	}
+}
+
+func TestConfigMapping_DefaultNonRepeaterFanInRejectionUsesFailureDestinations(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "init", Type: interfaces.StateTypeInitial},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
+				},
+			},
+			{
+				Name: "page",
+				States: []interfaces.StateConfig{
+					{Name: "ready", Type: interfaces.StateTypeInitial},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
+				},
+			},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name: "fan-in",
+				Inputs: []interfaces.IOConfig{
+					{StateName: "init", WorkTypeName: "task"},
+					{StateName: "ready", WorkTypeName: "page"},
+				},
+				Outputs: []interfaces.IOConfig{
+					{StateName: "complete", WorkTypeName: "task"},
+					{StateName: "complete", WorkTypeName: "page"},
+				},
+			},
+		},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tr := net.Transitions["fan-in"]
+	if tr == nil {
+		t.Fatal("expected mapped transition for fan-in")
+	}
+	if len(tr.FailureArcs) != 2 {
+		t.Fatalf("expected default failure routing to both failed states, got %+v", tr.FailureArcs)
+	}
+	assertTransitionArcPlaces(t, tr.FailureArcs, "task:failed", "page:failed")
+	if len(tr.RejectionArcs) != 2 {
+		t.Fatalf("expected default rejection routing to clone failure destinations, got %+v", tr.RejectionArcs)
+	}
+	assertTransitionArcPlaces(t, tr.RejectionArcs, "task:failed", "page:failed")
+}
+
 // portos:func-length-exception owner=agent-factory reason=cron-mapping-fixture review=2026-07-18 removal=split-cron-fixture-before-next-cron-topology-change
 func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 	input := &interfaces.FactoryConfig{
@@ -233,6 +347,20 @@ func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 	}
 	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
 		t.Fatalf("expected cron failure to route to task:failed, got %+v", tr.FailureArcs)
+	}
+}
+
+func assertTransitionArcPlaces(t *testing.T, arcs []petri.Arc, wantPlaces ...string) {
+	t.Helper()
+
+	places := make(map[string]struct{}, len(arcs))
+	for _, arc := range arcs {
+		places[arc.PlaceID] = struct{}{}
+	}
+	for _, want := range wantPlaces {
+		if _, ok := places[want]; !ok {
+			t.Fatalf("arc places = %+v, want %s destination", arcs, want)
+		}
 	}
 }
 

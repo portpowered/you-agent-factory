@@ -739,7 +739,7 @@ describe("App current selection", () => {
         name: "Work session runs list",
       }),
     ).toBeNull();
-    expect(within(dispatchHistory).getByText("6 dispatches")).toBeTruthy();
+    expect(within(dispatchHistory).queryByText("6 dispatches")).toBeNull();
 
     const pendingCard = getDispatchHistoryCard(
       dispatchHistory,
@@ -753,10 +753,10 @@ describe("App current selection", () => {
       "Inference attempts",
     );
     expect(
-      within(pendingRequestDetails).getByText(
+      within(pendingRequestDetails).queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       within(pendingInferenceAttempts).getByText(
         "No inference attempt details have been recorded for this dispatch yet.",
@@ -784,10 +784,10 @@ describe("App current selection", () => {
     const readyRequestBody = expandAttemptBody(readyAttemptDetails, "Request body");
     const readyResponseBody = expandAttemptBody(readyAttemptDetails, "Response body");
     expect(
-      within(readyRequestDetails).getByText(
+      within(readyRequestDetails).queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       within(readyRequestDetails).queryByText(
         "Review the active story and decide whether it is ready.",
