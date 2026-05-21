@@ -44,11 +44,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 	}
 	if req.Works != nil {
 		workRequest.Works = make([]interfaces.Work, 0, len(*req.Works))
-		for i, work := range *req.Works {
-			content, err := generatedWorkContentToDomainAtPath(work.Content, fmt.Sprintf("works[%d].content", i))
-			if err != nil {
-				return interfaces.WorkRequest{}, err
-			}
+		for _, work := range *req.Works {
 			workRequest.Works = append(workRequest.Works, interfaces.Work{
 				Name:                     work.Name,
 				WorkID:                   stringValue(work.WorkId),
@@ -59,7 +55,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 				CurrentChainingTraceID:   stringValue(work.CurrentChainingTraceId),
 				PreviousChainingTraceIDs: stringSliceValue(work.PreviousChainingTraceIds),
 				TraceID:                  stringValue(work.TraceId),
-				Content:                  content,
+				Content:                  generatedWorkContentToDomain(work.Content),
 				Payload:                  work.Payload,
 				Tags:                     generatedStringMap(work.Tags),
 			})
@@ -80,9 +76,13 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 }
 
 func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
-	parts, err := generatedWorkContentToDomainAtPath(content, "content")
-	if err != nil {
+	if content == nil || len(*content) == 0 {
 		return nil
+	}
+
+	parts := make([]interfaces.WorkContentPart, 0, len(*content))
+	for _, part := range *content {
+		parts = append(parts, generatedWorkContentPartToDomain(part))
 	}
 	return parts
 }
@@ -120,35 +120,44 @@ func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factor
 	return &content
 }
 
-func generatedWorkContentToDomainAtPath(content *factoryapi.WorkContent, fieldPath string) ([]interfaces.WorkContentPart, error) {
-	if content == nil || len(*content) == 0 {
-		return nil, nil
+func generatedWorkContentPartToDomain(part factoryapi.WorkContentPart) interfaces.WorkContentPart {
+	var contentType struct {
+		Type factoryapi.WorkContentPartType `json:"type"`
+	}
+	if err := unmarshalGeneratedWorkContentPart(part, &contentType); err != nil {
+		return interfaces.WorkContentPart{}
 	}
 
-	parts := make([]interfaces.WorkContentPart, 0, len(*content))
-	for i, part := range *content {
-		pathPrefix := fmt.Sprintf("%s[%d].", fieldPath, i)
-		textPart, textErr := part.AsWorkTextContentPart()
-		if textErr == nil && textPart.Type == factoryapi.WorkContentPartTypeText {
-			parts = append(parts, interfaces.WorkContentPart{
-				Type: interfaces.WorkContentPartTypeText,
-				Text: textPart.Text,
-			})
-			continue
+	switch contentType.Type {
+	case factoryapi.WorkContentPartTypeText:
+		var textPart factoryapi.WorkTextContentPart
+		if err := unmarshalGeneratedWorkContentPart(part, &textPart); err != nil {
+			return interfaces.WorkContentPart{}
 		}
-
-		imagePart, imageErr := part.AsWorkImageContentPart()
-		if imageErr == nil && imagePart.Type == factoryapi.WorkContentPartTypeImage {
-			parts = append(parts, interfaces.WorkContentPart{
-				Type: interfaces.WorkContentPartTypeImage,
-				File: imagePart.File,
-			})
-			continue
+		return interfaces.WorkContentPart{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: textPart.Text,
 		}
-
-		return nil, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", pathPrefix)}
+	case factoryapi.WorkContentPartTypeImage:
+		var imagePart factoryapi.WorkImageContentPart
+		if err := unmarshalGeneratedWorkContentPart(part, &imagePart); err != nil {
+			return interfaces.WorkContentPart{}
+		}
+		return interfaces.WorkContentPart{
+			Type: interfaces.WorkContentPartTypeImage,
+			File: imagePart.File,
+		}
+	default:
+		return interfaces.WorkContentPart{}
 	}
-	return parts, nil
+}
+
+func unmarshalGeneratedWorkContentPart(part factoryapi.WorkContentPart, target any) error {
+	rawPart, err := part.MarshalJSON()
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(rawPart, target)
 }
 
 type requestFieldValidationError struct {
