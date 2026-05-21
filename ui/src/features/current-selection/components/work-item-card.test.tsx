@@ -697,6 +697,14 @@ describe("WorkItemDetailCard summary", () => {
       within(currentSelection).getAllByText(dispatchID).length,
     ).toBeGreaterThan(0);
     expect(
+      within(currentSelection).queryByText(selectedNode.transition_id),
+    ).toBeNull();
+    expect(
+      within(currentSelection).getByText(selectedNode.workstation_name, {
+        selector: "strong",
+      }),
+    ).toBeTruthy();
+    expect(
       within(currentSelection).queryByText(
         "No workstation dispatch has been recorded yet for this work item.",
       ),

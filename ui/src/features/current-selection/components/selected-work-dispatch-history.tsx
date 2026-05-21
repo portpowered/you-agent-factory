@@ -26,6 +26,8 @@ export function SelectedWorkDispatchHistorySection({
 }: SelectedWorkDispatchHistorySectionProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
   const providerSessionMessages = getWorkstationDetailMessages(locale);
+  const fallbackHeading = (workstationName?: string) =>
+    workstationName || messages.workstationUnavailableValue;
 
   if (requests.length === 0 && fallbackProviderSessions.length > 0) {
     return (
@@ -36,7 +38,7 @@ export function SelectedWorkDispatchHistorySection({
         messages={providerSessionMessages}
         onSelectProviderSession={onSelectProviderSession}
         onSelectWorkID={onSelectWorkID}
-        renderHeading={(attempt) => attempt.workstation_name || attempt.transition_id}
+        renderHeading={(attempt) => fallbackHeading(attempt.workstation_name)}
         selectedProviderSessionKey={selectedProviderSessionKey}
         selectedWorkID={selectedWorkID}
         title={messages.dispatchHistoryHeading}
