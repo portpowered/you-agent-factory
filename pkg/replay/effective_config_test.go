@@ -335,6 +335,7 @@ func TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind(t 
 			"states": []map[string]string{
 				{"name": "init", "type": "INITIAL"},
 				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
 			},
 		}},
 		"workers": []map[string]any{{"name": "executor"}},
@@ -386,6 +387,22 @@ Retry the work.
 	}
 	if workstation.Kind != interfaces.WorkstationKindRepeater {
 		t.Fatalf("replay workstation kind = %q, want repeater", workstation.Kind)
+	}
+
+	mapper := config.ConfigMapper{}
+	net, err := mapper.Map(context.Background(), replayRuntimeCfg.FactoryConfig())
+	if err != nil {
+		t.Fatalf("Map replay runtime effective factory: %v", err)
+	}
+	transition := net.Transitions["retry-story"]
+	if transition == nil {
+		t.Fatal("expected retry-story transition")
+	}
+	if len(transition.RejectionArcs) != 1 || transition.RejectionArcs[0].PlaceID != "story:init" {
+		t.Fatalf("replay-mapped repeater rejection arcs = %+v, want loopback to story:init", transition.RejectionArcs)
+	}
+	if len(transition.FailureArcs) != 1 || transition.FailureArcs[0].PlaceID != "story:failed" {
+		t.Fatalf("replay-mapped repeater failure arcs = %+v, want story:failed", transition.FailureArcs)
 	}
 }
 

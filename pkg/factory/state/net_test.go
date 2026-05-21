@@ -130,7 +130,7 @@ func TestGenerateResourcePlacesZeroCapacity(t *testing.T) {
 	}
 }
 
-func TestNormalizeTransitionTopology_AddsRepeaterAndDefaultFailureArcs(t *testing.T) {
+func TestNormalizeTransitionTopology_AddsRepeaterDefaultRejectionArcs(t *testing.T) {
 	net := normalizeTransitionTopologyFixture()
 
 	NormalizeTransitionTopology(net, map[string]interfaces.WorkstationKind{
@@ -150,6 +150,12 @@ func TestNormalizeTransitionTopology_AddsRepeaterAndDefaultFailureArcs(t *testin
 	if transition.FailureArcs[0].PlaceID != "task:failed" {
 		t.Fatalf("failure arc PlaceID = %q, want %q", transition.FailureArcs[0].PlaceID, "task:failed")
 	}
+}
+
+func TestNormalizeTransitionTopology_ClonesDefaultFailureArcsIntoRejectionArcs(t *testing.T) {
+	net := normalizeTransitionTopologyFixture()
+
+	NormalizeTransitionTopology(net, nil)
 
 	fanIn := net.Transitions["fan-in"]
 	if len(fanIn.FailureArcs) != 2 {

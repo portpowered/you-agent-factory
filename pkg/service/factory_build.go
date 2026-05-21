@@ -195,7 +195,7 @@ func buildPreparedRuntimeGraph(
 	replaySideEffects *replay.SideEffects,
 ) (*state.Net, *factory.FactoryEventHistory, []factory.FactoryOption, error) {
 	mapper := factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig(), loadedFactoryCfg)
+	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig())
 	if err != nil {
 		cfg.Logger.Error("failed to map factory config", zap.Error(err))
 		return nil, nil, nil, fmt.Errorf("map factory config: %w", err)
@@ -323,7 +323,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, fa
 	loadedFactoryCfg.SetRuntimeBaseDir(fs.cfg.ExecutionBaseDir)
 
 	mapper := factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig(), loadedFactoryCfg)
+	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig())
 	if err != nil {
 		return nil, fmt.Errorf("map factory config: %w", err)
 	}
