@@ -499,6 +499,105 @@ func TestWorkstationExecutor_PreservesDistinctWorktreeForNonCodexRunner(t *testi
 	}
 }
 
+func TestWorkstationExecutor_PreparesCodexDistinctExistingWorktreeByReusingWorktreeDirectory(t *testing.T) {
+	repoDir, worktreeDir := createGitRepoWithWorktree(t)
+
+	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			RuntimeBasePath: repoDir,
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system", ModelProvider: string(ModelProviderCodex)},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"review": {
+					Type:             interfaces.WorkstationTypeModel,
+					PromptTemplate:   "Review {{ .Context.WorkDir }}",
+					WorkingDirectory: filepath.ToSlash(repoDir),
+					Worktree:         filepath.ToSlash(worktreeDir),
+				},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-codex-existing-worktree",
+		TransitionID:    "t-codex-existing-worktree",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if mock.dispatch.RunnerID != interfaces.RunnerIDCodex {
+		t.Fatalf("runner ID = %q, want %q", mock.dispatch.RunnerID, interfaces.RunnerIDCodex)
+	}
+	if mock.dispatch.WorkingDirectory != worktreeDir {
+		t.Fatalf("working directory = %q, want %q", mock.dispatch.WorkingDirectory, worktreeDir)
+	}
+	if mock.dispatch.Worktree != "" {
+		t.Fatalf("worktree = %q, want empty after codex existing-worktree reuse", mock.dispatch.Worktree)
+	}
+	if mock.dispatch.WorktreeHandling != codexWorktreeHandlingReuseExistingWorktree {
+		t.Fatalf("worktree handling = %q, want %q", mock.dispatch.WorktreeHandling, codexWorktreeHandlingReuseExistingWorktree)
+	}
+	if mock.dispatch.UserMessage != "Review "+worktreeDir {
+		t.Fatalf("user message = %q", mock.dispatch.UserMessage)
+	}
+}
+
+func TestWorkstationExecutor_DoesNotReuseInvalidDistinctCodexWorktree(t *testing.T) {
+	repoDir := t.TempDir()
+	invalidWorktreeDir := filepath.Join(t.TempDir(), "missing-worktree")
+
+	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			RuntimeBasePath: repoDir,
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system", ModelProvider: string(ModelProviderCodex)},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"review": {
+					Type:             interfaces.WorkstationTypeModel,
+					PromptTemplate:   "Review {{ .Context.WorkDir }}",
+					WorkingDirectory: filepath.ToSlash(repoDir),
+					Worktree:         filepath.ToSlash(invalidWorktreeDir),
+				},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-codex-missing-worktree",
+		TransitionID:    "t-codex-missing-worktree",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if mock.dispatch.WorkingDirectory != repoDir {
+		t.Fatalf("working directory = %q, want %q", mock.dispatch.WorkingDirectory, repoDir)
+	}
+	if mock.dispatch.Worktree != filepath.ToSlash(invalidWorktreeDir) {
+		t.Fatalf("worktree = %q, want unresolved distinct path preserved for later stories", mock.dispatch.Worktree)
+	}
+	if mock.dispatch.WorktreeHandling != "" {
+		t.Fatalf("worktree handling = %q, want empty for missing worktree", mock.dispatch.WorktreeHandling)
+	}
+}
+
 func TestWorkstationExecutor_PreservesExistingUnixAbsoluteWorkingDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix absolute path semantics do not apply on Windows")
@@ -543,6 +642,22 @@ func TestWorkstationExecutor_PreservesExistingUnixAbsoluteWorkingDirectory(t *te
 	if mock.dispatch.UserMessage != "Work from "+filepath.Clean(absoluteDir) {
 		t.Fatalf("user message = %q", mock.dispatch.UserMessage)
 	}
+}
+
+func createGitRepoWithWorktree(t *testing.T) (string, string) {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	runGitSetup(t, repoDir, "init")
+	runGitSetup(t, repoDir, "config", "user.name", "Test User")
+	runGitSetup(t, repoDir, "config", "user.email", "test@example.com")
+	writeTestFile(t, repoDir, "README.md", "root\n")
+	runGitSetup(t, repoDir, "add", "README.md")
+	runGitSetup(t, repoDir, "commit", "-m", "initial")
+
+	worktreeDir := filepath.Join(t.TempDir(), "feature-worktree")
+	runGitSetup(t, repoDir, "worktree", "add", worktreeDir, "-b", "feature-worktree")
+	return repoDir, worktreeDir
 }
 
 func TestWorkstationExecutor_LoadedRuntimeConfigRuntimeBaseDirOverrideDrivesRelativeExecutionPath(t *testing.T) {

@@ -119,29 +119,6 @@ func providerGitTestEnv(envVars map[string]string) []string {
 	return isolatedGitEnv(buildProviderEnv(envVars))
 }
 
-func isolatedGitEnv(env []string) []string {
-	filtered := make([]string, 0, len(env))
-	for _, entry := range env {
-		name, _, ok := strings.Cut(entry, "=")
-		if !ok || inheritedGitRepoEnv[name] {
-			continue
-		}
-		filtered = append(filtered, entry)
-	}
-	return filtered
-}
-
-var inheritedGitRepoEnv = map[string]bool{
-	"GIT_ALTERNATE_OBJECT_DIRECTORIES": true,
-	"GIT_COMMON_DIR":                   true,
-	"GIT_DIR":                          true,
-	"GIT_INDEX_FILE":                   true,
-	"GIT_OBJECT_DIRECTORY":             true,
-	"GIT_PREFIX":                       true,
-	"GIT_QUARANTINE_PATH":              true,
-	"GIT_WORK_TREE":                    true,
-}
-
 func assertStringSlicesEqual(t *testing.T, want, got []string) {
 	t.Helper()
 	if len(want) != len(got) {

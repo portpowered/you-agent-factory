@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -44,12 +45,14 @@ type WorkstationExecutor struct {
 	RuntimeConfig   interfaces.RuntimeConfigLookup
 	DefaultRunnerID string
 	Executor        WorkstationRequestExecutor
+	CommandRunner   CommandRunner
 	Renderer        PromptRenderer
 	Parser          OutputParser
 	Logger          logging.Logger // optional; nil → noop
 }
 
 const defaultSubprocessExecutionTimeout = 2 * time.Hour
+const codexWorktreeValidationTimeout = 5 * time.Second
 
 type resolvedWorkstationExecutionContext struct {
 	ProjectID        string
@@ -129,7 +132,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		return *failed, nil
 	}
 
-	request, failed := we.buildWorkstationExecutionRequest(dispatch, workerName, workerDef, workstationDef, resolvedContext, start, logger)
+	request, failed := we.buildWorkstationExecutionRequest(ctx, dispatch, workerName, workerDef, workstationDef, resolvedContext, start, logger)
 	if failed != nil {
 		return *failed, nil
 	}
@@ -220,21 +223,42 @@ func pathExists(value string) bool {
 	return err == nil || !errors.Is(err, os.ErrNotExist)
 }
 
-const codexWorktreeHandlingReuseWorkingDirectory = "reuse_working_directory_overlap"
+const (
+	codexWorktreeHandlingReuseWorkingDirectory = "reuse_working_directory_overlap"
+	codexWorktreeHandlingReuseExistingWorktree = "reuse_existing_worktree"
+)
 
-func prepareCodexWorktreeRequest(request interfaces.WorkstationExecutionRequest) interfaces.WorkstationExecutionRequest {
+func (we *WorkstationExecutor) prepareCodexWorktreeRequest(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkstationExecutionRequest, error) {
 	if interfaces.NormalizeRunnerID(request.RunnerID) != interfaces.RunnerIDCodex {
-		return request
+		return request, nil
 	}
-	if !pathsOverlapForCodexReuse(request.WorkingDirectory, request.Worktree) {
-		return request
+
+	resolvedWorktreePath := request.Worktree
+	if resolvedWorktreePath != "" {
+		resolvedWorktreePath = resolveCodexWorktreePath(we.runtimeBaseDir(), resolvedWorktreePath)
 	}
-	request.WorktreeHandling = codexWorktreeHandlingReuseWorkingDirectory
-	if request.WorkingDirectory == "" {
-		request.WorkingDirectory = request.Worktree
+
+	if pathsOverlapForCodexReuse(request.WorkingDirectory, resolvedWorktreePath) {
+		request.WorktreeHandling = codexWorktreeHandlingReuseWorkingDirectory
+		if request.WorkingDirectory == "" {
+			request.WorkingDirectory = resolvedWorktreePath
+		}
+		request.Worktree = ""
+		return request, nil
 	}
+
+	reusable, err := we.codexCanReuseExistingWorktree(ctx, resolvedWorktreePath)
+	if err != nil {
+		return interfaces.WorkstationExecutionRequest{}, err
+	}
+	if !reusable {
+		return request, nil
+	}
+
+	request.WorktreeHandling = codexWorktreeHandlingReuseExistingWorktree
+	request.WorkingDirectory = resolvedWorktreePath
 	request.Worktree = ""
-	return request
+	return request, nil
 }
 
 func pathsOverlapForCodexReuse(workingDirectory, worktree string) bool {
@@ -260,11 +284,46 @@ func sameOrNestedPath(root, candidate string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfaces.WorkDispatch, workerName string, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (interfaces.WorkstationExecutionRequest, *interfaces.WorkResult) {
+func (we *WorkstationExecutor) buildWorkstationExecutionRequest(ctx context.Context, dispatch interfaces.WorkDispatch, workerName string, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (interfaces.WorkstationExecutionRequest, *interfaces.WorkResult) {
+	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
+	var err error
+	request := interfaces.WorkstationExecutionRequest{
+		Dispatch:              interfaces.CloneWorkDispatch(dispatch),
+		WorkerType:            workerName,
+		WorkstationType:       dispatch.WorkstationName,
+		RunnerID:              selection.RunnerID,
+		RunnerSelectionSource: selection.Source,
+		ProjectID:             requestContext.ProjectID,
+		InputTokens:           InputTokens(requestContext.InputTokens...),
+		SystemPrompt:          workerDef.Body,
+		OutputSchema:          workstationDef.OutputSchema,
+		EnvVars:               cloneEnvVars(requestContext.EnvVars),
+		WorktreeHandling:      requestContext.WorktreeHandling,
+		Worktree:              requestContext.Worktree,
+		WorkingDirectory:      requestContext.WorkingDirectory,
+	}
+	request, err = we.prepareCodexWorktreeRequest(ctx, request)
+	if err != nil {
+		logger.Error("codex worktree preparation failed",
+			WorkLogFields(dispatch.Execution,
+				"transition_id", dispatch.TransitionID,
+				"dispatch_id", dispatch.DispatchID,
+				"worktree", requestContext.Worktree,
+				"error", err)...)
+		failed := interfaces.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+			Outcome:      interfaces.OutcomeFailed,
+			Error:        "codex worktree preparation failed: " + err.Error(),
+			Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+		}
+		return interfaces.WorkstationExecutionRequest{}, &failed
+	}
+
 	rendered, err := we.Renderer.Render(
 		workstationDef.PromptTemplate,
 		requestContext.InputTokens,
-		requestContext.factoryContext(),
+		executionRequestContext(request),
 	)
 	if err != nil {
 		logger.Error("prompt render failed",
@@ -282,25 +341,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 		}
 		return interfaces.WorkstationExecutionRequest{}, &failed
 	}
-
-	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
-	request := interfaces.WorkstationExecutionRequest{
-		Dispatch:              interfaces.CloneWorkDispatch(dispatch),
-		WorkerType:            workerName,
-		WorkstationType:       dispatch.WorkstationName,
-		RunnerID:              selection.RunnerID,
-		RunnerSelectionSource: selection.Source,
-		ProjectID:             requestContext.ProjectID,
-		InputTokens:           InputTokens(requestContext.InputTokens...),
-		SystemPrompt:          workerDef.Body,
-		UserMessage:           rendered,
-		OutputSchema:          workstationDef.OutputSchema,
-		EnvVars:               cloneEnvVars(requestContext.EnvVars),
-		WorktreeHandling:      requestContext.WorktreeHandling,
-		Worktree:              requestContext.Worktree,
-		WorkingDirectory:      requestContext.WorkingDirectory,
-	}
-	request = prepareCodexWorktreeRequest(request)
+	request.UserMessage = rendered
 	if request.WorktreeHandling != "" {
 		logger.Info("workstation: prepared codex worktree handling",
 			WorkLogFields(dispatch.Execution,
@@ -310,6 +351,113 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 				"working_directory", request.WorkingDirectory)...)
 	}
 	return request, nil
+}
+
+func (we *WorkstationExecutor) codexCanReuseExistingWorktree(ctx context.Context, worktreePath string) (bool, error) {
+	if worktreePath == "" {
+		return false, nil
+	}
+	info, err := os.Stat(worktreePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("stat %q: %w", worktreePath, err)
+	}
+	if !info.IsDir() {
+		return false, nil
+	}
+
+	validateCtx, cancel := context.WithTimeout(ctx, codexWorktreeValidationTimeout)
+	defer cancel()
+
+	topLevel, err := we.gitRevParse(validateCtx, worktreePath, "--show-toplevel")
+	if err != nil {
+		return false, nil
+	}
+	return pathsEquivalentForCodex(topLevel, worktreePath), nil
+}
+
+func (we *WorkstationExecutor) gitRevParse(ctx context.Context, workDir string, args ...string) (string, error) {
+	result, err := we.commandRunner().Run(ctx, CommandRequest{
+		Command: "git",
+		Args:    append([]string{"rev-parse"}, args...),
+		Env:     isolatedGitEnv(os.Environ()),
+		WorkDir: workDir,
+	})
+	if err != nil {
+		return "", err
+	}
+	if result.ExitCode != 0 {
+		return "", fmt.Errorf("git rev-parse %s exit code %d: %s", strings.Join(args, " "), result.ExitCode, strings.TrimSpace(string(result.Stderr)))
+	}
+	return strings.TrimSpace(string(result.Stdout)), nil
+}
+
+func (we *WorkstationExecutor) commandRunner() CommandRunner {
+	if we != nil && we.CommandRunner != nil {
+		return we.CommandRunner
+	}
+	return ExecCommandRunner{}
+}
+
+func (we *WorkstationExecutor) runtimeBaseDir() string {
+	if we == nil || we.RuntimeConfig == nil {
+		return ""
+	}
+	return we.RuntimeConfig.RuntimeBaseDir()
+}
+
+func resolveCodexWorktreePath(baseDir, worktree string) string {
+	if worktree == "" {
+		return ""
+	}
+	normalized := filepath.Clean(filepath.FromSlash(worktree))
+	if filepath.IsAbs(normalized) {
+		return normalized
+	}
+	if baseDir != "" {
+		return filepath.Clean(filepath.Join(baseDir, normalized))
+	}
+	return resolveRuntimePath("", normalized)
+}
+
+func pathsEquivalentForCodex(left, right string) bool {
+	leftPath, leftErr := filepath.EvalSymlinks(filepath.Clean(filepath.FromSlash(left)))
+	if leftErr != nil {
+		leftPath = filepath.Clean(filepath.FromSlash(left))
+	}
+	rightPath, rightErr := filepath.EvalSymlinks(filepath.Clean(filepath.FromSlash(right)))
+	if rightErr != nil {
+		rightPath = filepath.Clean(filepath.FromSlash(right))
+	}
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(leftPath, rightPath)
+	}
+	return leftPath == rightPath
+}
+
+func isolatedGitEnv(env []string) []string {
+	filtered := make([]string, 0, len(env))
+	for _, entry := range env {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok || inheritedGitRepoEnv[name] {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
+}
+
+var inheritedGitRepoEnv = map[string]bool{
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES": true,
+	"GIT_COMMON_DIR":                   true,
+	"GIT_DIR":                          true,
+	"GIT_INDEX_FILE":                   true,
+	"GIT_OBJECT_DIRECTORY":             true,
+	"GIT_PREFIX":                       true,
+	"GIT_QUARANTINE_PATH":              true,
+	"GIT_WORK_TREE":                    true,
 }
 
 func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (interfaces.WorkResult, error) {
