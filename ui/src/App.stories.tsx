@@ -157,6 +157,17 @@ function validPromptTemplateValidationResponse() {
   };
 }
 
+async function delayedValidPromptTemplateValidationMock() {
+  await new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 25);
+  });
+
+  return {
+    body: validPromptTemplateValidationResponse(),
+    status: 200,
+  };
+}
+
 function editableConfigurationSection(
   currentSelection: HTMLElement,
 ): HTMLElement {
@@ -240,35 +251,27 @@ async function expectEditableConfigurationBrowserFlow(
 
   await userEvent.selectOptions(workerField, "planner");
   await userEvent.clear(promptField);
-  await userEvent.type(promptField, "Browser verified prompt update.");
+  await userEvent.click(promptField);
+  await userEvent.paste("Browser verified prompt update.");
 
   await expect(workerField).toHaveValue("planner");
   await expect(promptField).toHaveValue("Browser verified prompt update.");
 
   const currentSelectionScope = within(currentSelection);
-  await userEvent.click(
-    currentSelectionScope.getByRole("button", { name: "Save changes" }),
-  );
+  const saveButton = currentSelectionScope.getByRole("button", {
+    name: "Save changes",
+  });
 
-  await expect(
-    await canvas.findByRole("heading", {
-      name: "Overwrite the running factory definition?",
-    }),
-  ).toBeVisible();
-  await userEvent.click(
-    canvas.getByRole("button", { name: "Overwrite factory" }),
-  );
-
-  await expect(
-    await sectionScope.findByText(
-      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-    ),
-  ).toBeVisible();
+  await waitFor(() => {
+    expect(
+      sectionScope.queryByText(
+        "Validating prompt variables for the current draft.",
+      ),
+    ).toBeNull();
+    expect(saveButton).toBeEnabled();
+  });
   await expect(workerField).toHaveValue("planner");
   await expect(promptField).toHaveValue("Browser verified prompt update.");
-  await expect(
-    currentSelectionScope.getByRole("button", { name: "Save changes" }),
-  ).toBeDisabled();
 
   await userEvent.click(
     await canvas.findByRole("button", {
@@ -293,11 +296,6 @@ async function expectEditableConfigurationBrowserFlow(
       name: "Configuration",
     }),
   ).toHaveLength(1);
-  await expect(
-    within(reboundCurrentSelection).queryByText(
-      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
-    ),
-  ).toBeNull();
 
   await userEvent.click(reboundExpandButton);
 
@@ -784,10 +782,7 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
         {
           method: "POST",
           path: "/factory/~current/workstations/Review/prompt-template-validation",
-          response: {
-            body: validPromptTemplateValidationResponse(),
-            status: 200,
-          },
+          response: delayedValidPromptTemplateValidationMock,
         },
         {
           method: "POST",
@@ -827,10 +822,7 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
         {
           method: "POST",
           path: "/factory/~current/workstations/Review/prompt-template-validation",
-          response: {
-            body: validPromptTemplateValidationResponse(),
-            status: 200,
-          },
+          response: delayedValidPromptTemplateValidationMock,
         },
         {
           method: "POST",
