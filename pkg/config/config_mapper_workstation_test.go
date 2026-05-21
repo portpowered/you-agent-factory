@@ -137,6 +137,65 @@ func TestConfigMapping_WorkstationTypeRepeater(t *testing.T) {
 	}
 }
 
+func TestConfigMapping_UsesEffectiveRuntimeConfigWorkstationKindsForNormalization(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{"name": "executor"}},
+		"workstations": []map[string]any{{
+			"name":     "retry-task",
+			"behavior": "REPEATER",
+			"worker":   "executor",
+			"inputs":   []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":  []map[string]string{{"workType": "task", "state": "complete"}},
+		}},
+	})
+	writeRuntimeWorkerAgentsMD(t, factoryDir, "executor", `---
+type: MODEL_WORKER
+modelProvider: openai
+model: gpt-5.4
+---
+Execute work.
+`)
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "retry-task", `---
+type: MODEL_WORKSTATION
+worker: executor
+---
+Retry work.
+`)
+
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), loaded.FactoryConfig())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tr := net.Transitions["retry-task"]
+	if tr == nil {
+		t.Fatal("expected mapped transition for retry-task")
+	}
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:init" {
+		t.Fatalf("effective runtime repeater should reject back to task:init, got %+v", tr.RejectionArcs)
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("effective runtime repeater should still fail through task:failed, got %+v", tr.FailureArcs)
+	}
+}
+
 // portos:func-length-exception owner=agent-factory reason=cron-mapping-fixture review=2026-07-18 removal=split-cron-fixture-before-next-cron-topology-change
 func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 	input := &interfaces.FactoryConfig{
