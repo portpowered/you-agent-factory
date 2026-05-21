@@ -1,60 +1,59 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-04-22
+last-modified: 2026-05-20
 doc-id: agent-factory/reference/batch-work
 ---
 
 # Batch Work
 
-Use a `FACTORY_REQUEST_BATCH` when one submission should create multiple work
-items together. A batch can describe independent work, `DEPENDS_ON`
-prerequisites, and `PARENT_CHILD` relations for parent-aware fan-in.
+`you docs batch-work` stays available as the stable packaged quick-reference
+topic for explicit batch submission. Use
+[`docs/reference/batch-inputs.md`](../../../docs/reference/batch-inputs.md) as
+the canonical customer guide for the complete `FACTORY_REQUEST_BATCH` contract.
 
-## Example Request
+## Canonical Guide
 
-```json
-{
-  "requestId": "release-story-set",
-  "type": "FACTORY_REQUEST_BATCH",
-  "works": [
-    {
-      "name": "story-set",
-      "workTypeName": "story-set",
-      "state": "waiting",
-      "payload": { "title": "April release story set" }
-    },
-    {
-      "name": "story-auth",
-      "workTypeName": "story",
-      "payload": { "title": "Harden auth session handling" }
-    }
-  ],
-  "relations": [
-    {
-      "type": "PARENT_CHILD",
-      "sourceWorkName": "story-auth",
-      "targetWorkName": "story-set"
-    }
-  ]
-}
-```
+- Canonical public guide:
+  `docs/reference/batch-inputs.md`
+- Use that guide for watched-file placement, full request fields, validation
+  rules, and relation semantics.
+- Keep this packaged topic for quick terminal help and stable topic-name
+  compatibility.
+
+## Current Contract Summary
+
+- Use `FACTORY_REQUEST_BATCH` when one submission should create multiple work
+  items together.
+- Put mixed-work-type batches and submitted parent-child batches under
+  `factory/inputs/BATCH/default/<request_id>.json`.
+- Put single-work-type batches under
+  `factory/inputs/<work_type>/default/<request_id>.json`.
+- In `inputs/BATCH`, every work item must set `work_type_name`.
+- Submitted batch relations use `DEPENDS_ON` and `PARENT_CHILD`.
 
 ## Supported Paths
 
 | Path | Use |
 |------|-----|
-| `factory/inputs/BATCH/default/<requestId>.json` | Mixed-work-type batches and canonical parent-child file input. |
-| `factory/inputs/<work_type>/default/<requestId>.json` | Single-work-type watched batches. |
-| Any readable JSON path passed to `you run --work <path>` | Startup batch submission before runtime start. |
+| `factory/inputs/BATCH/default/<request_id>.json` | Mixed-work-type batches and canonical parent-child file input. |
+| `factory/inputs/<work_type>/default/<request_id>.json` | Single-work-type watched batches. |
+| Any readable `.json` path passed to `you run --work <path>` | Startup batch submission before runtime start. |
 
-## Request Fields
+## Minimal Batch
 
-| Field | Description |
-|-------|-------------|
-| `requestId` | Stable idempotency key for the submission. |
-| `type` | Must be `FACTORY_REQUEST_BATCH`. |
-| `works` | One or more work items. |
-| `relations` | Optional named relations between items in the same request. |
+```json
+{
+  "request_id": "release-story-set",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "story-auth",
+      "work_type_name": "story",
+      "payload": { "title": "Harden auth session handling" }
+    }
+  ]
+}
+```
 
 ## Relation Types
 
@@ -63,8 +62,17 @@ prerequisites, and `PARENT_CHILD` relations for parent-aware fan-in.
 | `DEPENDS_ON` | The source work waits for the target work to reach a required state. |
 | `PARENT_CHILD` | The source work becomes a child of the target work. |
 
-Use `workTypeName` in public batch payloads. Do not use the retired
-`work_type_id` alias.
+Use `DEPENDS_ON` for prerequisite ordering between siblings and `PARENT_CHILD`
+for explicit parent-aware lineage.
+
+## Verification Pointers
+
+- Watched-file and API request shape:
+  `docs/reference/batch-inputs.md`
+- Startup submission path:
+  `you run --work <path>`
+- API submission path:
+  `PUT /work-requests/{request_id}`
 
 ## Related
 

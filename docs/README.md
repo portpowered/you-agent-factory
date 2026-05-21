@@ -7,7 +7,7 @@ run `you docs <topic>` for one of `config`, `workstation`, `workers`,
 
 ## Packaged CLI Reference Topics
 
-These are the fixed topic names accepted by `infinite-you docs <topic>`.
+These are the fixed topic names accepted by `you docs <topic>`.
 
 - `config` is the packaged `factory.json` layout reference. Use
   [Factory JSON and work configuration](reference/work.md) for the canonical
@@ -25,9 +25,8 @@ These are the fixed topic names accepted by `infinite-you docs <topic>`.
   [Batch inputs](reference/batch-inputs.md) for submitted payload fields and
   watched-file placement.
 - `templates` is the packaged template syntax reference. Use
-  [Templates](reference/templates.md) for template surfaces and
-  [Prompt variables](reference/prompt-variables.md) for the complete variable
-  list.
+  [Templates](reference/templates.md) for template surfaces, the complete
+  variable inventory, and JSON-versus-Markdown quoting rules.
 
 ## Customer Guides
 
@@ -38,14 +37,11 @@ These are the fixed topic names accepted by `infinite-you docs <topic>`.
   - [Workers reference](reference/workers.md) owns worker types, worker-scoped runtime fields, and split `workers/<name>/AGENTS.md` placement.
 - [Config reference](reference/config.md) explains the canonical split layout, `factory.json`, and where worker, workstation, and input files live.
 - [Resources reference](reference/resources.md) explains top-level resource pools and workstation or worker resource requirements.
-- [Batch-work reference](reference/batch-work.md) explains `FACTORY_REQUEST_BATCH`, watched-file placement, and authored relation types.
-- [Templates reference](reference/templates.md) explains supported Go-template surfaces and the JSON-versus-Markdown quoting rule.
-- [Author workflows](reference/authoring-workflows.md) explains how to configure and run factory workflows.
+- [Batch inputs](reference/batch-inputs.md) explains `FACTORY_REQUEST_BATCH`, watched-file placement, and authored relation types.
+- [Templates reference](reference/templates.md) explains supported Go-template surfaces, the complete variable inventory, and the JSON-versus-Markdown quoting rule.
+- [Author factories](reference/authoring-factories.md) explains how to configure and run factories end to end.
 - [Author AGENTS.md](reference/authoring-agents-md.md) explains split `AGENTS.md` file shape, prompt placement, and authoring patterns.
-- [Batch inputs](reference/batch-inputs.md) explains `FACTORY_REQUEST_BATCH` files, fields, and dependency relations.
 - [The Zen of flow](reference/the-zen-of-flow.md) explains the project’s workflow philosophy.
-- [Workstations and workers](reference/workstations-and-workers.md) is a combined workflow-oriented overview that links to the canonical workstation and worker guides for contract details.
-- [Prompt variables](reference/prompt-variables.md) lists values available in workstation prompts and rendered runtime fields.
 - [Understand a run timeline](internal/development/run-timeline.md) explains how `/events`, recordings, replay, and the dashboard use one ordered event timeline.
 
 ## Contributor Guides

@@ -1,10 +1,14 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-04-22
+last-modified: 2026-05-21
 doc-id: agent-factory/reference/workers
 ---
 
 # Workers
+
+`you docs workers` stays available as the stable packaged worker quick
+reference. Use [`docs/reference/workers.md`](../../../docs/reference/workers.md)
+for the maintained worker guide.
 
 Workers are the execution backends that workstations dispatch. A worker can be
 model-backed or script-backed. Workstations reference workers by `name`.
