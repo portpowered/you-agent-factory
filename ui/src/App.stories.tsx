@@ -216,7 +216,8 @@ async function expectEditableConfigurationBrowserFlow(
   expect(sectionScope.queryByLabelText("Worker")).toBeNull();
   expect(sectionScope.queryByLabelText("Prompt")).toBeNull();
 
-  await userEvent.click(expandButton);
+  expandButton.focus();
+  await userEvent.keyboard("{Enter}");
 
   const workerField = await sectionScope.findByRole("combobox", {
     name: "Worker",
@@ -229,6 +230,10 @@ async function expectEditableConfigurationBrowserFlow(
   await expect(workerField).toHaveValue("reviewer");
   await expect(promptField).toHaveValue(
     "Review the latest story changes before approval.",
+  );
+  await expect(expandButton).toHaveAttribute(
+    "aria-controls",
+    expect.stringContaining("-content"),
   );
   expect(sectionScope.queryByLabelText("Model")).toBeNull();
   expect(sectionScope.queryByLabelText("Template")).toBeNull();
@@ -283,6 +288,11 @@ async function expectEditableConfigurationBrowserFlow(
   await expect(
     within(reboundCurrentSelection).getByText("Plan", { selector: "p" }),
   ).toBeVisible();
+  await expect(
+    within(reboundCurrentSelection).getAllByRole("heading", {
+      name: "Configuration",
+    }),
+  ).toHaveLength(1);
   await expect(
     within(reboundCurrentSelection).queryByText(
       "Running factory saved. The editable workstation values were refreshed to the saved definition.",
