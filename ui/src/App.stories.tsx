@@ -264,6 +264,43 @@ async function expectEditableConfigurationBrowserFlow(
   await expect(
     currentSelectionScope.getByRole("button", { name: "Save changes" }),
   ).toBeDisabled();
+
+  await userEvent.click(
+    await canvas.findByRole("button", {
+      name: "Select Plan workstation",
+    }),
+  );
+
+  const reboundCurrentSelection = currentSelectionCard(canvasElement);
+  const reboundSection = await expectSingleEditableConfigurationSection(
+    reboundCurrentSelection,
+  );
+  const reboundScope = within(reboundSection);
+  const reboundExpandButton = reboundScope.getByRole("button", {
+    name: "Expand editable configuration",
+  });
+
+  await expect(
+    within(reboundCurrentSelection).getByText("Plan", { selector: "p" }),
+  ).toBeVisible();
+  await expect(
+    within(reboundCurrentSelection).queryByText(
+      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+    ),
+  ).toBeNull();
+
+  await userEvent.click(reboundExpandButton);
+
+  await expect(
+    await reboundScope.findByText(
+      "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
+    ),
+  ).toBeVisible();
+  await expect(
+    within(reboundCurrentSelection).getByRole("button", {
+      name: "Save changes",
+    }),
+  ).toBeDisabled();
 }
 
 async function expectFactoryGraphHeaderBrowserFlow(
