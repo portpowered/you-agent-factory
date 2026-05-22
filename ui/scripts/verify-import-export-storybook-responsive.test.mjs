@@ -81,7 +81,7 @@ describe("verifyStory", () => {
       {
         assertions,
         dialogName: "Export factory",
-        id: "infinite-you-dashboard-export-factory-dialog--ready",
+        id: "you-agent-factory-dashboard-export-factory-dialog--ready",
       },
       { height: 844, label: "mobile", width: 390 },
     );
@@ -91,7 +91,7 @@ describe("verifyStory", () => {
     });
     expect(context.newPage).toHaveBeenCalledTimes(1);
     expect(goto).toHaveBeenCalledWith(
-      "http://127.0.0.1:6008/iframe.html?id=infinite-you-dashboard-export-factory-dialog--ready&viewMode=story",
+      "http://127.0.0.1:6008/iframe.html?id=you-agent-factory-dashboard-export-factory-dialog--ready&viewMode=story",
       { waitUntil: "domcontentloaded" },
     );
     expect(getByRole).toHaveBeenCalledWith("dialog", {
@@ -128,7 +128,7 @@ describe("verifyStory", () => {
         {
           assertions: vi.fn().mockRejectedValue(failure),
           dialogName: "Export factory",
-          id: "infinite-you-dashboard-export-factory-dialog--ready",
+          id: "you-agent-factory-dashboard-export-factory-dialog--ready",
         },
         { height: 844, label: "mobile", width: 390 },
       ),
