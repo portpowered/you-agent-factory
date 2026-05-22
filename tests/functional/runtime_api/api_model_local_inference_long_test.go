@@ -26,6 +26,8 @@ const (
 	realOmniVoiceLongTestCommandEnv  = "INFINITE_YOU_OMNIVOICE_COMMAND"
 	realOmniVoiceLongTestCacheDirEnv = "INFINITE_YOU_OMNIVOICE_CACHE_DIR"
 	realOmniVoiceDefaultCommand      = "omnivoice-llamacpp"
+	realOmniVoiceFactoryWaitTimeout  = 90 * time.Second
+	realOmniVoiceFactoryWaitWindows  = 3 * time.Minute
 )
 
 func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *testing.T) {
@@ -99,10 +101,17 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 			mustGeneratedFunctionalTextPart(t, "hello from factory-level model invoke"),
 		},
 	})
-	work := waitForGeneratedWorkAtPlace(t, server.URL(), traceID, "speech:complete", 60*time.Second)
+	work := waitForGeneratedWorkAtPlace(t, server.URL(), traceID, "speech:complete", realLocalInferenceFactoryWaitTimeout())
 	findGeneratedWorkByTraceIDAndPlace(t, work.Results, traceID, "speech:complete")
 	eventAudioPath := assertRecordedRealLocalModelEvents(t, server.GetFactoryEvents(t))
 	assertWAVFile(t, eventAudioPath, "output validation failure")
+}
+
+func realLocalInferenceFactoryWaitTimeout() time.Duration {
+	if runtime.GOOS == "windows" {
+		return realOmniVoiceFactoryWaitWindows
+	}
+	return realOmniVoiceFactoryWaitTimeout
 }
 
 func resolveRealOmniVoiceCommand(t *testing.T) string {

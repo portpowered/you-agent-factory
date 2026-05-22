@@ -246,7 +246,9 @@ func waitForGeneratedWorkAtPlace(t *testing.T, baseURL string, traceID string, p
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
+	t.Fatalf("timed out waiting for trace %q at %s; last work response: %#v", traceID, placeID, work)
+	return factoryapi.ListWorkResponse{}
 }
 
 func waitForGeneratedWorkTypeComplete(t *testing.T, baseURL string, workType string, timeout time.Duration) factoryapi.Work {
