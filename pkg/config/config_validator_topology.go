@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -315,6 +316,13 @@ func ruleClassifierWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 					Severity: SeverityError,
 					Path:     routePath + ".label",
 					Message:  "classification route label must not include leading or trailing whitespace",
+					Rule:     "classifier-workstation-route-label",
+				})
+			} else if json.Valid([]byte(label)) {
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     routePath + ".label",
+					Message:  "classification route label must not be JSON literal text",
 					Rule:     "classifier-workstation-route-label",
 				})
 			} else {

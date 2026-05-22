@@ -226,6 +226,7 @@ func TestRuleClassifierWorkstations_RejectsDuplicateLabelsWhitespaceAndEmptyOutp
 			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
 			{Label: "approved"},
 			{Label: " needs_review ", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "review"}}},
+			{Label: "123", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "review"}}},
 			{Label: "   ", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
 		},
 	}}

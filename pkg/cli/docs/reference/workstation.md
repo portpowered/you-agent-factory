@@ -84,7 +84,10 @@ string label and route to that authored branch only." This is the right fit
 for flows like `approved`, `needs_changes`, or `spam`.
 
 - `classificationRoutes` is required for classifiers and each route needs one
-  unique non-empty `label` plus one or more destination `outputs`.
+  unique non-empty `label` plus one or more destination `outputs`. Labels must
+  be authored as plain text, not JSON literal text such as `"approved"`,
+  `123`, `true`, `null`, `{...}`, or `[...]`, and must not include surrounding
+  whitespace.
 - The runtime trims surrounding whitespace before matching, then applies exact
   case-sensitive label matching.
 - Classifier workstations must not also declare normal success `outputs`,

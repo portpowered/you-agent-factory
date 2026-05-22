@@ -158,7 +158,9 @@ authored branch label." Do not approximate that with normal `outputs`,
 Classifier authoring stays intentionally strict:
 
 - `classificationRoutes` is required and must contain one or more entries.
-- Every route label must be non-empty and unique after authoring.
+- Every route label must be non-empty, unique, free of surrounding whitespace,
+  and authored as plain text rather than JSON literal text such as
+  `"approved"`, `123`, `true`, `null`, `{...}`, or `[...]`.
 - Every route must declare one or more destination outputs.
 - Classifier workstations must not also declare normal success `outputs`,
   `onContinue`, or `onRejection`.
