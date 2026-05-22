@@ -24,6 +24,14 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 			strict:     StrictPublicFactoryWorkerType,
 		},
 		{
+			name:       "hosted worker type",
+			alias:      "HOSTED_WORKER",
+			unknown:    "CUSTOM_HOSTED_WORKER",
+			want:       WorkerTypeHosted,
+			permissive: PermissivePublicFactoryWorkerType,
+			strict:     StrictPublicFactoryWorkerType,
+		},
+		{
 			name:       "worker model provider",
 			alias:      "CODEX",
 			unknown:    "mystery-provider",
@@ -38,6 +46,14 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 			want:       "SCRIPT_WRAP",
 			permissive: PermissivePublicFactoryWorkerProvider,
 			strict:     StrictPublicFactoryWorkerProvider,
+		},
+		{
+			name:       "hosted worker provider",
+			alias:      "LINEAR",
+			unknown:    "custom-hosted-provider",
+			want:       HostedWorkerProviderLinear,
+			permissive: PermissivePublicFactoryHostedWorkerProvider,
+			strict:     StrictPublicFactoryHostedWorkerProvider,
 		},
 		{
 			name:       "workstation type",
@@ -87,6 +103,9 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	if got := GeneratedPublicFactoryWorkerType("  CUSTOM_WORKER  "); got != factoryapi.WorkerType("CUSTOM_WORKER") {
 		t.Fatalf("worker type = %q, want trimmed unknown to round-trip", got)
 	}
+	if got := GeneratedPublicFactoryWorkerType("  HOSTED_WORKER  "); got != factoryapi.WorkerType("HOSTED_WORKER") {
+		t.Fatalf("worker type = %q, want HOSTED_WORKER", got)
+	}
 	if got := GeneratedPublicFactoryWorkerModelProvider("  openai  "); got != factoryapi.WorkerModelProvider("CODEX") {
 		t.Fatalf("worker model provider = %q, want CODEX from internal openai alias", got)
 	}
@@ -98,6 +117,12 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	}
 	if got := GeneratedPublicFactoryWorkerProvider("  custom-executor  "); got != factoryapi.WorkerProvider("custom-executor") {
 		t.Fatalf("worker provider = %q, want trimmed unknown to round-trip", got)
+	}
+	if got := GeneratedPublicFactoryHostedWorkerProvider("  LINEAR  "); got != "LINEAR" {
+		t.Fatalf("hosted worker provider = %q, want LINEAR", got)
+	}
+	if got := GeneratedPublicFactoryHostedWorkerProvider("  custom-hosted-provider  "); got != "custom-hosted-provider" {
+		t.Fatalf("hosted worker provider = %q, want trimmed unknown to round-trip", got)
 	}
 	if got := GeneratedPublicFactoryWorkstationType("  CUSTOM_WORKSTATION  "); got != factoryapi.WorkstationType("CUSTOM_WORKSTATION") {
 		t.Fatalf("workstation type = %q, want trimmed unknown to round-trip", got)
@@ -160,6 +185,14 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 			ptr:           generatedPublicFactoryWorkerTypeStringPtr,
 		},
 		{
+			name:          "hosted worker type",
+			supported:     "  HOSTED_WORKER  ",
+			wantSupported: "HOSTED_WORKER",
+			unknown:       "  CUSTOM_HOSTED_WORKER  ",
+			wantUnknown:   "CUSTOM_HOSTED_WORKER",
+			ptr:           generatedPublicFactoryWorkerTypeStringPtr,
+		},
+		{
 			name:          "worker model provider",
 			supported:     "  openai  ",
 			wantSupported: "CODEX",
@@ -174,6 +207,14 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 			unknown:       "  custom-executor  ",
 			wantUnknown:   "custom-executor",
 			ptr:           generatedPublicFactoryWorkerProviderStringPtr,
+		},
+		{
+			name:          "hosted worker provider",
+			supported:     "  LINEAR  ",
+			wantSupported: "LINEAR",
+			unknown:       "  custom-hosted-provider  ",
+			wantUnknown:   "custom-hosted-provider",
+			ptr:           generatedPublicFactoryHostedWorkerProviderStringPtr,
 		},
 		{
 			name:          "workstation type",
@@ -212,6 +253,10 @@ func generatedPublicFactoryWorkerModelProviderStringPtr(value string) *string {
 
 func generatedPublicFactoryWorkerProviderStringPtr(value string) *string {
 	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryWorkerProviderPtr(value))
+}
+
+func generatedPublicFactoryHostedWorkerProviderStringPtr(value string) *string {
+	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryHostedWorkerProviderPtr(value))
 }
 
 func generatedPublicFactoryWorkstationTypeStringPtr(value string) *string {

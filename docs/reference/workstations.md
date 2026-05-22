@@ -46,7 +46,8 @@ environment, and routing.
 
 ## Current Contract
 
-- Use `behavior` for scheduling behavior: `STANDARD`, `REPEATER`, or `CRON`.
+- Use `behavior` for scheduling behavior: `STANDARD`, `REPEATER`, `CRON`, or
+  `POLLER`.
 - Use `type` for the runtime implementation: `MODEL_WORKSTATION`,
   `CLASSIFIER_WORKSTATION`, or `LOGICAL_MOVE`.
 - Use `worker` for the bound worker name. Omit it only for logical routing
@@ -82,9 +83,9 @@ execute:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | Yes | Stable workstation name. This is also the transition ID in runtime events. |
-| `behavior` | No | Scheduling behavior. Use `STANDARD`, `REPEATER`, or `CRON`. Defaults to `STANDARD`. |
+| `behavior` | No | Scheduling behavior. Use `STANDARD`, `REPEATER`, `CRON`, or `POLLER`. Defaults to `STANDARD`. |
 | `type` | Runtime config | Runtime implementation. Use `MODEL_WORKSTATION` for worker dispatch, `CLASSIFIER_WORKSTATION` for single-label branch selection, or `LOGICAL_MOVE` for no-worker routing. |
-| `worker` | Usually | Worker name from `workers[].name`. Required for model/script dispatch and cron workstations. Omit only for logical routing workstations. |
+| `worker` | Usually | Worker name from `workers[].name`. Required for model/script dispatch, cron workstations, and poller workstations. Omit only for logical routing workstations. |
 | `inputs` | Usually | IO places that enable the workstation. Cron workstations may omit customer inputs but still consume internal time work. |
 | `outputs` | Usually | IO places produced when the worker returns accepted. Cron workstations require at least one output. |
 | `onContinue` | No | IO place produced when the worker reports ordinary partial progress and the work should iterate without being classified as rejection. |

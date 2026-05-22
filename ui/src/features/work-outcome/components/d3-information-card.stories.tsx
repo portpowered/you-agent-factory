@@ -146,7 +146,7 @@ const RESIZABLE_WORK_OUTCOME_LAYOUT: AgentBentoLayoutItem[] = [
   { id: "work-outcome-chart", x: 0, y: 0, w: 6, h: 3 },
 ];
 
-function expectWorkOutcomeChartContract(card: HTMLElement): void {
+async function expectWorkOutcomeChartContract(card: HTMLElement): Promise<void> {
   const chart = within(card).getByRole("img", {
     name: "Work outcome chart for 15m",
   });
@@ -159,19 +159,21 @@ function expectWorkOutcomeChartContract(card: HTMLElement): void {
   expect(within(card).getByText("Ticks")).toBeVisible();
   expect(within(card).getByText("Work count")).toBeVisible();
 
-  for (const series of WORK_OUTCOME_CHART_SERIES) {
-    const path = chart.querySelector<SVGPathElement>(
-      `.recharts-line-curve[data-chart-series='${series.key}']`,
-    );
+  await waitFor(() => {
+    for (const series of WORK_OUTCOME_CHART_SERIES) {
+      const path = chart.querySelector<SVGPathElement>(
+        `.recharts-line-curve[data-chart-series='${series.key}']`,
+      );
 
-    expect(path).not.toBeNull();
-    expect(path?.getAttribute("data-chart-series-color")).toBe(
-      series.lineColor,
-    );
-    expect(path ? window.getComputedStyle(path).strokeWidth : "").toBe(
-      "2.25px",
-    );
-  }
+      expect(path).not.toBeNull();
+      expect(path?.getAttribute("data-chart-series-color")).toBe(
+        series.lineColor,
+      );
+      expect(path ? window.getComputedStyle(path).strokeWidth : "").toBe(
+        "2.25px",
+      );
+    }
+  });
 
   expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
   expect(chart.className).toContain("px-5");
@@ -311,7 +313,7 @@ async function expectChartExpandsAfterResize(
     expect(chart.getBoundingClientRect().height).toBeGreaterThan(initialChartHeight + 24);
   });
 
-  expectWorkOutcomeChartContract(card);
+  await expectWorkOutcomeChartContract(card);
 }
 
 function expectCenteredStatusPanel(statePanel: HTMLElement): void {
@@ -404,7 +406,7 @@ export const Populated = {
       name: "Work outcome chart",
     });
 
-    expectWorkOutcomeChartContract(card);
+    await expectWorkOutcomeChartContract(card);
   },
 };
 
@@ -498,7 +500,7 @@ export const ConstrainedWidth = {
       name: "Work outcome chart",
     });
 
-    expectWorkOutcomeChartContract(card);
+    await expectWorkOutcomeChartContract(card);
     expectNoOverflowInStoryShell(canvasElement);
   },
 };

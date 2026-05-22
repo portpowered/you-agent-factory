@@ -49,6 +49,7 @@ func LoadWorkerConfig(dir string) (*interfaces.WorkerConfig, error) {
 
 	cfg := interfaces.WorkerConfig{
 		Type:             parsed.Type,
+		Provider:         parsed.Provider,
 		Model:            parsed.Model,
 		ModelProvider:    parsed.ModelProvider,
 		ExecutorProvider: parsed.ExecutorProvider,
@@ -58,7 +59,12 @@ func LoadWorkerConfig(dir string) (*interfaces.WorkerConfig, error) {
 		Timeout:          parsed.Timeout,
 		StopToken:        parsed.StopToken,
 		SkipPermissions:  parsed.SkipPermissions,
+		Auth:             cloneHostedWorkerAuthConfig(parsed.Auth),
+		Linear:           cloneHostedLinearWorkerConfig(parsed.Linear),
 		Body:             body,
+	}
+	if cfg.Provider != "" {
+		cfg.Provider = internalFactoryHostedWorkerProviderFromPublic(cfg.Provider)
 	}
 	if cfg.ModelProvider != "" {
 		modelProvider := factoryapi.WorkerModelProvider(cfg.ModelProvider)
@@ -72,16 +78,41 @@ func LoadWorkerConfig(dir string) (*interfaces.WorkerConfig, error) {
 }
 
 type workerFrontmatterInput struct {
-	Type             string                      `yaml:"type"`
-	Model            string                      `yaml:"model,omitempty"`
-	ModelProvider    string                      `yaml:"modelProvider,omitempty"`
-	ExecutorProvider string                      `yaml:"executorProvider,omitempty"`
-	Command          string                      `yaml:"command,omitempty"`
-	Args             []string                    `yaml:"args,omitempty"`
-	Resources        []interfaces.ResourceConfig `yaml:"resources,omitempty"`
-	Timeout          string                      `yaml:"timeout,omitempty"`
-	StopToken        string                      `yaml:"stopToken,omitempty"`
-	SkipPermissions  bool                        `yaml:"skipPermissions,omitempty"`
+	Type             string                               `yaml:"type"`
+	Provider         string                               `yaml:"provider,omitempty"`
+	Model            string                               `yaml:"model,omitempty"`
+	ModelProvider    string                               `yaml:"modelProvider,omitempty"`
+	ExecutorProvider string                               `yaml:"executorProvider,omitempty"`
+	Command          string                               `yaml:"command,omitempty"`
+	Args             []string                             `yaml:"args,omitempty"`
+	Resources        []interfaces.ResourceConfig          `yaml:"resources,omitempty"`
+	Timeout          string                               `yaml:"timeout,omitempty"`
+	StopToken        string                               `yaml:"stopToken,omitempty"`
+	SkipPermissions  bool                                 `yaml:"skipPermissions,omitempty"`
+	Auth             *interfaces.HostedWorkerAuthConfig   `yaml:"auth,omitempty"`
+	Linear           *interfaces.HostedLinearWorkerConfig `yaml:"linear,omitempty"`
+}
+
+func cloneHostedWorkerAuthConfig(cfg *interfaces.HostedWorkerAuthConfig) *interfaces.HostedWorkerAuthConfig {
+	if cfg == nil {
+		return nil
+	}
+	cloned := *cfg
+	return &cloned
+}
+
+func cloneHostedLinearWorkerConfig(cfg *interfaces.HostedLinearWorkerConfig) *interfaces.HostedLinearWorkerConfig {
+	if cfg == nil {
+		return nil
+	}
+	cloned := *cfg
+	cloned.TeamIDs = append([]string(nil), cfg.TeamIDs...)
+	cloned.StateIDs = append([]string(nil), cfg.StateIDs...)
+	if cfg.Claim != nil {
+		claim := *cfg.Claim
+		cloned.Claim = &claim
+	}
+	return &cloned
 }
 
 // LoadWorkstationConfig loads a workstation configuration from the given directory.
@@ -223,8 +254,10 @@ func parseAgentsFrontmatterMap(frontmatter []byte) (map[string]any, error) {
 }
 
 func rejectRetiredWorkerFrontmatterAliases(frontmatter map[string]any) error {
+	if err := rejectRetiredHostedProviderAlias(frontmatter, "frontmatter"); err != nil {
+		return err
+	}
 	return rejectRetiredBoundaryFields(frontmatter, "frontmatter", []retiredBoundaryField{
-		{key: "provider", replacement: "use executorProvider"},
 		{key: "model_provider", replacement: "use modelProvider"},
 		{key: "sessionId", replacement: "remove sessionId; provider sessions are runtime-owned"},
 		{key: "session_id", replacement: "remove sessionId; provider sessions are runtime-owned"},

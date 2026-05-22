@@ -332,7 +332,7 @@ func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {
 		t.Fatalf("components.schemas.Workstation.properties.classificationRoutes.items must reference ClassificationRoute")
 	}
 	assertPropertiesAbsent(t, workstationProperties, "Workstation", "timeout", "runtime_type")
-	assertEnumValues(t, schemaObject(t, schemas, "WorkstationKind"), "WorkstationKind", []string{"STANDARD", "REPEATER", "CRON"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkstationKind"), "WorkstationKind", []string{"STANDARD", "REPEATER", "CRON", "POLLER"})
 	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"MODEL_WORKSTATION", "LOGICAL_MOVE", "CLASSIFIER_WORKSTATION"})
 
 	classificationRouteSchema := schemaObject(t, schemas, "ClassificationRoute")

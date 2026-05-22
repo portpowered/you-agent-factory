@@ -9,8 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
-const defaultProviderErrorSmokeWorktreeTemplate = "{{ (index .Inputs 0).Name }}"
-
 // ProviderErrorSmokeLane declares one provider/model lane in a generated
 // provider-error smoke fixture.
 type ProviderErrorSmokeLane struct {
@@ -198,7 +196,6 @@ func providerErrorSmokeLaneWorkstation(lane ProviderErrorSmokeLane) interfaces.F
 			WorkTypeName: lane.WorkTypeID,
 			StateName:    "failed",
 		}},
-		Worktree: defaultProviderErrorSmokeWorktreeTemplate,
 	}
 }
 

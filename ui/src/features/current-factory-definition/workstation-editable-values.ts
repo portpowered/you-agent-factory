@@ -4,22 +4,34 @@ import {
   BUILT_IN_RUNNER_IDS,
   type RunnerID,
 } from "../current-selection/runner-metadata";
+import {
+  DEFAULT_WORKSTATION_BEHAVIOR,
+  resolveEditableWorkstationBehavior,
+  resolveEditableWorkstationBehaviorOptions,
+  type EditableWorkstationBehavior,
+} from "./workstation-behavior";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
 >[number];
+type CanonicalWorker = NonNullable<CanonicalFactoryDefinition["workers"]>[number];
+
 export interface EditableWorkstationValues {
+  behavior: EditableWorkstationBehavior;
+  behaviorOptions: EditableWorkstationBehavior[];
   effectiveRunnerName: RunnerID;
   factoryRunnerName: RunnerID | null;
   prompt: string | null;
   runnerName: RunnerID | null;
   runnerOptions: RunnerID[];
+  workerTypeByName: Record<string, CanonicalWorker["type"] | undefined>;
   workerName: string;
   workerOptions: string[];
   workstationName: string;
 }
 
 export interface EditableWorkstationDraft {
+  behavior: EditableWorkstationBehavior;
   prompt: string;
   runnerName: RunnerID | null;
   workerName: string;
@@ -37,11 +49,16 @@ export function resolveEditableWorkstationValues(
   const { workstation } = workstationResolution;
 
   return {
+    behavior: resolveEditableWorkstationBehavior(workstation),
+    behaviorOptions: resolveEditableWorkstationBehaviorOptions(
+      resolveEditableWorkstationBehavior(workstation),
+    ),
     effectiveRunnerName: resolveEffectiveRunnerName(factory, workstation),
     factoryRunnerName: factory.runner ?? null,
     prompt: workstation.body ?? null,
     runnerName: workstation.runner ?? null,
     runnerOptions: BUILT_IN_RUNNER_IDS,
+    workerTypeByName: resolveWorkerTypeByName(factory),
     workerName: workstation.worker,
     workerOptions: resolveWorkerOptions(factory),
     workstationName: workstation.name,
@@ -52,6 +69,7 @@ export function editableWorkstationDraftFromValues(
   values: EditableWorkstationValues,
 ): EditableWorkstationDraft {
   return {
+    behavior: values.behavior,
     prompt: values.prompt ?? "",
     runnerName: values.runnerName,
     workerName: values.workerName,
@@ -72,20 +90,22 @@ export function applyEditableWorkstationDraft(
     return null;
   }
 
-  const { runner: _existingRunner, ...workstationWithoutRunner } =
+  const {
+    behavior: existingBehavior,
+    runner: _existingRunner,
+    ...workstationWithoutRunner
+  } =
     workstationResolution.workstation;
-  const nextWorkstation = draft.runnerName
-    ? {
-        ...workstationWithoutRunner,
-        body: draft.prompt,
-        runner: draft.runnerName,
-        worker: draft.workerName,
-      }
-    : {
-        ...workstationWithoutRunner,
-        body: draft.prompt,
-        worker: draft.workerName,
-      };
+  const nextWorkstation = {
+    ...workstationWithoutRunner,
+    body: draft.prompt,
+    worker: draft.workerName,
+    ...(draft.runnerName ? { runner: draft.runnerName } : {}),
+    ...(draft.behavior === DEFAULT_WORKSTATION_BEHAVIOR &&
+    existingBehavior === undefined
+      ? {}
+      : { behavior: draft.behavior }),
+  };
 
   return {
     ...factory,
@@ -141,4 +161,10 @@ function resolveWorkerOptions(factory: CanonicalFactoryDefinition): string[] {
   return (factory.workers ?? [])
     .map((worker) => worker.name)
     .filter((name) => name.length > 0);
+}
+
+function resolveWorkerTypeByName(factory: CanonicalFactoryDefinition) {
+  return Object.fromEntries(
+    (factory.workers ?? []).map((worker) => [worker.name, worker.type]),
+  ) as Record<string, CanonicalWorker["type"] | undefined>;
 }

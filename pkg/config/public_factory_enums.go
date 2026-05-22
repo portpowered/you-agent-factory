@@ -12,12 +12,14 @@ const (
 	publicFactoryInputKindDefault             = "DEFAULT"
 	publicFactoryWorkerTypeModel              = "MODEL_WORKER"
 	publicFactoryWorkerTypeScript             = "SCRIPT_WORKER"
+	publicFactoryWorkerTypeHosted             = "HOSTED_WORKER"
 	publicFactoryWorkerModelProviderClaude    = "CLAUDE"
 	publicFactoryWorkerModelProviderCodex     = "CODEX"
 	publicFactoryWorkerProviderScriptWrap     = "SCRIPT_WRAP"
 	publicFactoryWorkstationKindStandard      = "STANDARD"
 	publicFactoryWorkstationKindRepeater      = "REPEATER"
 	publicFactoryWorkstationKindCron          = "CRON"
+	publicFactoryWorkstationKindPoller        = "POLLER"
 	publicFactoryWorkstationTypeModel         = "MODEL_WORKSTATION"
 	publicFactoryWorkstationTypeLogical       = "LOGICAL_MOVE"
 	publicFactoryGuardTypeVisitCount          = "VISIT_COUNT"
@@ -157,6 +159,10 @@ func publicFactoryWorkerProviderFromInternal(value string) factoryapi.WorkerProv
 	return interfaces.GeneratedPublicFactoryWorkerProvider(value)
 }
 
+func publicFactoryHostedWorkerProviderFromInternal(value string) string {
+	return interfaces.GeneratedPublicFactoryHostedWorkerProvider(value)
+}
+
 func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) string {
 	if value == nil {
 		return ""
@@ -165,6 +171,13 @@ func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) s
 		return strings.ToLower(canonical)
 	}
 	return strings.TrimSpace(string(*value))
+}
+
+func internalFactoryHostedWorkerProviderFromPublic(value string) string {
+	if canonical := interfaces.StrictPublicFactoryHostedWorkerProvider(value); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(value)
 }
 
 func publicFactoryWorkstationKindFromInternal(kind interfaces.WorkstationKind) factoryapi.WorkstationKind {
@@ -182,6 +195,8 @@ func internalFactoryWorkstationKindFromPublic(kind *factoryapi.WorkstationKind) 
 		return interfaces.WorkstationKindRepeater
 	case publicFactoryWorkstationKindCron:
 		return interfaces.WorkstationKindCron
+	case publicFactoryWorkstationKindPoller:
+		return interfaces.WorkstationKindPoller
 	default:
 		return interfaces.WorkstationKind(strings.TrimSpace(string(*kind)))
 	}

@@ -35,7 +35,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveConfirmationCancelAction: "Cancel",
     editableConfigurationSaveConfirmationConfirmAction: "Overwrite factory",
     editableConfigurationSaveConfirmationDescription:
-      "Saving will overwrite the running factory definition with the worker and prompt values in this workstation draft.",
+      "Saving will overwrite the running factory definition with the kind, worker, and prompt values in this workstation draft.",
     editableConfigurationSaveConflictConfirmationDescription: (fields) =>
       `Saving will overwrite newer server values for ${fields} with the draft currently shown in the editor.`,
     editableConfigurationSaveConfirmationTitle:
@@ -47,6 +47,8 @@ const workstationDetailMessagesByLocale = {
       "Loading the current factory definition for this workstation.",
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this workstation.",
+    editableConfigurationBehaviorPollerWorkerUnsupported:
+      "Poller workstations must use a script or hosted worker before saving this workstation.",
     editableConfigurationPromptRequired:
       "Enter a prompt before saving this workstation.",
     editableConfigurationPromptEditorLoading:
@@ -202,7 +204,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveConfirmationCancelAction: "キャンセル",
     editableConfigurationSaveConfirmationConfirmAction: "ファクトリーを上書き",
     editableConfigurationSaveConfirmationDescription:
-      "保存すると、このワークステーション下書きの worker と prompt の値で実行中ファクトリー定義を上書きします。",
+      "保存すると、このワークステーション下書きの種別、worker、prompt の値で実行中ファクトリー定義を上書きします。",
     editableConfigurationSaveConflictConfirmationDescription: (fields) =>
       `保存すると、エディターに表示中の下書きで ${fields} の新しいサーバー値を上書きします。`,
     editableConfigurationSaveConfirmationTitle:
@@ -214,6 +216,8 @@ const workstationDetailMessagesByLocale = {
       "このワークステーション向けに現在のファクトリー定義を読み込んでいます。",
     editableConfigurationValidationStatus:
       "このワークステーションを保存する前に、強調表示された項目を修正してください。",
+    editableConfigurationBehaviorPollerWorkerUnsupported:
+      "このワークステーションを保存する前に、ポーラーのワークステーションではスクリプトまたは hosted worker を使用してください。",
     editableConfigurationPromptRequired:
       "このワークステーションを保存する前にプロンプトを入力してください。",
     editableConfigurationPromptEditorLoading:
@@ -369,7 +373,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveConfirmationCancelAction: "취소",
     editableConfigurationSaveConfirmationConfirmAction: "팩토리 덮어쓰기",
     editableConfigurationSaveConfirmationDescription:
-      "저장하면 이 워크스테이션 초안의 worker 및 prompt 값으로 실행 중인 팩토리 정의를 덮어씁니다.",
+      "저장하면 이 워크스테이션 초안의 종류, worker, prompt 값으로 실행 중인 팩토리 정의를 덮어씁니다.",
     editableConfigurationSaveConflictConfirmationDescription: (fields) =>
       `저장하면 편집기에 표시된 초안으로 ${fields}의 최신 서버 값을 덮어씁니다.`,
     editableConfigurationSaveConfirmationTitle:
@@ -381,6 +385,8 @@ const workstationDetailMessagesByLocale = {
       "이 워크스테이션의 현재 팩토리 정의를 불러오는 중입니다.",
     editableConfigurationValidationStatus:
       "이 워크스테이션을 저장하기 전에 강조 표시된 필드를 수정하세요.",
+    editableConfigurationBehaviorPollerWorkerUnsupported:
+      "이 워크스테이션을 저장하기 전에 폴러 워크스테이션에는 스크립트 또는 hosted worker를 사용하세요.",
     editableConfigurationPromptRequired:
       "이 워크스테이션을 저장하기 전에 프롬프트를 입력하세요.",
     editableConfigurationPromptEditorLoading:
@@ -533,7 +539,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveConfirmationCancelAction: "取消",
     editableConfigurationSaveConfirmationConfirmAction: "覆盖工厂",
     editableConfigurationSaveConfirmationDescription:
-      "保存将使用此工作站草稿中的 worker 和 prompt 值覆盖运行中的工厂定义。",
+      "保存将使用此工作站草稿中的类型、worker 和 prompt 值覆盖运行中的工厂定义。",
     editableConfigurationSaveConflictConfirmationDescription: (fields) =>
       `保存将使用编辑器中当前草稿覆盖 ${fields} 的较新服务器值。`,
     editableConfigurationSaveConfirmationTitle: "要覆盖运行中的工厂定义吗？",
@@ -542,6 +548,8 @@ const workstationDetailMessagesByLocale = {
       "运行中的工厂已保存。可编辑的工作站值已刷新为保存后的定义。",
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
+    editableConfigurationBehaviorPollerWorkerUnsupported:
+      "保存此工作站前，请先为轮询器工作站选择脚本或 hosted worker。",
     editableConfigurationPromptRequired: "保存此工作站前请输入提示词。",
     editableConfigurationPromptEditorLoading: "正在启动此工作站的提示词编辑器。",
     editableConfigurationPromptEditorError:

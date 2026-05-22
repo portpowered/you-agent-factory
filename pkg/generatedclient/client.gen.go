@@ -59,6 +59,11 @@ const (
 	GuardTypeVisitCount          GuardType = "VISIT_COUNT"
 )
 
+// Defines values for HostedWorkerProvider.
+const (
+	HostedWorkerProviderLinear HostedWorkerProvider = "LINEAR"
+)
+
 // Defines values for InputKind.
 const (
 	InputKindDefault InputKind = "DEFAULT"
@@ -94,6 +99,7 @@ const (
 
 // Defines values for WorkerType.
 const (
+	WorkerTypeHostedWorker WorkerType = "HOSTED_WORKER"
 	WorkerTypeModelWorker  WorkerType = "MODEL_WORKER"
 	WorkerTypeScriptWorker WorkerType = "SCRIPT_WORKER"
 )
@@ -101,6 +107,7 @@ const (
 // Defines values for WorkstationKind.
 const (
 	WorkstationKindCron     WorkstationKind = "CRON"
+	WorkstationKindPoller   WorkstationKind = "POLLER"
 	WorkstationKindRepeater WorkstationKind = "REPEATER"
 	WorkstationKindStandard WorkstationKind = "STANDARD"
 )
@@ -277,6 +284,48 @@ type GuardMatchConfig struct {
 // GuardType Guard condition attached to a workstation or one of its specific inputs.
 type GuardType string
 
+// HostedLinearWorkerClaim Optional claim-related configuration that v1 hosted Linear workers explicitly allow.
+type HostedLinearWorkerClaim struct {
+	// AssigneeField Linear issue field name to use when deriving optional assignee claim metadata.
+	AssigneeField *string `json:"assigneeField,omitempty"`
+}
+
+// HostedLinearWorkerConfig Provider-specific poller configuration for the built-in hosted Linear worker.
+type HostedLinearWorkerConfig struct {
+	// Claim Optional claim-related configuration that v1 hosted Linear workers explicitly allow.
+	Claim *HostedLinearWorkerClaim `json:"claim,omitempty"`
+
+	// Mapping Deterministic issue-to-work mapping fields owned by a hosted Linear worker.
+	Mapping *HostedLinearWorkerMapping `json:"mapping,omitempty"`
+
+	// PollInterval Optional Go duration that controls how often the hosted Linear worker polls for updates.
+	PollInterval *string `json:"pollInterval,omitempty"`
+
+	// StateIds Optional Linear issue-state identifiers that bound the poll source.
+	StateIds *[]string `json:"stateIds,omitempty"`
+
+	// TeamIds Optional Linear team identifiers that bound the poll source.
+	TeamIds *[]string `json:"teamIds,omitempty"`
+}
+
+// HostedLinearWorkerMapping Deterministic issue-to-work mapping fields owned by a hosted Linear worker.
+type HostedLinearWorkerMapping struct {
+	// State Canonical submitted work state emitted for matched Linear issues.
+	State *string `json:"state,omitempty"`
+
+	// WorkType Canonical submitted work type emitted for matched Linear issues.
+	WorkType *string `json:"workType,omitempty"`
+}
+
+// HostedWorkerAuth Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields.
+type HostedWorkerAuth struct {
+	// SecretRef Referenced secret name that resolves the hosted provider API key at runtime.
+	SecretRef *string `json:"secretRef,omitempty"`
+}
+
+// HostedWorkerProvider Built-in repository-owned hosted worker providers supported by the public factory-config contract.
+type HostedWorkerProvider string
+
 // HybridLogicalTimestamp defines model for HybridLogicalTimestamp.
 type HybridLogicalTimestamp struct {
 	// Logical Monotonic Lamport-style logical component derived from the persisted factory definition version.
@@ -377,6 +426,9 @@ type Worker struct {
 	// Args Additional command arguments passed to the configured command.
 	Args *[]string `json:"args,omitempty"`
 
+	// Auth Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields.
+	Auth *HostedWorkerAuth `json:"auth,omitempty"`
+
 	// Body Inline worker instructions or script body when the worker is authored directly in factory config.
 	Body *string `json:"body,omitempty"`
 
@@ -386,6 +438,9 @@ type Worker struct {
 	// ExecutorProvider Concrete worker-provider wrappers supported by the public factory-config contract.
 	ExecutorProvider *WorkerProvider `json:"executorProvider,omitempty"`
 
+	// Linear Provider-specific poller configuration for the built-in hosted Linear worker.
+	Linear *HostedLinearWorkerConfig `json:"linear,omitempty"`
+
 	// Model Model identifier to request from the configured model provider when this worker uses model execution.
 	Model *string `json:"model,omitempty"`
 
@@ -394,6 +449,9 @@ type Worker struct {
 
 	// Name Worker name referenced by Workstation.worker.
 	Name string `json:"name"`
+
+	// Provider Built-in repository-owned hosted worker providers supported by the public factory-config contract.
+	Provider *HostedWorkerProvider `json:"provider,omitempty"`
 
 	// Resources Resource capacity this worker requires before it can be dispatched.
 	Resources *[]ResourceRequirement `json:"resources,omitempty"`
@@ -422,7 +480,7 @@ type WorkerType string
 
 // Workstation A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
 type Workstation struct {
-	// Behavior Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
+	// Behavior Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
 	Behavior *WorkstationKind `json:"behavior,omitempty"`
 
 	// Body Inline workstation instructions or script body when authored directly in factory config.
@@ -520,7 +578,7 @@ type WorkstationIO struct {
 	WorkType string `json:"workType"`
 }
 
-// WorkstationKind Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
+// WorkstationKind Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
 type WorkstationKind string
 
 // WorkstationLimits Retry and execution ceilings applied to one workstation definition.

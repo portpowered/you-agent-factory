@@ -35,7 +35,7 @@ instead of normal success `outputs`.
 | Field | Description |
 |-------|-------------|
 | `name` | Stable workstation and transition name. |
-| `behavior` | Scheduling behavior: `STANDARD`, `REPEATER`, or `CRON`. |
+| `behavior` | Scheduling behavior: `STANDARD`, `REPEATER`, `CRON`, or `POLLER`. |
 | `type` | Runtime implementation: `MODEL_WORKSTATION`, `CLASSIFIER_WORKSTATION`, or `LOGICAL_MOVE`. |
 | `worker` | Worker name to dispatch when the workstation executes. |
 | `inputs` | Places that must be present before the workstation can fire. |

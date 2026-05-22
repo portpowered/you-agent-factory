@@ -1439,6 +1439,8 @@ export interface components {
             name: string;
             /** @description Worker implementation family to instantiate for this definition. */
             type?: components["schemas"]["WorkerType"];
+            /** @description Built-in hosted provider identity when this worker uses repository-owned hosted execution. */
+            provider?: components["schemas"]["HostedWorkerProvider"];
             /** @description Model identifier to request from the configured model provider when this worker uses model execution. */
             model?: string;
             /** @description Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs. */
@@ -1457,6 +1459,10 @@ export interface components {
             stopToken?: string;
             /** @description When true, bypasses permission checks for providers that support permission gating. */
             skipPermissions?: boolean;
+            /** @description Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef. */
+            auth?: components["schemas"]["HostedWorkerAuth"];
+            /** @description Provider-specific configuration for the built-in hosted LINEAR worker. */
+            linear?: components["schemas"]["HostedLinearWorkerConfig"];
             /** @description Inline worker instructions or script body when the worker is authored directly in factory config. */
             body?: string;
         };
@@ -1464,7 +1470,7 @@ export interface components {
          * @description Worker implementation families supported by the public factory-config contract.
          * @enum {string}
          */
-        WorkerType: "MODEL_WORKER" | "SCRIPT_WORKER";
+        WorkerType: "MODEL_WORKER" | "SCRIPT_WORKER" | "HOSTED_WORKER";
         /**
          * @description Canonical model-provider identifiers supported by model workers in factory config.
          * @enum {string}
@@ -1550,11 +1556,11 @@ export interface components {
             maxExecutionTime?: string;
         };
         /**
-         * @description Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
+         * @description Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
          * @default STANDARD
          * @enum {string}
          */
-        WorkstationKind: "STANDARD" | "REPEATER" | "CRON";
+        WorkstationKind: "STANDARD" | "REPEATER" | "CRON" | "POLLER";
         /**
          * @description Runtime workstation implementation types supported by the public factory-config contract.
          * @enum {string}
@@ -1787,6 +1793,41 @@ export interface components {
             output?: string;
             /** @description Whether the entry only exposed encrypted content instead of plaintext. */
             encrypted?: boolean;
+        };
+        /**
+         * @description Built-in repository-owned hosted worker providers supported by the public factory-config contract.
+         * @enum {string}
+         */
+        HostedWorkerProvider: "LINEAR";
+        /** @description Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields. */
+        HostedWorkerAuth: {
+            /** @description Referenced secret name that resolves the hosted provider API key at runtime. */
+            secretRef?: string;
+        };
+        /** @description Deterministic issue-to-work mapping fields owned by a hosted Linear worker. */
+        HostedLinearWorkerMapping: {
+            /** @description Canonical submitted work type emitted for matched Linear issues. */
+            workType?: string;
+            /** @description Canonical submitted work state emitted for matched Linear issues. */
+            state?: string;
+        };
+        /** @description Optional claim-related configuration that v1 hosted Linear workers explicitly allow. */
+        HostedLinearWorkerClaim: {
+            /** @description Linear issue field name to use when deriving optional assignee claim metadata. */
+            assigneeField?: string;
+        };
+        /** @description Provider-specific poller configuration for the built-in hosted Linear worker. */
+        HostedLinearWorkerConfig: {
+            /** @description Optional Go duration that controls how often the hosted Linear worker polls for updates. */
+            pollInterval?: string;
+            /** @description Optional Linear team identifiers that bound the poll source. */
+            teamIds?: string[];
+            /** @description Optional Linear issue-state identifiers that bound the poll source. */
+            stateIds?: string[];
+            /** @description Deterministic mapping fields for canonical work submission generation. */
+            mapping?: components["schemas"]["HostedLinearWorkerMapping"];
+            /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
+            claim?: components["schemas"]["HostedLinearWorkerClaim"];
         };
     };
     responses: {

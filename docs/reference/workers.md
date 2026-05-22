@@ -49,7 +49,8 @@ what it renders, and where it routes results.
 - Workers define the execution backend and system instructions.
 - Workstations define topology, routing, prompt templates, and per-step
   execution context.
-- The current worker types are `MODEL_WORKER` and `SCRIPT_WORKER`.
+- The current worker types are `MODEL_WORKER`, `SCRIPT_WORKER`, and
+  `HOSTED_WORKER`.
 - Current built-in `modelProvider` values are `CLAUDE` and `CODEX`.
 - Runner selection is separate from `modelProvider`. Use factory or
   workstation `runner` fields to choose the built-in runner ID: `codex`,
@@ -122,11 +123,51 @@ timeout: 10m
 Runs the Go test suite.
 ```
 
+### `HOSTED_WORKER`
+
+Use a hosted worker when the repository owns the integration code and the
+workstation should bind to a built-in provider rather than a subprocess.
+
+V1 hosted workers currently support only `provider: LINEAR`, and the intended
+shape is for a `POLLER` workstation to bind that worker so service mode can
+supervise the provider loop as a first-class sidecar.
+
+```yaml
+---
+type: HOSTED_WORKER
+provider: LINEAR
+auth:
+  secretRef: secrets/linear-api-key
+linear:
+  pollInterval: 2m
+  teams: ["ENG"]
+  states: ["unstarted", "started"]
+  mapping:
+    workType: task
+    state: init
+  claim:
+    assigneeField: linearAssignee
+---
+
+Hosted Linear intake poller.
+```
+
+Hosted-worker rules:
+
+- Use `auth.secretRef` for the provider API key. Inline secret values are not
+  part of the v1 contract.
+- OAuth-oriented fields such as `clientId`, `clientSecret`, `refreshToken`,
+  or token URLs are rejected in v1.
+- Provider-specific config lives on the worker, not on the workstation.
+- The current hosted Linear poller supports deterministic issue-to-work
+  mapping, bounded checkpointed resume behavior, team or issue-state filters,
+  and safe diagnostics that do not log secret material.
+
 ## Core Fields
 
 | Field | Applies to | What it controls |
 |-------|------------|------------------|
-| `type` | all workers | `MODEL_WORKER` or `SCRIPT_WORKER` |
+| `type` | all workers | `MODEL_WORKER`, `SCRIPT_WORKER`, or `HOSTED_WORKER` |
 | `model` | model workers | Concrete model identifier such as `gpt-5-codex` |
 | `modelProvider` | model workers | Model-routing provider identity used for provider selection and diagnostics |
 | `executorProvider` | model workers | Execution wrapper or adapter used to run the worker |
@@ -136,6 +177,9 @@ Runs the Go test suite.
 | `timeout` | all workers | Per-attempt worker timeout |
 | `stopToken` | model workers | Output marker for accepted completion when configured |
 | `skipPermissions` | model workers | Provider-specific permission shortcut |
+| `provider` | hosted workers | Built-in hosted integration provider. V1 supports `LINEAR`. |
+| `auth.secretRef` | hosted workers | Secret reference for provider authentication. |
+| `linear` | hosted workers | Provider-specific Linear poller configuration such as poll interval, filters, mapping, and optional claim settings. |
 
 ## Provider Fields
 
@@ -149,6 +193,28 @@ Keep `modelProvider` and `executorProvider` separate:
 For a normal model worker, both fields can appear on the same worker because
 they answer different questions: which model backend to use, and which worker
 execution adapter should run it.
+
+Hosted workers do not use `modelProvider` or `executorProvider` to reach
+provider APIs. Keep hosted provider identity under `provider`, keep
+authentication under `auth.secretRef`, and keep provider-specific polling
+settings under the provider block such as `linear`.
+
+## When To Use Script Versus Hosted Pollers
+
+- Use a `SCRIPT_WORKER` poller when you already own the external integration
+  logic and want the service to supervise that script as a poller sidecar.
+- Use a `HOSTED_WORKER` poller when the repository-owned provider code already
+  implements the integration and you want the public contract instead of a
+  subprocess dependency.
+- Use a hosted `LINEAR` worker when you need the built-in GraphQL client,
+  checkpointed resume behavior, and deterministic issue mapping without writing
+  custom script code.
+
+V1 non-goals for hosted workers:
+
+- OAuth flows are not supported.
+- Inline API key fields are not supported.
+- Providers other than `LINEAR` are not yet part of the public contract.
 
 Use `runner` when the operator needs to choose the execution family. Keep
 `modelProvider` for worker-local provider compatibility, diagnostics, and the

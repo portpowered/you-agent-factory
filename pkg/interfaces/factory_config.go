@@ -210,6 +210,8 @@ const (
 	WorkstationKindRepeater WorkstationKind = "repeater"
 	// WorkstationKindCron declares a timed trigger workstation.
 	WorkstationKindCron WorkstationKind = "cron"
+	// WorkstationKindPoller declares a long-lived ingress poller workstation.
+	WorkstationKindPoller WorkstationKind = "poller"
 )
 
 // GuardType identifies a built-in guard type in customer-facing config.

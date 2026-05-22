@@ -12,6 +12,9 @@ properties:
   type:
     $ref: './WorkerType.yaml'
     description: Worker implementation family to instantiate for this definition.
+  provider:
+    $ref: './HostedWorkerProvider.yaml'
+    description: Built-in hosted provider identity when this worker uses repository-owned hosted execution.
   model:
     type: string
     description: Model identifier to request from the configured model provider when this worker uses model execution.
@@ -43,6 +46,12 @@ properties:
   skipPermissions:
     type: boolean
     description: When true, bypasses permission checks for providers that support permission gating.
+  auth:
+    $ref: './HostedWorkerAuth.yaml'
+    description: Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef.
+  linear:
+    $ref: './HostedLinearWorkerConfig.yaml'
+    description: Provider-specific configuration for the built-in hosted LINEAR worker.
   body:
     type: string
     description: Inline worker instructions or script body when the worker is authored directly in factory config.

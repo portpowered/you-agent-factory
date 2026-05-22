@@ -2849,6 +2849,9 @@ components:
         type:
           $ref: '#/components/schemas/WorkerType'
           description: Worker implementation family to instantiate for this definition.
+        provider:
+          $ref: '#/components/schemas/HostedWorkerProvider'
+          description: Built-in hosted provider identity when this worker uses repository-owned hosted execution.
         model:
           type: string
           description: Model identifier to request from the configured model provider when this worker uses model execution.
@@ -2880,6 +2883,12 @@ components:
         skipPermissions:
           type: boolean
           description: When true, bypasses permission checks for providers that support permission gating.
+        auth:
+          $ref: '#/components/schemas/HostedWorkerAuth'
+          description: Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef.
+        linear:
+          $ref: '#/components/schemas/HostedLinearWorkerConfig'
+          description: Provider-specific configuration for the built-in hosted LINEAR worker.
         body:
           type: string
           description: Inline worker instructions or script body when the worker is authored directly in factory config.
@@ -2889,12 +2898,15 @@ components:
       x-enum-varnames:
         - WorkerTypeModelWorker
         - WorkerTypeScriptWorker
+        - WorkerTypeHostedWorker
       enum:
         - MODEL_WORKER
         - SCRIPT_WORKER
+        - HOSTED_WORKER
       x-enum-descriptions:
         - Model-backed worker that renders prompts and dispatches through the configured model provider.
         - Script-backed worker that executes a configured command instead of calling a model provider.
+        - Repository-owned hosted worker implementation selected by type-specific runtime code instead of a subprocess.
     WorkerModelProvider:
       type: string
       description: Canonical model-provider identifiers supported by model workers in factory config.
@@ -3078,19 +3090,22 @@ components:
     WorkstationKind:
       type: string
       default: STANDARD
-      description: Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
+      description: Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
       x-enum-varnames:
         - WorkstationKindStandard
         - WorkstationKindRepeater
         - WorkstationKindCron
+        - WorkstationKindPoller
       enum:
         - STANDARD
         - REPEATER
         - CRON
+        - POLLER
       x-enum-descriptions:
         - Schedules when its inputs are ready and emits configured outputs.
         - Re-runs when observed inputs change and can loop rejected work back to an earlier state.
         - Produces internal time work from a cron schedule and dispatches through the normal worker path when inputs are ready.
+        - Binds a poller-capable worker that emits canonical ingress work under service supervision.
     WorkstationType:
       type: string
       description: Runtime workstation implementation types supported by the public factory-config contract.
@@ -3583,3 +3598,63 @@ components:
         encrypted:
           type: boolean
           description: Whether the entry only exposed encrypted content instead of plaintext.
+    HostedWorkerProvider:
+      type: string
+      description: Built-in repository-owned hosted worker providers supported by the public factory-config contract.
+      x-enum-varnames:
+        - HostedWorkerProviderLinear
+      enum:
+        - LINEAR
+      x-enum-descriptions:
+        - Built-in hosted poller integration for the Linear GraphQL API.
+    HostedWorkerAuth:
+      description: Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields.
+      type: object
+      additionalProperties: false
+      properties:
+        secretRef:
+          type: string
+          description: Referenced secret name that resolves the hosted provider API key at runtime.
+    HostedLinearWorkerMapping:
+      description: Deterministic issue-to-work mapping fields owned by a hosted Linear worker.
+      type: object
+      additionalProperties: false
+      properties:
+        workType:
+          type: string
+          description: Canonical submitted work type emitted for matched Linear issues.
+        state:
+          type: string
+          description: Canonical submitted work state emitted for matched Linear issues.
+    HostedLinearWorkerClaim:
+      description: Optional claim-related configuration that v1 hosted Linear workers explicitly allow.
+      type: object
+      additionalProperties: false
+      properties:
+        assigneeField:
+          type: string
+          description: Linear issue field name to use when deriving optional assignee claim metadata.
+    HostedLinearWorkerConfig:
+      description: Provider-specific poller configuration for the built-in hosted Linear worker.
+      type: object
+      additionalProperties: false
+      properties:
+        pollInterval:
+          type: string
+          description: Optional Go duration that controls how often the hosted Linear worker polls for updates.
+        teamIds:
+          type: array
+          description: Optional Linear team identifiers that bound the poll source.
+          items:
+            type: string
+        stateIds:
+          type: array
+          description: Optional Linear issue-state identifiers that bound the poll source.
+          items:
+            type: string
+        mapping:
+          $ref: '#/components/schemas/HostedLinearWorkerMapping'
+          description: Deterministic mapping fields for canonical work submission generation.
+        claim:
+          $ref: '#/components/schemas/HostedLinearWorkerClaim'
+          description: Optional claim-related configuration that v1 hosted Linear polling allows.

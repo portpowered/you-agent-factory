@@ -406,8 +406,11 @@ export const FailureAnalysisEventReplaySmoke = {
     expect(
       failedSelection.getAllByText("provider_rate_limit").length,
     ).toBeGreaterThan(0);
+    const inferenceAttempts = failedSelection.getByRole("region", {
+      name: "Inference attempts",
+    });
     await userEvent.click(
-      failedSelection.getByRole("button", { name: "Expand" }),
+      within(inferenceAttempts).getByRole("button", { name: "Expand" }),
     );
     await expect(
       failedSelection.getByText(

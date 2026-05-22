@@ -138,6 +138,12 @@ function EditableConfigurationReadyForm({
           label={messages.workerFieldLabel}
         />
         <EditableConfigurationField
+          fieldId="editable-workstation-kind"
+          errorMessage={state.validationErrors.behavior}
+          input={<EditableConfigurationBehaviorInput state={state} />}
+          label={messages.kindLabel}
+        />
+        <EditableConfigurationField
           fieldId="editable-workstation-runner"
           input={<EditableConfigurationRunnerField messages={messages} state={state} />}
           label={messages.runnerFieldLabel}
@@ -301,6 +307,38 @@ function EditableConfigurationWorkerInput({
       {state.workerOptionsState.options.map((workerName) => (
         <option key={workerName} value={workerName}>
           {valueOrFallback(workerName, messages.notConfiguredValue)}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+function EditableConfigurationBehaviorInput({
+  state,
+}: {
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  return (
+    <Select
+      aria-describedby={
+        state.validationErrors.behavior
+          ? "editable-workstation-kind-error"
+          : undefined
+      }
+      aria-invalid={state.validationErrors.behavior ? "true" : undefined}
+      className={DASHBOARD_BODY_TEXT_CLASS}
+      id="editable-workstation-kind"
+      onChange={(event) =>
+        state.onBehaviorChange(event.target.value as typeof state.draft.behavior)
+      }
+      value={state.draft.behavior}
+    >
+      {state.initialValues.behaviorOptions.map((behavior) => (
+        <option key={behavior} value={behavior}>
+          {behavior}
         </option>
       ))}
     </Select>

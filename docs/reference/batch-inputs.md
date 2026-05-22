@@ -96,6 +96,59 @@ curl -X PUT "http://localhost:7437/work-requests/release-story-set" \
 
 The path `request_id` and body `request_id` must match.
 
+## Poller Stdout Contract
+
+Service-owned `POLLER` workstations submit work through the same canonical
+batch ingress path. A script-backed poller may write one JSON payload to
+stdout using either of these shapes:
+
+1. A canonical `FACTORY_REQUEST_BATCH` object.
+2. An object with `"submissions": [...]`, where each item uses the internal
+   submit-style record fields already used by the runtime.
+
+Examples:
+
+```json
+{
+  "requestId": "linear-issues-team-a-2026-05-22T07:00Z",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "issue-123",
+      "workTypeName": "task",
+      "payload": {
+        "externalId": "ISSUE-123"
+      }
+    }
+  ]
+}
+```
+
+```json
+{
+  "submissions": [
+    {
+      "requestId": "linear-issues-team-a-2026-05-22T07:00Z",
+      "workId": "issue-123",
+      "name": "issue-123",
+      "workTypeName": "task",
+      "traceId": "linear-issue-123"
+    }
+  ]
+}
+```
+
+Rules:
+
+- Poller output must carry a stable non-empty `requestId`. Reusing the same
+  `requestId` on a later poll is an idempotent no-op instead of creating
+  duplicate work.
+- Canonical batch output follows the same validation rules as watched-file and
+  API-submitted `FACTORY_REQUEST_BATCH` requests.
+- Raw factory event emission is not supported in poller stdout.
+- The current script poller runner captures stdout when the subprocess exits,
+  so a script poller should emit one complete batch payload per run.
+
 ## Where To Put Batch Files
 
 Watched input files use this layout:

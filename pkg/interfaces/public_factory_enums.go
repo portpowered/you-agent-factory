@@ -9,6 +9,7 @@ import (
 var publicFactoryWorkerTypeAliases = map[string]string{
 	WorkerTypeModel:  WorkerTypeModel,
 	WorkerTypeScript: WorkerTypeScript,
+	WorkerTypeHosted: WorkerTypeHosted,
 }
 
 var publicFactoryWorkerModelProviderAliases = map[string]string{
@@ -18,6 +19,10 @@ var publicFactoryWorkerModelProviderAliases = map[string]string{
 
 var publicFactoryWorkerProviderAliases = map[string]string{
 	publicFactoryWorkerProviderScriptWrap: publicFactoryWorkerProviderScriptWrap,
+}
+
+var publicFactoryHostedWorkerProviderAliases = map[string]string{
+	HostedWorkerProviderLinear: HostedWorkerProviderLinear,
 }
 
 var publicFactoryWorkstationTypeAliases = map[string]string{
@@ -133,6 +138,26 @@ func PermissivePublicFactoryWorkerProvider(value string) string {
 // StrictPublicFactoryWorkerProvider canonicalizes supported public worker providers and rejects unknown values.
 func StrictPublicFactoryWorkerProvider(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerProviderAliases, false)
+}
+
+// PermissivePublicFactoryHostedWorkerProvider canonicalizes supported hosted worker providers and preserves unknown values.
+func PermissivePublicFactoryHostedWorkerProvider(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryHostedWorkerProviderAliases, true)
+}
+
+// StrictPublicFactoryHostedWorkerProvider canonicalizes supported hosted worker providers and rejects unknown values.
+func StrictPublicFactoryHostedWorkerProvider(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryHostedWorkerProviderAliases, false)
+}
+
+// GeneratedPublicFactoryHostedWorkerProvider returns the generated hosted worker provider enum.
+func GeneratedPublicFactoryHostedWorkerProvider(value string) string {
+	return PermissivePublicFactoryHostedWorkerProvider(value)
+}
+
+// GeneratedPublicFactoryHostedWorkerProviderPtr returns the generated hosted worker provider enum when non-empty.
+func GeneratedPublicFactoryHostedWorkerProviderPtr(value string) *string {
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryHostedWorkerProvider)
 }
 
 // PermissivePublicFactoryWorkstationType canonicalizes supported public workstation types and preserves unknown values.

@@ -18,6 +18,7 @@ export interface FactoryGraphEditorMessages {
   addDialogFirstStateLabel: string;
   addDialogIdentifierHelp: string;
   addDialogIdentifierLabel: string;
+  addDialogKindLabel: string;
   addDialogModelHelp: string;
   addDialogModelLabel: string;
   addDialogPromptBodyHelp: string;
@@ -158,6 +159,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogIdentifierHelp:
         "Use the authored name the factory definition should save.",
       addDialogIdentifierLabel: "Identifier",
+      addDialogKindLabel: "Kind",
       addDialogModelHelp:
         "The model identifier saved on the new `MODEL_WORKER`.",
       addDialogModelLabel: "Model",
@@ -260,6 +262,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogFirstStateLabel: "首个状态",
       addDialogIdentifierHelp: "使用应保存到工厂定义中的已编写名称。",
       addDialogIdentifierLabel: "标识符",
+      addDialogKindLabel: "类型",
       addDialogModelHelp: "将保存到新 `MODEL_WORKER` 上的模型标识符。",
       addDialogModelLabel: "模型",
       addDialogPromptBodyHelp: "工作站正文的可选提示内容。",

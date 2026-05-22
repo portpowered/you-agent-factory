@@ -1,0 +1,7 @@
+description: Optional claim-related configuration that v1 hosted Linear workers explicitly allow.
+type: object
+additionalProperties: false
+properties:
+  assigneeField:
+    type: string
+    description: Linear issue field name to use when deriving optional assignee claim metadata.
