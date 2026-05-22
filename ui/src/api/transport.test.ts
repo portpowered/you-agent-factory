@@ -98,4 +98,37 @@ describe("API transport helper", () => {
       ],
     });
   });
+
+  it("preserves valid structured targets from mixed target arrays", () => {
+    const payload = extractAPIErrorPayload(
+      {
+        code: "BAD_REQUEST",
+        message: "The request was invalid.",
+        targets: [
+          {
+            kind: "field",
+            path: "factory.name",
+          },
+          "invalid-target-entry",
+        ],
+      },
+      {
+        isTarget: (value): value is { kind: string; path: string } =>
+          isAPIRecord(value) &&
+          typeof value.kind === "string" &&
+          typeof value.path === "string",
+      },
+    );
+
+    expect(payload).toEqual({
+      code: "BAD_REQUEST",
+      message: "The request was invalid.",
+      targets: [
+        {
+          kind: "field",
+          path: "factory.name",
+        },
+      ],
+    });
+  });
 });

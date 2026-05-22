@@ -62,5 +62,6 @@ function readAPIErrorTargets<TTarget>(
     return value as TTarget[];
   }
 
-  return value.every((entry) => isTarget(entry)) ? value : undefined;
+  const targets = value.filter((entry): entry is TTarget => isTarget(entry));
+  return targets.length > 0 ? targets : undefined;
 }
