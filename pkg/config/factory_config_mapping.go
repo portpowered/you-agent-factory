@@ -377,7 +377,9 @@ func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.W
 		Command:          stringPtrIfNotEmpty(def.Command),
 		Model:            stringPtrIfNotEmpty(def.Model),
 		ModelProvider:    workerModelProviderPtrIfNotEmpty(def.ModelProvider),
+		ModelLocality:    workerModelLocalityPtrIfNotEmpty(def.ModelLocality),
 		ExecutorProvider: workerProviderPtrIfNotEmpty(def.ExecutorProvider),
+		Operations:       modelOperationsAPIFromInternal(def.Operations),
 		Resources:        resourceRequirementsAPIFromInternal(def.Resources),
 		SkipPermissions:  boolPtrIfTrue(def.SkipPermissions),
 		StopToken:        stringPtrIfNotEmpty(def.StopToken),
@@ -389,6 +391,47 @@ func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.W
 // OpenAPI worker model.
 func WorkerConfigToOpenAPI(worker interfaces.WorkerConfig) factoryapi.Worker {
 	return *workerDefinitionAPIFromInternal(&worker)
+}
+
+func modelOperationsAPIFromInternal(operations []interfaces.ModelOperation) *[]factoryapi.ModelOperation {
+	if len(operations) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.ModelOperation, len(operations))
+	for i, operation := range operations {
+		values[i] = factoryapi.ModelOperation{
+			Name:    operation.Name,
+			Inputs:  modelOperationSlotsAPIFromInternal(operation.Inputs),
+			Outputs: modelOperationSlotsAPIFromInternal(operation.Outputs),
+		}
+	}
+	return &values
+}
+
+func modelOperationSlotsAPIFromInternal(slots []interfaces.ModelOperationSlot) *[]factoryapi.ModelOperationSlot {
+	if len(slots) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.ModelOperationSlot, len(slots))
+	for i, slot := range slots {
+		values[i] = factoryapi.ModelOperationSlot{
+			Name:         slot.Name,
+			ContentTypes: modelOperationContentTypesAPIFromInternal(slot.ContentTypes),
+			Required:     boolPtrIfTrue(slot.Required),
+		}
+	}
+	return &values
+}
+
+func modelOperationContentTypesAPIFromInternal(contentTypes []string) []factoryapi.ModelOperationContentType {
+	if len(contentTypes) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.ModelOperationContentType, len(contentTypes))
+	for i, contentType := range contentTypes {
+		values[i] = publicFactoryModelOperationContentTypeFromInternal(contentType)
+	}
+	return values
 }
 
 func mergeCanonicalStopWords(base []string, extra []string) []string {
@@ -547,6 +590,14 @@ func workerModelProviderPtrIfNotEmpty(value string) *factoryapi.WorkerModelProvi
 		return nil
 	}
 	enumValue := publicFactoryWorkerModelProviderFromInternal(value)
+	return &enumValue
+}
+
+func workerModelLocalityPtrIfNotEmpty(value string) *factoryapi.WorkerModelLocality {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	enumValue := publicFactoryWorkerModelLocalityFromInternal(value)
 	return &enumValue
 }
 

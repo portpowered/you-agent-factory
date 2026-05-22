@@ -1,0 +1,20 @@
+type: string
+description: Uppercase content-part categories supported by worker model-operation capability slots.
+x-enum-varnames:
+  - ModelOperationContentTypeText
+  - ModelOperationContentTypeImage
+  - ModelOperationContentTypeAudio
+  - ModelOperationContentTypeJSON
+  - ModelOperationContentTypeBinary
+enum:
+  - TEXT
+  - IMAGE
+  - AUDIO
+  - JSON
+  - BINARY
+x-enum-descriptions:
+  - Textual content.
+  - Image content.
+  - Audio content.
+  - Structured JSON content.
+  - Opaque binary content.

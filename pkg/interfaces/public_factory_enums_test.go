@@ -40,6 +40,22 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 			strict:     StrictPublicFactoryWorkerProvider,
 		},
 		{
+			name:       "worker model locality",
+			alias:      "LOCAL",
+			unknown:    "edge",
+			want:       ModelLocalityLocal,
+			permissive: PermissivePublicFactoryWorkerModelLocality,
+			strict:     StrictPublicFactoryWorkerModelLocality,
+		},
+		{
+			name:       "worker operation content type",
+			alias:      "AUDIO",
+			unknown:    "sound",
+			want:       ModelOperationContentTypeAudio,
+			permissive: PermissivePublicFactoryWorkerModelOperationContentType,
+			strict:     StrictPublicFactoryWorkerModelOperationContentType,
+		},
+		{
 			name:       "workstation type",
 			alias:      "LOGICAL_MOVE",
 			unknown:    "CUSTOM_WORKSTATION",
@@ -93,11 +109,23 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	if got := GeneratedPublicFactoryWorkerProvider("  local-claude  "); got != factoryapi.WorkerProvider("SCRIPT_WRAP") {
 		t.Fatalf("worker provider = %q, want SCRIPT_WRAP from internal local-claude alias", got)
 	}
+	if got := GeneratedPublicFactoryWorkerModelLocality("  LOCAL  "); got != factoryapi.WorkerModelLocality("LOCAL") {
+		t.Fatalf("worker model locality = %q, want LOCAL", got)
+	}
+	if got := GeneratedPublicFactoryWorkerModelOperationContentType("  AUDIO  "); got != factoryapi.ModelOperationContentType("AUDIO") {
+		t.Fatalf("worker operation content type = %q, want AUDIO", got)
+	}
 	if got := GeneratedPublicFactoryWorkerModelProvider("  mystery-provider  "); got != factoryapi.WorkerModelProvider("mystery-provider") {
 		t.Fatalf("worker model provider = %q, want trimmed unknown to round-trip", got)
 	}
 	if got := GeneratedPublicFactoryWorkerProvider("  custom-executor  "); got != factoryapi.WorkerProvider("custom-executor") {
 		t.Fatalf("worker provider = %q, want trimmed unknown to round-trip", got)
+	}
+	if got := GeneratedPublicFactoryWorkerModelLocality("  edge  "); got != factoryapi.WorkerModelLocality("edge") {
+		t.Fatalf("worker model locality = %q, want trimmed unknown to round-trip", got)
+	}
+	if got := GeneratedPublicFactoryWorkerModelOperationContentType("  sound  "); got != factoryapi.ModelOperationContentType("sound") {
+		t.Fatalf("worker operation content type = %q, want trimmed unknown to round-trip", got)
 	}
 	if got := GeneratedPublicFactoryWorkstationType("  CUSTOM_WORKSTATION  "); got != factoryapi.WorkstationType("CUSTOM_WORKSTATION") {
 		t.Fatalf("workstation type = %q, want trimmed unknown to round-trip", got)
@@ -176,6 +204,22 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 			ptr:           generatedPublicFactoryWorkerProviderStringPtr,
 		},
 		{
+			name:          "worker model locality",
+			supported:     "  LOCAL  ",
+			wantSupported: "LOCAL",
+			unknown:       "  edge  ",
+			wantUnknown:   "edge",
+			ptr:           generatedPublicFactoryWorkerModelLocalityStringPtr,
+		},
+		{
+			name:          "worker operation content type",
+			supported:     "  AUDIO  ",
+			wantSupported: "AUDIO",
+			unknown:       "  sound  ",
+			wantUnknown:   "sound",
+			ptr:           generatedPublicFactoryWorkerModelOperationContentTypeStringPtr,
+		},
+		{
 			name:          "workstation type",
 			supported:     "  LOGICAL_MOVE  ",
 			wantSupported: "LOGICAL_MOVE",
@@ -212,6 +256,14 @@ func generatedPublicFactoryWorkerModelProviderStringPtr(value string) *string {
 
 func generatedPublicFactoryWorkerProviderStringPtr(value string) *string {
 	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryWorkerProviderPtr(value))
+}
+
+func generatedPublicFactoryWorkerModelLocalityStringPtr(value string) *string {
+	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryWorkerModelLocalityPtr(value))
+}
+
+func generatedPublicFactoryWorkerModelOperationContentTypeStringPtr(value string) *string {
+	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryWorkerModelOperationContentTypePtr(value))
 }
 
 func generatedPublicFactoryWorkstationTypeStringPtr(value string) *string {

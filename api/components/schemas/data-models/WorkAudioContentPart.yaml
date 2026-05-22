@@ -1,4 +1,4 @@
-description: Ordered image content for one work item.
+description: Ordered audio content for one work item.
 allOf:
   - $ref: './WorkContentCommonFields.yaml'
   - type: object
@@ -11,9 +11,8 @@ allOf:
         allOf:
           - $ref: './WorkContentPartType.yaml'
         enum:
-          - image
-          - IMAGE
+          - AUDIO
       file:
         type: string
         minLength: 1
-        description: Image file reference preserved for later runtime materialization.
+        description: Audio file or artifact reference preserved for later runtime materialization.

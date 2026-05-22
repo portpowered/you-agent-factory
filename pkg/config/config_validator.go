@@ -132,6 +132,7 @@ func NewConfigValidator(opts ...ConfigValidatorOption) *ConfigValidator {
 		ruleGuards,
 		ruleWorkstationKind,
 		ruleCronWorkstations,
+		ruleWorkerModelOperations,
 		ruleWorkerReferences,
 		rulePerInputGuards,
 		ruleResourceUsage,

@@ -233,12 +233,108 @@ func normalizeFactoryWorkerEntries(root map[string]any) error {
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "modelProvider", fmt.Sprintf("workers[%d].modelProvider", i), interfaces.StrictPublicFactoryWorkerModelProvider); err != nil {
 			return err
 		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "modelLocality", fmt.Sprintf("workers[%d].modelLocality", i), interfaces.StrictPublicFactoryWorkerModelLocality); err != nil {
+			return err
+		}
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "executorProvider", fmt.Sprintf("workers[%d].executorProvider", i), interfaces.StrictPublicFactoryWorkerProvider); err != nil {
+			return err
+		}
+		if err := normalizeFactoryWorkerOperationEntries(worker, i); err != nil {
 			return err
 		}
 		normalizeRuntimeResourceRequirements(worker, "resources")
 	}
 	return nil
+}
+
+func normalizeFactoryWorkerOperationEntries(worker map[string]any, workerIndex int) error {
+	operations, ok := worker["operations"].([]any)
+	if !ok {
+		return nil
+	}
+	for operationIndex, operationAny := range operations {
+		operation, ok := operationAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryModelOperationName(operation, "name", fmt.Sprintf("workers[%d].operations[%d].name", workerIndex, operationIndex)); err != nil {
+			return err
+		}
+		if err := normalizeFactoryModelOperationSlots(operation, "inputs", fmt.Sprintf("workers[%d].operations[%d].inputs", workerIndex, operationIndex)); err != nil {
+			return err
+		}
+		if err := normalizeFactoryModelOperationSlots(operation, "outputs", fmt.Sprintf("workers[%d].operations[%d].outputs", workerIndex, operationIndex)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeFactoryModelOperationSlots(operation map[string]any, key string, fieldPath string) error {
+	slots, ok := operation[key].([]any)
+	if !ok {
+		return nil
+	}
+	for slotIndex, slotAny := range slots {
+		slot, ok := slotAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		contentTypes, ok := slot["contentTypes"].([]any)
+		if !ok {
+			continue
+		}
+		for contentTypeIndex, contentTypeAny := range contentTypes {
+			contentType, ok := contentTypeAny.(string)
+			if !ok {
+				continue
+			}
+			canonical := interfaces.StrictPublicFactoryWorkerModelOperationContentType(contentType)
+			if canonical == "" {
+				return fmt.Errorf("%s[%d].contentTypes[%d]: unsupported value %q", fieldPath, slotIndex, contentTypeIndex, contentType)
+			}
+			contentTypes[contentTypeIndex] = canonical
+		}
+		slot["contentTypes"] = contentTypes
+	}
+	return nil
+}
+
+func normalizeFactoryModelOperationName(container map[string]any, key string, fieldPath string) error {
+	raw, ok := container[key]
+	if !ok {
+		return nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return nil
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		container[key] = ""
+		return nil
+	}
+	if !isUppercaseOperationIdentifier(trimmed) {
+		return fmt.Errorf("%s: unsupported value %q", fieldPath, value)
+	}
+	container[key] = trimmed
+	return nil
+}
+
+func isUppercaseOperationIdentifier(value string) bool {
+	for i, r := range value {
+		if r >= 'A' && r <= 'Z' {
+			continue
+		}
+		if i > 0 && r >= '0' && r <= '9' {
+			continue
+		}
+		if i > 0 && r == '_' {
+			continue
+		}
+		return false
+	}
+	return value != ""
 }
 
 func normalizeFactoryWorkstationEntries(root map[string]any) error {

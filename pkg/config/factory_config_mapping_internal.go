@@ -152,7 +152,9 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
 		Type:             internalFactoryWorkerTypeFromPublic(valueOrEmpty(worker.Type)),
 		Model:            stringValue(worker.Model),
 		ModelProvider:    internalFactoryWorkerModelProviderFromPublic(worker.ModelProvider),
+		ModelLocality:    internalFactoryWorkerModelLocalityFromPublic(worker.ModelLocality),
 		ExecutorProvider: internalFactoryWorkerProviderFromPublic(worker.ExecutorProvider),
+		Operations:       modelOperationsInternalFromAPI(worker.Operations),
 		Command:          stringValue(worker.Command),
 		Args:             stringSliceValue(worker.Args),
 		Resources:        resourceRequirementsInternalFromAPI(worker.Resources),
@@ -161,6 +163,47 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
 		SkipPermissions:  boolValue(worker.SkipPermissions),
 		Body:             stringValue(worker.Body),
 	}
+}
+
+func modelOperationsInternalFromAPI(operations *[]factoryapi.ModelOperation) []interfaces.ModelOperation {
+	if operations == nil {
+		return nil
+	}
+	values := make([]interfaces.ModelOperation, len(*operations))
+	for i, operation := range *operations {
+		values[i] = interfaces.ModelOperation{
+			Name:    operation.Name,
+			Inputs:  modelOperationSlotsInternalFromAPI(operation.Inputs),
+			Outputs: modelOperationSlotsInternalFromAPI(operation.Outputs),
+		}
+	}
+	return values
+}
+
+func modelOperationSlotsInternalFromAPI(slots *[]factoryapi.ModelOperationSlot) []interfaces.ModelOperationSlot {
+	if slots == nil {
+		return nil
+	}
+	values := make([]interfaces.ModelOperationSlot, len(*slots))
+	for i, slot := range *slots {
+		values[i] = interfaces.ModelOperationSlot{
+			Name:         slot.Name,
+			ContentTypes: modelOperationContentTypesInternalFromAPI(slot.ContentTypes),
+			Required:     boolValue(slot.Required),
+		}
+	}
+	return values
+}
+
+func modelOperationContentTypesInternalFromAPI(contentTypes []factoryapi.ModelOperationContentType) []string {
+	if len(contentTypes) == 0 {
+		return nil
+	}
+	values := make([]string, len(contentTypes))
+	for i, contentType := range contentTypes {
+		values[i] = internalFactoryModelOperationContentTypeFromPublic(contentType)
+	}
+	return values
 }
 
 // WorkerConfigFromOpenAPI converts a generated OpenAPI worker model into the

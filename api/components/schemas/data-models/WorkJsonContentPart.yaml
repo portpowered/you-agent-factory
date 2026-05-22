@@ -1,18 +1,16 @@
-description: Ordered inline text content for one work item.
+description: Ordered JSON content for one work item.
 allOf:
   - $ref: './WorkContentCommonFields.yaml'
   - type: object
     additionalProperties: false
     required:
       - type
-      - text
+      - json
     properties:
       type:
         allOf:
           - $ref: './WorkContentPartType.yaml'
         enum:
-          - text
-          - TEXT
-      text:
-        type: string
-        description: Inline text content preserved in canonical part order.
+          - JSON
+      json:
+        description: Arbitrary JSON value preserved in canonical part order.

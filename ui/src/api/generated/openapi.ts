@@ -1441,8 +1441,12 @@ export interface components {
             model?: string;
             /** @description Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs. */
             modelProvider?: components["schemas"]["WorkerModelProvider"];
+            /** @description Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution. */
+            modelLocality?: components["schemas"]["WorkerModelLocality"];
             /** @description Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`. */
             executorProvider?: components["schemas"]["WorkerProvider"];
+            /** @description Provider-agnostic model operations that this worker can execute, including named input and output slots. */
+            operations?: components["schemas"]["ModelOperation"][];
             /** @description Command to execute when this worker runs through a command or script provider. */
             command?: string;
             /** @description Additional command arguments passed to the configured command. */
@@ -1469,10 +1473,38 @@ export interface components {
          */
         WorkerModelProvider: "CLAUDE" | "CODEX";
         /**
+         * @description Provider locality for a model worker capability declaration.
+         * @enum {string}
+         */
+        WorkerModelLocality: "LOCAL" | "CLOUD";
+        /**
          * @description Concrete worker-provider wrappers supported by the public factory-config contract.
          * @enum {string}
          */
         WorkerProvider: "SCRIPT_WRAP";
+        /** @description One provider-agnostic operation exposed by a model worker, such as `TTS`. */
+        ModelOperation: {
+            /** @description Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`. */
+            name: string;
+            /** @description Named operation input slots this worker can consume. */
+            inputs?: components["schemas"]["ModelOperationSlot"][];
+            /** @description Named operation output slots this worker can produce. */
+            outputs?: components["schemas"]["ModelOperationSlot"][];
+        };
+        /** @description One named capability slot declared by a model operation. */
+        ModelOperationSlot: {
+            /** @description Stable slot name used by workstation-side bindings and diagnostics. */
+            name: string;
+            /** @description Uppercase content types accepted or produced by this slot. */
+            contentTypes: components["schemas"]["ModelOperationContentType"][];
+            /** @description Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed. */
+            required?: boolean;
+        };
+        /**
+         * @description Uppercase content-part categories supported by worker model-operation capability slots.
+         * @enum {string}
+         */
+        ModelOperationContentType: "TEXT" | "IMAGE" | "AUDIO" | "JSON" | "BINARY";
         /**
          * @description Stable built-in runner identifiers supported by factory and workstation runner selection.
          * @enum {string}
@@ -1709,24 +1741,60 @@ export interface components {
         /** @description Ordered canonical content parts for one work item. */
         WorkContent: components["schemas"]["WorkContentPart"][];
         /** @description One ordered canonical content part on a work item. */
-        WorkContentPart: components["schemas"]["WorkTextContentPart"] | components["schemas"]["WorkImageContentPart"];
+        WorkContentPart: components["schemas"]["WorkTextContentPart"] | components["schemas"]["WorkImageContentPart"] | components["schemas"]["WorkAudioContentPart"] | components["schemas"]["WorkJsonContentPart"] | components["schemas"]["WorkBinaryContentPart"];
         /**
-         * @description Supported first-slice canonical work content part types.
+         * @description Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
          * @enum {string}
          */
-        WorkContentPartType: "text" | "image";
+        WorkContentPartType: "text" | "image" | "TEXT" | "IMAGE" | "AUDIO" | "JSON" | "BINARY";
+        /** @description Optional metadata attached to one work content part. */
+        WorkContentMetadata: {
+            [key: string]: unknown;
+        };
+        WorkContentCommonFields: {
+            /** @description Optional caller-defined label for slot binding or diagnostics. */
+            label?: string;
+            /** @description Optional semantic role for model-operation authoring. */
+            role?: string;
+            /** @description Optional MIME content type for file-backed or structured parts. */
+            contentType?: string;
+            /** @description Optional artifact identifier for externally materialized content. */
+            artifactId?: string;
+            metadata?: components["schemas"]["WorkContentMetadata"];
+        };
         /** @description Ordered inline text content for one work item. */
-        WorkTextContentPart: {
+        WorkTextContentPart: components["schemas"]["WorkContentCommonFields"] & {
             /** @enum {unknown} */
-            type: "text";
+            type: "text" | "TEXT";
             /** @description Inline text content preserved in canonical part order. */
             text: string;
         };
         /** @description Ordered image content for one work item. */
-        WorkImageContentPart: {
+        WorkImageContentPart: components["schemas"]["WorkContentCommonFields"] & {
             /** @enum {unknown} */
-            type: "image";
+            type: "image" | "IMAGE";
             /** @description Image file reference preserved for later runtime materialization. */
+            file: string;
+        };
+        /** @description Ordered audio content for one work item. */
+        WorkAudioContentPart: components["schemas"]["WorkContentCommonFields"] & {
+            /** @enum {unknown} */
+            type: "AUDIO";
+            /** @description Audio file or artifact reference preserved for later runtime materialization. */
+            file: string;
+        };
+        /** @description Ordered JSON content for one work item. */
+        WorkJsonContentPart: components["schemas"]["WorkContentCommonFields"] & {
+            /** @enum {unknown} */
+            type: "JSON";
+            /** @description Arbitrary JSON value preserved in canonical part order. */
+            json: unknown;
+        };
+        /** @description Ordered binary content for one work item. */
+        WorkBinaryContentPart: components["schemas"]["WorkContentCommonFields"] & {
+            /** @enum {unknown} */
+            type: "BINARY";
+            /** @description Binary file or artifact reference preserved for later runtime materialization. */
             file: string;
         };
         Relation: {

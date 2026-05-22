@@ -1042,8 +1042,16 @@ components:
       $ref: './components/schemas/data-models/WorkerType.yaml'
     WorkerModelProvider:
       $ref: './components/schemas/data-models/WorkerModelProvider.yaml'
+    WorkerModelLocality:
+      $ref: './components/schemas/data-models/WorkerModelLocality.yaml'
     WorkerProvider:
       $ref: './components/schemas/data-models/WorkerProvider.yaml'
+    ModelOperation:
+      $ref: './components/schemas/data-models/ModelOperation.yaml'
+    ModelOperationSlot:
+      $ref: './components/schemas/data-models/ModelOperationSlot.yaml'
+    ModelOperationContentType:
+      $ref: './components/schemas/data-models/ModelOperationContentType.yaml'
     RunnerID:
       $ref: './components/schemas/data-models/RunnerID.yaml'
     RunnerSelectionSource:
@@ -1093,10 +1101,20 @@ components:
       $ref: './components/schemas/data-models/WorkContentPart.yaml'
     WorkContentPartType:
       $ref: './components/schemas/data-models/WorkContentPartType.yaml'
+    WorkContentMetadata:
+      $ref: './components/schemas/data-models/WorkContentMetadata.yaml'
+    WorkContentCommonFields:
+      $ref: './components/schemas/data-models/WorkContentCommonFields.yaml'
     WorkTextContentPart:
       $ref: './components/schemas/data-models/WorkTextContentPart.yaml'
     WorkImageContentPart:
       $ref: './components/schemas/data-models/WorkImageContentPart.yaml'
+    WorkAudioContentPart:
+      $ref: './components/schemas/data-models/WorkAudioContentPart.yaml'
+    WorkJsonContentPart:
+      $ref: './components/schemas/data-models/WorkJsonContentPart.yaml'
+    WorkBinaryContentPart:
+      $ref: './components/schemas/data-models/WorkBinaryContentPart.yaml'
     Relation:
       $ref: './components/schemas/data-models/Relation.yaml'
     RelationType:

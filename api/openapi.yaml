@@ -2851,9 +2851,17 @@ components:
         modelProvider:
           $ref: '#/components/schemas/WorkerModelProvider'
           description: Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
+        modelLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+          description: Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
         executorProvider:
           $ref: '#/components/schemas/WorkerProvider'
           description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
+        operations:
+          type: array
+          description: Provider-agnostic model operations that this worker can execute, including named input and output slots.
+          items:
+            $ref: '#/components/schemas/ModelOperation'
         command:
           type: string
           description: Command to execute when this worker runs through a command or script provider.
@@ -2903,6 +2911,18 @@ components:
       x-enum-descriptions:
         - Claude model execution routed through the `claude` provider command.
         - Codex model execution routed through the `codex` provider command.
+    WorkerModelLocality:
+      type: string
+      description: Provider locality for a model worker capability declaration.
+      x-enum-varnames:
+        - WorkerModelLocalityLocal
+        - WorkerModelLocalityCloud
+      enum:
+        - LOCAL
+        - CLOUD
+      x-enum-descriptions:
+        - The model runs through local embedded or host-managed inference resources.
+        - The model runs through a remote cloud-backed provider.
     WorkerProvider:
       type: string
       description: Concrete worker-provider wrappers supported by the public factory-config contract.
@@ -2912,6 +2932,67 @@ components:
         - SCRIPT_WRAP
       x-enum-descriptions:
         - Public worker executor adapter that shells out through the configured worker command path.
+    ModelOperation:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      description: One provider-agnostic operation exposed by a model worker, such as `TTS`.
+      properties:
+        name:
+          type: string
+          description: Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+        inputs:
+          type: array
+          description: Named operation input slots this worker can consume.
+          items:
+            $ref: '#/components/schemas/ModelOperationSlot'
+        outputs:
+          type: array
+          description: Named operation output slots this worker can produce.
+          items:
+            $ref: '#/components/schemas/ModelOperationSlot'
+    ModelOperationSlot:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - contentTypes
+      description: One named capability slot declared by a model operation.
+      properties:
+        name:
+          type: string
+          description: Stable slot name used by workstation-side bindings and diagnostics.
+        contentTypes:
+          type: array
+          minItems: 1
+          description: Uppercase content types accepted or produced by this slot.
+          items:
+            $ref: '#/components/schemas/ModelOperationContentType'
+        required:
+          type: boolean
+          description: Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
+    ModelOperationContentType:
+      type: string
+      description: Uppercase content-part categories supported by worker model-operation capability slots.
+      x-enum-varnames:
+        - ModelOperationContentTypeText
+        - ModelOperationContentTypeImage
+        - ModelOperationContentTypeAudio
+        - ModelOperationContentTypeJSON
+        - ModelOperationContentTypeBinary
+      enum:
+        - TEXT
+        - IMAGE
+        - AUDIO
+        - JSON
+        - BINARY
+      x-enum-descriptions:
+        - Textual content.
+        - Image content.
+        - Audio content.
+        - Structured JSON content.
+        - Opaque binary content.
     RunnerID:
       type: string
       description: Stable built-in runner identifiers supported by factory and workstation runner selection.

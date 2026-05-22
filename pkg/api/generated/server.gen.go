@@ -146,6 +146,15 @@ const (
 	Codex LoadableProviderSessionProvider = "codex"
 )
 
+// Defines values for ModelOperationContentType.
+const (
+	ModelOperationContentTypeAudio  ModelOperationContentType = "AUDIO"
+	ModelOperationContentTypeBinary ModelOperationContentType = "BINARY"
+	ModelOperationContentTypeImage  ModelOperationContentType = "IMAGE"
+	ModelOperationContentTypeJSON   ModelOperationContentType = "JSON"
+	ModelOperationContentTypeText   ModelOperationContentType = "TEXT"
+)
+
 // Defines values for PromptTemplateDiagnosticKind.
 const (
 	INVALIDVARIABLE     PromptTemplateDiagnosticKind = "INVALID_VARIABLE"
@@ -230,6 +239,12 @@ const (
 	WorkStateTypeINITIAL    WorkStateType = "INITIAL"
 	WorkStateTypePROCESSING WorkStateType = "PROCESSING"
 	WorkStateTypeTERMINAL   WorkStateType = "TERMINAL"
+)
+
+// Defines values for WorkerModelLocality.
+const (
+	WorkerModelLocalityCloud WorkerModelLocality = "CLOUD"
+	WorkerModelLocalityLocal WorkerModelLocality = "LOCAL"
 )
 
 // Defines values for WorkerModelProvider.
@@ -1071,6 +1086,33 @@ type LoadableProviderSessionRef struct {
 	Provider LoadableProviderSessionProvider `json:"provider"`
 }
 
+// ModelOperation One provider-agnostic operation exposed by a model worker, such as `TTS`.
+type ModelOperation struct {
+	// Inputs Named operation input slots this worker can consume.
+	Inputs *[]ModelOperationSlot `json:"inputs,omitempty"`
+
+	// Name Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+	Name string `json:"name"`
+
+	// Outputs Named operation output slots this worker can produce.
+	Outputs *[]ModelOperationSlot `json:"outputs,omitempty"`
+}
+
+// ModelOperationContentType Uppercase content-part categories supported by worker model-operation capability slots.
+type ModelOperationContentType string
+
+// ModelOperationSlot One named capability slot declared by a model operation.
+type ModelOperationSlot struct {
+	// ContentTypes Uppercase content types accepted or produced by this slot.
+	ContentTypes []ModelOperationContentType `json:"contentTypes"`
+
+	// Name Stable slot name used by workstation-side bindings and diagnostics.
+	Name string `json:"name"`
+
+	// Required Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
+	Required *bool `json:"required,omitempty"`
+}
+
 // OpenFactorySessionRequest defines model for OpenFactorySessionRequest.
 type OpenFactorySessionRequest struct {
 	FolderPath string                   `json:"folderPath"`
@@ -1765,11 +1807,17 @@ type Worker struct {
 	// Model Model identifier to request from the configured model provider when this worker uses model execution.
 	Model *string `json:"model,omitempty"`
 
+	// ModelLocality Provider locality for a model worker capability declaration.
+	ModelLocality *WorkerModelLocality `json:"modelLocality,omitempty"`
+
 	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
 	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
 	// Name Worker name referenced by Workstation.worker.
 	Name string `json:"name"`
+
+	// Operations Provider-agnostic model operations that this worker can execute, including named input and output slots.
+	Operations *[]ModelOperation `json:"operations,omitempty"`
 
 	// Resources Resource capacity this worker requires before it can be dispatched.
 	Resources *[]ResourceRequirement `json:"resources,omitempty"`
@@ -1786,6 +1834,9 @@ type Worker struct {
 	// Type Worker implementation families supported by the public factory-config contract.
 	Type *WorkerType `json:"type,omitempty"`
 }
+
+// WorkerModelLocality Provider locality for a model worker capability declaration.
+type WorkerModelLocality string
 
 // WorkerModelProvider Canonical model-provider identifiers supported by model workers in factory config.
 type WorkerModelProvider string

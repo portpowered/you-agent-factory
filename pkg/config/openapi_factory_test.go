@@ -649,6 +649,57 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 			}`,
 		},
 		{
+			name:      "worker model locality",
+			fieldPath: "workers[0].modelLocality",
+			value:     "local",
+			payload: `{
+				"name":"worker-model-locality-factory",
+				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+				"workers": [{"name":"executor","type":"MODEL_WORKER","modelLocality":"local"}],
+				"workstations": [{
+					"name":"execute-story",
+					"worker":"executor",
+					"type":"MODEL_WORKSTATION",
+					"inputs":[{"workType":"story","state":"init"}],
+					"outputs":[{"workType":"story","state":"complete"}]
+				}]
+			}`,
+		},
+		{
+			name:      "worker operation name",
+			fieldPath: "workers[0].operations[0].name",
+			value:     "tts",
+			payload: `{
+				"name":"worker-operation-name-factory",
+				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+				"workers": [{"name":"executor","type":"MODEL_WORKER","operations":[{"name":"tts","outputs":[{"name":"audio","contentTypes":["AUDIO"]}]}]}],
+				"workstations": [{
+					"name":"execute-story",
+					"worker":"executor",
+					"type":"MODEL_WORKSTATION",
+					"inputs":[{"workType":"story","state":"init"}],
+					"outputs":[{"workType":"story","state":"complete"}]
+				}]
+			}`,
+		},
+		{
+			name:      "worker operation content type",
+			fieldPath: "workers[0].operations[0].outputs[0].contentTypes[0]",
+			value:     "audio",
+			payload: `{
+				"name":"worker-operation-content-type-factory",
+				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+				"workers": [{"name":"executor","type":"MODEL_WORKER","operations":[{"name":"TTS","outputs":[{"name":"audio","contentTypes":["audio"]}]}]}],
+				"workstations": [{
+					"name":"execute-story",
+					"worker":"executor",
+					"type":"MODEL_WORKSTATION",
+					"inputs":[{"workType":"story","state":"init"}],
+					"outputs":[{"workType":"story","state":"complete"}]
+				}]
+			}`,
+		},
+		{
 			name:      "workstation behavior",
 			fieldPath: "workstations[0].behavior",
 			value:     "cron",
@@ -712,6 +763,12 @@ func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBo
 			"name":"executor",
 			"type":"MODEL_WORKER",
 			"modelProvider":"CODEX",
+			"modelLocality":"LOCAL",
+			"operations":[{
+				"name":"TTS",
+				"inputs":[{"name":"text","contentTypes":["TEXT"],"required":true}],
+				"outputs":[{"name":"audio","contentTypes":["AUDIO"]}]
+			}],
 			"executorProvider":"SCRIPT_WRAP"
 		}],
 		"workstations": [{
@@ -735,8 +792,14 @@ func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBo
 	if worker.ModelProvider == nil || *worker.ModelProvider != factoryapi.WorkerModelProviderCodex {
 		t.Fatalf("expected generated worker modelProvider CODEX, got %#v", worker.ModelProvider)
 	}
+	if worker.ModelLocality == nil || *worker.ModelLocality != factoryapi.WorkerModelLocalityLocal {
+		t.Fatalf("expected generated worker modelLocality LOCAL, got %#v", worker.ModelLocality)
+	}
 	if worker.ExecutorProvider == nil || *worker.ExecutorProvider != factoryapi.WorkerProviderScriptWrap {
 		t.Fatalf("expected generated worker executorProvider SCRIPT_WRAP, got %#v", worker.ExecutorProvider)
+	}
+	if worker.Operations == nil || len(*worker.Operations) != 1 {
+		t.Fatalf("expected one generated worker operation, got %#v", worker.Operations)
 	}
 
 	cfg, err := FactoryConfigFromOpenAPI(generated)
@@ -746,8 +809,14 @@ func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBo
 	if got := cfg.Workers[0].ModelProvider; got != "codex" {
 		t.Fatalf("expected runtime worker modelProvider codex, got %q", got)
 	}
+	if got := cfg.Workers[0].ModelLocality; got != interfaces.ModelLocalityLocal {
+		t.Fatalf("expected runtime worker modelLocality LOCAL, got %q", got)
+	}
 	if got := cfg.Workers[0].ExecutorProvider; got != "script_wrap" {
 		t.Fatalf("expected runtime worker executorProvider script_wrap, got %q", got)
+	}
+	if len(cfg.Workers[0].Operations) != 1 || cfg.Workers[0].Operations[0].Name != "TTS" {
+		t.Fatalf("expected runtime worker TTS operation, got %#v", cfg.Workers[0].Operations)
 	}
 	if got := cfg.Workstations[0].Type; got != interfaces.WorkstationTypeModel {
 		t.Fatalf("expected runtime workstation type MODEL_WORKSTATION, got %q", got)

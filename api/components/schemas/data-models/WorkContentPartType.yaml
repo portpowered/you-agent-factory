@@ -1,11 +1,26 @@
 type: string
-description: Supported first-slice canonical work content part types.
+description: Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
 x-enum-varnames:
   - WorkContentPartTypeText
   - WorkContentPartTypeImage
+  - WorkContentPartTypeTextUpper
+  - WorkContentPartTypeImageUpper
+  - WorkContentPartTypeAudio
+  - WorkContentPartTypeJSON
+  - WorkContentPartTypeBinary
 enum:
   - text
   - image
+  - TEXT
+  - IMAGE
+  - AUDIO
+  - JSON
+  - BINARY
 x-enum-descriptions:
-  - Inline text content.
-  - Image content referenced by file path.
+  - Legacy inline text content.
+  - Legacy image content referenced by file path.
+  - Canonical uppercase inline text content.
+  - Canonical uppercase image content referenced by file path.
+  - Audio content referenced by file path or artifact.
+  - JSON content preserved in canonical part order.
+  - Binary content referenced by file path or artifact.

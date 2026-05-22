@@ -368,10 +368,23 @@ func TestFactoryConfigFromOpenAPI_ExplicitMapperMatchesJSONBoundary(t *testing.T
 		}},
 		Resources: []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 2}},
 		Workers: []interfaces.WorkerConfig{{
-			Name:            "executor",
-			Type:            interfaces.WorkerTypeModel,
-			ModelProvider:   "openai",
-			Model:           "gpt-5.4",
+			Name:          "executor",
+			Type:          interfaces.WorkerTypeModel,
+			ModelProvider: "openai",
+			ModelLocality: interfaces.ModelLocalityCloud,
+			Model:         "gpt-5.4",
+			Operations: []interfaces.ModelOperation{{
+				Name: "TTS",
+				Inputs: []interfaces.ModelOperationSlot{{
+					Name:         "text",
+					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					Required:     true,
+				}},
+				Outputs: []interfaces.ModelOperationSlot{{
+					Name:         "audio",
+					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				}},
+			}},
 			Timeout:         "30m",
 			StopToken:       "DONE",
 			SkipPermissions: true,

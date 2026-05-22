@@ -532,7 +532,7 @@ func assertFactoryConfigSmokeDescriptions(t *testing.T, factory *openapi3.Schema
 	assertOpenAPI3PropertyDescription(t, resource, "Resource", "capacity")
 
 	assertOpenAPI3Description(t, "Worker", worker.Description)
-	for _, propertyName := range []string{"type", "model", "executorProvider", "modelProvider", "timeout"} {
+	for _, propertyName := range []string{"type", "model", "modelLocality", "operations", "executorProvider", "modelProvider", "timeout"} {
 		assertOpenAPI3PropertyDescription(t, worker, "Worker", propertyName)
 	}
 
@@ -577,6 +577,8 @@ func assertFactoryConfigSmokeEnumRefs(t *testing.T) {
 	assertSchemaPropertyRef(t, schemas, "Worker", "type", "#/components/schemas/WorkerType")
 	assertSchemaPropertyRef(t, schemas, "Worker", "executorProvider", "#/components/schemas/WorkerProvider")
 	assertSchemaPropertyRef(t, schemas, "Worker", "modelProvider", "#/components/schemas/WorkerModelProvider")
+	assertSchemaPropertyRef(t, schemas, "Worker", "modelLocality", "#/components/schemas/WorkerModelLocality")
+	assertSchemaArrayItemRef(t, schemas, "Worker", "operations", "#/components/schemas/ModelOperation")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "behavior", "#/components/schemas/WorkstationKind")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "type", "#/components/schemas/WorkstationType")
 	assertSchemaPropertyRef(t, schemas, "Guard", "type", "#/components/schemas/GuardType")
