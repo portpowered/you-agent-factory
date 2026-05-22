@@ -391,6 +391,44 @@ func TestRuleWorkstationKindAndWorker_ValidConfig(t *testing.T) {
 	}
 }
 
+func TestRulePollerWorkstations_RejectsUnsupportedWorkerType(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name: "planner",
+		Type: interfaces.WorkerTypeModel,
+	}}
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "linear-poller",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "planner",
+	}}
+
+	findings := rulePollerWorkstations(cfg)
+	assertFindingExists(t, findings, "poller-worker-type")
+	if findings[0].Path != "workstations[0](linear-poller).worker" {
+		t.Fatalf("expected path to name poller workstation and worker field, got %q", findings[0].Path)
+	}
+	if got := findings[0].Message; !containsAll(got, `poller workstation "linear-poller"`, `worker "planner"`, `MODEL_WORKER`) {
+		t.Fatalf("expected explicit poller/worker relationship in message, got %q", got)
+	}
+}
+
+func TestRulePollerWorkstations_AcceptsScriptAndHostedWorkers(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{
+		{Name: "script-poller", Type: interfaces.WorkerTypeScript},
+		{Name: "hosted-poller", Type: interfaces.WorkerTypeHosted},
+	}
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
+		{Name: "script", Kind: interfaces.WorkstationKindPoller, WorkerTypeName: "script-poller"},
+		{Name: "hosted", Kind: interfaces.WorkstationKindPoller, WorkerTypeName: "hosted-poller"},
+	}
+
+	if findings := rulePollerWorkstations(cfg); len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
 func TestRulePerInputGuards_MissingParentInput(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{

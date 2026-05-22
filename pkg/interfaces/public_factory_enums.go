@@ -9,6 +9,7 @@ import (
 var publicFactoryWorkerTypeAliases = map[string]string{
 	WorkerTypeModel:  WorkerTypeModel,
 	WorkerTypeScript: WorkerTypeScript,
+	WorkerTypeHosted: WorkerTypeHosted,
 }
 
 var publicFactoryWorkerModelProviderAliases = map[string]string{

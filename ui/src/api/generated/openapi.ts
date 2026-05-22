@@ -1462,7 +1462,7 @@ export interface components {
          * @description Worker implementation families supported by the public factory-config contract.
          * @enum {string}
          */
-        WorkerType: "MODEL_WORKER" | "SCRIPT_WORKER";
+        WorkerType: "MODEL_WORKER" | "SCRIPT_WORKER" | "HOSTED_WORKER";
         /**
          * @description Canonical model-provider identifiers supported by model workers in factory config.
          * @enum {string}
@@ -1540,11 +1540,11 @@ export interface components {
             maxExecutionTime?: string;
         };
         /**
-         * @description Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
+         * @description Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
          * @default STANDARD
          * @enum {string}
          */
-        WorkstationKind: "STANDARD" | "REPEATER" | "CRON";
+        WorkstationKind: "STANDARD" | "REPEATER" | "CRON" | "POLLER";
         /**
          * @description Runtime workstation implementation types supported by the public factory-config contract.
          * @enum {string}

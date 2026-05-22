@@ -12,12 +12,14 @@ const (
 	publicFactoryInputKindDefault             = "DEFAULT"
 	publicFactoryWorkerTypeModel              = "MODEL_WORKER"
 	publicFactoryWorkerTypeScript             = "SCRIPT_WORKER"
+	publicFactoryWorkerTypeHosted             = "HOSTED_WORKER"
 	publicFactoryWorkerModelProviderClaude    = "CLAUDE"
 	publicFactoryWorkerModelProviderCodex     = "CODEX"
 	publicFactoryWorkerProviderScriptWrap     = "SCRIPT_WRAP"
 	publicFactoryWorkstationKindStandard      = "STANDARD"
 	publicFactoryWorkstationKindRepeater      = "REPEATER"
 	publicFactoryWorkstationKindCron          = "CRON"
+	publicFactoryWorkstationKindPoller        = "POLLER"
 	publicFactoryWorkstationTypeModel         = "MODEL_WORKSTATION"
 	publicFactoryWorkstationTypeLogical       = "LOGICAL_MOVE"
 	publicFactoryGuardTypeVisitCount          = "VISIT_COUNT"
@@ -182,6 +184,8 @@ func internalFactoryWorkstationKindFromPublic(kind *factoryapi.WorkstationKind) 
 		return interfaces.WorkstationKindRepeater
 	case publicFactoryWorkstationKindCron:
 		return interfaces.WorkstationKindCron
+	case publicFactoryWorkstationKindPoller:
+		return interfaces.WorkstationKindPoller
 	default:
 		return interfaces.WorkstationKind(strings.TrimSpace(string(*kind)))
 	}

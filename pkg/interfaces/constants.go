@@ -103,6 +103,7 @@ const (
 const (
 	WorkerTypeModel  = "MODEL_WORKER"
 	WorkerTypeScript = "SCRIPT_WORKER"
+	WorkerTypeHosted = "HOSTED_WORKER"
 )
 
 // WorkstationType constants for workstation AGENTS.md frontmatter.

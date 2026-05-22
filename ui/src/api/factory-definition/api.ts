@@ -101,6 +101,7 @@ const WORK_STATE_TYPE_VALUES = new Set<FactoryWorkState["type"]>([
   "TERMINAL",
 ]);
 const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
+  "HOSTED_WORKER",
   "MODEL_WORKER",
   "SCRIPT_WORKER",
 ]);
@@ -122,6 +123,7 @@ const WORKSTATION_BEHAVIOR_VALUES = new Set<
   NonNullable<FactoryWorkstation["behavior"]>
 >([
   "CRON",
+  "POLLER",
   "REPEATER",
   "STANDARD",
 ]);

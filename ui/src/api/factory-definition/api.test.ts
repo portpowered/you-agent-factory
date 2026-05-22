@@ -484,9 +484,39 @@ describe("normalizeFactoryDefinition", () => {
       }),
     ).toThrowError(
       new FactoryDefinitionAPIError(
-        "factory.workstations[0].behavior must be one of CRON, REPEATER, STANDARD.",
+        "factory.workstations[0].behavior must be one of CRON, POLLER, REPEATER, STANDARD.",
       ),
     );
+  });
+
+  it("accepts poller workstations bound to hosted workers through the typed API boundary", () => {
+    expect(
+      normalizeFactoryDefinition({
+        name: "poller-factory",
+        workers: [{ name: "linear", type: "HOSTED_WORKER" }],
+        workstations: [
+          {
+            behavior: "POLLER",
+            inputs: [{ state: "new", workType: "story" }],
+            name: "Linear Poller",
+            outputs: [{ state: "queued", workType: "story" }],
+            worker: "linear",
+          },
+        ],
+      }),
+    ).toEqual({
+      name: "poller-factory",
+      workers: [{ name: "linear", type: "HOSTED_WORKER" }],
+      workstations: [
+        {
+          behavior: "POLLER",
+          inputs: [{ state: "new", workType: "story" }],
+          name: "Linear Poller",
+          outputs: [{ state: "queued", workType: "story" }],
+          worker: "linear",
+        },
+      ],
+    });
   });
 
   it("rejects malformed factory-level throttle guards", () => {

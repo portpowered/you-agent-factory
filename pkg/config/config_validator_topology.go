@@ -228,6 +228,7 @@ func ruleWorkstationKind(cfg *interfaces.FactoryConfig) []Finding {
 		interfaces.WorkstationKindStandard: true,
 		interfaces.WorkstationKindRepeater: true,
 		interfaces.WorkstationKindCron:     true,
+		interfaces.WorkstationKindPoller:   true,
 	}
 	for wi, ws := range cfg.Workstations {
 		if ws.Kind == "" {
@@ -242,6 +243,57 @@ func ruleWorkstationKind(cfg *interfaces.FactoryConfig) []Finding {
 			})
 		}
 	}
+	return findings
+}
+
+// --- Rule: poller workstation validation ---
+
+func rulePollerWorkstations(cfg *interfaces.FactoryConfig) []Finding {
+	var findings []Finding
+
+	workersByName := make(map[string]interfaces.WorkerConfig, len(cfg.Workers))
+	for _, worker := range cfg.Workers {
+		workersByName[worker.Name] = worker
+	}
+
+	for wi, ws := range cfg.Workstations {
+		if ws.Kind != interfaces.WorkstationKindPoller {
+			continue
+		}
+
+		basePath := fmt.Sprintf("workstations[%d](%s)", wi, ws.Name)
+		if strings.TrimSpace(ws.WorkerTypeName) == "" {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".worker",
+				Message:  "poller workstation requires a worker because pollers only run through a bound worker in v1",
+				Rule:     "poller-worker",
+			})
+			continue
+		}
+
+		worker, ok := workersByName[ws.WorkerTypeName]
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(worker.Type) {
+		case interfaces.WorkerTypeScript, interfaces.WorkerTypeHosted:
+			continue
+		default:
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".worker",
+				Message: fmt.Sprintf(
+					"poller workstation %q cannot bind worker %q of type %q; v1 pollers support only SCRIPT_WORKER or HOSTED_WORKER",
+					ws.Name,
+					worker.Name,
+					worker.Type,
+				),
+				Rule: "poller-worker-type",
+			})
+		}
+	}
+
 	return findings
 }
 

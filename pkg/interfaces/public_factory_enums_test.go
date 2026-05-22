@@ -24,6 +24,14 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 			strict:     StrictPublicFactoryWorkerType,
 		},
 		{
+			name:       "hosted worker type",
+			alias:      "HOSTED_WORKER",
+			unknown:    "CUSTOM_HOSTED_WORKER",
+			want:       WorkerTypeHosted,
+			permissive: PermissivePublicFactoryWorkerType,
+			strict:     StrictPublicFactoryWorkerType,
+		},
+		{
 			name:       "worker model provider",
 			alias:      "CODEX",
 			unknown:    "mystery-provider",
@@ -86,6 +94,9 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	if got := GeneratedPublicFactoryWorkerType("  CUSTOM_WORKER  "); got != factoryapi.WorkerType("CUSTOM_WORKER") {
 		t.Fatalf("worker type = %q, want trimmed unknown to round-trip", got)
+	}
+	if got := GeneratedPublicFactoryWorkerType("  HOSTED_WORKER  "); got != factoryapi.WorkerType("HOSTED_WORKER") {
+		t.Fatalf("worker type = %q, want HOSTED_WORKER", got)
 	}
 	if got := GeneratedPublicFactoryWorkerModelProvider("  openai  "); got != factoryapi.WorkerModelProvider("CODEX") {
 		t.Fatalf("worker model provider = %q, want CODEX from internal openai alias", got)
@@ -157,6 +168,14 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 			wantSupported: "MODEL_WORKER",
 			unknown:       "  CUSTOM_WORKER  ",
 			wantUnknown:   "CUSTOM_WORKER",
+			ptr:           generatedPublicFactoryWorkerTypeStringPtr,
+		},
+		{
+			name:          "hosted worker type",
+			supported:     "  HOSTED_WORKER  ",
+			wantSupported: "HOSTED_WORKER",
+			unknown:       "  CUSTOM_HOSTED_WORKER  ",
+			wantUnknown:   "CUSTOM_HOSTED_WORKER",
 			ptr:           generatedPublicFactoryWorkerTypeStringPtr,
 		},
 		{

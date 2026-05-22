@@ -94,6 +94,7 @@ const (
 
 // Defines values for WorkerType.
 const (
+	WorkerTypeHostedWorker WorkerType = "HOSTED_WORKER"
 	WorkerTypeModelWorker  WorkerType = "MODEL_WORKER"
 	WorkerTypeScriptWorker WorkerType = "SCRIPT_WORKER"
 )
@@ -101,6 +102,7 @@ const (
 // Defines values for WorkstationKind.
 const (
 	WorkstationKindCron     WorkstationKind = "CRON"
+	WorkstationKindPoller   WorkstationKind = "POLLER"
 	WorkstationKindRepeater WorkstationKind = "REPEATER"
 	WorkstationKindStandard WorkstationKind = "STANDARD"
 )
@@ -412,7 +414,7 @@ type WorkerType string
 
 // Workstation A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
 type Workstation struct {
-	// Behavior Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
+	// Behavior Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
 	Behavior *WorkstationKind `json:"behavior,omitempty"`
 
 	// Body Inline workstation instructions or script body when authored directly in factory config.
@@ -507,7 +509,7 @@ type WorkstationIO struct {
 	WorkType string `json:"workType"`
 }
 
-// WorkstationKind Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
+// WorkstationKind Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
 type WorkstationKind string
 
 // WorkstationLimits Retry and execution ceilings applied to one workstation definition.
