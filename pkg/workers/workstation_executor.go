@@ -340,17 +340,8 @@ func normalizeClassifierLabel(output string) (string, error) {
 	if trimmed == "" {
 		return "", fmt.Errorf("empty label")
 	}
-
-	var decoded any
-	if err := json.Unmarshal([]byte(trimmed), &decoded); err == nil {
-		label, ok := decoded.(string)
-		if !ok {
-			return "", fmt.Errorf("expected plain string label")
-		}
-		trimmed = strings.TrimSpace(label)
-		if trimmed == "" {
-			return "", fmt.Errorf("empty label")
-		}
+	if json.Valid([]byte(trimmed)) {
+		return "", fmt.Errorf("expected plain string label")
 	}
 
 	return trimmed, nil

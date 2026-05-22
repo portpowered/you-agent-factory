@@ -310,6 +310,13 @@ func ruleClassifierWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 					Message:  "classification route label must be non-empty",
 					Rule:     "classifier-workstation-route-label",
 				})
+			} else if label != route.Label {
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     routePath + ".label",
+					Message:  "classification route label must not include leading or trailing whitespace",
+					Rule:     "classifier-workstation-route-label",
+				})
 			} else {
 				if _, exists := seenLabels[label]; exists {
 					findings = append(findings, Finding{

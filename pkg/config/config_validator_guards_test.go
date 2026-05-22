@@ -215,7 +215,7 @@ func TestRuleClassifierWorkstations_RejectsMissingRoutesAndLegacySuccessPaths(t 
 	assertFindingExists(t, findings, "classifier-workstation-on-rejection")
 }
 
-func TestRuleClassifierWorkstations_RejectsDuplicateLabelsAndEmptyOutputs(t *testing.T) {
+func TestRuleClassifierWorkstations_RejectsDuplicateLabelsWhitespaceAndEmptyOutputs(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:           "classify-story",
@@ -225,6 +225,7 @@ func TestRuleClassifierWorkstations_RejectsDuplicateLabelsAndEmptyOutputs(t *tes
 		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
 			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
 			{Label: "approved"},
+			{Label: " needs_review ", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "review"}}},
 			{Label: "   ", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
 		},
 	}}

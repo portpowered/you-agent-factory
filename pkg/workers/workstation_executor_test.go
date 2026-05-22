@@ -699,7 +699,7 @@ func TestWorkstationExecutor_ClassifierTrimsLabelAndIgnoresNonFailureOutcomeKind
 	}
 }
 
-func TestWorkstationExecutor_ClassifierAcceptsJSONStringLabel(t *testing.T) {
+func TestWorkstationExecutor_ClassifierRejectsJSONStringLabel(t *testing.T) {
 	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "\"needs_review\""}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
@@ -723,11 +723,11 @@ func TestWorkstationExecutor_ClassifierAcceptsJSONStringLabel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
 	}
-	if result.Output != "needs_review" {
-		t.Fatalf("Output = %q, want needs_review", result.Output)
+	if result.Error != `classifier output invalid: expected plain string label (raw output: "\"needs_review\"")` {
+		t.Fatalf("Error = %q", result.Error)
 	}
 }
 
