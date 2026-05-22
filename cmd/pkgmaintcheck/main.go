@@ -176,7 +176,7 @@ func scanFile(repoRoot string, filePath string, cfg config) ([]violation, error)
 
 	var findings []violation
 	lineCount := countLines(source)
-	if lineCount > cfg.fileLineLimit && !hasIgnoreDirective(parsedFile.Comments, ignoreFileLineDirective) {
+	if lineCount > cfg.fileLineLimit && !hasFileIgnoreDirective(parsedFile, ignoreFileLineDirective) {
 		findings = append(findings, violation{
 			packagePath: packagePath,
 			filePath:    relativePath,
@@ -292,6 +292,18 @@ func hasIgnoreDirective(groups []*ast.CommentGroup, directive string) bool {
 			if strings.Contains(comment.Text, directive) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func hasFileIgnoreDirective(file *ast.File, directive string) bool {
+	for _, group := range file.Comments {
+		if group.Pos() > file.Package {
+			continue
+		}
+		if hasIgnoreDirective([]*ast.CommentGroup{group}, directive) {
+			return true
 		}
 	}
 	return false

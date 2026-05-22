@@ -197,6 +197,44 @@ func TestRunHonorsRuleScopedIgnoreDirectives(t *testing.T) {
 	}
 }
 
+func TestRunRequiresFileLineDirectiveAtFileScope(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoFile(t, repoRoot, "pkg/service/file_scope.go", strings.Join([]string{
+		"package service",
+		"",
+		"// pkgmaintcheck:ignore-file-lines this comment is attached to the function, not the file.",
+		"func HiddenFileWaiver() {",
+		"\tprintln(\"line 1\")",
+		"\tprintln(\"line 2\")",
+		"}",
+	}, "\n"))
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{
+		root:              repoRoot,
+		fileLineLimit:     4,
+		functionLineLimit: 20,
+		cyclomaticLimit:   20,
+	}, stdout, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want file-line violation when directive is function-scoped")
+	}
+
+	errOutput := stderr.String()
+	if !strings.Contains(errOutput, "pkg/service | rule=file-lines target=pkg/service/file_scope.go actual=7 limit=4") {
+		t.Fatalf("run() stderr = %q, want file-line violation details", errOutput)
+	}
+	if strings.Contains(errOutput, "rule=function-lines") || strings.Contains(errOutput, "rule=cyclomatic-complexity") {
+		t.Fatalf("run() stderr = %q, want only file-line violation", errOutput)
+	}
+	if got := err.Error(); got != "[agent-factory:pkg-maint] found 1 maintainability violation(s)" {
+		t.Fatalf("run() error = %q, want one violation count", got)
+	}
+}
+
 func TestRunRejectsNonPositiveLimits(t *testing.T) {
 	t.Parallel()
 
