@@ -224,12 +224,7 @@ func assertCanonicalCompletedDispatchState(t *testing.T, state interfaces.Factor
 	if len(state.CompletedDispatches) != 1 {
 		t.Fatalf("completed dispatches = %d, want 1", len(state.CompletedDispatches))
 	}
-	if state.CompletedDispatches[0].DispatchID != "dispatch-1" || state.CompletedDispatches[0].StartedTick != 2 {
-		t.Fatalf("completion = %#v, want dispatch-1 started at tick 2", state.CompletedDispatches[0])
-	}
-	if got := state.CompletedDispatches[0].Result.SelectedClassificationLabel; got != "approved" {
-		t.Fatalf("completion selected classification label = %q, want approved", got)
-	}
+	assertCanonicalCompletedDispatchRecord(t, state.CompletedDispatches[0])
 	if _, ok := state.ActiveWorkItemsByID["work-1"]; ok {
 		t.Fatalf("work-1 should not remain active after terminal response")
 	}
@@ -247,6 +242,17 @@ func assertCanonicalCompletedDispatchState(t *testing.T, state interfaces.Factor
 	}
 	if state.FactoryState != "" {
 		t.Fatalf("FactoryState = %q, want empty before tick 4", state.FactoryState)
+	}
+}
+
+func assertCanonicalCompletedDispatchRecord(t *testing.T, dispatch interfaces.FactoryWorldDispatchCompletion) {
+	t.Helper()
+
+	if dispatch.DispatchID != "dispatch-1" || dispatch.StartedTick != 2 {
+		t.Fatalf("completion = %#v, want dispatch-1 started at tick 2", dispatch)
+	}
+	if got := dispatch.Result.SelectedClassificationLabel; got != "approved" {
+		t.Fatalf("completion selected classification label = %q, want approved", got)
 	}
 }
 

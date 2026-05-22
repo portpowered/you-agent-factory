@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -37,6 +38,18 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesHostedLinearWorker(t *testing.T)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
 	}
+	assertGeneratedHostedLinearWorker(t, generated)
+
+	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	assertRuntimeHostedLinearWorker(t, cfg)
+}
+
+func assertGeneratedHostedLinearWorker(t *testing.T, generated factoryapi.Factory) {
+	t.Helper()
+
 	worker := (*generated.Workers)[0]
 	if worker.Provider == nil || *worker.Provider != "LINEAR" {
 		t.Fatalf("expected generated worker provider LINEAR, got %#v", worker.Provider)
@@ -47,11 +60,11 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesHostedLinearWorker(t *testing.T)
 	if worker.Linear == nil || worker.Linear.Mapping.WorkType == nil || *worker.Linear.Mapping.WorkType != "story" {
 		t.Fatalf("expected generated worker linear mapping, got %#v", worker.Linear)
 	}
+}
 
-	cfg, err := FactoryConfigFromOpenAPI(generated)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
-	}
+func assertRuntimeHostedLinearWorker(t *testing.T, cfg interfaces.FactoryConfig) {
+	t.Helper()
+
 	runtimeWorker := cfg.Workers[0]
 	if runtimeWorker.Type != interfaces.WorkerTypeHosted || runtimeWorker.Provider != interfaces.HostedWorkerProviderLinear {
 		t.Fatalf("runtime hosted worker = %#v", runtimeWorker)
