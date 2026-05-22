@@ -98,6 +98,10 @@ func (fs *FactoryService) superviseScriptPoller(
 	runner := fs.pollerCommandRunner()
 	backoffClock := fs.pollerSupervisorClock()
 	attempt := 0
+	logger.Info("script poller started")
+	defer func() {
+		logger.Info("script poller stopped", zap.String("reason", pollerStopReason(ctx.Err())))
+	}()
 
 	for {
 		if ctx.Err() != nil {
@@ -211,6 +215,19 @@ func pollerRestartBackoff(attempt int) time.Duration {
 		}
 	}
 	return backoff
+}
+
+func pollerStopReason(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "context canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "deadline exceeded"
+	case err != nil:
+		return err.Error()
+	default:
+		return "completed"
+	}
 }
 
 func scriptPollerCommandRequest(

@@ -330,6 +330,153 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 	}
 }
 
+func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycle(t *testing.T) {
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{{waitForCancel: true}},
+	}
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	svc := &FactoryService{
+		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner},
+		logger: zap.New(logCore),
+	}
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "poller-script",
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		t.TempDir(),
+		&interfaces.FactoryConfig{
+			Workers:      []interfaces.WorkerConfig{{Name: "poller-script"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{poller},
+		},
+		map[string]*interfaces.WorkerConfig{
+			"poller-script": {
+				Name:    "poller-script",
+				Type:    interfaces.WorkerTypeScript,
+				Command: "factory/scripts/poller.sh",
+			},
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			poller.Name: &poller,
+		},
+	)
+	handle := &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			runtimeCfg: runtimeCfg,
+		},
+	}
+
+	if err := svc.startLiveRuntimeSidecars(context.Background(), handle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+
+	waitForPollerRunnerCalls(t, runner, 1, time.Second)
+	svc.stopLiveRuntimeSidecars(handle)
+
+	if observedLogs.FilterMessage("script poller started").Len() != 1 {
+		t.Fatalf("script poller started log count = %d, want 1", observedLogs.FilterMessage("script poller started").Len())
+	}
+	stopped := observedLogs.FilterMessage("script poller stopped").All()
+	if len(stopped) != 1 {
+		t.Fatalf("script poller stopped log count = %d, want 1", len(stopped))
+	}
+	if got := fieldString(stopped[0].ContextMap()["reason"]); got != "context canceled" {
+		t.Fatalf("script poller stop reason = %q, want context canceled", got)
+	}
+	if runner.callCount() != 1 {
+		t.Fatalf("script poller runner calls after stop = %d, want 1", runner.callCount())
+	}
+}
+
+func TestFactoryService_StopLiveRuntimeSidecars_StopsPriorScriptPollerBeforeReplacementStart(t *testing.T) {
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{
+			{waitForCancel: true},
+			{waitForCancel: true},
+		},
+	}
+	svc := &FactoryService{
+		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner},
+		logger: zap.NewNop(),
+	}
+	oldPoller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress-old",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "poller-script",
+	}
+	newPoller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress-new",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "poller-script",
+	}
+	oldHandle := &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			runtimeCfg: newLoadedFactoryConfigForServiceTest(
+				t,
+				t.TempDir(),
+				&interfaces.FactoryConfig{
+					Workers:      []interfaces.WorkerConfig{{Name: "poller-script"}},
+					Workstations: []interfaces.FactoryWorkstationConfig{oldPoller},
+				},
+				map[string]*interfaces.WorkerConfig{
+					"poller-script": {
+						Name:    "poller-script",
+						Type:    interfaces.WorkerTypeScript,
+						Command: "factory/scripts/poller.sh",
+					},
+				},
+				map[string]*interfaces.FactoryWorkstationConfig{oldPoller.Name: &oldPoller},
+			),
+		},
+	}
+	newHandle := &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			runtimeCfg: newLoadedFactoryConfigForServiceTest(
+				t,
+				t.TempDir(),
+				&interfaces.FactoryConfig{
+					Workers:      []interfaces.WorkerConfig{{Name: "poller-script"}},
+					Workstations: []interfaces.FactoryWorkstationConfig{newPoller},
+				},
+				map[string]*interfaces.WorkerConfig{
+					"poller-script": {
+						Name:    "poller-script",
+						Type:    interfaces.WorkerTypeScript,
+						Command: "factory/scripts/poller.sh",
+					},
+				},
+				map[string]*interfaces.FactoryWorkstationConfig{newPoller.Name: &newPoller},
+			),
+		},
+	}
+
+	if err := svc.startLiveRuntimeSidecars(context.Background(), oldHandle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars(old): %v", err)
+	}
+	waitForPollerRunnerCalls(t, runner, 1, time.Second)
+
+	svc.stopLiveRuntimeSidecars(oldHandle)
+
+	if err := svc.startLiveRuntimeSidecars(context.Background(), newHandle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars(new): %v", err)
+	}
+	defer svc.stopLiveRuntimeSidecars(newHandle)
+	waitForPollerRunnerCalls(t, runner, 2, time.Second)
+
+	reqs := runner.requests()
+	if len(reqs) != 2 {
+		t.Fatalf("poller runner requests = %d, want 2", len(reqs))
+	}
+	if reqs[0].WorkstationName != oldPoller.Name {
+		t.Fatalf("first poller workstation = %q, want %q", reqs[0].WorkstationName, oldPoller.Name)
+	}
+	if reqs[1].WorkstationName != newPoller.Name {
+		t.Fatalf("replacement poller workstation = %q, want %q", reqs[1].WorkstationName, newPoller.Name)
+	}
+}
+
 func TestParseScriptPollerOutput_RejectsUnsupportedRawFactoryEvents(t *testing.T) {
 	rawEventJSON, err := json.Marshal(map[string]any{
 		"events": []map[string]any{{

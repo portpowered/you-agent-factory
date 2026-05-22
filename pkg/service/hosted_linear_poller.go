@@ -113,6 +113,10 @@ func (fs *FactoryService) superviseHostedLinearPoller(
 	logger := fs.pollerLogger(workstation, workerDef).With(zap.String("provider", interfaces.HostedWorkerProviderLinear))
 	backoffClock := fs.pollerSupervisorClock()
 	attempt := 0
+	logger.Info("hosted linear poller started")
+	defer func() {
+		logger.Info("hosted linear poller stopped", zap.String("reason", pollerStopReason(ctx.Err())))
+	}()
 
 	for {
 		if ctx.Err() != nil {
