@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { getTerminalWorkMessages } from "../messages";
 import { TerminalWorkWidget } from "./terminal-work-widget";
@@ -48,5 +48,39 @@ describe("TerminalWorkWidget", () => {
       screen.getByRole("heading", { name: messages.rowTitle("completed") }),
     ).toBeTruthy();
     expect(screen.getByText(messages.emptyState("failed"))).toBeTruthy();
+  });
+
+  it("stays prop-driven by reflecting the selected row and invoking the passed handler", () => {
+    const onSelectItem = vi.fn();
+
+    render(
+      <TerminalWorkWidget
+        completedItems={[{ label: "Done Story", traceWorkID: "work-done-story" }]}
+        failedItems={[{ label: "Failed Story", traceWorkID: "work-failed-story" }]}
+        onSelectItem={onSelectItem}
+        selectedItem={{ label: "Done Story", status: "completed" }}
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole("button", { name: /Done Story/ })
+        .getAttribute("data-selected"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: /Failed Story/ })
+        .getAttribute("data-selected"),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Failed Story/ }));
+
+    expect(onSelectItem).toHaveBeenCalledWith(
+      "failed",
+      expect.objectContaining({
+        label: "Failed Story",
+        traceWorkID: "work-failed-story",
+      }),
+    );
   });
 });

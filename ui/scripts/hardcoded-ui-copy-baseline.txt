@@ -169,8 +169,8 @@ src/features/flowchart/components/current-activity-place-node.tsx|179|35|string-
 src/features/flowchart/components/current-activity-place-node.tsx|179|45|string-literal|Constraint
 src/features/flowchart/components/current-activity-place-node.tsx|207|12|string-literal|Processing state
 src/features/flowchart/components/current-activity-place-node.tsx|280|12|string-literal|resource tokens
-src/features/flowchart/components/current-activity-workstation-node.tsx|221|19|jsx-attribute|Active
-src/features/flowchart/components/current-activity-workstation-node.tsx|226|21|jsx-prop|Active
+src/features/flowchart/components/current-activity-workstation-node.tsx|216|19|jsx-attribute|Active
+src/features/flowchart/components/current-activity-workstation-node.tsx|221|21|jsx-prop|Active
 src/features/flowchart/components/graph-semantic-icon.tsx|38|12|string-literal|Active work
 src/features/flowchart/components/graph-semantic-icon.tsx|47|12|string-literal|Constraint
 src/features/flowchart/components/graph-semantic-icon.tsx|57|12|string-literal|Cron workstation
@@ -218,5 +218,5 @@ src/features/work-outcome/trends.ts|212|12|string-literal|Tick
 src/features/work-outcome/trends.ts|254|33|string-literal|Session
 src/features/work-outcome/trends.ts|299|14|string-literal|Work type:
 src/features/workflow-activity/components/mutation-dialog.tsx|75|22|string-literal|fixed inset-0 px-5 py-6
-src/features/workflow-activity/react-flow-current-activity-card-graph.ts|59|10|string-literal|workstation:
-src/features/workflow-activity/react-flow-current-activity-card-graph.ts|63|10|string-literal|place:
+src/features/workflow-activity/react-flow-current-activity-card-graph.ts|55|10|string-literal|workstation:
+src/features/workflow-activity/react-flow-current-activity-card-graph.ts|59|10|string-literal|place:
