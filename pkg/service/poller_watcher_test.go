@@ -10,10 +10,17 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+)
+
+const (
+	canonicalScriptPollerWorkstationName = "linear-ingress"
+	canonicalScriptPollerWorkerName      = "poller-script"
+	canonicalScriptPollerCommand         = "factory/scripts/poller.sh"
 )
 
 func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdoutToFactoryService(t *testing.T) {
@@ -31,21 +38,13 @@ func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdoutToFactoryService(t *te
 		cfg:    &FactoryServiceConfig{CommandRunnerOverride: runner},
 		logger: zap.NewNop(),
 	}
-	poller := interfaces.FactoryWorkstationConfig{
-		Name:           "linear-ingress",
-		Kind:           interfaces.WorkstationKindPoller,
-		WorkerTypeName: "poller-script",
-	}
-	worker := &interfaces.WorkerConfig{
-		Name:    "poller-script",
-		Type:    interfaces.WorkerTypeScript,
-		Command: "factory/scripts/poller.sh",
-	}
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(
 		t,
 		factoryDir,
-		&interfaces.FactoryConfig{Workers: []interfaces.WorkerConfig{{Name: "poller-script"}}, Workstations: []interfaces.FactoryWorkstationConfig{poller}},
-		map[string]*interfaces.WorkerConfig{"poller-script": worker},
+		&interfaces.FactoryConfig{Workers: []interfaces.WorkerConfig{{Name: canonicalScriptPollerWorkerName}}, Workstations: []interfaces.FactoryWorkstationConfig{poller}},
+		map[string]*interfaces.WorkerConfig{canonicalScriptPollerWorkerName: worker},
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 
@@ -95,21 +94,13 @@ func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdoutToFactoryService(t *test
 		cfg:    &FactoryServiceConfig{CommandRunnerOverride: runner},
 		logger: zap.NewNop(),
 	}
-	poller := interfaces.FactoryWorkstationConfig{
-		Name:           "linear-ingress",
-		Kind:           interfaces.WorkstationKindPoller,
-		WorkerTypeName: "poller-script",
-	}
-	worker := &interfaces.WorkerConfig{
-		Name:    "poller-script",
-		Type:    interfaces.WorkerTypeScript,
-		Command: "factory/scripts/poller.sh",
-	}
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(
 		t,
 		factoryDir,
-		&interfaces.FactoryConfig{Workers: []interfaces.WorkerConfig{{Name: "poller-script"}}, Workstations: []interfaces.FactoryWorkstationConfig{poller}},
-		map[string]*interfaces.WorkerConfig{"poller-script": worker},
+		&interfaces.FactoryConfig{Workers: []interfaces.WorkerConfig{{Name: canonicalScriptPollerWorkerName}}, Workstations: []interfaces.FactoryWorkstationConfig{poller}},
+		map[string]*interfaces.WorkerConfig{canonicalScriptPollerWorkerName: worker},
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 
@@ -155,39 +146,26 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
-	poller := interfaces.FactoryWorkstationConfig{
-		Name:           "linear-ingress",
-		Kind:           interfaces.WorkstationKindPoller,
-		WorkerTypeName: "poller-script",
-	}
+	poller := newCanonicalScriptPollerWorkstation()
 	standard := interfaces.FactoryWorkstationConfig{
 		Name:           "processor",
 		Kind:           interfaces.WorkstationKindStandard,
-		WorkerTypeName: "poller-script",
+		WorkerTypeName: canonicalScriptPollerWorkerName,
 	}
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
 		t,
 		factoryDir,
-		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "poller-script"}, {Name: "non-poller-script"}},
-			Workstations: []interfaces.FactoryWorkstationConfig{poller, standard},
-		},
-		map[string]*interfaces.WorkerConfig{
-			"poller-script": {
-				Name:    "poller-script",
-				Type:    interfaces.WorkerTypeScript,
-				Command: "factory/scripts/poller.sh",
-				Args:    []string{"--mode", "watch"},
+		scriptPollerRuntimeConfigOptions{
+			poller:       poller,
+			pollerWorker: newCanonicalScriptPollerWorker("--mode", "watch"),
+			additionalWorkers: []*interfaces.WorkerConfig{
+				{
+					Name:    "non-poller-script",
+					Type:    interfaces.WorkerTypeScript,
+					Command: "factory/scripts/processor.sh",
+				},
 			},
-			"non-poller-script": {
-				Name:    "non-poller-script",
-				Type:    interfaces.WorkerTypeScript,
-				Command: "factory/scripts/processor.sh",
-			},
-		},
-		map[string]*interfaces.FactoryWorkstationConfig{
-			poller.Name:   &poller,
-			standard.Name: &standard,
+			additionalWorkstations: []interfaces.FactoryWorkstationConfig{standard},
 		},
 	)
 	handle := &liveRuntimeHandle{
@@ -239,27 +217,12 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeBatch, CommandRunnerOverride: runner},
 		logger: zap.NewNop(),
 	}
-	poller := interfaces.FactoryWorkstationConfig{
-		Name:           "linear-ingress",
-		Kind:           interfaces.WorkstationKindPoller,
-		WorkerTypeName: "poller-script",
-	}
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+	poller := newCanonicalScriptPollerWorkstation()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
 		t,
 		t.TempDir(),
-		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "poller-script"}},
-			Workstations: []interfaces.FactoryWorkstationConfig{poller},
-		},
-		map[string]*interfaces.WorkerConfig{
-			"poller-script": {
-				Name:    "poller-script",
-				Type:    interfaces.WorkerTypeScript,
-				Command: "factory/scripts/poller.sh",
-			},
-		},
-		map[string]*interfaces.FactoryWorkstationConfig{
-			poller.Name: &poller,
+		scriptPollerRuntimeConfigOptions{
+			poller: poller,
 		},
 	)
 	handle := &liveRuntimeHandle{
@@ -294,27 +257,12 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
-	poller := interfaces.FactoryWorkstationConfig{
-		Name:           "linear-ingress",
-		Kind:           interfaces.WorkstationKindPoller,
-		WorkerTypeName: "poller-script",
-	}
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+	poller := newCanonicalScriptPollerWorkstation()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
 		t,
 		t.TempDir(),
-		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "poller-script"}},
-			Workstations: []interfaces.FactoryWorkstationConfig{poller},
-		},
-		map[string]*interfaces.WorkerConfig{
-			"poller-script": {
-				Name:    "poller-script",
-				Type:    interfaces.WorkerTypeScript,
-				Command: "factory/scripts/poller.sh",
-			},
-		},
-		map[string]*interfaces.FactoryWorkstationConfig{
-			poller.Name: &poller,
+		scriptPollerRuntimeConfigOptions{
+			poller: poller,
 		},
 	)
 	handle := &liveRuntimeHandle{
@@ -354,27 +302,12 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner},
 		logger: zap.New(logCore),
 	}
-	poller := interfaces.FactoryWorkstationConfig{
-		Name:           "linear-ingress",
-		Kind:           interfaces.WorkstationKindPoller,
-		WorkerTypeName: "poller-script",
-	}
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+	poller := newCanonicalScriptPollerWorkstation()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
 		t,
 		t.TempDir(),
-		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "poller-script"}},
-			Workstations: []interfaces.FactoryWorkstationConfig{poller},
-		},
-		map[string]*interfaces.WorkerConfig{
-			"poller-script": {
-				Name:    "poller-script",
-				Type:    interfaces.WorkerTypeScript,
-				Command: "factory/scripts/poller.sh",
-			},
-		},
-		map[string]*interfaces.FactoryWorkstationConfig{
-			poller.Name: &poller,
+		scriptPollerRuntimeConfigOptions{
+			poller: poller,
 		},
 	)
 	handle := &liveRuntimeHandle{
@@ -427,48 +360,8 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsPriorScriptPollerBeforeRepl
 		Kind:           interfaces.WorkstationKindPoller,
 		WorkerTypeName: "poller-script",
 	}
-	oldHandle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
-			factory: &aggregateSnapshotFactory{},
-			runtimeCfg: newLoadedFactoryConfigForServiceTest(
-				t,
-				t.TempDir(),
-				&interfaces.FactoryConfig{
-					Workers:      []interfaces.WorkerConfig{{Name: "poller-script"}},
-					Workstations: []interfaces.FactoryWorkstationConfig{oldPoller},
-				},
-				map[string]*interfaces.WorkerConfig{
-					"poller-script": {
-						Name:    "poller-script",
-						Type:    interfaces.WorkerTypeScript,
-						Command: "factory/scripts/poller.sh",
-					},
-				},
-				map[string]*interfaces.FactoryWorkstationConfig{oldPoller.Name: &oldPoller},
-			),
-		},
-	}
-	newHandle := &liveRuntimeHandle{
-		runtime: &replacementFactoryRuntime{
-			factory: &aggregateSnapshotFactory{},
-			runtimeCfg: newLoadedFactoryConfigForServiceTest(
-				t,
-				t.TempDir(),
-				&interfaces.FactoryConfig{
-					Workers:      []interfaces.WorkerConfig{{Name: "poller-script"}},
-					Workstations: []interfaces.FactoryWorkstationConfig{newPoller},
-				},
-				map[string]*interfaces.WorkerConfig{
-					"poller-script": {
-						Name:    "poller-script",
-						Type:    interfaces.WorkerTypeScript,
-						Command: "factory/scripts/poller.sh",
-					},
-				},
-				map[string]*interfaces.FactoryWorkstationConfig{newPoller.Name: &newPoller},
-			),
-		},
-	}
+	oldHandle := newScriptPollerRuntimeHandleForWorkstation(t, oldPoller, &aggregateSnapshotFactory{})
+	newHandle := newScriptPollerRuntimeHandleForWorkstation(t, newPoller, &aggregateSnapshotFactory{})
 
 	if err := svc.startLiveRuntimeSidecars(context.Background(), oldHandle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars(old): %v", err)
@@ -576,29 +469,29 @@ func TestFactoryService_StopLiveRuntimeSidecars_WaitsForScriptPollerSubmitBefore
 func newScriptPollerRuntimeHandle(t *testing.T, workstationName string, activeFactory *aggregateSnapshotFactory) *liveRuntimeHandle {
 	t.Helper()
 
-	poller := interfaces.FactoryWorkstationConfig{
+	return newScriptPollerRuntimeHandleForWorkstation(t, interfaces.FactoryWorkstationConfig{
 		Name:           workstationName,
 		Kind:           interfaces.WorkstationKindPoller,
 		WorkerTypeName: "poller-script",
-	}
+	}, activeFactory)
+}
+
+func newScriptPollerRuntimeHandleForWorkstation(
+	t *testing.T,
+	poller interfaces.FactoryWorkstationConfig,
+	activeFactory *aggregateSnapshotFactory,
+) *liveRuntimeHandle {
+	t.Helper()
+
 	return &liveRuntimeHandle{
 		runtime: &replacementFactoryRuntime{
 			factory: activeFactory,
-			runtimeCfg: newLoadedFactoryConfigForServiceTest(
+			runtimeCfg: newScriptPollerLoadedRuntimeConfigForServiceTest(
 				t,
 				t.TempDir(),
-				&interfaces.FactoryConfig{
-					Workers:      []interfaces.WorkerConfig{{Name: "poller-script"}},
-					Workstations: []interfaces.FactoryWorkstationConfig{poller},
+				scriptPollerRuntimeConfigOptions{
+					poller: poller,
 				},
-				map[string]*interfaces.WorkerConfig{
-					"poller-script": {
-						Name:    "poller-script",
-						Type:    interfaces.WorkerTypeScript,
-						Command: "factory/scripts/poller.sh",
-					},
-				},
-				map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 			),
 		},
 	}
@@ -621,6 +514,74 @@ func TestParseScriptPollerOutput_RejectsUnsupportedRawFactoryEvents(t *testing.T
 	if parseErr == nil || !strings.Contains(parseErr.Error(), "unsupported raw factory events") {
 		t.Fatalf("parse error = %v, want unsupported raw factory events", parseErr)
 	}
+}
+
+func newCanonicalScriptPollerWorkstation() interfaces.FactoryWorkstationConfig {
+	return interfaces.FactoryWorkstationConfig{
+		Name:           canonicalScriptPollerWorkstationName,
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: canonicalScriptPollerWorkerName,
+	}
+}
+
+func newCanonicalScriptPollerWorker(args ...string) *interfaces.WorkerConfig {
+	return &interfaces.WorkerConfig{
+		Name:    canonicalScriptPollerWorkerName,
+		Type:    interfaces.WorkerTypeScript,
+		Command: canonicalScriptPollerCommand,
+		Args:    args,
+	}
+}
+
+type scriptPollerRuntimeConfigOptions struct {
+	poller                 interfaces.FactoryWorkstationConfig
+	pollerWorker           *interfaces.WorkerConfig
+	additionalWorkers      []*interfaces.WorkerConfig
+	additionalWorkstations []interfaces.FactoryWorkstationConfig
+}
+
+func newScriptPollerLoadedRuntimeConfigForServiceTest(
+	t *testing.T,
+	factoryDir string,
+	options scriptPollerRuntimeConfigOptions,
+) *config.LoadedFactoryConfig {
+	t.Helper()
+
+	poller := options.poller
+	if poller.Name == "" {
+		poller = newCanonicalScriptPollerWorkstation()
+	}
+	pollerWorker := options.pollerWorker
+	if pollerWorker == nil {
+		pollerWorker = newCanonicalScriptPollerWorker()
+	}
+
+	factoryCfg := &interfaces.FactoryConfig{
+		Workers:      []interfaces.WorkerConfig{{Name: pollerWorker.Name}},
+		Workstations: []interfaces.FactoryWorkstationConfig{poller},
+	}
+	workerConfigs := map[string]*interfaces.WorkerConfig{
+		pollerWorker.Name: pollerWorker,
+	}
+	workstationConfigs := map[string]*interfaces.FactoryWorkstationConfig{
+		poller.Name: &poller,
+	}
+
+	for _, worker := range options.additionalWorkers {
+		if worker == nil {
+			continue
+		}
+		factoryCfg.Workers = append(factoryCfg.Workers, interfaces.WorkerConfig{Name: worker.Name})
+		workerConfigs[worker.Name] = worker
+	}
+	for i := range options.additionalWorkstations {
+		workstation := options.additionalWorkstations[i]
+		factoryCfg.Workstations = append(factoryCfg.Workstations, workstation)
+		workstationCopy := workstation
+		workstationConfigs[workstation.Name] = &workstationCopy
+	}
+
+	return newLoadedFactoryConfigForServiceTest(t, factoryDir, factoryCfg, workerConfigs, workstationConfigs)
 }
 
 type pollerRunOutcome struct {
