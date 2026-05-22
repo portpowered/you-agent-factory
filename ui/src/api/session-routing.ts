@@ -8,10 +8,9 @@ export function factorySessionScopedPath(
   legacyPath: string,
   sessionID: string | null | undefined,
 ): string {
-  if (isDefaultFactorySessionID(sessionID)) {
-    return legacyPath;
-  }
-
   const normalizedPath = legacyPath.startsWith("/") ? legacyPath : `/${legacyPath}`;
-  return `/factories/${encodeURIComponent(sessionID ?? "")}${normalizedPath}`;
+  const normalizedSessionID: string = isDefaultFactorySessionID(sessionID)
+    ? DEFAULT_FACTORY_SESSION_ID
+    : (sessionID ?? DEFAULT_FACTORY_SESSION_ID);
+  return `/factories/${encodeURIComponent(normalizedSessionID)}${normalizedPath}`;
 }
