@@ -27,6 +27,7 @@ const (
 	realOmniVoiceLongTestCacheDirEnv = "INFINITE_YOU_OMNIVOICE_CACHE_DIR"
 	realOmniVoiceDefaultCommand      = "omnivoice-llamacpp"
 	realOmniVoiceFactoryWaitTimeout  = 90 * time.Second
+	realOmniVoiceFactoryWaitMacOS    = 5 * time.Minute
 	realOmniVoiceFactoryWaitWindows  = 3 * time.Minute
 )
 
@@ -110,6 +111,9 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 func realLocalInferenceFactoryWaitTimeout() time.Duration {
 	if runtime.GOOS == "windows" {
 		return realOmniVoiceFactoryWaitWindows
+	}
+	if runtime.GOOS == "darwin" {
+		return realOmniVoiceFactoryWaitMacOS
 	}
 	return realOmniVoiceFactoryWaitTimeout
 }
