@@ -9,14 +9,17 @@ import {
 } from "../messages/header-controls";
 
 const TICK_SLIDER_SHELL_CLASS = cn(
-  "flex min-w-0 w-full flex-wrap items-center gap-2 rounded-lg border border-af-overlay/10 bg-af-overlay/4 px-3 py-2",
-  "md:w-auto md:min-w-80 md:max-w-xl",
+  "flex min-w-0 w-full flex-wrap items-center gap-1.5 rounded-lg border border-af-overlay/10 bg-af-overlay/4 px-2.5 py-1.5",
+  "md:w-auto md:min-w-72 md:max-w-lg md:flex-nowrap",
 );
 const TICK_SLIDER_LABEL_CLASS =
-  "flex min-w-32 flex-1 flex-col gap-1 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-ink/62";
+  "flex min-w-36 flex-1 flex-col gap-0.5 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-ink/62 md:min-w-52";
 const TICK_SLIDER_INPUT_CLASS =
-  "h-2 min-w-36 flex-1 cursor-pointer accent-af-accent disabled:cursor-not-allowed disabled:opacity-45";
-const TICK_SLIDER_STATUS_CLASS = "text-xs text-af-ink/76 md:text-sm";
+  "h-1.5 min-w-32 flex-1 cursor-pointer accent-af-accent disabled:cursor-not-allowed disabled:opacity-45";
+const TICK_SLIDER_META_CLASS =
+  "ml-auto flex w-full items-center justify-between gap-1.5 md:w-auto md:justify-start";
+const TICK_SLIDER_STATUS_CLASS =
+  "whitespace-nowrap text-xs font-medium tabular-nums text-af-ink/76";
 const MINIMUM_TIMELINE_TICKS = 2;
 
 interface TimelineBounds {
@@ -116,38 +119,40 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
         />
       </label>
 
-      <span className={TICK_SLIDER_STATUS_CLASS}>
-        {isDisabled
-          ? messages.waitingForMoreTicks
-          : formatCurrentTickStatus(
-              messages.currentTickStatusTemplate,
-              displayedTick,
-              bounds.maxTick,
-            )}
-      </span>
+      <div className={TICK_SLIDER_META_CLASS}>
+        <span className={TICK_SLIDER_STATUS_CLASS}>
+          {isDisabled
+            ? messages.waitingForMoreTicks
+            : formatCurrentTickStatus(
+                messages.currentTickStatusTemplate,
+                displayedTick,
+                bounds.maxTick,
+              )}
+        </span>
 
-      <DashboardHeaderActionButton
-        className={cn(mode === "current" && "opacity-75")}
-        aria-label={messages.returnToCurrentTickLabel}
-        compact
-        disabled={isDisabled || mode === "current"}
-        onClick={setCurrentMode}
-      >
-        <svg
-          aria-hidden="true"
-          fill="none"
-          height="18"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.8"
-          viewBox="0 0 24 24"
-          width="18"
+        <DashboardHeaderActionButton
+          className={cn(mode === "current" && "opacity-75")}
+          aria-label={messages.returnToCurrentTickLabel}
+          compact
+          disabled={isDisabled || mode === "current"}
+          onClick={setCurrentMode}
         >
-          <path d="M6 5.75v12.5" />
-          <path d="m10 8.25 8 3.75-8 3.75v-7.5" />
-        </svg>
-      </DashboardHeaderActionButton>
+          <svg
+            aria-hidden="true"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+            viewBox="0 0 24 24"
+            width="18"
+          >
+            <path d="M6 5.75v12.5" />
+            <path d="m10 8.25 8 3.75-8 3.75v-7.5" />
+          </svg>
+        </DashboardHeaderActionButton>
+      </div>
     </div>
   );
 }

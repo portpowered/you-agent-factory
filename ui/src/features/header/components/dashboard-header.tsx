@@ -32,11 +32,11 @@ import { getHeaderControlsMessages } from "../messages/header-controls";
 
 const DASHBOARD_TOOLBAR_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
-  "mb-4 flex flex-wrap items-center gap-3 p-3 md:px-4 md:py-3",
+  "mb-3 flex flex-wrap items-center gap-2 p-2 md:px-3 md:py-2",
 );
 const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
 const DASHBOARD_CONTROLS_CLASS = cn(
-  "ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3",
+  "ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2",
   "max-md:ml-0 max-md:w-full max-md:justify-stretch",
 );
 const STREAM_STATUS_SHELL_CLASS = cn(
@@ -89,10 +89,15 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
       </h1>
       <div className={DASHBOARD_CONTROLS_CLASS}>
         <TickSliderControl locale={resolvedLocale} />
-        <DashboardLocaleMenu
-          locale={resolvedLocale}
-          onChangeLocale={setLocale}
-        />
+        <div className={STREAM_STATUS_SHELL_CLASS}>
+          <div
+            aria-label={streamStatusLabel(streamState.status, resolvedLocale)}
+            className={streamStatusClassName(streamState.status)}
+            role="status"
+          >
+            <StreamStatusIcon status={streamState.status} />
+          </div>
+        </div>
         <DashboardHeaderActionButton
           aria-label={exportMessages.triggerLabel}
           aria-expanded={isExportDialogOpen}
@@ -116,15 +121,10 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
             <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
           </svg>
         </DashboardHeaderActionButton>
-        <div className={STREAM_STATUS_SHELL_CLASS}>
-          <div
-            aria-label={streamStatusLabel(streamState.status, resolvedLocale)}
-            className={streamStatusClassName(streamState.status)}
-            role="status"
-          >
-            <StreamStatusIcon status={streamState.status} />
-          </div>
-        </div>
+        <DashboardLocaleMenu
+          locale={resolvedLocale}
+          onChangeLocale={setLocale}
+        />
       </div>
       <DashboardSessionTabs locale={resolvedLocale} />
     </section>

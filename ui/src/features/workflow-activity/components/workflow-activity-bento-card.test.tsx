@@ -167,9 +167,14 @@ describe("WorkflowActivityBentoCard", () => {
     const graphHeader = graphCard.querySelector("header");
 
     expect(graphHeader).toBeTruthy();
+    expect(graphHeader?.className).toContain("min-h-11");
+    expect(graphHeader?.className).toContain("px-3");
     expect(
       within(graphCard).getByRole("button", { name: "进入工厂图编辑器" }),
     ).toBeTruthy();
+    expect(
+      within(graphCard).getByRole("button", { name: "Move 工厂图" }).className,
+    ).toContain("size-8");
     expect(within(graphCard).getByText("观察模式")).toBeTruthy();
     expect(graphHeader?.textContent).toContain("观察模式");
     expect(
@@ -196,7 +201,12 @@ describe("WorkflowActivityBentoCard", () => {
 
     expect(graphHeader).toBeTruthy();
     const headerScope = within(graphHeader as HTMLElement);
+    expect(graphHeader?.className).toContain("min-h-11");
     expect(headerScope.getByText(editorMessages.modeObserve)).toBeTruthy();
+    expect(
+      headerScope.getByRole("button", { name: editorMessages.modeEnterEditor })
+        .className,
+    ).toContain("size-8");
     expect(
       within(graphCard).queryByRole("heading", { name: shellMessages.title }),
     ).toBeNull();

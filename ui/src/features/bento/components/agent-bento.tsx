@@ -43,6 +43,7 @@ export interface AgentBentoCardProps {
   bodyClassName?: string;
   children: ReactNode;
   className?: string;
+  chromeDensity?: "compact" | "default";
   headerAction?: ReactNode;
   title: string;
 }
@@ -62,18 +63,24 @@ const BENTO_ITEM_CLASS = "min-w-0";
 const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
   "flex min-h-13 cursor-move items-center justify-between gap-3 border-af-overlay/10 px-3.5 py-3";
+const BENTO_CARD_HEADER_COMPACT_CLASS =
+  "min-h-11 gap-2 px-3 py-2.5";
 const BENTO_CARD_TITLE_CLASS = cn(
   "m-0 [overflow-wrap:anywhere]",
   DASHBOARD_SECTION_HEADING_CLASS,
 );
 const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
+const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS = "gap-1.5";
 const BENTO_DRAG_HANDLE_CLASS =
   "inline-grid size-9 shrink-0 cursor-grab place-items-center rounded-lg border border-af-overlay/18 bg-af-overlay/8 text-af-ink/68 outline-af-ink/55 transition-colors hover:border-af-overlay/28 hover:bg-af-overlay/12 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 active:cursor-grabbing";
+const BENTO_DRAG_HANDLE_COMPACT_CLASS =
+  "size-8 rounded-md border-af-overlay/12 bg-transparent text-af-ink/54 hover:border-af-overlay/20 hover:bg-af-overlay/8 hover:text-af-ink/80";
 const BENTO_CARD_BODY_CLASS = cn(
   "grid h-full min-h-0 flex-1 gap-2.5 overflow-auto p-3.5 [&_p]:m-0",
   DASHBOARD_BODY_TEXT_CLASS,
 );
+const BENTO_CARD_BODY_COMPACT_CLASS = "gap-2 p-3";
 
 function toGridLayout(layout: AgentBentoLayoutItem[]): Layout {
   return layout.map((item) => ({
@@ -206,11 +213,17 @@ export function AgentBentoCard({
   bodyClassName = "",
   children,
   className = "",
+  chromeDensity = "default",
   headerAction,
   title,
 }: AgentBentoCardProps) {
   const cardClassName = cn(BENTO_CARD_CLASS, className);
-  const cardBodyClassName = cn(BENTO_CARD_BODY_CLASS, bodyClassName);
+  const compactChrome = chromeDensity === "compact";
+  const cardBodyClassName = cn(
+    BENTO_CARD_BODY_CLASS,
+    compactChrome && BENTO_CARD_BODY_COMPACT_CLASS,
+    bodyClassName,
+  );
 
   return (
     <DashboardPanelShell
@@ -219,13 +232,26 @@ export function AgentBentoCard({
       className={cardClassName}
       shellKind="grid-card"
     >
-      <header className={BENTO_CARD_HEADER_CLASS}>
+      <header
+        className={cn(
+          BENTO_CARD_HEADER_CLASS,
+          compactChrome && BENTO_CARD_HEADER_COMPACT_CLASS,
+        )}
+      >
         <h3 className={BENTO_CARD_TITLE_CLASS}>{title}</h3>
-        <div className={BENTO_CARD_HEADER_TOOLS_CLASS}>
+        <div
+          className={cn(
+            BENTO_CARD_HEADER_TOOLS_CLASS,
+            compactChrome && BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS,
+          )}
+        >
           {headerAction}
           <button
             aria-label={`Move ${title}`}
-            className={BENTO_DRAG_HANDLE_CLASS}
+            className={cn(
+              BENTO_DRAG_HANDLE_CLASS,
+              compactChrome && BENTO_DRAG_HANDLE_COMPACT_CLASS,
+            )}
             data-bento-drag-handle="true"
             type="button"
           >

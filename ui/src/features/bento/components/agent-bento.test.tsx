@@ -285,4 +285,26 @@ describe("AgentBentoLayout", () => {
       "current-selection",
     );
   });
+
+  it("supports compact shared chrome for dense dashboard cards", () => {
+    render(
+      <AgentBentoCard chromeDensity="compact" title="Factory graph">
+        <p>Graph content</p>
+      </AgentBentoCard>,
+    );
+
+    const card = screen.getByRole("article", { name: "Factory graph" });
+    const header = card.querySelector("header");
+    const handle = within(card).getByRole("button", {
+      name: "Move Factory graph",
+    });
+    const body = screen.getByText("Graph content").parentElement;
+
+    expect(header?.className).toContain("min-h-11");
+    expect(header?.className).toContain("px-3");
+    expect(body?.className).toContain("p-3");
+    expect(body?.className).toContain("gap-2");
+    expect(handle.className).toContain("size-8");
+    expect(handle.className).toContain("bg-transparent");
+  });
 });

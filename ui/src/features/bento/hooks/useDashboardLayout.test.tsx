@@ -26,7 +26,7 @@ describe("useDashboardLayout", () => {
       minW: 3,
       w: 4,
       x: 4,
-      y: 12,
+      y: 10,
     });
   });
 

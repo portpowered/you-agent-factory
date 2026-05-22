@@ -2799,9 +2799,9 @@ describe("App timeline reconstruction flows", () => {
 
     expect(headerControls).toHaveLength(4);
     expect(headerControls[0]).toBe(slider);
-    expect(headerControls[1]).toBe(languageButton);
+    expect(headerControls[1]).toBe(streamStatus);
     expect(headerControls[2]).toBe(exportButton);
-    expect(headerControls[3]).toBe(streamStatus);
+    expect(headerControls[3]).toBe(languageButton);
     expect(within(toolbar).getByText("4/4")).toBeTruthy();
     expect(within(toolbar).queryByText(/Tick \d+ of \d+/)).toBeNull();
     expect(within(toolbar).getByText("Timeline tick").className).toContain(
@@ -3596,7 +3596,7 @@ describe("App dashboard layout and graph behavior", () => {
       "work-totals:0:0:12:2",
     );
     expect(workflowActivity.dataset.layoutSignature).toContain(
-      "work-graph:0:2:12:10",
+      "work-graph:0:2:12:8",
     );
     expect(
       within(screen.getByLabelText("work totals")).getByText("In progress"),
@@ -3610,6 +3610,46 @@ describe("App dashboard layout and graph behavior", () => {
     expect(
       within(screen.getByLabelText("work totals")).getByText("Dispatched"),
     ).toBeTruthy();
+  });
+
+  it("migrates the stored dashboard baseline to the compacted factory graph height", async () => {
+    window.localStorage.setItem(
+      "agent-factory.dashboard.layout.v2",
+      JSON.stringify([
+        { h: 2, id: "work-totals", w: 12, x: 0, y: 0 },
+        { h: 10, id: "work-graph", w: 12, x: 0, y: 2 },
+        { h: 5, id: "current-selection", w: 4, x: 0, y: 12 },
+        { h: 5, id: "terminal-work", w: 4, x: 4, y: 12 },
+        { h: 6, id: "work-outcome-chart", w: 4, x: 8, y: 12 },
+        { h: 6, id: "submit-work", w: 4, x: 8, y: 18 },
+        { h: 9, id: "trace", w: 8, x: 0, y: 18 },
+      ]),
+    );
+
+    renderApp({ snapshot: activeSnapshot });
+
+    await screen.findByRole("heading", { name: "Infinite You" });
+
+    const dashboardGrid = screen.getByRole("region", {
+      name: "Infinite You bento board",
+    });
+    const workflowActivity = dashboardGrid.querySelector<HTMLElement>(
+      '[data-bento-card-id="work-graph"]',
+    );
+    const currentSelection = dashboardGrid.querySelector<HTMLElement>(
+      '[data-bento-card-id="current-selection"]',
+    );
+    const trace = dashboardGrid.querySelector<HTMLElement>(
+      '[data-bento-card-id="trace"]',
+    );
+
+    expect(workflowActivity?.dataset.layoutSignature).toContain(
+      "work-graph:0:2:12:8",
+    );
+    expect(currentSelection?.dataset.layoutSignature).toContain(
+      "current-selection:0:10:4:5",
+    );
+    expect(trace?.dataset.layoutSignature).toContain("trace:0:15:8:9");
   });
 
   it("migrates legacy selection detail layout IDs into one current selection slot", async () => {

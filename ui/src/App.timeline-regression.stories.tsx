@@ -9,6 +9,7 @@ import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-f
 import { useExportDialogStore } from "./features/export/state";
 import {
   activeStoryTrace,
+  expectCompactedTopDashboardSection,
   currentSelectionCard,
   expectCurrentSelectionCardID,
   expectNoPageHorizontalOverflow,
@@ -36,6 +37,14 @@ const defaultFactorySessionSummary = {
     kind: "default" as const,
   },
 };
+
+function renderDashboardAtWidth(width: number) {
+  return (
+    <div style={{ maxWidth: "100%", width: `${width}px` }}>
+      <App />
+    </div>
+  );
+}
 
 export const WorkChartTimelineVerification = {
   parameters: {
@@ -204,6 +213,44 @@ export const HeaderTimelineAlignmentVerification = {
     await expectTimelineToolbarAlignment(canvasElement);
   },
 };
+
+function compactTopSectionStory(width: number) {
+  return {
+    tags: ["test"],
+    parameters: {
+      dashboardApi: {
+        fetchMocks: [
+          {
+            method: "GET",
+            path: "/factory-sessions",
+            response: {
+              body: {
+                sessions: [defaultFactorySessionSummary],
+              },
+            },
+          },
+        ],
+        timelineSnapshots: [
+          historicalWorkOutcomeSnapshot,
+          liveWorkOutcomeSnapshot,
+        ],
+      },
+    },
+    render: () => renderDashboardAtWidth(width),
+    play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+      await expectCompactedTopDashboardSection(canvasElement);
+    },
+  };
+}
+
+export const CompactedTopSectionDesktopVerification =
+  compactTopSectionStory(1280);
+
+export const CompactedTopSectionTabletVerification =
+  compactTopSectionStory(768);
+
+export const CompactedTopSectionMobileVerification =
+  compactTopSectionStory(360);
 
 export const SelectedPositionCurrentWork = {
   parameters: {

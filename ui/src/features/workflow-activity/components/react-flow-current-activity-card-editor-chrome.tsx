@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 
+import { cn } from "../../../lib/cn";
 import {
   applyFactoryGraphAddEntityDraft,
   createFactoryGraphAddEntityDraft,
@@ -88,8 +89,13 @@ export function useFactoryGraphAddEntityController({
 
 const FACTORY_GRAPH_HEADER_ACTIONS_CLASS =
   "flex min-w-0 flex-wrap items-center justify-end gap-2";
+const FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS = "gap-1.5";
+const STATUS_PILL_COMPACT_CLASS = "px-2.5 py-0.5 text-[0.7rem]";
+const MODE_TOGGLE_COMPACT_CLASS =
+  "size-8 rounded-md border-af-overlay/12 bg-transparent text-af-ink/72 hover:bg-af-overlay/8";
 
 export function CurrentActivityGraphHeaderActions({
+  compact = false,
   editorMode,
   hasChanges,
   isDefinitionLoading,
@@ -97,6 +103,7 @@ export function CurrentActivityGraphHeaderActions({
   locale,
   onToggle,
 }: {
+  compact?: boolean;
   editorMode: boolean;
   hasChanges: boolean;
   isDefinitionLoading: boolean;
@@ -105,8 +112,14 @@ export function CurrentActivityGraphHeaderActions({
   onToggle: () => void;
 }) {
   return (
-    <div className={FACTORY_GRAPH_HEADER_ACTIONS_CLASS}>
+    <div
+      className={cn(
+        FACTORY_GRAPH_HEADER_ACTIONS_CLASS,
+        compact && FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS,
+      )}
+    >
       <FactoryGraphEditorStatus
+        className={compact ? STATUS_PILL_COMPACT_CLASS : undefined}
         editorMode={editorMode}
         hasChanges={hasChanges}
         isDefinitionLoading={isDefinitionLoading}
@@ -114,6 +127,7 @@ export function CurrentActivityGraphHeaderActions({
         loadErrorMessage={loadErrorMessage}
       />
       <FactoryGraphEditorModeToggle
+        className={compact ? MODE_TOGGLE_COMPACT_CLASS : undefined}
         editorMode={editorMode}
         locale={locale}
         onClick={onToggle}
