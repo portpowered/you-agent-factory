@@ -29,7 +29,7 @@ func newRuntimeLogHomeFixture(t *testing.T) runtimeLogHomeFixture {
 }
 
 func (f runtimeLogHomeFixture) canonicalLogDir() string {
-	return canonicalRuntimeLogDir(f.homeDir)
+	return filepath.Join(f.homeDir, ".you-agent-factory", "logs")
 }
 
 func (f runtimeLogHomeFixture) canonicalLogPath(name string) string {
@@ -37,7 +37,7 @@ func (f runtimeLogHomeFixture) canonicalLogPath(name string) string {
 }
 
 func (f runtimeLogHomeFixture) legacyLogDir() string {
-	return legacyRuntimeLogDir(f.homeDir)
+	return filepath.Join(f.homeDir, ".agent-factory", "logs")
 }
 
 func (f runtimeLogHomeFixture) legacyLogPath(name string) string {
