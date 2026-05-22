@@ -1,6 +1,6 @@
 # Resources Reference
 
-Use this page when you need the current Agent Factory resource contract for
+Use this page when you need the current you-agent-factory resource contract for
 bounded concurrency.
 
 Use [Factory JSON and work configuration](work.md) for the overall

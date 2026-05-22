@@ -6,7 +6,7 @@ last-modified: 2026-04-21
 doc-id: agent-factory/authoring-agents-md
 ---
 
-This guide explains how to write `AGENTS.md` files for the agent factory. The
+This guide explains how to write `AGENTS.md` files for you-agent-factory. The
 recommended layout keeps prompt-heavy worker and workstation runtime
 configuration in split `AGENTS.md` files beside a canonical `factory.json`
 topology.
@@ -18,7 +18,7 @@ authoring patterns. Use [Workers](workers.md) for the worker contract,
 
 ## Overview
 
-The agent factory uses two kinds of `AGENTS.md` files:
+you-agent-factory uses two kinds of `AGENTS.md` files:
 
 | Kind | Location | Purpose |
 |------|----------|---------|

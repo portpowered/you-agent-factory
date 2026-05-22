@@ -6,7 +6,7 @@ doc-id: agent-factory/work
 
 # Factory JSON And Work Configuration
 
-`factory.json` declares the workflow topology for an Agent Factory run. It
+`factory.json` declares the workflow topology for a you-agent-factory run. It
 defines the work types, states, workers, workstations, resources, and routing
 behavior that the runtime turns into a Petri-net execution model.
 

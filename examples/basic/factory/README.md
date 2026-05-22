@@ -1,6 +1,6 @@
 # Example: Basic Task Workflow
 
-This example models a minimal task-processing workflow as an agent factory configuration.
+This example models a minimal task-processing workflow as a you-agent-factory configuration.
 
 ## Workflow
 
