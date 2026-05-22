@@ -138,10 +138,12 @@ describe("factory API", () => {
         },
       ),
     );
-    vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      getCurrentFactory({ sessionID: "session-2" }),
+      getCurrentFactory({
+        fetch: fetchMock,
+        sessionID: "session-2",
+      }),
     ).resolves.toEqual({
       name: "Session Factory",
       workTypes: [],
