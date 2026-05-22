@@ -6,18 +6,36 @@ command_url="${OMNIVOICE_COMMAND_URL:-}"
 install_dir="${OMNIVOICE_COMMAND_INSTALL_DIR:-$(pwd)/.cache/omnivoice-command/bin}"
 extract_dir="${OMNIVOICE_COMMAND_EXTRACT_DIR:-$(pwd)/.cache/omnivoice-command/extract}"
 
-if [ -z "$command_url" ]; then
-  echo "OMNIVOICE_COMMAND_URL is required so CI can install ${command_name} on $(uname -s)/$(uname -m)." >&2
-  echo "Configure the repository variable for this runner in .github/workflows/long-local-inference.yml." >&2
-  exit 1
-fi
-
 mkdir -p "$install_dir" "$extract_dir"
 target_path="${install_dir}/${command_name}"
 
+emit_outputs() {
+  local command_path="$1"
+  local skipped="$2"
+  local reason="$3"
+  {
+    echo "command_path=$command_path"
+    echo "skipped=$skipped"
+    echo "skip_reason=$reason"
+  } >> "$GITHUB_OUTPUT"
+}
+
 if [ -x "$target_path" ]; then
   echo "Reusing cached ${command_name} at ${target_path}" >&2
+  emit_outputs "$target_path" "false" ""
 else
+  if [ -z "$command_url" ]; then
+    if fallback_path="$(command -v "$command_name" 2>/dev/null)"; then
+      echo "Using ${command_name} already available on PATH at ${fallback_path}" >&2
+      emit_outputs "$fallback_path" "false" ""
+      exit 0
+    fi
+
+    echo "OMNIVOICE_COMMAND_URL is not configured for $(uname -s)/$(uname -m); skipping long local inference job." >&2
+    emit_outputs "" "true" "missing OMNIVOICE_COMMAND_URL and no preinstalled ${command_name} on PATH"
+    exit 0
+  fi
+
   archive_path="${extract_dir}/$(basename "${command_url}")"
   rm -rf "${extract_dir:?}/payload"
   mkdir -p "${extract_dir}/payload"
@@ -47,7 +65,8 @@ else
     cp "$candidate" "$target_path"
     chmod +x "$target_path"
   fi
+
+  emit_outputs "$target_path" "false" ""
 fi
 
-echo "command_path=$target_path" >> "$GITHUB_OUTPUT"
 echo "$install_dir" >> "$GITHUB_PATH"

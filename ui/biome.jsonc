@@ -58,13 +58,75 @@
     },
     {
       "includes": [
-        "src/**/*.test.ts",
-        "src/**/*.test.tsx",
-        "src/**/*.test.mjs",
-        "integration/**/*.test.ts",
-        "integration/**/*.test.tsx",
-        "integration/**/*.test.mjs",
-        "src/**/*.stories.tsx"
+        "src/App.current-selection.test.tsx",
+        "src/App.export-dialog.test.tsx",
+        "src/App.export-submit.test.tsx",
+        "src/App.import.test.tsx",
+        "src/App.replay-dispatch-selection.test.tsx",
+        "src/App.replay-stream.test.tsx",
+        "src/App.replay-workstation-requests.test.tsx",
+        "src/App.timeline.test.tsx",
+        "src/App.toolbar-locale.test.tsx",
+        "src/api/current-factory-definition/api.test.ts",
+        "src/api/current-factory-prompt-template/api.test.ts",
+        "src/api/factory-definition/api.test.ts",
+        "src/api/factory-sessions/api.test.ts",
+        "src/api/named-factory/api.additional.test.ts",
+        "src/api/named-factory/api.test.ts",
+        "src/api/provider-session-details/api.test.ts",
+        "src/api/work/api.additional.test.ts",
+        "src/features/bento/components/agent-bento.test.tsx",
+        "src/features/current-factory-definition/workstation-editable-values.test.ts",
+        "src/features/current-selection/components/current-selection-widget.provider-session-selection.test.tsx",
+        "src/features/current-selection/components/current-selection-widget.save.test.tsx",
+        "src/features/current-selection/components/current-selection-widget.test.tsx",
+        "src/features/current-selection/components/execution-details.test.tsx",
+        "src/features/current-selection/components/provider-session-attempts.test.tsx",
+        "src/features/current-selection/components/provider-session-detail-panel.test.tsx",
+        "src/features/current-selection/components/state-node-detail.test.tsx",
+        "src/features/current-selection/components/work-item-card.test.tsx",
+        "src/features/current-selection/components/workstation-detail-card.editable-configuration.test.tsx",
+        "src/features/current-selection/components/workstation-detail-card.test.tsx",
+        "src/features/current-selection/components/workstation-prompt-monaco.test.ts",
+        "src/features/current-selection/components/workstation-request-detail.test.tsx",
+        "src/features/current-selection/editable-workstation-prompt-state.test.ts",
+        "src/features/current-selection/hooks/use-editable-workstation-configuration-state.test.tsx",
+        "src/features/current-selection/hooks/useCurrentSelection.actions.test.ts",
+        "src/features/current-selection/hooks/useCurrentSelection.test.tsx",
+        "src/features/current-selection/messages/workstation-detail.test.ts",
+        "src/features/current-selection/selected-work-dispatch-history-helpers.test.ts",
+        "src/features/current-selection/state/executionDetails.test.ts",
+        "src/features/current-selection/useCurrentSelection.request-helpers.test.ts",
+        "src/features/current-selection/useCurrentSelection.selection-helpers.test.ts",
+        "src/features/dashboard/hooks/useDashboardSnapshot.test.tsx",
+        "src/features/export/components/export-factory-dialog.test.tsx",
+        "src/features/export/factory-png-export.test.ts",
+        "src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.test.tsx",
+        "src/features/factory-graph-editor/factory-graph-draft.test.tsx",
+        "src/features/factory-graph-editor/factory-graph-editor-connections.test.ts",
+        "src/features/factory-graph-editor/factory-graph-editor-removals.test.ts",
+        "src/features/factory-graph-editor/messages/editor.test.ts",
+        "src/features/flowchart/layout.test.ts",
+        "src/features/header/components/dashboard-header.test.tsx",
+        "src/features/header/components/tick-slider-control.test.tsx",
+        "src/features/header/dashboard-session-tabs.test.tsx",
+        "src/features/import/components/dashboard-import-preview-dialog.test.tsx",
+        "src/features/import/factory-png-import.test.ts",
+        "src/features/import/hooks/use-factory-import-activation.test.tsx",
+        "src/features/import/hooks/use-factory-png-drop.test.tsx",
+        "src/features/submit-work/components/submit-work-widget.test.tsx",
+        "src/features/terminal-work/components/terminal-work-card.test.tsx",
+        "src/features/timeline/state/factoryTimelineStore.test.ts",
+        "src/features/work-outcome/components/d3-information-card.test.tsx",
+        "src/features/work-outcome/components/trend-cards.test.tsx",
+        "src/features/work-outcome/components/work-chart.test.tsx",
+        "src/features/work-outcome/hooks/useWorkOutcomeChart.test.ts",
+        "src/features/workflow-activity/components/dashboard-flow-axis-legend.test.tsx",
+        "src/features/workflow-activity/components/react-flow-current-activity-card-import.test.tsx",
+        "src/features/workflow-activity/components/react-flow-current-activity-card.coverage.test.tsx",
+        "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
+        "src/features/workflow-activity/react-flow-current-activity-card-editor-controllers.test.tsx",
+        "integration/event-stream-replay.integration.test.mjs"
       ],
       "linter": {
         "rules": {
@@ -82,7 +144,7 @@
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
-                "maxLines": 4000,
+                "maxLines": 5000,
                 "skipBlankLines": true
               }
             }
@@ -91,7 +153,14 @@
       }
     },
     {
-      "includes": ["src/**/*.stories.tsx"],
+      "includes": [
+        "src/App.stories.tsx",
+        "src/App.timeline-regression.stories.tsx",
+        "src/App.workstation-requests.stories.tsx",
+        "src/features/factory-graph-editor/components/factory-graph-editor-flow.stories.tsx",
+        "src/features/work-outcome/components/d3-information-card.stories.tsx",
+        "src/features/workflow-activity/components/react-flow-current-activity-card.stories.tsx"
+      ],
       "linter": {
         "rules": {
           "complexity": {

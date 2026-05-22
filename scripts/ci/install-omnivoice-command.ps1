@@ -7,8 +7,16 @@ $commandUrl = $env:OMNIVOICE_COMMAND_URL
 $installDir = if ($env:OMNIVOICE_COMMAND_INSTALL_DIR) { $env:OMNIVOICE_COMMAND_INSTALL_DIR } else { Join-Path (Get-Location) ".cache/omnivoice-command/bin" }
 $extractDir = if ($env:OMNIVOICE_COMMAND_EXTRACT_DIR) { $env:OMNIVOICE_COMMAND_EXTRACT_DIR } else { Join-Path (Get-Location) ".cache/omnivoice-command/extract" }
 
-if ([string]::IsNullOrWhiteSpace($commandUrl)) {
-    throw "OMNIVOICE_COMMAND_URL is required so CI can install $commandName on $env:RUNNER_OS/$env:PROCESSOR_ARCHITECTURE."
+function Write-InstallerOutputs {
+    param(
+        [string]$CommandPath,
+        [string]$Skipped,
+        [string]$SkipReason
+    )
+
+    "command_path=$CommandPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+    "skipped=$Skipped" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+    "skip_reason=$SkipReason" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 }
 
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
@@ -16,6 +24,19 @@ New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
 
 $targetPath = Join-Path $installDir $commandName
 if (-not (Test-Path $targetPath)) {
+    if ([string]::IsNullOrWhiteSpace($commandUrl)) {
+        $existingCommand = Get-Command $commandName -ErrorAction SilentlyContinue
+        if ($existingCommand) {
+            Write-Host "Using $commandName already available on PATH at $($existingCommand.Source)"
+            Write-InstallerOutputs -CommandPath $existingCommand.Source -Skipped "false" -SkipReason ""
+            exit 0
+        }
+
+        Write-Host "OMNIVOICE_COMMAND_URL is not configured for $env:RUNNER_OS/$env:PROCESSOR_ARCHITECTURE; skipping long local inference job."
+        Write-InstallerOutputs -CommandPath "" -Skipped "true" -SkipReason "missing OMNIVOICE_COMMAND_URL and no preinstalled $commandName on PATH"
+        exit 0
+    }
+
     $archivePath = Join-Path $extractDir ([System.IO.Path]::GetFileName($commandUrl))
     $payloadDir = Join-Path $extractDir "payload"
     if (Test-Path $payloadDir) {
@@ -42,5 +63,5 @@ if (-not (Test-Path $targetPath)) {
     }
 }
 
-"command_path=$targetPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+Write-InstallerOutputs -CommandPath $targetPath -Skipped "false" -SkipReason ""
 $installDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
