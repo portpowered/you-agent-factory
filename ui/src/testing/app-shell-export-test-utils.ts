@@ -185,7 +185,3 @@ export function installExportDownloadProbe(): {
     },
   };
 }
-
-export function onePixelPngBytes(): Uint8Array {
-  return fromBase64(onePixelPngBase64);
-}

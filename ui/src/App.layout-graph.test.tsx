@@ -80,8 +80,12 @@ describe("App layout behavior", () => {
     expect(within(screen.getByLabelText("work totals")).getByText("Failed")).toBeTruthy();
     expect(within(screen.getByLabelText("work totals")).getByText("Dispatched")).toBeTruthy();
   });
+});
 
-  it("migrates stored dashboard layout IDs into the compacted grid slots", async () => {
+describe("App layout migration behavior", () => {
+  registerAppDashboardTestLifecycle();
+
+  it("migrates the stored dashboard baseline to the compacted grid slots", async () => {
     window.localStorage.setItem(
       "agent-factory.dashboard.layout.v2",
       JSON.stringify([
@@ -125,6 +129,66 @@ describe("App layout behavior", () => {
     ).toBeNull();
   });
 
+  it("migrates legacy selection detail layout IDs into one current selection slot", async () => {
+    window.localStorage.setItem(
+      "agent-factory.dashboard.layout.v2",
+      JSON.stringify([
+        { h: 5, id: "work-totals", w: 12, x: 0, y: 0 },
+        { h: 10, id: "work-graph", w: 12, x: 0, y: 2 },
+        { h: 6, id: "terminal-summary", w: 5, x: 7, y: 12 },
+        { h: 9, id: "trace", w: 8, x: 0, y: 18 },
+      ]),
+    );
+
+    renderApp({ snapshot: activeSnapshot });
+
+    await screen.findByRole("heading", { name: "you-agent-factory" });
+
+    const dashboardGrid = screen.getByRole("region", {
+      name: "you-agent-factory bento board",
+    });
+    const currentSelection = dashboardGrid.querySelector<HTMLElement>(
+      '[data-bento-card-id="current-selection"]',
+    );
+
+    expect(currentSelection).toBeTruthy();
+    expect(
+      dashboardGrid.querySelector(
+        '[data-bento-card-id="work-info"], [data-bento-card-id="workstation-info"], [data-bento-card-id="terminal-summary"]',
+      ),
+    ).toBeNull();
+    expect(currentSelection?.dataset.layoutSignature).toMatch(/current-selection:7:\d+:5:6/);
+  });
+
+  it("migrates stored completion and failure chart layout IDs into one work outcome chart slot", async () => {
+    window.localStorage.setItem(
+      "agent-factory.dashboard.layout.v2",
+      JSON.stringify([
+        { h: 5, id: "completion-trend", w: 5, x: 7, y: 12 },
+        { h: 5, id: "failure-trend", w: 4, x: 0, y: 17 },
+      ]),
+    );
+
+    renderApp({ snapshot: activeSnapshot });
+
+    await screen.findByRole("heading", { name: "you-agent-factory" });
+
+    const dashboardGrid = screen.getByRole("region", {
+      name: "you-agent-factory bento board",
+    });
+    const workOutcome = dashboardGrid.querySelector<HTMLElement>(
+      '[data-bento-card-id="work-outcome-chart"]',
+    );
+
+    expect(workOutcome).toBeTruthy();
+    expect(
+      dashboardGrid.querySelector(
+        '[data-bento-card-id="completion-trend"], [data-bento-card-id="failure-trend"]',
+      ),
+    ).toBeNull();
+    expect(workOutcome?.dataset.layoutSignature).toMatch(/work-outcome-chart:7:\d+:5:5/);
+  });
+
   it("ignores stored retry, rework, and timing trend card IDs in the visible dashboard layout", async () => {
     window.localStorage.setItem(
       "agent-factory.dashboard.layout.v2",
@@ -155,7 +219,6 @@ describe("App layout behavior", () => {
       /trace:\d+:\d+:\d+:\d+/,
     );
   });
-
 });
 
 describe("App graph behavior", () => {
