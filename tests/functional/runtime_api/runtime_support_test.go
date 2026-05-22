@@ -65,13 +65,6 @@ func functionalEventTypes(events []factoryapi.FactoryEvent) []factoryapi.Factory
 	return out
 }
 
-func factoryWorksValue(works *[]factoryapi.Work) []factoryapi.Work {
-	if works == nil {
-		return nil
-	}
-	return *works
-}
-
 var retiredFunctionalFactoryEventTypes = []string{
 	"RUN_STARTED",
 	"INITIAL_STRUCTURE",
