@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildWorkstationPromptMarkers,
   buildWorkstationPromptCompletionItems,
   extractTemplateExpression,
   isInsideTemplate,
@@ -150,6 +151,58 @@ describe("registerWorkstationPromptMonaco", () => {
       "(index .Inputs 0).Payload",
     );
     expect(extractTemplateExpression(".Prompt")).toBe(".Prompt");
+  });
+
+  it("builds Monaco markers from authoritative byte offsets, source-text fallback, and multiline prompts", () => {
+    expect(
+      buildWorkstationPromptMarkers("😀 {{ .Prompt }}\nSecond {{ .Other }}", [
+        {
+          endOffset: 18,
+          kind: "INVALID_VARIABLE",
+          message: "Prompt root is invalid.",
+          startOffset: 6,
+        },
+        {
+          kind: "SYNTAX_ERROR",
+          message: "Second template is invalid.",
+          sourceText: "{{ .Other }}",
+        },
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        endColumn: 17,
+        endLineNumber: 1,
+        message: "Prompt root is invalid.",
+        startColumn: 4,
+        startLineNumber: 1,
+      }),
+      expect.objectContaining({
+        endColumn: 20,
+        endLineNumber: 2,
+        message: "Second template is invalid.",
+        startColumn: 8,
+        startLineNumber: 2,
+      }),
+    ]);
+  });
+
+  it("falls back to a minimal inline marker when a diagnostic range cannot be resolved", () => {
+    expect(
+      buildWorkstationPromptMarkers("Prompt", [
+        {
+          kind: "INVALID_VARIABLE",
+          message: "Prompt is invalid.",
+        },
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        endColumn: 2,
+        endLineNumber: 1,
+        message: "Prompt is invalid.",
+        startColumn: 1,
+        startLineNumber: 1,
+      }),
+    ]);
   });
 
   it("only returns completion items outside template expressions for manual invocation", () => {

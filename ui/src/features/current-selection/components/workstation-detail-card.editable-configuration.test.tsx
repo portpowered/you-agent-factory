@@ -544,8 +544,13 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    const squiggle = editableConfigurationSection().querySelector("mark");
-    expect(squiggle?.textContent).toBe("index .Context.Env 0");
+    const editor = editableConfigurationSection().querySelector(
+      "[data-monaco-editor='workstation-prompt']",
+    );
+    expect(editor?.getAttribute("data-monaco-marker-count")).toBe("1");
+    expect(editor?.getAttribute("data-monaco-marker-messages")).toContain(
+      "Template execution would fail: value has type int; should be string.",
+    );
   });
 
   it("renders explicit prompt-validation loading and error states", () => {
@@ -639,9 +644,13 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    const squiggles = editableConfigurationSection().querySelectorAll("mark");
-    expect(squiggles).toHaveLength(1);
-    expect(squiggles[0]?.textContent).toBe("{{ .Prompt }}");
+    const editor = editableConfigurationSection().querySelector(
+      "[data-monaco-editor='workstation-prompt']",
+    );
+    expect(editor?.getAttribute("data-monaco-marker-count")).toBe("2");
+    expect(editor?.getAttribute("data-monaco-marker-ranges")).toContain(
+      "\"startColumn\":5",
+    );
   });
 
   it("uses byte offsets correctly when diagnostics begin after multibyte characters", () => {
@@ -680,8 +689,12 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    const squiggle = editableConfigurationSection().querySelector("mark");
-    expect(squiggle?.textContent).toBe("{{ .Prompt }}");
+    const editor = editableConfigurationSection().querySelector(
+      "[data-monaco-editor='workstation-prompt']",
+    );
+    expect(editor?.getAttribute("data-monaco-marker-ranges")).toContain(
+      "\"startColumn\":4",
+    );
   });
 
   it("clamps diagnostic offsets that start at byte one or extend past the prompt end", () => {
@@ -719,8 +732,12 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    const squiggle = editableConfigurationSection().querySelector("mark");
-    expect(squiggle?.textContent).toBe("Prompt");
+    const editor = editableConfigurationSection().querySelector(
+      "[data-monaco-editor='workstation-prompt']",
+    );
+    expect(editor?.getAttribute("data-monaco-marker-ranges")).toContain(
+      "\"endColumn\":7",
+    );
   });
 
   it("falls back to source-text matching when authoritative offsets are unavailable", () => {
@@ -762,10 +779,10 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    const squiggles = Array.from(
-      editableConfigurationSection().querySelectorAll("mark"),
-    ).map((element) => element.textContent);
-    expect(squiggles).toEqual(["{{ .Prompt }}", "{{ .Prompt }}"]);
+    const editor = editableConfigurationSection().querySelector(
+      "[data-monaco-editor='workstation-prompt']",
+    );
+    expect(editor?.getAttribute("data-monaco-marker-count")).toBe("2");
   });
 
   it("renders loading, empty, and error prompt variable help states explicitly", () => {

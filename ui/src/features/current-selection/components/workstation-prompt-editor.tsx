@@ -7,8 +7,12 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
-import type { EditableWorkstationPromptHelpState } from "../detail-card-types";
+import type {
+  EditableWorkstationPromptDiagnostic,
+  EditableWorkstationPromptHelpState,
+} from "../detail-card-types";
 import {
+  buildWorkstationPromptMarkers,
   registerWorkstationPromptCompletionProvider,
   registerWorkstationPromptMonaco,
   WORKSTATION_PROMPT_LANGUAGE_ID,
@@ -53,6 +57,7 @@ interface WorkstationPromptEditorProps {
   ariaInvalid?: boolean;
   autocompleteState: EditableWorkstationPromptHelpState;
   className?: string;
+  diagnostics?: EditableWorkstationPromptDiagnostic[];
   hasDiagnostics?: boolean;
   loadingMessage: string;
   onChange: (value: string) => void;
@@ -69,6 +74,7 @@ export function WorkstationPromptEditor({
   ariaInvalid = false,
   autocompleteState,
   className,
+  diagnostics = [],
   hasDiagnostics = false,
   loadingMessage,
   onChange,
@@ -79,8 +85,14 @@ export function WorkstationPromptEditor({
   value,
 }: WorkstationPromptEditorProps) {
   const autocompleteStateRef = useRef(autocompleteState);
+  const editorRef = useRef<MonacoEditorAPI.IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
   const [startupState, setStartupState] = useState<"error" | "loading" | "ready">(
     monacoLoaderReady ? "ready" : "loading",
+  );
+  const markers = useMemo(
+    () => buildWorkstationPromptMarkers(value, diagnostics),
+    [diagnostics, value],
   );
 
   useEffect(() => {
@@ -118,6 +130,25 @@ export function WorkstationPromptEditor({
 
   const options = useMemo(() => PROMPT_EDITOR_OPTIONS, []);
 
+  useEffect(() => {
+    const editorInstance = editorRef.current;
+    const monaco = monacoRef.current;
+    const model = editorInstance?.getModel();
+    if (!monaco || !model) {
+      return;
+    }
+
+    monaco.editor.setModelMarkers(
+      model,
+      "workstation-prompt-validation",
+      markers,
+    );
+
+    return () => {
+      monaco.editor.setModelMarkers(model, "workstation-prompt-validation", []);
+    };
+  }, [markers]);
+
   if (startupState !== "ready") {
     return (
       <PromptEditorFallbackState
@@ -145,12 +176,16 @@ export function WorkstationPromptEditor({
       height="13.5rem"
       onChange={(nextValue) => onChange(nextValue ?? "")}
       onMount={(editorInstance, monaco) => {
+        editorRef.current = editorInstance;
+        monacoRef.current = monaco;
         const completionProvider = registerWorkstationPromptCompletionProvider(
           monaco,
           () => autocompleteStateRef.current,
         );
 
         editorInstance.onDidDispose(() => {
+          editorRef.current = null;
+          monacoRef.current = null;
           completionProvider.dispose();
         });
         onMount?.(editorInstance);

@@ -1,4 +1,4 @@
-import { createElement, type ReactNode } from "react";
+import { createElement, type ReactNode, useEffect, useMemo, useState } from "react";
 import { vi } from "vitest";
 
 if (typeof HTMLAnchorElement !== "undefined") {
@@ -17,19 +17,74 @@ vi.mock("@monaco-editor/react", () => ({
   default: ({
     loading,
     onChange,
+    onMount,
     options,
     value,
     wrapperProps,
   }: {
     loading?: ReactNode;
     onChange?: (nextValue: string | undefined) => void;
+    onMount?: (editorInstance: unknown, monaco: unknown) => void;
     options?: { ariaLabel?: string };
     value?: string;
     wrapperProps?: Record<string, string | undefined>;
-  }) =>
-    createElement(
+  }) => {
+    const [markers, setMarkers] = useState<
+      Array<{
+        endColumn: number;
+        endLineNumber: number;
+        message: string;
+        startColumn: number;
+        startLineNumber: number;
+      }>
+    >([]);
+    const model = useMemo(
+      () => ({
+        __setMarkers: setMarkers,
+      }),
+      [],
+    );
+
+    useEffect(() => {
+      onMount?.(
+        {
+          getModel: () => model,
+          getScrollLeft: () => 0,
+          getScrollTop: () => 0,
+          onDidDispose: () => ({ dispose() {} }),
+          onDidScrollChange: () => ({ dispose() {} }),
+        },
+        {
+          editor: {
+            setModelMarkers: (
+              nextModel: typeof model,
+              _owner: string,
+              nextMarkers: typeof markers,
+            ) => {
+              nextModel.__setMarkers(nextMarkers);
+            },
+          },
+          languages: {
+            CompletionItemKind: { Variable: 4 },
+            CompletionTriggerKind: { Invoke: 0, TriggerCharacter: 1 },
+            registerCompletionItemProvider: () => ({
+              dispose() {},
+            }),
+          },
+        },
+      );
+    }, [model, onMount]);
+
+    return createElement(
       "div",
-      wrapperProps,
+      {
+        ...wrapperProps,
+        "data-monaco-marker-count": String(markers.length),
+        "data-monaco-marker-messages": JSON.stringify(
+          markers.map((marker) => marker.message),
+        ),
+        "data-monaco-marker-ranges": JSON.stringify(markers),
+      },
       loading
         ? createElement("div", { "data-monaco-loading": "true" }, loading)
         : null,
@@ -40,7 +95,8 @@ vi.mock("@monaco-editor/react", () => ({
           onChange?.((event.target as HTMLTextAreaElement).value),
         value: value ?? "",
       }),
-    ),
+    );
+  },
   loader: {
     config: vi.fn(),
   },
