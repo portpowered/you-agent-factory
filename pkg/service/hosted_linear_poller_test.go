@@ -67,20 +67,14 @@ func TestRunHostedLinearPollCycle_SubmitsFilteredIssuesAndPersistsCheckpoint(t *
 	}))
 	defer server.Close()
 
-	worker := &interfaces.WorkerConfig{
-		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Linear: &interfaces.HostedLinearWorkerConfig{
-			TeamIDs:  []string{"team-1"},
-			StateIDs: []string{"state-1"},
-			Mapping: interfaces.HostedLinearWorkerMappingConfig{
-				WorkType: "story",
-				State:    "init",
-			},
-			Claim: &interfaces.HostedLinearWorkerClaimConfig{AssigneeField: "ownerEmail"},
+	worker := hostedLinearWorkerConfigForTest(
+		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		func(cfg *interfaces.HostedLinearWorkerConfig) {
+			cfg.TeamIDs = []string{"team-1"}
+			cfg.StateIDs = []string{"state-1"}
+			cfg.Claim = &interfaces.HostedLinearWorkerClaimConfig{AssigneeField: "ownerEmail"}
 		},
-	}
+	)
 	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
 	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
 
@@ -112,39 +106,9 @@ func TestRunHostedLinearPollCycle_SubmitsFilteredIssuesAndPersistsCheckpoint(t *
 		t.Fatalf("authorization headers = %#v, want raw API key once", got)
 	}
 
-	normalized, err := factory.NormalizeWorkRequest(submitted[0], interfaces.WorkRequestNormalizeOptions{})
-	if err != nil {
-		t.Fatalf("NormalizeWorkRequest: %v", err)
-	}
-	if len(normalized) != 2 {
-		t.Fatalf("normalized submissions = %d, want 2 filtered issues", len(normalized))
-	}
-	if normalized[0].WorkID != "linear:issue-old" || normalized[1].WorkID != "linear:issue-new" {
-		t.Fatalf("normalized work IDs = [%s %s], want oldest-first filtered issues", normalized[0].WorkID, normalized[1].WorkID)
-	}
-	if normalized[0].RequestID != normalized[1].RequestID || normalized[0].RequestID == "" {
-		t.Fatalf("deterministic batch request IDs = [%q %q], want shared non-empty ID", normalized[0].RequestID, normalized[1].RequestID)
-	}
-	if normalized[1].Tags["linear_issue_identifier"] != "ENG-101" {
-		t.Fatalf("linear tags = %#v, want identifier tag", normalized[1].Tags)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(normalized[1].Payload, &payload); err != nil {
-		t.Fatalf("unmarshal payload: %v", err)
-	}
-	claims, _ := payload["claims"].(map[string]any)
-	if claims["ownerEmail"] != "alex@example.com" {
-		t.Fatalf("claims = %#v, want ownerEmail claim", claims)
-	}
-
-	checkpointData, err := os.ReadFile(checkpointPath)
-	if err != nil {
-		t.Fatalf("read checkpoint: %v", err)
-	}
-	var checkpoint linearCheckpoint
-	if err := json.Unmarshal(checkpointData, &checkpoint); err != nil {
-		t.Fatalf("decode checkpoint: %v", err)
-	}
+	normalized := normalizeSubmittedLinearWorkRequest(t, submitted[0])
+	assertNormalizedHostedLinearIssues(t, normalized)
+	checkpoint := readLinearCheckpointForTest(t, checkpointPath)
 	if checkpoint.IssueID != "issue-new" || checkpoint.UpdatedAt != "2026-05-22T07:10:00Z" {
 		t.Fatalf("checkpoint = %#v, want newest issue fingerprint", checkpoint)
 	}
@@ -187,14 +151,10 @@ func TestRunHostedLinearPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testi
 	}))
 	defer server.Close()
 
-	worker := &interfaces.WorkerConfig{
-		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Linear: &interfaces.HostedLinearWorkerConfig{
-			Mapping: interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
-		},
-	}
+	worker := hostedLinearWorkerConfigForTest(
+		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		nil,
+	)
 	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
 	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
 	if err := saveLinearCheckpoint(checkpointPath, linearCheckpoint{
@@ -249,6 +209,75 @@ func TestRunHostedLinearPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testi
 	if second.foundNewer {
 		t.Fatal("expected second cycle to stop at checkpoint with no newer issues")
 	}
+}
+
+func hostedLinearWorkerConfigForTest(
+	mapping interfaces.HostedLinearWorkerMappingConfig,
+	mutate func(*interfaces.HostedLinearWorkerConfig),
+) *interfaces.WorkerConfig {
+	worker := &interfaces.WorkerConfig{
+		Name:     "linear-poller",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Linear: &interfaces.HostedLinearWorkerConfig{
+			Mapping: mapping,
+		},
+	}
+	if mutate != nil {
+		mutate(worker.Linear)
+	}
+	return worker
+}
+
+func normalizeSubmittedLinearWorkRequest(t *testing.T, request interfaces.WorkRequest) []interfaces.SubmitRequest {
+	t.Helper()
+
+	normalized, err := factory.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+	if err != nil {
+		t.Fatalf("NormalizeWorkRequest: %v", err)
+	}
+	return normalized
+}
+
+func assertNormalizedHostedLinearIssues(t *testing.T, normalized []interfaces.SubmitRequest) {
+	t.Helper()
+
+	if len(normalized) != 2 {
+		t.Fatalf("normalized submissions = %d, want 2 filtered issues", len(normalized))
+	}
+	if normalized[0].WorkID != "linear:issue-old" || normalized[1].WorkID != "linear:issue-new" {
+		t.Fatalf("normalized work IDs = [%s %s], want oldest-first filtered issues", normalized[0].WorkID, normalized[1].WorkID)
+	}
+	if normalized[0].RequestID != normalized[1].RequestID || normalized[0].RequestID == "" {
+		t.Fatalf("deterministic batch request IDs = [%q %q], want shared non-empty ID", normalized[0].RequestID, normalized[1].RequestID)
+	}
+	if normalized[1].Tags["linear_issue_identifier"] != "ENG-101" {
+		t.Fatalf("linear tags = %#v, want identifier tag", normalized[1].Tags)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(normalized[1].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	claims, _ := payload["claims"].(map[string]any)
+	if claims["ownerEmail"] != "alex@example.com" {
+		t.Fatalf("claims = %#v, want ownerEmail claim", claims)
+	}
+}
+
+func readLinearCheckpointForTest(t *testing.T, checkpointPath string) linearCheckpoint {
+	t.Helper()
+
+	checkpointData, err := os.ReadFile(checkpointPath)
+	if err != nil {
+		t.Fatalf("read checkpoint: %v", err)
+	}
+
+	var checkpoint linearCheckpoint
+	if err := json.Unmarshal(checkpointData, &checkpoint); err != nil {
+		t.Fatalf("decode checkpoint: %v", err)
+	}
+	return checkpoint
 }
 
 func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *testing.T) {
