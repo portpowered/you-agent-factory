@@ -844,6 +844,36 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesHostedLinearWorker(t *testing.T)
 	}
 }
 
+func TestFactoryConfigFromOpenAPIJSON_RejectsHostedLinearWorkerMissingMappingWithoutPanic(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"invalid-hosted-linear-factory",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"queued","type":"PROCESSING"}]}],
+		"workers": [{
+			"name":"linear-poller",
+			"type":"HOSTED_WORKER",
+			"provider":"LINEAR",
+			"auth":{"secretRef":"secrets/linear-api-key"},
+			"linear":{}
+		}],
+		"workstations": [{
+			"name":"poll-linear",
+			"behavior":"POLLER",
+			"worker":"linear-poller",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"queued"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	findings := NewConfigValidator().Validate(cfg).Errors()
+	assertFindingMatch(t, findings, "hosted-worker-linear-mapping-work-type", "workers[0](linear-poller).linear.mapping.workType", "mapping.workType")
+	assertFindingMatch(t, findings, "hosted-worker-linear-mapping-state", "workers[0](linear-poller).linear.mapping.state", "mapping.state")
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsHostedWorkerOAuthAuthFields(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"invalid-hosted-auth-factory",

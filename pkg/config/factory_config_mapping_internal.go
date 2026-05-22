@@ -189,11 +189,18 @@ func hostedLinearWorkerInternalFromAPI(cfg *factoryapi.HostedLinearWorkerConfig)
 		PollInterval: stringValue(cfg.PollInterval),
 		TeamIDs:      stringSliceValue(cfg.TeamIds),
 		StateIDs:     stringSliceValue(cfg.StateIds),
-		Mapping: interfaces.HostedLinearWorkerMappingConfig{
-			WorkType: stringValue(cfg.Mapping.WorkType),
-			State:    stringValue(cfg.Mapping.State),
-		},
+		Mapping:      hostedLinearWorkerMappingInternalFromAPI(cfg.Mapping),
 		Claim: hostedLinearWorkerClaimInternalFromAPI(cfg.Claim),
+	}
+}
+
+func hostedLinearWorkerMappingInternalFromAPI(mapping *factoryapi.HostedLinearWorkerMapping) interfaces.HostedLinearWorkerMappingConfig {
+	if mapping == nil {
+		return interfaces.HostedLinearWorkerMappingConfig{}
+	}
+	return interfaces.HostedLinearWorkerMappingConfig{
+		WorkType: stringValue(mapping.WorkType),
+		State:    stringValue(mapping.State),
 	}
 }
 
