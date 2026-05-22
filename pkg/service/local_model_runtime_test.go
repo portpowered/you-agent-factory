@@ -149,7 +149,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 		"",
 		runtimeCfg,
 		logging.NoopLogger{},
-		false,
+		true,
 		provider,
 		nil,
 		nil,
@@ -271,7 +271,7 @@ func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*wor
 		},
 	})
 	history := factory.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
-	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, history.RecordModelEvent, func() time.Time { return eventTime }, newLocalModelResourceLimiter(), newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime))
+	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, history.RecordModelEvent, func() time.Time { return eventTime }, newLocalModelResourceLimiter(), newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime))
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
