@@ -263,10 +263,18 @@ func ruleClassifierWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 	var findings []Finding
 
 	for wi, ws := range cfg.Workstations {
+		basePath := fmt.Sprintf("workstations[%d](%s)", wi, ws.Name)
 		if !isClassifierWorkstation(ws) {
+			if len(ws.Outputs) == 0 {
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     basePath + ".outputs",
+					Message:  "non-classifier workstation requires at least one normal success output",
+					Rule:     "workstation-outputs",
+				})
+			}
 			continue
 		}
-		basePath := fmt.Sprintf("workstations[%d](%s)", wi, ws.Name)
 		if len(ws.ClassificationRoutes) == 0 {
 			findings = append(findings, Finding{
 				Severity: SeverityError,

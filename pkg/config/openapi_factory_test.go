@@ -165,6 +165,34 @@ func TestFactoryConfigFromOpenAPIJSON_MapsClassifierWorkstationRoutes(t *testing
 	}
 }
 
+func TestFactoryConfigFromOpenAPIJSON_RejectsNonClassifierWithoutOutputsDuringValidation(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"missing-outputs-factory",
+		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers": [{"name":"executor","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"name":"process-task",
+			"type":"MODEL_WORKSTATION",
+			"worker":"executor",
+			"inputs":[{"workType":"task","state":"init"}],
+			"onFailure":[{"workType":"task","state":"failed"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	result := NewConfigValidator().Validate(cfg)
+	if !result.HasErrors() {
+		t.Fatalf("expected validator to reject missing non-classifier outputs, got %#v", result.Findings)
+	}
+	if !strings.Contains(result.Error(), "workstation-outputs") {
+		t.Fatalf("expected workstation-outputs finding, got %s", result.Error())
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"customer-facing-name",

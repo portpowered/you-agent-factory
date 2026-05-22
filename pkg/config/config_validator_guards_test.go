@@ -196,6 +196,19 @@ func TestRuleWorkstationKind_UnknownKind(t *testing.T) {
 	assertFindingExists(t, findings, "workstation-kind")
 }
 
+func TestRuleClassifierWorkstations_RejectsNonClassifierWithoutOutputs(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "process-task",
+		Type:           interfaces.WorkstationTypeModel,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	assertFindingExists(t, findings, "workstation-outputs")
+}
+
 func TestRuleClassifierWorkstations_RejectsMissingRoutesAndLegacySuccessPaths(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
