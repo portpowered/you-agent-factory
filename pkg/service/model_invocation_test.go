@@ -40,8 +40,9 @@ func TestInvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 		},
 	}, nil)
 	svc := &FactoryService{
-		runtimeCfg: runtimeCfg,
-		cfg:        &FactoryServiceConfig{ProviderOverride: provider},
+		runtimeCfg:  runtimeCfg,
+		cfg:         &FactoryServiceConfig{ProviderOverride: provider},
+		modelAssets: staticModelAssetPuller{},
 	}
 
 	mode := factoryapi.AUDIOSTREAM

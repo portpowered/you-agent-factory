@@ -385,6 +385,33 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /models/{model_name}/pull:
+    post:
+      tags:
+        - Models
+      operationId: pullModel
+      summary: Pull local model assets into the managed cache
+      description: Pulls the required local assets for one discovered model into the managed cache directory. Cloud-backed models and unsupported local targets return actionable errors instead of silently succeeding.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful local-model asset pull or confirmation that the managed cache already contained the required revision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelPullResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factories/{factory_id}/status:
     get:
       tags:
@@ -1265,6 +1292,57 @@ components:
           description: Deterministically resolved slot bindings used for the invocation.
           items:
             $ref: '#/components/schemas/ResolvedModelOperationBinding'
+    ModelPullDownloadedFile:
+      type: object
+      required:
+        - path
+        - bytes
+      properties:
+        path:
+          type: string
+          description: Relative file path written under the managed model cache directory.
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Downloaded file size in bytes.
+        sha256:
+          type: string
+          description: Lowercase SHA-256 checksum for the cached file when known.
+    ModelPullOutcome:
+      type: string
+      description: Outcome of a managed local-model asset pull request.
+      enum:
+        - PULLED
+        - ALREADY_PRESENT
+    ModelPullResponse:
+      type: object
+      required:
+        - modelName
+        - providerLocality
+        - outcome
+        - cachePath
+        - revision
+        - downloadedFiles
+      properties:
+        modelName:
+          type: string
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+        providerLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+        outcome:
+          $ref: '#/components/schemas/ModelPullOutcome'
+        cachePath:
+          type: string
+          description: Final managed cache directory that now contains the pulled model assets.
+        revision:
+          type: string
+          description: Pulled source revision identifier, such as an upstream repository commit SHA.
+        downloadedFiles:
+          type: array
+          description: Files that were downloaded or verified as already present for the managed cache entry.
+          items:
+            $ref: '#/components/schemas/ModelPullDownloadedFile'
     ResolvedModelOperationBinding:
       type: object
       additionalProperties: false

@@ -32,6 +32,9 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
+	if err := fs.modelAssetPuller().EnsureModelAvailable(ctx, runtimeCfg, workerDef); err != nil {
+		return apisurface.ModelInvocationResult{}, err
+	}
 
 	inputContent := workcontent.PartsFromGenerated(request.Content)
 	inputTokens := []interfaces.Token{{

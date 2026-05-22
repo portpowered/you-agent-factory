@@ -167,6 +167,12 @@ const (
 	ModelOperationContentTypeText   ModelOperationContentType = "TEXT"
 )
 
+// Defines values for ModelPullOutcome.
+const (
+	ALREADYPRESENT ModelPullOutcome = "ALREADY_PRESENT"
+	PULLED         ModelPullOutcome = "PULLED"
+)
+
 // Defines values for ModelStatus.
 const (
 	READY       ModelStatus = "READY"
@@ -1248,6 +1254,42 @@ type ModelOperationSlot struct {
 
 	// Required Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
 	Required *bool `json:"required,omitempty"`
+}
+
+// ModelPullDownloadedFile defines model for ModelPullDownloadedFile.
+type ModelPullDownloadedFile struct {
+	// Bytes Downloaded file size in bytes.
+	Bytes int64 `json:"bytes"`
+
+	// Path Relative file path written under the managed model cache directory.
+	Path string `json:"path"`
+
+	// Sha256 Lowercase SHA-256 checksum for the cached file when known.
+	Sha256 *string `json:"sha256,omitempty"`
+}
+
+// ModelPullOutcome Outcome of a managed local-model asset pull request.
+type ModelPullOutcome string
+
+// ModelPullResponse defines model for ModelPullResponse.
+type ModelPullResponse struct {
+	// CachePath Final managed cache directory that now contains the pulled model assets.
+	CachePath string `json:"cachePath"`
+
+	// DownloadedFiles Files that were downloaded or verified as already present for the managed cache entry.
+	DownloadedFiles []ModelPullDownloadedFile `json:"downloadedFiles"`
+
+	// ModelName Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	ModelName string `json:"modelName"`
+
+	// Outcome Outcome of a managed local-model asset pull request.
+	Outcome ModelPullOutcome `json:"outcome"`
+
+	// ProviderLocality Provider locality for a model worker capability declaration.
+	ProviderLocality WorkerModelLocality `json:"providerLocality"`
+
+	// Revision Pulled source revision identifier, such as an upstream repository commit SHA.
+	Revision string `json:"revision"`
 }
 
 // ModelResourceSummary defines model for ModelResourceSummary.
@@ -2919,6 +2961,9 @@ type ServerInterface interface {
 	// Invoke one discovered model directly
 	// (POST /models/{model_name}/invocations)
 	InvokeModel(w http.ResponseWriter, r *http.Request, modelName string)
+	// Pull local model assets into the managed cache
+	// (POST /models/{model_name}/pull)
+	PullModel(w http.ResponseWriter, r *http.Request, modelName string)
 	// Get provider session details
 	// (GET /provider-sessions/detail)
 	GetProviderSessionDetails(w http.ResponseWriter, r *http.Request, params GetProviderSessionDetailsParams)
@@ -3471,6 +3516,31 @@ func (siw *ServerInterfaceWrapper) InvokeModel(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// PullModel operation middleware
+func (siw *ServerInterfaceWrapper) PullModel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "model_name" -------------
+	var modelName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "model_name", mux.Vars(r)["model_name"], &modelName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PullModel(w, r, modelName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetProviderSessionDetails operation middleware
 func (siw *ServerInterfaceWrapper) GetProviderSessionDetails(w http.ResponseWriter, r *http.Request) {
 
@@ -3828,6 +3898,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/models/{model_name}", wrapper.GetModel).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/models/{model_name}/invocations", wrapper.InvokeModel).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/models/{model_name}/pull", wrapper.PullModel).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 

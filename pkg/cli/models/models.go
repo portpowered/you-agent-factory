@@ -47,6 +47,13 @@ type InvokeConfig struct {
 	Output     io.Writer
 }
 
+type PullConfig struct {
+	ModelName string
+	Port      int
+	JSON      bool
+	Output    io.Writer
+}
+
 func List(cfg ListConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
@@ -109,6 +116,24 @@ func Invoke(cfg InvokeConfig) error {
 	}
 	_, err := fmt.Fprintf(cfg.Output, "Wrote audio: %s\n", outputPath)
 	return err
+}
+
+func Pull(cfg PullConfig) error {
+	if cfg.Output == nil {
+		cfg.Output = os.Stdout
+	}
+	modelName := strings.TrimSpace(cfg.ModelName)
+	if modelName == "" {
+		return fmt.Errorf("model name is required")
+	}
+	response, err := pullModel(cfg.Port, modelName)
+	if err != nil {
+		return err
+	}
+	if cfg.JSON {
+		return json.NewEncoder(cfg.Output).Encode(response)
+	}
+	return RenderPull(response, cfg.Output)
 }
 
 func QueryList(port int) (factoryapi.ListModelsResponse, error) {
@@ -201,6 +226,14 @@ func invokeModelAudio(port int, modelName, operation, text, outputPath string) e
 	return nil
 }
 
+func pullModel(port int, modelName string) (factoryapi.ModelPullResponse, error) {
+	var response factoryapi.ModelPullResponse
+	if err := doModelsPOST(port, "/models/"+url.PathEscape(strings.TrimSpace(modelName))+"/pull", map[string]any{}, &response); err != nil {
+		return factoryapi.ModelPullResponse{}, err
+	}
+	return response, nil
+}
+
 func doModelsPOST(port int, path string, payload any, out any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -271,6 +304,25 @@ func RenderList(response factoryapi.ListModelsResponse, output io.Writer) error 
 			modelModalities(model.Modalities),
 			len(model.Resources),
 		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func RenderPull(response factoryapi.ModelPullResponse, output io.Writer) error {
+	if _, err := fmt.Fprintf(output, "MODEL\tOUTCOME\tREVISION\tCACHE PATH\n%s\t%s\t%s\t%s\n", response.ModelName, response.Outcome, response.Revision, response.CachePath); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(output, "FILES"); err != nil {
+		return err
+	}
+	files := append([]factoryapi.ModelPullDownloadedFile(nil), response.DownloadedFiles...)
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Path < files[j].Path
+	})
+	for _, file := range files {
+		if _, err := fmt.Fprintf(output, "%s\t%d\n", file.Path, file.Bytes); err != nil {
 			return err
 		}
 	}

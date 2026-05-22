@@ -35,6 +35,7 @@ var queryFactory = factorycli.Query
 var listModels = modelscli.List
 var inspectModel = modelscli.Inspect
 var invokeModel = modelscli.Invoke
+var pullModel = modelscli.Pull
 
 const (
 	defaultMockWorkersConfigPathSentinel = "__agent_factory_default_mock_workers_config__"
@@ -136,9 +137,10 @@ func newModelsCommand() *cobra.Command {
 		Short: "Inspect discovered models from a running service",
 		Long: "Inspect discovered models from a running infinite-you service.\n\n" +
 			"Use list to discover model identifiers, inspect to view one model's readiness and capabilities, " +
-			"and invoke to call a discovered model directly through the same /models contract exposed by the API.",
+			"invoke to call a discovered model directly through the same /models contract exposed by the API, " +
+			"and pull to populate the managed local-model cache for supported local assets.",
 	}
-	modelsCmd.AddCommand(newModelsListCommand(), newModelsInspectCommand(), newModelsInvokeCommand())
+	modelsCmd.AddCommand(newModelsListCommand(), newModelsInspectCommand(), newModelsInvokeCommand(), newModelsPullCommand())
 	return modelsCmd
 }
 
@@ -191,6 +193,23 @@ func newModelsInvokeCommand() *cobra.Command {
 	cmd.Flags().StringVar(&cfg.Text, "text", "", "text input for direct invocation")
 	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "output file path for streamed audio responses")
 	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API model-invocation JSON metadata response")
+	return cmd
+}
+
+func newModelsPullCommand() *cobra.Command {
+	cfg := modelscli.PullConfig{Port: defaultcmd.FactoryPort}
+	cmd := &cobra.Command{
+		Use:   "pull <model-name>",
+		Short: "Pull one discovered local model into the managed cache",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.ModelName = args[0]
+			cfg.Output = cmd.OutOrStdout()
+			return pullModel(cfg)
+		},
+	}
+	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API model-pull JSON response")
 	return cmd
 }
 

@@ -182,6 +182,7 @@ func assertPublishedOperations(t *testing.T, paths map[string]any) {
 		"/models":                          {"get"},
 		"/models/{model_name}":             {"get"},
 		"/models/{model_name}/invocations": {"post"},
+		"/models/{model_name}/pull":        {"post"},
 		"/provider-sessions/detail":        {"get"},
 		"/factory":                         {"post"},
 		"/factory/~current":                {"get"},
@@ -229,7 +230,7 @@ func assertPublishedSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	for _, schema := range []string{
 		"SubmitWorkRequest", "SubmitWorkResponse", "UpsertWorkRequestResponse", "WorkRequest", "Work", "WorkContent",
 		"WorkContentPart", "WorkContentPartType", "WorkTextContentPart", "WorkImageContentPart", "Relation", "ListWorkResponse",
-		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "Workstation", "WorkstationKind",
+		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "Workstation", "WorkstationKind",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)

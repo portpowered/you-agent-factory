@@ -200,6 +200,7 @@ You are a helpful assistant.
 	}
 }
 
+// backendsizecheck:ignore-function this dual-locality integration test keeps the full model-invoke execution assertion path in one place.
 func TestLoadWorkersFromConfig_ModelInvokeContractExecutesAcrossLocalAndCloudWorkers(t *testing.T) {
 	t.Parallel()
 

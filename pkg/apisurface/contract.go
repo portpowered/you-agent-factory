@@ -24,6 +24,7 @@ type APISurface interface {
 	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
 	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
 	InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (ModelInvocationResult, error)
+	PullModel(ctx context.Context, modelName string) (ModelPullResult, error)
 }
 
 // SessionAPISurface extends APISurface with explicit per-session routing while
@@ -69,6 +70,14 @@ var ErrEditableFactoryVersionStale = errors.New("editable factory definition ver
 // not present in the current runtime configuration.
 var ErrModelNotFound = errors.New("model not found")
 
+// ErrModelNotAvailable reports that a discovered local model exists but its
+// required local assets are not present in the managed cache.
+var ErrModelNotAvailable = errors.New("model not available")
+
+// ErrModelPullUnsupported reports that the requested model does not support
+// managed local asset pulls in the current runtime or platform.
+var ErrModelPullUnsupported = errors.New("model pull is not supported")
+
 // ErrModelInvocationUnsupportedMode reports that the requested direct
 // invocation response mode is not valid for the selected operation output.
 var ErrModelInvocationUnsupportedMode = errors.New("model invocation response mode is not supported")
@@ -88,6 +97,25 @@ type ModelInvocationResult struct {
 	Bindings          []interfaces.ResolvedModelOperationBinding
 	StreamFile        string
 	StreamContentType string
+}
+
+// ModelPullDownloadedFile describes one cached artifact materialized by a
+// managed local-model asset pull.
+type ModelPullDownloadedFile struct {
+	Path   string
+	Bytes  int64
+	SHA256 string
+}
+
+// ModelPullResult carries the service-owned result of pulling one model into
+// the managed local cache.
+type ModelPullResult struct {
+	ModelName        string
+	ProviderLocality string
+	Outcome          string
+	CachePath        string
+	Revision         string
+	DownloadedFiles  []ModelPullDownloadedFile
 }
 
 // TopologyValidationError carries validation targets that the graph editor can

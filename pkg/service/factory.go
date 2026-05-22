@@ -122,6 +122,7 @@ type FactoryService struct {
 	recording      *replay.Recorder
 	logSink        *logging.RuntimeLogSink
 	modelResources *localModelResourceLimiter
+	modelAssets    modelAssetPuller
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)
@@ -218,6 +219,9 @@ type FactoryServiceConfig struct {
 	// exercising the full ScriptExecutor pipeline (arg templates, env
 	// merging, exit-code routing).
 	CommandRunnerOverride workers.CommandRunner
+	// ModelCacheDir optionally overrides the default managed local-model cache
+	// directory under ~/.agent-factory/models.
+	ModelCacheDir string
 }
 
 // BuildFactoryService loads factory.json from the config directory, constructs

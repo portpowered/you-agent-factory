@@ -1,0 +1,16 @@
+type: object
+required:
+  - path
+  - bytes
+properties:
+  path:
+    type: string
+    description: Relative file path written under the managed model cache directory.
+  bytes:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Downloaded file size in bytes.
+  sha256:
+    type: string
+    description: Lowercase SHA-256 checksum for the cached file when known.

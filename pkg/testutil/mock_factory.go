@@ -45,6 +45,9 @@ type MockFactory struct {
 	InvokedModelNames        []string
 	InvokeModelResult        apisurface.ModelInvocationResult
 	InvokeModelErr           error
+	PulledModelNames         []string
+	PullModelResult          apisurface.ModelPullResult
+	PullModelErr             error
 	SessionFactories         map[string]*MockFactory
 	FactorySessions          factoryapi.ListFactorySessionsResponse
 	ListFactorySessionsErr   error
@@ -230,6 +233,14 @@ func (m *MockFactory) InvokeModel(_ context.Context, modelName string, request f
 	m.InvokedModelNames = append(m.InvokedModelNames, modelName)
 	m.InvokedModels = append(m.InvokedModels, request)
 	return m.InvokeModelResult, nil
+}
+
+func (m *MockFactory) PullModel(_ context.Context, modelName string) (apisurface.ModelPullResult, error) {
+	if m.PullModelErr != nil {
+		return apisurface.ModelPullResult{}, m.PullModelErr
+	}
+	m.PulledModelNames = append(m.PulledModelNames, modelName)
+	return m.PullModelResult, nil
 }
 
 func (m *MockFactory) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {

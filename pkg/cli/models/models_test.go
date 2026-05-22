@@ -114,3 +114,32 @@ func TestInvoke_AudioWritesOutputFile(t *testing.T) {
 		t.Fatalf("output bytes = %q, want %q", got, audioBytes)
 	}
 }
+
+func TestPull_JSONWritesPullMetadataResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M/pull" {
+			t.Fatalf("path = %q, want pull path", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/OMNIVOICE_Q4_K_M/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}]}`)
+	}))
+	defer server.Close()
+
+	port := server.Listener.Addr().(*net.TCPAddr).Port
+	var out bytes.Buffer
+	if err := Pull(PullConfig{
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Port:      port,
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+	for _, want := range []string{"OMNIVOICE_Q4_K_M", `"outcome":"PULLED"`} {
+		if !bytes.Contains(out.Bytes(), []byte(want)) {
+			t.Fatalf("output missing %q:\n%s", want, out.String())
+		}
+	}
+}

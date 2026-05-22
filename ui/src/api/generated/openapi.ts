@@ -252,6 +252,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/models/{model_name}/pull": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pull local model assets into the managed cache
+         * @description Pulls the required local assets for one discovered model into the managed cache directory. Cloud-backed models and unsupported local targets return actionable errors instead of silently succeeding.
+         */
+        post: operations["pullModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factories/{factory_id}/status": {
         parameters: {
             query?: never;
@@ -637,6 +657,34 @@ export interface components {
             content: components["schemas"]["WorkContent"];
             /** @description Deterministically resolved slot bindings used for the invocation. */
             bindings: components["schemas"]["ResolvedModelOperationBinding"][];
+        };
+        ModelPullDownloadedFile: {
+            /** @description Relative file path written under the managed model cache directory. */
+            path: string;
+            /**
+             * Format: int64
+             * @description Downloaded file size in bytes.
+             */
+            bytes: number;
+            /** @description Lowercase SHA-256 checksum for the cached file when known. */
+            sha256?: string;
+        };
+        /**
+         * @description Outcome of a managed local-model asset pull request.
+         * @enum {string}
+         */
+        ModelPullOutcome: "PULLED" | "ALREADY_PRESENT";
+        ModelPullResponse: {
+            /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+            modelName: string;
+            providerLocality: components["schemas"]["WorkerModelLocality"];
+            outcome: components["schemas"]["ModelPullOutcome"];
+            /** @description Final managed cache directory that now contains the pulled model assets. */
+            cachePath: string;
+            /** @description Pulled source revision identifier, such as an upstream repository commit SHA. */
+            revision: string;
+            /** @description Files that were downloaded or verified as already present for the managed cache entry. */
+            downloadedFiles: components["schemas"]["ModelPullDownloadedFile"][];
         };
         ResolvedModelOperationBinding: {
             /** @description Stable input slot name declared by the worker capability. */
@@ -2532,6 +2580,32 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ModelInvocationResponse"];
                     "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    pullModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+                model_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful local-model asset pull or confirmation that the managed cache already contained the required revision. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelPullResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

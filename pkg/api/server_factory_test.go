@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -228,6 +229,51 @@ func TestInvokeModel_StreamsAudioOutput(t *testing.T) {
 	}
 	if !bytes.Equal(rec.Body.Bytes(), audioBytes) {
 		t.Fatalf("streamed body = %q, want %q", rec.Body.Bytes(), audioBytes)
+	}
+}
+
+func TestInvokeModel_ReturnsModelNotAvailableWhenLocalAssetsAreMissing(t *testing.T) {
+	mf := &testutil.MockFactory{
+		InvokeModelErr: fmt.Errorf("%w: required assets missing", apisurface.ErrModelNotAvailable),
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/invocations", bytes.NewBufferString(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello world"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "MODEL_NOT_AVAILABLE", "model not available: required assets missing")
+}
+
+func TestPullModel_ReturnsManagedCachePullMetadata(t *testing.T) {
+	mf := &testutil.MockFactory{
+		PullModelResult: apisurface.ModelPullResult{
+			ModelName:        "OMNIVOICE_Q4_K_M",
+			ProviderLocality: interfaces.ModelLocalityLocal,
+			Outcome:          "PULLED",
+			CachePath:        "/tmp/models/OMNIVOICE_Q4_K_M/rev1",
+			Revision:         "rev1",
+			DownloadedFiles: []apisurface.ModelPullDownloadedFile{{
+				Path:   "omnivoice-base-Q4_K_M.gguf",
+				Bytes:  407,
+				SHA256: "abc123",
+			}},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/pull", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.PulledModelNames) != 1 || mf.PulledModelNames[0] != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("pulled model names = %#v, want OMNIVOICE_Q4_K_M", mf.PulledModelNames)
+	}
+	response := decodeJSONResponse[factoryapi.ModelPullResponse](t, rec)
+	if response.Outcome != factoryapi.ModelPullOutcome("PULLED") || response.CachePath == "" || len(response.DownloadedFiles) != 1 {
+		t.Fatalf("pull response = %#v, want pull metadata", response)
 	}
 }
 

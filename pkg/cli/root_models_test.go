@@ -89,6 +89,31 @@ func TestModelsInvokeCommand_MapsArgumentsAndFlags(t *testing.T) {
 	}
 }
 
+func TestModelsPullCommand_MapsArgumentsAndFlags(t *testing.T) {
+	originalPullModel := pullModel
+	defer func() {
+		pullModel = originalPullModel
+	}()
+
+	var got modelscli.PullConfig
+	pullModel = func(cfg modelscli.PullConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"models", "pull", "OMNIVOICE_Q4_K_M", "--port", "9090", "--json"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute models pull: %v", err)
+	}
+	if got.ModelName != "OMNIVOICE_Q4_K_M" || got.Port != 9090 || !got.JSON {
+		t.Fatalf("pull config = %#v, want mapped pull args and flags", got)
+	}
+}
+
 func TestModelsCommand_HelpMentionsDiscoverySurface(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand()
@@ -100,7 +125,7 @@ func TestModelsCommand_HelpMentionsDiscoverySurface(t *testing.T) {
 		t.Fatalf("execute models --help: %v", err)
 	}
 	help := out.String()
-	for _, want := range []string{"Inspect discovered models", "list", "inspect", "invoke", "/models"} {
+	for _, want := range []string{"Inspect discovered models", "list", "inspect", "invoke", "pull", "/models"} {
 		if !bytes.Contains([]byte(help), []byte(want)) {
 			t.Fatalf("models help missing %q:\n%s", want, help)
 		}
