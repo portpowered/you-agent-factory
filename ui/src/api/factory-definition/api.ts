@@ -150,6 +150,7 @@ const WORKSTATION_BEHAVIOR_VALUES = new Set<
   "STANDARD",
 ]);
 const WORKSTATION_TYPE_VALUES = new Set<NonNullable<FactoryWorkstation["type"]>>([
+  "CLASSIFIER_WORKSTATION",
   "LOGICAL_MOVE",
   "MODEL_WORKSTATION",
 ]);
