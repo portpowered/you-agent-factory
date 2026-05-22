@@ -65,7 +65,6 @@
         "src/App.replay-dispatch-selection.test.tsx",
         "src/App.replay-stream.test.tsx",
         "src/App.replay-workstation-requests.test.tsx",
-        "src/App.test.tsx",
         "src/App.timeline.test.tsx",
         "src/App.toolbar-locale.test.tsx",
         "src/api/current-factory-definition/api.test.ts",
