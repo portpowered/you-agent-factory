@@ -42,6 +42,7 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.ModelCacheDir = cacheDir
+		cfg.SkipBuiltInRunnerPrerequisiteValidation = true
 	}, factory.WithServiceMode())
 
 	pull := postJSON[factoryapi.ModelPullResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/pull", nil, "asset pull failure")

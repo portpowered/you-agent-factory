@@ -23,6 +23,18 @@ function Write-InstallerOutputs {
     "skip_reason=$SkipReason" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 }
 
+function Invoke-NativeCommand {
+    param(
+        [string]$Description,
+        [scriptblock]$Command
+    )
+
+    & $Command
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Description failed with exit code $LASTEXITCODE"
+    }
+}
+
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
 
@@ -31,7 +43,7 @@ $backendTargetPath = Join-Path $installDir $backendName
 
 function Build-Adapter {
     Write-Host "Building $commandName adapter"
-    & go build "-o" $targetPath "./cmd/omnivoice-llamacpp"
+    Invoke-NativeCommand "go build adapter" { go build "-o" $targetPath "./cmd/omnivoice-llamacpp" }
 }
 
 function Get-ExistingBackendPath {
@@ -84,14 +96,18 @@ function Build-BackendFromSource {
             Remove-Item -Recurse -Force $sourceDir
         }
         New-Item -ItemType Directory -Path ([System.IO.Path]::GetDirectoryName($sourceDir)) -Force | Out-Null
-        & git clone "--branch" "master" "--depth" "1" "--recurse-submodules" "--shallow-submodules" $sourceRepo $sourceDir
+        Invoke-NativeCommand "git clone omnivoice.cpp" {
+            git clone "--branch" "master" "--depth" "1" "--recurse-submodules" "--shallow-submodules" $sourceRepo $sourceDir
+        }
     }
 
     Write-Host "Building real $backendName from pinned $sourceRepo@$sourceRef"
-    & git -C $sourceDir fetch "--depth" "1" "origin" $sourceRef
-    & git -C $sourceDir checkout "--force" $sourceRef
-    & git -C $sourceDir submodule sync "--recursive"
-    & git -C $sourceDir submodule update "--init" "--recursive" "--depth" "1"
+    Invoke-NativeCommand "git fetch omnivoice.cpp ref" { git -C $sourceDir fetch "--depth" "1" "origin" $sourceRef }
+    Invoke-NativeCommand "git checkout omnivoice.cpp ref" { git -C $sourceDir checkout "--force" $sourceRef }
+    Invoke-NativeCommand "git submodule sync omnivoice.cpp" { git -C $sourceDir submodule sync "--recursive" }
+    Invoke-NativeCommand "git submodule update omnivoice.cpp" {
+        git -C $sourceDir submodule update "--init" "--recursive" "--depth" "1"
+    }
 
     $buildDir = Join-Path $sourceDir "build"
     if (Test-Path $buildDir) {
@@ -99,12 +115,12 @@ function Build-BackendFromSource {
     }
     New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
 
-    $vcvars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-    $quotedSourceDir = '"' + $sourceDir + '"'
-    $quotedBuildDir = '"' + $buildDir + '"'
-    $quotedVcvars = '"' + $vcvars + '"'
-    $buildCommand = "$quotedVcvars && cd /d $quotedSourceDir && cmake -B build && cmake --build build --config Release -j %NUMBER_OF_PROCESSORS%"
-    & cmd.exe /c $buildCommand
+    Invoke-NativeCommand "cmake configure omnivoice.cpp" {
+        cmake "-S" $sourceDir "-B" $buildDir "-G" "Visual Studio 17 2022" "-A" "x64"
+    }
+    Invoke-NativeCommand "cmake build omnivoice.cpp" {
+        cmake "--build" $buildDir "--config" "Release" "--parallel" $env:NUMBER_OF_PROCESSORS
+    }
 
     $candidate = Get-ChildItem -Path $buildDir -Recurse -File | Where-Object { $_.Name -eq $backendName } | Select-Object -First 1
     if (-not $candidate) {
