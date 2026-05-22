@@ -217,27 +217,29 @@ func defaultRuntimeLogDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve user home for runtime logs: %w", err)
 	}
-	runtimeLogDir := filepath.Join(home, defaultRuntimeLogDirName, runtimeLogSubdirName)
+	runtimeLogDir := canonicalRuntimeLogDir(home)
 	if err := migrateLegacyRuntimeLogDir(home, runtimeLogDir); err != nil {
 		return "", err
 	}
 	return runtimeLogDir, nil
 }
 
+func canonicalRuntimeLogDir(home string) string {
+	return filepath.Join(home, defaultRuntimeLogDirName, runtimeLogSubdirName)
+}
+
+func legacyRuntimeLogDir(home string) string {
+	return filepath.Join(home, legacyRuntimeLogDirName, runtimeLogSubdirName)
+}
+
 func migrateLegacyRuntimeLogDir(home, runtimeLogDir string) error {
-	legacyLogDir := filepath.Join(home, legacyRuntimeLogDirName, runtimeLogSubdirName)
-
-	if _, err := os.Stat(legacyLogDir); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("stat legacy runtime log dir %s: %w", legacyLogDir, err)
+	legacyLogDir := legacyRuntimeLogDir(home)
+	shouldMigrate, err := shouldMigrateLegacyRuntimeLogDir(legacyLogDir, runtimeLogDir)
+	if err != nil {
+		return err
 	}
-
-	if _, err := os.Stat(runtimeLogDir); err == nil {
+	if !shouldMigrate {
 		return nil
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("stat runtime log dir %s: %w", runtimeLogDir, err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(runtimeLogDir), 0o755); err != nil {
@@ -247,4 +249,21 @@ func migrateLegacyRuntimeLogDir(home, runtimeLogDir string) error {
 		return fmt.Errorf("migrate legacy runtime logs from %s to %s: %w", legacyLogDir, runtimeLogDir, err)
 	}
 	return nil
+}
+
+func shouldMigrateLegacyRuntimeLogDir(legacyLogDir, runtimeLogDir string) (bool, error) {
+	if _, err := os.Stat(legacyLogDir); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("stat legacy runtime log dir %s: %w", legacyLogDir, err)
+	}
+
+	if _, err := os.Stat(runtimeLogDir); err == nil {
+		return false, nil
+	} else if !os.IsNotExist(err) {
+		return false, fmt.Errorf("stat runtime log dir %s: %w", runtimeLogDir, err)
+	}
+
+	return true, nil
 }
