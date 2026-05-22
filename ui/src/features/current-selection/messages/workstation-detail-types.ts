@@ -27,6 +27,8 @@ export interface WorkstationDetailMessages {
   editableConfigurationSaveSuccess: string;
   editableConfigurationValidationStatus: string;
   editableConfigurationPromptRequired: string;
+  editableConfigurationPromptEditorLoading: string;
+  editableConfigurationPromptEditorError: string;
   editableConfigurationPromptValidationLoading: string;
   editableConfigurationPromptValidationFallbackError: string;
   editableConfigurationPromptValidationErrorPrefix: string;

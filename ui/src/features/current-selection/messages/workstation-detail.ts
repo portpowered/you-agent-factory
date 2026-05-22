@@ -49,6 +49,10 @@ const workstationDetailMessagesByLocale = {
       "Resolve the highlighted fields before saving this workstation.",
     editableConfigurationPromptRequired:
       "Enter a prompt before saving this workstation.",
+    editableConfigurationPromptEditorLoading:
+      "Starting the prompt editor for this workstation.",
+    editableConfigurationPromptEditorError:
+      "The prompt editor could not be started. Reload this workstation and try again.",
     editableConfigurationPromptValidationLoading:
       "Validating prompt variables for the current draft.",
     editableConfigurationPromptValidationFallbackError:
@@ -217,6 +221,10 @@ const workstationDetailMessagesByLocale = {
       "このワークステーションを保存する前に、強調表示された項目を修正してください。",
     editableConfigurationPromptRequired:
       "このワークステーションを保存する前にプロンプトを入力してください。",
+    editableConfigurationPromptEditorLoading:
+      "このワークステーションのプロンプトエディターを起動しています。",
+    editableConfigurationPromptEditorError:
+      "プロンプトエディターを起動できませんでした。このワークステーションを再読み込みしてもう一度お試しください。",
     editableConfigurationPromptValidationLoading:
       "この下書きのプロンプト変数を検証しています。",
     editableConfigurationPromptValidationFallbackError:
@@ -386,6 +394,10 @@ const workstationDetailMessagesByLocale = {
       "이 워크스테이션을 저장하기 전에 강조 표시된 필드를 수정하세요.",
     editableConfigurationPromptRequired:
       "이 워크스테이션을 저장하기 전에 프롬프트를 입력하세요.",
+    editableConfigurationPromptEditorLoading:
+      "이 워크스테이션의 프롬프트 편집기를 시작하는 중입니다.",
+    editableConfigurationPromptEditorError:
+      "프롬프트 편집기를 시작할 수 없습니다. 이 워크스테이션을 다시 불러오고 다시 시도하세요.",
     editableConfigurationPromptValidationLoading:
       "현재 초안의 프롬프트 변수를 검증하는 중입니다.",
     editableConfigurationPromptValidationFallbackError:
@@ -547,6 +559,9 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
     editableConfigurationPromptRequired: "保存此工作站前请输入提示词。",
+    editableConfigurationPromptEditorLoading: "正在启动此工作站的提示词编辑器。",
+    editableConfigurationPromptEditorError:
+      "无法启动提示词编辑器。请重新加载此工作站后重试。",
     editableConfigurationPromptValidationLoading: "正在校验当前草稿中的提示词变量。",
     editableConfigurationPromptValidationFallbackError: "无法完成提示词校验。",
     editableConfigurationPromptValidationErrorPrefix: "提示词校验不可用。",

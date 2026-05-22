@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Textarea } from "../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -9,6 +8,7 @@ import {
 import { cn } from "../../../lib/cn";
 import type { WorkstationDetailCardProps } from "../detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages";
+import { WorkstationPromptEditor } from "./workstation-prompt-editor";
 
 export function EditableConfigurationPromptInput({
   messages,
@@ -20,8 +20,8 @@ export function EditableConfigurationPromptInput({
     { status: "ready" }
   >;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const [editorReady, setEditorReady] = useState(false);
   const diagnosticsId = "editable-workstation-prompt-diagnostics";
   const errorId = "editable-workstation-prompt-error";
   const describedBy = [
@@ -32,41 +32,37 @@ export function EditableConfigurationPromptInput({
     .join(" ");
 
   useEffect(() => {
-    const textarea = textareaRef.current;
     const overlay = overlayRef.current;
-    if (!textarea || !overlay) {
+    if (!overlay) {
       return;
     }
 
-    const syncScroll = () => {
-      overlay.scrollTop = textarea.scrollTop;
-      overlay.scrollLeft = textarea.scrollLeft;
-    };
-
-    syncScroll();
-    textarea.addEventListener("scroll", syncScroll);
-    return () => textarea.removeEventListener("scroll", syncScroll);
+    overlay.scrollTop = 0;
+    overlay.scrollLeft = 0;
   }, []);
 
   return (
     <div className="grid gap-2">
       <div className="relative">
-        <div
-          aria-hidden="true"
-          className={cn(
-            "pointer-events-none absolute inset-0 overflow-hidden rounded-xl border border-af-overlay/14 px-3 py-3 text-sm text-transparent",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-          ref={overlayRef}
-        >
-          <PromptDiagnosticOverlay
-            diagnostics={state.promptDiagnostics}
-            prompt={state.draft.prompt}
-          />
-        </div>
-        <Textarea
+        {editorReady ? (
+          <div
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-0 overflow-hidden rounded-xl border border-af-overlay/14 px-3 py-3 text-sm text-transparent",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
+            ref={overlayRef}
+          >
+            <PromptDiagnosticOverlay
+              diagnostics={state.promptDiagnostics}
+              prompt={state.draft.prompt}
+            />
+          </div>
+        ) : null}
+        <WorkstationPromptEditor
+          ariaLabel={messages.promptFieldLabel}
           aria-describedby={describedBy || undefined}
-          aria-invalid={state.validationErrors.prompt ? "true" : undefined}
+          ariaInvalid={Boolean(state.validationErrors.prompt)}
           className={cn(
             "relative z-10 bg-transparent",
             state.promptDiagnostics.length > 0
@@ -74,9 +70,20 @@ export function EditableConfigurationPromptInput({
               : undefined,
             DASHBOARD_BODY_TEXT_CLASS,
           )}
-          id="editable-workstation-prompt"
-          onChange={(event) => state.onPromptChange(event.target.value)}
-          ref={textareaRef}
+          hasDiagnostics={state.promptDiagnostics.length > 0}
+          loadingMessage={messages.editableConfigurationPromptEditorLoading}
+          onChange={state.onPromptChange}
+          onReadyChange={setEditorReady}
+          onScrollChange={({ scrollLeft, scrollTop }) => {
+            const overlay = overlayRef.current;
+            if (!overlay) {
+              return;
+            }
+
+            overlay.scrollTop = scrollTop;
+            overlay.scrollLeft = scrollLeft;
+          }}
+          startupErrorMessage={messages.editableConfigurationPromptEditorError}
           value={state.draft.prompt}
         />
       </div>

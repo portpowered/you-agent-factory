@@ -236,6 +236,9 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByLabelText("Worker")).toBeTruthy();
     expect(
+      screen.getByLabelText("Prompt").getAttribute("data-monaco-editor"),
+    ).toBe("workstation-prompt");
+    expect(
       screen.getByDisplayValue(
         "Review the latest story changes before approval.",
       ),
