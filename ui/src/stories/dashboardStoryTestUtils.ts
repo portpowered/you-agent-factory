@@ -242,11 +242,13 @@ export async function expectTimelineToolbarAlignment(
   );
   expect(sliderRect.left).toBeGreaterThanOrEqual(headingRect.right - 1);
   expect(currentButtonRect.left).toBeGreaterThanOrEqual(sliderRect.left);
-  expect(languageButtonRect.left).toBeGreaterThanOrEqual(sliderRect.right - 1);
+  expect(streamStatusRect.left).toBeGreaterThanOrEqual(sliderRect.right - 1);
   expect(exportButtonRect.left).toBeGreaterThanOrEqual(
-    languageButtonRect.right - 1,
+    streamStatusRect.right - 1,
   );
-  expect(streamStatusRect.left).toBeGreaterThanOrEqual(exportButtonRect.right - 1);
+  expect(languageButtonRect.left).toBeGreaterThanOrEqual(
+    exportButtonRect.right - 1,
+  );
 }
 
 export async function selectWorkstationRequest(

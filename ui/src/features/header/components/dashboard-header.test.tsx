@@ -158,9 +158,9 @@ describe("DashboardHeader", () => {
     );
     expect(controls).toHaveLength(4);
     expect(controls[0]).toBe(slider);
-    expect(controls[1]).toBe(languageButton);
+    expect(controls[1]).toBe(streamStatus);
     expect(controls[2]).toBe(exportButton);
-    expect(controls[3]).toBe(streamStatus);
+    expect(controls[3]).toBe(languageButton);
     expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");
     expect(languageButton.getAttribute("aria-expanded")).toBe("false");

@@ -2789,9 +2789,9 @@ describe("App timeline reconstruction flows", () => {
 
     expect(headerControls).toHaveLength(4);
     expect(headerControls[0]).toBe(slider);
-    expect(headerControls[1]).toBe(languageButton);
+    expect(headerControls[1]).toBe(streamStatus);
     expect(headerControls[2]).toBe(exportButton);
-    expect(headerControls[3]).toBe(streamStatus);
+    expect(headerControls[3]).toBe(languageButton);
     expect(within(toolbar).getByText("4/4")).toBeTruthy();
     expect(within(toolbar).queryByText(/Tick \d+ of \d+/)).toBeNull();
     expect(within(toolbar).getByText("Timeline tick").className).toContain(
