@@ -41,12 +41,6 @@ export interface WorkstationDetailMessages {
   editableConfigurationPromptHelpEmpty: string;
   editableConfigurationPromptHelpFallbackError: string;
   editableConfigurationPromptHelpErrorPrefix: string;
-  editableConfigurationPromptHelpHeading: string;
-  editableConfigurationPromptHelpOpenActionLabel: string;
-  editableConfigurationPromptHelpCloseActionLabel: string;
-  editableConfigurationPromptHelpAvailableHeading: string;
-  editableConfigurationPromptHelpUnavailableHeading: string;
-  editableConfigurationPromptHelpInputCountSummary: (count: number) => string;
   editableConfigurationPromptAutocompleteSummary: (
     variableCount: number,
     inputCount: number,

@@ -348,7 +348,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(onPromptChange).toHaveBeenCalledWith("Updated prompt");
   });
 
-  it("shows prompt variable help inline from the current workstation contract", () => {
+  it("shows inline Monaco guidance from the current workstation contract", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
@@ -367,9 +367,6 @@ describe("WorkstationDetailCard editable configuration", () => {
         name: "Expand editable configuration",
       }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open prompt variable help" }),
-    );
 
     expect(
       screen.getByText(
@@ -382,17 +379,12 @@ describe("WorkstationDetailCard editable configuration", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText("This workstation exposes 1 authored input."),
-    ).toBeTruthy();
-    expect(screen.getByText("Prompt variable help")).toBeTruthy();
-    expect(screen.getByText("Available variables")).toBeTruthy();
-    expect(screen.getByText(".WorkID")).toBeTruthy();
-    expect(screen.getByText("{{ .WorkID }}")).toBeTruthy();
-    expect(screen.getByText("Unavailable access patterns")).toBeTruthy();
-    expect(screen.getByText(".Inputs[1].Payload")).toBeTruthy();
-    expect(
-      screen.getByText("Only input 0 is available for this workstation."),
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: "Open prompt variable help" }),
+    ).toBeNull();
+    expect(screen.queryByText("Prompt variable help")).toBeNull();
+    expect(screen.queryByText("Available variables")).toBeNull();
+    expect(screen.queryByText(".WorkID")).toBeNull();
+    expect(screen.queryByText("{{ .WorkID }}")).toBeNull();
   });
 
   it("renders inline prompt diagnostics with squiggle feedback for invalid variables", () => {
@@ -785,7 +777,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(editor?.getAttribute("data-monaco-marker-count")).toBe("2");
   });
 
-  it("renders loading, empty, and error prompt variable help states explicitly", () => {
+  it("keeps prompt guidance inline without a separate prompt variable help disclosure", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const { rerender } = render(
@@ -805,9 +797,10 @@ describe("WorkstationDetailCard editable configuration", () => {
         name: "Expand editable configuration",
       }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open prompt variable help" }),
-    );
+
+    expect(
+      screen.queryByRole("button", { name: "Open prompt variable help" }),
+    ).toBeNull();
 
     expect(
       screen.getAllByText(

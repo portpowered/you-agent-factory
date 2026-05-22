@@ -74,15 +74,6 @@ const workstationDetailMessagesByLocale = {
       "Prompt variable help could not be loaded.",
     editableConfigurationPromptHelpErrorPrefix:
       "Prompt variable help unavailable.",
-    editableConfigurationPromptHelpHeading: "Prompt variable help",
-    editableConfigurationPromptHelpOpenActionLabel: "Open prompt variable help",
-    editableConfigurationPromptHelpCloseActionLabel:
-      "Close prompt variable help",
-    editableConfigurationPromptHelpAvailableHeading: "Available variables",
-    editableConfigurationPromptHelpUnavailableHeading:
-      "Unavailable access patterns",
-    editableConfigurationPromptHelpInputCountSummary: (count) =>
-      `This workstation exposes ${singularPlural(count, "authored input", "authored inputs")}.`,
     editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
       `Autocomplete is ready with ${singularPlural(variableCount, "variable", "variables")} for ${singularPlural(inputCount, "authored input", "authored inputs")}.`,
     editableConfigurationPromptAutocompleteDetail:
@@ -250,16 +241,6 @@ const workstationDetailMessagesByLocale = {
       "プロンプト変数ヘルプを読み込めませんでした。",
     editableConfigurationPromptHelpErrorPrefix:
       "プロンプト変数ヘルプは利用できません。",
-    editableConfigurationPromptHelpHeading: "プロンプト変数ヘルプ",
-    editableConfigurationPromptHelpOpenActionLabel:
-      "プロンプト変数ヘルプを開く",
-    editableConfigurationPromptHelpCloseActionLabel:
-      "プロンプト変数ヘルプを閉じる",
-    editableConfigurationPromptHelpAvailableHeading: "利用可能な変数",
-    editableConfigurationPromptHelpUnavailableHeading:
-      "利用できないアクセスパターン",
-    editableConfigurationPromptHelpInputCountSummary: (count) =>
-      `このワークステーションは ${count} 件の入力を公開しています。`,
     editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
       `${inputCount} 件の入力コンテキストで ${variableCount} 件の補完候補を利用できます。`,
     editableConfigurationPromptAutocompleteDetail:
@@ -427,15 +408,6 @@ const workstationDetailMessagesByLocale = {
       "프롬프트 변수 도움말을 불러올 수 없습니다.",
     editableConfigurationPromptHelpErrorPrefix:
       "프롬프트 변수 도움말을 사용할 수 없습니다.",
-    editableConfigurationPromptHelpHeading: "프롬프트 변수 도움말",
-    editableConfigurationPromptHelpOpenActionLabel: "프롬프트 변수 도움말 열기",
-    editableConfigurationPromptHelpCloseActionLabel:
-      "프롬프트 변수 도움말 닫기",
-    editableConfigurationPromptHelpAvailableHeading: "사용 가능한 변수",
-    editableConfigurationPromptHelpUnavailableHeading:
-      "사용할 수 없는 접근 패턴",
-    editableConfigurationPromptHelpInputCountSummary: (count) =>
-      `이 워크스테이션은 ${count}개의 작성된 입력을 노출합니다.`,
     editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
       `${inputCount}개의 입력 컨텍스트에서 ${variableCount}개의 자동완성 변수를 사용할 수 있습니다.`,
     editableConfigurationPromptAutocompleteDetail:
@@ -591,13 +563,6 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptHelpFallbackError:
       "无法加载提示词变量帮助信息。",
     editableConfigurationPromptHelpErrorPrefix: "提示词变量帮助信息不可用。",
-    editableConfigurationPromptHelpHeading: "提示词变量帮助",
-    editableConfigurationPromptHelpOpenActionLabel: "打开提示词变量帮助",
-    editableConfigurationPromptHelpCloseActionLabel: "关闭提示词变量帮助",
-    editableConfigurationPromptHelpAvailableHeading: "可用变量",
-    editableConfigurationPromptHelpUnavailableHeading: "不可用访问模式",
-    editableConfigurationPromptHelpInputCountSummary: (count) =>
-      `此工作站公开了 ${count} 个已编写输入。`,
     editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
       `自动补全已就绪，可为 ${inputCount} 个已编写输入上下文提供 ${variableCount} 个变量候选。`,
     editableConfigurationPromptAutocompleteDetail:

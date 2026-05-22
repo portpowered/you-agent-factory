@@ -141,8 +141,9 @@ const invokeWorkstationDetail = (
       return [formatter("Gemini" as never, "Factory" as never)];
     case "historyRequestCountLabel":
     case "historyRunCountLabel":
-    case "editableConfigurationPromptHelpInputCountSummary":
       return [formatter(1 as never), formatter(3 as never)];
+    case "editableConfigurationPromptAutocompleteSummary":
+      return [formatter(1 as never, 1 as never), formatter(3 as never, 2 as never)];
     case "openNamedWorkItemAction":
     case "selectWorkItemLabel":
       return [formatter("Review Story" as never)];
