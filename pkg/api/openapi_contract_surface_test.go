@@ -306,15 +306,38 @@ func assertWorkContentSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	assertSchemaOneOfRefs(t, workContentPartSchema, "WorkContentPart", []string{
 		"#/components/schemas/WorkTextContentPart",
 		"#/components/schemas/WorkImageContentPart",
+		"#/components/schemas/WorkAudioContentPart",
+		"#/components/schemas/WorkJsonContentPart",
+		"#/components/schemas/WorkBinaryContentPart",
 	})
-	assertEnumValues(t, schemaObject(t, schemas, "WorkContentPartType"), "WorkContentPartType", []string{"text", "image"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkContentPartType"), "WorkContentPartType", []string{"text", "image", "TEXT", "IMAGE", "AUDIO", "JSON", "BINARY"})
 
-	workTextPartSchema := schemaObject(t, schemas, "WorkTextContentPart")
-	assertRequiredFields(t, workTextPartSchema, "type", "text")
-	assertSchemaPropertiesPresent(t, schemaProperties(t, workTextPartSchema, "WorkTextContentPart"), "WorkTextContentPart", "type", "text")
-	workImagePartSchema := schemaObject(t, schemas, "WorkImageContentPart")
-	assertRequiredFields(t, workImagePartSchema, "type", "file")
-	assertSchemaPropertiesPresent(t, schemaProperties(t, workImagePartSchema, "WorkImageContentPart"), "WorkImageContentPart", "type", "file")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkTextContentPart", "type", "text")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkImageContentPart", "type", "file")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkAudioContentPart", "type", "file")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkJsonContentPart", "type", "json")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkBinaryContentPart", "type", "file")
+	assertSchemaPropertiesPresent(t, schemaProperties(t, schemaObject(t, schemas, "WorkContentCommonFields"), "WorkContentCommonFields"), "WorkContentCommonFields", "label", "role", "contentType", "artifactId", "metadata")
+}
+
+func assertWorkContentPartSchemaVariant(t *testing.T, schemas map[string]any, schemaName string, requiredFields ...string) {
+	t.Helper()
+
+	schema := schemaObject(t, schemas, schemaName)
+	allOf, ok := schema["allOf"].([]any)
+	if !ok || len(allOf) != 2 {
+		t.Fatalf("%s.allOf has %d entries, want 2", schemaName, len(allOf))
+	}
+	commonRef, ok := allOf[0].(map[string]any)
+	if !ok || commonRef["$ref"] != "#/components/schemas/WorkContentCommonFields" {
+		t.Fatalf("%s first allOf entry must reference WorkContentCommonFields", schemaName)
+	}
+	inlineSchema, ok := allOf[1].(map[string]any)
+	if !ok {
+		t.Fatalf("%s inline allOf schema is missing", schemaName)
+	}
+	assertRequiredFields(t, inlineSchema, requiredFields...)
+	assertSchemaPropertiesPresent(t, schemaProperties(t, inlineSchema, schemaName), schemaName, requiredFields...)
 }
 
 func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {

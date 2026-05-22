@@ -583,14 +583,14 @@ func legacyTextPayloadFromCanonicalContent(content []interfaces.WorkContentPart)
 	var builder strings.Builder
 	hasText := false
 	for _, part := range content {
-		switch part.Type {
+		switch part.Type.Normalized() {
 		case interfaces.WorkContentPartTypeText:
 			hasText = true
 			builder.WriteString(part.Text)
 		case interfaces.WorkContentPartTypeImage:
 			continue
 		default:
-			return "", false, fmt.Errorf("unsupported content type %q", part.Type)
+			continue
 		}
 	}
 	return builder.String(), hasText, nil

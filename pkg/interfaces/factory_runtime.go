@@ -1,5 +1,7 @@
 package interfaces
 
+import "encoding/json"
+
 // FactoryState represents the current lifecycle state of a Factory.
 type FactoryState string
 
@@ -82,18 +84,39 @@ type Work struct {
 // WorkContentPart is the backend-owned canonical work content shape mirrored
 // from the public API contract.
 type WorkContentPart struct {
-	Type WorkContentPartType `json:"type"`
-	Text string              `json:"text,omitempty"`
-	File string              `json:"file,omitempty"`
+	Type        WorkContentPartType `json:"type"`
+	Text        string              `json:"text,omitempty"`
+	File        string              `json:"file,omitempty"`
+	JSON        json.RawMessage     `json:"json,omitempty"`
+	Label       string              `json:"label,omitempty"`
+	Role        string              `json:"role,omitempty"`
+	ContentType string              `json:"contentType,omitempty"`
+	ArtifactID  string              `json:"artifactId,omitempty"`
+	Metadata    map[string]any      `json:"metadata,omitempty"`
 }
 
 // WorkContentPartType identifies one canonical content part kind.
 type WorkContentPartType string
 
 const (
-	WorkContentPartTypeText  WorkContentPartType = "text"
-	WorkContentPartTypeImage WorkContentPartType = "image"
+	WorkContentPartTypeText   WorkContentPartType = "text"
+	WorkContentPartTypeImage  WorkContentPartType = "image"
+	WorkContentPartTypeAudio  WorkContentPartType = "AUDIO"
+	WorkContentPartTypeJSON   WorkContentPartType = "JSON"
+	WorkContentPartTypeBinary WorkContentPartType = "BINARY"
 )
+
+// Normalized returns the stable backend-owned kind for supported public aliases.
+func (t WorkContentPartType) Normalized() WorkContentPartType {
+	switch t {
+	case "TEXT":
+		return WorkContentPartTypeText
+	case "IMAGE":
+		return WorkContentPartTypeImage
+	default:
+		return t
+	}
+}
 
 // WorkRelationType identifies a relationship between work items in a WorkRequest.
 type WorkRelationType string

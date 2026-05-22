@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
@@ -58,6 +59,47 @@ func TestUpsertWorkRequest_AcceptsCanonicalContent(t *testing.T) {
 	}
 	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].File != "fixtures/ui.png" {
 		t.Fatalf("submitted content[1] = %#v, want canonical image content", mf.Submitted[0].Content[1])
+	}
+}
+
+func TestUpsertWorkRequest_AcceptsUppercaseAndExtendedContent(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := upsertWorkRequest(t, srv, "/work-requests/request-model-content", `{
+		"requestId":"request-model-content",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{
+			"name":"draft",
+			"workTypeName":"prd",
+			"content":[
+				{"type":"IMAGE","file":"fixtures/ui.png","label":"reference"},
+				{"type":"BINARY","file":"artifacts/raw.bin","contentType":"application/octet-stream"},
+				{"type":"JSON","json":{"mode":"preview"}}
+			]
+		}]
+	}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 || len(mf.Submitted[0].Content) != 3 {
+		t.Fatalf("submitted content = %#v, want 3 canonical parts", mf.Submitted)
+	}
+	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[0].Label != "reference" {
+		t.Fatalf("submitted content[0] = %#v, want normalized image part", mf.Submitted[0].Content[0])
+	}
+	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeBinary || mf.Submitted[0].Content[1].ContentType != "application/octet-stream" {
+		t.Fatalf("submitted content[1] = %#v, want canonical binary part", mf.Submitted[0].Content[1])
+	}
+	if mf.Submitted[0].Content[2].Type != interfaces.WorkContentPartTypeJSON {
+		t.Fatalf("submitted content[2] = %#v, want canonical json part", mf.Submitted[0].Content[2])
+	}
+	jsonValue := map[string]any{}
+	if err := json.Unmarshal(mf.Submitted[0].Content[2].JSON, &jsonValue); err != nil {
+		t.Fatalf("decode json content: %v", err)
+	}
+	if jsonValue["mode"] != "preview" {
+		t.Fatalf("submitted content[2].json = %s, want preview json", mf.Submitted[0].Content[2].JSON)
 	}
 }
 

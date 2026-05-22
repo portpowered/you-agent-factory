@@ -708,6 +708,34 @@ func TestNormalizeWorkRequest_RejectsPayloadAlongsideImageContent(t *testing.T) 
 	}
 }
 
+func TestNormalizeWorkRequest_ExtendedContentKeepsLegacyTextProjection(t *testing.T) {
+	normalized, err := NormalizeWorkRequest(interfaces.WorkRequest{
+		RequestID: "request-model-content",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{{
+			Name:       "tts",
+			WorkTypeID: "task",
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "Synthesize"},
+				{Type: interfaces.WorkContentPartTypeAudio, File: "artifacts/output.wav"},
+				{Type: interfaces.WorkContentPartTypeJSON, JSON: json.RawMessage(`{"voice":"alloy"}`)},
+			},
+		}},
+	}, interfaces.WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	if err != nil {
+		t.Fatalf("NormalizeWorkRequest: %v", err)
+	}
+	if len(normalized) != 1 {
+		t.Fatalf("normalized count = %d, want 1", len(normalized))
+	}
+	if string(normalized[0].Payload) != "Synthesize" {
+		t.Fatalf("payload = %q, want text-only legacy projection", normalized[0].Payload)
+	}
+	if len(normalized[0].Content) != 3 || normalized[0].Content[1].Type != interfaces.WorkContentPartTypeAudio || normalized[0].Content[2].Type != interfaces.WorkContentPartTypeJSON {
+		t.Fatalf("content = %#v, want preserved extended content", normalized[0].Content)
+	}
+}
+
 func findSubmitRequest(t *testing.T, requests []interfaces.SubmitRequest, name string) interfaces.SubmitRequest {
 	t.Helper()
 	for _, request := range requests {

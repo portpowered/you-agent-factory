@@ -202,8 +202,13 @@ const (
 
 // Defines values for WorkContentPartType.
 const (
-	WorkContentPartTypeImage WorkContentPartType = "image"
-	WorkContentPartTypeText  WorkContentPartType = "text"
+	WorkContentPartTypeAudio      WorkContentPartType = "AUDIO"
+	WorkContentPartTypeBinary     WorkContentPartType = "BINARY"
+	WorkContentPartTypeImage      WorkContentPartType = "image"
+	WorkContentPartTypeImageUpper WorkContentPartType = "IMAGE"
+	WorkContentPartTypeJSON       WorkContentPartType = "JSON"
+	WorkContentPartTypeText       WorkContentPartType = "text"
+	WorkContentPartTypeTextUpper  WorkContentPartType = "TEXT"
 )
 
 // Defines values for WorkOutcome.
@@ -1529,15 +1534,80 @@ type Work struct {
 	WorkTypeName *string `json:"workTypeName,omitempty"`
 }
 
+// WorkAudioContentPart defines model for WorkAudioContentPart.
+type WorkAudioContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// File Audio file or artifact reference preserved for later runtime materialization.
+	File string `json:"file"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string             `json:"role,omitempty"`
+	Type WorkContentPartType `json:"type"`
+}
+
+// WorkBinaryContentPart defines model for WorkBinaryContentPart.
+type WorkBinaryContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// File Binary file or artifact reference preserved for later runtime materialization.
+	File string `json:"file"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string             `json:"role,omitempty"`
+	Type WorkContentPartType `json:"type"`
+}
+
 // WorkContent Ordered canonical content parts for one work item.
 type WorkContent = []WorkContentPart
+
+// WorkContentCommonFields defines model for WorkContentCommonFields.
+type WorkContentCommonFields struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+}
+
+// WorkContentMetadata Optional metadata attached to one work content part.
+type WorkContentMetadata map[string]interface{}
 
 // WorkContentPart One ordered canonical content part on a work item.
 type WorkContentPart struct {
 	union json.RawMessage
 }
 
-// WorkContentPartType Supported first-slice canonical work content part types.
+// WorkContentPartType Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
 type WorkContentPartType string
 
 // WorkDiagnostics defines model for WorkDiagnostics.
@@ -1549,10 +1619,47 @@ type WorkDiagnostics struct {
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
 
-// WorkImageContentPart Ordered image content for one work item.
+// WorkImageContentPart defines model for WorkImageContentPart.
 type WorkImageContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
 	// File Image file reference preserved for later runtime materialization.
-	File string              `json:"file"`
+	File string `json:"file"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string             `json:"role,omitempty"`
+	Type WorkContentPartType `json:"type"`
+}
+
+// WorkJsonContentPart defines model for WorkJsonContentPart.
+type WorkJsonContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Json Arbitrary JSON value preserved in canonical part order.
+	Json interface{} `json:"json"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string             `json:"role,omitempty"`
 	Type WorkContentPartType `json:"type"`
 }
 
@@ -1610,8 +1717,23 @@ type WorkState struct {
 // WorkStateType Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
 type WorkStateType string
 
-// WorkTextContentPart Ordered inline text content for one work item.
+// WorkTextContentPart defines model for WorkTextContentPart.
 type WorkTextContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
 	// Text Inline text content preserved in canonical part order.
 	Text string              `json:"text"`
 	Type WorkContentPartType `json:"type"`
@@ -2302,6 +2424,84 @@ func (t *WorkContentPart) FromWorkImageContentPart(v WorkImageContentPart) error
 
 // MergeWorkImageContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkImageContentPart
 func (t *WorkContentPart) MergeWorkImageContentPart(v WorkImageContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkAudioContentPart returns the union data inside the WorkContentPart as a WorkAudioContentPart
+func (t WorkContentPart) AsWorkAudioContentPart() (WorkAudioContentPart, error) {
+	var body WorkAudioContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkAudioContentPart overwrites any union data inside the WorkContentPart as the provided WorkAudioContentPart
+func (t *WorkContentPart) FromWorkAudioContentPart(v WorkAudioContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkAudioContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkAudioContentPart
+func (t *WorkContentPart) MergeWorkAudioContentPart(v WorkAudioContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkJsonContentPart returns the union data inside the WorkContentPart as a WorkJsonContentPart
+func (t WorkContentPart) AsWorkJsonContentPart() (WorkJsonContentPart, error) {
+	var body WorkJsonContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkJsonContentPart overwrites any union data inside the WorkContentPart as the provided WorkJsonContentPart
+func (t *WorkContentPart) FromWorkJsonContentPart(v WorkJsonContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkJsonContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkJsonContentPart
+func (t *WorkContentPart) MergeWorkJsonContentPart(v WorkJsonContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkBinaryContentPart returns the union data inside the WorkContentPart as a WorkBinaryContentPart
+func (t WorkContentPart) AsWorkBinaryContentPart() (WorkBinaryContentPart, error) {
+	var body WorkBinaryContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkBinaryContentPart overwrites any union data inside the WorkContentPart as the provided WorkBinaryContentPart
+func (t *WorkContentPart) FromWorkBinaryContentPart(v WorkBinaryContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkBinaryContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkBinaryContentPart
+func (t *WorkContentPart) MergeWorkBinaryContentPart(v WorkBinaryContentPart) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

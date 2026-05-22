@@ -3417,51 +3417,151 @@ components:
       oneOf:
         - $ref: '#/components/schemas/WorkTextContentPart'
         - $ref: '#/components/schemas/WorkImageContentPart'
+        - $ref: '#/components/schemas/WorkAudioContentPart'
+        - $ref: '#/components/schemas/WorkJsonContentPart'
+        - $ref: '#/components/schemas/WorkBinaryContentPart'
     WorkContentPartType:
       type: string
-      description: Supported first-slice canonical work content part types.
+      description: Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
       x-enum-varnames:
         - WorkContentPartTypeText
         - WorkContentPartTypeImage
+        - WorkContentPartTypeTextUpper
+        - WorkContentPartTypeImageUpper
+        - WorkContentPartTypeAudio
+        - WorkContentPartTypeJSON
+        - WorkContentPartTypeBinary
       enum:
         - text
         - image
+        - TEXT
+        - IMAGE
+        - AUDIO
+        - JSON
+        - BINARY
       x-enum-descriptions:
-        - Inline text content.
-        - Image content referenced by file path.
+        - Legacy inline text content.
+        - Legacy image content referenced by file path.
+        - Canonical uppercase inline text content.
+        - Canonical uppercase image content referenced by file path.
+        - Audio content referenced by file path or artifact.
+        - JSON content preserved in canonical part order.
+        - Binary content referenced by file path or artifact.
+    WorkContentMetadata:
+      type: object
+      additionalProperties: true
+      description: Optional metadata attached to one work content part.
+    WorkContentCommonFields:
+      type: object
+      properties:
+        label:
+          type: string
+          description: Optional caller-defined label for slot binding or diagnostics.
+        role:
+          type: string
+          description: Optional semantic role for model-operation authoring.
+        contentType:
+          type: string
+          description: Optional MIME content type for file-backed or structured parts.
+        artifactId:
+          type: string
+          description: Optional artifact identifier for externally materialized content.
+        metadata:
+          $ref: '#/components/schemas/WorkContentMetadata'
     WorkTextContentPart:
-      type: object
-      additionalProperties: false
       description: Ordered inline text content for one work item.
-      required:
-        - type
-        - text
-      properties:
-        type:
-          allOf:
-            - $ref: '#/components/schemas/WorkContentPartType'
-          enum:
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
             - text
-        text:
-          type: string
-          description: Inline text content preserved in canonical part order.
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - text
+                - TEXT
+            text:
+              type: string
+              description: Inline text content preserved in canonical part order.
     WorkImageContentPart:
-      type: object
-      additionalProperties: false
       description: Ordered image content for one work item.
-      required:
-        - type
-        - file
-      properties:
-        type:
-          allOf:
-            - $ref: '#/components/schemas/WorkContentPartType'
-          enum:
-            - image
-        file:
-          type: string
-          minLength: 1
-          description: Image file reference preserved for later runtime materialization.
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - file
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - image
+                - IMAGE
+            file:
+              type: string
+              minLength: 1
+              description: Image file reference preserved for later runtime materialization.
+    WorkAudioContentPart:
+      description: Ordered audio content for one work item.
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - file
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - AUDIO
+            file:
+              type: string
+              minLength: 1
+              description: Audio file or artifact reference preserved for later runtime materialization.
+    WorkJsonContentPart:
+      description: Ordered JSON content for one work item.
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - json
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - JSON
+            json:
+              description: Arbitrary JSON value preserved in canonical part order.
+    WorkBinaryContentPart:
+      description: Ordered binary content for one work item.
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - file
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - BINARY
+            file:
+              type: string
+              minLength: 1
+              description: Binary file or artifact reference preserved for later runtime materialization.
     Relation:
       type: object
       additionalProperties: false

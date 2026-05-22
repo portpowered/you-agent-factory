@@ -186,6 +186,7 @@ func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkConte
 			if part.Type != factoryapi.WorkContentPartTypeText || part.Text != wantPart.Text {
 				t.Fatalf("content[%d] = %#v, want text %q", i, part, wantPart.Text)
 			}
+			assertGeneratedPartSharedFields(t, i, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, wantPart)
 		case interfaces.WorkContentPartTypeImage:
 			part, err := (*content)[i].AsWorkImageContentPart()
 			if err != nil {
@@ -194,10 +195,65 @@ func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkConte
 			if part.Type != factoryapi.WorkContentPartTypeImage || part.File != wantPart.File {
 				t.Fatalf("content[%d] = %#v, want image %q", i, part, wantPart.File)
 			}
+			assertGeneratedPartSharedFields(t, i, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, wantPart)
+		case interfaces.WorkContentPartTypeAudio:
+			part, err := (*content)[i].AsWorkAudioContentPart()
+			if err != nil {
+				t.Fatalf("content[%d] decode audio: %v", i, err)
+			}
+			if part.Type != factoryapi.WorkContentPartTypeAudio || part.File != wantPart.File {
+				t.Fatalf("content[%d] = %#v, want audio %q", i, part, wantPart.File)
+			}
+			assertGeneratedPartSharedFields(t, i, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, wantPart)
+		case interfaces.WorkContentPartTypeJSON:
+			part, err := (*content)[i].AsWorkJsonContentPart()
+			if err != nil {
+				t.Fatalf("content[%d] decode json: %v", i, err)
+			}
+			rawJSON, err := json.Marshal(part.Json)
+			if err != nil {
+				t.Fatalf("content[%d] encode json: %v", i, err)
+			}
+			if part.Type != factoryapi.WorkContentPartTypeJSON || string(rawJSON) != string(wantPart.JSON) {
+				t.Fatalf("content[%d] = %#v, want json %s", i, part, wantPart.JSON)
+			}
+			assertGeneratedPartSharedFields(t, i, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, wantPart)
+		case interfaces.WorkContentPartTypeBinary:
+			part, err := (*content)[i].AsWorkBinaryContentPart()
+			if err != nil {
+				t.Fatalf("content[%d] decode binary: %v", i, err)
+			}
+			if part.Type != factoryapi.WorkContentPartTypeBinary || part.File != wantPart.File {
+				t.Fatalf("content[%d] = %#v, want binary %q", i, part, wantPart.File)
+			}
+			assertGeneratedPartSharedFields(t, i, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, wantPart)
 		default:
 			t.Fatalf("unsupported expected content type %q", wantPart.Type)
 		}
 	}
+}
+
+func assertGeneratedPartSharedFields(t *testing.T, index int, label *string, role *string, contentType *string, artifactID *string, metadata *factoryapi.WorkContentMetadata, want interfaces.WorkContentPart) {
+	t.Helper()
+
+	if derefString(label) != want.Label ||
+		derefString(role) != want.Role ||
+		derefString(contentType) != want.ContentType ||
+		derefString(artifactID) != want.ArtifactID {
+		t.Fatalf("content[%d] shared fields mismatch for %#v", index, want)
+	}
+	gotMetadata, _ := json.Marshal(metadata)
+	wantMetadata, _ := json.Marshal(want.Metadata)
+	if string(gotMetadata) != string(wantMetadata) {
+		t.Fatalf("content[%d] metadata = %s, want %s", index, gotMetadata, wantMetadata)
+	}
+}
+
+func derefString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func embeddedDashboardAssetPath(t *testing.T, html string) string {

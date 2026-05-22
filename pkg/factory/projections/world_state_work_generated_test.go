@@ -1,6 +1,7 @@
 package projections
 
 import (
+	"encoding/json"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -31,7 +32,7 @@ func TestGeneratedWorkContentToDomain_PreservesNilEmptyAndOrderedParts(t *testin
 		t.Fatalf("content part count = %d, want %d (%#v)", len(got), len(want), got)
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		if !projectionWorkContentPartEqual(got[i], want[i]) {
 			t.Fatalf("content part %d = %#v, want %#v", i, got[i], want[i])
 		}
 	}
@@ -101,4 +102,20 @@ func workImageContentPartForProjectionTest(t *testing.T, file string) factoryapi
 		t.Fatalf("build image part: %v", err)
 	}
 	return part
+}
+
+func projectionWorkContentPartEqual(left, right interfaces.WorkContentPart) bool {
+	if left.Type != right.Type ||
+		left.Text != right.Text ||
+		left.File != right.File ||
+		left.Label != right.Label ||
+		left.Role != right.Role ||
+		left.ContentType != right.ContentType ||
+		left.ArtifactID != right.ArtifactID ||
+		string(left.JSON) != string(right.JSON) {
+		return false
+	}
+	leftMetadata, _ := json.Marshal(left.Metadata)
+	rightMetadata, _ := json.Marshal(right.Metadata)
+	return string(leftMetadata) == string(rightMetadata)
 }

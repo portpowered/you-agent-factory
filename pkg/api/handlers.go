@@ -911,6 +911,7 @@ func (s *Server) getEvents(
 		}
 	}
 }
+
 // --- Helpers ---
 
 func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenResponse {
@@ -1341,36 +1342,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 }
 
 func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
-	if len(parts) == 0 {
-		return nil
-	}
-	content := make(factoryapi.WorkContent, 0, len(parts))
-	for _, part := range parts {
-		var generated factoryapi.WorkContentPart
-		switch part.Type {
-		case interfaces.WorkContentPartTypeText:
-			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-				Type: factoryapi.WorkContentPartTypeText,
-				Text: part.Text,
-			}); err != nil {
-				continue
-			}
-		case interfaces.WorkContentPartTypeImage:
-			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
-				Type: factoryapi.WorkContentPartTypeImage,
-				File: part.File,
-			}); err != nil {
-				continue
-			}
-		default:
-			continue
-		}
-		content = append(content, generated)
-	}
-	if len(content) == 0 {
-		return nil
-	}
-	return &content
+	return workcontent.GeneratedPtrFromParts(parts)
 }
 
 func validateGeneratedWorkContentAtPath(content *factoryapi.WorkContent, fieldPath string) error {
@@ -1380,17 +1352,11 @@ func validateGeneratedWorkContentAtPath(content *factoryapi.WorkContent, fieldPa
 
 	for i, part := range *content {
 		pathPrefix := fmt.Sprintf("%s[%d].", fieldPath, i)
-		textPart, textErr := part.AsWorkTextContentPart()
-		if textErr == nil && textPart.Type == factoryapi.WorkContentPartTypeText {
+		if _, ok := workcontent.PartFromGenerated(part); ok {
 			continue
 		}
 
-		imagePart, imageErr := part.AsWorkImageContentPart()
-		if imageErr == nil && imagePart.Type == factoryapi.WorkContentPartTypeImage {
-			continue
-		}
-
-		return requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", pathPrefix)}
+		return requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text, image, TEXT, IMAGE, AUDIO, JSON, or BINARY", pathPrefix)}
 	}
 	return nil
 }
@@ -1660,9 +1626,9 @@ func validatedRawWorkContentPart(fields map[string]json.RawMessage, prefix strin
 		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be a non-empty string", prefix)}
 	}
 
-	switch interfaces.WorkContentPartType(partType) {
+	switch interfaces.WorkContentPartType(partType).Normalized() {
 	case interfaces.WorkContentPartTypeText:
-		if err := requireOnlyFields(fields, prefix, "type", "text"); err != nil {
+		if err := requireOnlyFields(fields, prefix, "type", "text", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
 			return interfaces.WorkContentPart{}, err
 		}
 		textRaw, ok := fields["text"]
@@ -1673,9 +1639,15 @@ func validatedRawWorkContentPart(fields map[string]json.RawMessage, prefix strin
 		if err := json.Unmarshal(textRaw, &text); err != nil {
 			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stext must be a string", prefix)}
 		}
-		return interfaces.WorkContentPart{Type: interfaces.WorkContentPartTypeText, Text: text}, nil
+		shared, err := validateSharedWorkContentFields(fields, prefix)
+		if err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		shared.Type = interfaces.WorkContentPartTypeText
+		shared.Text = text
+		return shared, nil
 	case interfaces.WorkContentPartTypeImage:
-		if err := requireOnlyFields(fields, prefix, "type", "file"); err != nil {
+		if err := requireOnlyFields(fields, prefix, "type", "file", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
 			return interfaces.WorkContentPart{}, err
 		}
 		fileRaw, ok := fields["file"]
@@ -1686,10 +1658,124 @@ func validatedRawWorkContentPart(fields map[string]json.RawMessage, prefix strin
 		if err := json.Unmarshal(fileRaw, &file); err != nil || file == "" {
 			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sfile must be a non-empty string", prefix)}
 		}
-		return interfaces.WorkContentPart{Type: interfaces.WorkContentPartTypeImage, File: file}, nil
+		shared, err := validateSharedWorkContentFields(fields, prefix)
+		if err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		shared.Type = interfaces.WorkContentPartTypeImage
+		shared.File = file
+		return shared, nil
+	case interfaces.WorkContentPartTypeAudio:
+		if err := requireOnlyFields(fields, prefix, "type", "file", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		file, err := requiredNonEmptyStringField(fields, prefix, "file", "audio content parts")
+		if err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		shared, err := validateSharedWorkContentFields(fields, prefix)
+		if err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		shared.Type = interfaces.WorkContentPartTypeAudio
+		shared.File = file
+		return shared, nil
+	case interfaces.WorkContentPartTypeJSON:
+		if err := requireOnlyFields(fields, prefix, "type", "json", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		jsonRaw, ok := fields["json"]
+		if !ok {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sjson is required for JSON content parts", prefix)}
+		}
+		var value any
+		if err := json.Unmarshal(jsonRaw, &value); err != nil {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sjson must be valid JSON", prefix)}
+		}
+		shared, err := validateSharedWorkContentFields(fields, prefix)
+		if err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		shared.Type = interfaces.WorkContentPartTypeJSON
+		shared.JSON = append(json.RawMessage(nil), jsonRaw...)
+		return shared, nil
+	case interfaces.WorkContentPartTypeBinary:
+		if err := requireOnlyFields(fields, prefix, "type", "file", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		file, err := requiredNonEmptyStringField(fields, prefix, "file", "binary content parts")
+		if err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		shared, err := validateSharedWorkContentFields(fields, prefix)
+		if err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		shared.Type = interfaces.WorkContentPartTypeBinary
+		shared.File = file
+		return shared, nil
 	default:
-		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", prefix)}
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text, image, TEXT, IMAGE, AUDIO, JSON, or BINARY", prefix)}
 	}
+}
+
+func validateSharedWorkContentFields(fields map[string]json.RawMessage, prefix string) (interfaces.WorkContentPart, error) {
+	part := interfaces.WorkContentPart{}
+
+	label, err := optionalStringField(fields, prefix, "label")
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	role, err := optionalStringField(fields, prefix, "role")
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	contentType, err := optionalStringField(fields, prefix, "contentType")
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	artifactID, err := optionalStringField(fields, prefix, "artifactId")
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	part.Label = label
+	part.Role = role
+	part.ContentType = contentType
+	part.ArtifactID = artifactID
+
+	if metadataRaw, ok := fields["metadata"]; ok {
+		var metadata map[string]any
+		if err := json.Unmarshal(metadataRaw, &metadata); err != nil || metadata == nil {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%smetadata must be an object", prefix)}
+		}
+		part.Metadata = metadata
+	}
+
+	return part, nil
+}
+
+func requiredNonEmptyStringField(fields map[string]json.RawMessage, prefix string, field string, partLabel string) (string, error) {
+	fieldRaw, ok := fields[field]
+	if !ok {
+		return "", requestFieldValidationError{message: fmt.Sprintf("%s%s is required for %s", prefix, field, partLabel)}
+	}
+	var value string
+	if err := json.Unmarshal(fieldRaw, &value); err != nil || value == "" {
+		return "", requestFieldValidationError{message: fmt.Sprintf("%s%s must be a non-empty string", prefix, field)}
+	}
+	return value, nil
+}
+
+func optionalStringField(fields map[string]json.RawMessage, prefix string, field string) (string, error) {
+	fieldRaw, ok := fields[field]
+	if !ok {
+		return "", nil
+	}
+	var value string
+	if err := json.Unmarshal(fieldRaw, &value); err != nil {
+		return "", requestFieldValidationError{message: fmt.Sprintf("%s%s must be a string", prefix, field)}
+	}
+	return value, nil
 }
 
 func requireOnlyFields(fields map[string]json.RawMessage, prefix string, allowed ...string) error {
