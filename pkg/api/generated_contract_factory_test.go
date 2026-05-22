@@ -100,6 +100,18 @@ func assertGeneratedOpenAPIBoundaryTypes(
 ) {
 	t.Helper()
 
+	assertGeneratedOpenAPISurfaceTypes(t, submitRequest, workRequest, namedFactory)
+	assertGeneratedOpenAPIChainingAndRelations(t, submitRequest, workRequest)
+}
+
+func assertGeneratedOpenAPISurfaceTypes(
+	t *testing.T,
+	submitRequest factoryapi.SubmitWorkRequest,
+	workRequest factoryapi.WorkRequest,
+	namedFactory factoryapi.Factory,
+) {
+	t.Helper()
+
 	submitResponse := factoryapi.SubmitWorkResponse{TraceId: "trace-1"}
 	upsertResponse := factoryapi.UpsertWorkRequestResponse{RequestId: workRequest.RequestId, TraceId: "trace-1"}
 	triggerAtStart := true
@@ -118,6 +130,11 @@ func assertGeneratedOpenAPIBoundaryTypes(
 	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
 		t.Fatal("generated OpenAPI request and response types should be usable")
 	}
+}
+
+func assertGeneratedOpenAPIChainingAndRelations(t *testing.T, submitRequest factoryapi.SubmitWorkRequest, workRequest factoryapi.WorkRequest) {
+	t.Helper()
+
 	if submitRequest.CurrentChainingTraceId == nil || *submitRequest.CurrentChainingTraceId != "chain-submit-1" {
 		t.Fatal("generated submit request should expose current chaining trace ID")
 	}
@@ -218,21 +235,39 @@ func assertGeneratedNamedFactoryJSONRoundTrip(t *testing.T, namedFactory factory
 	if err != nil {
 		t.Fatalf("marshal generated NamedFactory: %v", err)
 	}
+	assertGeneratedNamedFactoryJSONShape(t, encoded)
+
+	var roundTripped factoryapi.Factory
+	decodeRoundTripJSON(t, encoded, &roundTripped, "generated NamedFactory")
+	assertGeneratedNamedFactoryRoundTripFields(t, namedFactory, roundTripped)
+	assertGeneratedNamedFactoryRoundTripRoutes(t, roundTripped)
+}
+
+func assertGeneratedNamedFactoryJSONShape(t *testing.T, encoded []byte) {
+	t.Helper()
+
 	if !strings.Contains(string(encoded), `"name":"customer-support-triage"`) {
 		t.Fatalf("generated NamedFactory JSON missing canonical name field: %s", encoded)
 	}
 	if strings.Contains(string(encoded), `"factory_name"`) {
 		t.Fatalf("generated NamedFactory JSON contains unexpected legacy field: %s", encoded)
 	}
+}
 
-	var roundTripped factoryapi.Factory
-	decodeRoundTripJSON(t, encoded, &roundTripped, "generated NamedFactory")
+func assertGeneratedNamedFactoryRoundTripFields(t *testing.T, namedFactory factoryapi.Factory, roundTripped factoryapi.Factory) {
+	t.Helper()
+
 	if roundTripped.Name != namedFactory.Name {
 		t.Fatalf("round-tripped named factory name = %q, want %q", roundTripped.Name, namedFactory.Name)
 	}
 	if roundTripped.Workstations == nil || len(*roundTripped.Workstations) != 1 || (*roundTripped.Workstations)[0].Worker != "planner" {
 		t.Fatalf("round-tripped named factory workstations = %#v, want planner workstation", roundTripped.Workstations)
 	}
+}
+
+func assertGeneratedNamedFactoryRoundTripRoutes(t *testing.T, roundTripped factoryapi.Factory) {
+	t.Helper()
+
 	workstation := (*roundTripped.Workstations)[0]
 	if workstation.OnContinue == nil || len(*workstation.OnContinue) != 2 {
 		t.Fatalf("round-tripped workstation onContinue = %#v, want two array routes", workstation.OnContinue)
