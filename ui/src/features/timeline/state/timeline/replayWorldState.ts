@@ -36,8 +36,6 @@ import {
   applyScriptRequest,
   applyScriptResponse,
   inferenceAttemptsForDispatch,
-  legacyInferencePayloadDispatchID,
-  legacyInferencePayloadTransitionID,
   resolveDispatchTransitionID,
   syncCompletedDispatchAttempt,
 } from "./replayWorldStateSupport";
@@ -295,15 +293,13 @@ function applyInferenceRequest(
   event: InferenceRequestEvent,
 ): void {
   const { payload } = event;
-  const dispatchID =
-    event.context.dispatchId ?? legacyInferencePayloadDispatchID(payload);
+  const dispatchID = event.context.dispatchId;
   if (!dispatchID || !payload.inferenceRequestId) {
     return;
   }
   const attempts = inferenceAttemptsForDispatch(state, dispatchID);
   const current = attempts[payload.inferenceRequestId];
   const transitionID =
-    legacyInferencePayloadTransitionID(payload) ??
     current?.transition_id ??
     resolveDispatchTransitionID(state, dispatchID);
   if (!transitionID) {
@@ -327,15 +323,13 @@ function applyInferenceResponse(
   event: InferenceResponseEvent,
 ): void {
   const { payload } = event;
-  const dispatchID =
-    event.context.dispatchId ?? legacyInferencePayloadDispatchID(payload);
+  const dispatchID = event.context.dispatchId;
   if (!dispatchID || !payload.inferenceRequestId) {
     return;
   }
   const attempts = inferenceAttemptsForDispatch(state, dispatchID);
   const current = attempts[payload.inferenceRequestId];
   const transitionID =
-    legacyInferencePayloadTransitionID(payload) ??
     current?.transition_id ??
     resolveDispatchTransitionID(state, dispatchID);
   if (!transitionID) {
