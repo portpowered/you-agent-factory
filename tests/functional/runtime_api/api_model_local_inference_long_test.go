@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,7 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 
 	command := resolveRealOmniVoiceCommand(t)
 	cacheDir := stringsTrimSpaceOrDefault(os.Getenv(realOmniVoiceLongTestCacheDirEnv), filepath.Join(t.TempDir(), "managed-model-cache"))
+	t.Logf("real local inference diagnostics: platform=%s/%s backend=%q cachePath=%q", runtime.GOOS, runtime.GOARCH, command, cacheDir)
 	dir := support.ScaffoldFactory(t, realLocalInferenceFactoryConfig())
 	writeRealLocalInferenceWorkerConfig(t, dir, command)
 	writeRealLocalInferenceWorkstationConfig(t, dir)
@@ -47,6 +49,7 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	if pull.ModelName != "OMNIVOICE_Q4_K_M" || pull.CachePath == "" || pull.Revision == "" || len(pull.DownloadedFiles) == 0 {
 		t.Fatalf("asset pull failure: response = %#v, want model identity, cache path, revision, and files", pull)
 	}
+	t.Logf("asset pull diagnostics: model=%s revision=%s cachePath=%s files=%d", pull.ModelName, pull.Revision, pull.CachePath, len(pull.DownloadedFiles))
 
 	jsonInvocation := postJSON[factoryapi.ModelInvocationResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{
 		Operation: "TTS",
@@ -58,6 +61,7 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	if jsonInvocation.ModelName != "OMNIVOICE_Q4_K_M" || jsonInvocation.Operation != "TTS" || jsonInvocation.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
 		t.Fatalf("output validation failure: invocation identity = %#v, want OMNIVOICE local TTS metadata", jsonInvocation)
 	}
+	t.Logf("invocation diagnostics: model=%s operation=%s locality=%s outputParts=%d", jsonInvocation.ModelName, jsonInvocation.Operation, jsonInvocation.ProviderLocality, len(jsonInvocation.Content))
 	if len(jsonInvocation.Content) != 1 {
 		t.Fatalf("output validation failure: invocation content count = %d, want 1", len(jsonInvocation.Content))
 	}
@@ -116,7 +120,7 @@ func resolveRealOmniVoiceCommand(t *testing.T) string {
 	command := stringsTrimSpaceOrDefault(os.Getenv(realOmniVoiceLongTestCommandEnv), realOmniVoiceDefaultCommand)
 	resolved, err := exec.LookPath(command)
 	if err != nil {
-		t.Fatalf("platform or backend failure: OMNIVOICE runtime command %q not found on PATH: %v", command, err)
+		t.Fatalf("platform or backend failure: platform=%s/%s command=%q path=%q: %v", runtime.GOOS, runtime.GOARCH, command, os.Getenv("PATH"), err)
 	}
 	return resolved
 }

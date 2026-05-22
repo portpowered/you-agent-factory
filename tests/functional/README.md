@@ -18,6 +18,11 @@ and ensure the `omnivoice-llamacpp` command is available on `PATH`, or point
 `INFINITE_YOU_OMNIVOICE_COMMAND` at the executable explicitly. Set
 `INFINITE_YOU_OMNIVOICE_CACHE_DIR` to reuse an existing managed cache; when
 omitted, the long test pulls assets into a temporary managed cache directory.
+GitHub Actions automation for that lane lives in
+`.github/workflows/long-local-inference.yml`; it restores `.cache/managed-models`
+between runs and expects per-platform `OMNIVOICE_COMMAND_URL_*` repository
+variables so the hosted runners can install the `omnivoice-llamacpp` command
+before `make long-tests` executes.
 
 The default lane runs one repository-owned package-discovery command through
 `make test-functional`: `go run ./cmd/functionallane` uses
