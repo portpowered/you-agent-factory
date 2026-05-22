@@ -80,6 +80,10 @@ const traceSnapshot: DashboardTrace = {
   ],
 };
 
+const activeStoryTraceFixtures = {
+  [activeWorkID]: traceSnapshot,
+} satisfies Record<string, DashboardTrace>;
+
 const reworkTraceSnapshot: DashboardTrace = {
   ...traceSnapshot,
   transition_ids: ["plan", "review", "plan"],
@@ -107,6 +111,10 @@ const reworkTraceSnapshot: DashboardTrace = {
     },
   ],
 };
+
+const activeStoryReworkTraceFixtures = {
+  [activeWorkID]: reworkTraceSnapshot,
+} satisfies Record<string, DashboardTrace>;
 
 const completedTraceSnapshot: DashboardTrace = {
   ...traceSnapshot,
@@ -136,6 +144,36 @@ const failedTraceSnapshot: DashboardTrace = {
     },
   ],
 };
+
+const terminalStateTraceFixtures = {
+  [completedWorkID]: completedTraceSnapshot,
+  [failedWorkID]: failedTraceSnapshot,
+} satisfies Record<string, DashboardTrace>;
+
+const dispatchHistoryWorkstationRequestsByDispatchID = {
+  [dashboardWorkstationRequestFixtures.noResponse.dispatch_id]:
+    dashboardWorkstationRequestFixtures.noResponse,
+  [dashboardWorkstationRequestFixtures.ready.dispatch_id]:
+    dashboardWorkstationRequestFixtures.ready,
+  [dashboardWorkstationRequestFixtures.rejected.dispatch_id]:
+    dashboardWorkstationRequestFixtures.rejected,
+  [dashboardWorkstationRequestFixtures.errored.dispatch_id]:
+    dashboardWorkstationRequestFixtures.errored,
+  [dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id]:
+    dashboardWorkstationRequestFixtures.scriptSuccess,
+  [dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id]:
+    dashboardWorkstationRequestFixtures.scriptFailed,
+} satisfies Record<string, DashboardWorkstationRequest>;
+
+const readyDispatchWorkstationRequestsByDispatchID = {
+  [dashboardWorkstationRequestFixtures.ready.dispatch_id]:
+    dashboardWorkstationRequestFixtures.ready,
+} satisfies Record<string, DashboardWorkstationRequest>;
+
+const terminalTimelineSnapshots = [
+  historicalTimelineSnapshot,
+  terminalSnapshot,
+] satisfies DashboardSnapshot[];
 
 function requireValue<T>(value: T | null | undefined, message: string): T {
   if (value === null || value === undefined) {
@@ -384,9 +422,7 @@ describe("App current selection", () => {
   it("renders a trace drill-down for a selected work item", async () => {
     renderApp({
       snapshot: activeSnapshot,
-      traceFixtures: {
-        [activeWorkID]: traceSnapshot,
-      },
+      traceFixtures: activeStoryTraceFixtures,
     });
 
     expect(
@@ -439,23 +475,9 @@ describe("App current selection", () => {
   it("renders one selected-work dispatch history list with mixed inference and script-backed rows", async () => {
     renderApp({
       snapshot: activeSnapshot,
-      traceFixtures: {
-        [activeWorkID]: traceSnapshot,
-      },
-      workstationRequestsByDispatchID: {
-        [dashboardWorkstationRequestFixtures.noResponse.dispatch_id]:
-          dashboardWorkstationRequestFixtures.noResponse,
-        [dashboardWorkstationRequestFixtures.ready.dispatch_id]:
-          dashboardWorkstationRequestFixtures.ready,
-        [dashboardWorkstationRequestFixtures.rejected.dispatch_id]:
-          dashboardWorkstationRequestFixtures.rejected,
-        [dashboardWorkstationRequestFixtures.errored.dispatch_id]:
-          dashboardWorkstationRequestFixtures.errored,
-        [dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id]:
-          dashboardWorkstationRequestFixtures.scriptSuccess,
-        [dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id]:
-          dashboardWorkstationRequestFixtures.scriptFailed,
-      },
+      traceFixtures: activeStoryTraceFixtures,
+      workstationRequestsByDispatchID:
+        dispatchHistoryWorkstationRequestsByDispatchID,
     });
 
     fireEvent.click(getActiveStorySelectionButton());
@@ -649,13 +671,9 @@ describe("App current selection", () => {
   it("follows the explicit selection contract: clicking work selects work, clicking a request selects a request", async () => {
     renderApp({
       snapshot: activeSnapshot,
-      traceFixtures: {
-        [activeWorkID]: traceSnapshot,
-      },
-      workstationRequestsByDispatchID: {
-        [dashboardWorkstationRequestFixtures.ready.dispatch_id]:
-          dashboardWorkstationRequestFixtures.ready,
-      },
+      traceFixtures: activeStoryTraceFixtures,
+      workstationRequestsByDispatchID:
+        readyDispatchWorkstationRequestsByDispatchID,
     });
 
     fireEvent.click(getActiveStorySelectionButton());
@@ -725,9 +743,7 @@ describe("App current selection", () => {
 
     renderApp({
       snapshot: snapshotWithoutSelectedWorkDispatchHistory,
-      traceFixtures: {
-        [activeWorkID]: traceSnapshot,
-      },
+      traceFixtures: activeStoryTraceFixtures,
     });
 
     fireEvent.click(getActiveStorySelectionButton());
@@ -785,9 +801,7 @@ describe("App current selection", () => {
   it("keeps workstation and work-item selection usable after React Flow zoom", async () => {
     renderApp({
       snapshot: activeSnapshot,
-      traceFixtures: {
-        [activeWorkID]: traceSnapshot,
-      },
+      traceFixtures: activeStoryTraceFixtures,
     });
 
     await screen.findAllByText("dispatch-review-active");
@@ -814,9 +828,7 @@ describe("App current selection", () => {
   it("separates workstation selection from active work selection", async () => {
     renderApp({
       snapshot: activeSnapshot,
-      traceFixtures: {
-        [activeWorkID]: traceSnapshot,
-      },
+      traceFixtures: activeStoryTraceFixtures,
     });
 
     await screen.findAllByText("dispatch-review-active");
@@ -1180,9 +1192,7 @@ describe("App current selection layout", () => {
   it("keeps selection detail out of the workflow graph inspector layer", async () => {
     renderApp({
       snapshot: activeSnapshot,
-      traceFixtures: {
-        [activeWorkID]: traceSnapshot,
-      },
+      traceFixtures: activeStoryTraceFixtures,
     });
 
     await screen.findAllByText("dispatch-review-active");
@@ -1207,9 +1217,7 @@ describe("App current selection layout", () => {
   it("renders selected work and traces on the shared dashboard grid", async () => {
     renderApp({
       snapshot: activeSnapshot,
-      traceFixtures: {
-        [activeWorkID]: traceSnapshot,
-      },
+      traceFixtures: activeStoryTraceFixtures,
     });
 
     fireEvent.click(getActiveStorySelectionButton());
@@ -1239,9 +1247,7 @@ describe("App current selection layout", () => {
   it("supports rearranging shared-grid widgets without replacing graph selection", async () => {
     renderApp({
       snapshot: activeSnapshot,
-      traceFixtures: {
-        [activeWorkID]: traceSnapshot,
-      },
+      traceFixtures: activeStoryTraceFixtures,
     });
 
     fireEvent.click(getActiveStorySelectionButton());
@@ -1481,9 +1487,7 @@ describe("App current selection layout", () => {
   it("keeps retry, rework, and timing trends hidden when selected trace data is available", async () => {
     renderApp({
       snapshot: terminalSnapshot,
-      traceFixtures: {
-        [activeWorkID]: reworkTraceSnapshot,
-      },
+      traceFixtures: activeStoryReworkTraceFixtures,
     });
 
     await screen.findByRole("heading", { name: "you-agent-factory" });
@@ -1529,9 +1533,7 @@ describe("App current selection layout", () => {
     resizeDashboardViewport(viewportWidth);
     renderApp({
       snapshot: terminalSnapshot,
-      traceFixtures: {
-        [activeWorkID]: reworkTraceSnapshot,
-      },
+      traceFixtures: activeStoryReworkTraceFixtures,
     });
 
     fireEvent.click(getActiveStorySelectionButton());
@@ -1584,9 +1586,7 @@ describe("App current selection layout", () => {
     resizeDashboardViewport(640);
     renderApp({
       snapshot: terminalSnapshot,
-      traceFixtures: {
-        [activeWorkID]: traceSnapshot,
-      },
+      traceFixtures: activeStoryTraceFixtures,
     });
 
     await screen.findByRole("heading", { name: "you-agent-factory" });
@@ -1722,10 +1722,7 @@ describe("App current selection terminal states", () => {
   it("opens completed and failed work summaries and updates the trace card", async () => {
     renderApp({
       snapshot: terminalSnapshot,
-      traceFixtures: {
-        [completedWorkID]: completedTraceSnapshot,
-        [failedWorkID]: failedTraceSnapshot,
-      },
+      traceFixtures: terminalStateTraceFixtures,
     });
 
     await screen.findByRole("heading", { name: "you-agent-factory" });
@@ -1826,7 +1823,7 @@ describe("App current selection terminal states", () => {
   it("shows terminal and failed state occupancy in current-selection details", async () => {
     renderApp({
       snapshot: terminalSnapshot,
-      timelineSnapshots: [historicalTimelineSnapshot, terminalSnapshot],
+      timelineSnapshots: terminalTimelineSnapshots,
     });
 
     await screen.findByRole("heading", { name: "you-agent-factory" });
