@@ -315,7 +315,11 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	modelResources := newLocalModelResourceLimiter()
 	modelAssets := newHuggingFaceModelAssetPuller(strings.TrimSpace(cfg.ModelCacheDir))
-	localModels := newManagedLocalModelManager(modelAssets, cfg.LocalModelRuntimeOverride)
+	localModelRuntime := cfg.LocalModelRuntimeOverride
+	if localModelRuntime == nil {
+		localModelRuntime = newOmniVoiceLocalRuntime(nil)
+	}
+	localModels := newManagedLocalModelManager(modelAssets, localModelRuntime)
 	workerOpts, err := loadWorkersFromConfig(
 		loadedFactoryCfg.FactoryDir(),
 		loadedFactoryCfg.FactoryConfig(),
