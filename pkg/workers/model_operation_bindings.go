@@ -54,6 +54,17 @@ func resolveModelOperationBindings(
 	return resolved, nil
 }
 
+// ResolveModelOperationBindings resolves one MODEL_INVOKE-style slot binding
+// set against ordered runtime input content using the same rules as workstation
+// execution.
+func ResolveModelOperationBindings(
+	workstationDef *interfaces.FactoryWorkstationConfig,
+	workerDef *interfaces.WorkerConfig,
+	inputTokens []interfaces.Token,
+) ([]interfaces.ResolvedModelOperationBinding, error) {
+	return resolveModelOperationBindings(workstationDef, workerDef, inputTokens)
+}
+
 func workerOperationByName(operations []interfaces.ModelOperation, name string) (interfaces.ModelOperation, bool) {
 	for _, operation := range operations {
 		if strings.TrimSpace(operation.Name) == name {

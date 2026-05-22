@@ -1,0 +1,7 @@
+type: string
+description: Source used to resolve one invocation slot binding.
+enum:
+  - INPUT
+  - CONFIG
+  - DEFAULT
+  - OMITTED

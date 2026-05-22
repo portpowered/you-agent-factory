@@ -1,0 +1,5 @@
+type: string
+description: Requested direct-invocation response mode.
+enum:
+  - METADATA
+  - AUDIO_STREAM

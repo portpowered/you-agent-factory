@@ -755,6 +755,29 @@ func assertResponseSchemaRef(t *testing.T, operation map[string]any, status stri
 	}
 }
 
+func assertRequestSchemaRef(t *testing.T, operation map[string]any, wantRef string) {
+	t.Helper()
+	requestBody, ok := operation["requestBody"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.requestBody is missing")
+	}
+	content, ok := requestBody["content"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.requestBody.content is missing")
+	}
+	applicationJSON, ok := content["application/json"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.requestBody.content.application/json is missing")
+	}
+	schema, ok := applicationJSON["schema"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.requestBody.content.application/json.schema is missing")
+	}
+	if got, ok := schema["$ref"].(string); !ok || got != wantRef {
+		t.Fatalf("operation.requestBody.content.application/json.schema.$ref = %v, want %s", schema["$ref"], wantRef)
+	}
+}
+
 func assertResponseRef(t *testing.T, operation map[string]any, status string, wantRef string) {
 	t.Helper()
 	responses, ok := operation["responses"].(map[string]any)

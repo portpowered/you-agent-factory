@@ -41,6 +41,10 @@ type MockFactory struct {
 	ListModelsErr            error
 	ModelDetails             map[string]factoryapi.ModelDetail
 	GetModelErr              error
+	InvokedModels            []factoryapi.ModelInvocationRequest
+	InvokedModelNames        []string
+	InvokeModelResult        apisurface.ModelInvocationResult
+	InvokeModelErr           error
 	SessionFactories         map[string]*MockFactory
 	FactorySessions          factoryapi.ListFactorySessionsResponse
 	ListFactorySessionsErr   error
@@ -217,6 +221,15 @@ func (m *MockFactory) GetModel(_ context.Context, modelName string) (factoryapi.
 		return factoryapi.ModelDetail{}, apisurface.ErrModelNotFound
 	}
 	return model, nil
+}
+
+func (m *MockFactory) InvokeModel(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	if m.InvokeModelErr != nil {
+		return apisurface.ModelInvocationResult{}, m.InvokeModelErr
+	}
+	m.InvokedModelNames = append(m.InvokedModelNames, modelName)
+	m.InvokedModels = append(m.InvokedModels, request)
+	return m.InvokeModelResult, nil
 }
 
 func (m *MockFactory) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {

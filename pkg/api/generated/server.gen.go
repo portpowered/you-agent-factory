@@ -146,6 +146,12 @@ const (
 	Codex LoadableProviderSessionProvider = "codex"
 )
 
+// Defines values for ModelInvocationResponseMode.
+const (
+	AUDIOSTREAM ModelInvocationResponseMode = "AUDIO_STREAM"
+	METADATA    ModelInvocationResponseMode = "METADATA"
+)
+
 // Defines values for ModelLoadState.
 const (
 	NOTAPPLICABLE ModelLoadState = "NOT_APPLICABLE"
@@ -188,6 +194,14 @@ const (
 	RelationTypeDependsOn   RelationType = "DEPENDS_ON"
 	RelationTypeParentChild RelationType = "PARENT_CHILD"
 	RelationTypeSpawnedBy   RelationType = "SPAWNED_BY"
+)
+
+// Defines values for ResolvedModelOperationBindingSource.
+const (
+	CONFIG  ResolvedModelOperationBindingSource = "CONFIG"
+	DEFAULT ResolvedModelOperationBindingSource = "DEFAULT"
+	INPUT   ResolvedModelOperationBindingSource = "INPUT"
+	OMITTED ResolvedModelOperationBindingSource = "OMITTED"
 )
 
 // Defines values for ResourceType.
@@ -1158,6 +1172,51 @@ type ModelDetail struct {
 	Status ModelStatus `json:"status"`
 }
 
+// ModelInvocationOptions Optional direct-invocation controls for response shaping and transport.
+type ModelInvocationOptions struct {
+	// ResponseMode Requested direct-invocation response mode.
+	ResponseMode *ModelInvocationResponseMode `json:"responseMode,omitempty"`
+}
+
+// ModelInvocationRequest defines model for ModelInvocationRequest.
+type ModelInvocationRequest struct {
+	// Bindings Optional per-request slot bindings that follow the same contract as `MODEL_INVOKE` workstation bindings.
+	Bindings *[]WorkstationOperationBinding `json:"bindings,omitempty"`
+
+	// Content Ordered canonical content parts for one work item.
+	Content *WorkContent `json:"content,omitempty"`
+
+	// Operation Uppercase provider-agnostic operation to invoke, such as `TTS`.
+	Operation string `json:"operation"`
+
+	// Options Optional direct-invocation controls for response shaping and transport.
+	Options *ModelInvocationOptions `json:"options,omitempty"`
+}
+
+// ModelInvocationResponse defines model for ModelInvocationResponse.
+type ModelInvocationResponse struct {
+	// Bindings Deterministically resolved slot bindings used for the invocation.
+	Bindings []ResolvedModelOperationBinding `json:"bindings"`
+
+	// Content Ordered canonical content parts for one work item.
+	Content WorkContent `json:"content"`
+
+	// ModelName Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	ModelName string `json:"modelName"`
+
+	// Operation Uppercase provider-agnostic operation that was invoked.
+	Operation string `json:"operation"`
+
+	// ProviderLocality Provider locality for a model worker capability declaration.
+	ProviderLocality WorkerModelLocality `json:"providerLocality"`
+
+	// Worker Worker selected to satisfy this invocation.
+	Worker string `json:"worker"`
+}
+
+// ModelInvocationResponseMode Requested direct-invocation response mode.
+type ModelInvocationResponseMode string
+
 // ModelLoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
 type ModelLoadState string
 
@@ -1430,6 +1489,21 @@ type RequiredTool struct {
 	// VersionArgs Optional argument vector used by future validation flows to probe the tool version without changing the executable lookup token.
 	VersionArgs *[]string `json:"versionArgs,omitempty"`
 }
+
+// ResolvedModelOperationBinding defines model for ResolvedModelOperationBinding.
+type ResolvedModelOperationBinding struct {
+	// Content Ordered canonical content parts for one work item.
+	Content WorkContent `json:"content"`
+
+	// Slot Stable input slot name declared by the worker capability.
+	Slot string `json:"slot"`
+
+	// Source Source used to resolve one invocation slot binding.
+	Source ResolvedModelOperationBindingSource `json:"source"`
+}
+
+// ResolvedModelOperationBindingSource Source used to resolve one invocation slot binding.
+type ResolvedModelOperationBindingSource string
 
 // Resource Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas.
 type Resource struct {
@@ -2280,6 +2354,9 @@ type SaveEditableCurrentFactoryDefinitionJSONRequestBody = SaveEditableFactoryDe
 // ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplate for application/json ContentType.
 type ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody = PromptTemplateValidationRequest
 
+// InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
+type InvokeModelJSONRequestBody = ModelInvocationRequest
+
 // SubmitWorkJSONRequestBody defines body for SubmitWork for application/json ContentType.
 type SubmitWorkJSONRequestBody = SubmitWorkRequest
 
@@ -2839,6 +2916,9 @@ type ServerInterface interface {
 	// Get one discovered model
 	// (GET /models/{model_name})
 	GetModel(w http.ResponseWriter, r *http.Request, modelName string)
+	// Invoke one discovered model directly
+	// (POST /models/{model_name}/invocations)
+	InvokeModel(w http.ResponseWriter, r *http.Request, modelName string)
 	// Get provider session details
 	// (GET /provider-sessions/detail)
 	GetProviderSessionDetails(w http.ResponseWriter, r *http.Request, params GetProviderSessionDetailsParams)
@@ -3366,6 +3446,31 @@ func (siw *ServerInterfaceWrapper) GetModel(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// InvokeModel operation middleware
+func (siw *ServerInterfaceWrapper) InvokeModel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "model_name" -------------
+	var modelName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "model_name", mux.Vars(r)["model_name"], &modelName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.InvokeModel(w, r, modelName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetProviderSessionDetails operation middleware
 func (siw *ServerInterfaceWrapper) GetProviderSessionDetails(w http.ResponseWriter, r *http.Request) {
 
@@ -3721,6 +3826,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/models", wrapper.ListModels).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/models/{model_name}", wrapper.GetModel).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/models/{model_name}/invocations", wrapper.InvokeModel).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 

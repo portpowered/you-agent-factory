@@ -347,6 +347,44 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /models/{model_name}/invocations:
+    post:
+      tags:
+        - Models
+      operationId: invokeModel
+      summary: Invoke one discovered model directly
+      description: Invokes one discovered model through its declared provider-agnostic operation contract using canonical `WorkContent` input and optional slot-binding overrides. Non-streaming clients receive JSON metadata, while audio-producing operations can return a streamed audio body when requested.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelInvocationRequest'
+      responses:
+        '200':
+          description: Successful model invocation result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelInvocationResponse'
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                description: Streamed audio body for audio-producing invocations when `options.responseMode` requests `AUDIO_STREAM`.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factories/{factory_id}/status:
     get:
       tags:
@@ -1165,6 +1203,92 @@ components:
             $ref: '#/components/schemas/ModelCapability'
         diagnostics:
           $ref: '#/components/schemas/StringMap'
+    ModelInvocationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - operation
+      properties:
+        operation:
+          type: string
+          description: Uppercase provider-agnostic operation to invoke, such as `TTS`.
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Ordered invocation input content resolved through optional slot bindings.
+        bindings:
+          type: array
+          description: Optional per-request slot bindings that follow the same contract as `MODEL_INVOKE` workstation bindings.
+          items:
+            $ref: '#/components/schemas/WorkstationOperationBinding'
+        options:
+          $ref: '#/components/schemas/ModelInvocationOptions'
+    ModelInvocationOptions:
+      type: object
+      additionalProperties: false
+      description: Optional direct-invocation controls for response shaping and transport.
+      properties:
+        responseMode:
+          $ref: '#/components/schemas/ModelInvocationResponseMode'
+    ModelInvocationResponseMode:
+      type: string
+      description: Requested direct-invocation response mode.
+      enum:
+        - METADATA
+        - AUDIO_STREAM
+    ModelInvocationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - modelName
+        - worker
+        - operation
+        - providerLocality
+        - content
+        - bindings
+      properties:
+        modelName:
+          type: string
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+        worker:
+          type: string
+          description: Worker selected to satisfy this invocation.
+        operation:
+          type: string
+          description: Uppercase provider-agnostic operation that was invoked.
+        providerLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Returned model output as canonical `WorkContent`.
+        bindings:
+          type: array
+          description: Deterministically resolved slot bindings used for the invocation.
+          items:
+            $ref: '#/components/schemas/ResolvedModelOperationBinding'
+    ResolvedModelOperationBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - slot
+        - source
+        - content
+      properties:
+        slot:
+          type: string
+          description: Stable input slot name declared by the worker capability.
+        source:
+          $ref: '#/components/schemas/ResolvedModelOperationBindingSource'
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Resolved content bound to the slot.
+    ResolvedModelOperationBindingSource:
+      type: string
+      description: Source used to resolve one invocation slot binding.
+      enum:
+        - INPUT
+        - CONFIG
+        - DEFAULT
+        - OMITTED
     ModelCapability:
       type: object
       required:
@@ -3920,6 +4044,42 @@ components:
       type: string
       description: Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
       pattern: ^[A-Z][A-Z0-9_]*$
+    WorkstationOperationBindingSelector:
+      type: object
+      additionalProperties: false
+      description: Selector fields used to resolve one content part from ordered runtime input.
+      properties:
+        slot:
+          type: string
+          description: Match a content part by its authored slot field.
+        label:
+          type: string
+          description: Match a content part by its label field.
+        type:
+          $ref: '#/components/schemas/ModelOperationContentType'
+          description: Match a content part by its uppercase public type.
+        role:
+          type: string
+          description: Match a content part by its role field.
+    WorkstationOperationBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - slot
+      description: One workstation-authored binding for a provider-agnostic model-operation input slot.
+      properties:
+        slot:
+          type: string
+          description: Stable input slot name declared by the worker operation.
+        selector:
+          $ref: '#/components/schemas/WorkstationOperationBindingSelector'
+          description: Ordered runtime-input selector used before falling back to config or default content.
+        config:
+          $ref: '#/components/schemas/WorkContent'
+          description: Static authored content bound directly or used as the first fallback when runtime input does not match.
+        defaultContent:
+          $ref: '#/components/schemas/WorkContent'
+          description: Optional final fallback content when neither runtime input nor config content resolves the slot.
     CodexSessionTranscriptEntryType:
       type: string
       description: Canonical transcript entry type used by the dashboard transcript view.
@@ -3982,39 +4142,3 @@ components:
         encrypted:
           type: boolean
           description: Whether the entry only exposed encrypted content instead of plaintext.
-    WorkstationOperationBindingSelector:
-      type: object
-      additionalProperties: false
-      description: Selector fields used to resolve one content part from ordered runtime input.
-      properties:
-        slot:
-          type: string
-          description: Match a content part by its authored slot field.
-        label:
-          type: string
-          description: Match a content part by its label field.
-        type:
-          $ref: '#/components/schemas/ModelOperationContentType'
-          description: Match a content part by its uppercase public type.
-        role:
-          type: string
-          description: Match a content part by its role field.
-    WorkstationOperationBinding:
-      type: object
-      additionalProperties: false
-      required:
-        - slot
-      description: One workstation-authored binding for a provider-agnostic model-operation input slot.
-      properties:
-        slot:
-          type: string
-          description: Stable input slot name declared by the worker operation.
-        selector:
-          $ref: '#/components/schemas/WorkstationOperationBindingSelector'
-          description: Ordered runtime-input selector used before falling back to config or default content.
-        config:
-          $ref: '#/components/schemas/WorkContent'
-          description: Static authored content bound directly or used as the first fallback when runtime input does not match.
-        defaultContent:
-          $ref: '#/components/schemas/WorkContent'
-          description: Optional final fallback content when neither runtime input nor config content resolves the slot.

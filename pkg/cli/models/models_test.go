@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -50,5 +52,65 @@ func TestQueryModel_NotFoundUsesFriendlyError(t *testing.T) {
 	}
 	if !errors.Is(err, ErrModelNotFound) {
 		t.Fatalf("error = %v, want ErrModelNotFound", err)
+	}
+}
+
+func TestInvoke_JSONWritesMetadataResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M/invocations" {
+			t.Fatalf("path = %q, want invocation path", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","worker":"tts-worker","operation":"TTS","providerLocality":"LOCAL","content":[{"type":"AUDIO","file":"artifacts/output.wav"}],"bindings":[]}`)
+	}))
+	defer server.Close()
+
+	port := server.Listener.Addr().(*net.TCPAddr).Port
+	var out bytes.Buffer
+	if err := Invoke(InvokeConfig{
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Operation: "TTS",
+		Text:      "hello world",
+		Port:      port,
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	for _, want := range []string{"OMNIVOICE_Q4_K_M", `"operation":"TTS"`} {
+		if !bytes.Contains(out.Bytes(), []byte(want)) {
+			t.Fatalf("output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestInvoke_AudioWritesOutputFile(t *testing.T) {
+	audioBytes := []byte("RIFF....WAVE")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "audio/wav")
+		_, _ = w.Write(audioBytes)
+	}))
+	defer server.Close()
+
+	outputPath := filepath.Join(t.TempDir(), "speech.wav")
+	port := server.Listener.Addr().(*net.TCPAddr).Port
+	if err := Invoke(InvokeConfig{
+		ModelName:  "OMNIVOICE_Q4_K_M",
+		Operation:  "TTS",
+		Text:       "hello world",
+		OutputPath: outputPath,
+		Port:       port,
+		Output:     io.Discard,
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	got, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output file: %v", err)
+	}
+	if !bytes.Equal(got, audioBytes) {
+		t.Fatalf("output bytes = %q, want %q", got, audioBytes)
 	}
 }

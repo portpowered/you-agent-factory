@@ -232,6 +232,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/models/{model_name}/invocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invoke one discovered model directly
+         * @description Invokes one discovered model through its declared provider-agnostic operation contract using canonical `WorkContent` input and optional slot-binding overrides. Non-streaming clients receive JSON metadata, while audio-producing operations can return a streamed audio body when requested.
+         */
+        post: operations["invokeModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factories/{factory_id}/status": {
         parameters: {
             query?: never;
@@ -587,6 +607,49 @@ export interface components {
             capabilities: components["schemas"]["ModelCapability"][];
             diagnostics: components["schemas"]["StringMap"];
         };
+        ModelInvocationRequest: {
+            /** @description Uppercase provider-agnostic operation to invoke, such as `TTS`. */
+            operation: string;
+            /** @description Ordered invocation input content resolved through optional slot bindings. */
+            content?: components["schemas"]["WorkContent"];
+            /** @description Optional per-request slot bindings that follow the same contract as `MODEL_INVOKE` workstation bindings. */
+            bindings?: components["schemas"]["WorkstationOperationBinding"][];
+            options?: components["schemas"]["ModelInvocationOptions"];
+        };
+        /** @description Optional direct-invocation controls for response shaping and transport. */
+        ModelInvocationOptions: {
+            responseMode?: components["schemas"]["ModelInvocationResponseMode"];
+        };
+        /**
+         * @description Requested direct-invocation response mode.
+         * @enum {string}
+         */
+        ModelInvocationResponseMode: "METADATA" | "AUDIO_STREAM";
+        ModelInvocationResponse: {
+            /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+            modelName: string;
+            /** @description Worker selected to satisfy this invocation. */
+            worker: string;
+            /** @description Uppercase provider-agnostic operation that was invoked. */
+            operation: string;
+            providerLocality: components["schemas"]["WorkerModelLocality"];
+            /** @description Returned model output as canonical `WorkContent`. */
+            content: components["schemas"]["WorkContent"];
+            /** @description Deterministically resolved slot bindings used for the invocation. */
+            bindings: components["schemas"]["ResolvedModelOperationBinding"][];
+        };
+        ResolvedModelOperationBinding: {
+            /** @description Stable input slot name declared by the worker capability. */
+            slot: string;
+            source: components["schemas"]["ResolvedModelOperationBindingSource"];
+            /** @description Resolved content bound to the slot. */
+            content: components["schemas"]["WorkContent"];
+        };
+        /**
+         * @description Source used to resolve one invocation slot binding.
+         * @enum {string}
+         */
+        ResolvedModelOperationBindingSource: "INPUT" | "CONFIG" | "DEFAULT" | "OMITTED";
         ModelCapability: {
             /** @description Customer-authored worker name that exposes this capability declaration. */
             worker: string;
@@ -1939,6 +2002,28 @@ export interface components {
         RelationType: "DEPENDS_ON" | "PARENT_CHILD" | "SPAWNED_BY";
         /** @description Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`. */
         ModelOperationName: string;
+        /** @description Selector fields used to resolve one content part from ordered runtime input. */
+        WorkstationOperationBindingSelector: {
+            /** @description Match a content part by its authored slot field. */
+            slot?: string;
+            /** @description Match a content part by its label field. */
+            label?: string;
+            /** @description Match a content part by its uppercase public type. */
+            type?: components["schemas"]["ModelOperationContentType"];
+            /** @description Match a content part by its role field. */
+            role?: string;
+        };
+        /** @description One workstation-authored binding for a provider-agnostic model-operation input slot. */
+        WorkstationOperationBinding: {
+            /** @description Stable input slot name declared by the worker operation. */
+            slot: string;
+            /** @description Ordered runtime-input selector used before falling back to config or default content. */
+            selector?: components["schemas"]["WorkstationOperationBindingSelector"];
+            /** @description Static authored content bound directly or used as the first fallback when runtime input does not match. */
+            config?: components["schemas"]["WorkContent"];
+            /** @description Optional final fallback content when neither runtime input nor config content resolves the slot. */
+            defaultContent?: components["schemas"]["WorkContent"];
+        };
         /**
          * @description Canonical transcript entry type used by the dashboard transcript view.
          * @enum {string}
@@ -1975,28 +2060,6 @@ export interface components {
             output?: string;
             /** @description Whether the entry only exposed encrypted content instead of plaintext. */
             encrypted?: boolean;
-        };
-        /** @description Selector fields used to resolve one content part from ordered runtime input. */
-        WorkstationOperationBindingSelector: {
-            /** @description Match a content part by its authored slot field. */
-            slot?: string;
-            /** @description Match a content part by its label field. */
-            label?: string;
-            /** @description Match a content part by its uppercase public type. */
-            type?: components["schemas"]["ModelOperationContentType"];
-            /** @description Match a content part by its role field. */
-            role?: string;
-        };
-        /** @description One workstation-authored binding for a provider-agnostic model-operation input slot. */
-        WorkstationOperationBinding: {
-            /** @description Stable input slot name declared by the worker operation. */
-            slot: string;
-            /** @description Ordered runtime-input selector used before falling back to config or default content. */
-            selector?: components["schemas"]["WorkstationOperationBindingSelector"];
-            /** @description Static authored content bound directly or used as the first fallback when runtime input does not match. */
-            config?: components["schemas"]["WorkContent"];
-            /** @description Optional final fallback content when neither runtime input nor config content resolves the slot. */
-            defaultContent?: components["schemas"]["WorkContent"];
         };
     };
     responses: {
@@ -2441,6 +2504,37 @@ export interface operations {
                     "application/json": components["schemas"]["ModelDetail"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    invokeModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+                model_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelInvocationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful model invocation result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelInvocationResponse"];
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };

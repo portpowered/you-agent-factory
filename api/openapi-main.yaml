@@ -347,6 +347,44 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /models/{model_name}/invocations:
+    post:
+      tags:
+        - Models
+      operationId: invokeModel
+      summary: Invoke one discovered model directly
+      description: Invokes one discovered model through its declared provider-agnostic operation contract using canonical `WorkContent` input and optional slot-binding overrides. Non-streaming clients receive JSON metadata, while audio-producing operations can return a streamed audio body when requested.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelInvocationRequest'
+      responses:
+        '200':
+          description: Successful model invocation result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelInvocationResponse'
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                description: Streamed audio body for audio-producing invocations when `options.responseMode` requests `AUDIO_STREAM`.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factories/{factory_id}/status:
     get:
       tags:
@@ -897,6 +935,18 @@ components:
       $ref: './components/schemas/api/ModelSummary.yaml'
     ModelDetail:
       $ref: './components/schemas/api/ModelDetail.yaml'
+    ModelInvocationRequest:
+      $ref: './components/schemas/api/ModelInvocationRequest.yaml'
+    ModelInvocationOptions:
+      $ref: './components/schemas/api/ModelInvocationOptions.yaml'
+    ModelInvocationResponseMode:
+      $ref: './components/schemas/api/ModelInvocationResponseMode.yaml'
+    ModelInvocationResponse:
+      $ref: './components/schemas/api/ModelInvocationResponse.yaml'
+    ResolvedModelOperationBinding:
+      $ref: './components/schemas/api/ResolvedModelOperationBinding.yaml'
+    ResolvedModelOperationBindingSource:
+      $ref: './components/schemas/api/ResolvedModelOperationBindingSource.yaml'
     ModelCapability:
       $ref: './components/schemas/api/ModelCapability.yaml'
     ModelResourceSummary:

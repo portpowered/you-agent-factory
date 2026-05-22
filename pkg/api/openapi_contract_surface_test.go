@@ -174,16 +174,17 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 func assertPublishedOperations(t *testing.T, paths map[string]any) {
 	t.Helper()
 	requiredOperations := map[string][]string{
-		"/work":                       {"get", "post"},
-		"/work-requests/{request_id}": {"put"},
-		"/work/{id}":                  {"get"},
-		"/events":                     {"get"},
-		"/status":                     {"get"},
-		"/models":                     {"get"},
-		"/models/{model_name}":        {"get"},
-		"/provider-sessions/detail":   {"get"},
-		"/factory":                    {"post"},
-		"/factory/~current":           {"get"},
+		"/work":                            {"get", "post"},
+		"/work-requests/{request_id}":      {"put"},
+		"/work/{id}":                       {"get"},
+		"/events":                          {"get"},
+		"/status":                          {"get"},
+		"/models":                          {"get"},
+		"/models/{model_name}":             {"get"},
+		"/models/{model_name}/invocations": {"post"},
+		"/provider-sessions/detail":        {"get"},
+		"/factory":                         {"post"},
+		"/factory/~current":                {"get"},
 	}
 	for path, methods := range requiredOperations {
 		pathItem, ok := paths[path].(map[string]any)
@@ -228,7 +229,7 @@ func assertPublishedSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	for _, schema := range []string{
 		"SubmitWorkRequest", "SubmitWorkResponse", "UpsertWorkRequestResponse", "WorkRequest", "Work", "WorkContent",
 		"WorkContentPart", "WorkContentPartType", "WorkTextContentPart", "WorkImageContentPart", "Relation", "ListWorkResponse",
-		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "Workstation", "WorkstationKind",
+		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "Workstation", "WorkstationKind",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)
@@ -475,6 +476,12 @@ func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	getModel := pathOperation(t, paths, "/models/{model_name}", "get")
 	assertResponseSchemaRef(t, getModel, "200", "#/components/schemas/ModelDetail")
 	assertResponseRef(t, getModel, "404", "#/components/responses/NotFound")
+
+	invokeModel := pathOperation(t, paths, "/models/{model_name}/invocations", "post")
+	assertRequestSchemaRef(t, invokeModel, "#/components/schemas/ModelInvocationRequest")
+	assertResponseSchemaRef(t, invokeModel, "200", "#/components/schemas/ModelInvocationResponse")
+	assertResponseRef(t, invokeModel, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, invokeModel, "404", "#/components/responses/NotFound")
 }
 
 func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {

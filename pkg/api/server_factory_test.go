@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -153,6 +155,80 @@ func TestGetModel_ReturnsNotFoundForUnknownDiscoveredModel(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "model not found")
+}
+
+func TestInvokeModel_ReturnsInvocationMetadata(t *testing.T) {
+	mf := &testutil.MockFactory{
+		InvokeModelResult: apisurface.ModelInvocationResult{
+			ModelName:        "OMNIVOICE_Q4_K_M",
+			Worker:           "tts-worker",
+			Operation:        "TTS",
+			ProviderLocality: interfaces.ModelLocalityLocal,
+			Content: []interfaces.WorkContentPart{{
+				Type:        interfaces.WorkContentPartTypeAudio,
+				File:        "artifacts/output.wav",
+				ContentType: "audio/wav",
+			}},
+			Bindings: []interfaces.ResolvedModelOperationBinding{{
+				Slot:   "text",
+				Source: interfaces.ModelOperationBindingSourceInput,
+				Content: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "hello world",
+				}},
+			}},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/invocations", bytes.NewBufferString(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello world"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.InvokedModelNames) != 1 || mf.InvokedModelNames[0] != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("invoked model names = %#v, want OMNIVOICE_Q4_K_M", mf.InvokedModelNames)
+	}
+
+	response := decodeJSONResponse[factoryapi.ModelInvocationResponse](t, rec)
+	if response.ModelName != "OMNIVOICE_Q4_K_M" || response.Worker != "tts-worker" || len(response.Bindings) != 1 || len(response.Content) != 1 {
+		t.Fatalf("invoke response = %#v, want invocation metadata", response)
+	}
+}
+
+func TestInvokeModel_StreamsAudioOutput(t *testing.T) {
+	audioPath := filepath.Join(t.TempDir(), "speech.wav")
+	audioBytes := []byte("RIFF....WAVE")
+	if err := os.WriteFile(audioPath, audioBytes, 0o644); err != nil {
+		t.Fatalf("write audio file: %v", err)
+	}
+	mf := &testutil.MockFactory{
+		InvokeModelResult: apisurface.ModelInvocationResult{
+			ModelName:         "OMNIVOICE_Q4_K_M",
+			Worker:            "tts-worker",
+			Operation:         "TTS",
+			ProviderLocality:  interfaces.ModelLocalityLocal,
+			StreamFile:        audioPath,
+			StreamContentType: "audio/wav",
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/invocations", bytes.NewBufferString(`{"operation":"TTS","options":{"responseMode":"AUDIO_STREAM"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "audio/wav" {
+		t.Fatalf("content-type = %q, want audio/wav", got)
+	}
+	if !bytes.Equal(rec.Body.Bytes(), audioBytes) {
+		t.Fatalf("streamed body = %q, want %q", rec.Body.Bytes(), audioBytes)
+	}
 }
 
 func TestGetEditableCurrentFactoryDefinition_ReturnsDefinitionAndVersion(t *testing.T) {

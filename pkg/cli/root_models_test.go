@@ -64,6 +64,31 @@ func TestModelsInspectCommand_MapsModelArgumentAndPort(t *testing.T) {
 	}
 }
 
+func TestModelsInvokeCommand_MapsArgumentsAndFlags(t *testing.T) {
+	originalInvokeModel := invokeModel
+	defer func() {
+		invokeModel = originalInvokeModel
+	}()
+
+	var got modelscli.InvokeConfig
+	invokeModel = func(cfg modelscli.InvokeConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS", "--text", "hello", "--output", "speech.wav", "--port", "9090"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute models invoke: %v", err)
+	}
+	if got.ModelName != "OMNIVOICE_Q4_K_M" || got.Operation != "TTS" || got.Text != "hello" || got.OutputPath != "speech.wav" || got.Port != 9090 {
+		t.Fatalf("invoke config = %#v, want mapped invoke args and flags", got)
+	}
+}
+
 func TestModelsCommand_HelpMentionsDiscoverySurface(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand()
@@ -75,7 +100,7 @@ func TestModelsCommand_HelpMentionsDiscoverySurface(t *testing.T) {
 		t.Fatalf("execute models --help: %v", err)
 	}
 	help := out.String()
-	for _, want := range []string{"Inspect discovered models", "list", "inspect", "/models"} {
+	for _, want := range []string{"Inspect discovered models", "list", "inspect", "invoke", "/models"} {
 		if !bytes.Contains([]byte(help), []byte(want)) {
 			t.Fatalf("models help missing %q:\n%s", want, help)
 		}

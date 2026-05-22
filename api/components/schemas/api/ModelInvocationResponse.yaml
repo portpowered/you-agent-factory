@@ -1,0 +1,29 @@
+type: object
+additionalProperties: false
+required:
+  - modelName
+  - worker
+  - operation
+  - providerLocality
+  - content
+  - bindings
+properties:
+  modelName:
+    type: string
+    description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+  worker:
+    type: string
+    description: Worker selected to satisfy this invocation.
+  operation:
+    type: string
+    description: Uppercase provider-agnostic operation that was invoked.
+  providerLocality:
+    $ref: '../data-models/WorkerModelLocality.yaml'
+  content:
+    $ref: '../data-models/WorkContent.yaml'
+    description: Returned model output as canonical `WorkContent`.
+  bindings:
+    type: array
+    description: Deterministically resolved slot bindings used for the invocation.
+    items:
+      $ref: './ResolvedModelOperationBinding.yaml'

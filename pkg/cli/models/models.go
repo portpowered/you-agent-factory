@@ -2,6 +2,7 @@
 package models
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,6 +37,16 @@ type InspectConfig struct {
 	Output    io.Writer
 }
 
+type InvokeConfig struct {
+	ModelName  string
+	Operation  string
+	Text       string
+	OutputPath string
+	Port       int
+	JSON       bool
+	Output     io.Writer
+}
+
 func List(cfg ListConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
@@ -64,6 +75,42 @@ func Inspect(cfg InspectConfig) error {
 	return RenderModel(model, cfg.Output)
 }
 
+func Invoke(cfg InvokeConfig) error {
+	if cfg.Output == nil {
+		cfg.Output = os.Stdout
+	}
+	modelName := strings.TrimSpace(cfg.ModelName)
+	if modelName == "" {
+		return fmt.Errorf("model name is required")
+	}
+	operation := strings.TrimSpace(cfg.Operation)
+	if operation == "" {
+		return fmt.Errorf("--operation is required")
+	}
+	text := strings.TrimSpace(cfg.Text)
+	if text == "" {
+		return fmt.Errorf("--text is required")
+	}
+
+	if cfg.JSON {
+		response, err := invokeModelMetadata(cfg.Port, modelName, operation, text)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(cfg.Output).Encode(response)
+	}
+
+	outputPath := strings.TrimSpace(cfg.OutputPath)
+	if outputPath == "" {
+		return fmt.Errorf("--output is required unless --json is set")
+	}
+	if err := invokeModelAudio(cfg.Port, modelName, operation, text, outputPath); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(cfg.Output, "Wrote audio: %s\n", outputPath)
+	return err
+}
+
 func QueryList(port int) (factoryapi.ListModelsResponse, error) {
 	endpoint := url.URL{
 		Scheme: "http",
@@ -88,6 +135,99 @@ func QueryModel(port int, modelName string) (factoryapi.ModelDetail, error) {
 		return factoryapi.ModelDetail{}, err
 	}
 	return response, nil
+}
+
+func invokeModelMetadata(port int, modelName, operation, text string) (factoryapi.ModelInvocationResponse, error) {
+	request := factoryapi.ModelInvocationRequest{
+		Operation: operation,
+		Content: &factoryapi.WorkContent{
+			mustGeneratedTextContentPart(text),
+		},
+	}
+	var response factoryapi.ModelInvocationResponse
+	if err := doModelsPOST(port, "/models/"+url.PathEscape(strings.TrimSpace(modelName))+"/invocations", request, &response); err != nil {
+		return factoryapi.ModelInvocationResponse{}, err
+	}
+	return response, nil
+}
+
+func invokeModelAudio(port int, modelName, operation, text, outputPath string) error {
+	mode := factoryapi.ModelInvocationResponseMode("AUDIO_STREAM")
+	request := factoryapi.ModelInvocationRequest{
+		Operation: operation,
+		Content: &factoryapi.WorkContent{
+			mustGeneratedTextContentPart(text),
+		},
+		Options: &factoryapi.ModelInvocationOptions{
+			ResponseMode: &mode,
+		},
+	}
+	body, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("marshal invocation request: %w", err)
+	}
+	endpoint := url.URL{
+		Scheme: "http",
+		Host:   fmt.Sprintf("localhost:%d", port),
+		Path:   "/models/" + url.PathEscape(strings.TrimSpace(modelName)) + "/invocations",
+	}
+	httpReq, err := http.NewRequest(http.MethodPost, endpoint.String(), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("build invoke request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: modelsRequestTimeout}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		responseBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("read invocation error response: %w", readErr)
+		}
+		return modelsRequestError(resp.StatusCode, responseBody)
+	}
+	output, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("create output file: %w", err)
+	}
+	defer output.Close()
+	if _, err := io.Copy(output, resp.Body); err != nil {
+		return fmt.Errorf("write output file: %w", err)
+	}
+	return nil
+}
+
+func doModelsPOST(port int, path string, payload any, out any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal models request: %w", err)
+	}
+	endpoint := url.URL{
+		Scheme: "http",
+		Host:   fmt.Sprintf("localhost:%d", port),
+		Path:   path,
+	}
+	client := &http.Client{Timeout: modelsRequestTimeout}
+	resp, err := client.Post(endpoint.String(), "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read models response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return modelsRequestError(resp.StatusCode, responseBody)
+	}
+	if err := json.Unmarshal(responseBody, out); err != nil {
+		return fmt.Errorf("parse models response: %w", err)
+	}
+	return nil
 }
 
 func doModelsGET(endpoint url.URL, out any) error {
@@ -224,4 +364,13 @@ func modelsRequestError(statusCode int, body []byte) error {
 		return fmt.Errorf("models request failed (%d)", statusCode)
 	}
 	return fmt.Errorf("models request failed (%d): %s", statusCode, preview)
+}
+
+func mustGeneratedTextContentPart(text string) factoryapi.WorkContentPart {
+	var part factoryapi.WorkContentPart
+	_ = part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeTextUpper,
+		Text: text,
+	})
+	return part
 }

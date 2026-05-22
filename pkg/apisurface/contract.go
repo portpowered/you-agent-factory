@@ -23,6 +23,7 @@ type APISurface interface {
 	SaveEditableFactoryDefinition(ctx context.Context, request factoryapi.SaveEditableFactoryDefinitionRequest) (factoryapi.EditableFactoryDefinition, error)
 	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
 	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
+	InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (ModelInvocationResult, error)
 }
 
 // SessionAPISurface extends APISurface with explicit per-session routing while
@@ -67,6 +68,27 @@ var ErrEditableFactoryVersionStale = errors.New("editable factory definition ver
 // ErrModelNotFound reports that the requested discovered model identifier is
 // not present in the current runtime configuration.
 var ErrModelNotFound = errors.New("model not found")
+
+// ErrModelInvocationUnsupportedMode reports that the requested direct
+// invocation response mode is not valid for the selected operation output.
+var ErrModelInvocationUnsupportedMode = errors.New("model invocation response mode is not supported")
+
+// ErrModelInvocationUnsupportedOperation reports that the targeted model does
+// not expose the requested provider-agnostic operation.
+var ErrModelInvocationUnsupportedOperation = errors.New("model invocation operation is not supported")
+
+// ModelInvocationResult carries the backend-owned direct invocation result used
+// by the API transport for either JSON metadata or streamed audio responses.
+type ModelInvocationResult struct {
+	ModelName         string
+	Worker            string
+	Operation         string
+	ProviderLocality  string
+	Content           []interfaces.WorkContentPart
+	Bindings          []interfaces.ResolvedModelOperationBinding
+	StreamFile        string
+	StreamContentType string
+}
 
 // TopologyValidationError carries validation targets that the graph editor can
 // map back to form fields, nodes, edges, or save-level messages.
