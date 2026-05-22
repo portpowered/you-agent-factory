@@ -63,6 +63,7 @@ export function EditableConfigurationPromptInput({
           ariaLabel={messages.promptFieldLabel}
           aria-describedby={describedBy || undefined}
           ariaInvalid={Boolean(state.validationErrors.prompt)}
+          autocompleteState={state.promptHelpState}
           className={cn(
             "relative z-10 bg-transparent",
             state.promptDiagnostics.length > 0
@@ -87,11 +88,68 @@ export function EditableConfigurationPromptInput({
           value={state.draft.prompt}
         />
       </div>
+      <EditableConfigurationPromptAutocompleteFeedback
+        messages={messages}
+        state={state}
+      />
       <EditableConfigurationPromptValidationFeedback
         diagnosticsId={diagnosticsId}
         messages={messages}
         state={state}
       />
+    </div>
+  );
+}
+
+function EditableConfigurationPromptAutocompleteFeedback({
+  messages,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  if (state.promptHelpState.status === "loading") {
+    return (
+      <p className={cn("m-0 text-af-ink/70", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        {messages.editableConfigurationPromptHelpLoading}
+      </p>
+    );
+  }
+
+  if (state.promptHelpState.status === "error") {
+    return (
+      <p
+        className={cn("m-0 text-af-danger-ink", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+        role="alert"
+      >
+        {messages.editableConfigurationPromptHelpErrorPrefix}{" "}
+        {state.promptHelpState.errorMessage}
+      </p>
+    );
+  }
+
+  if (state.promptHelpState.status === "empty") {
+    return (
+      <p className={cn("m-0 text-af-ink/70", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        {state.promptHelpState.message}
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-1 rounded-xl border border-af-overlay/10 bg-af-overlay/4 p-3">
+      <p className={cn("m-0 text-af-ink/72", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        {messages.editableConfigurationPromptAutocompleteSummary(
+          state.promptHelpState.contract.availableVariables.length,
+          state.promptHelpState.contract.inputCount,
+        )}
+      </p>
+      <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        {messages.editableConfigurationPromptAutocompleteDetail}
+      </p>
     </div>
   );
 }

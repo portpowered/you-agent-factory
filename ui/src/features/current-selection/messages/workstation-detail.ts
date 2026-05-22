@@ -83,6 +83,10 @@ const workstationDetailMessagesByLocale = {
       "Unavailable access patterns",
     editableConfigurationPromptHelpInputCountSummary: (count) =>
       `This workstation exposes ${singularPlural(count, "authored input", "authored inputs")}.`,
+    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+      `Autocomplete is ready with ${singularPlural(variableCount, "variable", "variables")} for ${singularPlural(inputCount, "authored input", "authored inputs")}.`,
+    editableConfigurationPromptAutocompleteDetail:
+      "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
     editableConfigurationSaveFallbackError:
       "The running factory could not be saved.",
     editableConfigurationWorkerMissing:
@@ -256,6 +260,10 @@ const workstationDetailMessagesByLocale = {
       "利用できないアクセスパターン",
     editableConfigurationPromptHelpInputCountSummary: (count) =>
       `このワークステーションは ${count} 件の入力を公開しています。`,
+    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+      `${inputCount} 件の入力コンテキストで ${variableCount} 件の補完候補を利用できます。`,
+    editableConfigurationPromptAutocompleteDetail:
+      "{{ ... }} の中で入力すると候補が表示され、エディターの補完コマンドで手動表示することもできます。",
     editableConfigurationSaveFallbackError:
       "実行中ファクトリーを保存できませんでした。",
     editableConfigurationWorkerMissing:
@@ -428,6 +436,10 @@ const workstationDetailMessagesByLocale = {
       "사용할 수 없는 접근 패턴",
     editableConfigurationPromptHelpInputCountSummary: (count) =>
       `이 워크스테이션은 ${count}개의 작성된 입력을 노출합니다.`,
+    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+      `${inputCount}개의 입력 컨텍스트에서 ${variableCount}개의 자동완성 변수를 사용할 수 있습니다.`,
+    editableConfigurationPromptAutocompleteDetail:
+      "{{ ... }} 안에서 입력하면 추천이 나타나고, 프롬프트 편집기 어디서나 Monaco 자동완성 명령으로 수동 호출할 수도 있습니다.",
     editableConfigurationSaveFallbackError:
       "실행 중인 팩토리를 저장할 수 없습니다.",
     editableConfigurationWorkerMissing:
@@ -586,6 +598,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptHelpUnavailableHeading: "不可用访问模式",
     editableConfigurationPromptHelpInputCountSummary: (count) =>
       `此工作站公开了 ${count} 个已编写输入。`,
+    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+      `自动补全已就绪，可为 ${inputCount} 个已编写输入上下文提供 ${variableCount} 个变量候选。`,
+    editableConfigurationPromptAutocompleteDetail:
+      "在 {{ ... }} 内输入时会显示建议，也可以在提示词编辑器任意位置手动触发 Monaco 补全。",
     editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",
     editableConfigurationWorkerMissing:
       "所选工作站引用的工作器已不在当前工厂定义中。请重新加载当前选择并选择其他工作器。",

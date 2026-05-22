@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildWorkstationPromptCompletionItems,
+  extractTemplateExpression,
+  isInsideTemplate,
+  registerWorkstationPromptCompletionProvider,
   resetWorkstationPromptMonacoRegistrationForTests,
   registerWorkstationPromptMonaco,
   WORKSTATION_PROMPT_LANGUAGE_ID,
@@ -10,6 +14,7 @@ import {
 describe("registerWorkstationPromptMonaco", () => {
   it("registers the prompt-template language and theme once", () => {
     const register = vi.fn();
+    const registerCompletionItemProvider = vi.fn();
     const setMonarchTokensProvider = vi.fn();
     const defineTheme = vi.fn();
 
@@ -17,11 +22,19 @@ describe("registerWorkstationPromptMonaco", () => {
 
     registerWorkstationPromptMonaco({
       editor: { defineTheme },
-      languages: { register, setMonarchTokensProvider },
+      languages: {
+        register,
+        registerCompletionItemProvider,
+        setMonarchTokensProvider,
+      },
     } as unknown as typeof import("monaco-editor"));
     registerWorkstationPromptMonaco({
       editor: { defineTheme },
-      languages: { register, setMonarchTokensProvider },
+      languages: {
+        register,
+        registerCompletionItemProvider,
+        setMonarchTokensProvider,
+      },
     } as unknown as typeof import("monaco-editor"));
 
     expect(register).toHaveBeenCalledTimes(1);
@@ -74,5 +87,141 @@ describe("registerWorkstationPromptMonaco", () => {
         ]),
       }),
     );
+  });
+
+  it("builds inside-template and full-snippet completion inserts from the prompt-template contract", () => {
+    const contract = {
+      availableVariables: [
+        {
+          category: "ROOT",
+          description: "Current work identifier.",
+          example: "{{ .WorkID }}",
+          path: ".WorkID",
+        },
+        {
+          category: "INPUT",
+          description: "Payload for the first input.",
+          example: "{{ (index .Inputs 0).Payload }}",
+          path: ".Inputs[0].Payload",
+        },
+      ],
+      inputCount: 1,
+      unavailableAccessPatterns: [],
+    } as const;
+
+    expect(
+      buildWorkstationPromptCompletionItems(contract, {
+        insideTemplateExpression: true,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        insertText: ".WorkID",
+        label: ".WorkID",
+      }),
+      expect.objectContaining({
+        insertText: "(index .Inputs 0).Payload",
+        label: ".Inputs[0].Payload",
+      }),
+    ]);
+
+    expect(
+      buildWorkstationPromptCompletionItems(contract, {
+        insideTemplateExpression: false,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        insertText: "{{ .WorkID }}",
+      }),
+      expect.objectContaining({
+        insertText: "{{ (index .Inputs 0).Payload }}",
+      }),
+    ]);
+  });
+
+  it("detects whether the caret is already inside a template expression", () => {
+    expect(isInsideTemplate("Before {{ .WorkID }} after", 12)).toBe(true);
+    expect(isInsideTemplate("Before {{ .WorkID }} after", 22)).toBe(false);
+    expect(isInsideTemplate("Plain text only", 5)).toBe(false);
+  });
+
+  it("extracts the template body from completion snippets", () => {
+    expect(extractTemplateExpression("{{ .WorkID }}")).toBe(".WorkID");
+    expect(extractTemplateExpression("{{ (index .Inputs 0).Payload }}")).toBe(
+      "(index .Inputs 0).Payload",
+    );
+    expect(extractTemplateExpression(".Prompt")).toBe(".Prompt");
+  });
+
+  it("only returns completion items outside template expressions for manual invocation", () => {
+    const registerCompletionItemProvider = vi.fn();
+    const completionProvider = {
+      dispose: vi.fn(),
+    };
+
+    registerCompletionItemProvider.mockReturnValue(completionProvider);
+
+    registerWorkstationPromptCompletionProvider(
+      {
+        languages: {
+          CompletionItemKind: { Variable: 4 },
+          CompletionTriggerKind: { Invoke: 0, TriggerCharacter: 1 },
+          registerCompletionItemProvider,
+        },
+      } as unknown as typeof import("monaco-editor"),
+      () => ({
+        contract: {
+          availableVariables: [
+            {
+              category: "ROOT",
+              description: "Current work identifier.",
+              example: "{{ .WorkID }}",
+              path: ".WorkID",
+            },
+          ],
+          inputCount: 1,
+          unavailableAccessPatterns: [],
+        },
+        status: "ready",
+      }),
+    );
+
+    const provider = registerCompletionItemProvider.mock.calls[0]?.[1];
+
+    expect(
+      provider.provideCompletionItems(
+        {
+          getOffsetAt: () => 4,
+          getValue: () => "Plan",
+          getWordUntilPosition: () => ({
+            endColumn: 5,
+            startColumn: 1,
+          }),
+        },
+        { column: 5, lineNumber: 1 },
+        { triggerKind: 1 },
+      ),
+    ).toEqual({ suggestions: [] });
+
+    expect(
+      provider.provideCompletionItems(
+        {
+          getOffsetAt: () => 4,
+          getValue: () => "Plan",
+          getWordUntilPosition: () => ({
+            endColumn: 5,
+            startColumn: 1,
+          }),
+        },
+        { column: 5, lineNumber: 1 },
+        { triggerKind: 0 },
+      ),
+    ).toMatchObject({
+      suggestions: [
+        expect.objectContaining({
+          insertText: "{{ .WorkID }}",
+          label: ".WorkID",
+        }),
+      ],
+    });
   });
 });

@@ -1,5 +1,5 @@
 import Editor, { loader } from "@monaco-editor/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 
 import {
@@ -7,7 +7,9 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
+import type { EditableWorkstationPromptHelpState } from "../detail-card-types";
 import {
+  registerWorkstationPromptCompletionProvider,
   registerWorkstationPromptMonaco,
   WORKSTATION_PROMPT_LANGUAGE_ID,
   WORKSTATION_PROMPT_THEME_ID,
@@ -49,6 +51,7 @@ interface WorkstationPromptEditorProps {
   ariaLabel: string;
   ariaDescribedBy?: string;
   ariaInvalid?: boolean;
+  autocompleteState: EditableWorkstationPromptHelpState;
   className?: string;
   hasDiagnostics?: boolean;
   loadingMessage: string;
@@ -64,6 +67,7 @@ export function WorkstationPromptEditor({
   ariaLabel,
   ariaDescribedBy,
   ariaInvalid = false,
+  autocompleteState,
   className,
   hasDiagnostics = false,
   loadingMessage,
@@ -74,9 +78,14 @@ export function WorkstationPromptEditor({
   startupErrorMessage,
   value,
 }: WorkstationPromptEditorProps) {
+  const autocompleteStateRef = useRef(autocompleteState);
   const [startupState, setStartupState] = useState<"error" | "loading" | "ready">(
     monacoLoaderReady ? "ready" : "loading",
   );
+
+  useEffect(() => {
+    autocompleteStateRef.current = autocompleteState;
+  }, [autocompleteState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,7 +144,15 @@ export function WorkstationPromptEditor({
       defaultLanguage={WORKSTATION_PROMPT_LANGUAGE_ID}
       height="13.5rem"
       onChange={(nextValue) => onChange(nextValue ?? "")}
-      onMount={(editorInstance) => {
+      onMount={(editorInstance, monaco) => {
+        const completionProvider = registerWorkstationPromptCompletionProvider(
+          monaco,
+          () => autocompleteStateRef.current,
+        );
+
+        editorInstance.onDidDispose(() => {
+          completionProvider.dispose();
+        });
         onMount?.(editorInstance);
         onScrollChange?.({
           scrollLeft: editorInstance.getScrollLeft(),

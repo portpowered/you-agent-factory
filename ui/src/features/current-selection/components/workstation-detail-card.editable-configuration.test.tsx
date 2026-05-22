@@ -372,8 +372,19 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
+      screen.getByText(
+        "Autocomplete is ready with 2 variables for 1 authored input.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
+      ),
+    ).toBeTruthy();
+    expect(
       screen.getByText("This workstation exposes 1 authored input."),
     ).toBeTruthy();
+    expect(screen.getByText("Prompt variable help")).toBeTruthy();
     expect(screen.getByText("Available variables")).toBeTruthy();
     expect(screen.getByText(".WorkID")).toBeTruthy();
     expect(screen.getByText("{{ .WorkID }}")).toBeTruthy();
@@ -782,10 +793,10 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
-      screen.getByText(
+      screen.getAllByText(
         "Loading available prompt variables for this workstation.",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
 
     rerender(
       <WorkstationDetailCard
@@ -804,10 +815,10 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
-      screen.getByText(
+      screen.getAllByText(
         "No prompt variable help is available for this workstation.",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
 
     rerender(
       <WorkstationDetailCard
@@ -824,12 +835,12 @@ describe("WorkstationDetailCard editable configuration", () => {
       />,
     );
 
-    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
     expect(
-      screen.getByText(
+      screen.getAllByText(
         "Prompt variable help unavailable. Current named factory workstation not found.",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it("renders explicit worker empty and stale-selection states", () => {
