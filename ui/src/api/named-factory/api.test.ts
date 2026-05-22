@@ -94,30 +94,35 @@ describe("factory API", () => {
   });
 
   it("reads the current factory as a direct canonical factory payload", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Current Factory",
+          workTypes: [],
+          workers: [],
+          workstations: [],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+
     await expect(
       getCurrentFactory({
-        fetch: vi.fn().mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              name: "Current Factory",
-              workTypes: [],
-              workers: [],
-              workstations: [],
-            }),
-            {
-              headers: {
-                "Content-Type": "application/json",
-              },
-              status: 200,
-            },
-          ),
-        ),
+        fetch: fetchMock,
       }),
     ).resolves.toEqual({
       name: "Current Factory",
       workTypes: [],
       workers: [],
       workstations: [],
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/factories/~default/factory/~current", {
+      method: "GET",
     });
   });
 
