@@ -201,6 +201,7 @@ func CloneWorkerConfig(def interfaces.WorkerConfig) interfaces.WorkerConfig {
 func CloneWorkstationConfig(def interfaces.FactoryWorkstationConfig) interfaces.FactoryWorkstationConfig {
 	def.Inputs = cloneIOConfigs(def.Inputs)
 	def.Outputs = cloneIOConfigs(def.Outputs)
+	def.OperationBindings = cloneModelOperationBindings(def.OperationBindings)
 	def.Resources = append([]interfaces.ResourceConfig(nil), def.Resources...)
 	def.Guards = cloneGuardConfigs(def.Guards)
 	def.StopWords = append([]string(nil), def.StopWords...)
@@ -279,6 +280,34 @@ func cloneIOConfigs(configs []interfaces.IOConfig) []interfaces.IOConfig {
 		out[i] = cloneIOConfig(configs[i])
 	}
 	return out
+}
+
+func cloneModelOperationBindings(bindings []interfaces.ModelOperationBinding) []interfaces.ModelOperationBinding {
+	if len(bindings) == 0 {
+		return nil
+	}
+	out := make([]interfaces.ModelOperationBinding, len(bindings))
+	for i := range bindings {
+		out[i] = interfaces.ModelOperationBinding{
+			Slot:           bindings[i].Slot,
+			Config:         cloneWorkContentParts(bindings[i].Config),
+			DefaultContent: cloneWorkContentParts(bindings[i].DefaultContent),
+		}
+		if bindings[i].Selector != nil {
+			selector := *bindings[i].Selector
+			out[i].Selector = &selector
+		}
+	}
+	return out
+}
+
+func cloneWorkContentParts(parts []interfaces.WorkContentPart) []interfaces.WorkContentPart {
+	if len(parts) == 0 {
+		return nil
+	}
+	cloned := make([]interfaces.WorkContentPart, len(parts))
+	copy(cloned, parts)
+	return cloned
 }
 
 func cloneIOConfig(cfg interfaces.IOConfig) interfaces.IOConfig {

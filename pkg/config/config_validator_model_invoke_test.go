@@ -25,9 +25,15 @@ func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstation(t *
 		}},
 	}}
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
-		Name:           "speak",
-		Type:           interfaces.WorkstationTypeInvoke,
-		Operation:      "TTS",
+		Name:      "speak",
+		Type:      interfaces.WorkstationTypeInvoke,
+		Operation: "TTS",
+		OperationBindings: []interfaces.ModelOperationBinding{{
+			Slot: "text",
+			Selector: &interfaces.ModelOperationBindingSelector{
+				Label: "utterance",
+			},
+		}},
 		WorkerTypeName: "tts-worker",
 		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
@@ -117,4 +123,41 @@ func TestRuleModelInvokeWorkstations_RejectsIncompleteContentContract(t *testing
 
 	findings := ruleModelInvokeWorkstations(cfg)
 	assertFindingMatch(t, findings, "workstation-model-invoke-content-contract", "workstations[0](speak).operation", "incompatible content contract")
+}
+
+func TestRuleModelInvokeWorkstations_RejectsDuplicateUnknownAndEmptyOperationBindings(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name: "tts-worker",
+		Type: interfaces.WorkerTypeModel,
+		Operations: []interfaces.ModelOperation{{
+			Name: "TTS",
+			Inputs: []interfaces.ModelOperationSlot{{
+				Name:         "text",
+				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				Required:     true,
+			}},
+			Outputs: []interfaces.ModelOperationSlot{{
+				Name:         "audio",
+				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			}},
+		}},
+	}}
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "speak",
+		Type:           interfaces.WorkstationTypeInvoke,
+		Operation:      "TTS",
+		WorkerTypeName: "tts-worker",
+		OperationBindings: []interfaces.ModelOperationBinding{
+			{Slot: "text", Selector: &interfaces.ModelOperationBindingSelector{Label: "utterance"}},
+			{Slot: "text", Config: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "fallback"}}},
+			{Slot: "voice", Selector: &interfaces.ModelOperationBindingSelector{Role: "system"}},
+			{Slot: "style"},
+		},
+	}}
+
+	findings := ruleModelInvokeWorkstations(cfg)
+	assertFindingMatch(t, findings, "workstation-model-invoke-binding-duplicate", "workstations[0](speak).operationBindings[1](text).slot", `duplicate operation binding for slot "text"`)
+	assertFindingMatch(t, findings, "workstation-model-invoke-binding-unknown-slot", "workstations[0](speak).operationBindings[2](voice).slot", `unknown input slot "voice"`)
+	assertFindingMatch(t, findings, "workstation-model-invoke-binding-empty", "workstations[0](speak).operationBindings[3](style)", "must declare a selector, config content, or default content")
 }

@@ -57,6 +57,7 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 			return interfaces.WorkContentPart{
 				Type:        interfaces.WorkContentPartType(textPart.Type).Normalized(),
 				Text:        textPart.Text,
+				Slot:        stringValue(textPart.Slot),
 				Label:       stringValue(textPart.Label),
 				Role:        stringValue(textPart.Role),
 				ContentType: stringValue(textPart.ContentType),
@@ -73,6 +74,7 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 			return interfaces.WorkContentPart{
 				Type:        interfaces.WorkContentPartType(imagePart.Type).Normalized(),
 				File:        imagePart.File,
+				Slot:        stringValue(imagePart.Slot),
 				Label:       stringValue(imagePart.Label),
 				Role:        stringValue(imagePart.Role),
 				ContentType: stringValue(imagePart.ContentType),
@@ -87,6 +89,7 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 		return interfaces.WorkContentPart{
 			Type:        interfaces.WorkContentPartTypeAudio,
 			File:        audioPart.File,
+			Slot:        stringValue(audioPart.Slot),
 			Label:       stringValue(audioPart.Label),
 			Role:        stringValue(audioPart.Role),
 			ContentType: stringValue(audioPart.ContentType),
@@ -104,6 +107,7 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 		return interfaces.WorkContentPart{
 			Type:        interfaces.WorkContentPartTypeJSON,
 			JSON:        cloneRawMessage(rawJSON),
+			Slot:        stringValue(jsonPart.Slot),
 			Label:       stringValue(jsonPart.Label),
 			Role:        stringValue(jsonPart.Role),
 			ContentType: stringValue(jsonPart.ContentType),
@@ -117,6 +121,7 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 		return interfaces.WorkContentPart{
 			Type:        interfaces.WorkContentPartTypeBinary,
 			File:        binaryPart.File,
+			Slot:        stringValue(binaryPart.Slot),
 			Label:       stringValue(binaryPart.Label),
 			Role:        stringValue(binaryPart.Role),
 			ContentType: stringValue(binaryPart.ContentType),
@@ -137,6 +142,7 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 		if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
 			Type:        factoryapi.WorkContentPartType(part.Type.Normalized()),
 			Text:        part.Text,
+			Slot:        stringPtr(part.Slot),
 			Label:       stringPtr(part.Label),
 			Role:        stringPtr(part.Role),
 			ContentType: stringPtr(part.ContentType),
@@ -149,6 +155,7 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 		if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
 			Type:        factoryapi.WorkContentPartType(part.Type.Normalized()),
 			File:        part.File,
+			Slot:        stringPtr(part.Slot),
 			Label:       stringPtr(part.Label),
 			Role:        stringPtr(part.Role),
 			ContentType: stringPtr(part.ContentType),
@@ -161,6 +168,7 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 		if err := generated.FromWorkAudioContentPart(factoryapi.WorkAudioContentPart{
 			Type:        factoryapi.WorkContentPartTypeAudio,
 			File:        part.File,
+			Slot:        stringPtr(part.Slot),
 			Label:       stringPtr(part.Label),
 			Role:        stringPtr(part.Role),
 			ContentType: stringPtr(part.ContentType),
@@ -179,6 +187,7 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 		if err := generated.FromWorkJsonContentPart(factoryapi.WorkJsonContentPart{
 			Type:        factoryapi.WorkContentPartTypeJSON,
 			Json:        jsonValue,
+			Slot:        stringPtr(part.Slot),
 			Label:       stringPtr(part.Label),
 			Role:        stringPtr(part.Role),
 			ContentType: stringPtr(part.ContentType),
@@ -191,6 +200,7 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 		if err := generated.FromWorkBinaryContentPart(factoryapi.WorkBinaryContentPart{
 			Type:        factoryapi.WorkContentPartTypeBinary,
 			File:        part.File,
+			Slot:        stringPtr(part.Slot),
 			Label:       stringPtr(part.Label),
 			Role:        stringPtr(part.Role),
 			ContentType: stringPtr(part.ContentType),

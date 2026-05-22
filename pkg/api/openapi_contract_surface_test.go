@@ -317,7 +317,7 @@ func assertWorkContentSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	assertWorkContentPartSchemaVariant(t, schemas, "WorkAudioContentPart", "type", "file")
 	assertWorkContentPartSchemaVariant(t, schemas, "WorkJsonContentPart", "type", "json")
 	assertWorkContentPartSchemaVariant(t, schemas, "WorkBinaryContentPart", "type", "file")
-	assertSchemaPropertiesPresent(t, schemaProperties(t, schemaObject(t, schemas, "WorkContentCommonFields"), "WorkContentCommonFields"), "WorkContentCommonFields", "label", "role", "contentType", "artifactId", "metadata")
+	assertSchemaPropertiesPresent(t, schemaProperties(t, schemaObject(t, schemas, "WorkContentCommonFields"), "WorkContentCommonFields"), "WorkContentCommonFields", "slot", "label", "role", "contentType", "artifactId", "metadata")
 }
 
 func assertWorkContentPartSchemaVariant(t *testing.T, schemas map[string]any, schemaName string, requiredFields ...string) {
@@ -347,6 +347,7 @@ func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	assertPropertyRef(t, workstationProperties, "behavior", "#/components/schemas/WorkstationKind")
 	assertPropertyRef(t, workstationProperties, "operation", "#/components/schemas/ModelOperationName")
 	assertPropertyRef(t, workstationProperties, "type", "#/components/schemas/WorkstationType")
+	assertSchemaArrayItemRef(t, schemas, "Workstation", "operationBindings", "#/components/schemas/WorkstationOperationBinding")
 	assertPropertiesAbsent(t, workstationProperties, "Workstation", "timeout", "runtime_type")
 	assertEnumValues(t, schemaObject(t, schemas, "WorkstationKind"), "WorkstationKind", []string{"STANDARD", "REPEATER", "CRON"})
 	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"MODEL_WORKSTATION", "MODEL_INVOKE", "LOGICAL_MOVE"})
@@ -415,7 +416,7 @@ func assertFactorySchemaDescriptions(t *testing.T, workType, resource, worker, w
 	}
 
 	assertOpenAPI3Description(t, "Workstation", workstation.Description)
-	for _, propertyName := range []string{"name", "behavior", "type", "operation", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "guards"} {
+	for _, propertyName := range []string{"name", "behavior", "type", "operation", "operationBindings", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "guards"} {
 		assertOpenAPI3PropertyDescription(t, workstation, "Workstation", propertyName)
 	}
 	workstationLimits := assertOpenAPI3RefPropertyDescription(t, workstation, "Workstation", "limits")

@@ -1526,6 +1526,8 @@ export interface components {
             type?: components["schemas"]["WorkstationType"];
             /** @description Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`. */
             operation?: components["schemas"]["ModelOperationName"];
+            /** @description Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content. */
+            operationBindings?: components["schemas"]["WorkstationOperationBinding"][];
             /** @description Name of a worker declared in the workers list. */
             worker: string;
             /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner. */
@@ -1753,6 +1755,8 @@ export interface components {
             [key: string]: unknown;
         };
         WorkContentCommonFields: {
+            /** @description Optional slot name used by model-operation binding selectors and diagnostics. */
+            slot?: string;
             /** @description Optional caller-defined label for slot binding or diagnostics. */
             label?: string;
             /** @description Optional semantic role for model-operation authoring. */
@@ -1849,6 +1853,28 @@ export interface components {
         };
         /** @description Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`. */
         ModelOperationName: string;
+        /** @description Selector fields used to resolve one content part from ordered runtime input. */
+        WorkstationOperationBindingSelector: {
+            /** @description Match a content part by its authored slot field. */
+            slot?: string;
+            /** @description Match a content part by its label field. */
+            label?: string;
+            /** @description Match a content part by its uppercase public type. */
+            type?: components["schemas"]["ModelOperationContentType"];
+            /** @description Match a content part by its role field. */
+            role?: string;
+        };
+        /** @description One workstation-authored binding for a provider-agnostic model-operation input slot. */
+        WorkstationOperationBinding: {
+            /** @description Stable input slot name declared by the worker operation. */
+            slot: string;
+            /** @description Ordered runtime-input selector used before falling back to config or default content. */
+            selector?: components["schemas"]["WorkstationOperationBindingSelector"];
+            /** @description Static authored content bound directly or used as the first fallback when runtime input does not match. */
+            config?: components["schemas"]["WorkContent"];
+            /** @description Optional final fallback content when neither runtime input nor config content resolves the slot. */
+            defaultContent?: components["schemas"]["WorkContent"];
+        };
     };
     responses: {
         /** @description Request payload or parameter was invalid. */

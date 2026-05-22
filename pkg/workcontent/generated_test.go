@@ -113,6 +113,7 @@ func TestGeneratedPtrFromPartsPreservesExtendedContentFields(t *testing.T) {
 		{
 			Type:        interfaces.WorkContentPartTypeAudio,
 			File:        "fixtures/output.wav",
+			Slot:        "audio",
 			Label:       "speech",
 			Role:        "assistant",
 			ContentType: "audio/wav",
@@ -122,6 +123,7 @@ func TestGeneratedPtrFromPartsPreservesExtendedContentFields(t *testing.T) {
 		{
 			Type:        interfaces.WorkContentPartTypeJSON,
 			JSON:        json.RawMessage(`{"voice":"alloy","speed":1}`),
+			Slot:        "settings",
 			ContentType: "application/json",
 		},
 	}
@@ -243,6 +245,7 @@ func workContentPartEqual(left, right interfaces.WorkContentPart) bool {
 	if left.Type != right.Type ||
 		left.Text != right.Text ||
 		left.File != right.File ||
+		left.Slot != right.Slot ||
 		left.Label != right.Label ||
 		left.Role != right.Role ||
 		left.ContentType != right.ContentType ||

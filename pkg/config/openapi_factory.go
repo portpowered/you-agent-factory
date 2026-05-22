@@ -362,6 +362,9 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		if err := normalizeFactoryModelOperationName(workstation, "operation", fmt.Sprintf("workstations[%d].operation", i)); err != nil {
 			return err
 		}
+		if err := normalizeFactoryWorkstationOperationBindings(workstation, i); err != nil {
+			return err
+		}
 		if err := normalizeFactoryWorkstationGuardEntries(workstation, i); err != nil {
 			return err
 		}
@@ -369,6 +372,32 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 			return err
 		}
 		normalizeRuntimeResourceRequirements(workstation, "resources")
+	}
+	return nil
+}
+
+func normalizeFactoryWorkstationOperationBindings(workstation map[string]any, workstationIndex int) error {
+	bindings, ok := workstation["operationBindings"].([]any)
+	if !ok {
+		return nil
+	}
+	for bindingIndex, bindingAny := range bindings {
+		binding, ok := bindingAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		selector, ok := binding["selector"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(
+			selector,
+			"type",
+			fmt.Sprintf("workstations[%d].operationBindings[%d].selector.type", workstationIndex, bindingIndex),
+			interfaces.StrictPublicFactoryWorkerModelOperationContentType,
+		); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -1598,7 +1598,10 @@ type WorkAudioContentPart struct {
 	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
 
 	// Role Optional semantic role for model-operation authoring.
-	Role *string             `json:"role,omitempty"`
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
 }
 
@@ -1620,7 +1623,10 @@ type WorkBinaryContentPart struct {
 	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
 
 	// Role Optional semantic role for model-operation authoring.
-	Role *string             `json:"role,omitempty"`
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
 }
 
@@ -1643,6 +1649,9 @@ type WorkContentCommonFields struct {
 
 	// Role Optional semantic role for model-operation authoring.
 	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string `json:"slot,omitempty"`
 }
 
 // WorkContentMetadata Optional metadata attached to one work content part.
@@ -1683,7 +1692,10 @@ type WorkImageContentPart struct {
 	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
 
 	// Role Optional semantic role for model-operation authoring.
-	Role *string             `json:"role,omitempty"`
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
 }
 
@@ -1705,7 +1717,10 @@ type WorkJsonContentPart struct {
 	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
 
 	// Role Optional semantic role for model-operation authoring.
-	Role *string             `json:"role,omitempty"`
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
 }
 
@@ -1779,6 +1794,9 @@ type WorkTextContentPart struct {
 
 	// Role Optional semantic role for model-operation authoring.
 	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string `json:"slot,omitempty"`
 
 	// Text Inline text content preserved in canonical part order.
 	Text string              `json:"text"`
@@ -1893,6 +1911,9 @@ type Workstation struct {
 	// Operation Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
 	Operation *ModelOperationName `json:"operation,omitempty"`
 
+	// OperationBindings Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.
+	OperationBindings *[]WorkstationOperationBinding `json:"operationBindings,omitempty"`
+
 	// OutputSchema JSON schema string used to validate or parse structured model output when configured.
 	OutputSchema *string `json:"outputSchema,omitempty"`
 
@@ -1961,6 +1982,36 @@ type WorkstationLimits struct {
 
 	// MaxRetries Maximum number of retry attempts after a failed dispatch before the workstation gives up.
 	MaxRetries *int `json:"maxRetries,omitempty"`
+}
+
+// WorkstationOperationBinding One workstation-authored binding for a provider-agnostic model-operation input slot.
+type WorkstationOperationBinding struct {
+	// Config Ordered canonical content parts for one work item.
+	Config *WorkContent `json:"config,omitempty"`
+
+	// DefaultContent Ordered canonical content parts for one work item.
+	DefaultContent *WorkContent `json:"defaultContent,omitempty"`
+
+	// Selector Selector fields used to resolve one content part from ordered runtime input.
+	Selector *WorkstationOperationBindingSelector `json:"selector,omitempty"`
+
+	// Slot Stable input slot name declared by the worker operation.
+	Slot string `json:"slot"`
+}
+
+// WorkstationOperationBindingSelector Selector fields used to resolve one content part from ordered runtime input.
+type WorkstationOperationBindingSelector struct {
+	// Label Match a content part by its label field.
+	Label *string `json:"label,omitempty"`
+
+	// Role Match a content part by its role field.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Match a content part by its authored slot field.
+	Slot *string `json:"slot,omitempty"`
+
+	// Type Uppercase content-part categories supported by worker model-operation capability slots.
+	Type *ModelOperationContentType `json:"type,omitempty"`
 }
 
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.

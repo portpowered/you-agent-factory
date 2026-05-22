@@ -87,7 +87,10 @@ func ruleModelInvokeWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 				Message:  fmt.Sprintf("worker %q operation %q has an incompatible content contract; MODEL_INVOKE requires at least one input slot and one output slot", workstation.WorkerTypeName, operationName),
 				Rule:     "workstation-model-invoke-content-contract",
 			})
+			continue
 		}
+
+		findings = append(findings, validateModelOperationBindings(workstation.OperationBindings, operation.Inputs, basePath+".operationBindings")...)
 	}
 
 	return findings
@@ -100,4 +103,71 @@ func findWorkerOperation(operations []interfaces.ModelOperation, name string) (i
 		}
 	}
 	return interfaces.ModelOperation{}, false
+}
+
+func validateModelOperationBindings(bindings []interfaces.ModelOperationBinding, inputs []interfaces.ModelOperationSlot, path string) []Finding {
+	if len(bindings) == 0 {
+		return nil
+	}
+
+	knownSlots := make(map[string]bool, len(inputs))
+	for _, slot := range inputs {
+		name := strings.TrimSpace(slot.Name)
+		if name != "" {
+			knownSlots[name] = true
+		}
+	}
+
+	seen := make(map[string]bool, len(bindings))
+	var findings []Finding
+	for i, binding := range bindings {
+		bindingPath := fmt.Sprintf("%s[%d](%s)", path, i, binding.Slot)
+		slotName := strings.TrimSpace(binding.Slot)
+		if slotName == "" {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     bindingPath + ".slot",
+				Message:  "operation binding requires a slot name",
+				Rule:     "workstation-model-invoke-binding-slot",
+			})
+			continue
+		}
+		if seen[slotName] {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     bindingPath + ".slot",
+				Message:  fmt.Sprintf("duplicate operation binding for slot %q", slotName),
+				Rule:     "workstation-model-invoke-binding-duplicate",
+			})
+			continue
+		}
+		seen[slotName] = true
+		if !knownSlots[slotName] {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     bindingPath + ".slot",
+				Message:  fmt.Sprintf("operation binding references unknown input slot %q", slotName),
+				Rule:     "workstation-model-invoke-binding-unknown-slot",
+			})
+		}
+		if selectorIsEmpty(binding.Selector) && len(binding.Config) == 0 && len(binding.DefaultContent) == 0 {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     bindingPath,
+				Message:  "operation binding must declare a selector, config content, or default content",
+				Rule:     "workstation-model-invoke-binding-empty",
+			})
+		}
+	}
+	return findings
+}
+
+func selectorIsEmpty(selector *interfaces.ModelOperationBindingSelector) bool {
+	if selector == nil {
+		return true
+	}
+	return strings.TrimSpace(selector.Slot) == "" &&
+		strings.TrimSpace(selector.Label) == "" &&
+		strings.TrimSpace(selector.Type) == "" &&
+		strings.TrimSpace(selector.Role) == ""
 }

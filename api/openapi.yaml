@@ -3051,6 +3051,11 @@ components:
         operation:
           $ref: '#/components/schemas/ModelOperationName'
           description: Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`.
+        operationBindings:
+          type: array
+          description: Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.
+          items:
+            $ref: '#/components/schemas/WorkstationOperationBinding'
         worker:
           type: string
           description: Name of a worker declared in the workers list.
@@ -3540,6 +3545,9 @@ components:
     WorkContentCommonFields:
       type: object
       properties:
+        slot:
+          type: string
+          description: Optional slot name used by model-operation binding selectors and diagnostics.
         label:
           type: string
           description: Optional caller-defined label for slot binding or diagnostics.
@@ -3747,3 +3755,39 @@ components:
       type: string
       description: Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
       pattern: ^[A-Z][A-Z0-9_]*$
+    WorkstationOperationBindingSelector:
+      type: object
+      additionalProperties: false
+      description: Selector fields used to resolve one content part from ordered runtime input.
+      properties:
+        slot:
+          type: string
+          description: Match a content part by its authored slot field.
+        label:
+          type: string
+          description: Match a content part by its label field.
+        type:
+          $ref: '#/components/schemas/ModelOperationContentType'
+          description: Match a content part by its uppercase public type.
+        role:
+          type: string
+          description: Match a content part by its role field.
+    WorkstationOperationBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - slot
+      description: One workstation-authored binding for a provider-agnostic model-operation input slot.
+      properties:
+        slot:
+          type: string
+          description: Stable input slot name declared by the worker operation.
+        selector:
+          $ref: '#/components/schemas/WorkstationOperationBindingSelector'
+          description: Ordered runtime-input selector used before falling back to config or default content.
+        config:
+          $ref: '#/components/schemas/WorkContent'
+          description: Static authored content bound directly or used as the first fallback when runtime input does not match.
+        defaultContent:
+          $ref: '#/components/schemas/WorkContent'
+          description: Optional final fallback content when neither runtime input nor config content resolves the slot.

@@ -5,6 +5,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig, error) {
@@ -250,6 +251,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		Name:                  workstation.Name,
 		WorkerTypeName:        workstation.Worker,
 		Operation:             stringValue(workstation.Operation),
+		OperationBindings:     workstationOperationBindingsInternalFromAPI(workstation.OperationBindings),
 		Type:                  internalFactoryWorkstationTypeFromPublic(workstation.Type),
 		PromptFile:            stringValue(workstation.PromptFile),
 		OutputSchema:          stringValue(workstation.OutputSchema),
@@ -292,6 +294,34 @@ func workstationLimitsInternalFromAPI(limits *factoryapi.WorkstationLimits) inte
 	return interfaces.WorkstationLimits{
 		MaxRetries:       intValue(limits.MaxRetries),
 		MaxExecutionTime: stringValue(limits.MaxExecutionTime),
+	}
+}
+
+func workstationOperationBindingsInternalFromAPI(bindings *[]factoryapi.WorkstationOperationBinding) []interfaces.ModelOperationBinding {
+	if bindings == nil {
+		return nil
+	}
+	values := make([]interfaces.ModelOperationBinding, len(*bindings))
+	for i, binding := range *bindings {
+		values[i] = interfaces.ModelOperationBinding{
+			Slot:           binding.Slot,
+			Selector:       workstationOperationBindingSelectorInternalFromAPI(binding.Selector),
+			Config:         workcontent.PartsFromGenerated(binding.Config),
+			DefaultContent: workcontent.PartsFromGenerated(binding.DefaultContent),
+		}
+	}
+	return values
+}
+
+func workstationOperationBindingSelectorInternalFromAPI(selector *factoryapi.WorkstationOperationBindingSelector) *interfaces.ModelOperationBindingSelector {
+	if selector == nil {
+		return nil
+	}
+	return &interfaces.ModelOperationBindingSelector{
+		Slot:  stringValue(selector.Slot),
+		Label: stringValue(selector.Label),
+		Type:  internalFactoryModelOperationContentTypeFromPublic(valueOrEmpty(selector.Type)),
+		Role:  stringValue(selector.Role),
 	}
 }
 

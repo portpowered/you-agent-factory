@@ -25,6 +25,11 @@ properties:
   operation:
     $ref: './ModelOperationName.yaml'
     description: Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`.
+  operationBindings:
+    type: array
+    description: Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.
+    items:
+      $ref: './WorkstationOperationBinding.yaml'
   worker:
     type: string
     description: Name of a worker declared in the workers list.

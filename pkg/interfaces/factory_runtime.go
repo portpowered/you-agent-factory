@@ -88,6 +88,7 @@ type WorkContentPart struct {
 	Text        string              `json:"text,omitempty"`
 	File        string              `json:"file,omitempty"`
 	JSON        json.RawMessage     `json:"json,omitempty"`
+	Slot        string              `json:"slot,omitempty"`
 	Label       string              `json:"label,omitempty"`
 	Role        string              `json:"role,omitempty"`
 	ContentType string              `json:"contentType,omitempty"`

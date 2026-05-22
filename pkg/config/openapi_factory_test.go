@@ -88,6 +88,11 @@ func TestFactoryConfigFromOpenAPIJSON_MapsModelInvokeOperation(t *testing.T) {
 			"worker":"tts-worker",
 			"type":"MODEL_INVOKE",
 			"operation":"TTS",
+			"operationBindings":[{
+				"slot":"text",
+				"selector":{"slot":"text","type":"TEXT"},
+				"defaultContent":[{"type":"TEXT","slot":"text","text":"fallback"}]
+			}],
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"complete"}]
 		}]
@@ -105,6 +110,19 @@ func TestFactoryConfigFromOpenAPIJSON_MapsModelInvokeOperation(t *testing.T) {
 	}
 	if got := cfg.Workstations[0].Operation; got != "TTS" {
 		t.Fatalf("workstation operation = %q, want TTS", got)
+	}
+	if len(cfg.Workstations[0].OperationBindings) != 1 {
+		t.Fatalf("operation bindings = %#v, want one binding", cfg.Workstations[0].OperationBindings)
+	}
+	binding := cfg.Workstations[0].OperationBindings[0]
+	if binding.Slot != "text" {
+		t.Fatalf("binding slot = %q, want text", binding.Slot)
+	}
+	if binding.Selector == nil || binding.Selector.Type != interfaces.ModelOperationContentTypeText {
+		t.Fatalf("binding selector = %#v, want TEXT selector", binding.Selector)
+	}
+	if len(binding.DefaultContent) != 1 || binding.DefaultContent[0].Slot != "text" || binding.DefaultContent[0].Text != "fallback" {
+		t.Fatalf("binding default content = %#v", binding.DefaultContent)
 	}
 }
 
@@ -647,12 +665,46 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredCronIntervalFieldAtBounda
 }
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *testing.T) {
-	testCases := []struct {
-		name      string
-		fieldPath string
-		value     string
-		payload   string
-	}{
+	for _, tc := range generatedFactoryMisCasedEnumTestCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			assertGeneratedFactoryRejectsMisCasedEnumValue(t, tc.fieldPath, tc.value, tc.payload)
+		})
+	}
+}
+
+type generatedFactoryMisCasedEnumTestCase struct {
+	name      string
+	fieldPath string
+	value     string
+	payload   string
+}
+
+func assertGeneratedFactoryRejectsMisCasedEnumValue(t *testing.T, fieldPath, value, payload string) {
+	t.Helper()
+
+	_, err := GeneratedFactoryFromOpenAPIJSON([]byte(payload))
+	if err == nil {
+		t.Fatal("expected mis-cased enum value to fail at generated boundary")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), fieldPath) {
+		t.Fatalf("expected field path %q in error, got %v", fieldPath, err)
+	}
+	if !strings.Contains(err.Error(), `unsupported value "`+value+`"`) {
+		t.Fatalf("expected unsupported value %q in error, got %v", value, err)
+	}
+}
+
+func generatedFactoryMisCasedEnumTestCases() []generatedFactoryMisCasedEnumTestCase {
+	cases := generatedFactoryMisCasedWorkerEnumTestCases()
+	cases = append(cases, generatedFactoryMisCasedWorkstationEnumTestCases()...)
+	return cases
+}
+
+func generatedFactoryMisCasedWorkerEnumTestCases() []generatedFactoryMisCasedEnumTestCase {
+	return []generatedFactoryMisCasedEnumTestCase{
 		{
 			name:      "worker type",
 			fieldPath: "workers[0].type",
@@ -737,6 +789,11 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 				}]
 			}`,
 		},
+	}
+}
+
+func generatedFactoryMisCasedWorkstationEnumTestCases() []generatedFactoryMisCasedEnumTestCase {
+	return []generatedFactoryMisCasedEnumTestCase{
 		{
 			name:      "workstation behavior",
 			fieldPath: "workstations[0].behavior",
@@ -790,24 +847,6 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 				}]
 			}`,
 		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := GeneratedFactoryFromOpenAPIJSON([]byte(tc.payload))
-			if err == nil {
-				t.Fatal("expected mis-cased enum value to fail at generated boundary")
-			}
-			if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
-				t.Fatalf("expected generated boundary context, got %v", err)
-			}
-			if !strings.Contains(err.Error(), tc.fieldPath) {
-				t.Fatalf("expected field path %q in error, got %v", tc.fieldPath, err)
-			}
-			if !strings.Contains(err.Error(), `unsupported value "`+tc.value+`"`) {
-				t.Fatalf("expected unsupported value %q in error, got %v", tc.value, err)
-			}
-		})
 	}
 }
 

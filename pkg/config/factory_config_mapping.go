@@ -10,6 +10,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 // FactoryConfigMapper maps between on-disk factory configuration payloads and
@@ -239,6 +240,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 		Limits:                workstationLimitsAPIFromInternal(normalized.Limits),
 		OutputSchema:          stringPtrIfNotEmpty(normalized.OutputSchema),
 		Operation:             stringPtrIfNotEmpty(normalized.Operation),
+		OperationBindings:     workstationOperationBindingsAPIFromInternal(normalized.OperationBindings),
 		PromptFile:            stringPtrIfNotEmpty(normalized.PromptFile),
 		Type:                  workstationTypePtrIfNotEmpty(normalized.Type),
 	}
@@ -467,6 +469,34 @@ func workstationLimitsAPIFromInternal(limits interfaces.WorkstationLimits) *fact
 	}
 }
 
+func workstationOperationBindingsAPIFromInternal(bindings []interfaces.ModelOperationBinding) *[]factoryapi.WorkstationOperationBinding {
+	if len(bindings) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.WorkstationOperationBinding, len(bindings))
+	for i, binding := range bindings {
+		values[i] = factoryapi.WorkstationOperationBinding{
+			Slot:           binding.Slot,
+			Config:         workcontent.GeneratedPtrFromParts(binding.Config),
+			DefaultContent: workcontent.GeneratedPtrFromParts(binding.DefaultContent),
+			Selector:       workstationOperationBindingSelectorAPIFromInternal(binding.Selector),
+		}
+	}
+	return &values
+}
+
+func workstationOperationBindingSelectorAPIFromInternal(selector *interfaces.ModelOperationBindingSelector) *factoryapi.WorkstationOperationBindingSelector {
+	if selector == nil {
+		return nil
+	}
+	return &factoryapi.WorkstationOperationBindingSelector{
+		Slot:  stringPtrIfNotEmpty(selector.Slot),
+		Label: stringPtrIfNotEmpty(selector.Label),
+		Type:  modelOperationContentTypePtrIfNotEmpty(selector.Type),
+		Role:  stringPtrIfNotEmpty(selector.Role),
+	}
+}
+
 func workstationCronAPIFromInternal(cron *interfaces.CronConfig) *factoryapi.WorkstationCron {
 	if cron == nil {
 		return nil
@@ -615,6 +645,14 @@ func workstationTypePtrIfNotEmpty(value string) *factoryapi.WorkstationType {
 		return nil
 	}
 	enumValue := publicFactoryWorkstationTypeFromInternal(value)
+	return &enumValue
+}
+
+func modelOperationContentTypePtrIfNotEmpty(value string) *factoryapi.ModelOperationContentType {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	enumValue := publicFactoryModelOperationContentTypeFromInternal(value)
 	return &enumValue
 }
 

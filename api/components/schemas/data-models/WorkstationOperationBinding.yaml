@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - slot
+description: One workstation-authored binding for a provider-agnostic model-operation input slot.
+properties:
+  slot:
+    type: string
+    description: Stable input slot name declared by the worker operation.
+  selector:
+    $ref: './WorkstationOperationBindingSelector.yaml'
+    description: Ordered runtime-input selector used before falling back to config or default content.
+  config:
+    $ref: './WorkContent.yaml'
+    description: Static authored content bound directly or used as the first fallback when runtime input does not match.
+  defaultContent:
+    $ref: './WorkContent.yaml'
+    description: Optional final fallback content when neither runtime input nor config content resolves the slot.

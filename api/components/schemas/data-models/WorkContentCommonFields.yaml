@@ -1,5 +1,8 @@
 type: object
 properties:
+  slot:
+    type: string
+    description: Optional slot name used by model-operation binding selectors and diagnostics.
   label:
     type: string
     description: Optional caller-defined label for slot binding or diagnostics.
