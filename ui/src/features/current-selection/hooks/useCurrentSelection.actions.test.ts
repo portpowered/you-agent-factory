@@ -22,7 +22,7 @@ describe("useCurrentSelectionActions", () => {
     vi.clearAllMocks();
   });
 
-  it("opens terminal work detail with a workstation-request preference and falls back to the current selection when unresolved", () => {
+  it("opens terminal work detail and falls back to the current selection when unresolved", () => {
     const commitSelectionState = vi.fn();
     const currentSelection: DashboardSelection = {
       kind: "node",
@@ -65,7 +65,6 @@ describe("useCurrentSelectionActions", () => {
           failureMessage: "Provider rate limit exceeded.",
           failureReason: "provider_rate_limit",
           label: "Blocked Analysis Story",
-          preferWorkstationRequest: true,
           status: "failed",
           traceWorkID: "work-blocked-analysis",
           workItem,
@@ -76,7 +75,7 @@ describe("useCurrentSelectionActions", () => {
     expect(commitSelectionState).toHaveBeenCalledWith({
       selection: currentSelection,
       terminalWorkDetail: expect.objectContaining({
-        preferWorkstationRequest: true,
+        dispatchID: "dispatch-blocked-analysis",
       }),
     });
   });
@@ -169,6 +168,36 @@ describe("useCurrentSelectionActions", () => {
         traceWorkID: "work-blocked-analysis",
         workItem,
       },
+    });
+  });
+
+  it("keeps explicit workstation-request selection separate from work-by-id selection", () => {
+    const commitSelectionState = vi.fn();
+    const request = {
+      dispatch_id: "dispatch-review",
+      workstation_node_id: "review",
+    } as never;
+
+    const actions = useCurrentSelectionActions({
+      commitSelectionState,
+      completedWorkItems: [],
+      failedWorkItems: [],
+      projectedWorkstationRequestsByDispatchID: undefined,
+      selection: null,
+      snapshot: null,
+      terminalWorkDetail: null,
+    });
+
+    actions.selectWorkstationRequest(request);
+
+    expect(commitSelectionState).toHaveBeenCalledWith({
+      selection: {
+        dispatchId: "dispatch-review",
+        kind: "workstation-request",
+        nodeId: "review",
+        request,
+      },
+      terminalWorkDetail: null,
     });
   });
 });

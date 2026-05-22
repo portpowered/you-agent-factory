@@ -232,7 +232,7 @@ describe("useCurrentSelection.selection-helpers", () => {
     expect(inferStateWorkTerminalStatus(null, reviewOutputPlace, workAlpha)).toBeNull();
   });
 
-  it("resolves tracked work selections across script-backed, active, provider, failed, retained, and fallback paths", () => {
+  it("resolves tracked work selections to work-item selections across request, active, provider, failed, retained, and fallback paths", () => {
     const snapshot = buildSnapshot();
     const scriptRequest: DashboardWorkstationRequest = {
       counts: {
@@ -273,9 +273,9 @@ describe("useCurrentSelection.selection-helpers", () => {
       }),
     ).toEqual({
       dispatchId: "dispatch-script",
-      kind: "workstation-request",
+      kind: "work-item",
       nodeId: "review",
-      request: scriptRequest,
+      workItem: workAlpha,
     });
 
     snapshot.runtime.workstation_requests_by_dispatch_id = {};

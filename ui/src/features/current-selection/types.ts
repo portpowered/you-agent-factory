@@ -15,7 +15,6 @@ export interface TerminalWorkDetail {
   failureMessage?: string;
   failureReason?: string;
   label: string;
-  preferWorkstationRequest?: boolean;
   status: "completed" | "failed";
   traceWorkID: string;
   workItem?: DashboardWorkItemRef;
