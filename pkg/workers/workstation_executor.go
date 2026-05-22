@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,6 +52,7 @@ type WorkstationExecutor struct {
 }
 
 const defaultSubprocessExecutionTimeout = 2 * time.Hour
+const classifierFailureRawOutputLimit = 160
 
 type resolvedWorkstationExecutionContext struct {
 	ProjectID        string
@@ -323,7 +325,7 @@ func normalizeClassifierWorkResult(result interfaces.WorkResult) interfaces.Work
 	label, err := normalizeClassifierLabel(result.Output)
 	if err != nil {
 		result.Outcome = interfaces.OutcomeFailed
-		result.Error = "classifier output invalid: " + err.Error()
+		result.Error = classifierOutputErrorDetail(result.Output, err)
 		return result
 	}
 
@@ -352,6 +354,26 @@ func normalizeClassifierLabel(output string) (string, error) {
 	}
 
 	return trimmed, nil
+}
+
+func classifierOutputErrorDetail(rawOutput string, err error) string {
+	detail := "classifier output invalid: " + err.Error()
+	evidence := classifierRawOutputEvidence(rawOutput)
+	if evidence == "" {
+		return detail
+	}
+	return detail + " (raw output: " + evidence + ")"
+}
+
+func classifierRawOutputEvidence(rawOutput string) string {
+	trimmed := strings.TrimSpace(rawOutput)
+	if trimmed == "" {
+		return ""
+	}
+	if len(trimmed) > classifierFailureRawOutputLimit {
+		trimmed = trimmed[:classifierFailureRawOutputLimit] + "..."
+	}
+	return strconv.Quote(trimmed)
 }
 
 // Compile-time check.

@@ -539,6 +539,22 @@ func TestFailureDetailsForResult_FailedWorkerErrorUsesStableFailureDetails(t *te
 	}
 }
 
+func TestFailureDetailsForResult_ClassifierInvalidOutputPreservesRawOutputEvidence(t *testing.T) {
+	reason, message := failureDetailsForResult(interfaces.WorkResult{
+		DispatchID:   "dispatch-classifier-invalid",
+		TransitionID: "classify",
+		Outcome:      interfaces.OutcomeFailed,
+		Error:        `classifier output invalid: expected plain string label (raw output: "{\"label\":\"approved\"}")`,
+	})
+
+	if reason != failureReasonWorkerError {
+		t.Fatalf("failure reason = %q, want %q", reason, failureReasonWorkerError)
+	}
+	if !strings.Contains(message, `raw output: "{\"label\":\"approved\"}"`) {
+		t.Fatalf("failure message = %q, want raw output evidence", message)
+	}
+}
+
 func TestFailureDetailsForResult_FailedWithoutDetailsUsesUnavailableMessage(t *testing.T) {
 	reason, message := failureDetailsForResult(interfaces.WorkResult{
 		DispatchID:   "dispatch-unknown",

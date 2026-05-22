@@ -772,6 +772,9 @@ func TestWorkstationExecutor_ClassifierRejectsEmptyOrNonStringOutput(t *testing.
 			if !strings.HasPrefix(result.Error, "classifier output invalid:") {
 				t.Fatalf("Error = %q, want classifier output invalid prefix", result.Error)
 			}
+			if strings.TrimSpace(tc.output) != "" && !strings.Contains(result.Error, "raw output:") {
+				t.Fatalf("Error = %q, want raw output evidence", result.Error)
+			}
 		})
 	}
 }
