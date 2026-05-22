@@ -136,73 +136,102 @@ func collectCandidate(et interfaces.EnabledTransition, topology *state.Net, runt
 		return queuedCandidate{}, false
 	}
 
-	seenConsumeTokens := make(map[string]struct{})
-	consumeTokenIDs := make([]string, 0, len(et.Bindings))
-	inputBindings := make(map[string][]string)
-	traceIDSet := make(map[string]struct{})
-	var earliestQueueTime time.Time
-	processingWorkCount := 0
-	hasCustomerWork := false
-
+	analysis := newQueuedCandidateAnalysis(et, topology)
 	for _, arcName := range arcNames {
-		tokens := et.Bindings[arcName]
-		for _, token := range tokens {
-			tokenID := token.ID
-			if tokenID == "" {
-				continue
-			}
-
-			if isCustomerWorkToken(token) {
-				if token.Color.TraceID != "" {
-					traceIDSet[token.Color.TraceID] = struct{}{}
-				}
-				queuedAt := token.EnteredAt
-				if queuedAt.IsZero() {
-					queuedAt = token.CreatedAt
-				}
-				if !queuedAt.IsZero() && (earliestQueueTime.IsZero() || queuedAt.Before(earliestQueueTime)) {
-					earliestQueueTime = queuedAt
-				}
-			}
-
-			if et.ArcModes[arcName] == interfaces.ArcModeObserve {
-				continue
-			}
-			if _, exists := seenConsumeTokens[tokenID]; !exists {
-				consumeTokenIDs = append(consumeTokenIDs, tokenID)
-				seenConsumeTokens[tokenID] = struct{}{}
-				if isCustomerWorkToken(token) {
-					hasCustomerWork = true
-				}
-				if isProcessingWorkToken(token, topology) {
-					processingWorkCount++
-				}
-			}
-			inputBindings[arcName] = append(inputBindings[arcName], tokenID)
-		}
+		analysis.consumeArc(arcName, et.Bindings[arcName])
 	}
-
-	if len(consumeTokenIDs) == 0 {
+	if len(analysis.consumeTokenIDs) == 0 {
 		return queuedCandidate{}, false
 	}
-
-	traceIDs := make([]string, 0, len(traceIDSet))
-	for id := range traceIDSet {
-		traceIDs = append(traceIDs, id)
-	}
-	sort.Strings(traceIDs)
 
 	return queuedCandidate{
 		transitionID:        et.TransitionID,
 		workerType:          et.WorkerType,
-		inputBindings:       inputBindings,
-		consumeTokenIDs:     consumeTokenIDs,
-		traceIDs:            traceIDs,
-		earliestQueueTime:   earliestQueueTime,
-		processingWorkCount: processingWorkCount,
+		inputBindings:       analysis.inputBindings,
+		consumeTokenIDs:     analysis.consumeTokenIDs,
+		traceIDs:            analysis.traceIDs(),
+		earliestQueueTime:   analysis.earliestQueueTime,
+		processingWorkCount: analysis.processingWorkCount,
 		workstationPriority: workstationKindPriority(et.TransitionID, topology, runtimeConfig),
-		hasCustomerWork:     hasCustomerWork,
+		hasCustomerWork:     analysis.hasCustomerWork,
 	}, true
+}
+
+type queuedCandidateAnalysis struct {
+	arcModes            map[string]interfaces.ArcMode
+	topology            *state.Net
+	seenConsumeTokens   map[string]struct{}
+	consumeTokenIDs     []string
+	inputBindings       map[string][]string
+	traceIDSet          map[string]struct{}
+	earliestQueueTime   time.Time
+	processingWorkCount int
+	hasCustomerWork     bool
+}
+
+func newQueuedCandidateAnalysis(et interfaces.EnabledTransition, topology *state.Net) *queuedCandidateAnalysis {
+	return &queuedCandidateAnalysis{
+		arcModes:          et.ArcModes,
+		topology:          topology,
+		seenConsumeTokens: make(map[string]struct{}),
+		consumeTokenIDs:   make([]string, 0, len(et.Bindings)),
+		inputBindings:     make(map[string][]string),
+		traceIDSet:        make(map[string]struct{}),
+	}
+}
+
+func (a *queuedCandidateAnalysis) consumeArc(arcName string, tokens []interfaces.Token) {
+	for _, token := range tokens {
+		a.consumeToken(arcName, token)
+	}
+}
+
+func (a *queuedCandidateAnalysis) consumeToken(arcName string, token interfaces.Token) {
+	tokenID := token.ID
+	if tokenID == "" {
+		return
+	}
+	a.observeTraceCandidate(token)
+	if a.arcModes[arcName] == interfaces.ArcModeObserve {
+		return
+	}
+	a.inputBindings[arcName] = append(a.inputBindings[arcName], tokenID)
+	if _, exists := a.seenConsumeTokens[tokenID]; exists {
+		return
+	}
+	a.seenConsumeTokens[tokenID] = struct{}{}
+	a.consumeTokenIDs = append(a.consumeTokenIDs, tokenID)
+	if isCustomerWorkToken(token) {
+		a.hasCustomerWork = true
+	}
+	if isProcessingWorkToken(token, a.topology) {
+		a.processingWorkCount++
+	}
+}
+
+func (a *queuedCandidateAnalysis) observeTraceCandidate(token interfaces.Token) {
+	if !isCustomerWorkToken(token) {
+		return
+	}
+	if token.Color.TraceID != "" {
+		a.traceIDSet[token.Color.TraceID] = struct{}{}
+	}
+	queuedAt := token.EnteredAt
+	if queuedAt.IsZero() {
+		queuedAt = token.CreatedAt
+	}
+	if !queuedAt.IsZero() && (a.earliestQueueTime.IsZero() || queuedAt.Before(a.earliestQueueTime)) {
+		a.earliestQueueTime = queuedAt
+	}
+}
+
+func (a *queuedCandidateAnalysis) traceIDs() []string {
+	traceIDs := make([]string, 0, len(a.traceIDSet))
+	for id := range a.traceIDSet {
+		traceIDs = append(traceIDs, id)
+	}
+	sort.Strings(traceIDs)
+	return traceIDs
 }
 
 func snapshotTopology(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) *state.Net {
@@ -278,57 +307,59 @@ func (c *queuedCandidate) isCompletedTrace(activeTraces map[string]bool, initial
 
 func stableSortQueuedCandidates(candidates []queuedCandidate) {
 	sort.SliceStable(candidates, func(i, j int) bool {
-		left := candidates[i]
-		right := candidates[j]
-		if left.processingWorkCount != right.processingWorkCount {
-			return left.processingWorkCount > right.processingWorkCount
-		}
-		if left.hasCustomerWork != right.hasCustomerWork {
-			return left.hasCustomerWork
-		}
-		if left.workstationPriority != right.workstationPriority {
-			return left.workstationPriority < right.workstationPriority
-		}
-		if left.hasInitialized != right.hasInitialized {
-			return left.hasInitialized
-		}
-		if left.hasInitialized {
-			if !left.lastDispatchAt.Equal(right.lastDispatchAt) {
-				if left.lastDispatchAt.IsZero() {
-					return false
-				}
-				if right.lastDispatchAt.IsZero() {
-					return true
-				}
-				return left.lastDispatchAt.Before(right.lastDispatchAt)
-			}
-		}
-		if !left.earliestQueueTime.Equal(right.earliestQueueTime) {
-			if left.earliestQueueTime.IsZero() {
-				return false
-			}
-			if right.earliestQueueTime.IsZero() {
-				return true
-			}
-			return left.earliestQueueTime.Before(right.earliestQueueTime)
-		}
-		if left.transitionID != right.transitionID {
-			return left.transitionID < right.transitionID
-		}
-		if left.workerType != right.workerType {
-			return left.workerType < right.workerType
-		}
-		if len(left.consumeTokenIDs) != len(right.consumeTokenIDs) {
-			return len(left.consumeTokenIDs) < len(right.consumeTokenIDs)
-		}
-		for idx := range left.consumeTokenIDs {
-			if left.consumeTokenIDs[idx] == right.consumeTokenIDs[idx] {
-				continue
-			}
-			return left.consumeTokenIDs[idx] < right.consumeTokenIDs[idx]
-		}
-		return false
+		return queuedCandidateLess(candidates[i], candidates[j])
 	})
+}
+
+func queuedCandidateLess(left queuedCandidate, right queuedCandidate) bool {
+	if left.processingWorkCount != right.processingWorkCount {
+		return left.processingWorkCount > right.processingWorkCount
+	}
+	if left.hasCustomerWork != right.hasCustomerWork {
+		return left.hasCustomerWork
+	}
+	if left.workstationPriority != right.workstationPriority {
+		return left.workstationPriority < right.workstationPriority
+	}
+	if left.hasInitialized != right.hasInitialized {
+		return left.hasInitialized
+	}
+	if left.hasInitialized && !left.lastDispatchAt.Equal(right.lastDispatchAt) {
+		return earlierNonZeroTime(left.lastDispatchAt, right.lastDispatchAt)
+	}
+	if !left.earliestQueueTime.Equal(right.earliestQueueTime) {
+		return earlierNonZeroTime(left.earliestQueueTime, right.earliestQueueTime)
+	}
+	if left.transitionID != right.transitionID {
+		return left.transitionID < right.transitionID
+	}
+	if left.workerType != right.workerType {
+		return left.workerType < right.workerType
+	}
+	if len(left.consumeTokenIDs) != len(right.consumeTokenIDs) {
+		return len(left.consumeTokenIDs) < len(right.consumeTokenIDs)
+	}
+	return orderedTokenIDsLess(left.consumeTokenIDs, right.consumeTokenIDs)
+}
+
+func earlierNonZeroTime(left time.Time, right time.Time) bool {
+	if left.IsZero() {
+		return false
+	}
+	if right.IsZero() {
+		return true
+	}
+	return left.Before(right)
+}
+
+func orderedTokenIDsLess(left []string, right []string) bool {
+	for idx := range left {
+		if left[idx] == right[idx] {
+			continue
+		}
+		return left[idx] < right[idx]
+	}
+	return false
 }
 
 func buildInitializedTraceRegistry(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) map[string]time.Time {

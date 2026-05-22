@@ -266,7 +266,6 @@ func (e *FactoryEngine) validWorkTypes() map[string]bool {
 
 // Run is the main execution loop. Blocks on a select over wake channels until
 // ctx is cancelled or the marking has no more actionable tokens.
-// portos:func-length-exception owner=agent-factory reason=legacy-engine-run-loop review=2026-07-18 removal=split-initial-drain-and-wait-loop-before-next-engine-loop-change
 func (e *FactoryEngine) Run(ctx context.Context) error {
 	e.logger.Info("engine started")
 	defer func() {
@@ -279,34 +278,14 @@ func (e *FactoryEngine) Run(ctx context.Context) error {
 	// mutations from manual Tick() calls that happened before Run was called.
 	// Without this, tokens left in intermediate states by pre-Run ticks would
 	// never advance because the select loop waits for new channel events.
-	e.mu.Lock()
-	e.drainChannels()
-	e.mu.Unlock()
-	for {
-		e.mu.Lock()
-		mutated, shouldTerminate, err := e.tick(ctx)
-		e.mu.Unlock()
-		if err != nil {
-			e.logger.Error("engine initial tick error", "error", err)
-			return err
-		}
-		if shouldTerminate {
-			e.mu.Lock()
-			e.acceptingSubmits = false
-			drained := e.drainChannels()
-			if drained {
-				e.acceptingSubmits = true
-			}
-			e.mu.Unlock()
-			if drained {
-				continue
-			}
-			e.logger.Info("engine terminated during initial tick pass")
-			return nil
-		}
-		if !mutated {
-			break
-		}
+	terminated, err := e.runInitialTickPass(ctx)
+	if err != nil {
+		e.logger.Error("engine initial tick error", "error", err)
+		return err
+	}
+	if terminated {
+		e.logger.Info("engine terminated during initial tick pass")
+		return nil
 	}
 
 	var dispatchWait <-chan struct{}
@@ -314,50 +293,79 @@ func (e *FactoryEngine) Run(ctx context.Context) error {
 		dispatchWait = e.dispatchHook.WaitCh()
 	}
 	for {
-		select {
-		case <-e.resultCh:
-			e.mu.Lock()
-			e.logger.Info("engine: result signal received")
-			e.handleResult()
-			e.mu.Unlock()
-		case <-e.submitSignal:
-			e.logger.Info("engine: submission hook wake-up received")
-		case <-dispatchWait:
-			e.logger.Info("engine: dispatch/result hook wake-up received")
-		case <-ctx.Done():
-			e.logger.Info("engine stopped", "reason", ctx.Err())
-			return ctx.Err()
+		if err := e.waitForEngineSignal(ctx, dispatchWait); err != nil {
+			return err
 		}
-
-		// Continue ticking until no more mutations are produced (quiescent)
-		// or termination is signaled.
-		for {
-			e.mu.Lock()
-			mutated, shouldTerminate, err := e.tick(ctx)
-			e.mu.Unlock()
-			if err != nil {
-				e.logger.Error("engine tick error", "error", err)
-				return err
-			}
-			if shouldTerminate {
-				e.mu.Lock()
-				e.acceptingSubmits = false
-				drained := e.drainChannels()
-				if drained {
-					e.acceptingSubmits = true
-				}
-				e.mu.Unlock()
-				if drained {
-					continue
-				}
-				e.logger.Info("engine terminated")
-				return nil
-			}
-			if !mutated {
-				break
-			}
+		terminated, err := e.runUntilQuiescent(ctx)
+		if err != nil {
+			e.logger.Error("engine tick error", "error", err)
+			return err
+		}
+		if terminated {
+			e.logger.Info("engine terminated")
+			return nil
 		}
 	}
+}
+
+func (e *FactoryEngine) runInitialTickPass(ctx context.Context) (bool, error) {
+	e.mu.Lock()
+	e.drainChannels()
+	e.mu.Unlock()
+	return e.runUntilQuiescent(ctx)
+}
+
+func (e *FactoryEngine) waitForEngineSignal(ctx context.Context, dispatchWait <-chan struct{}) error {
+	select {
+	case <-e.resultCh:
+		e.mu.Lock()
+		e.logger.Info("engine: result signal received")
+		e.handleResult()
+		e.mu.Unlock()
+	case <-e.submitSignal:
+		e.logger.Info("engine: submission hook wake-up received")
+	case <-dispatchWait:
+		e.logger.Info("engine: dispatch/result hook wake-up received")
+	case <-ctx.Done():
+		e.logger.Info("engine stopped", "reason", ctx.Err())
+		return ctx.Err()
+	}
+	return nil
+}
+
+func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
+	for {
+		mutated, shouldTerminate, err := e.tickOnce(ctx)
+		if err != nil {
+			return false, err
+		}
+		if shouldTerminate {
+			return e.finishTerminationDrain()
+		}
+		if !mutated {
+			return false, nil
+		}
+	}
+}
+
+func (e *FactoryEngine) tickOnce(ctx context.Context) (bool, bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.tick(ctx)
+}
+
+func (e *FactoryEngine) finishTerminationDrain() (bool, error) {
+	e.mu.Lock()
+	e.acceptingSubmits = false
+	drained := e.drainChannels()
+	if drained {
+		e.acceptingSubmits = true
+	}
+	e.mu.Unlock()
+	if drained {
+		return false, nil
+	}
+	return true, nil
 }
 
 // Tick executes a single tick synchronously. Drains all pending channel events
@@ -706,74 +714,113 @@ func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []interfaces.G
 	total := 0
 	for i := range batches {
 		batch := batches[i]
-		source := batch.Metadata.Source
-		if source == "" {
-			source = defaultSource
-		}
-		if source == "" {
-			source = "generated-batch"
-		}
-		normalized, err := factory.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
-			ValidWorkTypes:    e.validWorkTypes(),
-			ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes),
-		})
+		source := generatedSubmissionSource(batch, defaultSource)
+		normalized, requestID, err := e.normalizeGeneratedSubmissionBatch(batch)
 		if err != nil {
 			return total, err
 		}
-
-		requestID := ""
-		if len(normalized) > 0 {
-			requestID = normalized[0].RequestID
-		}
-		if _, exists := e.workRequests[requestID]; exists && requestID != "" && source != externalSubmissionHookName {
+		if e.skipGeneratedSubmissionRequest(requestID, source) {
 			continue
 		}
-
-		now := e.clock.Now()
-		tokens := make([]*interfaces.Token, 0, len(normalized))
-		for _, req := range normalized {
-			token, err := e.transformer.InitialTokenFromSubmit(req, now)
-			if err != nil {
-				return total, err
-			}
-			tokens = append(tokens, token)
+		tokens, err := e.tokensFromGeneratedSubmissions(normalized)
+		if err != nil {
+			return total, err
 		}
-
-		traceID := ""
-		if len(normalized) > 0 {
-			traceID = normalized[0].TraceID
-		}
-		e.workRequests[requestID] = interfaces.WorkRequestSubmitResult{
-			RequestID: requestID,
-			TraceID:   traceID,
-			Accepted:  true,
-		}
-
-		if e.recordWorkRequest != nil {
-			record := factory.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
-			record.ParentLineage = append([]string(nil), batch.Metadata.ParentLineage...)
-			e.recordWorkRequest(
-				e.runtimeState.TickCount,
-				record,
-			)
-		}
-		for index, token := range tokens {
-			if e.recordSubmission != nil {
-				e.recordSubmission(interfaces.FactorySubmissionRecord{
-					SubmissionID: submissionRecordID(e.runtimeState.TickCount, source, index),
-					ObservedTick: e.runtimeState.TickCount,
-					Request:      normalized[index],
-					Source:       source,
-				})
-			}
-			e.runtimeState.Marking.AddToken(token)
-			if e.recordWorkInput != nil {
-				e.recordWorkInput(e.runtimeState.TickCount, normalized[index], *token)
-			}
-		}
+		e.recordGeneratedSubmissionRequest(requestID, source, batch, normalized)
+		e.recordGeneratedSubmissionTokens(source, normalized, tokens)
 		total += len(tokens)
 	}
 	return total, nil
+}
+
+func generatedSubmissionSource(batch interfaces.GeneratedSubmissionBatch, defaultSource string) string {
+	if batch.Metadata.Source != "" {
+		return batch.Metadata.Source
+	}
+	if defaultSource != "" {
+		return defaultSource
+	}
+	return "generated-batch"
+}
+
+func (e *FactoryEngine) normalizeGeneratedSubmissionBatch(batch interfaces.GeneratedSubmissionBatch) ([]interfaces.SubmitRequest, string, error) {
+	normalized, err := factory.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+		ValidWorkTypes:    e.validWorkTypes(),
+		ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes),
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	requestID := ""
+	if len(normalized) > 0 {
+		requestID = normalized[0].RequestID
+	}
+	return normalized, requestID, nil
+}
+
+func (e *FactoryEngine) skipGeneratedSubmissionRequest(requestID string, source string) bool {
+	if requestID == "" || source == externalSubmissionHookName {
+		return false
+	}
+	_, exists := e.workRequests[requestID]
+	return exists
+}
+
+func (e *FactoryEngine) tokensFromGeneratedSubmissions(normalized []interfaces.SubmitRequest) ([]*interfaces.Token, error) {
+	now := e.clock.Now()
+	tokens := make([]*interfaces.Token, 0, len(normalized))
+	for _, req := range normalized {
+		token, err := e.transformer.InitialTokenFromSubmit(req, now)
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, token)
+	}
+	return tokens, nil
+}
+
+func (e *FactoryEngine) recordGeneratedSubmissionRequest(
+	requestID string,
+	source string,
+	batch interfaces.GeneratedSubmissionBatch,
+	normalized []interfaces.SubmitRequest,
+) {
+	traceID := ""
+	if len(normalized) > 0 {
+		traceID = normalized[0].TraceID
+	}
+	e.workRequests[requestID] = interfaces.WorkRequestSubmitResult{
+		RequestID: requestID,
+		TraceID:   traceID,
+		Accepted:  true,
+	}
+	if e.recordWorkRequest == nil {
+		return
+	}
+	record := factory.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
+	record.ParentLineage = append([]string(nil), batch.Metadata.ParentLineage...)
+	e.recordWorkRequest(e.runtimeState.TickCount, record)
+}
+
+func (e *FactoryEngine) recordGeneratedSubmissionTokens(
+	source string,
+	normalized []interfaces.SubmitRequest,
+	tokens []*interfaces.Token,
+) {
+	for index, token := range tokens {
+		if e.recordSubmission != nil {
+			e.recordSubmission(interfaces.FactorySubmissionRecord{
+				SubmissionID: submissionRecordID(e.runtimeState.TickCount, source, index),
+				ObservedTick: e.runtimeState.TickCount,
+				Request:      normalized[index],
+				Source:       source,
+			})
+		}
+		e.runtimeState.Marking.AddToken(token)
+		if e.recordWorkInput != nil {
+			e.recordWorkInput(e.runtimeState.TickCount, normalized[index], *token)
+		}
+	}
 }
 
 // injectTokens creates tokens from submit requests and places them in INITIAL places.

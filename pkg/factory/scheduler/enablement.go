@@ -380,52 +380,95 @@ func expandRepeatedCardinalityOneBindings(tr *petri.Transition, marking *petri.M
 		return []interfaces.EnabledTransition{base}
 	}
 
+	arcTokens, candidateCount, hasWorkInput, ok := repeatedBindingArcTokens(tr, marking)
+	if !ok || !hasWorkInput || candidateCount <= 1 {
+		return []interfaces.EnabledTransition{base}
+	}
+	return expandRepeatedBindingCandidates(tr, base, arcTokens, candidateCount)
+}
+
+func repeatedBindingArcTokens(
+	tr *petri.Transition,
+	marking *petri.MarkingSnapshot,
+) (map[string][]interfaces.Token, int, bool, bool) {
 	arcTokens := make(map[string][]interfaces.Token)
 	candidateCount := 0
 	hasWorkInput := false
-
 	for i := range tr.InputArcs {
-		arc := &tr.InputArcs[i]
-		if !isSingleTokenCardinality(arc.Cardinality) {
-			return []interfaces.EnabledTransition{base}
-		}
-
-		key := arcKey(arc)
-		tokens := stableTokens(marking.TokensInPlace(arc.PlaceID))
-		if len(tokens) == 0 {
-			return []interfaces.EnabledTransition{base}
-		}
-		if arc.Guard != nil {
-			dependencyGuard, ok := arc.Guard.(*petri.DependencyGuard)
-			if !ok {
-				return []interfaces.EnabledTransition{base}
-			}
-			matched, ok := dependencyGuard.Evaluate(tokens, nil, marking)
-			if !ok || len(matched) == 0 {
-				return []interfaces.EnabledTransition{base}
-			}
-			tokens = stableTokens(matched)
+		key, tokens, count, hasWorkToken, ok := repeatedBindingTokensForInput(&tr.InputArcs[i], marking, candidateCount)
+		if !ok {
+			return nil, 0, false, false
 		}
 		arcTokens[key] = tokens
+		candidateCount = count
+		hasWorkInput = hasWorkInput || hasWorkToken
+	}
+	return arcTokens, candidateCount, hasWorkInput, true
+}
 
-		if arc.Mode == interfaces.ArcModeObserve {
-			continue
-		}
-		if candidateCount == 0 || len(tokens) < candidateCount {
-			candidateCount = len(tokens)
-		}
-		for _, token := range tokens {
-			if isWorkCandidateToken(token) {
-				hasWorkInput = true
-				break
-			}
+func repeatedBindingTokensForInput(
+	arc *petri.Arc,
+	marking *petri.MarkingSnapshot,
+	currentCandidateCount int,
+) (string, []interfaces.Token, int, bool, bool) {
+	if !isSingleTokenCardinality(arc.Cardinality) {
+		return "", nil, 0, false, false
+	}
+	key := arcKey(arc)
+	tokens, ok := repeatedBindingTokensForArc(arc, marking)
+	if !ok {
+		return "", nil, 0, false, false
+	}
+	candidateCount := currentCandidateCount
+	hasWorkInput := false
+	if arc.Mode != interfaces.ArcModeObserve {
+		candidateCount = minPositiveCandidateCount(candidateCount, len(tokens))
+		hasWorkInput = containsWorkCandidateToken(tokens)
+	}
+	return key, tokens, candidateCount, hasWorkInput, true
+}
+
+func repeatedBindingTokensForArc(arc *petri.Arc, marking *petri.MarkingSnapshot) ([]interfaces.Token, bool) {
+	tokens := stableTokens(marking.TokensInPlace(arc.PlaceID))
+	if len(tokens) == 0 {
+		return nil, false
+	}
+	if arc.Guard == nil {
+		return tokens, true
+	}
+	dependencyGuard, ok := arc.Guard.(*petri.DependencyGuard)
+	if !ok {
+		return nil, false
+	}
+	matched, ok := dependencyGuard.Evaluate(tokens, nil, marking)
+	if !ok || len(matched) == 0 {
+		return nil, false
+	}
+	return stableTokens(matched), true
+}
+
+func minPositiveCandidateCount(current int, candidate int) int {
+	if current == 0 || candidate < current {
+		return candidate
+	}
+	return current
+}
+
+func containsWorkCandidateToken(tokens []interfaces.Token) bool {
+	for _, token := range tokens {
+		if isWorkCandidateToken(token) {
+			return true
 		}
 	}
+	return false
+}
 
-	if !hasWorkInput || candidateCount <= 1 {
-		return []interfaces.EnabledTransition{base}
-	}
-
+func expandRepeatedBindingCandidates(
+	tr *petri.Transition,
+	base interfaces.EnabledTransition,
+	arcTokens map[string][]interfaces.Token,
+	candidateCount int,
+) []interfaces.EnabledTransition {
 	expanded := make([]interfaces.EnabledTransition, 0, candidateCount)
 	for candidateIndex := 0; candidateIndex < candidateCount; candidateIndex++ {
 		bindings := make(map[string][]interfaces.Token, len(base.Bindings))
@@ -447,7 +490,6 @@ func expandRepeatedCardinalityOneBindings(tr *petri.Transition, marking *petri.M
 			ArcModes:     arcModes,
 		})
 	}
-
 	return expanded
 }
 
