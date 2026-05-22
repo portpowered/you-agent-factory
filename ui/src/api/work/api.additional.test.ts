@@ -77,6 +77,42 @@ describe("submitWork error handling", () => {
     );
   });
 
+  it("falls back to the generic message when a structured JSON error message is empty", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            code: "INTERNAL_ERROR",
+            family: "INTERNAL_SERVER_ERROR",
+            message: "",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 500,
+            statusText: "Internal Server Error",
+          },
+        ),
+      ),
+    );
+
+    await expect(
+      submitWork({
+        name: "Empty structured message review",
+        payload: "Review the runtime failure.",
+        workTypeName: "story",
+      }),
+    ).rejects.toEqual(
+      new SubmitWorkAPIError({
+        message: "Dashboard submission failed. Try again in a moment.",
+        status: 500,
+        statusText: "Internal Server Error",
+      }),
+    );
+  });
+
   it("falls back to the generic message when a JSON error payload cannot be parsed", async () => {
     vi.stubGlobal(
       "fetch",

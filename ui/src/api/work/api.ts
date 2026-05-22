@@ -42,11 +42,11 @@ export async function submitWork(
   const response = await fetch(
     factoryAPIURL(factorySessionScopedPath(SUBMIT_WORK_ENDPOINT, options.sessionID)),
     {
-    body: JSON.stringify(request),
-    headers: {
-      "Content-Type": "application/json",
-    },
-    method: "POST",
+      body: JSON.stringify(request),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
     },
   );
 
@@ -60,15 +60,21 @@ export async function submitWork(
 async function submitWorkErrorFromResponse(response: Response): Promise<SubmitWorkAPIError> {
   const responseBody = await readAPIResponseBody(response);
   const errorResponse = extractAPIErrorPayload(responseBody);
+  const message = normalizeSubmitWorkErrorMessage(errorResponse?.message);
   return new SubmitWorkAPIError({
-    code:
-      typeof errorResponse?.message === "string"
-        ? normalizeSubmitWorkErrorCode(errorResponse.code)
-        : undefined,
-    message: errorResponse?.message ?? GENERIC_SUBMIT_WORK_ERROR_MESSAGE,
+    code: message ? normalizeSubmitWorkErrorCode(errorResponse?.code) : undefined,
+    message: message ?? GENERIC_SUBMIT_WORK_ERROR_MESSAGE,
     status: response.status,
     statusText: response.statusText,
   });
+}
+
+function normalizeSubmitWorkErrorMessage(message: string | undefined): string | undefined {
+  if (typeof message !== "string") {
+    return undefined;
+  }
+
+  return message.length > 0 ? message : undefined;
 }
 
 function normalizeSubmitWorkErrorCode(
