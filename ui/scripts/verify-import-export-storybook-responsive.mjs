@@ -354,7 +354,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
 
   if (viewport.label === "desktop") {
     await expectOrderedLeftEdges(
-      [heading, slider, languageButton, exportButton, streamStatus],
+      [heading, slider, streamStatus, exportButton, languageButton],
       "Dashboard header desktop controls",
     );
   }
