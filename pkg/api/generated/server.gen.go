@@ -565,9 +565,10 @@ type DispatchResponseEventPayload struct {
 
 	// PreviousChainingTraceIds Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	PreviousChainingTraceIds *[]string                `json:"previousChainingTraceIds,omitempty"`
-	ProviderFailure          *ProviderFailureMetadata `json:"providerFailure,omitempty"`
-	TransitionId             string                   `json:"transitionId"`
+	PreviousChainingTraceIds    *[]string                `json:"previousChainingTraceIds,omitempty"`
+	ProviderFailure             *ProviderFailureMetadata `json:"providerFailure,omitempty"`
+	SelectedClassificationLabel *string                  `json:"selectedClassificationLabel,omitempty"`
+	TransitionId                string                   `json:"transitionId"`
 }
 
 // EditableFactoryDefinition defines model for EditableFactoryDefinition.
@@ -911,16 +912,17 @@ type FactoryWorldWorkstationRequestRequestView struct {
 
 // FactoryWorldWorkstationRequestResponseView defines model for FactoryWorldWorkstationRequestResponseView.
 type FactoryWorldWorkstationRequestResponseView struct {
-	DurationMillis  *int64                          `json:"durationMillis,omitempty"`
-	EndTime         *string                         `json:"endTime,omitempty"`
-	FailureMessage  *string                         `json:"failureMessage,omitempty"`
-	FailureReason   *string                         `json:"failureReason,omitempty"`
-	Feedback        *string                         `json:"feedback,omitempty"`
-	Outcome         *string                         `json:"outcome,omitempty"`
-	OutputMutations *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
-	OutputWorkItems *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
-	Runner          *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
-	ScriptResponse  *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
+	DurationMillis              *int64                          `json:"durationMillis,omitempty"`
+	EndTime                     *string                         `json:"endTime,omitempty"`
+	FailureMessage              *string                         `json:"failureMessage,omitempty"`
+	FailureReason               *string                         `json:"failureReason,omitempty"`
+	Feedback                    *string                         `json:"feedback,omitempty"`
+	Outcome                     *string                         `json:"outcome,omitempty"`
+	OutputMutations             *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
+	OutputWorkItems             *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
+	Runner                      *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
+	ScriptResponse              *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
+	SelectedClassificationLabel *string                         `json:"selectedClassificationLabel,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestView defines model for FactoryWorldWorkstationRequestView.

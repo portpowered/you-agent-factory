@@ -22,18 +22,19 @@ type InferenceResponse struct {
 // WorkResult is returned by a worker after processing.
 // The Outcome determines which arc set is used to route the resulting tokens.
 type WorkResult struct {
-	DispatchID         string                   `json:"dispatch_id"`
-	TransitionID       string                   `json:"transition_id"`
-	Outcome            WorkOutcome              `json:"outcome"`
-	Output             string                   `json:"output,omitempty"`
-	SpawnedWork        []TokenColor             `json:"spawned_work,omitempty"`
-	RecordedOutputWork []FactoryWorkItem        `json:"recorded_output_work,omitempty"`
-	Error              string                   `json:"error,omitempty"`
-	Feedback           string                   `json:"feedback,omitempty"`
-	ProviderFailure    *ProviderFailureMetadata `json:"provider_failure,omitempty"`
-	ProviderSession    *ProviderSessionMetadata `json:"provider_session,omitempty"`
-	Diagnostics        *WorkDiagnostics         `json:"diagnostics,omitempty"`
-	Metrics            WorkMetrics              `json:"metrics"`
+	DispatchID                  string                   `json:"dispatch_id"`
+	TransitionID                string                   `json:"transition_id"`
+	Outcome                     WorkOutcome              `json:"outcome"`
+	Output                      string                   `json:"output,omitempty"`
+	SpawnedWork                 []TokenColor             `json:"spawned_work,omitempty"`
+	RecordedOutputWork          []FactoryWorkItem        `json:"recorded_output_work,omitempty"`
+	Error                       string                   `json:"error,omitempty"`
+	Feedback                    string                   `json:"feedback,omitempty"`
+	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
+	ProviderFailure             *ProviderFailureMetadata `json:"provider_failure,omitempty"`
+	ProviderSession             *ProviderSessionMetadata `json:"provider_session,omitempty"`
+	Diagnostics                 *WorkDiagnostics         `json:"diagnostics,omitempty"`
+	Metrics                     WorkMetrics              `json:"metrics"`
 }
 
 // ProviderSessionMetadata carries a stable provider rollout/session identity.

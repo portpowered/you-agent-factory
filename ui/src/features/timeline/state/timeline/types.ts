@@ -49,6 +49,7 @@ export interface WorldCompletion extends WorldDispatch {
   failureMessage?: string;
   failureReason?: string;
   feedback?: string;
+  selectedClassificationLabel?: string;
   inputItems: DashboardWorkItemRef[];
   outcome: string;
   outputItems: DashboardWorkItemRef[];
@@ -183,4 +184,3 @@ export function emptyWorldRuntime(): DashboardRuntime {
     },
   };
 }
-

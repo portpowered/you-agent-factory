@@ -169,7 +169,7 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 			DispatchID:     "dispatch-1",
 			TransitionID:   "t-review",
 			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:         interfaces.WorkstationResult{Outcome: "ACCEPTED"},
+			Result:         interfaces.WorkstationResult{Outcome: "ACCEPTED", SelectedClassificationLabel: "approved"},
 			DurationMillis: 2500,
 			Outputs: []interfaces.WorkstationOutput{{
 				Type:    string(interfaces.MutationMove),
@@ -226,6 +226,9 @@ func assertCanonicalCompletedDispatchState(t *testing.T, state interfaces.Factor
 	}
 	if state.CompletedDispatches[0].DispatchID != "dispatch-1" || state.CompletedDispatches[0].StartedTick != 2 {
 		t.Fatalf("completion = %#v, want dispatch-1 started at tick 2", state.CompletedDispatches[0])
+	}
+	if got := state.CompletedDispatches[0].Result.SelectedClassificationLabel; got != "approved" {
+		t.Fatalf("completion selected classification label = %q, want approved", got)
 	}
 	if _, ok := state.ActiveWorkItemsByID["work-1"]; ok {
 		t.Fatalf("work-1 should not remain active after terminal response")
@@ -505,17 +508,18 @@ func workstationResponseEvent(tick int, eventTime time.Time, payload interfaces.
 		context.WorkIds = stringSlicePtrForProjectionTest(payload.TraceData.WorkIDs)
 	}
 	generatedPayload := factoryapi.DispatchResponseEventPayload{
-		TransitionId:    payload.TransitionID,
-		Outcome:         outcome,
-		Output:          stringPtrForProjectionTest(payload.Result.Output),
-		Error:           stringPtrForProjectionTest(payload.Result.Error),
-		Feedback:        stringPtrForProjectionTest(payload.Result.Feedback),
-		FailureReason:   stringPtrForProjectionTest(payload.Result.FailureReason),
-		FailureMessage:  stringPtrForProjectionTest(payload.Result.FailureMessage),
-		ProviderFailure: generatedProviderFailureForProjectionTest(payload.Result.ProviderFailure),
-		DurationMillis:  int64PtrForProjectionTest(payload.DurationMillis),
-		OutputWork:      &outputWork,
-		OutputResources: generatedResourcesForProjectionTest(payload.OutputResources),
+		TransitionId:                payload.TransitionID,
+		Outcome:                     outcome,
+		Output:                      stringPtrForProjectionTest(payload.Result.Output),
+		Error:                       stringPtrForProjectionTest(payload.Result.Error),
+		Feedback:                    stringPtrForProjectionTest(payload.Result.Feedback),
+		SelectedClassificationLabel: stringPtrForProjectionTest(payload.Result.SelectedClassificationLabel),
+		FailureReason:               stringPtrForProjectionTest(payload.Result.FailureReason),
+		FailureMessage:              stringPtrForProjectionTest(payload.Result.FailureMessage),
+		ProviderFailure:             generatedProviderFailureForProjectionTest(payload.Result.ProviderFailure),
+		DurationMillis:              int64PtrForProjectionTest(payload.DurationMillis),
+		OutputWork:                  &outputWork,
+		OutputResources:             generatedResourcesForProjectionTest(payload.OutputResources),
 	}
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeDispatchResponse, "response/"+payload.DispatchID, tick, eventTime, context, generatedPayload)
 }

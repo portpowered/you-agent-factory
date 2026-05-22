@@ -836,6 +836,7 @@ export interface components {
             runner?: components["schemas"]["FactoryWorldSelectedRunnerView"];
             outcome?: string;
             feedback?: string;
+            selectedClassificationLabel?: string;
             failureReason?: string;
             failureMessage?: string;
             scriptResponse?: components["schemas"]["FactoryWorldScriptResponseView"];
@@ -1042,6 +1043,7 @@ export interface components {
             output?: string;
             error?: string;
             feedback?: string;
+            selectedClassificationLabel?: string;
             failureReason?: string;
             failureMessage?: string;
             providerFailure?: components["schemas"]["ProviderFailureMetadata"];

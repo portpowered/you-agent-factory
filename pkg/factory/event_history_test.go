@@ -221,6 +221,41 @@ func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnum
 	}
 }
 
+func TestFactoryEventHistory_RecordDispatchCompletion_PreservesSelectedClassificationLabel(t *testing.T) {
+	history := NewFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() },
+	)
+
+	result := interfaces.WorkResult{
+		DispatchID:                  "dispatch-1",
+		TransitionID:                "t-review",
+		Outcome:                     interfaces.OutcomeAccepted,
+		SelectedClassificationLabel: "approved",
+	}
+	completed := interfaces.CompletedDispatch{
+		DispatchID:      "dispatch-1",
+		TransitionID:    "t-review",
+		Outcome:         interfaces.OutcomeAccepted,
+		ConsumedTokens:  []interfaces.Token{{ID: "token-1", Color: interfaces.TokenColor{WorkID: "work-1", TraceID: "trace-1"}}},
+		OutputMutations: nil,
+	}
+
+	history.RecordWorkstationResponse(3, result, completed)
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch response payload: %v", err)
+	}
+	if got := stringValueForEventHistoryTest(payload.SelectedClassificationLabel); got != "approved" {
+		t.Fatalf("selected classification label = %q, want approved", got)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdentity(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })

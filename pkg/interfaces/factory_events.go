@@ -171,13 +171,14 @@ type WorkstationOutput struct {
 
 // WorkstationResult describes the business result of a workstation execution.
 type WorkstationResult struct {
-	Outcome         string                   `json:"outcome"`
-	Output          string                   `json:"output,omitempty"`
-	Error           string                   `json:"error,omitempty"`
-	Feedback        string                   `json:"feedback,omitempty"`
-	FailureReason   string                   `json:"failure_reason,omitempty"`
-	FailureMessage  string                   `json:"failure_message,omitempty"`
-	ProviderFailure *ProviderFailureMetadata `json:"provider_failure,omitempty"`
+	Outcome                     string                   `json:"outcome"`
+	Output                      string                   `json:"output,omitempty"`
+	Error                       string                   `json:"error,omitempty"`
+	Feedback                    string                   `json:"feedback,omitempty"`
+	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
+	FailureReason               string                   `json:"failure_reason,omitempty"`
+	FailureMessage              string                   `json:"failure_message,omitempty"`
+	ProviderFailure             *ProviderFailureMetadata `json:"provider_failure,omitempty"`
 }
 
 // FactoryTraceData carries trace identifiers attached to a runtime event.
