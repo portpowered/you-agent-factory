@@ -22,21 +22,21 @@ export const DASHBOARD_WIDGET_IDS = {
 
 export const DEFAULT_DASHBOARD_LAYOUT: AgentBentoLayoutItem[] = [
   { id: DASHBOARD_WIDGET_IDS.workTotals, x: 0, y: 0, w: 12, h: 2, minH: 2, minW: 6 },
-  { id: DASHBOARD_WIDGET_IDS.workGraph, x: 0, y: 2, w: 12, h: 10, minH: 8, minW: 6 },
+  { id: DASHBOARD_WIDGET_IDS.workGraph, x: 0, y: 2, w: 12, h: 8, minH: 8, minW: 6 },
   {
     id: DASHBOARD_WIDGET_IDS.currentSelection,
     x: 0,
-    y: 12,
+    y: 10,
     w: 4,
     h: 5,
     minH: 4,
     minW: 3,
   },
-  { id: DASHBOARD_WIDGET_IDS.terminalWork, x: 4, y: 12, w: 4, h: 5, minH: 3, minW: 3 },
+  { id: DASHBOARD_WIDGET_IDS.terminalWork, x: 4, y: 10, w: 4, h: 5, minH: 3, minW: 3 },
   {
     id: DASHBOARD_WIDGET_IDS.workOutcomeChart,
     x: 8,
-    y: 12,
+    y: 10,
     w: 4,
     h: 6,
     minH: 5,
@@ -45,7 +45,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: AgentBentoLayoutItem[] = [
   {
     id: DASHBOARD_WIDGET_IDS.submitWork,
     x: 8,
-    y: 18,
+    y: 16,
     w: 4,
     h: 6,
     minH: 5,
@@ -54,7 +54,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: AgentBentoLayoutItem[] = [
   {
     id: DASHBOARD_WIDGET_IDS.trace,
     x: 0,
-    y: 18,
+    y: 15,
     w: 8,
     h: 9,
     minH: 7,
@@ -124,7 +124,9 @@ export function reloadDashboardLayoutFromStorage(): void {
 }
 
 function migrateDashboardLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {
-  const normalizedLayout = migrateTraceLayout(migrateWorkOutcomeLayout(layout));
+  const normalizedLayout = migrateDashboardCompactionLayout(
+    migrateTraceLayout(migrateWorkOutcomeLayout(layout)),
+  );
 
   const legacySelectionItem = LEGACY_SELECTION_WIDGET_IDS
     .map((id) => normalizedLayout.find((item) => item.id === id))
@@ -148,6 +150,65 @@ function migrateDashboardLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayou
       id: DASHBOARD_WIDGET_IDS.currentSelection,
     },
   ];
+}
+
+function migrateDashboardCompactionLayout(
+  layout: AgentBentoLayoutItem[],
+): AgentBentoLayoutItem[] {
+  return layout.map((item) => {
+    switch (item.id) {
+      case DASHBOARD_WIDGET_IDS.workGraph:
+        if (item.x === 0 && item.y === 2 && item.w === 12 && item.h === 10) {
+          return {
+            ...item,
+            h: 8,
+          };
+        }
+        return item;
+      case DASHBOARD_WIDGET_IDS.currentSelection:
+        if (item.x === 0 && item.y === 12 && item.w === 4 && item.h === 5) {
+          return {
+            ...item,
+            y: 10,
+          };
+        }
+        return item;
+      case DASHBOARD_WIDGET_IDS.terminalWork:
+        if (item.x === 4 && item.y === 12 && item.w === 4 && item.h === 5) {
+          return {
+            ...item,
+            y: 10,
+          };
+        }
+        return item;
+      case DASHBOARD_WIDGET_IDS.workOutcomeChart:
+        if (item.x === 8 && item.y === 12 && item.w === 4 && item.h === 6) {
+          return {
+            ...item,
+            y: 10,
+          };
+        }
+        return item;
+      case DASHBOARD_WIDGET_IDS.submitWork:
+        if (item.x === 8 && item.y === 18 && item.w === 4 && item.h === 6) {
+          return {
+            ...item,
+            y: 16,
+          };
+        }
+        return item;
+      case DASHBOARD_WIDGET_IDS.trace:
+        if (item.x === 0 && item.y === 18 && item.w === 8 && item.h === 9) {
+          return {
+            ...item,
+            y: 15,
+          };
+        }
+        return item;
+      default:
+        return item;
+    }
+  });
 }
 
 function migrateTraceLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {
