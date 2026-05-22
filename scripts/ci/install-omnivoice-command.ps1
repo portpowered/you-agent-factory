@@ -61,7 +61,23 @@ function Get-ExistingBackendPath {
 
 function Copy-BackendCandidate {
     param([string]$CandidatePath)
+
     Copy-Item -LiteralPath $CandidatePath -Destination $backendTargetPath -Force
+
+    $candidateDir = Split-Path -Parent $CandidatePath
+    $runtimeLibraries = Get-ChildItem -Path $candidateDir -Filter "*.dll" -File -ErrorAction SilentlyContinue
+    foreach ($library in $runtimeLibraries) {
+        Copy-Item -LiteralPath $library.FullName -Destination (Join-Path $installDir $library.Name) -Force
+    }
+}
+
+function Test-BackendRuntimeReady {
+    if (-not (Test-Path $backendTargetPath)) {
+        return $false
+    }
+
+    $runtimeLibraries = Get-ChildItem -Path $installDir -Filter "ggml*.dll" -File -ErrorAction SilentlyContinue
+    return $runtimeLibraries.Count -gt 0
 }
 
 function Download-BackendFromUrl {
@@ -130,7 +146,7 @@ function Build-BackendFromSource {
     Copy-BackendCandidate -CandidatePath $candidate.FullName
 }
 
-if (-not (Test-Path $targetPath) -or -not (Test-Path $backendTargetPath)) {
+if (-not (Test-Path $targetPath) -or -not (Test-BackendRuntimeReady)) {
     if (-not (Get-ExistingBackendPath)) {
         if ([string]::IsNullOrWhiteSpace($commandUrl)) {
             Build-BackendFromSource
