@@ -351,6 +351,39 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesInlineRuntimeDefinitions(t
 	if err != nil {
 		t.Fatalf("mapper.Expand: %v", err)
 	}
+	assertExpandedInlineRuntimeDefinitions(t, cfg)
+
+	flattened, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+	assertFlattenedInlineRuntimeDefinitions(t, flattened)
+}
+
+func TestFactoryConfigMapper_FlattenAndExpandPreservesPortableResourceManifest(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	cfg := portableResourceManifestMapperFixture()
+
+	flattened, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+
+	payload := mustDecodeFactoryPayload(t, flattened)
+	assertFlattenedPortableResourceManifestPayload(t, payload)
+	assertMissingKey(t, payload, "resource_manifest")
+
+	expanded, err := mapper.Expand(flattened)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+	assertExpandedPortableResourceManifest(t, expanded)
+}
+
+func assertExpandedInlineRuntimeDefinitions(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
 	if cfg.Workers[0].ModelProvider != "claude" {
 		t.Fatalf("expected model provider claude, got %q", cfg.Workers[0].ModelProvider)
 	}
@@ -363,11 +396,10 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesInlineRuntimeDefinitions(t
 	if cfg.Workstations[0].PromptTemplate != "Implement {{ .WorkID }}." {
 		t.Fatalf("expected prompt template to round-trip, got %q", cfg.Workstations[0].PromptTemplate)
 	}
+}
 
-	flattened, err := mapper.Flatten(cfg)
-	if err != nil {
-		t.Fatalf("mapper.Flatten: %v", err)
-	}
+func assertFlattenedInlineRuntimeDefinitions(t *testing.T, flattened []byte) {
+	t.Helper()
 
 	var payload map[string]any
 	if err := json.Unmarshal(flattened, &payload); err != nil {
@@ -478,7 +510,6 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesHostedLinearWorker(t *test
 		t.Fatalf("expected canonical auth.secretRef, got %#v", authPayload)
 	}
 }
-
 func TestFactoryConfigMapper_ExpandParsesCanonicalWorkstationKindAndRuntimeType(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 

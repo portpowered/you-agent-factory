@@ -931,16 +931,32 @@ func assertDynamicFanoutTransition(t *testing.T, outputNet *state.Net) {
 	if len(tr.InputArcs) != 3 {
 		t.Fatalf("expected 3 input arcs, got %d", len(tr.InputArcs))
 	}
+	assertDynamicFanoutParentArc(t, tr.InputArcs[0])
+	assertDynamicFanoutCountArc(t, tr.InputArcs[1])
+	assertDynamicFanoutChildArc(t, tr.InputArcs[2])
 
-	parentArc := tr.InputArcs[0]
+	if outputNet.FanoutGroups == nil {
+		t.Fatal("expected FanoutGroups to be set")
+	}
+	if outputNet.FanoutGroups["parser"] != "parser:fanout-count" {
+		t.Errorf("FanoutGroups[parser]: expected 'parser:fanout-count', got %q", outputNet.FanoutGroups["parser"])
+	}
+}
+
+func assertDynamicFanoutParentArc(t *testing.T, parentArc petri.Arc) {
+	t.Helper()
+
 	if parentArc.Name != "parent" {
 		t.Errorf("arc[0] name: expected 'parent', got %q", parentArc.Name)
 	}
 	if parentArc.PlaceID != "chapter:processing" {
 		t.Errorf("arc[0] place: expected 'chapter:processing', got %q", parentArc.PlaceID)
 	}
+}
 
-	countArc := tr.InputArcs[1]
+func assertDynamicFanoutCountArc(t *testing.T, countArc petri.Arc) {
+	t.Helper()
+
 	if countArc.Name != "fanout-count" {
 		t.Errorf("arc[1] name: expected 'fanout-count', got %q", countArc.Name)
 	}
@@ -953,8 +969,11 @@ func assertDynamicFanoutTransition(t *testing.T, outputNet *state.Net) {
 	if _, ok := countArc.Guard.(*petri.MatchColorGuard); !ok {
 		t.Fatalf("arc[1] guard: expected MatchColorGuard, got %T", countArc.Guard)
 	}
+}
 
-	childArc := tr.InputArcs[2]
+func assertDynamicFanoutChildArc(t *testing.T, childArc petri.Arc) {
+	t.Helper()
+
 	if childArc.PlaceID != "page:complete" {
 		t.Errorf("arc[2] place: expected 'page:complete', got %q", childArc.PlaceID)
 	}
@@ -973,12 +992,5 @@ func assertDynamicFanoutTransition(t *testing.T, outputNet *state.Net) {
 	}
 	if fcGuard.CountBinding != "fanout-count" {
 		t.Errorf("fanout guard count binding: expected 'fanout-count', got %q", fcGuard.CountBinding)
-	}
-
-	if outputNet.FanoutGroups == nil {
-		t.Fatal("expected FanoutGroups to be set")
-	}
-	if outputNet.FanoutGroups["parser"] != "parser:fanout-count" {
-		t.Errorf("FanoutGroups[parser]: expected 'parser:fanout-count', got %q", outputNet.FanoutGroups["parser"])
 	}
 }
