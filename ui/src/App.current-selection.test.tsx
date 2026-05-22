@@ -635,6 +635,33 @@ function buildEditableFactoryDefinitionForCurrentSelection() {
   };
 }
 
+function mockPendingEditableFactoryDefinition(): void {
+  vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+    data: undefined,
+    error: null,
+    failureCount: 0,
+    failureReason: null,
+    fetchStatus: "idle",
+    isError: false,
+    isFetched: false,
+    isFetchedAfterMount: false,
+    isFetching: false,
+    isInitialLoading: false,
+    isLoading: false,
+    isLoadingError: false,
+    isPaused: false,
+    isPending: true,
+    isPlaceholderData: false,
+    isRefetchError: false,
+    isRefetching: false,
+    isStale: true,
+    isSuccess: false,
+    promise: Promise.resolve(undefined),
+    refetch: vi.fn(),
+    status: "pending",
+  } as never);
+}
+
 describe("App current selection", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -644,30 +671,7 @@ describe("App current selection", () => {
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
-      data: undefined,
-      error: null,
-      failureCount: 0,
-      failureReason: null,
-      fetchStatus: "idle",
-      isError: false,
-      isFetched: false,
-      isFetchedAfterMount: false,
-      isFetching: false,
-      isInitialLoading: false,
-      isLoading: false,
-      isLoadingError: false,
-      isPaused: false,
-      isPending: true,
-      isPlaceholderData: false,
-      isRefetchError: false,
-      isRefetching: false,
-      isStale: true,
-      isSuccess: false,
-      promise: Promise.resolve(undefined),
-      refetch: vi.fn(),
-      status: "pending",
-    } as never);
+    mockPendingEditableFactoryDefinition();
   });
 
   afterEach(() => {
@@ -1430,6 +1434,11 @@ describe("App current selection layout", () => {
     window.localStorage.clear();
     MockEventSource.instances = [];
     restoreBrowserTestShims = installDashboardBrowserTestShims();
+    resetSelectionHistoryStore();
+    useDashboardSessionStore.setState({
+      selectedSessionID: "~default",
+    });
+    mockPendingEditableFactoryDefinition();
   });
 
   afterEach(() => {
@@ -2001,6 +2010,11 @@ describe("App current selection terminal states", () => {
     window.localStorage.clear();
     MockEventSource.instances = [];
     restoreBrowserTestShims = installDashboardBrowserTestShims();
+    resetSelectionHistoryStore();
+    useDashboardSessionStore.setState({
+      selectedSessionID: "~default",
+    });
+    mockPendingEditableFactoryDefinition();
   });
 
   afterEach(() => {
@@ -2048,10 +2062,25 @@ describe("App current selection terminal states", () => {
     const completedDetail = await screen.findByRole("article", {
       name: "Current selection",
     });
+    expect(
+      within(dashboardGrid)
+        .getByRole("button", { name: "Done Story" })
+        .getAttribute("data-selected"),
+    ).toBe("true");
     expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
     expect(
       within(completedDetail).queryByRole("heading", {
         name: "Execution details",
+      }),
+    ).toBeNull();
+    expect(
+      within(completedDetail).queryByRole("heading", {
+        name: "Request details",
+      }),
+    ).toBeNull();
+    expect(
+      within(completedDetail).queryByRole("heading", {
+        name: "Request counts",
       }),
     ).toBeNull();
     expect(within(completedDetail).queryByText("Failure reason")).toBeNull();
@@ -2065,10 +2094,30 @@ describe("App current selection terminal states", () => {
     const failedDetail = await screen.findByRole("article", {
       name: "Current selection",
     });
+    expect(
+      within(dashboardGrid)
+        .getByRole("button", { name: "Done Story" })
+        .getAttribute("data-selected"),
+    ).toBeNull();
+    expect(
+      within(dashboardGrid)
+        .getByRole("button", { name: "Failed Story" })
+        .getAttribute("data-selected"),
+    ).toBe("true");
     expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();
     expect(
       within(failedDetail).queryByRole("heading", {
         name: "Execution details",
+      }),
+    ).toBeNull();
+    expect(
+      within(failedDetail).queryByRole("heading", {
+        name: "Request details",
+      }),
+    ).toBeNull();
+    expect(
+      within(failedDetail).queryByRole("heading", {
+        name: "Request counts",
       }),
     ).toBeNull();
     expect(

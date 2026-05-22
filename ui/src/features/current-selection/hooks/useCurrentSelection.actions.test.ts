@@ -80,6 +80,62 @@ describe("useCurrentSelectionActions", () => {
     });
   });
 
+  it("opens terminal work detail on the resolved work-item path when the clicked work can be tracked", () => {
+    const commitSelectionState = vi.fn();
+    const resolvedSelection: DashboardSelection = {
+      dispatchId: "dispatch-done-story",
+      kind: "work-item",
+      nodeId: "complete",
+      workItem: {
+        display_name: "Done Story",
+        work_id: "work-done-story",
+        work_type_id: "story",
+      },
+    };
+    const terminalItem: TerminalWorkItem = {
+      dispatchID: "dispatch-done-story",
+      label: "Done Story",
+      traceWorkID: "work-done-story",
+      workItem: resolvedSelection.workItem,
+    };
+
+    helperMocks.resolveTrackedWorkSelection.mockReturnValueOnce(resolvedSelection);
+
+    const actions = useCurrentSelectionActions({
+      commitSelectionState,
+      completedWorkItems: [],
+      failedWorkItems: [],
+      projectedWorkstationRequestsByDispatchID: undefined,
+      selection: {
+        dispatchId: "dispatch-review",
+        kind: "workstation-request",
+        nodeId: "review",
+        request: {
+          dispatch_id: "dispatch-review",
+          workstation_node_id: "review",
+        } as never,
+      },
+      snapshot: null,
+      terminalWorkDetail: null,
+    });
+
+    actions.openTerminalWorkDetail("completed", terminalItem);
+
+    expect(commitSelectionState).toHaveBeenCalledWith({
+      selection: resolvedSelection,
+      terminalWorkDetail: {
+        attempts: undefined,
+        dispatchID: "dispatch-done-story",
+        failureMessage: undefined,
+        failureReason: undefined,
+        label: "Done Story",
+        status: "completed",
+        traceWorkID: "work-done-story",
+        workItem: resolvedSelection.workItem,
+      },
+    });
+  });
+
   it("reuses terminal detail when selecting the same work id", () => {
     const commitSelectionState = vi.fn();
     const resolvedSelection: DashboardSelection = {
