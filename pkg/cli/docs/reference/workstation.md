@@ -33,7 +33,7 @@ configured output, continue, rejection, or failure place.
 | Field | Description |
 |-------|-------------|
 | `name` | Stable workstation and transition name. |
-| `behavior` | Scheduling behavior: `STANDARD`, `REPEATER`, or `CRON`. |
+| `behavior` | Scheduling behavior: `STANDARD`, `REPEATER`, `CRON`, or `POLLER`. |
 | `worker` | Worker name to dispatch when the workstation executes. |
 | `inputs` | Places that must be present before the workstation can fire. |
 | `outputs` | Places produced on accepted completion. |
@@ -42,7 +42,7 @@ configured output, continue, rejection, or failure place.
 | `onFailure` | Places produced on failure or timeout. |
 | `resources` | Resource capacity held while the dispatch is in flight. |
 | `guards` | Workstation-level `VISIT_COUNT` guards. |
-| `CRON` | Schedule configuration for `behavior: "CRON"`. |
+| `cron` | Schedule configuration for `behavior: "CRON"`. |
 
 ## Runtime Fields
 
@@ -70,6 +70,14 @@ These can live inline in `factory.json` or in
   negative outcomes.
 - `CRON` submits internal time work on a schedule while the runtime stays in
   service mode.
+- `POLLER` binds a `SCRIPT_WORKER` or `HOSTED_WORKER` that service mode
+  supervises as one long-lived ingress loop.
+
+Use `POLLER` when the runtime should own an external poll loop, restart it with
+bounded backoff on failure, and stop it on shutdown or replacement. Pollers
+submit work only through canonical submit-style ingress; use
+[`docs/reference/batch-inputs.md`](../../../docs/reference/batch-inputs.md)
+for the stdout contract and request-id idempotency rules.
 
 Use a guarded `LOGICAL_MOVE` workstation to cap repeater or review loops.
 

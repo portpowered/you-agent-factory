@@ -44,7 +44,8 @@ environment, and routing.
 
 ## Current Contract
 
-- Use `behavior` for scheduling behavior: `STANDARD`, `REPEATER`, or `CRON`.
+- Use `behavior` for scheduling behavior: `STANDARD`, `REPEATER`, `CRON`, or
+  `POLLER`.
 - Use `type` for the runtime implementation: `MODEL_WORKSTATION` or
   `LOGICAL_MOVE`.
 - Use `worker` for the bound worker name. Omit it only for logical routing
@@ -76,9 +77,9 @@ execute:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | Yes | Stable workstation name. This is also the transition ID in runtime events. |
-| `behavior` | No | Scheduling behavior. Use `STANDARD`, `REPEATER`, or `CRON`. Defaults to `STANDARD`. |
+| `behavior` | No | Scheduling behavior. Use `STANDARD`, `REPEATER`, `CRON`, or `POLLER`. Defaults to `STANDARD`. |
 | `type` | Runtime config | Runtime implementation. Use `MODEL_WORKSTATION` for worker dispatch or `LOGICAL_MOVE` for no-worker routing. |
-| `worker` | Usually | Worker name from `workers[].name`. Required for model/script dispatch and cron workstations. Omit only for logical routing workstations. |
+| `worker` | Usually | Worker name from `workers[].name`. Required for model/script dispatch, cron workstations, and poller workstations. Omit only for logical routing workstations. |
 | `inputs` | Usually | IO places that enable the workstation. Cron workstations may omit customer inputs but still consume internal time work. |
 | `outputs` | Usually | IO places produced when the worker returns accepted. Cron workstations require at least one output. |
 | `onContinue` | No | IO place produced when the worker reports ordinary partial progress and the work should iterate without being classified as rejection. |
@@ -96,6 +97,8 @@ execute:
 - `REPEATER` re-runs after continue results until the work is accepted or
   fails.
 - `CRON` runs on a schedule in service mode.
+- `POLLER` binds a poller-capable worker that the service runtime supervises as
+  one long-lived ingress loop.
 
 `type` answers "what runtime implementation handles the step?"
 
@@ -138,6 +141,8 @@ terminal path.
 - Use `REPEATER` for iterative agent loops.
 - Use `CRON` only when the step should submit scheduled time work in service
   mode; keep the schedule under `cron.schedule`.
+- Use `POLLER` when the runtime should supervise a long-lived external ingress
+  loop that emits canonical submitted work into the factory.
 
 ### Standard Workstations
 
@@ -279,6 +284,60 @@ Cron workstations create internal `__system_time` work. Public `/work`,
 while canonical events retain it for replay and diagnostics.
 
 Do not use `cron.interval`; it is retired. Use `cron.schedule`.
+
+## Poller Kind
+
+### Poller Workstations
+
+Use `POLLER` when a workstation should stay alive in service mode and keep
+submitting ordinary work from an external system:
+
+```json
+{
+  "name": "linear-intake",
+  "behavior": "POLLER",
+  "worker": "linear-poller",
+  "outputs": [{ "workType": "task", "state": "init" }],
+  "onFailure": { "workType": "task", "state": "failed" }
+}
+```
+
+Poller workstations require:
+
+- `behavior: "POLLER"`
+- a `worker`
+- a bound worker whose `type` is `SCRIPT_WORKER` or `HOSTED_WORKER`
+
+Pollers are service-owned sidecars:
+
+- Service mode starts exactly one long-lived poll loop per enabled poller
+  workstation.
+- Batch mode does not start poller sidecars.
+- The runtime cancels pollers during shutdown or named-factory replacement
+  before replacement pollers become authoritative.
+- Unexpected script exit, malformed script output, malformed provider data, or
+  mapping failures produce diagnostics and restart with bounded backoff instead
+  of a tight crash loop.
+
+Pollers submit work only through canonical submit-style ingress. Use
+[Batch Inputs](batch-inputs.md#poller-stdout-contract) for the stdout contract,
+`requestId` idempotency rules, and the current script-poller payload shapes.
+
+Choose `POLLER` instead of the other workstation behaviors when:
+
+- `CRON` is wrong because you need a long-lived external poll loop rather than
+  internal time-triggered work.
+- `REPEATER` is wrong because you are not iterating one existing work item
+  through the same workstation.
+- Watched-file input is wrong because the runtime, not an external file drop,
+  should own poller lifecycle, restarts, and shutdown.
+
+V1 non-goals:
+
+- Pollers do not emit raw factory events.
+- Pollers do not support multi-instance coordination or leader election.
+- Script pollers currently emit one complete batch payload per run because the
+  runtime captures stdout when the subprocess exits.
 
 ## Runtime Fields
 

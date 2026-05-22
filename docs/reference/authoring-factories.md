@@ -278,6 +278,121 @@ to the topology so every outcome lands somewhere intentional. Use
 canonical routing contract, [Workstations](workstations.md) for route fields
 and execution limits, and [Workers](workers.md) for worker backend behavior.
 
+## When To Use Pollers
+
+Use `POLLER` when the factory itself should own a long-lived ingress loop that
+continuously creates ordinary submitted work from an external system.
+
+Choose the workstation behavior this way:
+
+- Use `STANDARD` for a normal dispatch stage.
+- Use `REPEATER` when one work item should iterate until it is accepted or
+  fails.
+- Use `CRON` when service mode should create internal time-triggered work on a
+  schedule.
+- Use `POLLER` when service mode should keep an external integration alive,
+  restart it with bounded backoff, and stop it cleanly on shutdown or
+  replacement.
+
+Choose the poller worker type this way:
+
+- Use a `SCRIPT_WORKER` poller when you already have custom integration logic
+  in a script.
+- Use a `HOSTED_WORKER` poller when the repository already ships the provider
+  integration, such as the built-in `LINEAR` poller.
+
+Keep the exact contracts on the canonical owner pages:
+
+- [Workstations](workstations.md) owns `behavior: "POLLER"` and lifecycle
+  behavior.
+- [Workers](workers.md) owns hosted `LINEAR` worker fields and `auth.secretRef`.
+- [Batch Inputs](batch-inputs.md#poller-stdout-contract) owns the script
+  poller stdout submission contract.
+
+### Script Poller Example
+
+`factory.json`:
+
+```json
+{
+  "name": "github-intake",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workers": [
+    { "name": "github-poller" }
+  ],
+  "workstations": [
+    {
+      "name": "github-intake",
+      "behavior": "POLLER",
+      "worker": "github-poller",
+      "outputs": [{ "workType": "task", "state": "init" }],
+      "onFailure": { "workType": "task", "state": "failed" }
+    }
+  ]
+}
+```
+
+`workers/github-poller/AGENTS.md`:
+
+```yaml
+---
+type: SCRIPT_WORKER
+command: bash
+args: ["scripts/poll-github.sh"]
+timeout: 2m
+---
+
+Poll GitHub and emit one canonical batch payload on stdout per run.
+```
+
+### Hosted Linear Poller Example
+
+`workers/linear-poller/AGENTS.md`:
+
+```yaml
+---
+type: HOSTED_WORKER
+provider: LINEAR
+auth:
+  secretRef: secrets/linear-api-key
+linear:
+  pollInterval: 2m
+  teams: ["ENG"]
+  states: ["unstarted", "started"]
+  mapping:
+    workType: task
+    state: init
+---
+
+Repository-owned Linear poller.
+```
+
+Bound workstation:
+
+```json
+{
+  "name": "linear-intake",
+  "behavior": "POLLER",
+  "worker": "linear-poller",
+  "outputs": [{ "workType": "task", "state": "init" }],
+  "onFailure": { "workType": "task", "state": "failed" }
+}
+```
+
+V1 non-goals for poller authoring:
+
+- Raw factory event emission from pollers.
+- OAuth-based hosted auth flows.
+- Advanced multi-instance poller coordination.
+
 ## Test Workflows With Mock Workers
 
 Use mock workers when you want to verify routing, rejection loops, failure
