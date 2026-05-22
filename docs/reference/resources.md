@@ -11,7 +11,8 @@ concurrency behavior of `resources` pools and resource requirements.
 
 - Declare shared pools at the top level of `factory.json` under `resources`.
 - Use the canonical `{name, capacity}` shape for the top-level pool and for
-  any matching requirement.
+  any matching requirement. Add uppercase `type` plus typed metadata when the
+  resource describes a model cache, cloud quota, or invocation slot boundary.
 - Put the scheduling-facing requirement on the workstation that should hold the
   capacity while it runs.
 - Keep worker `resources` on the worker only when you need the worker-runtime
@@ -19,6 +20,55 @@ concurrency behavior of `resources` pools and resource requirements.
   `resources` as the canonical explanation for workflow-step concurrency.
 - Use canonical camelCase `resources`; older resource aliases are
   compatibility-only inputs.
+
+## Typed Model Resources
+
+Use typed resources when model-backed execution needs more than a generic
+capacity pool:
+
+- `MODEL` for local managed model assets and loaded-handle capacity.
+- `PROVIDER_QUOTA` for provider-wide cloud quota or request budget.
+- `INVOCATION_SLOT` for per-model or per-provider concurrency.
+
+```json
+{
+  "resources": [
+    {
+      "name": "omnivoice-cache",
+      "type": "MODEL",
+      "capacity": 1,
+      "model": "OMNIVOICE_Q4_K_M",
+      "backend": "LLAMACPP",
+      "loadPolicy": "ON_DEMAND"
+    },
+    {
+      "name": "cloud-tts-quota",
+      "type": "PROVIDER_QUOTA",
+      "capacity": 8,
+      "provider": "CODEX",
+      "model": "gpt-4o-mini-tts"
+    },
+    {
+      "name": "cloud-tts-slot",
+      "type": "INVOCATION_SLOT",
+      "capacity": 2,
+      "provider": "CODEX",
+      "model": "gpt-4o-mini-tts"
+    }
+  ]
+}
+```
+
+Typed metadata rules:
+
+- `MODEL` resources require `model`, `backend`, and `loadPolicy`.
+- `PROVIDER_QUOTA` resources require `provider` and `model`.
+- `INVOCATION_SLOT` resources should carry the provider or model identity that
+  the scheduler is supposed to throttle.
+
+For local models, the running service also enforces a process-level shared
+capacity boundary keyed by canonical model metadata. Two different factories
+that point at the same local model still share that cross-factory limit.
 
 ## Minimal Bounded-Concurrency Example
 
@@ -74,6 +124,7 @@ should be throttled.
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
 - [Factory JSON and work configuration](work.md)
+- [Models and model operations](models.md)
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Workstations](workstations.md)
 - [Workers](workers.md)

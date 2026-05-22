@@ -259,6 +259,199 @@ you run --dir ./factory --with-mock-workers --work ./fixtures/story-001.json
 Or drop the file under `factory/inputs/story/default/` while the factory is
 already running.
 
+## Author A Model-Operation TTS Factory
+
+Use `MODEL_INVOKE` when the workstation should request a generic operation such
+as `TTS` and let worker capability plus typed resources decide whether the
+execution is local or cloud-backed.
+
+### Shared workstation contract
+
+This workstation stays the same for both local and cloud TTS:
+
+```json
+{
+  "name": "speak",
+  "type": "MODEL_INVOKE",
+  "operation": "TTS",
+  "worker": "tts-worker",
+  "operationBindings": [
+    {
+      "slot": "text",
+      "selector": {
+        "label": "utterance",
+        "type": "TEXT"
+      }
+    },
+    {
+      "slot": "voice",
+      "defaultContent": [
+        {
+          "type": "JSON",
+          "role": "voice",
+          "json": { "name": "alloy" }
+        }
+      ]
+    }
+  ],
+  "inputs": [{ "workType": "speech", "state": "init" }],
+  "outputs": [{ "workType": "speech", "state": "complete" }],
+  "onFailure": [{ "workType": "speech", "state": "failed" }]
+}
+```
+
+### Local OMNIVOICE example
+
+`factory.json`:
+
+```json
+{
+  "workTypes": [
+    {
+      "name": "speech",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "name": "omnivoice-cache",
+      "type": "MODEL",
+      "capacity": 1,
+      "model": "OMNIVOICE_Q4_K_M",
+      "backend": "LLAMACPP",
+      "loadPolicy": "ON_DEMAND"
+    }
+  ],
+  "workers": [{ "name": "tts-worker" }],
+  "workstations": [
+    {
+      "name": "speak",
+      "type": "MODEL_INVOKE",
+      "operation": "TTS",
+      "worker": "tts-worker",
+      "operationBindings": [
+        {
+          "slot": "text",
+          "selector": { "type": "TEXT", "label": "utterance" }
+        }
+      ],
+      "inputs": [{ "workType": "speech", "state": "init" }],
+      "outputs": [{ "workType": "speech", "state": "complete" }],
+      "onFailure": [{ "workType": "speech", "state": "failed" }]
+    }
+  ]
+}
+```
+
+`workers/tts-worker/AGENTS.md`:
+
+```yaml
+---
+type: MODEL_WORKER
+model: OMNIVOICE_Q4_K_M
+modelProvider: CODEX
+modelLocality: LOCAL
+resources:
+  - name: omnivoice-cache
+    capacity: 1
+operations:
+  - name: TTS
+    inputs:
+      - name: text
+        required: true
+        contentTypes:
+          - TEXT
+    outputs:
+      - name: audio
+        contentTypes:
+          - AUDIO
+---
+Synthesize speech from the resolved utterance.
+```
+
+### Cloud-backed TTS example
+
+Reuse the same workstation and change the resources plus worker:
+
+```json
+{
+  "resources": [
+    {
+      "name": "cloud-tts-quota",
+      "type": "PROVIDER_QUOTA",
+      "capacity": 8,
+      "provider": "CODEX",
+      "model": "gpt-4o-mini-tts"
+    },
+    {
+      "name": "cloud-tts-slot",
+      "type": "INVOCATION_SLOT",
+      "capacity": 2,
+      "provider": "CODEX",
+      "model": "gpt-4o-mini-tts"
+    }
+  ],
+  "workers": [{ "name": "tts-worker" }]
+}
+```
+
+```yaml
+---
+type: MODEL_WORKER
+model: gpt-4o-mini-tts
+modelProvider: CODEX
+modelLocality: CLOUD
+resources:
+  - name: cloud-tts-quota
+    capacity: 1
+  - name: cloud-tts-slot
+    capacity: 1
+operations:
+  - name: TTS
+    inputs:
+      - name: text
+        required: true
+        contentTypes:
+          - TEXT
+    outputs:
+      - name: audio
+        contentTypes:
+          - AUDIO
+---
+Synthesize speech through the cloud-backed provider.
+```
+
+Compatibility stays stable because the workstation still asks for one `TTS`
+operation with the same slot contract. Only the worker identity, locality, and
+resource metadata change.
+
+### Test And Inspect Without A Full Workflow
+
+Use the `/models` surface while authoring:
+
+```bash
+you models list
+you models inspect OMNIVOICE_Q4_K_M
+you models pull OMNIVOICE_Q4_K_M
+you models invoke OMNIVOICE_Q4_K_M --operation TTS --text "release notes" --output speech.wav
+you models invoke OMNIVOICE_Q4_K_M --operation TTS --text "release notes" --json
+```
+
+Use the `--output` form when you want the streamed audio body written directly
+to a file. Use `--json` when you want metadata plus canonical output content
+references.
+
+### Maintainer Validation
+
+For real local OMNIVOICE coverage, run `make long-tests`. Set
+`INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1`, ensure `omnivoice-llamacpp` is
+installed, and optionally set `INFINITE_YOU_OMNIVOICE_COMMAND` or
+`INFINITE_YOU_OMNIVOICE_CACHE_DIR` to reuse a custom backend or managed cache.
+
 ## Related Contract Detail
 
 - [Factory JSON And Work Configuration](work.md) owns work types, states,

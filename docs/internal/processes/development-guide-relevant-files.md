@@ -200,6 +200,7 @@ This inventory records the checked-in files and directories that the maintainer 
 ## Reusable Rules
 
 - When maintainer docs describe command execution, anchor the instructions to the repository root that contains `go.mod` and `Makefile`.
+- When a customer-facing reference topic grows into a stable packaged `you docs <topic>` surface, update both `docs/reference/*.md` and `pkg/cli/docs/reference/*.md` together, then keep `pkg/cli/docs/docs.go` plus `pkg/cli/docs/docs_test.go` aligned so the packaged topic list and embedded markdown stay in sync.
 - Keep cross-platform maintainer command logic in repo-owned Go entrypoints such as `cmd/functionallane/` or `cmd/releaseprep/` instead of embedding platform-specific shell discovery pipelines directly in `Makefile`.
 - If a workflow temporarily changes directories, state that it starts from the repository root and why the subdirectory hop is required.
 - When GitHub Actions or other automation is added, prefer repository-owned root commands or package scripts that the maintainer guide already documents instead of inventing CI-only command sequences.

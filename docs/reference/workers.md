@@ -50,6 +50,9 @@ what it renders, and where it routes results.
 - Workstations define topology, routing, prompt templates, and per-step
   execution context.
 - The current worker types are `MODEL_WORKER` and `SCRIPT_WORKER`.
+- `MODEL_WORKER` can declare provider-agnostic `operations`, named input and
+  output slots, `modelLocality`, and concrete `model` identity so
+  `MODEL_INVOKE` workstations can validate compatibility before dispatch.
 - Current built-in `modelProvider` values are `CLAUDE` and `CODEX`.
 - Runner selection is separate from `modelProvider`. Use factory or
   workstation `runner` fields to choose the built-in runner ID: `codex`,
@@ -105,6 +108,72 @@ You are a software engineer. Follow the workstation instructions and keep
 changes scoped to the current work item.
 ```
 
+When the worker should support direct model operations such as TTS, add the
+capability contract directly to the worker:
+
+```yaml
+---
+type: MODEL_WORKER
+model: OMNIVOICE_Q4_K_M
+modelProvider: CODEX
+modelLocality: LOCAL
+resources:
+  - name: omnivoice-cache
+    capacity: 1
+operations:
+  - name: TTS
+    inputs:
+      - name: text
+        required: true
+        contentTypes:
+          - TEXT
+      - name: voice
+        contentTypes:
+          - JSON
+    outputs:
+      - name: audio
+        contentTypes:
+          - AUDIO
+---
+Synthesize speech from resolved text content.
+```
+
+For a cloud-backed worker, keep the same operation contract and change only the
+worker identity and locality:
+
+```yaml
+---
+type: MODEL_WORKER
+model: gpt-4o-mini-tts
+modelProvider: CODEX
+modelLocality: CLOUD
+resources:
+  - name: cloud-tts-quota
+    capacity: 1
+  - name: cloud-tts-slot
+    capacity: 1
+operations:
+  - name: TTS
+    inputs:
+      - name: text
+        required: true
+        contentTypes:
+          - TEXT
+      - name: voice
+        contentTypes:
+          - JSON
+    outputs:
+      - name: audio
+        contentTypes:
+          - AUDIO
+---
+Synthesize speech through the cloud-backed provider.
+```
+
+Validation rejects duplicate operation names on one worker, duplicate slot
+names within one operation direction, lowercase or invalid uppercase enum
+values, and incompatible content declarations.
+
 ### `SCRIPT_WORKER`
 
 Use a script worker when the workstation should run a command instead of a
@@ -136,6 +205,8 @@ Runs the Go test suite.
 | `timeout` | all workers | Per-attempt worker timeout |
 | `stopToken` | model workers | Output marker for accepted completion when configured |
 | `skipPermissions` | model workers | Provider-specific permission shortcut |
+| `modelLocality` | model workers | `LOCAL` or `CLOUD` execution locality for model operations and diagnostics |
+| `operations` | model workers | Provider-agnostic capability declarations with uppercase operation names and typed slots |
 
 ## Provider Fields
 
@@ -158,6 +229,7 @@ legacy fallback path when no explicit runner is configured.
 
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
+- [Models and model operations](models.md)
 - [Workstations reference](workstations.md)
 - [Factory JSON and work configuration](work.md)
 - [Author AGENTS.md](authoring-agents-md.md)

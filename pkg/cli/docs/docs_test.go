@@ -16,6 +16,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 		"workstation",
 		"workers",
 		"resources",
+		"models",
 		"batch-work",
 		"templates",
 	}
@@ -60,7 +61,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: config, workstation, workers, resources, batch-work, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: config, workstation, workers, resources, models, batch-work, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }

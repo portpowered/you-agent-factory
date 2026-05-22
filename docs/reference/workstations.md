@@ -46,7 +46,9 @@ environment, and routing.
 
 - Use `behavior` for scheduling behavior: `STANDARD`, `REPEATER`, or `CRON`.
 - Use `type` for the runtime implementation: `MODEL_WORKSTATION` or
-  `LOGICAL_MOVE`.
+  `LOGICAL_MOVE`, or `MODEL_INVOKE` when the workstation should execute one
+  provider-agnostic model operation through a declared `MODEL_WORKER`
+  capability contract.
 - Use `worker` for the bound worker name. Omit it only for logical routing
   workstations such as `LOGICAL_MOVE`.
 - Route accepted results through `outputs`, ordinary partial-progress results
@@ -54,6 +56,53 @@ environment, and routing.
   timed-out results through `onFailure`.
 - Use workstation-level `guards` only for `VISIT_COUNT` gating. Use a guarded
   `LOGICAL_MOVE` workstation when you need an explicit loop-breaker route.
+
+## `MODEL_INVOKE` Workstations
+
+Use `MODEL_INVOKE` when a workstation should describe the requested behavior in
+provider-agnostic terms such as `TTS`, `ASR`, `TRANSCRIBE`, `EMBED`, or
+`CLASSIFY`.
+
+```json
+{
+  "name": "speak",
+  "type": "MODEL_INVOKE",
+  "operation": "TTS",
+  "worker": "tts-worker",
+  "operationBindings": [
+    {
+      "slot": "text",
+      "selector": {
+        "label": "utterance",
+        "type": "TEXT"
+      }
+    },
+    {
+      "slot": "voice",
+      "defaultContent": [
+        {
+          "type": "JSON",
+          "role": "voice",
+          "json": { "name": "alloy" }
+        }
+      ]
+    }
+  ],
+  "inputs": [{ "workType": "speech", "state": "init" }],
+  "outputs": [{ "workType": "speech", "state": "complete" }],
+  "onFailure": [{ "workType": "speech", "state": "failed" }]
+}
+```
+
+Additional `MODEL_INVOKE` rules:
+
+- `operation` must be uppercase.
+- `worker` must reference a `MODEL_WORKER`.
+- The worker must declare the same operation and a compatible input/output
+  slot contract.
+- Each `operationBindings[].slot` must match one declared worker input slot.
+- Bindings resolve deterministically from matching runtime input, authored
+  `config`, authored `defaultContent`, or omission for optional slots.
 
 ## Topology Fields
 
@@ -87,6 +136,8 @@ execute:
 | `resources` | No | Resource capacity consumed while the workstation runs. |
 | `guards` | No | Workstation-level visit-count guards. Parent fan-in and same-name matching belong on per-input guards. |
 | `cron` | Cron only | Trigger timing for `behavior: "CRON"`. |
+| `operation` | `MODEL_INVOKE` only | Uppercase provider-agnostic operation such as `TTS`. |
+| `operationBindings` | `MODEL_INVOKE` only | Deterministic slot bindings from runtime input content, static config content, defaults, or omission. |
 
 ## `behavior` Versus `type`
 
@@ -100,6 +151,8 @@ execute:
 `type` answers "what runtime implementation handles the step?"
 
 - `MODEL_WORKSTATION` renders a prompt and dispatches to the bound worker.
+- `MODEL_INVOKE` resolves slot bindings and dispatches one typed model
+  operation to the bound worker.
 - `LOGICAL_MOVE` moves tokens without invoking a worker.
 
 Do not use `type` to express schedule semantics, and do not use `behavior` to
@@ -131,6 +184,11 @@ Use `REPEATER` when continue should keep the same workstation active instead of
 routing to a different review state. Pair long-running review loops with a
 guarded `LOGICAL_MOVE` loop breaker so repeated true rejection has an explicit
 terminal path.
+
+When the step should ask for a generic model capability instead of rendering a
+prompt-oriented workstation body, prefer `MODEL_INVOKE` plus
+`operationBindings` over encoding provider-specific slot names in the submitted
+payload.
 
 ## When To Use Each Kind
 
