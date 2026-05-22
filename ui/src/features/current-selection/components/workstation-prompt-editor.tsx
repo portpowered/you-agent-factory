@@ -7,6 +7,11 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
+import {
+  registerWorkstationPromptMonaco,
+  WORKSTATION_PROMPT_LANGUAGE_ID,
+  WORKSTATION_PROMPT_THEME_ID,
+} from "./workstation-prompt-monaco";
 
 const PROMPT_EDITOR_OPTIONS = {
   automaticLayout: true,
@@ -127,7 +132,7 @@ export function WorkstationPromptEditor({
           : undefined,
         className,
       )}
-      defaultLanguage="plaintext"
+      defaultLanguage={WORKSTATION_PROMPT_LANGUAGE_ID}
       height="13.5rem"
       onChange={(nextValue) => onChange(nextValue ?? "")}
       onMount={(editorInstance) => {
@@ -145,7 +150,7 @@ export function WorkstationPromptEditor({
       }}
       options={{ ...options, ariaLabel }}
       path="inmemory://model/current-selection/workstation-prompt"
-      theme="vs"
+      theme={WORKSTATION_PROMPT_THEME_ID}
       value={value}
       width="100%"
       wrapperProps={{
@@ -179,6 +184,8 @@ async function configureMonacoLoader() {
         jsonWorker,
         tsWorker,
       ]) => {
+        registerWorkstationPromptMonaco(monaco);
+
         self.MonacoEnvironment = {
           getWorker(_, label) {
             if (label === "json") {
