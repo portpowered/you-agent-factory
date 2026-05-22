@@ -4,6 +4,7 @@ required:
   - providerSession
   - source
   - parse
+  - transcript
 properties:
   providerSession:
     $ref: './LoadableProviderSessionRef.yaml'
@@ -11,3 +12,8 @@ properties:
     $ref: './ProviderSessionSourceMetadata.yaml'
   parse:
     $ref: './CodexSessionParseSummary.yaml'
+  transcript:
+    type: array
+    description: Ordered transcript entries extracted from the provider-session stream.
+    items:
+      $ref: './CodexSessionTranscriptEntry.yaml'

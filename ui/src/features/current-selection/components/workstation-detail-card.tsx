@@ -28,7 +28,6 @@ import type {
 } from "../detail-card-types";
 import { getWorkstationDetailMessages } from "../messages";
 import { CollapsibleProviderSessionAttempts } from "./provider-session-attempts";
-import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 import {
   EditableConfigurationSection,
   WorkstationSummary,
@@ -45,7 +44,6 @@ export function WorkstationDetailCard({
   onSelectWorkstationRequest,
   providerSessions,
   saveState,
-  selectedProviderSession,
   selectedProviderSessionKey,
   selectedRequest,
   selectedWorkID,
@@ -129,10 +127,6 @@ export function WorkstationDetailCard({
           workstationRequestsByDispatchID={workstationRequestsByDispatchID}
         />
       )}
-      <ProviderSessionDetailPanel
-        locale={locale}
-        selectedProviderSession={selectedProviderSession ?? null}
-      />
     </SelectionDetailLayout>
   );
 }

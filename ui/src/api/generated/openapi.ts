@@ -562,6 +562,8 @@ export interface components {
             providerSession: components["schemas"]["LoadableProviderSessionRef"];
             source: components["schemas"]["ProviderSessionSourceMetadata"];
             parse: components["schemas"]["CodexSessionParseSummary"];
+            /** @description Ordered transcript entries extracted from the provider-session stream. */
+            transcript: components["schemas"]["CodexSessionTranscriptEntry"][];
         };
         FactorySessionTargetRef: {
             /** @enum {string} */
@@ -1739,6 +1741,43 @@ export interface components {
          * @enum {string}
          */
         RelationType: "DEPENDS_ON" | "PARENT_CHILD" | "SPAWNED_BY";
+        /**
+         * @description Canonical transcript entry type used by the dashboard transcript view.
+         * @enum {string}
+         */
+        CodexSessionTranscriptEntryType: "user_message" | "assistant_message" | "reasoning" | "tool_call" | "tool_output" | "system_event";
+        CodexSessionTranscriptEntry: {
+            /** @description Stable chronological order of the transcript entry in the session stream. */
+            order: number;
+            type: components["schemas"]["CodexSessionTranscriptEntryType"];
+            /** @description One-based inferred turn index when the session parser can associate the entry with a turn. */
+            turnIndex?: number;
+            /**
+             * Format: date-time
+             * @description Provider event timestamp when present in the source session stream.
+             */
+            timestamp?: string;
+            /** @description One-based JSONL line number that produced this transcript entry when applicable. */
+            lineNumber?: number;
+            /** @description Raw provider event or item type that produced this transcript entry. */
+            sourceType?: string;
+            /** @description Provider tool-call identifier when present. */
+            callId?: string;
+            /** @description Tool or function name when present. */
+            name?: string;
+            /** @description Provider or inferred status value when present. */
+            status?: string;
+            /** @description Plaintext transcript body when present. */
+            text?: string;
+            /** @description Compact summary text when the provider emits a separate summary channel. */
+            summary?: string;
+            /** @description Compact tool-call arguments when present. */
+            arguments?: string;
+            /** @description Compact tool output when present. */
+            output?: string;
+            /** @description Whether the entry only exposed encrypted content instead of plaintext. */
+            encrypted?: boolean;
+        };
     };
     responses: {
         /** @description Request payload or parameter was invalid. */
