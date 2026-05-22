@@ -329,6 +329,7 @@ func assertOrderedEventSequence(t *testing.T, events []factoryapi.FactoryEvent) 
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper intentionally checks the ordered event payload contract in one reviewer-readable pass.
 func assertOrderedEventPayloads(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 	batch, err := events[2].Payload.AsWorkRequestEventPayload()
@@ -445,6 +446,7 @@ func assertFactoryEventTypesPrefix(t *testing.T, got []factoryapi.FactoryEventTy
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the batch replay event contract visible in one assertion owner.
 func assertBatchRequestReplayEvents(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 	batch, err := events[2].Payload.AsWorkRequestEventPayload()
@@ -525,6 +527,7 @@ func generatedRuntimeBatchFixture() interfaces.GeneratedSubmissionBatch {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the generated batch event contract together across request, relation, and response assertions.
 func assertGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 	requestPayload, err := events[2].Payload.AsWorkRequestEventPayload()

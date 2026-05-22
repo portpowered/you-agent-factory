@@ -42,76 +42,106 @@ func NewSubmissionHook(artifact *interfaces.ReplayArtifact) (*SubmissionHook, er
 }
 
 func applyReplaySubmissionDispatchDefaults(submissions []replaySubmission, dispatches []replayDispatch) {
-	type dispatchWorkDefaults struct {
-		workID     string
-		workTypeID string
-		traceID    string
+	byWorkID, byNameAndTrace, byTrace := buildReplayDispatchDefaultsIndex(dispatches)
+	for i := range submissions {
+		applyReplaySubmissionDefaultsForRequest(submissions[i].request.Works, byWorkID, byNameAndTrace, byTrace)
 	}
-	type namedTraceKey struct {
-		name    string
-		traceID string
-	}
+}
+
+type dispatchWorkDefaults struct {
+	workID     string
+	workTypeID string
+	traceID    string
+}
+
+type namedTraceKey struct {
+	name    string
+	traceID string
+}
+
+func buildReplayDispatchDefaultsIndex(dispatches []replayDispatch) (
+	map[string]dispatchWorkDefaults,
+	map[namedTraceKey]dispatchWorkDefaults,
+	map[string][]dispatchWorkDefaults,
+) {
 	byWorkID := make(map[string]dispatchWorkDefaults)
 	byNameAndTrace := make(map[namedTraceKey]dispatchWorkDefaults)
 	byTrace := make(map[string][]dispatchWorkDefaults)
 	for _, dispatch := range dispatches {
 		for _, token := range workers.WorkDispatchInputTokens(dispatch.dispatch) {
-			if token.Color.DataType == interfaces.DataTypeResource || token.Color.WorkID == "" {
+			current, ok := replayDispatchDefaultsFromToken(token, dispatch.dispatch.Execution.TraceID)
+			if !ok {
 				continue
 			}
-			traceID := token.Color.TraceID
-			if traceID == "" {
-				traceID = dispatch.dispatch.Execution.TraceID
-			}
-			current := byWorkID[token.Color.WorkID]
-			current.workID = token.Color.WorkID
-			if current.workTypeID == "" {
-				current.workTypeID = token.Color.WorkTypeID
-			}
-			if current.traceID == "" {
-				current.traceID = traceID
-			}
-			byWorkID[token.Color.WorkID] = current
-
-			if token.Color.Name != "" && traceID != "" {
-				key := namedTraceKey{name: token.Color.Name, traceID: traceID}
+			byWorkID[current.workID] = current
+			if token.Color.Name != "" && current.traceID != "" {
+				key := namedTraceKey{name: token.Color.Name, traceID: current.traceID}
 				if _, exists := byNameAndTrace[key]; !exists {
 					byNameAndTrace[key] = current
 				}
 			}
-			if traceID != "" {
-				byTrace[traceID] = append(byTrace[traceID], current)
+			if current.traceID != "" {
+				byTrace[current.traceID] = append(byTrace[current.traceID], current)
 			}
 		}
 	}
-	for i := range submissions {
-		for j := range submissions[i].request.Works {
-			work := &submissions[i].request.Works[j]
-			defaults := byWorkID[work.WorkID]
-			if defaults.workID == "" && work.Name != "" && work.TraceID != "" {
-				defaults = byNameAndTrace[namedTraceKey{
-					name:    work.Name,
-					traceID: work.TraceID,
-				}]
-			}
-			if defaults.workID == "" && work.TraceID != "" {
-				queued := byTrace[work.TraceID]
-				if len(queued) > 0 {
-					defaults = queued[0]
-					byTrace[work.TraceID] = queued[1:]
-				}
-			}
-			if work.WorkID == "" {
-				work.WorkID = defaults.workID
-			}
-			if work.WorkTypeID == "" {
-				work.WorkTypeID = defaults.workTypeID
-			}
-			if work.TraceID == "" {
-				work.TraceID = defaults.traceID
-			}
+	return byWorkID, byNameAndTrace, byTrace
+}
+
+func replayDispatchDefaultsFromToken(token interfaces.Token, fallbackTraceID string) (dispatchWorkDefaults, bool) {
+	if token.Color.DataType == interfaces.DataTypeResource || token.Color.WorkID == "" {
+		return dispatchWorkDefaults{}, false
+	}
+	traceID := token.Color.TraceID
+	if traceID == "" {
+		traceID = fallbackTraceID
+	}
+	return dispatchWorkDefaults{
+		workID:     token.Color.WorkID,
+		workTypeID: token.Color.WorkTypeID,
+		traceID:    traceID,
+	}, true
+}
+
+func applyReplaySubmissionDefaultsForRequest(
+	works []interfaces.Work,
+	byWorkID map[string]dispatchWorkDefaults,
+	byNameAndTrace map[namedTraceKey]dispatchWorkDefaults,
+	byTrace map[string][]dispatchWorkDefaults,
+) {
+	for i := range works {
+		work := &works[i]
+		defaults := replayDispatchDefaultsForWork(*work, byWorkID, byNameAndTrace, byTrace)
+		if work.WorkID == "" {
+			work.WorkID = defaults.workID
+		}
+		if work.WorkTypeID == "" {
+			work.WorkTypeID = defaults.workTypeID
+		}
+		if work.TraceID == "" {
+			work.TraceID = defaults.traceID
 		}
 	}
+}
+
+func replayDispatchDefaultsForWork(
+	work interfaces.Work,
+	byWorkID map[string]dispatchWorkDefaults,
+	byNameAndTrace map[namedTraceKey]dispatchWorkDefaults,
+	byTrace map[string][]dispatchWorkDefaults,
+) dispatchWorkDefaults {
+	defaults := byWorkID[work.WorkID]
+	if defaults.workID == "" && work.Name != "" && work.TraceID != "" {
+		defaults = byNameAndTrace[namedTraceKey{name: work.Name, traceID: work.TraceID}]
+	}
+	if defaults.workID == "" && work.TraceID != "" {
+		queued := byTrace[work.TraceID]
+		if len(queued) > 0 {
+			defaults = queued[0]
+			byTrace[work.TraceID] = queued[1:]
+		}
+	}
+	return defaults
 }
 
 func applyReplaySubmissionDefaults(submissions []replaySubmission, generatedFactory factoryapi.Factory) {

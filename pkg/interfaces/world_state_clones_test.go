@@ -81,6 +81,7 @@ func TestCloneToken_DetachesNestedMutableRuntimeFields(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this clone contract test keeps nil, empty, and detached-copy assertions together on the public seam.
 func TestCloneToken_PreserveNilAndEmptyValues(t *testing.T) {
 	tests := []struct {
 		name  string

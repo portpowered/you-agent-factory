@@ -292,6 +292,13 @@ func loadRuntimeConfigForSmoke(t *testing.T, dir string) *config.LoadedFactoryCo
 func assertLoadedFactoryRuntimeForSmoke(t *testing.T, loaded *config.LoadedFactoryConfig) {
 	t.Helper()
 
+	assertLoadedFactorySmokeWorker(t, loaded)
+	assertLoadedFactorySmokeWorkstation(t, loaded)
+}
+
+func assertLoadedFactorySmokeWorker(t *testing.T, loaded *config.LoadedFactoryConfig) {
+	t.Helper()
+
 	worker, ok := loaded.Worker("executor")
 	if !ok {
 		t.Fatal("loaded runtime config is missing worker definition for executor")
@@ -302,6 +309,10 @@ func assertLoadedFactoryRuntimeForSmoke(t *testing.T, loaded *config.LoadedFacto
 	if len(worker.Resources) != 1 || worker.Resources[0].Name != "agent-slot" || worker.Resources[0].Capacity != 1 {
 		t.Fatalf("loaded worker resources = %#v, want agent-slot capacity 1", worker.Resources)
 	}
+}
+
+func assertLoadedFactorySmokeWorkstation(t *testing.T, loaded *config.LoadedFactoryConfig) {
+	t.Helper()
 
 	workstation, ok := loaded.Workstation("execute-story")
 	if !ok {
@@ -585,6 +596,13 @@ func assertFactoryConfigSmokeEnumRefs(t *testing.T) {
 func assertFactoryConfigSmokeGeneratedBoundary(t *testing.T, factory factoryapi.Factory) {
 	t.Helper()
 
+	assertFactoryConfigSmokeGeneratedWorkers(t, factory)
+	assertFactoryConfigSmokeGeneratedWorkstations(t, factory)
+}
+
+func assertFactoryConfigSmokeGeneratedWorkers(t *testing.T, factory factoryapi.Factory) {
+	t.Helper()
+
 	if factory.Workers == nil || len(*factory.Workers) != 1 {
 		t.Fatalf("generated boundary workers = %#v, want one worker", factory.Workers)
 	}
@@ -594,6 +612,10 @@ func assertFactoryConfigSmokeGeneratedBoundary(t *testing.T, factory factoryapi.
 	if (*factory.Workers)[0].ExecutorProvider == nil || *(*factory.Workers)[0].ExecutorProvider != factoryapi.WorkerProviderScriptWrap {
 		t.Fatalf("generated boundary worker executorProvider = %#v, want SCRIPT_WRAP", (*factory.Workers)[0].ExecutorProvider)
 	}
+}
+
+func assertFactoryConfigSmokeGeneratedWorkstations(t *testing.T, factory factoryapi.Factory) {
+	t.Helper()
 
 	if factory.Workstations == nil || len(*factory.Workstations) < 1 {
 		t.Fatalf("generated boundary workstations = %#v, want at least one workstation", factory.Workstations)

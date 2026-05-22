@@ -120,6 +120,7 @@ func TestWorkstationDispatchViewFromCompletion_OmitsInferenceOwnedSummaryFields(
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this projection contract case keeps the pending-dispatch fallback matrix inline so the generated API shape is reviewable end to end.
 func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesPendingDispatchWithoutInferenceFallback(t *testing.T) {
 	workItem := interfaces.FactoryWorkItem{
 		ID:          "work-pending",
@@ -282,6 +283,7 @@ func assertActiveProjectionRequest(t *testing.T, active factoryapi.FactoryWorldW
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this assertion helper intentionally checks the full completed projection contract in one place.
 func assertCompletedProjectionRequest(t *testing.T, completed factoryapi.FactoryWorldWorkstationRequestView) {
 	t.Helper()
 	if completed.DispatchId != "dispatch-completed" {
@@ -397,6 +399,7 @@ func assertActiveScriptProjection(t *testing.T, active factoryapi.FactoryWorldWo
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this assertion helper intentionally checks the full completed script projection contract in one place.
 func assertCompletedScriptProjection(t *testing.T, completed factoryapi.FactoryWorldWorkstationRequestView) {
 	t.Helper()
 	if completed.Request.ScriptRequest == nil {

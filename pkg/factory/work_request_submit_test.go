@@ -29,6 +29,7 @@ func TestWorkRequestRecordFromSubmitRequests_UsesSharedTraceFallback(t *testing.
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this canonical batch-contract test keeps cross-item payload, relation, and trace assertions visible in one flow.
 func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testing.T) {
 	requests := []interfaces.SubmitRequest{
 		{

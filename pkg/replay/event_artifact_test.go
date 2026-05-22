@@ -284,6 +284,7 @@ func mergeGeneratedWorkstationsFixture() (*factoryapi.Factory, map[string]interf
 		}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper intentionally validates the merged generated workstation artifact contract in one place.
 func assertMergedGeneratedWorkstations(t *testing.T, factory *factoryapi.Factory) {
 	t.Helper()
 	if factory.Workstations == nil {

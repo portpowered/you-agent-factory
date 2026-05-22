@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this snapshot contract test keeps all exported state fields visible in one reviewer-readable assertion flow.
 func TestEngineStateSnapshot_AllFieldsAccessible(t *testing.T) {
 	snap := engineStateSnapshotFixture()
 
