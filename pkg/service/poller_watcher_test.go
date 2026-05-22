@@ -28,9 +28,8 @@ func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdoutToFactoryService(t *te
 	}
 	submitted := &aggregateSnapshotFactory{}
 	svc := &FactoryService{
-		cfg:     &FactoryServiceConfig{CommandRunnerOverride: runner},
-		logger:  zap.NewNop(),
-		factory: submitted,
+		cfg:    &FactoryServiceConfig{CommandRunnerOverride: runner},
+		logger: zap.NewNop(),
 	}
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
@@ -50,7 +49,14 @@ func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdoutToFactoryService(t *te
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 
-	err := svc.runScriptPoller(context.Background(), runner, runtimeCfg, poller, worker)
+	err := svc.runScriptPoller(
+		context.Background(),
+		runner,
+		runtimeCfg,
+		poller,
+		worker,
+		submitWorkRequestWithFactory(submitted),
+	)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
 		t.Fatalf("runScriptPoller error = %v, want unexpected exit after successful submit", err)
 	}
@@ -86,9 +92,8 @@ func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdoutToFactoryService(t *test
 	}
 	submitted := &aggregateSnapshotFactory{}
 	svc := &FactoryService{
-		cfg:     &FactoryServiceConfig{CommandRunnerOverride: runner},
-		logger:  zap.NewNop(),
-		factory: submitted,
+		cfg:    &FactoryServiceConfig{CommandRunnerOverride: runner},
+		logger: zap.NewNop(),
 	}
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
@@ -108,7 +113,14 @@ func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdoutToFactoryService(t *test
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 
-	err := svc.runScriptPoller(context.Background(), runner, runtimeCfg, poller, worker)
+	err := svc.runScriptPoller(
+		context.Background(),
+		runner,
+		runtimeCfg,
+		poller,
+		worker,
+		submitWorkRequestWithFactory(submitted),
+	)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
 		t.Fatalf("runScriptPoller error = %v, want unexpected exit after successful submit", err)
 	}
@@ -180,6 +192,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 	)
 	handle := &liveRuntimeHandle{
 		runtime: &replacementFactoryRuntime{
+			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
 	}
@@ -251,6 +264,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 	)
 	handle := &liveRuntimeHandle{
 		runtime: &replacementFactoryRuntime{
+			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
 	}
@@ -305,6 +319,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 	)
 	handle := &liveRuntimeHandle{
 		runtime: &replacementFactoryRuntime{
+			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
 	}
@@ -364,6 +379,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 	)
 	handle := &liveRuntimeHandle{
 		runtime: &replacementFactoryRuntime{
+			factory:    &aggregateSnapshotFactory{},
 			runtimeCfg: runtimeCfg,
 		},
 	}
@@ -413,6 +429,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsPriorScriptPollerBeforeRepl
 	}
 	oldHandle := &liveRuntimeHandle{
 		runtime: &replacementFactoryRuntime{
+			factory: &aggregateSnapshotFactory{},
 			runtimeCfg: newLoadedFactoryConfigForServiceTest(
 				t,
 				t.TempDir(),
@@ -433,6 +450,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsPriorScriptPollerBeforeRepl
 	}
 	newHandle := &liveRuntimeHandle{
 		runtime: &replacementFactoryRuntime{
+			factory: &aggregateSnapshotFactory{},
 			runtimeCfg: newLoadedFactoryConfigForServiceTest(
 				t,
 				t.TempDir(),
@@ -474,6 +492,115 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsPriorScriptPollerBeforeRepl
 	}
 	if reqs[1].WorkstationName != newPoller.Name {
 		t.Fatalf("replacement poller workstation = %q, want %q", reqs[1].WorkstationName, newPoller.Name)
+	}
+}
+
+func TestFactoryService_StopLiveRuntimeSidecars_WaitsForScriptPollerSubmitBeforeReplacementStart(t *testing.T) {
+	workRequestJSON := []byte(`{
+		"requestId":"linear-issue-batch-3",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{"name":"issue-125","workTypeName":"task","payload":{"id":"ISSUE-125"}}]
+	}`)
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{
+			{result: workers.CommandResult{Stdout: workRequestJSON}},
+			{waitForCancel: true},
+		},
+	}
+	submitStarted := make(chan struct{})
+	releaseSubmit := make(chan struct{})
+	oldFactory := &aggregateSnapshotFactory{
+		submitFunc: func(context.Context, interfaces.WorkRequest) error {
+			close(submitStarted)
+			<-releaseSubmit
+			return nil
+		},
+	}
+	newFactory := &aggregateSnapshotFactory{}
+	svc := &FactoryService{
+		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner},
+		logger: zap.NewNop(),
+	}
+	oldHandle := newScriptPollerRuntimeHandle(t, "linear-ingress-old", oldFactory)
+	newHandle := newScriptPollerRuntimeHandle(t, "linear-ingress-new", newFactory)
+
+	if err := svc.startLiveRuntimeSidecars(context.Background(), oldHandle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars(old): %v", err)
+	}
+	<-submitStarted
+
+	stopped := make(chan struct{})
+	go func() {
+		svc.stopLiveRuntimeSidecars(oldHandle)
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+		t.Fatal("stopLiveRuntimeSidecars(old) completed before in-flight submit drained")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(releaseSubmit)
+
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for stopLiveRuntimeSidecars(old) to finish")
+	}
+
+	if err := svc.startLiveRuntimeSidecars(context.Background(), newHandle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars(new): %v", err)
+	}
+	defer svc.stopLiveRuntimeSidecars(newHandle)
+	waitForPollerRunnerCalls(t, runner, 2, time.Second)
+
+	if oldFactory.submitCalls != 1 {
+		t.Fatalf("old runtime submit calls = %d, want 1", oldFactory.submitCalls)
+	}
+	if newFactory.submitCalls != 0 {
+		t.Fatalf("replacement runtime submit calls before replacement poller restart = %d, want 0", newFactory.submitCalls)
+	}
+	reqs := runner.requests()
+	if len(reqs) != 2 {
+		t.Fatalf("poller runner requests = %d, want 2", len(reqs))
+	}
+	if reqs[0].WorkstationName != "linear-ingress-old" {
+		t.Fatalf("first poller workstation = %q, want %q", reqs[0].WorkstationName, "linear-ingress-old")
+	}
+	if reqs[1].WorkstationName != "linear-ingress-new" {
+		t.Fatalf("replacement poller workstation = %q, want %q", reqs[1].WorkstationName, "linear-ingress-new")
+	}
+}
+
+func newScriptPollerRuntimeHandle(t *testing.T, workstationName string, activeFactory *aggregateSnapshotFactory) *liveRuntimeHandle {
+	t.Helper()
+
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           workstationName,
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "poller-script",
+	}
+	return &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			factory: activeFactory,
+			runtimeCfg: newLoadedFactoryConfigForServiceTest(
+				t,
+				t.TempDir(),
+				&interfaces.FactoryConfig{
+					Workers:      []interfaces.WorkerConfig{{Name: "poller-script"}},
+					Workstations: []interfaces.FactoryWorkstationConfig{poller},
+				},
+				map[string]*interfaces.WorkerConfig{
+					"poller-script": {
+						Name:    "poller-script",
+						Type:    interfaces.WorkerTypeScript,
+						Command: "factory/scripts/poller.sh",
+					},
+				},
+				map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
+			),
+		},
 	}
 }
 

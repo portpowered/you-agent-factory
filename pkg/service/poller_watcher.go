@@ -32,7 +32,7 @@ func (fs *FactoryService) startPollerWatchersForRuntime(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	submitter workRequestSubmitter,
 ) {
-	if runtimeModeOrDefault(fs.cfg.RuntimeMode) != interfaces.RuntimeModeService || factoryCfg == nil || runtimeCfg == nil || sidecars == nil {
+	if runtimeModeOrDefault(fs.cfg.RuntimeMode) != interfaces.RuntimeModeService || factoryCfg == nil || runtimeCfg == nil || sidecars == nil || submitter == nil {
 		return
 	}
 
@@ -65,7 +65,7 @@ func (fs *FactoryService) startPollerWatchersForRuntime(
 			sidecars.Add(1)
 			go func() {
 				defer sidecars.Done()
-				fs.superviseScriptPoller(ctx, runtimeCfg, ws, workerDef)
+				fs.superviseScriptPoller(ctx, runtimeCfg, ws, workerDef, submitter)
 			}()
 		case interfaces.WorkerTypeHosted:
 			if workerDef.Provider != interfaces.HostedWorkerProviderLinear {
@@ -93,6 +93,7 @@ func (fs *FactoryService) superviseScriptPoller(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
 	workerDef *interfaces.WorkerConfig,
+	submitter workRequestSubmitter,
 ) {
 	logger := fs.pollerLogger(workstation, workerDef)
 	runner := fs.pollerCommandRunner()
@@ -109,7 +110,7 @@ func (fs *FactoryService) superviseScriptPoller(
 		}
 
 		attempt++
-		runErr := fs.runScriptPoller(ctx, runner, runtimeCfg, workstation, workerDef)
+		runErr := fs.runScriptPoller(ctx, runner, runtimeCfg, workstation, workerDef, submitter)
 		if ctx.Err() != nil {
 			return
 		}
@@ -135,6 +136,7 @@ func (fs *FactoryService) runScriptPoller(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
 	workerDef *interfaces.WorkerConfig,
+	submitter workRequestSubmitter,
 ) error {
 	commandReq, err := scriptPollerCommandRequest(runtimeCfg, workstation, workerDef)
 	if err != nil {
@@ -170,7 +172,10 @@ func (fs *FactoryService) runScriptPoller(
 		return err
 	}
 	if hasOutput {
-		if _, err := fs.SubmitWorkRequest(ctx, request); err != nil {
+		if submitter == nil {
+			return fmt.Errorf("script poller submitter is not available")
+		}
+		if err := submitter(ctx, request); err != nil {
 			return fmt.Errorf("script poller submit failed: %w", err)
 		}
 	}
