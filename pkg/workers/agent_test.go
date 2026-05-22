@@ -83,6 +83,70 @@ func withAgentWorkingDirectory(workingDirectory string) func(*interfaces.Worksta
 	}
 }
 
+func withAgentModelOperation(operation string, bindings []interfaces.ResolvedModelOperationBinding) func(*interfaces.WorkstationExecutionRequest) {
+	return func(req *interfaces.WorkstationExecutionRequest) {
+		req.ModelOperation = operation
+		req.ModelBindings = bindings
+	}
+}
+
+func TestInferenceRequestForExecutionRequest_ForwardsModelOperationContract(t *testing.T) {
+	req := testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:      "d-tts",
+			TransitionID:    "t-tts",
+			WorkerType:      "worker-a",
+			WorkstationName: "speak",
+		},
+		withAgentPrompts("System prompt", "Speak"),
+		withAgentModelOperation("TTS", []interfaces.ResolvedModelOperationBinding{
+			{
+				Slot:   "text",
+				Source: interfaces.ModelOperationBindingSourceInput,
+				Content: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "hello",
+				}},
+			},
+			{
+				Slot:   "voice",
+				Source: interfaces.ModelOperationBindingSourceConfig,
+				Content: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeJSON,
+					JSON: []byte(`{"name":"alloy"}`),
+				}},
+			},
+		}),
+	)
+
+	got := inferenceRequestForExecutionRequest(req, &interfaces.WorkerConfig{
+		Model:         "OMNIVOICE_Q4_K_M",
+		ModelProvider: interfaces.RunnerIDCodex,
+		ModelLocality: interfaces.ModelLocalityLocal,
+	})
+
+	if got.ModelOperation != "TTS" {
+		t.Fatalf("model operation = %q, want TTS", got.ModelOperation)
+	}
+	if got.ModelLocality != interfaces.ModelLocalityLocal {
+		t.Fatalf("model locality = %q, want %q", got.ModelLocality, interfaces.ModelLocalityLocal)
+	}
+	if len(got.ModelBindings) != 2 {
+		t.Fatalf("model bindings = %#v, want 2 entries", got.ModelBindings)
+	}
+	if got.ModelBindings[0].Slot != "text" || got.ModelBindings[0].Content[0].Text != "hello" {
+		t.Fatalf("text binding = %#v, want forwarded text binding", got.ModelBindings[0])
+	}
+	if got.ModelBindings[1].Slot != "voice" || string(got.ModelBindings[1].Content[0].JSON) != `{"name":"alloy"}` {
+		t.Fatalf("voice binding = %#v, want forwarded config binding", got.ModelBindings[1])
+	}
+
+	got.ModelBindings[0].Content[0].Text = "changed"
+	if req.ModelBindings[0].Content[0].Text != "hello" {
+		t.Fatalf("request bindings mutated original execution request: %#v", req.ModelBindings)
+	}
+}
+
 func TestAgentExecutor_SuccessfulResponse_PopulatesOutput(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "The answer is 42."}}
 	executor := NewAgentExecutor(staticRuntimeConfig{

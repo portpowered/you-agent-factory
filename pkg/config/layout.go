@@ -193,6 +193,7 @@ func cloneFactoryGuardConfigs(configs []interfaces.FactoryGuardConfig) []interfa
 // CloneWorkerConfig returns a copy of a worker runtime definition.
 func CloneWorkerConfig(def interfaces.WorkerConfig) interfaces.WorkerConfig {
 	def.Args = append([]string(nil), def.Args...)
+	def.Operations = cloneModelOperations(def.Operations)
 	def.Resources = append([]interfaces.ResourceConfig(nil), def.Resources...)
 	return def
 }
@@ -237,6 +238,36 @@ func cloneWorkTypeConfigs(configs []interfaces.WorkTypeConfig) []interfaces.Work
 
 func cloneResourceConfigs(configs []interfaces.ResourceConfig) []interfaces.ResourceConfig {
 	return append([]interfaces.ResourceConfig(nil), configs...)
+}
+
+func cloneModelOperations(operations []interfaces.ModelOperation) []interfaces.ModelOperation {
+	if len(operations) == 0 {
+		return nil
+	}
+	cloned := make([]interfaces.ModelOperation, len(operations))
+	for i, operation := range operations {
+		cloned[i] = interfaces.ModelOperation{
+			Name:    operation.Name,
+			Inputs:  cloneModelOperationSlots(operation.Inputs),
+			Outputs: cloneModelOperationSlots(operation.Outputs),
+		}
+	}
+	return cloned
+}
+
+func cloneModelOperationSlots(slots []interfaces.ModelOperationSlot) []interfaces.ModelOperationSlot {
+	if len(slots) == 0 {
+		return nil
+	}
+	cloned := make([]interfaces.ModelOperationSlot, len(slots))
+	for i, slot := range slots {
+		cloned[i] = interfaces.ModelOperationSlot{
+			Name:         slot.Name,
+			ContentTypes: append([]string(nil), slot.ContentTypes...),
+			Required:     slot.Required,
+		}
+	}
+	return cloned
 }
 
 func clonePortableResourceManifestConfig(cfg *interfaces.PortableResourceManifestConfig) *interfaces.PortableResourceManifestConfig {
@@ -360,8 +391,14 @@ func applyWorkerRuntimeDefinition(worker *interfaces.WorkerConfig, def *interfac
 	if runtimeDef.ModelProvider != "" {
 		worker.ModelProvider = runtimeDef.ModelProvider
 	}
+	if runtimeDef.ModelLocality != "" {
+		worker.ModelLocality = runtimeDef.ModelLocality
+	}
 	if runtimeDef.ExecutorProvider != "" {
 		worker.ExecutorProvider = runtimeDef.ExecutorProvider
+	}
+	if len(runtimeDef.Operations) > 0 {
+		worker.Operations = cloneModelOperations(runtimeDef.Operations)
 	}
 	if runtimeDef.SessionID != "" {
 		worker.SessionID = runtimeDef.SessionID

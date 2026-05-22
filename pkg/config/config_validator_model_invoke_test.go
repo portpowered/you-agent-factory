@@ -45,6 +45,76 @@ func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstation(t *
 	}
 }
 
+func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstationAcrossWorkerLocality(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name   string
+		worker interfaces.WorkerConfig
+	}{
+		{
+			name: "local worker",
+			worker: interfaces.WorkerConfig{
+				Name:          "tts-worker",
+				Type:          interfaces.WorkerTypeModel,
+				Model:         "OMNIVOICE_Q4_K_M",
+				ModelProvider: interfaces.RunnerIDCodex,
+				ModelLocality: interfaces.ModelLocalityLocal,
+				Operations: []interfaces.ModelOperation{{
+					Name: "TTS",
+					Inputs: []interfaces.ModelOperationSlot{
+						{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}, Required: true},
+						{Name: "voice", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+					},
+					Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+				}},
+			},
+		},
+		{
+			name: "cloud worker",
+			worker: interfaces.WorkerConfig{
+				Name:          "tts-worker",
+				Type:          interfaces.WorkerTypeModel,
+				Model:         "gpt-4o-mini-tts",
+				ModelProvider: interfaces.RunnerIDCodex,
+				ModelLocality: interfaces.ModelLocalityCloud,
+				Operations: []interfaces.ModelOperation{{
+					Name: "TTS",
+					Inputs: []interfaces.ModelOperationSlot{
+						{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}, Required: true},
+						{Name: "voice", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+					},
+					Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+				}},
+			},
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testBaseConfig()
+			cfg.Workers = []interfaces.WorkerConfig{tt.worker}
+			cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+				Name:           "speak",
+				Type:           interfaces.WorkstationTypeInvoke,
+				Operation:      "TTS",
+				WorkerTypeName: "tts-worker",
+				OperationBindings: []interfaces.ModelOperationBinding{
+					{Slot: "text", Selector: &interfaces.ModelOperationBindingSelector{Label: "utterance"}},
+					{Slot: "voice", Config: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeJSON, JSON: []byte(`{"name":"alloy"}`)}}},
+				},
+				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			}}
+
+			findings := ruleModelInvokeWorkstations(cfg)
+			if len(findings) != 0 {
+				t.Fatalf("expected no findings, got %#v", findings)
+			}
+		})
+	}
+}
+
 func TestRuleModelInvokeWorkstations_RejectsOperationOnNonModelInvokeType(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{

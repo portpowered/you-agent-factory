@@ -54,23 +54,26 @@ type WorkstationExecutionRequest struct {
 // ProviderInferenceRequest is the provider-owned request shape derived from one
 // rendered workstation execution request plus runtime worker configuration.
 type ProviderInferenceRequest struct {
-	Dispatch                     WorkDispatch               `json:"dispatch"`
-	WorkerType                   string                     `json:"worker_type,omitempty"`
-	WorkstationType              string                     `json:"workstation_type,omitempty"`
-	RunnerID                     string                     `json:"runner_id,omitempty"`
-	ProjectID                    string                     `json:"project_id,omitempty"`
-	InputTokens                  []any                      `json:"input_tokens,omitempty"`
-	SystemPrompt                 string                     `json:"system_prompt,omitempty"`
-	UserMessage                  string                     `json:"user_message,omitempty"`
-	OutputSchema                 string                     `json:"output_schema,omitempty"`
-	ToolExecutionMode            RunnerToolExecutionMode    `json:"tool_execution_mode,omitempty"`
-	RequiredOptionalCapabilities []RunnerOptionalCapability `json:"required_optional_capabilities,omitempty"`
-	EnvVars                      map[string]string          `json:"env_vars,omitempty"`
-	Worktree                     string                     `json:"worktree,omitempty"`
-	WorkingDirectory             string                     `json:"working_directory,omitempty"`
-	Model                        string                     `json:"model,omitempty"`
-	ModelProvider                string                     `json:"model_provider,omitempty"`
-	SessionID                    string                     `json:"session_id,omitempty"`
+	Dispatch                     WorkDispatch                    `json:"dispatch"`
+	WorkerType                   string                          `json:"worker_type,omitempty"`
+	WorkstationType              string                          `json:"workstation_type,omitempty"`
+	RunnerID                     string                          `json:"runner_id,omitempty"`
+	ProjectID                    string                          `json:"project_id,omitempty"`
+	InputTokens                  []any                           `json:"input_tokens,omitempty"`
+	ModelOperation               string                          `json:"model_operation,omitempty"`
+	ModelBindings                []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
+	SystemPrompt                 string                          `json:"system_prompt,omitempty"`
+	UserMessage                  string                          `json:"user_message,omitempty"`
+	OutputSchema                 string                          `json:"output_schema,omitempty"`
+	ToolExecutionMode            RunnerToolExecutionMode         `json:"tool_execution_mode,omitempty"`
+	RequiredOptionalCapabilities []RunnerOptionalCapability      `json:"required_optional_capabilities,omitempty"`
+	EnvVars                      map[string]string               `json:"env_vars,omitempty"`
+	Worktree                     string                          `json:"worktree,omitempty"`
+	WorkingDirectory             string                          `json:"working_directory,omitempty"`
+	Model                        string                          `json:"model,omitempty"`
+	ModelProvider                string                          `json:"model_provider,omitempty"`
+	ModelLocality                string                          `json:"model_locality,omitempty"`
+	SessionID                    string                          `json:"session_id,omitempty"`
 }
 
 // SubprocessExecutionRequest is the command-boundary request derived from
@@ -119,7 +122,7 @@ func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) Works
 	clone := request
 	clone.Dispatch = CloneWorkDispatch(request.Dispatch)
 	clone.InputTokens = cloneAnySlice(request.InputTokens)
-	clone.ModelBindings = cloneResolvedModelOperationBindings(request.ModelBindings)
+	clone.ModelBindings = CloneResolvedModelOperationBindings(request.ModelBindings)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	return clone
 }
@@ -130,6 +133,7 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone := request
 	clone.Dispatch = CloneWorkDispatch(request.Dispatch)
 	clone.InputTokens = cloneAnySlice(request.InputTokens)
+	clone.ModelBindings = CloneResolvedModelOperationBindings(request.ModelBindings)
 	clone.RequiredOptionalCapabilities = cloneRunnerOptionalCapabilities(request.RequiredOptionalCapabilities)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	return clone
@@ -187,7 +191,9 @@ func cloneRunnerOptionalCapabilities(values []RunnerOptionalCapability) []Runner
 	return clone
 }
 
-func cloneResolvedModelOperationBindings(values []ResolvedModelOperationBinding) []ResolvedModelOperationBinding {
+// CloneResolvedModelOperationBindings returns a detached copy of one resolved
+// model-operation binding slice.
+func CloneResolvedModelOperationBindings(values []ResolvedModelOperationBinding) []ResolvedModelOperationBinding {
 	if len(values) == 0 {
 		return nil
 	}

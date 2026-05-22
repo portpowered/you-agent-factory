@@ -142,6 +142,8 @@ func TestCloneProviderInferenceRequest_DetachesProviderFields(t *testing.T) {
 		WorkstationType:   "review",
 		ProjectID:         "project-override",
 		InputTokens:       []any{map[string]any{"id": "token-2"}},
+		ModelOperation:    "TTS",
+		ModelBindings:     []ResolvedModelOperationBinding{{Slot: "text", Source: ModelOperationBindingSourceInput, Content: []WorkContentPart{{Type: WorkContentPartTypeText, Text: "hello"}}}},
 		SystemPrompt:      "system",
 		UserMessage:       "user",
 		OutputSchema:      "{}",
@@ -155,17 +157,22 @@ func TestCloneProviderInferenceRequest_DetachesProviderFields(t *testing.T) {
 		WorkingDirectory: "/tmp/working",
 		Model:            "model-x",
 		ModelProvider:    "acme",
+		ModelLocality:    ModelLocalityLocal,
 		SessionID:        "session-1",
 	}
 
 	clone := CloneProviderInferenceRequest(original)
 	clone.Dispatch.InputBindings["source"][0] = "changed"
 	clone.InputTokens[0] = map[string]any{"id": "changed"}
+	clone.ModelBindings[0].Content[0].Text = "changed"
 	clone.RequiredOptionalCapabilities[0] = RunnerOptionalCapabilityImageInput
 	clone.EnvVars["TASK"] = "changed"
 
 	if original.Dispatch.InputBindings["source"][0] != "a" {
 		t.Fatalf("dispatch bindings mutated original: %#v", original.Dispatch.InputBindings)
+	}
+	if original.ModelBindings[0].Content[0].Text != "hello" {
+		t.Fatalf("model bindings mutated original: %#v", original.ModelBindings)
 	}
 	if original.RequiredOptionalCapabilities[0] != RunnerOptionalCapabilityStructuredOutput {
 		t.Fatalf("required optional capabilities mutated original: %#v", original.RequiredOptionalCapabilities)
