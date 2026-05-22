@@ -260,12 +260,12 @@ func GeneratedPublicFactoryWorkerProviderPtr(value string) *factoryapi.WorkerPro
 }
 
 // GeneratedPublicFactoryHostedWorkerProvider returns the generated hosted worker provider enum.
-func GeneratedPublicFactoryHostedWorkerProvider(value string) string {
-	return PermissivePublicFactoryHostedWorkerProvider(value)
+func GeneratedPublicFactoryHostedWorkerProvider(value string) factoryapi.HostedWorkerProvider {
+	return factoryapi.HostedWorkerProvider(PermissivePublicFactoryHostedWorkerProvider(value))
 }
 
 // GeneratedPublicFactoryHostedWorkerProviderPtr returns the generated hosted worker provider enum when non-empty.
-func GeneratedPublicFactoryHostedWorkerProviderPtr(value string) *string {
+func GeneratedPublicFactoryHostedWorkerProviderPtr(value string) *factoryapi.HostedWorkerProvider {
 	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryHostedWorkerProvider)
 }
 

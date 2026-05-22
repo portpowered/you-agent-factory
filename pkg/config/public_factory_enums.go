@@ -199,7 +199,7 @@ func publicFactoryWorkerProviderFromInternal(value string) factoryapi.WorkerProv
 }
 
 func publicFactoryHostedWorkerProviderFromInternal(value string) string {
-	return interfaces.GeneratedPublicFactoryHostedWorkerProvider(value)
+	return string(interfaces.GeneratedPublicFactoryHostedWorkerProvider(value))
 }
 
 func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) string {

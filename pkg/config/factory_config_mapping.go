@@ -695,11 +695,7 @@ func workerProviderPtrIfNotEmpty(value string) *factoryapi.WorkerProvider {
 }
 
 func hostedWorkerProviderPtrIfNotEmpty(value string) *factoryapi.HostedWorkerProvider {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	enumValue := factoryapi.HostedWorkerProvider(publicFactoryHostedWorkerProviderFromInternal(value))
-	return &enumValue
+	return interfaces.GeneratedPublicFactoryHostedWorkerProviderPtr(value)
 }
 
 func workstationTypePtrIfNotEmpty(value string) *factoryapi.WorkstationType {

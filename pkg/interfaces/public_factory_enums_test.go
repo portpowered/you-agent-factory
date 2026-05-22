@@ -7,14 +7,35 @@ import (
 )
 
 func TestPublicFactoryEnumNormalizers(t *testing.T) {
-	tests := []struct {
-		name       string
-		alias      string
-		unknown    string
-		want       string
-		permissive func(string) string
-		strict     func(string) string
-	}{
+	for _, tt := range publicFactoryEnumNormalizerCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.permissive("  " + tt.alias + "  "); got != tt.want {
+				t.Fatalf("permissive(%q) = %q, want %q", tt.alias, got, tt.want)
+			}
+			if got := tt.strict("  " + tt.alias + "  "); got != tt.want {
+				t.Fatalf("strict(%q) = %q, want %q", tt.alias, got, tt.want)
+			}
+			if got := tt.permissive("  " + tt.unknown + "  "); got != tt.unknown {
+				t.Fatalf("permissive(%q) = %q, want trimmed unknown %q", tt.unknown, got, tt.unknown)
+			}
+			if got := tt.strict("  " + tt.unknown + "  "); got != "" {
+				t.Fatalf("strict(%q) = %q, want rejection", tt.unknown, got)
+			}
+		})
+	}
+}
+
+type publicFactoryEnumNormalizerCase struct {
+	name       string
+	alias      string
+	unknown    string
+	want       string
+	permissive func(string) string
+	strict     func(string) string
+}
+
+func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
+	return []publicFactoryEnumNormalizerCase{
 		{
 			name:       "worker type",
 			alias:      "MODEL_WORKER",
@@ -38,6 +59,14 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 			want:       "SCRIPT_WRAP",
 			permissive: PermissivePublicFactoryWorkerProvider,
 			strict:     StrictPublicFactoryWorkerProvider,
+		},
+		{
+			name:       "hosted worker provider",
+			alias:      "LINEAR",
+			unknown:    "custom-hosted",
+			want:       HostedWorkerProviderLinear,
+			permissive: PermissivePublicFactoryHostedWorkerProvider,
+			strict:     StrictPublicFactoryHostedWorkerProvider,
 		},
 		{
 			name:       "worker model locality",
@@ -88,23 +117,6 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 			strict:     StrictPublicFactoryRunnerSelectionSource,
 		},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.permissive("  " + tt.alias + "  "); got != tt.want {
-				t.Fatalf("permissive(%q) = %q, want %q", tt.alias, got, tt.want)
-			}
-			if got := tt.strict("  " + tt.alias + "  "); got != tt.want {
-				t.Fatalf("strict(%q) = %q, want %q", tt.alias, got, tt.want)
-			}
-			if got := tt.permissive("  " + tt.unknown + "  "); got != tt.unknown {
-				t.Fatalf("permissive(%q) = %q, want trimmed unknown %q", tt.unknown, got, tt.unknown)
-			}
-			if got := tt.strict("  " + tt.unknown + "  "); got != "" {
-				t.Fatalf("strict(%q) = %q, want rejection", tt.unknown, got)
-			}
-		})
-	}
 }
 
 func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
@@ -116,6 +128,9 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	}
 	if got := GeneratedPublicFactoryWorkerProvider("  local-claude  "); got != factoryapi.WorkerProvider("SCRIPT_WRAP") {
 		t.Fatalf("worker provider = %q, want SCRIPT_WRAP from internal local-claude alias", got)
+	}
+	if got := GeneratedPublicFactoryHostedWorkerProvider("  LINEAR  "); got != factoryapi.HostedWorkerProvider("LINEAR") {
+		t.Fatalf("hosted worker provider = %q, want LINEAR", got)
 	}
 	if got := GeneratedPublicFactoryWorkerModelLocality("  LOCAL  "); got != factoryapi.WorkerModelLocality("LOCAL") {
 		t.Fatalf("worker model locality = %q, want LOCAL", got)
@@ -131,6 +146,9 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	}
 	if got := GeneratedPublicFactoryWorkerProvider("  custom-executor  "); got != factoryapi.WorkerProvider("custom-executor") {
 		t.Fatalf("worker provider = %q, want trimmed unknown to round-trip", got)
+	}
+	if got := GeneratedPublicFactoryHostedWorkerProvider("  custom-hosted  "); got != factoryapi.HostedWorkerProvider("custom-hosted") {
+		t.Fatalf("hosted worker provider = %q, want trimmed unknown to round-trip", got)
 	}
 	if got := GeneratedPublicFactoryWorkerModelLocality("  edge  "); got != factoryapi.WorkerModelLocality("edge") {
 		t.Fatalf("worker model locality = %q, want trimmed unknown to round-trip", got)
@@ -218,6 +236,14 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 			ptr:           generatedPublicFactoryWorkerProviderStringPtr,
 		},
 		{
+			name:          "hosted worker provider",
+			supported:     "  LINEAR  ",
+			wantSupported: "LINEAR",
+			unknown:       "  custom-hosted  ",
+			wantUnknown:   "custom-hosted",
+			ptr:           generatedPublicFactoryHostedWorkerProviderStringPtr,
+		},
+		{
 			name:          "worker model locality",
 			supported:     "  LOCAL  ",
 			wantSupported: "LOCAL",
@@ -270,6 +296,10 @@ func generatedPublicFactoryWorkerModelProviderStringPtr(value string) *string {
 
 func generatedPublicFactoryWorkerProviderStringPtr(value string) *string {
 	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryWorkerProviderPtr(value))
+}
+
+func generatedPublicFactoryHostedWorkerProviderStringPtr(value string) *string {
+	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryHostedWorkerProviderPtr(value))
 }
 
 func generatedPublicFactoryWorkerModelLocalityStringPtr(value string) *string {

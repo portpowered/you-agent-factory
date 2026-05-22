@@ -31,8 +31,11 @@ else
       exit 0
     fi
 
-    echo "OMNIVOICE_COMMAND_URL is not configured for $(uname -s)/$(uname -m); skipping long local inference job." >&2
-    emit_outputs "" "true" "missing OMNIVOICE_COMMAND_URL and no preinstalled ${command_name} on PATH"
+    echo "OMNIVOICE_COMMAND_URL is not configured for $(uname -s)/$(uname -m); building repo-owned ${command_name} companion." >&2
+    go build -o "$target_path" ./cmd/omnivoice-llamacpp
+    chmod +x "$target_path"
+    emit_outputs "$target_path" "false" ""
+    echo "$install_dir" >> "$GITHUB_PATH"
     exit 0
   fi
 

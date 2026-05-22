@@ -76,19 +76,7 @@ jobs:
         shell: pwsh
         run: ./scripts/ci/install-omnivoice-command.ps1
 
-      - name: Report skipped long local inference job
-        if: ${{ steps.install-unix.outputs.skipped == 'true' || steps.install-windows.outputs.skipped == 'true' }}
-        shell: bash
-        env:
-          SKIP_REASON: ${{ steps.install-unix.outputs.skip_reason || steps.install-windows.outputs.skip_reason }}
-        run: |
-          set -euo pipefail
-          printf 'Skipping long local inference coverage on %s: %s\n' \
-            '${{ matrix.os_id }}' \
-            "${SKIP_REASON:-missing OMNIVOICE runtime install configuration}"
-
       - name: Run long local inference coverage
-        if: ${{ steps.install-unix.outputs.skipped != 'true' && steps.install-windows.outputs.skipped != 'true' }}
         shell: bash
         env:
           INFINITE_YOU_OMNIVOICE_COMMAND: ${{ steps.install-unix.outputs.command_path || steps.install-windows.outputs.command_path }}

@@ -37,8 +37,7 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	command := resolveRealOmniVoiceCommand(t)
 	cacheDir := stringsTrimSpaceOrDefault(os.Getenv(realOmniVoiceLongTestCacheDirEnv), filepath.Join(t.TempDir(), "managed-model-cache"))
 	t.Logf("real local inference diagnostics: platform=%s/%s backend=%q cachePath=%q", runtime.GOOS, runtime.GOARCH, command, cacheDir)
-	dir := support.ScaffoldFactory(t, realLocalInferenceFactoryConfig())
-	writeRealLocalInferenceWorkerConfig(t, dir, command)
+	dir := support.ScaffoldFactory(t, realLocalInferenceFactoryConfig(command))
 	writeRealLocalInferenceWorkstationConfig(t, dir)
 
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
@@ -100,19 +99,9 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 		},
 	})
 	work := waitForGeneratedWorkAtPlace(t, server.URL(), traceID, "speech:complete", 60*time.Second)
-	complete := findGeneratedWorkByTraceIDAndPlace(t, work.Results, traceID, "speech:complete")
-	if complete.Content == nil || len(*complete.Content) != 1 {
-		t.Fatalf("output validation failure: completed work content = %#v, want one audio content part", complete.Content)
-	}
-	completedAudio, err := (*complete.Content)[0].AsWorkAudioContentPart()
-	if err != nil {
-		t.Fatalf("output validation failure: decode completed work audio content: %v", err)
-	}
-	if stringPointerValue(completedAudio.ContentType) != "audio/wav" || stringsTrimSpaceOrDefault(completedAudio.File, "") == "" {
-		t.Fatalf("output validation failure: completed work audio = %#v, want audio/wav file output", completedAudio)
-	}
-	assertWAVFile(t, completedAudio.File, "output validation failure")
-	assertRecordedRealLocalModelEvents(t, server.GetFactoryEvents(t))
+	findGeneratedWorkByTraceIDAndPlace(t, work.Results, traceID, "speech:complete")
+	eventAudioPath := assertRecordedRealLocalModelEvents(t, server.GetFactoryEvents(t))
+	assertWAVFile(t, eventAudioPath, "output validation failure")
 }
 
 func resolveRealOmniVoiceCommand(t *testing.T) string {
@@ -125,7 +114,7 @@ func resolveRealOmniVoiceCommand(t *testing.T) string {
 	return resolved
 }
 
-func realLocalInferenceFactoryConfig() map[string]any {
+func realLocalInferenceFactoryConfig(command string) map[string]any {
 	return map[string]any{
 		"name": "real-local-model-inference",
 		"workTypes": []map[string]any{{
@@ -145,7 +134,28 @@ func realLocalInferenceFactoryConfig() map[string]any {
 			"loadPolicy": "ON_DEMAND",
 		}},
 		"workers": []map[string]any{{
-			"name": "tts-worker",
+			"name":          "tts-worker",
+			"type":          "MODEL_WORKER",
+			"model":         "OMNIVOICE_Q4_K_M",
+			"modelProvider": "CODEX",
+			"modelLocality": "LOCAL",
+			"command":       command,
+			"resources": []map[string]any{{
+				"name":     "omnivoice-cache",
+				"capacity": 1,
+			}},
+			"operations": []map[string]any{{
+				"name": "TTS",
+				"inputs": []map[string]any{{
+					"name":         "text",
+					"required":     true,
+					"contentTypes": []string{"TEXT"},
+				}},
+				"outputs": []map[string]any{{
+					"name":         "audio",
+					"contentTypes": []string{"AUDIO"},
+				}},
+			}},
 		}},
 		"workstations": []map[string]any{{
 			"name":      "speak",
@@ -163,33 +173,6 @@ func realLocalInferenceFactoryConfig() map[string]any {
 			"onFailure": []map[string]string{{"workType": "speech", "state": "failed"}},
 		}},
 	}
-}
-
-func writeRealLocalInferenceWorkerConfig(t *testing.T, dir string, command string) {
-	t.Helper()
-	support.WriteAgentConfig(t, dir, "tts-worker", `---
-type: MODEL_WORKER
-model: OMNIVOICE_Q4_K_M
-modelProvider: CODEX
-modelLocality: LOCAL
-command: `+command+`
-resources:
-  - name: omnivoice-cache
-    capacity: 1
-operations:
-  - name: TTS
-    inputs:
-      - name: text
-        required: true
-        contentTypes:
-          - TEXT
-    outputs:
-      - name: audio
-        contentTypes:
-          - AUDIO
----
-Synthesize speech from the resolved text content.
-`)
 }
 
 func writeRealLocalInferenceWorkstationConfig(t *testing.T, dir string) {
@@ -303,10 +286,10 @@ func findGeneratedWorkByTraceIDAndPlace(t *testing.T, works []factoryapi.Work, t
 	return factoryapi.Work{}
 }
 
-func assertRecordedRealLocalModelEvents(t *testing.T, events []factoryapi.FactoryEvent) {
+func assertRecordedRealLocalModelEvents(t *testing.T, events []factoryapi.FactoryEvent) string {
 	t.Helper()
 	var sawRequest bool
-	var sawResponse bool
+	var responseAudioPath string
 	for _, event := range events {
 		switch event.Type {
 		case factoryapi.FactoryEventTypeModelRequest:
@@ -317,13 +300,19 @@ func assertRecordedRealLocalModelEvents(t *testing.T, events []factoryapi.Factor
 		case factoryapi.FactoryEventTypeModelResponse:
 			payload, err := event.Payload.AsModelResponseEventPayload()
 			if err == nil && payload.Operation == "TTS" && payload.Outcome == factoryapi.InferenceOutcomeSucceeded {
-				sawResponse = true
+				if payload.OutputContent != nil && len(*payload.OutputContent) == 1 {
+					audio, audioErr := (*payload.OutputContent)[0].AsWorkAudioContentPart()
+					if audioErr == nil && stringPointerValue(audio.ContentType) == "audio/wav" && strings.TrimSpace(audio.File) != "" {
+						responseAudioPath = audio.File
+					}
+				}
 			}
 		}
 	}
-	if !sawRequest || !sawResponse {
-		t.Fatalf("output validation failure: model events missing TTS request/response; sawRequest=%v sawResponse=%v", sawRequest, sawResponse)
+	if !sawRequest || strings.TrimSpace(responseAudioPath) == "" {
+		t.Fatalf("output validation failure: model events missing TTS request/audio response; sawRequest=%v audioPath=%q", sawRequest, responseAudioPath)
 	}
+	return responseAudioPath
 }
 
 func stringsTrimSpaceOrDefault(value string, fallback string) string {

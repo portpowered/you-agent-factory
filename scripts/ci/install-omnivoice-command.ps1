@@ -32,8 +32,10 @@ if (-not (Test-Path $targetPath)) {
             exit 0
         }
 
-        Write-Host "OMNIVOICE_COMMAND_URL is not configured for $env:RUNNER_OS/$env:PROCESSOR_ARCHITECTURE; skipping long local inference job."
-        Write-InstallerOutputs -CommandPath "" -Skipped "true" -SkipReason "missing OMNIVOICE_COMMAND_URL and no preinstalled $commandName on PATH"
+        Write-Host "OMNIVOICE_COMMAND_URL is not configured for $env:RUNNER_OS/$env:PROCESSOR_ARCHITECTURE; building repo-owned $commandName companion."
+        & go build "-o" $targetPath "./cmd/omnivoice-llamacpp"
+        Write-InstallerOutputs -CommandPath $targetPath -Skipped "false" -SkipReason ""
+        $installDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         exit 0
     }
 
