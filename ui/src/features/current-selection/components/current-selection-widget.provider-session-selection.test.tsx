@@ -8,13 +8,14 @@ import {
 } from "../../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition";
-import { CurrentSelectionWidget } from "./current-selection-widget";
-import { selectWorkItemExecutionDetails } from "../state/executionDetails";
-import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
-import type { DashboardSelection } from "../types";
 import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
+import { providerSessionSelectionKey } from "../provider-session-details";
+import { selectWorkItemExecutionDetails } from "../state/executionDetails";
+import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
+import type { DashboardSelection } from "../types";
+import { CurrentSelectionWidget } from "./current-selection-widget";
 
 vi.mock("../../current-factory-definition", async () => {
   const actual = await vi.importActual("../../current-factory-definition");
@@ -157,25 +158,35 @@ describe("CurrentSelectionWidget provider-session selection", () => {
 
   it("keeps an inference-attempt-only provider session selected in current-selection state without rendering duplicate detail", async () => {
     const user = userEvent.setup();
-    const { dispatchId, execution, selectedNode, selection, snapshot, workItem } =
-      buildSelectedWorkItemFixture();
-    const inferenceOnlyRequest = buildDashboardWorkstationRequestFixture(dispatchId, {
-      inference_attempts: [
-        buildDashboardInferenceAttemptFixture(dispatchId, {
-          outcome: "SUCCEEDED",
-          provider_session: {
-            id: "sess_inference_only",
-            kind: "session_id",
-            provider: "codex",
-          },
-          response: "Selected from inference attempts.",
-        }),
-      ],
-    });
+    const {
+      dispatchId,
+      execution,
+      selectedNode,
+      selection,
+      snapshot,
+      workItem,
+    } = buildSelectedWorkItemFixture();
+    const inferenceOnlyRequest = buildDashboardWorkstationRequestFixture(
+      dispatchId,
+      {
+        inference_attempts: [
+          buildDashboardInferenceAttemptFixture(dispatchId, {
+            outcome: "SUCCEEDED",
+            provider_session: {
+              id: "sess_inference_only",
+              kind: "session_id",
+              provider: "codex",
+            },
+            response: "Selected from inference attempts.",
+          }),
+        ],
+      },
+    );
     const executionDetails = selectWorkItemExecutionDetails({
       activeExecution: execution,
       dispatchID: dispatchId,
-      inferenceAttemptsByDispatchID: snapshot.runtime.inference_attempts_by_dispatch_id,
+      inferenceAttemptsByDispatchID:
+        snapshot.runtime.inference_attempts_by_dispatch_id,
       providerSessions: [],
       selectedNode,
       workItem,
@@ -205,7 +216,9 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       within(inferenceAttempts).getByRole("button", { name: "Expand" }),
     );
     await user.click(
-      within(inferenceAttempts).getByRole("button", { name: "Expand attempt 1" }),
+      within(inferenceAttempts).getByRole("button", {
+        name: "Expand attempt 1",
+      }),
     );
     const selectSessionButton = within(currentSelection).getByRole("button", {
       name: "Select provider session codex / session_id / sess_inference_only for dispatch dispatch-review-active",
@@ -231,12 +244,17 @@ describe("CurrentSelectionWidget provider-session selection", () => {
 
   it("keeps selection controls available for timestamp-prefixed Codex session files without embedding the detail panel", async () => {
     const user = userEvent.setup();
-    const { dispatchId, execution, selectedNode, selection, snapshot, workItem } =
-      buildSelectedWorkItemFixture();
-    const codexSessionID = "019e44f4-580e-7f32-981e-1e54ec6907d6";
-    const requestWithTimestampPrefixedSession = buildDashboardWorkstationRequestFixture(
+    const {
       dispatchId,
-      {
+      execution,
+      selectedNode,
+      selection,
+      snapshot,
+      workItem,
+    } = buildSelectedWorkItemFixture();
+    const codexSessionID = "019e44f4-580e-7f32-981e-1e54ec6907d6";
+    const requestWithTimestampPrefixedSession =
+      buildDashboardWorkstationRequestFixture(dispatchId, {
         inference_attempts: [
           buildDashboardInferenceAttemptFixture(dispatchId, {
             outcome: "SUCCEEDED",
@@ -248,12 +266,12 @@ describe("CurrentSelectionWidget provider-session selection", () => {
             response: "Resolved from the on-disk Codex session artifact.",
           }),
         ],
-      },
-    );
+      });
     const executionDetails = selectWorkItemExecutionDetails({
       activeExecution: execution,
       dispatchID: dispatchId,
-      inferenceAttemptsByDispatchID: snapshot.runtime.inference_attempts_by_dispatch_id,
+      inferenceAttemptsByDispatchID:
+        snapshot.runtime.inference_attempts_by_dispatch_id,
       providerSessions: [],
       selectedNode,
       workItem,
@@ -283,7 +301,9 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       within(inferenceAttempts).getByRole("button", { name: "Expand" }),
     );
     await user.click(
-      within(inferenceAttempts).getByRole("button", { name: "Expand attempt 1" }),
+      within(inferenceAttempts).getByRole("button", {
+        name: "Expand attempt 1",
+      }),
     );
 
     await user.click(
@@ -360,10 +380,14 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       within(inferenceAttempts).getByRole("button", { name: "Expand" }),
     );
     await user.click(
-      within(inferenceAttempts).getByRole("button", { name: "Expand attempt 1" }),
+      within(inferenceAttempts).getByRole("button", {
+        name: "Expand attempt 1",
+      }),
     );
     await user.click(
-      within(inferenceAttempts).getByRole("button", { name: "Expand attempt 2" }),
+      within(inferenceAttempts).getByRole("button", {
+        name: "Expand attempt 2",
+      }),
     );
     const firstButton = within(currentSelection).getByRole("button", {
       name: "Select provider session codex / session_id / sess_inference_first for dispatch dispatch-review-active",
@@ -374,9 +398,7 @@ describe("CurrentSelectionWidget provider-session selection", () => {
 
     await user.click(firstButton);
 
-    expect(
-      firstButton.getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect(firstButton.getAttribute("aria-pressed")).toBe("true");
     expect(secondButton.getAttribute("aria-pressed")).toBe("false");
     expect(
       within(currentSelection).queryByText(
@@ -390,6 +412,86 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     expect(secondButton.getAttribute("aria-pressed")).toBe("true");
     expect(
       within(currentSelection).queryByRole("heading", {
+        name: "Selected session details",
+      }),
+    ).toBeNull();
+  });
+
+  it("routes workstation run-history provider-session selection through shared selection state", async () => {
+    const user = userEvent.setup();
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const providerSessions = snapshot.runtime.session.provider_sessions?.filter(
+      (attempt) =>
+        attempt.transition_id === selectedNode.transition_id ||
+        attempt.workstation_name === selectedNode.workstation_name,
+    );
+    const resolvedProviderSessions = providerSessions ?? [];
+    const onSelectProviderSession = vi.fn();
+    const selectedSession = {
+      dispatchID: "dispatch-review-active",
+      id: "sess-active-story",
+      kind: "session_id",
+      provider: "codex",
+    } as const;
+    const currentSelection = buildCurrentSelection({
+      selectedNode,
+      selectedNodeProviderSessions: resolvedProviderSessions,
+      selection: { kind: "node", nodeId: selectedNode.node_id },
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+    const renderCurrentSelection = (
+      selectedProviderSessionKey: string | null,
+    ) => (
+      <QueryClientProvider client={queryClient}>
+        <CurrentSelectionWidget
+          currentSelection={currentSelection}
+          now={DETAIL_CARD_NOW}
+          onSelectProviderSession={onSelectProviderSession}
+          selectedProviderSessionKey={selectedProviderSessionKey}
+          selectedWorkExecutionDetails={null}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(renderCurrentSelection(null));
+
+    const currentSelectionCard = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    const runHistory = within(currentSelectionCard).getByRole("region", {
+      name: "Run history",
+    });
+    await user.click(
+      within(runHistory).getByRole("button", { name: "Expand" }),
+    );
+    const selectSessionButton = within(runHistory).getByRole("button", {
+      name: "Select provider session codex / session_id / sess-active-story for dispatch dispatch-review-active",
+    });
+
+    expect(selectSessionButton.getAttribute("aria-pressed")).toBe("false");
+
+    await user.click(selectSessionButton);
+
+    expect(onSelectProviderSession).toHaveBeenCalledWith(selectedSession);
+
+    rerender(
+      renderCurrentSelection(providerSessionSelectionKey(selectedSession)),
+    );
+
+    expect(
+      within(runHistory)
+        .getByRole("button", {
+          name: "Select provider session codex / session_id / sess-active-story for dispatch dispatch-review-active",
+        })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      within(currentSelectionCard).queryByRole("heading", {
         name: "Selected session details",
       }),
     ).toBeNull();
