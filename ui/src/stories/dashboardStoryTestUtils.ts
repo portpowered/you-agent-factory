@@ -210,6 +210,9 @@ export async function expectTimelineToolbarAlignment(
   const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
     name: "Timeline tick",
   });
+  const currentButton = within(toolbar).getByRole("button", {
+    name: "Return to current tick",
+  });
   const languageButton = within(toolbar).getByRole("button", {
     name: "Change language",
   });
@@ -221,13 +224,24 @@ export async function expectTimelineToolbarAlignment(
     slider.closest<HTMLElement>("div"),
     "expected slider shell in dashboard toolbar",
   );
+  const sliderMetaGroup = requireValue(
+    currentButton.parentElement,
+    "expected timeline meta group in dashboard toolbar",
+  );
   const headingRect = heading.getBoundingClientRect();
   const sliderRect = sliderShell.getBoundingClientRect();
+  const currentButtonRect = currentButton.getBoundingClientRect();
   const languageButtonRect = languageButton.getBoundingClientRect();
   const streamStatusRect = streamStatus.getBoundingClientRect();
   const exportButtonRect = exportButton.getBoundingClientRect();
 
+  expect(sliderShell.className).toContain("gap-1.5");
+  expect(sliderShell.className).toContain("px-2.5");
+  expect(sliderMetaGroup.contains(within(sliderMetaGroup).getByText("5/5"))).toBe(
+    true,
+  );
   expect(sliderRect.left).toBeGreaterThanOrEqual(headingRect.right - 1);
+  expect(currentButtonRect.left).toBeGreaterThanOrEqual(sliderRect.left);
   expect(languageButtonRect.left).toBeGreaterThanOrEqual(sliderRect.right - 1);
   expect(exportButtonRect.left).toBeGreaterThanOrEqual(
     languageButtonRect.right - 1,

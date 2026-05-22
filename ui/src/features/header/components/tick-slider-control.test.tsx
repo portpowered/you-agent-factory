@@ -105,11 +105,16 @@ describe("TickSliderControl", () => {
     const currentButton = screen.getByRole<HTMLButtonElement>("button", {
       name: messages.returnToCurrentTickLabel,
     });
+    const sliderShell = slider.closest("div");
+    const metaGroup = currentButton.parentElement;
 
     expect(slider.value).toBe("9");
     expect(screen.getByText("9/9")).toBeTruthy();
     expect(currentButton.disabled).toBe(true);
     expect(currentButton.className).toContain("opacity-75");
+    expect(sliderShell?.className).toContain("gap-1.5");
+    expect(sliderShell?.className).toContain("px-2.5");
+    expect(metaGroup?.className).toContain("justify-between");
     expect(screen.queryByText("Current")).toBeNull();
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
 
@@ -239,6 +244,35 @@ describe("TickSliderControl", () => {
     ).toBeTruthy();
     expect(screen.getByText(messages.sliderLabel).className).toContain(
       "sr-only",
+    );
+  });
+
+  it("keeps the tick status and return-to-current action in one compact cluster", () => {
+    act(() => {
+      useFactoryTimelineStore
+        .getState()
+        .replaceEvents(graphStateSmokeTimelineEvents);
+    });
+
+    const messages = getHeaderControlsMessages("en");
+
+    render(<TickSliderControl />);
+
+    const slider = screen.getByRole<HTMLInputElement>("slider", {
+      name: messages.sliderAriaLabel,
+    });
+    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: messages.returnToCurrentTickLabel,
+    });
+    const statusText = screen.getByText("9/9");
+    const metaGroup = currentButton.parentElement;
+
+    expect(metaGroup).toBeTruthy();
+    expect(metaGroup?.contains(statusText)).toBe(true);
+    expect(metaGroup?.className).toContain("gap-1.5");
+    expect(statusText.className).toContain("tabular-nums");
+    expect(slider.compareDocumentPosition(metaGroup as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
     );
   });
 
