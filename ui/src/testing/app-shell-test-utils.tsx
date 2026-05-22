@@ -30,7 +30,9 @@ import type { WorldState } from "../features/timeline/state";
 import { useFactoryTimelineStore } from "../features/timeline/state";
 
 vi.mock("../features/current-factory-definition", async () => {
-  const actual = await vi.importActual("../features/current-factory-definition");
+  const actual = await vi.importActual(
+    "../features/current-factory-definition",
+  );
 
   return {
     ...actual,
@@ -103,6 +105,8 @@ let restoreBrowserTestShims: (() => void) | null = null;
 export const baselineSnapshot = buildDashboardSnapshotFixture(
   mediumBranchingDashboardTopology,
 );
+
+export const activeSnapshot = semanticWorkflowDashboardSnapshot;
 
 export const terminalSnapshot = {
   ...terminalBaseSnapshot,
@@ -311,7 +315,9 @@ function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
   );
 }
 
-export function nonPromptTemplateFetchPaths(fetchMock: ReturnType<typeof vi.fn>) {
+export function nonPromptTemplateFetchPaths(
+  fetchMock: ReturnType<typeof vi.fn>,
+) {
   return fetchCallPaths(fetchMock).filter(
     (path) =>
       !path.includes("/prompt-template-contract") &&
