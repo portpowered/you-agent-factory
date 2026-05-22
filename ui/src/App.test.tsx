@@ -1,4 +1,3 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: This file is the existing app-shell integration harness, and the merge from origin/main pushed it over the repository limit without changing its test role in this story branch.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
