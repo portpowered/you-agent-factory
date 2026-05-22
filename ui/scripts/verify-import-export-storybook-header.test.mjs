@@ -43,7 +43,7 @@ function createPage({
       ? {
           boundingBox: vi
             .fn()
-            .mockResolvedValue({ height: 20, width: 120, x: 380, y: 0 }),
+            .mockResolvedValue({ height: 20, width: 120, x: 660, y: 0 }),
         }
       : {}),
     isVisible: vi.fn().mockResolvedValue(true),
@@ -53,7 +53,7 @@ function createPage({
       ? {
           boundingBox: vi
             .fn()
-            .mockResolvedValue({ height: 20, width: 180, x: 640, y: 0 }),
+            .mockResolvedValue({ height: 20, width: 120, x: 380, y: 0 }),
         }
       : {}),
     isVisible: vi.fn().mockResolvedValue(true),
