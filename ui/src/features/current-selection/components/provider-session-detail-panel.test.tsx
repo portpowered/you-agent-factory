@@ -216,6 +216,8 @@ describe("ProviderSessionDetailPanel", () => {
     });
     expect(screen.getByRole("heading", { name: "Parse diagnostics" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Token usage" })).toBeTruthy();
+    expect(screen.getByText("Unknown event on line 1")).toBeTruthy();
+    expect(screen.getByText("Unknown event on line 2")).toBeTruthy();
   });
 
   it("renders parsed source metadata, turns, function calls, reasoning, token usage, and diagnostics", async () => {

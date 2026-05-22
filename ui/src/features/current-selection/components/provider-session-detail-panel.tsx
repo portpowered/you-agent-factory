@@ -121,7 +121,10 @@ function LoadedProviderSessionDetailPanel({
             <StatusNotice>{messages.emptyState}</StatusNotice>
           ) : null}
           {detailState.status === "empty-transcript" ? (
-            <StatusNotice>{messages.emptyTranscriptState}</StatusNotice>
+            <>
+              <StatusNotice>{messages.emptyTranscriptState}</StatusNotice>
+              <ParseDiagnosticsSection detail={detail} locale={locale} />
+            </>
           ) : null}
           {detailState.status === "parse-error" ? (
             <>
