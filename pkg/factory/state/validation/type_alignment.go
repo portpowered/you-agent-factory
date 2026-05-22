@@ -99,6 +99,7 @@ func consumedInputMultiplicity(cardinality petri.ArcCardinality) int {
 
 func countWorkOutputsByType(arcs []petri.Arc, net *state.Net) map[string]int {
 	counts := make(map[string]int)
+	labeledCounts := make(map[string]map[string]int)
 	for _, arc := range arcs {
 		place, ok := net.Places[arc.PlaceID]
 		if !ok {
@@ -108,7 +109,25 @@ func countWorkOutputsByType(arcs []petri.Arc, net *state.Net) map[string]int {
 			continue
 		}
 
-		counts[place.TypeID]++
+		if arc.ClassificationLabel == "" {
+			counts[place.TypeID]++
+			continue
+		}
+		byLabel := labeledCounts[place.TypeID]
+		if byLabel == nil {
+			byLabel = make(map[string]int)
+			labeledCounts[place.TypeID] = byLabel
+		}
+		byLabel[arc.ClassificationLabel]++
+	}
+	for typeID, byLabel := range labeledCounts {
+		maxCount := 0
+		for _, count := range byLabel {
+			if count > maxCount {
+				maxCount = count
+			}
+		}
+		counts[typeID] += maxCount
 	}
 	return counts
 }

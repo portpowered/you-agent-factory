@@ -137,6 +137,55 @@ func TestConfigMapping_WorkstationTypeRepeater(t *testing.T) {
 	}
 }
 
+func TestConfigMapping_ClassifierRoutesBecomeLabeledAcceptedArcs(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "approved", Type: interfaces.StateTypeTerminal},
+				{Name: "review", Type: interfaces.StateTypeProcessing},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "classifier"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "classify-task",
+			Type:           interfaces.WorkstationTypeClassify,
+			WorkerTypeName: "classifier",
+			Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+				{Label: "approved", Outputs: []interfaces.IOConfig{{StateName: "approved", WorkTypeName: "task"}}},
+				{Label: "needs_review", Outputs: []interfaces.IOConfig{{StateName: "review", WorkTypeName: "task"}}},
+			},
+			OnFailure: []interfaces.IOConfig{{StateName: "failed", WorkTypeName: "task"}},
+		}},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tr := net.Transitions["classify-task"]
+	if tr == nil {
+		t.Fatal("expected mapped transition for classify-task")
+	}
+	if len(tr.OutputArcs) != 2 {
+		t.Fatalf("classifier output arcs = %d, want 2", len(tr.OutputArcs))
+	}
+	if tr.OutputArcs[0].PlaceID != "task:approved" || tr.OutputArcs[0].ClassificationLabel != "approved" {
+		t.Fatalf("first classifier output arc = %#v, want approved route metadata", tr.OutputArcs[0])
+	}
+	if tr.OutputArcs[1].PlaceID != "task:review" || tr.OutputArcs[1].ClassificationLabel != "needs_review" {
+		t.Fatalf("second classifier output arc = %#v, want needs_review route metadata", tr.OutputArcs[1])
+	}
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("classifier rejection arcs = %#v, want default failure routing only", tr.RejectionArcs)
+	}
+}
+
 func TestConfigMapping_UsesEffectiveRuntimeConfigWorkstationKindsForNormalization(t *testing.T) {
 	factoryDir := t.TempDir()
 

@@ -48,18 +48,19 @@ type DispatchEntry struct {
 
 // CompletedDispatch records a dispatch that has finished, with timing data.
 type CompletedDispatch struct {
-	DispatchID      string                   `json:"dispatch_id"`
-	TransitionID    string                   `json:"transition_id"`
-	WorkstationName string                   `json:"workstation_name,omitempty"`
-	Outcome         WorkOutcome              `json:"outcome"`
-	Reason          string                   `json:"reason,omitempty"`
-	ProviderFailure *ProviderFailureMetadata `json:"provider_failure,omitempty"`
-	ProviderSession *ProviderSessionMetadata `json:"provider_session,omitempty"`
-	StartTime       time.Time                `json:"start_time"`
-	EndTime         time.Time                `json:"end_time"`
-	Duration        time.Duration            `json:"duration"`
-	ConsumedTokens  []Token                  `json:"consumed_tokens,omitempty"`
-	OutputMutations []TokenMutationRecord    `json:"output_mutations,omitempty"`
+	DispatchID                  string                   `json:"dispatch_id"`
+	TransitionID                string                   `json:"transition_id"`
+	WorkstationName             string                   `json:"workstation_name,omitempty"`
+	Outcome                     WorkOutcome              `json:"outcome"`
+	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
+	Reason                      string                   `json:"reason,omitempty"`
+	ProviderFailure             *ProviderFailureMetadata `json:"provider_failure,omitempty"`
+	ProviderSession             *ProviderSessionMetadata `json:"provider_session,omitempty"`
+	StartTime                   time.Time                `json:"start_time"`
+	EndTime                     time.Time                `json:"end_time"`
+	Duration                    time.Duration            `json:"duration"`
+	ConsumedTokens              []Token                  `json:"consumed_tokens,omitempty"`
+	OutputMutations             []TokenMutationRecord    `json:"output_mutations,omitempty"`
 }
 
 // ActiveThrottlePause records an active provider/model dispatch pause window.

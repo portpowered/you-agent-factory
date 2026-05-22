@@ -513,6 +513,45 @@ func TestTypeAlignment_CrossTypeFanout_NoViolation(t *testing.T) {
 	}
 }
 
+func TestTypeAlignment_ClassifierLabelsAreMutuallyExclusiveForOutputCounts(t *testing.T) {
+	n := &state.Net{
+		ID: "classifier-type-alignment",
+		Places: map[string]*petri.Place{
+			"task:init":     {ID: "task:init", TypeID: "task", State: "init"},
+			"task:approved": {ID: "task:approved", TypeID: "task", State: "approved"},
+			"task:review":   {ID: "task:review", TypeID: "task", State: "review"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"classifier": {
+				ID: "classifier",
+				InputArcs: []petri.Arc{
+					{ID: "in-task", PlaceID: "task:init", Direction: petri.ArcInput},
+				},
+				OutputArcs: []petri.Arc{
+					{ID: "approved", PlaceID: "task:approved", Direction: petri.ArcOutput, ClassificationLabel: "approved"},
+					{ID: "needs-review", PlaceID: "task:review", Direction: petri.ArcOutput, ClassificationLabel: "needs_review"},
+				},
+			},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "approved", Category: state.StateCategoryTerminal},
+					{Value: "review", Category: state.StateCategoryProcessing},
+				},
+			},
+		},
+	}
+
+	tv := &TypeAlignmentValidator{}
+	violations := tv.Validate(n)
+	if len(violations) != 0 {
+		t.Fatalf("expected 0 violations for mutually exclusive classifier labels, got %+v", violations)
+	}
+}
+
 // --- CompositeValidator tests ---
 
 func TestCompositeValidator_CombinesViolations(t *testing.T) {

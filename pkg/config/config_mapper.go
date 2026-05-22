@@ -91,15 +91,31 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 				TransitionID: t.ID,
 			})
 		}
-		for _, output := range ws.Outputs {
-			placeID := mapToID(output)
-			name := fmt.Sprintf("%s:%s:from:%s", output.WorkTypeName, output.StateName, t.Name)
-			t.OutputArcs = append(t.OutputArcs, petri.Arc{
-				ID:           uuid.NewString(),
-				Name:         name,
-				PlaceID:      placeID,
-				TransitionID: t.ID,
-			})
+		if ws.Type == interfaces.WorkstationTypeClassify {
+			for _, route := range ws.ClassificationRoutes {
+				for _, output := range route.Outputs {
+					placeID := mapToID(output)
+					name := fmt.Sprintf("%s:%s:classify:%s:%s", output.WorkTypeName, output.StateName, t.Name, route.Label)
+					t.OutputArcs = append(t.OutputArcs, petri.Arc{
+						ID:                  uuid.NewString(),
+						Name:                name,
+						PlaceID:             placeID,
+						TransitionID:        t.ID,
+						ClassificationLabel: route.Label,
+					})
+				}
+			}
+		} else {
+			for _, output := range ws.Outputs {
+				placeID := mapToID(output)
+				name := fmt.Sprintf("%s:%s:from:%s", output.WorkTypeName, output.StateName, t.Name)
+				t.OutputArcs = append(t.OutputArcs, petri.Arc{
+					ID:           uuid.NewString(),
+					Name:         name,
+					PlaceID:      placeID,
+					TransitionID: t.ID,
+				})
+			}
 		}
 		for _, route := range ws.OnContinue {
 			placeID := mapToID(route)
