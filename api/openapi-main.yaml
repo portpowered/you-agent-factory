@@ -1204,6 +1204,8 @@ components:
       $ref: './components/schemas/data-models/RunnerSelectionSource.yaml'
     Workstation:
       $ref: './components/schemas/data-models/Workstation.yaml'
+    ClassificationRoute:
+      $ref: './components/schemas/data-models/ClassificationRoute.yaml'
     WorkstationLimits:
       $ref: './components/schemas/data-models/WorkstationLimits.yaml'
     WorkstationKind:

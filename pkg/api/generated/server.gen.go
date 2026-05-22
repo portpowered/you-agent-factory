@@ -321,9 +321,10 @@ const (
 
 // Defines values for WorkstationType.
 const (
-	WorkstationTypeLogicalMove      WorkstationType = "LOGICAL_MOVE"
-	WorkstationTypeModelInvoke      WorkstationType = "MODEL_INVOKE"
-	WorkstationTypeModelWorkstation WorkstationType = "MODEL_WORKSTATION"
+	WorkstationTypeClassifierWorkstation WorkstationType = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeLogicalMove           WorkstationType = "LOGICAL_MOVE"
+	WorkstationTypeModelInvoke           WorkstationType = "MODEL_INVOKE"
+	WorkstationTypeModelWorkstation      WorkstationType = "MODEL_WORKSTATION"
 )
 
 // Defines values for SortBy.
@@ -367,6 +368,15 @@ type BundledFileContent struct {
 
 // BundledFileContentEncoding Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
 type BundledFileContentEncoding string
+
+// ClassificationRoute defines model for ClassificationRoute.
+type ClassificationRoute struct {
+	// Label Case-sensitive classifier label that must match the trimmed classifier output exactly.
+	Label string `json:"label"`
+
+	// Outputs One or more authored destinations emitted when this classifier label is selected.
+	Outputs []WorkstationIO `json:"outputs"`
+}
 
 // CodexSessionFunctionCallSummary defines model for CodexSessionFunctionCallSummary.
 type CodexSessionFunctionCallSummary struct {
@@ -624,9 +634,10 @@ type DispatchResponseEventPayload struct {
 
 	// PreviousChainingTraceIds Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	PreviousChainingTraceIds *[]string                `json:"previousChainingTraceIds,omitempty"`
-	ProviderFailure          *ProviderFailureMetadata `json:"providerFailure,omitempty"`
-	TransitionId             string                   `json:"transitionId"`
+	PreviousChainingTraceIds    *[]string                `json:"previousChainingTraceIds,omitempty"`
+	ProviderFailure             *ProviderFailureMetadata `json:"providerFailure,omitempty"`
+	SelectedClassificationLabel *string                  `json:"selectedClassificationLabel,omitempty"`
+	TransitionId                string                   `json:"transitionId"`
 }
 
 // EditableFactoryDefinition defines model for EditableFactoryDefinition.
@@ -970,16 +981,17 @@ type FactoryWorldWorkstationRequestRequestView struct {
 
 // FactoryWorldWorkstationRequestResponseView defines model for FactoryWorldWorkstationRequestResponseView.
 type FactoryWorldWorkstationRequestResponseView struct {
-	DurationMillis  *int64                          `json:"durationMillis,omitempty"`
-	EndTime         *string                         `json:"endTime,omitempty"`
-	FailureMessage  *string                         `json:"failureMessage,omitempty"`
-	FailureReason   *string                         `json:"failureReason,omitempty"`
-	Feedback        *string                         `json:"feedback,omitempty"`
-	Outcome         *string                         `json:"outcome,omitempty"`
-	OutputMutations *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
-	OutputWorkItems *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
-	Runner          *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
-	ScriptResponse  *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
+	DurationMillis              *int64                          `json:"durationMillis,omitempty"`
+	EndTime                     *string                         `json:"endTime,omitempty"`
+	FailureMessage              *string                         `json:"failureMessage,omitempty"`
+	FailureReason               *string                         `json:"failureReason,omitempty"`
+	Feedback                    *string                         `json:"feedback,omitempty"`
+	Outcome                     *string                         `json:"outcome,omitempty"`
+	OutputMutations             *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
+	OutputWorkItems             *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
+	Runner                      *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
+	ScriptResponse              *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
+	SelectedClassificationLabel *string                         `json:"selectedClassificationLabel,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestView defines model for FactoryWorldWorkstationRequestView.
@@ -2289,6 +2301,9 @@ type Workstation struct {
 	// Body Inline workstation instructions or script body when authored directly in factory config.
 	Body *string `json:"body,omitempty"`
 
+	// ClassificationRoutes Explicit label-to-destination routing used only by CLASSIFIER_WORKSTATION definitions. Each route must declare a unique non-empty label and one or more outputs.
+	ClassificationRoutes *[]ClassificationRoute `json:"classificationRoutes,omitempty"`
+
 	// CopyReferencedScripts Copy supported referenced script files into the expanded workstation layout when config expand runs.
 	CopyReferencedScripts *bool `json:"copyReferencedScripts,omitempty"`
 
@@ -2311,13 +2326,13 @@ type Workstation struct {
 	// Name Customer-authored workstation name used by guards, diagnostics, and authored references.
 	Name string `json:"name"`
 
-	// OnContinue Optional destination emitted when the workstation makes partial progress and should continue iterating.
+	// OnContinue Optional destination emitted when the workstation makes partial progress and should continue iterating. Classifier workstations must not declare onContinue.
 	OnContinue *[]WorkstationIO `json:"onContinue,omitempty"`
 
 	// OnFailure Optional destination emitted when the workstation fails permanently.
 	OnFailure *[]WorkstationIO `json:"onFailure,omitempty"`
 
-	// OnRejection Optional destination emitted when the worker rejects the current work without a hard failure.
+	// OnRejection Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection.
 	OnRejection *[]WorkstationIO `json:"onRejection,omitempty"`
 
 	// Operation Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
@@ -2329,8 +2344,8 @@ type Workstation struct {
 	// OutputSchema JSON schema string used to validate or parse structured model output when configured.
 	OutputSchema *string `json:"outputSchema,omitempty"`
 
-	// Outputs Work states emitted after this workstation succeeds.
-	Outputs []WorkstationIO `json:"outputs"`
+	// Outputs Work states emitted after a non-classifier workstation succeeds. Classifier workstations must use classificationRoutes instead of normal success outputs.
+	Outputs *[]WorkstationIO `json:"outputs,omitempty"`
 
 	// PromptFile Path to a prompt template file loaded for model-oriented workstation execution.
 	PromptFile *string `json:"promptFile,omitempty"`

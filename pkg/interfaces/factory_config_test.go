@@ -32,6 +32,32 @@ func TestFactoryWorkstationConfigUnmarshalJSON_DecodesCanonicalRuntimeAndCronFie
 	}
 }
 
+func TestFactoryWorkstationConfigUnmarshalJSON_DecodesClassificationRoutes(t *testing.T) {
+	var workstation FactoryWorkstationConfig
+	if err := json.Unmarshal([]byte(`{
+		"name":"classify-review",
+		"type":"CLASSIFIER_WORKSTATION",
+		"worker":"planner",
+		"inputs":[{"workType":"task","state":"init"}],
+		"classification_routes":[
+			{"label":"approved","outputs":[{"workType":"task","state":"done"}]},
+			{"label":"needs_review","outputs":[{"workType":"task","state":"failed"}]}
+		]
+	}`), &workstation); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	if workstation.Type != WorkstationTypeClassify {
+		t.Fatalf("expected classifier type to decode, got %+v", workstation)
+	}
+	if len(workstation.ClassificationRoutes) != 2 {
+		t.Fatalf("expected two classification routes, got %+v", workstation.ClassificationRoutes)
+	}
+	if workstation.ClassificationRoutes[0].Label != "approved" || workstation.ClassificationRoutes[0].Outputs[0].StateName != "done" {
+		t.Fatalf("expected first classification route to decode intact, got %+v", workstation.ClassificationRoutes[0])
+	}
+}
+
 func TestCronConfigUnmarshalJSON_DecodesCanonicalFields(t *testing.T) {
 	var cron CronConfig
 	if err := json.Unmarshal([]byte(`{

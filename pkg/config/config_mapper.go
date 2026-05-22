@@ -68,69 +68,18 @@ func validateNetTopology(n *state.Net) error {
 	return nil
 }
 
-// portos:func-length-exception owner=agent-factory reason=legacy-topology-construction review=2026-07-18 removal=split-transition-assembly-before-next-topology-expansion
 func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, places map[string]*petri.Place, fanoutGroups map[string]string) map[string]*petri.Transition {
 	transitions := make(map[string]*petri.Transition)
 
 	for _, ws := range cfg.Workstations {
-		t := &petri.Transition{
-			ID:         ws.Name,
-			Name:       ws.Name,
-			Type:       petri.TransitionNormal,
-			WorkerType: ws.WorkerTypeName,
-		}
+		t := cm.newTransition(ws)
 		transitions[t.Name] = t
 
-		for _, input := range ws.Inputs {
-			placeID := mapToID(input)
-			name := fmt.Sprintf("%s:%s:to:%s", input.WorkTypeName, input.StateName, t.Name)
-			t.InputArcs = append(t.InputArcs, petri.Arc{
-				ID:           uuid.NewString(),
-				Name:         name,
-				PlaceID:      placeID,
-				TransitionID: t.ID,
-			})
-		}
-		for _, output := range ws.Outputs {
-			placeID := mapToID(output)
-			name := fmt.Sprintf("%s:%s:from:%s", output.WorkTypeName, output.StateName, t.Name)
-			t.OutputArcs = append(t.OutputArcs, petri.Arc{
-				ID:           uuid.NewString(),
-				Name:         name,
-				PlaceID:      placeID,
-				TransitionID: t.ID,
-			})
-		}
-		for _, route := range ws.OnContinue {
-			placeID := mapToID(route)
-			name := fmt.Sprintf("%s:%s:continue:%s", route.WorkTypeName, route.StateName, t.Name)
-			t.ContinueArcs = append(t.ContinueArcs, petri.Arc{
-				ID:           uuid.NewString(),
-				Name:         name,
-				PlaceID:      placeID,
-				TransitionID: t.ID,
-			})
-		}
-		for _, route := range ws.OnRejection {
-			placeID := mapToID(route)
-			name := fmt.Sprintf("%s:%s:rejection:%s", route.WorkTypeName, route.StateName, t.Name)
-			t.RejectionArcs = append(t.RejectionArcs, petri.Arc{
-				ID:           uuid.NewString(),
-				Name:         name,
-				PlaceID:      placeID,
-				TransitionID: t.ID,
-			})
-		}
-		for _, route := range ws.OnFailure {
-			placeID := mapToID(route)
-			name := fmt.Sprintf("%s:%s:failure:%s", route.WorkTypeName, route.StateName, t.Name)
-			t.FailureArcs = append(t.FailureArcs, petri.Arc{
-				ID:           uuid.NewString(),
-				Name:         name,
-				PlaceID:      placeID,
-				TransitionID: t.ID,
-			})
-		}
+		cm.appendInputArcs(t, ws.Inputs)
+		cm.appendSuccessArcs(t, ws)
+		cm.appendOutcomeArcs(&t.ContinueArcs, ws.OnContinue, t.ID, t.Name, "continue")
+		cm.appendOutcomeArcs(&t.RejectionArcs, ws.OnRejection, t.ID, t.Name, "rejection")
+		cm.appendOutcomeArcs(&t.FailureArcs, ws.OnFailure, t.ID, t.Name, "failure")
 
 		cm.applyWorkstationGuards(ws, t)
 
@@ -139,31 +88,7 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 
 		cm.addCronTimeInputArc(ws, t)
 
-		// Handle resource usage: generate consume arcs (input) and release arcs (output).
-		for _, ru := range combinedTransitionResourceUsage(cfg, ws) {
-			resourcePlaceID := fmt.Sprintf("%s:%s", ru.Name, interfaces.ResourceStateAvailable)
-
-			// Consume arc: take resource token(s) when transition fires.
-			t.InputArcs = append(t.InputArcs, petri.Arc{
-				ID:           uuid.NewString(),
-				Name:         fmt.Sprintf("%s:consume:%s", ru.Name, t.Name),
-				PlaceID:      resourcePlaceID,
-				TransitionID: t.ID,
-				Direction:    petri.ArcInput,
-				Mode:         interfaces.ArcModeConsume,
-				Cardinality:  petri.ArcCardinality{Mode: petri.CardinalityN, Count: ru.Capacity},
-			})
-
-			// Release arc: return resource token(s) when transition completes.
-			t.OutputArcs = append(t.OutputArcs, petri.Arc{
-				ID:           uuid.NewString(),
-				Name:         fmt.Sprintf("%s:release:%s", ru.Name, t.Name),
-				PlaceID:      resourcePlaceID,
-				TransitionID: t.ID,
-				Direction:    petri.ArcOutput,
-				Cardinality:  petri.ArcCardinality{Mode: petri.CardinalityN, Count: ru.Capacity},
-			})
-		}
+		cm.appendResourceArcs(t, combinedTransitionResourceUsage(cfg, ws))
 	}
 	return transitions
 }
@@ -197,6 +122,94 @@ func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interface
 		out = append(out, combined[name])
 	}
 	return out
+}
+
+func (cm *ConfigMapper) newTransition(ws interfaces.FactoryWorkstationConfig) *petri.Transition {
+	return &petri.Transition{
+		ID:         ws.Name,
+		Name:       ws.Name,
+		Type:       petri.TransitionNormal,
+		WorkerType: ws.WorkerTypeName,
+	}
+}
+
+func (cm *ConfigMapper) appendInputArcs(t *petri.Transition, inputs []interfaces.IOConfig) {
+	for _, input := range inputs {
+		placeID := mapToID(input)
+		name := fmt.Sprintf("%s:%s:to:%s", input.WorkTypeName, input.StateName, t.Name)
+		t.InputArcs = append(t.InputArcs, petri.Arc{
+			ID:           uuid.NewString(),
+			Name:         name,
+			PlaceID:      placeID,
+			TransitionID: t.ID,
+		})
+	}
+}
+
+func (cm *ConfigMapper) appendSuccessArcs(t *petri.Transition, ws interfaces.FactoryWorkstationConfig) {
+	if ws.Type == interfaces.WorkstationTypeClassify {
+		for _, route := range ws.ClassificationRoutes {
+			for _, output := range route.Outputs {
+				placeID := mapToID(output)
+				name := fmt.Sprintf("%s:%s:classify:%s:%s", output.WorkTypeName, output.StateName, t.Name, route.Label)
+				t.OutputArcs = append(t.OutputArcs, petri.Arc{
+					ID:                  uuid.NewString(),
+					Name:                name,
+					PlaceID:             placeID,
+					TransitionID:        t.ID,
+					ClassificationLabel: route.Label,
+				})
+			}
+		}
+		return
+	}
+
+	for _, output := range ws.Outputs {
+		placeID := mapToID(output)
+		name := fmt.Sprintf("%s:%s:from:%s", output.WorkTypeName, output.StateName, t.Name)
+		t.OutputArcs = append(t.OutputArcs, petri.Arc{
+			ID:           uuid.NewString(),
+			Name:         name,
+			PlaceID:      placeID,
+			TransitionID: t.ID,
+		})
+	}
+}
+
+func (cm *ConfigMapper) appendOutcomeArcs(target *[]petri.Arc, routes []interfaces.IOConfig, transitionID string, transitionName string, kind string) {
+	for _, route := range routes {
+		placeID := mapToID(route)
+		name := fmt.Sprintf("%s:%s:%s:%s", route.WorkTypeName, route.StateName, kind, transitionName)
+		*target = append(*target, petri.Arc{
+			ID:           uuid.NewString(),
+			Name:         name,
+			PlaceID:      placeID,
+			TransitionID: transitionID,
+		})
+	}
+}
+
+func (cm *ConfigMapper) appendResourceArcs(t *petri.Transition, resources []interfaces.ResourceConfig) {
+	for _, ru := range resources {
+		resourcePlaceID := fmt.Sprintf("%s:%s", ru.Name, interfaces.ResourceStateAvailable)
+		t.InputArcs = append(t.InputArcs, petri.Arc{
+			ID:           uuid.NewString(),
+			Name:         fmt.Sprintf("%s:consume:%s", ru.Name, t.Name),
+			PlaceID:      resourcePlaceID,
+			TransitionID: t.ID,
+			Direction:    petri.ArcInput,
+			Mode:         interfaces.ArcModeConsume,
+			Cardinality:  petri.ArcCardinality{Mode: petri.CardinalityN, Count: ru.Capacity},
+		})
+		t.OutputArcs = append(t.OutputArcs, petri.Arc{
+			ID:           uuid.NewString(),
+			Name:         fmt.Sprintf("%s:release:%s", ru.Name, t.Name),
+			PlaceID:      resourcePlaceID,
+			TransitionID: t.ID,
+			Direction:    petri.ArcOutput,
+			Cardinality:  petri.ArcCardinality{Mode: petri.CardinalityN, Count: ru.Capacity},
+		})
+	}
 }
 
 func (cm *ConfigMapper) applyWorkstationGuards(ws interfaces.FactoryWorkstationConfig, t *petri.Transition) {

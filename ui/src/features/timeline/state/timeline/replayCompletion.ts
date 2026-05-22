@@ -180,6 +180,7 @@ export function responseCompletion(
     endTime: event.context.eventTime,
     feedback: event.payload.feedback,
     responseText: event.payload.output,
+    selectedClassificationLabel: event.payload.selectedClassificationLabel,
     failureMessage: event.payload.failureMessage,
     failureReason: event.payload.failureReason,
     inputItems: active?.workItems ?? [],

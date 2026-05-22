@@ -169,7 +169,7 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 			DispatchID:     "dispatch-1",
 			TransitionID:   "t-review",
 			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:         interfaces.WorkstationResult{Outcome: "ACCEPTED"},
+			Result:         interfaces.WorkstationResult{Outcome: "ACCEPTED", SelectedClassificationLabel: "approved"},
 			DurationMillis: 2500,
 			Outputs: []interfaces.WorkstationOutput{{
 				Type:    string(interfaces.MutationMove),
@@ -224,9 +224,7 @@ func assertCanonicalCompletedDispatchState(t *testing.T, state interfaces.Factor
 	if len(state.CompletedDispatches) != 1 {
 		t.Fatalf("completed dispatches = %d, want 1", len(state.CompletedDispatches))
 	}
-	if state.CompletedDispatches[0].DispatchID != "dispatch-1" || state.CompletedDispatches[0].StartedTick != 2 {
-		t.Fatalf("completion = %#v, want dispatch-1 started at tick 2", state.CompletedDispatches[0])
-	}
+	assertCanonicalCompletedDispatchRecord(t, state.CompletedDispatches[0])
 	if _, ok := state.ActiveWorkItemsByID["work-1"]; ok {
 		t.Fatalf("work-1 should not remain active after terminal response")
 	}
@@ -244,6 +242,17 @@ func assertCanonicalCompletedDispatchState(t *testing.T, state interfaces.Factor
 	}
 	if state.FactoryState != "" {
 		t.Fatalf("FactoryState = %q, want empty before tick 4", state.FactoryState)
+	}
+}
+
+func assertCanonicalCompletedDispatchRecord(t *testing.T, dispatch interfaces.FactoryWorldDispatchCompletion) {
+	t.Helper()
+
+	if dispatch.DispatchID != "dispatch-1" || dispatch.StartedTick != 2 {
+		t.Fatalf("completion = %#v, want dispatch-1 started at tick 2", dispatch)
+	}
+	if got := dispatch.Result.SelectedClassificationLabel; got != "approved" {
+		t.Fatalf("completion selected classification label = %q, want approved", got)
 	}
 }
 
@@ -348,7 +357,7 @@ func initialStructureEvent(eventTime time.Time) factoryapi.FactoryEvent {
 				Name:      "Review",
 				Worker:    "reviewer",
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
-				Outputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
+				Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
 			}},
 		},
@@ -375,7 +384,7 @@ func initialStructureEventWithNonSuccessRouteArrays(eventTime time.Time) factory
 				Name:        "Review",
 				Worker:      "reviewer",
 				Inputs:      []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
-				Outputs:     []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
+				Outputs:     &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 				OnContinue:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "retry"}, {WorkType: "task", State: "init"}},
 				OnRejection: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "triage"}, {WorkType: "task", State: "init"}},
 				OnFailure:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}, {WorkType: "task", State: "abandoned"}},
@@ -400,7 +409,7 @@ func factoryChangeEvent(eventTime time.Time) factoryapi.FactoryEvent {
 				Name:    "Plan",
 				Worker:  "planner",
 				Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "new"}},
-				Outputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
+				Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
 			}},
 		},
 	}
@@ -429,7 +438,7 @@ func runRequestEvent(eventTime time.Time) factoryapi.FactoryEvent {
 				Name:      "Review",
 				Worker:    "reviewer",
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
-				Outputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
+				Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
 			}},
 		},
@@ -505,17 +514,18 @@ func workstationResponseEvent(tick int, eventTime time.Time, payload interfaces.
 		context.WorkIds = stringSlicePtrForProjectionTest(payload.TraceData.WorkIDs)
 	}
 	generatedPayload := factoryapi.DispatchResponseEventPayload{
-		TransitionId:    payload.TransitionID,
-		Outcome:         outcome,
-		Output:          stringPtrForProjectionTest(payload.Result.Output),
-		Error:           stringPtrForProjectionTest(payload.Result.Error),
-		Feedback:        stringPtrForProjectionTest(payload.Result.Feedback),
-		FailureReason:   stringPtrForProjectionTest(payload.Result.FailureReason),
-		FailureMessage:  stringPtrForProjectionTest(payload.Result.FailureMessage),
-		ProviderFailure: generatedProviderFailureForProjectionTest(payload.Result.ProviderFailure),
-		DurationMillis:  int64PtrForProjectionTest(payload.DurationMillis),
-		OutputWork:      &outputWork,
-		OutputResources: generatedResourcesForProjectionTest(payload.OutputResources),
+		TransitionId:                payload.TransitionID,
+		Outcome:                     outcome,
+		Output:                      stringPtrForProjectionTest(payload.Result.Output),
+		Error:                       stringPtrForProjectionTest(payload.Result.Error),
+		Feedback:                    stringPtrForProjectionTest(payload.Result.Feedback),
+		SelectedClassificationLabel: stringPtrForProjectionTest(payload.Result.SelectedClassificationLabel),
+		FailureReason:               stringPtrForProjectionTest(payload.Result.FailureReason),
+		FailureMessage:              stringPtrForProjectionTest(payload.Result.FailureMessage),
+		ProviderFailure:             generatedProviderFailureForProjectionTest(payload.Result.ProviderFailure),
+		DurationMillis:              int64PtrForProjectionTest(payload.DurationMillis),
+		OutputWork:                  &outputWork,
+		OutputResources:             generatedResourcesForProjectionTest(payload.OutputResources),
 	}
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeDispatchResponse, "response/"+payload.DispatchID, tick, eventTime, context, generatedPayload)
 }

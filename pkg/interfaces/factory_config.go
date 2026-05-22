@@ -129,34 +129,42 @@ type WorkflowConfig struct {
 // It also carries flattened runtime workstation fields when factory.json embeds
 // AGENTS.md-equivalent workstation configuration directly.
 type FactoryWorkstationConfig struct {
-	ID                    string                  `json:"id" yaml:"id,omitempty"`
-	Name                  string                  `json:"name" yaml:"name,omitempty"`
-	Kind                  WorkstationKind         `json:"behavior,omitempty" yaml:"behavior,omitempty"`
-	Type                  string                  `json:"type,omitempty" yaml:"type,omitempty"`
-	Operation             string                  `json:"operation,omitempty" yaml:"operation,omitempty"`
-	OperationBindings     []ModelOperationBinding `json:"operationBindings,omitempty" yaml:"operationBindings,omitempty"`
-	WorkerTypeName        string                  `json:"worker" yaml:"worker,omitempty"`
-	Runner                string                  `json:"runner,omitempty" yaml:"runner,omitempty"`
-	PromptFile            string                  `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
-	OutputSchema          string                  `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`
-	Timeout               string                  `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Limits                WorkstationLimits       `json:"limits,omitempty" yaml:"limits,omitempty"`
-	Cron                  *CronConfig             `json:"cron,omitempty" yaml:"cron,omitempty"`
-	Inputs                []IOConfig              `json:"inputs" yaml:"inputs,omitempty"`
-	Outputs               []IOConfig              `json:"outputs" yaml:"outputs,omitempty"`
-	OnContinue            []IOConfig              `json:"on_continue,omitempty" yaml:"onContinue,omitempty"`
-	OnRejection           []IOConfig              `json:"on_rejection,omitempty" yaml:"onRejection,omitempty"`
-	OnFailure             []IOConfig              `json:"on_failure,omitempty" yaml:"onFailure,omitempty"`
-	Resources             []ResourceConfig        `json:"resources,omitempty" yaml:"resources,omitempty"`
-	CopyReferencedScripts bool                    `json:"copy_referenced_scripts,omitempty" yaml:"-"`
-	Guards                []GuardConfig           `json:"guards,omitempty" yaml:"guards,omitempty"`
-	StopWords             []string                `json:"stop_words,omitempty" yaml:"stopWords,omitempty"`
-	RuntimeStopWords      []string                `json:"runtime_stop_words,omitempty" yaml:"-"`
-	Body                  string                  `json:"body,omitempty" yaml:"-"`
-	PromptTemplate        string                  `json:"prompt_template,omitempty" yaml:"-"`
-	WorkingDirectory      string                  `json:"working_directory,omitempty" yaml:"workingDirectory,omitempty"`
-	Worktree              string                  `json:"worktree,omitempty" yaml:"worktree,omitempty"`
-	Env                   map[string]string       `json:"env,omitempty" yaml:"env,omitempty"`
+	ID                    string                      `json:"id" yaml:"id,omitempty"`
+	Name                  string                      `json:"name" yaml:"name,omitempty"`
+	Kind                  WorkstationKind             `json:"behavior,omitempty" yaml:"behavior,omitempty"`
+	Type                  string                      `json:"type,omitempty" yaml:"type,omitempty"`
+	Operation             string                      `json:"operation,omitempty" yaml:"operation,omitempty"`
+	OperationBindings     []ModelOperationBinding     `json:"operationBindings,omitempty" yaml:"operationBindings,omitempty"`
+	WorkerTypeName        string                      `json:"worker" yaml:"worker,omitempty"`
+	Runner                string                      `json:"runner,omitempty" yaml:"runner,omitempty"`
+	PromptFile            string                      `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
+	OutputSchema          string                      `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`
+	Timeout               string                      `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Limits                WorkstationLimits           `json:"limits,omitempty" yaml:"limits,omitempty"`
+	Cron                  *CronConfig                 `json:"cron,omitempty" yaml:"cron,omitempty"`
+	Inputs                []IOConfig                  `json:"inputs" yaml:"inputs,omitempty"`
+	Outputs               []IOConfig                  `json:"outputs" yaml:"outputs,omitempty"`
+	ClassificationRoutes  []ClassificationRouteConfig `json:"classification_routes,omitempty" yaml:"classificationRoutes,omitempty"`
+	OnContinue            []IOConfig                  `json:"on_continue,omitempty" yaml:"onContinue,omitempty"`
+	OnRejection           []IOConfig                  `json:"on_rejection,omitempty" yaml:"onRejection,omitempty"`
+	OnFailure             []IOConfig                  `json:"on_failure,omitempty" yaml:"onFailure,omitempty"`
+	Resources             []ResourceConfig            `json:"resources,omitempty" yaml:"resources,omitempty"`
+	CopyReferencedScripts bool                        `json:"copy_referenced_scripts,omitempty" yaml:"-"`
+	Guards                []GuardConfig               `json:"guards,omitempty" yaml:"guards,omitempty"`
+	StopWords             []string                    `json:"stop_words,omitempty" yaml:"stopWords,omitempty"`
+	RuntimeStopWords      []string                    `json:"runtime_stop_words,omitempty" yaml:"-"`
+	Body                  string                      `json:"body,omitempty" yaml:"-"`
+	PromptTemplate        string                      `json:"prompt_template,omitempty" yaml:"-"`
+	WorkingDirectory      string                      `json:"working_directory,omitempty" yaml:"workingDirectory,omitempty"`
+	Worktree              string                      `json:"worktree,omitempty" yaml:"worktree,omitempty"`
+	Env                   map[string]string           `json:"env,omitempty" yaml:"env,omitempty"`
+}
+
+// ClassificationRouteConfig declares one authored classifier label and the
+// destinations that label should dispatch to on successful classification.
+type ClassificationRouteConfig struct {
+	Label   string     `json:"label" yaml:"label,omitempty"`
+	Outputs []IOConfig `json:"outputs" yaml:"outputs,omitempty"`
 }
 
 // CronConfig declares the trigger contract for cron workstations.

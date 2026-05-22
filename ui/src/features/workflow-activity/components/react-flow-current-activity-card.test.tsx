@@ -40,7 +40,10 @@ import {
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../../flowchart";
 import { buildGraphLayout } from "../../flowchart/layout";
-import type { FactoryPngImportValue, ReadFactoryImportFile } from "../../import";
+import type {
+  FactoryPngImportValue,
+  ReadFactoryImportFile,
+} from "../../import";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import type { CurrentActivityImportController } from "../current-activity-import-controller";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
@@ -161,96 +164,97 @@ const editableFactoryDefinitionDocument: EditableFactoryDefinitionDocument = {
   },
 };
 
-const workerDenseFactoryDefinitionDocument: EditableFactoryDefinitionDocument = {
-  factoryDefinition: {
-    ...editableFactoryDefinition,
-    resources: [
-      {
-        capacity: 2,
-        name: "gpu",
-      },
-    ],
-    workers: [
-      {
-        model: "gpt-5",
-        name: "writer",
-        type: "MODEL_WORKER",
-      },
-      {
-        model: "gpt-5",
-        name: "reviewer",
-        type: "MODEL_WORKER",
-      },
-      {
-        model: "gpt-5",
-        name: "stalled",
-        type: "MODEL_WORKER",
-      },
-    ],
-    workstations: [
-      {
-        body: "Draft the story.",
-        inputs: [
-          {
-            state: "queued",
-            workType: "story",
-          },
-        ],
-        name: "draft",
-        outputs: [
-          {
-            state: "review",
-            workType: "story",
-          },
-        ],
-        resources: [{ capacity: 1, name: "gpu" }],
-        type: "MODEL_WORKSTATION",
-        worker: "writer",
-      },
-      {
-        body: "Review the draft.",
-        inputs: [
-          {
-            state: "review",
-            workType: "story",
-          },
-        ],
-        name: "review",
-        outputs: [
-          {
-            state: "done",
-            workType: "story",
-          },
-        ],
-        type: "MODEL_WORKSTATION",
-        worker: "reviewer",
-      },
-    ],
-    workTypes: [
-      {
-        name: "story",
-        states: [
-          {
-            name: "queued",
-            type: "INITIAL",
-          },
-          {
-            name: "review",
-            type: "PROCESSING",
-          },
-          {
-            name: "done",
-            type: "TERMINAL",
-          },
-        ],
-      },
-    ],
-  },
-  version: {
-    logical: 9,
-    physical: "2026-05-19T01:12:00Z",
-  },
-};
+const workerDenseFactoryDefinitionDocument: EditableFactoryDefinitionDocument =
+  {
+    factoryDefinition: {
+      ...editableFactoryDefinition,
+      resources: [
+        {
+          capacity: 2,
+          name: "gpu",
+        },
+      ],
+      workers: [
+        {
+          model: "gpt-5",
+          name: "writer",
+          type: "MODEL_WORKER",
+        },
+        {
+          model: "gpt-5",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+        {
+          model: "gpt-5",
+          name: "stalled",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Draft the story.",
+          inputs: [
+            {
+              state: "queued",
+              workType: "story",
+            },
+          ],
+          name: "draft",
+          outputs: [
+            {
+              state: "review",
+              workType: "story",
+            },
+          ],
+          resources: [{ capacity: 1, name: "gpu" }],
+          type: "MODEL_WORKSTATION",
+          worker: "writer",
+        },
+        {
+          body: "Review the draft.",
+          inputs: [
+            {
+              state: "review",
+              workType: "story",
+            },
+          ],
+          name: "review",
+          outputs: [
+            {
+              state: "done",
+              workType: "story",
+            },
+          ],
+          type: "MODEL_WORKSTATION",
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            {
+              name: "queued",
+              type: "INITIAL",
+            },
+            {
+              name: "review",
+              type: "PROCESSING",
+            },
+            {
+              name: "done",
+              type: "TERMINAL",
+            },
+          ],
+        },
+      ],
+    },
+    version: {
+      logical: 9,
+      physical: "2026-05-19T01:12:00Z",
+    },
+  };
 
 const defaultDraftState = {
   baseDocument: editableFactoryDefinitionDocument,
@@ -375,9 +379,10 @@ function renderCurrentActivity({
   snapshot,
   selection = null,
 }: RenderCurrentActivityOptions) {
-  const onSelectWorkID = vi.fn<
-    (workID: string, hint?: { dispatchID?: string; nodeID?: string }) => void
-  >();
+  const onSelectWorkID =
+    vi.fn<
+      (workID: string, hint?: { dispatchID?: string; nodeID?: string }) => void
+    >();
   const onSelectStateNode = vi.fn<(placeId: string) => void>();
   const onSelectWorkstation = vi.fn<(nodeId: string) => void>();
 
@@ -849,6 +854,35 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(screen.getByText("Editor mode active")).toBeTruthy();
   });
 
+  it("keeps classifier workstations out of the editable graph flow", async () => {
+    const snapshot = dashboardSnapshotWithActiveWorkItemCount(0);
+    snapshot.topology.workstation_nodes_by_id.review.workstation_kind =
+      "CLASSIFIER_WORKSTATION";
+
+    renderCurrentActivity({
+      snapshot,
+    });
+
+    const enterEditorButton = screen.getByRole("button", {
+      name: 'Factory graph editing does not yet support classifier workstation routes. "Review" stays read-only in this view until labeled route editing is available.',
+    });
+    expect(enterEditorButton.getAttribute("disabled")).not.toBeNull();
+    expect(
+      screen.getByText(
+        'Editor unavailable: Factory graph editing does not yet support classifier workstation routes. "Review" stays read-only in this view until labeled route editing is available.',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(enterEditorButton);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("region", { name: "Factory graph editor tools" }),
+      ).toBeNull();
+    });
+    expect(screen.queryByText("Observe mode")).toBeNull();
+  });
+
   it("lists the supported add-entity options and validates duplicate worker names before mutating the draft", async () => {
     const updateDraft = vi.fn();
     vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
@@ -1103,7 +1137,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
       latestDocument: workerDenseFactoryDefinitionDocument,
-      pendingFactoryDefinition: workerDenseFactoryDefinitionDocument.factoryDefinition,
+      pendingFactoryDefinition:
+        workerDenseFactoryDefinitionDocument.factoryDefinition,
     } as never);
 
     renderCurrentActivity({
@@ -1134,7 +1169,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
       latestDocument: workerDenseFactoryDefinitionDocument,
-      pendingFactoryDefinition: workerDenseFactoryDefinitionDocument.factoryDefinition,
+      pendingFactoryDefinition:
+        workerDenseFactoryDefinitionDocument.factoryDefinition,
     } as never);
 
     renderCurrentActivity({
@@ -1148,9 +1184,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(await screen.findByText("writer")).toBeTruthy();
     expect(screen.getByText("gpu")).toBeTruthy();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Hide workers lane" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Hide workers lane" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Hide resources lane" }),
     );
@@ -1440,12 +1474,14 @@ function registerCurrentActivityCardTestLifecycle(): void {
     const actions = await screen.findByRole("region", {
       name: "Pending graph changes",
     });
-    expect(within(actions).getByRole("button", { name: "Discard changes" })).toBeTruthy();
-    expect(within(actions).getByRole("button", { name: "Save changes" })).toBeTruthy();
     expect(
-      within(actions).getByText(
-        "This save will apply 1 created entity.",
-      ),
+      within(actions).getByRole("button", { name: "Discard changes" }),
+    ).toBeTruthy();
+    expect(
+      within(actions).getByRole("button", { name: "Save changes" }),
+    ).toBeTruthy();
+    expect(
+      within(actions).getByText("This save will apply 1 created entity."),
     ).toBeTruthy();
   });
 
@@ -1501,7 +1537,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
       within(dialog).getByText("This save will apply 1 created entity."),
     ).toBeTruthy();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save topology" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save topology" }),
+    );
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({
@@ -1560,7 +1598,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Save changes" }).getAttribute("disabled"),
+      screen
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
     ).not.toBeNull();
   });
 
@@ -1596,16 +1636,16 @@ function registerCurrentActivityCardTestLifecycle(): void {
       screen.getByRole("button", { name: "Enter factory graph editor" }),
     );
 
-    expect(
-      await screen.findByText("Topology edits are blocked"),
-    ).toBeTruthy();
+    expect(await screen.findByText("Topology edits are blocked")).toBeTruthy();
     expect(
       screen.getByText(
         "Save is unavailable while active work is still running in the current factory.",
       ),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Save changes" }).getAttribute("disabled"),
+      screen
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
     ).not.toBeNull();
   });
 

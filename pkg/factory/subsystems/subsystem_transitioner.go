@@ -35,15 +35,16 @@ type TransitionerSubsystem struct {
 var _ Subsystem = (*TransitionerSubsystem)(nil)
 
 type resolvedWorkResult struct {
-	dispatchID         string
-	transitionID       string
-	outcome            interfaces.WorkOutcome
-	output             string
-	spawnedWork        []interfaces.TokenColor
-	recordedOutputWork []interfaces.FactoryWorkItem
-	err                string
-	feedback           string
-	providerFailure    *interfaces.ProviderFailureMetadata
+	dispatchID                  string
+	transitionID                string
+	outcome                     interfaces.WorkOutcome
+	selectedClassificationLabel string
+	output                      string
+	spawnedWork                 []interfaces.TokenColor
+	recordedOutputWork          []interfaces.FactoryWorkItem
+	err                         string
+	feedback                    string
+	providerFailure             *interfaces.ProviderFailureMetadata
 }
 
 type generatedBatchWork struct {
@@ -194,7 +195,7 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 		}
 	}
 
-	arcs, err := calculateArcs(currentTransition, resolved.outcome)
+	arcs, resolved, err := t.calculateArcsForResolvedResult(currentTransition, resolved)
 	if err != nil {
 		return nil, interfaces.CompletedDispatch{}, nil, err
 	}
@@ -234,14 +235,15 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 ) interfaces.CompletedDispatch {
 	dispatchEntry := completedDispatchEntry(snapshot, result.DispatchID)
 	completed := interfaces.CompletedDispatch{
-		DispatchID:      result.DispatchID,
-		TransitionID:    result.TransitionID,
-		Outcome:         resolved.outcome,
-		Reason:          completedDispatchReason(resolved),
-		ProviderFailure: interfaces.CloneProviderFailureMetadata(result.ProviderFailure),
-		ProviderSession: interfaces.CloneProviderSessionMetadata(result.ProviderSession),
-		EndTime:         endTime,
-		ConsumedTokens:  interfaces.CloneTokens(consumedTokens),
+		DispatchID:                  result.DispatchID,
+		TransitionID:                result.TransitionID,
+		Outcome:                     resolved.outcome,
+		SelectedClassificationLabel: resolved.selectedClassificationLabel,
+		Reason:                      completedDispatchReason(resolved),
+		ProviderFailure:             interfaces.CloneProviderFailureMetadata(result.ProviderFailure),
+		ProviderSession:             interfaces.CloneProviderSessionMetadata(result.ProviderSession),
+		EndTime:                     endTime,
+		ConsumedTokens:              interfaces.CloneTokens(consumedTokens),
 		OutputMutations: mutationRecordsForDispatch(
 			result.DispatchID,
 			result.TransitionID,
@@ -270,6 +272,37 @@ func completedDispatchReason(result resolvedWorkResult) string {
 	default:
 		return ""
 	}
+}
+
+func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition *petri.Transition, resolved resolvedWorkResult) ([]petri.Arc, resolvedWorkResult, error) {
+	workstation, ok := workstationconfig.Workstation(currentTransition, t.runtimeConfig)
+	if !ok || workstation == nil || workstation.Type != interfaces.WorkstationTypeClassify || resolved.outcome != interfaces.OutcomeAccepted {
+		arcs, err := calculateArcs(currentTransition, resolved.outcome)
+		return arcs, resolved, err
+	}
+
+	matchedArcs := make([]petri.Arc, 0, len(currentTransition.OutputArcs))
+	matchedRoute := false
+	for _, arc := range currentTransition.OutputArcs {
+		if arc.ClassificationLabel == "" {
+			matchedArcs = append(matchedArcs, arc)
+			continue
+		}
+		if arc.ClassificationLabel == resolved.output {
+			matchedRoute = true
+			matchedArcs = append(matchedArcs, arc)
+		}
+	}
+	if matchedRoute {
+		resolved.selectedClassificationLabel = resolved.output
+		return matchedArcs, resolved, nil
+	}
+
+	resolved.outcome = interfaces.OutcomeFailed
+	resolved.err = fmt.Sprintf("classifier label %q did not match any authored classification route", resolved.output)
+	resolved.selectedClassificationLabel = ""
+	arcs, err := calculateArcs(currentTransition, resolved.outcome)
+	return arcs, resolved, err
 }
 
 func completedDispatchEntry(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], dispatchID string) *interfaces.DispatchEntry {

@@ -251,7 +251,8 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 		Name:                  normalized.Name,
 		Worker:                normalized.WorkerTypeName,
 		Inputs:                workstationIOsAPIFromInternal(normalized.Inputs),
-		Outputs:               workstationIOsAPIFromInternal(normalized.Outputs),
+		Outputs:               optionalWorkstationIOsAPIFromInternal(normalized.Outputs),
+		ClassificationRoutes:  classificationRoutesAPIFromInternal(normalized.ClassificationRoutes),
 		Cron:                  workstationCronAPIFromInternal(normalized.Cron),
 		OnContinue:            optionalWorkstationIOsAPIFromInternal(normalized.OnContinue),
 		OnRejection:           optionalWorkstationIOsAPIFromInternal(normalized.OnRejection),
@@ -335,6 +336,20 @@ func bundledFileContentAPIFromInternal(file interfaces.BundledFileConfig) factor
 		Encoding: factoryapi.BundledFileContentEncoding(file.Content.Encoding),
 		Inline:   file.Content.Inline,
 	}
+}
+
+func classificationRoutesAPIFromInternal(routes []interfaces.ClassificationRouteConfig) *[]factoryapi.ClassificationRoute {
+	if len(routes) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.ClassificationRoute, len(routes))
+	for i, route := range routes {
+		values[i] = factoryapi.ClassificationRoute{
+			Label:   route.Label,
+			Outputs: workstationIOsAPIFromInternal(route.Outputs),
+		}
+	}
+	return &values
 }
 
 func shouldOmitSupportedPortableBundledInline(file interfaces.BundledFileConfig) bool {

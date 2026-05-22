@@ -385,7 +385,7 @@ func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		CurrentNamedFactory: &factoryapi.Factory{
 			Name:         "beta",
-			Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: []factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
+			Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
 		},
 	})
 
@@ -406,7 +406,7 @@ func TestValidateCurrentFactoryWorkstationPromptTemplate(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		CurrentNamedFactory: &factoryapi.Factory{
 			Name:         "beta",
-			Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: []factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
+			Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
 		},
 	})
 

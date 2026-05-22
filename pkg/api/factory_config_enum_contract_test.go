@@ -38,6 +38,7 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 	assertSchemaPropertyRef(t, schemas, "Workstation", "operation", "#/components/schemas/ModelOperationName")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "runner", "#/components/schemas/RunnerID")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "type", "#/components/schemas/WorkstationType")
+	assertSchemaArrayItemRef(t, schemas, "Workstation", "classificationRoutes", "#/components/schemas/ClassificationRoute")
 	assertSchemaPropertyRef(t, schemas, "Guard", "type", "#/components/schemas/GuardType")
 }
 
@@ -57,6 +58,7 @@ func TestFactoryConfigContract_GeneratedModelsUseEnumBackedFieldsForTightenedCon
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Operation", reflect.TypeOf((*string)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Runner", reflect.TypeOf((*generated.RunnerID)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Type", reflect.TypeOf((*generated.WorkstationType)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "ClassificationRoutes", reflect.TypeOf((*[]generated.ClassificationRoute)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnContinue", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnRejection", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnFailure", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
@@ -179,13 +181,14 @@ func assertGeneratedModelInvokeWorkstationOperation(t *testing.T) {
 	t.Helper()
 	modelInvokeType := generated.WorkstationTypeModelInvoke
 	modelInvokeOperation := "TTS"
+	outputs := []generated.WorkstationIO{{WorkType: "story", State: "complete"}}
 	payloadBytes, err := json.Marshal(generated.Workstation{
 		Name:      "tts",
 		Worker:    "executor",
 		Type:      &modelInvokeType,
 		Operation: &modelInvokeOperation,
 		Inputs:    []generated.WorkstationIO{{WorkType: "story", State: "init"}},
-		Outputs:   []generated.WorkstationIO{{WorkType: "story", State: "complete"}},
+		Outputs:   &outputs,
 	})
 	if err != nil {
 		t.Fatalf("marshal generated MODEL_INVOKE workstation: %v", err)

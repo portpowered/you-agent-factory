@@ -442,7 +442,7 @@ func TestFactoryConfigFromOpenAPI_ReportsNestedGeneratedFieldPathOnMappingError(
 			State:    "init",
 			Guards:   &guards,
 		}},
-		Outputs: []factoryapi.WorkstationIO{{
+		Outputs: &[]factoryapi.WorkstationIO{{
 			WorkType: "story",
 			State:    "complete",
 		}},

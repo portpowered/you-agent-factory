@@ -242,7 +242,7 @@ func workstationRequestProjectionStateFixture() interfaces.FactoryWorldState {
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
 			DispatchID: "dispatch-completed", TransitionID: "review", Workstation: interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
 			StartedAt: t0.Add(2 * time.Second), CompletedAt: t0.Add(4 * time.Second), DurationMillis: 1200, WorkItemIDs: []string{completedInput.ID},
-			Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted), Feedback: "ready", Output: "fallback output"},
+			Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted), Feedback: "ready", Output: "fallback output", SelectedClassificationLabel: "approved"},
 			ConsumedInputs: []interfaces.WorkstationInput{{TokenID: "token-completed", PlaceID: completedInput.PlaceID, WorkItem: &completedInput}},
 			InputWorkItems: []interfaces.FactoryWorkItem{completedInput}, OutputWorkItems: []interfaces.FactoryWorkItem{completedOutput},
 			CurrentChainingTraceID: "chain-parent-a", PreviousChainingTraceIDs: []string{"chain-parent-a", "chain-parent-z"}, TraceIDs: []string{completedInput.TraceID},
@@ -291,6 +291,9 @@ func assertCompletedProjectionRequest(t *testing.T, completed factoryapi.Factory
 	}
 	if completed.Response == nil || completed.Response.Outcome == nil || *completed.Response.Outcome != "ACCEPTED" {
 		t.Fatalf("completed response = %#v, want accepted outcome", completed.Response)
+	}
+	if completed.Response.SelectedClassificationLabel == nil || *completed.Response.SelectedClassificationLabel != "approved" {
+		t.Fatalf("completed selected classification label = %#v, want approved", completed.Response.SelectedClassificationLabel)
 	}
 	if completed.Response.OutputMutations == nil || len(*completed.Response.OutputMutations) != 1 || (*completed.Response.OutputMutations)[0].TokenId != "work-completed-output" || (*completed.Response.OutputMutations)[0].Type != string(interfaces.MutationCreate) {
 		t.Fatalf("completed output mutations = %#v, want create mutation for work-completed-output", completed.Response.OutputMutations)

@@ -45,9 +45,10 @@ var publicFactoryResourceTypeAliases = map[string]string{
 }
 
 var publicFactoryWorkstationTypeAliases = map[string]string{
-	WorkstationTypeLogical: WorkstationTypeLogical,
-	WorkstationTypeInvoke:  WorkstationTypeInvoke,
-	WorkstationTypeModel:   WorkstationTypeModel,
+	WorkstationTypeClassify: WorkstationTypeClassify,
+	WorkstationTypeLogical:  WorkstationTypeLogical,
+	WorkstationTypeInvoke:   WorkstationTypeInvoke,
+	WorkstationTypeModel:    WorkstationTypeModel,
 }
 
 var publicFactoryRunnerIDAliases = map[string]string{

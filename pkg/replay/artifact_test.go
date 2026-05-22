@@ -593,7 +593,7 @@ func artifactTestFactory() factoryapi.Factory {
 			Worker:  "executor",
 			Type:    stringPtrIfNotEmpty(factoryapi.WorkstationTypeLogicalMove),
 			Inputs:  []factoryapi.WorkstationIO{},
-			Outputs: []factoryapi.WorkstationIO{},
+			Outputs: &[]factoryapi.WorkstationIO{},
 		}},
 		Metadata: generatedStringMapPtr(map[string]string{"factory_hash": "sha256:abc"}),
 	}

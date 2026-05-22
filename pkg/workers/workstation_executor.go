@@ -2,10 +2,12 @@ package workers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,6 +52,7 @@ type WorkstationExecutor struct {
 }
 
 const defaultSubprocessExecutionTimeout = 2 * time.Hour
+const classifierFailureRawOutputLimit = 160
 
 type resolvedWorkstationExecutionContext struct {
 	ProjectID        string
@@ -133,7 +136,14 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		return *failed, nil
 	}
 
-	return we.executeInnerWorker(ctx, request, workerDef, workstationDef, start, logger)
+	result, err := we.executeInnerWorker(ctx, request, workerDef, workstationDef, start, logger)
+	if err != nil {
+		return result, err
+	}
+	if workstationDef.Type == interfaces.WorkstationTypeClassify {
+		return normalizeClassifierWorkResult(result), nil
+	}
+	return result, nil
 }
 
 func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (resolvedWorkstationExecutionContext, *interfaces.WorkResult) {
@@ -325,6 +335,56 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request i
 			"outcome", result.Outcome)...)
 	result.Metrics.Duration = time.Since(start)
 	return result, nil
+}
+
+func normalizeClassifierWorkResult(result interfaces.WorkResult) interfaces.WorkResult {
+	if result.Outcome == interfaces.OutcomeFailed {
+		return result
+	}
+
+	label, err := normalizeClassifierLabel(result.Output)
+	if err != nil {
+		result.Outcome = interfaces.OutcomeFailed
+		result.Error = classifierOutputErrorDetail(result.Output, err)
+		return result
+	}
+
+	result.Outcome = interfaces.OutcomeAccepted
+	result.Output = label
+	result.Feedback = ""
+	return result
+}
+
+func normalizeClassifierLabel(output string) (string, error) {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return "", fmt.Errorf("empty label")
+	}
+	if json.Valid([]byte(trimmed)) {
+		return "", fmt.Errorf("expected plain string label")
+	}
+
+	return trimmed, nil
+}
+
+func classifierOutputErrorDetail(rawOutput string, err error) string {
+	detail := "classifier output invalid: " + err.Error()
+	evidence := classifierRawOutputEvidence(rawOutput)
+	if evidence == "" {
+		return detail
+	}
+	return detail + " (raw output: " + evidence + ")"
+}
+
+func classifierRawOutputEvidence(rawOutput string) string {
+	trimmed := strings.TrimSpace(rawOutput)
+	if trimmed == "" {
+		return ""
+	}
+	if len(trimmed) > classifierFailureRawOutputLimit {
+		trimmed = trimmed[:classifierFailureRawOutputLimit] + "..."
+	}
+	return strconv.Quote(trimmed)
 }
 
 // Compile-time check.
