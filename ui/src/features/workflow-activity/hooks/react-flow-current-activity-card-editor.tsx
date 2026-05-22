@@ -13,7 +13,10 @@ import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-edito
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/factory-graph-editor-controls";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/factory-graph-editor-save-summary";
 import { useFactoryGraphAddEntityController } from "../react-flow-current-activity-card-editor-chrome";
-import { findClassifierGraphEditorUnsupportedWorkstationName } from "./factory-graph-editor-availability";
+import {
+  findClassifierGraphEditorUnsupportedWorkstationName,
+  findClassifierGraphEditorUnsupportedWorkstationNameFromTopology,
+} from "./factory-graph-editor-availability";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 import { buildCurrentActivityGraphEditorValue } from "./react-flow-current-activity-card-editor-value";
@@ -46,6 +49,7 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
     draftState,
     editorMode,
     editableDefinitionQuery,
+    projectedTopology,
     saveEditableDefinition,
   });
   const addEntityController = useFactoryGraphAddEntityController({
@@ -159,6 +163,7 @@ function useFactoryGraphEditorSessionState({
   draftState,
   editorMode,
   editableDefinitionQuery,
+  projectedTopology,
   saveEditableDefinition,
 }: {
   activeWorkCount: number;
@@ -167,18 +172,31 @@ function useFactoryGraphEditorSessionState({
   editableDefinitionQuery: ReturnType<
     typeof useCurrentEditableFactoryDefinitionDocument
   >;
+  projectedTopology: DashboardSnapshot["topology"];
   saveEditableDefinition: ReturnType<
     typeof useSaveCurrentEditableFactoryDefinition
   >;
 }) {
   const hasActiveWork = activeWorkCount > 0;
-  const editorUnavailableClassifierWorkstationName =
-    findClassifierGraphEditorUnsupportedWorkstationName(
-      draftState.pendingFactoryDefinition ??
-        draftState.latestDocument?.factoryDefinition ??
-        draftState.baseDocument?.factoryDefinition ??
-        null,
-    );
+  const editorUnavailableClassifierWorkstationName = editorMode
+    ? findClassifierGraphEditorUnsupportedWorkstationName(
+        draftState.pendingFactoryDefinition ??
+          draftState.latestDocument?.factoryDefinition ??
+          draftState.baseDocument?.factoryDefinition ??
+          null,
+      ) ??
+      findClassifierGraphEditorUnsupportedWorkstationNameFromTopology(
+        projectedTopology,
+      )
+    : findClassifierGraphEditorUnsupportedWorkstationNameFromTopology(
+        projectedTopology,
+      ) ??
+      findClassifierGraphEditorUnsupportedWorkstationName(
+        draftState.pendingFactoryDefinition ??
+          draftState.latestDocument?.factoryDefinition ??
+          draftState.baseDocument?.factoryDefinition ??
+          null,
+      );
   const isStaleDraft =
     draftState.hasChanges &&
     draftState.baseDocument !== null &&

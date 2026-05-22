@@ -256,47 +256,6 @@ const workerDenseFactoryDefinitionDocument: EditableFactoryDefinitionDocument =
     },
   };
 
-const classifierFactoryDefinitionDocument: EditableFactoryDefinitionDocument = {
-  factoryDefinition: {
-    ...editableFactoryDefinition,
-    workstations: [
-      {
-        body: "Classify the work item into one authored branch label.",
-        classificationRoutes: [
-          {
-            label: "approved",
-            outputs: [
-              {
-                state: "done",
-                workType: "story",
-              },
-            ],
-          },
-        ],
-        inputs: [
-          {
-            state: "queued",
-            workType: "story",
-          },
-        ],
-        name: "review",
-        onFailure: [
-          {
-            state: "done",
-            workType: "story",
-          },
-        ],
-        type: "CLASSIFIER_WORKSTATION",
-        worker: "writer",
-      },
-    ],
-  },
-  version: {
-    logical: 10,
-    physical: "2026-05-22T08:31:00Z",
-  },
-};
-
 const defaultDraftState = {
   baseDocument: editableFactoryDefinitionDocument,
   draft: {
@@ -896,38 +855,31 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("keeps classifier workstations out of the editable graph flow", async () => {
-    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
-      data: classifierFactoryDefinitionDocument,
-      error: null,
-      status: "success",
-    } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
-      ...defaultDraftState,
-      baseDocument: classifierFactoryDefinitionDocument,
-      latestDocument: classifierFactoryDefinitionDocument,
-      pendingFactoryDefinition:
-        classifierFactoryDefinitionDocument.factoryDefinition,
-    } as never);
+    const snapshot = dashboardSnapshotWithActiveWorkItemCount(0);
+    snapshot.topology.workstation_nodes_by_id.review.workstation_kind =
+      "CLASSIFIER_WORKSTATION";
 
     renderCurrentActivity({
-      snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
+      snapshot,
     });
 
     const enterEditorButton = screen.getByRole("button", {
-      name: 'Factory graph editing does not yet support classifier workstation routes. "review" stays read-only in this view until labeled route editing is available.',
+      name: 'Factory graph editing does not yet support classifier workstation routes. "Review" stays read-only in this view until labeled route editing is available.',
     });
     expect(enterEditorButton.getAttribute("disabled")).not.toBeNull();
     expect(
       screen.getByText(
-        'Editor unavailable: Factory graph editing does not yet support classifier workstation routes. "review" stays read-only in this view until labeled route editing is available.',
+        'Editor unavailable: Factory graph editing does not yet support classifier workstation routes. "Review" stays read-only in this view until labeled route editing is available.',
       ),
     ).toBeTruthy();
 
     fireEvent.click(enterEditorButton);
 
-    expect(
-      screen.queryByRole("region", { name: "Factory graph editor tools" }),
-    ).toBeNull();
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("region", { name: "Factory graph editor tools" }),
+      ).toBeNull();
+    });
     expect(screen.queryByText("Observe mode")).toBeNull();
   });
 
