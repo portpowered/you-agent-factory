@@ -27,6 +27,7 @@ const (
 	modelPullOutcomeAlreadyPresent = "ALREADY_PRESENT"
 	defaultModelAssetBaseURL       = "https://huggingface.co"
 	defaultModelAssetAPIBaseURL    = "https://huggingface.co/api"
+	modelAssetMetadataFileName     = ".managed-cache.json"
 )
 
 type modelAssetPuller interface {
@@ -62,6 +63,18 @@ type modelAssetRemoteFile struct {
 	Bytes  int64
 	SHA256 string
 	URL    string
+}
+
+type localModelCacheMetadata struct {
+	ModelName string                `json:"modelName"`
+	Revision  string                `json:"revision"`
+	Files     []localModelCacheFile `json:"files"`
+}
+
+type localModelCacheFile struct {
+	Path   string `json:"path"`
+	Bytes  int64  `json:"bytes,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
 }
 
 type huggingFaceModelResponse struct {
@@ -158,6 +171,9 @@ func (p *huggingFaceModelAssetPuller) PullModel(ctx context.Context, runtimeCfg 
 	sort.Slice(downloaded, func(i, j int) bool {
 		return downloaded[i].Path < downloaded[j].Path
 	})
+	if err := p.writeLocalMetadata(spec, manifest); err != nil {
+		return apisurface.ModelPullResult{}, err
+	}
 
 	return apisurface.ModelPullResult{
 		ModelName:        spec.ModelName,
@@ -170,66 +186,51 @@ func (p *huggingFaceModelAssetPuller) PullModel(ctx context.Context, runtimeCfg 
 }
 
 func (p *huggingFaceModelAssetPuller) EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error {
+	_, err := p.resolveModelCacheLayout(ctx, runtimeCfg, worker)
+	return err
+}
+
+func (p *huggingFaceModelAssetPuller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (localModelCacheLayout, error) {
+	return p.resolveModelCacheLayout(ctx, runtimeCfg, worker)
+}
+
+func (p *huggingFaceModelAssetPuller) resolveModelCacheLayout(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (localModelCacheLayout, error) {
 	if worker == nil || strings.TrimSpace(worker.ModelLocality) != interfaces.ModelLocalityLocal {
-		return nil
+		return localModelCacheLayout{}, nil
 	}
 	spec, err := p.resolveSpec(runtimeCfg, worker.Model)
 	if err != nil {
 		if errors.Is(err, apisurface.ErrModelPullUnsupported) {
-			return fmt.Errorf("%w: %s", apisurface.ErrModelNotAvailable, strings.TrimSpace(worker.Model))
+			return localModelCacheLayout{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotAvailable, strings.TrimSpace(worker.Model))
 		}
-		return err
-	}
-	manifest, err := p.fetchManifest(ctx, spec)
-	if err != nil {
-		return fmt.Errorf("%w: %v", apisurface.ErrModelNotAvailable, err)
-	}
-	cachePath, err := p.cachePath(spec, manifest.Revision)
-	if err != nil {
-		return err
-	}
-	missing := make([]string, 0)
-	for _, file := range manifest.Files {
-		target := filepath.Join(cachePath, filepath.FromSlash(file.Path))
-		info, statErr := os.Stat(target)
-		switch {
-		case statErr == nil && !info.IsDir():
-		case errors.Is(statErr, os.ErrNotExist):
-			missing = append(missing, file.Path)
-		case statErr != nil:
-			return fmt.Errorf("inspect local model cache %q: %w", target, statErr)
-		default:
-			missing = append(missing, file.Path)
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("%w: required assets missing in managed cache %q (%s)", apisurface.ErrModelNotAvailable, cachePath, strings.Join(missing, ", "))
-	}
-	return nil
-}
-
-func (p *huggingFaceModelAssetPuller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (localModelCacheLayout, error) {
-	if worker == nil {
-		return localModelCacheLayout{}, fmt.Errorf("local model worker is required")
-	}
-	if err := p.EnsureModelAvailable(ctx, runtimeCfg, worker); err != nil {
 		return localModelCacheLayout{}, err
 	}
-	spec, err := p.resolveSpec(runtimeCfg, worker.Model)
+	manifest, err := p.resolveManifest(ctx, spec)
 	if err != nil {
-		return localModelCacheLayout{}, err
-	}
-	manifest, err := p.fetchManifest(ctx, spec)
-	if err != nil {
-		return localModelCacheLayout{}, err
+		return localModelCacheLayout{}, fmt.Errorf("%w: %v", apisurface.ErrModelNotAvailable, err)
 	}
 	cachePath, err := p.cachePath(spec, manifest.Revision)
 	if err != nil {
 		return localModelCacheLayout{}, err
 	}
 	files := make([]string, 0, len(manifest.Files))
+	missing := make([]string, 0)
 	for _, file := range manifest.Files {
-		files = append(files, filepath.Join(cachePath, filepath.FromSlash(file.Path)))
+		target := filepath.Join(cachePath, filepath.FromSlash(file.Path))
+		info, statErr := os.Stat(target)
+		switch {
+		case statErr == nil && !info.IsDir():
+			files = append(files, target)
+		case errors.Is(statErr, os.ErrNotExist):
+			missing = append(missing, file.Path)
+		case statErr != nil:
+			return localModelCacheLayout{}, fmt.Errorf("inspect local model cache %q: %w", target, statErr)
+		default:
+			missing = append(missing, file.Path)
+		}
+	}
+	if len(missing) > 0 {
+		return localModelCacheLayout{}, fmt.Errorf("%w: required assets missing in managed cache %q (%s)", apisurface.ErrModelNotAvailable, cachePath, strings.Join(missing, ", "))
 	}
 	return localModelCacheLayout{
 		ModelName: spec.ModelName,
@@ -237,6 +238,20 @@ func (p *huggingFaceModelAssetPuller) ResolveModelCache(ctx context.Context, run
 		Revision:  manifest.Revision,
 		Files:     files,
 	}, nil
+}
+
+func (p *huggingFaceModelAssetPuller) resolveManifest(ctx context.Context, spec modelAssetSpec) (modelAssetManifest, error) {
+	if manifest, ok, err := p.readLocalMetadata(spec); err != nil {
+		return modelAssetManifest{}, err
+	} else if ok {
+		return manifest, nil
+	}
+	if manifest, ok, err := p.discoverLocalManifest(spec); err != nil {
+		return modelAssetManifest{}, err
+	} else if ok {
+		return manifest, nil
+	}
+	return p.fetchManifest(ctx, spec)
 }
 
 func (p *huggingFaceModelAssetPuller) resolveSpec(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (modelAssetSpec, error) {
@@ -341,6 +356,14 @@ func (p *huggingFaceModelAssetPuller) fetchManifest(ctx context.Context, spec mo
 }
 
 func (p *huggingFaceModelAssetPuller) cachePath(spec modelAssetSpec, revision string) (string, error) {
+	root, err := p.modelCacheRoot(spec)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, revision), nil
+}
+
+func (p *huggingFaceModelAssetPuller) modelCacheRoot(spec modelAssetSpec) (string, error) {
 	root := strings.TrimSpace(p.cacheDir)
 	if root == "" {
 		homeDir, err := os.UserHomeDir()
@@ -349,7 +372,146 @@ func (p *huggingFaceModelAssetPuller) cachePath(spec modelAssetSpec, revision st
 		}
 		root = filepath.Join(homeDir, ".agent-factory", "models")
 	}
-	return filepath.Join(root, spec.ModelName, revision), nil
+	return filepath.Join(root, spec.ModelName), nil
+}
+
+func (p *huggingFaceModelAssetPuller) metadataPath(spec modelAssetSpec) (string, error) {
+	root, err := p.modelCacheRoot(spec)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, modelAssetMetadataFileName), nil
+}
+
+func (p *huggingFaceModelAssetPuller) writeLocalMetadata(spec modelAssetSpec, manifest modelAssetManifest) error {
+	metadataPath, err := p.metadataPath(spec)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(metadataPath), 0o755); err != nil {
+		return fmt.Errorf("prepare model metadata directory for %q: %w", spec.ModelName, err)
+	}
+	metadata := localModelCacheMetadata{
+		ModelName: spec.ModelName,
+		Revision:  manifest.Revision,
+		Files:     make([]localModelCacheFile, 0, len(manifest.Files)),
+	}
+	for _, file := range manifest.Files {
+		metadata.Files = append(metadata.Files, localModelCacheFile{
+			Path:   file.Path,
+			Bytes:  file.Bytes,
+			SHA256: file.SHA256,
+		})
+	}
+	body, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("encode managed-cache metadata for %q: %w", spec.ModelName, err)
+	}
+	tmpPath := metadataPath + ".partial"
+	if err := os.WriteFile(tmpPath, body, 0o644); err != nil {
+		return fmt.Errorf("write managed-cache metadata for %q: %w", spec.ModelName, err)
+	}
+	if err := os.Rename(tmpPath, metadataPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("commit managed-cache metadata for %q: %w", spec.ModelName, err)
+	}
+	return nil
+}
+
+func (p *huggingFaceModelAssetPuller) readLocalMetadata(spec modelAssetSpec) (modelAssetManifest, bool, error) {
+	metadataPath, err := p.metadataPath(spec)
+	if err != nil {
+		return modelAssetManifest{}, false, err
+	}
+	body, err := os.ReadFile(metadataPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return modelAssetManifest{}, false, nil
+	}
+	if err != nil {
+		return modelAssetManifest{}, false, fmt.Errorf("read managed-cache metadata for %q: %w", spec.ModelName, err)
+	}
+	var metadata localModelCacheMetadata
+	if err := json.Unmarshal(body, &metadata); err != nil {
+		return modelAssetManifest{}, false, fmt.Errorf("decode managed-cache metadata for %q: %w", spec.ModelName, err)
+	}
+	if strings.TrimSpace(metadata.Revision) == "" {
+		return modelAssetManifest{}, false, nil
+	}
+	manifest := modelAssetManifest{
+		Revision: metadata.Revision,
+		Files:    make([]modelAssetRemoteFile, 0, len(metadata.Files)),
+	}
+	for _, file := range metadata.Files {
+		manifest.Files = append(manifest.Files, modelAssetRemoteFile{
+			Path:   file.Path,
+			Bytes:  file.Bytes,
+			SHA256: file.SHA256,
+		})
+	}
+	if !manifestMatchesRequiredFiles(manifest, spec.RequiredFilenames) {
+		return modelAssetManifest{}, false, nil
+	}
+	return manifest, true, nil
+}
+
+func (p *huggingFaceModelAssetPuller) discoverLocalManifest(spec modelAssetSpec) (modelAssetManifest, bool, error) {
+	root, err := p.modelCacheRoot(spec)
+	if err != nil {
+		return modelAssetManifest{}, false, err
+	}
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return modelAssetManifest{}, false, nil
+	}
+	if err != nil {
+		return modelAssetManifest{}, false, fmt.Errorf("read managed model cache root for %q: %w", spec.ModelName, err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		revision := strings.TrimSpace(entry.Name())
+		if revision == "" {
+			continue
+		}
+		manifest := modelAssetManifest{
+			Revision: revision,
+			Files:    make([]modelAssetRemoteFile, 0, len(spec.RequiredFilenames)),
+		}
+		allPresent := true
+		for _, required := range spec.RequiredFilenames {
+			target := filepath.Join(root, revision, filepath.FromSlash(required))
+			info, statErr := os.Stat(target)
+			if statErr != nil || info.IsDir() {
+				allPresent = false
+				break
+			}
+			manifest.Files = append(manifest.Files, modelAssetRemoteFile{
+				Path:  required,
+				Bytes: info.Size(),
+			})
+		}
+		if allPresent {
+			return manifest, true, nil
+		}
+	}
+	return modelAssetManifest{}, false, nil
+}
+
+func manifestMatchesRequiredFiles(manifest modelAssetManifest, required []string) bool {
+	if strings.TrimSpace(manifest.Revision) == "" || len(manifest.Files) == 0 {
+		return false
+	}
+	fileSet := make(map[string]struct{}, len(manifest.Files))
+	for _, file := range manifest.Files {
+		fileSet[file.Path] = struct{}{}
+	}
+	for _, name := range required {
+		if _, ok := fileSet[name]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *huggingFaceModelAssetPuller) ensureCachedFile(ctx context.Context, cachePath string, remote modelAssetRemoteFile) (apisurface.ModelPullDownloadedFile, string, error) {

@@ -226,6 +226,9 @@ func assertDefaultFactoryJSONLayout(t *testing.T, base string) {
 	if _, ok := cfg["workers"]; !ok {
 		t.Error("factory.json missing 'workers' field")
 	}
+	if _, ok := cfg["resources"]; ok {
+		t.Error("default factory.json should not include a starter resource pool")
+	}
 	if _, ok := cfg["work_types"]; ok {
 		t.Error("factory.json should not include retired 'work_types' field")
 	}
@@ -289,6 +292,7 @@ func assertRalphFactoryJSONLayout(t *testing.T, base string) {
 	requireContainsAll(t, "Ralph factory.json", factoryJSON, []string{
 		`"name": "request"`,
 		`"name": "story"`,
+		`"name": "agent-slot"`,
 		`"name": "plan-request"`,
 		`"name": "execute-story"`,
 		`"name": "execute-story-loop-breaker"`,
@@ -393,6 +397,9 @@ func assertRalphWorkerTemplateContracts(t *testing.T, base string) {
 			"modelProvider: CODEX",
 			"executorProvider: SCRIPT_WRAP",
 			`stopToken: "<COMPLETE>"`,
+			"resources:",
+			"  - name: agent-slot",
+			"    capacity: 1",
 			"skipPermissions: true",
 		})
 		requireOmitsAll(t, workerPath, workerBody, []string{
@@ -403,6 +410,7 @@ func assertRalphWorkerTemplateContracts(t *testing.T, base string) {
 			"skip_permissions:",
 			"concurrency:",
 			"sessionId:",
+			`resources: ["agent-slot"]`,
 		})
 	}
 }

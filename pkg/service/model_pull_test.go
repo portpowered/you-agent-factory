@@ -75,6 +75,68 @@ func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
 	}
 }
 
+func TestPullModel_ResolveModelCacheUsesPersistedMetadataOffline(t *testing.T) {
+	baseBytes := []byte("base-gguf")
+	tokenizerBytes := []byte("tokenizer-gguf")
+	baseSHA := sha256HexString(baseBytes)
+	tokenizerSHA := sha256HexString(tokenizerBytes)
+	manifestRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/models/Serveurperso/OmniVoice-GGUF":
+			manifestRequests++
+			_, _ = io.WriteString(w, fmt.Sprintf(`{"sha":"rev-test","siblings":[{"rfilename":"omnivoice-base-Q4_K_M.gguf","size":%d,"lfs":{"oid":"%s","size":%d}},{"rfilename":"omnivoice-tokenizer-Q4_K_M.gguf","size":%d,"lfs":{"oid":"%s","size":%d}}]}`, len(baseBytes), baseSHA, len(baseBytes), len(tokenizerBytes), tokenizerSHA, len(tokenizerBytes)))
+		case "/Serveurperso/OmniVoice-GGUF/resolve/rev-test/omnivoice-base-Q4_K_M.gguf":
+			_, _ = w.Write(baseBytes)
+		case "/Serveurperso/OmniVoice-GGUF/resolve/rev-test/omnivoice-tokenizer-Q4_K_M.gguf":
+			_, _ = w.Write(tokenizerBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+
+	cacheDir := t.TempDir()
+	puller := newHuggingFaceModelAssetPuller(cacheDir)
+	puller.baseURL = server.URL
+	puller.apiBaseURL = server.URL + "/api"
+	puller.client = server.Client()
+
+	runtimeCfg := mustLoadedFactoryConfigForModelCatalogTest(t, &interfaces.FactoryConfig{
+		Resources: []interfaces.ResourceConfig{{
+			Name:       "omnivoice-cache",
+			Type:       interfaces.ResourceTypeModel,
+			Capacity:   1,
+			Model:      "OMNIVOICE_Q4_K_M",
+			Backend:    "LLAMACPP",
+			LoadPolicy: "ON_DEMAND",
+		}},
+	})
+	worker := &interfaces.WorkerConfig{
+		Model:         "OMNIVOICE_Q4_K_M",
+		ModelLocality: interfaces.ModelLocalityLocal,
+	}
+
+	result, err := puller.PullModel(context.Background(), runtimeCfg, "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("PullModel: %v", err)
+	}
+	server.Close()
+
+	layout, err := puller.ResolveModelCache(context.Background(), runtimeCfg, worker)
+	if err != nil {
+		t.Fatalf("ResolveModelCache after pull with offline manifest: %v", err)
+	}
+	if err := puller.EnsureModelAvailable(context.Background(), runtimeCfg, worker); err != nil {
+		t.Fatalf("EnsureModelAvailable after pull with offline manifest: %v", err)
+	}
+	if manifestRequests != 1 {
+		t.Fatalf("manifest requests = %d, want 1 during pull only", manifestRequests)
+	}
+	if layout.CachePath != result.CachePath || layout.Revision != "rev-test" || len(layout.Files) != 2 {
+		t.Fatalf("layout = %#v, want pulled cache path and revision", layout)
+	}
+}
+
 func TestPullModel_ReturnsUnsupportedWhenRuntimeHasNoMatchingModelResource(t *testing.T) {
 	puller := newHuggingFaceModelAssetPuller(t.TempDir())
 	runtimeCfg := mustLoadedFactoryConfigForModelCatalogTest(t, &interfaces.FactoryConfig{})
