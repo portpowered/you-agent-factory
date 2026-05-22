@@ -30,6 +30,7 @@ func (fs *FactoryService) startPollerWatchersForRuntime(
 	sidecars *sync.WaitGroup,
 	factoryCfg *interfaces.FactoryConfig,
 	runtimeCfg interfaces.RuntimeConfigLookup,
+	submitter workRequestSubmitter,
 ) {
 	if runtimeModeOrDefault(fs.cfg.RuntimeMode) != interfaces.RuntimeModeService || factoryCfg == nil || runtimeCfg == nil || sidecars == nil {
 		return
@@ -59,15 +60,31 @@ func (fs *FactoryService) startPollerWatchersForRuntime(
 			)
 			continue
 		}
-		if workerDef.Type != interfaces.WorkerTypeScript {
+		switch workerDef.Type {
+		case interfaces.WorkerTypeScript:
+			sidecars.Add(1)
+			go func() {
+				defer sidecars.Done()
+				fs.superviseScriptPoller(ctx, runtimeCfg, ws, workerDef)
+			}()
+		case interfaces.WorkerTypeHosted:
+			if workerDef.Provider != interfaces.HostedWorkerProviderLinear {
+				fs.logger.Warn("hosted poller disabled",
+					zap.String("workstation", ws.Name),
+					zap.String("worker", workerName),
+					zap.String("provider", workerDef.Provider),
+					zap.String("reason", "unsupported hosted provider"),
+				)
+				continue
+			}
+			sidecars.Add(1)
+			go func() {
+				defer sidecars.Done()
+				fs.superviseHostedLinearPoller(ctx, runtimeCfg, ws, workerDef, submitter)
+			}()
+		default:
 			continue
 		}
-
-		sidecars.Add(1)
-		go func() {
-			defer sidecars.Done()
-			fs.superviseScriptPoller(ctx, runtimeCfg, ws, workerDef)
-		}()
 	}
 }
 
