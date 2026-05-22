@@ -7,3 +7,6 @@ declare function setImmediate(
 
 declare function clearImmediate(handle: number): void;
 
+declare module "monaco-editor/esm/vs/editor/editor.api.js" {
+  export * from "monaco-editor";
+}

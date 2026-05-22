@@ -221,53 +221,20 @@ async function configureMonacoLoader() {
 
   if (!monacoLoaderPromise) {
     monacoLoaderPromise = Promise.all([
-      import("monaco-editor"),
-      import("monaco-editor/esm/vs/editor/editor.worker?worker"),
-      import("monaco-editor/esm/vs/language/css/css.worker?worker"),
-      import("monaco-editor/esm/vs/language/html/html.worker?worker"),
-      import("monaco-editor/esm/vs/language/json/json.worker?worker"),
-      import("monaco-editor/esm/vs/language/typescript/ts.worker?worker"),
-    ]).then(
-      ([
-        monaco,
-        editorWorker,
-        cssWorker,
-        htmlWorker,
-        jsonWorker,
-        tsWorker,
-      ]) => {
+      import("monaco-editor/esm/vs/editor/editor.api.js"),
+      import("monaco-editor/esm/vs/editor/editor.worker?worker&inline"),
+    ]).then(([monaco, editorWorker]) => {
         registerWorkstationPromptMonaco(monaco);
 
         self.MonacoEnvironment = {
-          getWorker(_, label) {
-            if (label === "json") {
-              return new jsonWorker.default();
-            }
-
-            if (label === "css" || label === "scss" || label === "less") {
-              return new cssWorker.default();
-            }
-
-            if (
-              label === "html" ||
-              label === "handlebars" ||
-              label === "razor"
-            ) {
-              return new htmlWorker.default();
-            }
-
-            if (label === "typescript" || label === "javascript") {
-              return new tsWorker.default();
-            }
-
+          getWorker() {
             return new editorWorker.default();
           },
         };
 
         loader.config({ monaco });
         monacoLoaderReady = true;
-      },
-    );
+      });
   }
 
   return monacoLoaderPromise;

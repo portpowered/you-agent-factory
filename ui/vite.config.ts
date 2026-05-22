@@ -5,6 +5,7 @@ import { coverageConfigDefaults } from "vitest/config";
 
 const apiOrigin = process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
 const storybookInteropDeps = [
+  "monaco-editor/esm/vs/editor/editor.api.js",
   "react",
   "react-dom",
   "react/jsx-runtime",

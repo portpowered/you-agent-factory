@@ -24,6 +24,8 @@ test("normalize-dist-output prunes empty dist directories before generating Go e
     await mkdir(emptyDashboardDir, { recursive: true });
     await writeFile(path.join(assetsDir, "index-abc123.js"), "console.log('ok');\n");
     await writeFile(path.join(assetsDir, "index-def456.css"), "body{}\n");
+    await writeFile(path.join(assetsDir, "editor.worker.js"), "self.onmessage = () => {};\n");
+    await writeFile(path.join(assetsDir, "editor.css"), ".monaco-editor{}\n");
     await writeFile(
       path.join(distDir, "index.html"),
       '<script src="/dashboard/ui/assets/index-abc123.js"></script><link rel="stylesheet" href="/dashboard/ui/assets/index-def456.css">',
@@ -38,6 +40,12 @@ test("normalize-dist-output prunes empty dist directories before generating Go e
       "console.log('ok');\n",
     );
     await expect(readFile(path.join(assetsDir, "index.css"), "utf8")).resolves.toBe("body{}\n");
+    await expect(readFile(path.join(assetsDir, "editor.worker.js"), "utf8")).resolves.toBe(
+      "self.onmessage = () => {};\n",
+    );
+    await expect(readFile(path.join(assetsDir, "editor.css"), "utf8")).resolves.toBe(
+      ".monaco-editor{}\n",
+    );
 
     const normalizedHtml = await readFile(path.join(distDir, "index.html"), "utf8");
     expect(normalizedHtml).toMatch(/\/dashboard\/ui\/assets\/index\.js/);
