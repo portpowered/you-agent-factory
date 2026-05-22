@@ -46,13 +46,22 @@ vi.mock("@monaco-editor/react", () => ({
     );
 
     useEffect(() => {
+      const disposeListeners: Array<() => void> = [];
       onMount?.(
         {
           getModel: () => model,
           getScrollLeft: () => 0,
           getScrollTop: () => 0,
-          onDidDispose: () => ({ dispose() {} }),
-          onDidScrollChange: () => ({ dispose() {} }),
+          onDidDispose: (listener: () => void) => {
+            disposeListeners.push(listener);
+            return { dispose() {} };
+          },
+          onDidScrollChange: (
+            listener: (event: { scrollLeft: number; scrollTop: number }) => void,
+          ) => {
+            listener({ scrollLeft: 3, scrollTop: 4 });
+            return { dispose() {} };
+          },
         },
         {
           editor: {
@@ -73,6 +82,12 @@ vi.mock("@monaco-editor/react", () => ({
           },
         },
       );
+
+      return () => {
+        for (const listener of disposeListeners) {
+          listener();
+        }
+      };
     }, [model, onMount]);
 
     return createElement(
