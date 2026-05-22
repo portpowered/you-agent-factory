@@ -2,6 +2,7 @@ package workers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -133,7 +134,14 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		return *failed, nil
 	}
 
-	return we.executeInnerWorker(ctx, request, workerDef, workstationDef, start, logger)
+	result, err := we.executeInnerWorker(ctx, request, workerDef, workstationDef, start, logger)
+	if err != nil {
+		return result, err
+	}
+	if workstationDef.Type == interfaces.WorkstationTypeClassify {
+		return normalizeClassifierWorkResult(result), nil
+	}
+	return result, nil
 }
 
 func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (resolvedWorkstationExecutionContext, *interfaces.WorkResult) {
@@ -305,6 +313,45 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request i
 			"outcome", result.Outcome)...)
 	result.Metrics.Duration = time.Since(start)
 	return result, nil
+}
+
+func normalizeClassifierWorkResult(result interfaces.WorkResult) interfaces.WorkResult {
+	if result.Outcome == interfaces.OutcomeFailed {
+		return result
+	}
+
+	label, err := normalizeClassifierLabel(result.Output)
+	if err != nil {
+		result.Outcome = interfaces.OutcomeFailed
+		result.Error = "classifier output invalid: " + err.Error()
+		return result
+	}
+
+	result.Outcome = interfaces.OutcomeAccepted
+	result.Output = label
+	result.Feedback = ""
+	return result
+}
+
+func normalizeClassifierLabel(output string) (string, error) {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return "", fmt.Errorf("empty label")
+	}
+
+	var decoded any
+	if err := json.Unmarshal([]byte(trimmed), &decoded); err == nil {
+		label, ok := decoded.(string)
+		if !ok {
+			return "", fmt.Errorf("expected plain string label")
+		}
+		trimmed = strings.TrimSpace(label)
+		if trimmed == "" {
+			return "", fmt.Errorf("empty label")
+		}
+	}
+
+	return trimmed, nil
 }
 
 // Compile-time check.

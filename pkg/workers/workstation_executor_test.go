@@ -667,6 +667,115 @@ func TestWorkstationExecutor_ExecutorError_ReturnsFailedResult(t *testing.T) {
 	}
 }
 
+func TestWorkstationExecutor_ClassifierTrimsLabelAndIgnoresNonFailureOutcomeKinds(t *testing.T) {
+	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Output: "  approved \n"}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Body: "system"},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"classifier": {Type: interfaces.WorkstationTypeClassify, PromptTemplate: "classify"},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-classifier-trim",
+		TransitionID:    "t-classifier-trim",
+		WorkerType:      "worker-a",
+		WorkstationName: "classifier",
+		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1"}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if result.Output != "approved" {
+		t.Fatalf("Output = %q, want approved", result.Output)
+	}
+}
+
+func TestWorkstationExecutor_ClassifierAcceptsJSONStringLabel(t *testing.T) {
+	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "\"needs_review\""}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Body: "system"},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"classifier": {Type: interfaces.WorkstationTypeClassify, PromptTemplate: "classify"},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-classifier-json-string",
+		TransitionID:    "t-classifier-json-string",
+		WorkerType:      "worker-a",
+		WorkstationName: "classifier",
+		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1"}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if result.Output != "needs_review" {
+		t.Fatalf("Output = %q, want needs_review", result.Output)
+	}
+}
+
+func TestWorkstationExecutor_ClassifierRejectsEmptyOrNonStringOutput(t *testing.T) {
+	testCases := []struct {
+		name   string
+		output string
+	}{
+		{name: "empty", output: " \n\t "},
+		{name: "json object", output: `{"label":"approved"}`},
+		{name: "json number", output: `123`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: tc.output}}
+			we := newTestWorkstationExecutor(
+				staticRuntimeConfig{
+					Workers: map[string]*interfaces.WorkerConfig{
+						"worker-a": {Body: "system"},
+					},
+					Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+						"classifier": {Type: interfaces.WorkstationTypeClassify, PromptTemplate: "classify"},
+					},
+				},
+				mock,
+			)
+
+			result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+				DispatchID:      "d-classifier-invalid",
+				TransitionID:    "t-classifier-invalid",
+				WorkerType:      "worker-a",
+				WorkstationName: "classifier",
+				InputTokens:     InputTokens(interfaces.Token{ID: "tok-1"}),
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Outcome != interfaces.OutcomeFailed {
+				t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+			}
+			if !strings.HasPrefix(result.Error, "classifier output invalid:") {
+				t.Fatalf("Error = %q, want classifier output invalid prefix", result.Error)
+			}
+		})
+	}
+}
+
 func TestWorkstationExecutor_PromptRenderFailure_ReturnsFailedResult(t *testing.T) {
 	mock := &wsMockExecutor{}
 	we := newTestWorkstationExecutor(

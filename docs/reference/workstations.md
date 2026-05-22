@@ -45,13 +45,17 @@ environment, and routing.
 ## Current Contract
 
 - Use `behavior` for scheduling behavior: `STANDARD`, `REPEATER`, or `CRON`.
-- Use `type` for the runtime implementation: `MODEL_WORKSTATION` or
-  `LOGICAL_MOVE`.
+- Use `type` for the runtime implementation: `MODEL_WORKSTATION`,
+  `CLASSIFIER_WORKSTATION`, or `LOGICAL_MOVE`.
 - Use `worker` for the bound worker name. Omit it only for logical routing
   workstations such as `LOGICAL_MOVE`.
 - Route accepted results through `outputs`, ordinary partial-progress results
   through `onContinue`, rejected results through `onRejection`, and failed or
   timed-out results through `onFailure`.
+- `CLASSIFIER_WORKSTATION` returns one plain string label. Leading and trailing
+  whitespace are trimmed before matching, matching stays exact and
+  case-sensitive, and empty or non-string outputs fail instead of routing
+  through success.
 - Use workstation-level `guards` only for `VISIT_COUNT` gating. Use a guarded
   `LOGICAL_MOVE` workstation when you need an explicit loop-breaker route.
 
@@ -100,10 +104,47 @@ execute:
 `type` answers "what runtime implementation handles the step?"
 
 - `MODEL_WORKSTATION` renders a prompt and dispatches to the bound worker.
+- `CLASSIFIER_WORKSTATION` renders a prompt and expects one plain string label
+  such as `approved`, `needs_review`, or `spam`.
 - `LOGICAL_MOVE` moves tokens without invoking a worker.
 
 Do not use `type` to express schedule semantics, and do not use `behavior` to
 replace runtime implementation.
+
+## Classifier Workstations
+
+Use `CLASSIFIER_WORKSTATION` when one workstation should return exactly one
+label and route through authored `classificationRoutes` instead of normal
+success outputs:
+
+```json
+{
+  "name": "triage",
+  "type": "CLASSIFIER_WORKSTATION",
+  "worker": "reviewer",
+  "inputs": [{ "workType": "task", "state": "init" }],
+  "classificationRoutes": [
+    {
+      "label": "approved",
+      "outputs": [{ "workType": "task", "state": "complete" }]
+    },
+    {
+      "label": "needs_review",
+      "outputs": [{ "workType": "task", "state": "in-review" }]
+    },
+    {
+      "label": "spam",
+      "outputs": [{ "workType": "task", "state": "failed" }]
+    }
+  ],
+  "onFailure": [{ "workType": "task", "state": "failed" }]
+}
+```
+
+The successful classifier contract is one plain string label. The runtime trims
+surrounding whitespace before matching, preserves exact case-sensitive label
+matching, and treats empty or non-string outputs as failures that route through
+`onFailure` and the ordinary `FAILED` path.
 
 ## Minimal Standard Step
 
