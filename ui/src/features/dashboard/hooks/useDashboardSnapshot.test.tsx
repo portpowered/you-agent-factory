@@ -291,7 +291,9 @@ describe("useDashboardSnapshot", () => {
 
     expect(result.current.snapshot?.tick_count).toBe(SEEDED_SNAPSHOT.tick_count);
     expect(replayHarness.getStreams()).toHaveLength(1);
-    expect(replayHarness.getStreams()[0]?.url).toBe("/events");
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
 
     act(() => {
       rerender({ refreshToken: 1 });
@@ -317,7 +319,9 @@ describe("useDashboardSnapshot", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    expect(replayHarness.getStreams()[0]?.url).toBe("/events");
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
 
     act(() => {
       useFactoryTimelineStore.setState({
