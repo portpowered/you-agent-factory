@@ -124,6 +124,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		nil,
 		time.Now,
 		fs.modelResources,
+		fs.localModels,
 	)
 	workstationExecutor, ok := executor.(*workers.WorkstationExecutor)
 	if !ok || workstationExecutor.Executor == nil {

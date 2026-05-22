@@ -12,6 +12,8 @@ type staticModelAssetPuller struct {
 	pullResult apisurface.ModelPullResult
 	pullErr    error
 	ensureErr  error
+	cache      localModelCacheLayout
+	cacheErr   error
 }
 
 func (s staticModelAssetPuller) PullModel(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ string) (apisurface.ModelPullResult, error) {
@@ -20,4 +22,8 @@ func (s staticModelAssetPuller) PullModel(_ context.Context, _ *factoryconfig.Lo
 
 func (s staticModelAssetPuller) EnsureModelAvailable(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) error {
 	return s.ensureErr
+}
+
+func (s staticModelAssetPuller) ResolveModelCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) (localModelCacheLayout, error) {
+	return s.cache, s.cacheErr
 }

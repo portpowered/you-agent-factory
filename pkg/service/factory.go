@@ -123,6 +123,7 @@ type FactoryService struct {
 	logSink        *logging.RuntimeLogSink
 	modelResources *localModelResourceLimiter
 	modelAssets    modelAssetPuller
+	localModels    *managedLocalModelManager
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)
@@ -222,6 +223,10 @@ type FactoryServiceConfig struct {
 	// ModelCacheDir optionally overrides the default managed local-model cache
 	// directory under ~/.agent-factory/models.
 	ModelCacheDir string
+	// LocalModelRuntimeOverride injects a managed local-model runtime for
+	// supported LOCAL model workers. Package tests use this to exercise the
+	// load/invoke/reuse path without a live embedded backend.
+	LocalModelRuntimeOverride localModelRuntime
 }
 
 // BuildFactoryService loads factory.json from the config directory, constructs
@@ -309,6 +314,8 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	modelResources := newLocalModelResourceLimiter()
+	modelAssets := newHuggingFaceModelAssetPuller(strings.TrimSpace(cfg.ModelCacheDir))
+	localModels := newManagedLocalModelManager(modelAssets, cfg.LocalModelRuntimeOverride)
 	workerOpts, err := loadWorkersFromConfig(
 		loadedFactoryCfg.FactoryDir(),
 		loadedFactoryCfg.FactoryConfig(),
@@ -323,6 +330,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		eventHistory.RecordInferenceEvent,
 		clock.Now,
 		modelResources,
+		localModels,
 	)
 	if err != nil {
 		logger.Error("failed to load workers from config", zap.Error(err))
@@ -412,6 +420,8 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		recording:      recording,
 		logSink:        logSink,
 		modelResources: modelResources,
+		modelAssets:    modelAssets,
+		localModels:    localModels,
 	}, nil
 }
 
@@ -508,6 +518,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 		eventHistory.RecordInferenceEvent,
 		clock.Now,
 		fs.modelResources,
+		fs.localModels,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load workers: %w", err)
@@ -2131,6 +2142,7 @@ func loadWorkersFromConfig(
 	inferenceRecorder workers.InferenceEventRecorder,
 	now func() time.Time,
 	modelResources *localModelResourceLimiter,
+	localModels *managedLocalModelManager,
 ) ([]factory.FactoryOption, error) {
 	var opts []factory.FactoryOption
 	logger.Info("loading workers from runtime config", "working-directory", factoryDir)
@@ -2151,7 +2163,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workers.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, now, modelResources)
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, now, modelResources, localModels)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -2194,6 +2206,7 @@ func buildWorkerExecutor(
 	inferenceRecorder workers.InferenceEventRecorder,
 	now func() time.Time,
 	modelResources *localModelResourceLimiter,
+	localModels *managedLocalModelManager,
 ) workers.WorkerExecutor {
 	def, ok := runtimeCfg.Worker(workerName)
 	if !ok {
@@ -2236,6 +2249,7 @@ func buildWorkerExecutor(
 			workers.WithLogger(logger),
 		}
 		runner = modelResources.wrapRunner(runner, factoryCfg, def)
+		runner = localModels.wrapRunner(runner, runtimeCfg, factoryCfg, def)
 		agentExec := workers.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
 		return &workers.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,

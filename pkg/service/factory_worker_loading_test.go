@@ -799,5 +799,6 @@ func loadWorkersFromConfigForServiceTest(
 		inferenceRecorder,
 		nil,
 		nil,
+		nil,
 	)
 }

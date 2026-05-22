@@ -32,6 +32,7 @@ const (
 type modelAssetPuller interface {
 	PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error)
 	EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error
+	ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (localModelCacheLayout, error)
 }
 
 type huggingFaceModelAssetPuller struct {
@@ -205,6 +206,37 @@ func (p *huggingFaceModelAssetPuller) EnsureModelAvailable(ctx context.Context, 
 		return fmt.Errorf("%w: required assets missing in managed cache %q (%s)", apisurface.ErrModelNotAvailable, cachePath, strings.Join(missing, ", "))
 	}
 	return nil
+}
+
+func (p *huggingFaceModelAssetPuller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (localModelCacheLayout, error) {
+	if worker == nil {
+		return localModelCacheLayout{}, fmt.Errorf("local model worker is required")
+	}
+	if err := p.EnsureModelAvailable(ctx, runtimeCfg, worker); err != nil {
+		return localModelCacheLayout{}, err
+	}
+	spec, err := p.resolveSpec(runtimeCfg, worker.Model)
+	if err != nil {
+		return localModelCacheLayout{}, err
+	}
+	manifest, err := p.fetchManifest(ctx, spec)
+	if err != nil {
+		return localModelCacheLayout{}, err
+	}
+	cachePath, err := p.cachePath(spec, manifest.Revision)
+	if err != nil {
+		return localModelCacheLayout{}, err
+	}
+	files := make([]string, 0, len(manifest.Files))
+	for _, file := range manifest.Files {
+		files = append(files, filepath.Join(cachePath, filepath.FromSlash(file.Path)))
+	}
+	return localModelCacheLayout{
+		ModelName: spec.ModelName,
+		CachePath: cachePath,
+		Revision:  manifest.Revision,
+		Files:     files,
+	}, nil
 }
 
 func (p *huggingFaceModelAssetPuller) resolveSpec(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (modelAssetSpec, error) {
