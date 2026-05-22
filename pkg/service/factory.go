@@ -982,6 +982,12 @@ func (fs *FactoryService) startLiveRuntimeSidecars(ctx context.Context, handle *
 		handle.runtime.runtimeCfg,
 		submitWorkRequestWithFactory(handle.runtime.factory),
 	)
+	fs.startPollerWatchersForRuntime(
+		sidecarCtx,
+		&handle.sidecars,
+		handle.runtime.runtimeCfg.FactoryConfig(),
+		handle.runtime.runtimeCfg,
+	)
 	if handle.runtime.listener != nil {
 		if err := handle.runtime.listener.PreseedInputs(sidecarCtx); err != nil {
 			sidecarCancel()
