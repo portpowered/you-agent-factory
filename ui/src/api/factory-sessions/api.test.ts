@@ -167,6 +167,99 @@ describe("factory sessions API", () => {
     );
   });
 
+  it("keeps the list fallback error for empty error bodies", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 503,
+        statusText: "Service Unavailable",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listFactorySessions()).rejects.toEqual(
+      new FactorySessionsAPIError(
+        "The factory sessions API rejected the request.",
+        {
+          code: "INTERNAL_ERROR",
+          responseBody: null,
+          status: 503,
+          statusText: "Service Unavailable",
+        },
+      ),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("keeps the open fallback error for malformed JSON bodies", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("{", {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 500,
+        statusText: "Internal Server Error",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      openFactorySession({
+        folderPath: "/workspace/project",
+      }),
+    ).rejects.toEqual(
+      new FactorySessionsAPIError(
+        "The factory sessions API rejected the request.",
+        {
+          code: "INTERNAL_ERROR",
+          responseBody: "{",
+          status: 500,
+          statusText: "Internal Server Error",
+        },
+      ),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions",
+      expect.objectContaining({
+        body: JSON.stringify({
+          folderPath: "/workspace/project",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      }),
+    );
+  });
+
+  it("keeps the close fallback error for plain-text error bodies", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("session close failed upstream", {
+        status: 502,
+        statusText: "Bad Gateway",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(closeFactorySession("session-beta")).rejects.toEqual(
+      new FactorySessionsAPIError(
+        "The factory sessions API rejected the request.",
+        {
+          code: "INTERNAL_ERROR",
+          responseBody: "session close failed upstream",
+          status: 502,
+          statusText: "Bad Gateway",
+        },
+      ),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/session-beta",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
   it("deletes one live factory session from the typed API surface", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(null, {

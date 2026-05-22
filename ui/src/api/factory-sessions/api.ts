@@ -8,7 +8,8 @@ import {
 
 export type FactorySessionSummary =
   components["schemas"]["FactorySessionSummary"];
-export type FactorySessionTarget = components["schemas"]["FactorySessionTarget"];
+export type FactorySessionTarget =
+  components["schemas"]["FactorySessionTarget"];
 export type FactorySessionTargetRef =
   components["schemas"]["FactorySessionTargetRef"];
 export type OpenFactorySessionResponse =
@@ -79,9 +80,12 @@ export async function listFactorySessions(
 
   let response: Response;
   try {
-    response = await fetchImplementation(factoryAPIURL(FACTORY_SESSIONS_ENDPOINT), {
-      method: "GET",
-    });
+    response = await fetchImplementation(
+      factoryAPIURL(FACTORY_SESSIONS_ENDPOINT),
+      {
+        method: "GET",
+      },
+    );
   } catch (error) {
     throw new FactorySessionsAPIError(
       "The dashboard could not reach the factory sessions API.",
@@ -132,13 +136,16 @@ export async function openFactorySession(
 
   let response: Response;
   try {
-    response = await fetchImplementation(factoryAPIURL(FACTORY_SESSIONS_ENDPOINT), {
-      body: JSON.stringify(input),
-      headers: {
-        "Content-Type": "application/json",
+    response = await fetchImplementation(
+      factoryAPIURL(FACTORY_SESSIONS_ENDPOINT),
+      {
+        body: JSON.stringify(input),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
       },
-      method: "POST",
-    });
+    );
   } catch (error) {
     throw new FactorySessionsAPIError(
       "The dashboard could not reach the factory sessions API.",
@@ -190,7 +197,9 @@ export async function closeFactorySession(
   let response: Response;
   try {
     response = await fetchImplementation(
-      factoryAPIURL(`${FACTORY_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionID)}`),
+      factoryAPIURL(
+        `${FACTORY_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionID)}`,
+      ),
       {
         method: "DELETE",
       },
