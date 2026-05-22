@@ -346,7 +346,7 @@ func newRunCommand() *cobra.Command {
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port; specifying this flag disables automatic fallback")
 	cmd.Flags().StringVar(&cfg.RecordPath, "record", "", "path to write a replay artifact for this run")
 	cmd.Flags().StringVar(&cfg.ReplayPath, "replay", "", "path to replay an existing replay artifact")
-	cmd.Flags().StringVar(&cfg.RuntimeLogDir, "runtime-log-dir", "", "directory for structured runtime log files (default: ~/.agent-factory/logs)")
+	cmd.Flags().StringVar(&cfg.RuntimeLogDir, "runtime-log-dir", "", "directory for structured runtime log files (default: ~/.you-agent-factory/logs)")
 	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxSize, "runtime-log-max-size-mb", cfg.RuntimeLogConfig.MaxSize, "rotate each runtime log file after this many megabytes")
 	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxBackups, "runtime-log-max-backups", cfg.RuntimeLogConfig.MaxBackups, "maximum rotated runtime log files to retain")
 	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxAge, "runtime-log-max-age-days", cfg.RuntimeLogConfig.MaxAge, "maximum days to retain rotated runtime log files")

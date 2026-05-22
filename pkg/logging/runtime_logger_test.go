@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -132,5 +133,93 @@ func TestBuildRuntimeLoggerRotatesLogFiles(t *testing.T) {
 		if !strings.HasPrefix(base, "runtime-rotates-") {
 			t.Fatalf("expected backup file name with timestamp suffix, got %q", base)
 		}
+	}
+}
+
+func TestBuildRuntimeLoggerUsesCanonicalDefaultLogDirectory(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	sink, err := BuildRuntimeLogger(zap.NewNop(), "runtime-default-path", "", RuntimeLogConfig{})
+	if err != nil {
+		t.Fatalf("BuildRuntimeLogger: %v", err)
+	}
+	defer sink.Close()
+
+	wantPath := filepath.Join(homeDir, ".you-agent-factory", "logs", "runtime-default-path.log")
+	if sink.Path() != wantPath {
+		t.Fatalf("sink.Path() = %q, want %q", sink.Path(), wantPath)
+	}
+}
+
+func TestBuildRuntimeLoggerMigratesLegacyDefaultLogDirectory(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	legacyLogDir := filepath.Join(homeDir, ".agent-factory", "logs")
+	if err := os.MkdirAll(legacyLogDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(legacy log dir): %v", err)
+	}
+	legacyLogPath := filepath.Join(legacyLogDir, "legacy.log")
+	if err := os.WriteFile(legacyLogPath, []byte("legacy runtime log\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(legacy runtime log): %v", err)
+	}
+
+	sink, err := BuildRuntimeLogger(zap.NewNop(), "runtime-migrated", "", RuntimeLogConfig{})
+	if err != nil {
+		t.Fatalf("BuildRuntimeLogger: %v", err)
+	}
+	defer sink.Close()
+
+	if got := sink.Path(); got != filepath.Join(homeDir, ".you-agent-factory", "logs", "runtime-migrated.log") {
+		t.Fatalf("sink.Path() = %q, want canonical runtime log path", got)
+	}
+	if _, err := os.Stat(filepath.Join(homeDir, ".you-agent-factory", "logs", "legacy.log")); err != nil {
+		t.Fatalf("expected migrated legacy log in canonical dir: %v", err)
+	}
+	if _, err := os.Stat(legacyLogPath); !os.IsNotExist(err) {
+		t.Fatalf("expected legacy runtime log path to disappear after migration, stat err = %v", err)
+	}
+}
+
+func TestBuildRuntimeLoggerKeepsCanonicalDirWhenLegacyDirAlsoExists(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	legacyLogDir := filepath.Join(homeDir, ".agent-factory", "logs")
+	if err := os.MkdirAll(legacyLogDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(legacy log dir): %v", err)
+	}
+	legacyLogPath := filepath.Join(legacyLogDir, "legacy.log")
+	if err := os.WriteFile(legacyLogPath, []byte("legacy runtime log\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(legacy runtime log): %v", err)
+	}
+
+	canonicalLogDir := filepath.Join(homeDir, ".you-agent-factory", "logs")
+	if err := os.MkdirAll(canonicalLogDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(canonical log dir): %v", err)
+	}
+	canonicalExistingPath := filepath.Join(canonicalLogDir, "existing.log")
+	if err := os.WriteFile(canonicalExistingPath, []byte("canonical runtime log\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(canonical runtime log): %v", err)
+	}
+
+	sink, err := BuildRuntimeLogger(zap.NewNop(), "runtime-canonical-wins", "", RuntimeLogConfig{})
+	if err != nil {
+		t.Fatalf("BuildRuntimeLogger: %v", err)
+	}
+	defer sink.Close()
+
+	if got := sink.Path(); got != filepath.Join(canonicalLogDir, "runtime-canonical-wins.log") {
+		t.Fatalf("sink.Path() = %q, want canonical runtime log path", got)
+	}
+	if _, err := os.Stat(legacyLogPath); err != nil {
+		t.Fatalf("expected legacy runtime log to remain when canonical dir already exists: %v", err)
+	}
+	if _, err := os.Stat(canonicalExistingPath); err != nil {
+		t.Fatalf("expected canonical runtime log to remain untouched: %v", err)
 	}
 }
