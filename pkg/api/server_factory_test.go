@@ -82,6 +82,79 @@ func TestGetCurrentFactory_AllowsDefaultRuntimeIdentifier(t *testing.T) {
 	}
 }
 
+func TestListModels_ReturnsDiscoveredModelSummaries(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Models: factoryapi.ListModelsResponse{
+			Results: []factoryapi.ModelSummary{{
+				Name:             "OMNIVOICE_Q4_K_M",
+				ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+				Status:           factoryapi.READY,
+				LoadState:        factoryapi.UNLOADED,
+				Operations:       []factoryapi.ModelOperation{{Name: "TTS"}},
+				Modalities:       []factoryapi.ModelOperationContentType{factoryapi.ModelOperationContentTypeAudio, factoryapi.ModelOperationContentTypeText},
+				Resources:        []factoryapi.ModelResourceSummary{{Name: "omnivoice-cache", Type: factoryapi.ResourceTypeModel, Capacity: 1}},
+			}},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodGet, "/models", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	response := decodeJSONResponse[factoryapi.ListModelsResponse](t, rec)
+	if len(response.Results) != 1 || response.Results[0].Name != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("list models response = %#v, want OMNIVOICE model", response)
+	}
+}
+
+func TestGetModel_ReturnsDiscoveredModelDetail(t *testing.T) {
+	mf := &testutil.MockFactory{
+		ModelDetails: map[string]factoryapi.ModelDetail{
+			"OMNIVOICE_Q4_K_M": {
+				Name:             "OMNIVOICE_Q4_K_M",
+				ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+				Status:           factoryapi.READY,
+				LoadState:        factoryapi.UNLOADED,
+				Operations:       []factoryapi.ModelOperation{{Name: "TTS"}},
+				Modalities:       []factoryapi.ModelOperationContentType{factoryapi.ModelOperationContentTypeAudio, factoryapi.ModelOperationContentTypeText},
+				Resources:        []factoryapi.ModelResourceSummary{{Name: "omnivoice-cache", Type: factoryapi.ResourceTypeModel, Capacity: 1}},
+				Capabilities: []factoryapi.ModelCapability{{
+					Worker:           "voice-local",
+					ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+					Operations:       []factoryapi.ModelOperation{{Name: "TTS"}},
+					ResourceNames:    []string{"omnivoice-cache"},
+				}},
+				Diagnostics: factoryapi.StringMap{"workerCount": "1"},
+			},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodGet, "/models/OMNIVOICE_Q4_K_M", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	model := decodeJSONResponse[factoryapi.ModelDetail](t, rec)
+	if model.Name != "OMNIVOICE_Q4_K_M" || len(model.Capabilities) != 1 {
+		t.Fatalf("model detail = %#v, want OMNIVOICE model capability detail", model)
+	}
+}
+
+func TestGetModel_ReturnsNotFoundForUnknownDiscoveredModel(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+	req := httptest.NewRequest(http.MethodGet, "/models/MISSING", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "model not found")
+}
+
 func TestGetEditableCurrentFactoryDefinition_ReturnsDefinitionAndVersion(t *testing.T) {
 	versionTime := time.Date(2026, 5, 18, 10, 30, 0, 0, time.UTC)
 	mf := &testutil.MockFactory{

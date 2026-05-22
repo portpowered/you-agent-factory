@@ -21,6 +21,8 @@ tags:
     description: Runtime state, event stream, and trace inspection.
   - name: Provider Sessions
     description: Provider-owned session diagnostics for dashboard inspection.
+  - name: Models
+    description: Model discovery and capability inspection for the current runtime.
   - name: Workflows
     description: Stored workflow inspection.
 paths:
@@ -302,6 +304,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models:
+    get:
+      tags:
+        - Models
+      operationId: listModels
+      summary: List discovered models
+      description: Lists the concrete model identifiers exposed by the currently loaded runtime configuration together with capability, readiness, locality, load-state, and resource summary data.
+      responses:
+        '200':
+          description: Discovered models for the current runtime.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListModelsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models/{model_name}:
+    get:
+      tags:
+        - Models
+      operationId: getModel
+      summary: Get one discovered model
+      description: Returns one discovered model's readiness, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Discovered model detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
   /factories/{factory_id}/status:
@@ -848,6 +891,20 @@ components:
       $ref: './components/schemas/api/StatusCategories.yaml'
     StatusResponse:
       $ref: './components/schemas/api/StatusResponse.yaml'
+    ListModelsResponse:
+      $ref: './components/schemas/api/ListModelsResponse.yaml'
+    ModelSummary:
+      $ref: './components/schemas/api/ModelSummary.yaml'
+    ModelDetail:
+      $ref: './components/schemas/api/ModelDetail.yaml'
+    ModelCapability:
+      $ref: './components/schemas/api/ModelCapability.yaml'
+    ModelResourceSummary:
+      $ref: './components/schemas/api/ModelResourceSummary.yaml'
+    ModelStatus:
+      $ref: './components/schemas/api/ModelStatus.yaml'
+    ModelLoadState:
+      $ref: './components/schemas/api/ModelLoadState.yaml'
     ErrorFamily:
       $ref: './components/schemas/api/ErrorFamily.yaml'
     ErrorResponse:

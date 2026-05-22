@@ -1,0 +1,5 @@
+type: string
+description: Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+enum:
+  - UNLOADED
+  - NOT_APPLICABLE

@@ -303,6 +303,30 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) ListModels(w http.ResponseWriter, r *http.Request) {
+	response, err := s.runtime.ListModels(r.Context())
+	if err != nil {
+		s.logger.Error("list models failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to list models", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) GetModel(w http.ResponseWriter, r *http.Request, modelName string) {
+	model, err := s.runtime.GetModel(r.Context(), modelName)
+	if err != nil {
+		if errors.Is(err, apisurface.ErrModelNotFound) {
+			s.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
+			return
+		}
+		s.logger.Error("get model failed", zap.Error(err), zap.String("model_name", modelName))
+		s.writeError(w, http.StatusInternalServerError, "failed to load model", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, model)
+}
+
 func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {

@@ -37,6 +37,10 @@ type MockFactory struct {
 	EditableFactoryErr       error
 	SavedEditableFactories   []factoryapi.SaveEditableFactoryDefinitionRequest
 	SaveEditableFactoryErr   error
+	Models                   factoryapi.ListModelsResponse
+	ListModelsErr            error
+	ModelDetails             map[string]factoryapi.ModelDetail
+	GetModelErr              error
 	SessionFactories         map[string]*MockFactory
 	FactorySessions          factoryapi.ListFactorySessionsResponse
 	ListFactorySessionsErr   error
@@ -192,6 +196,27 @@ func (m *MockFactory) SaveEditableFactoryDefinition(_ context.Context, request f
 		FactoryDefinition: request.FactoryDefinition,
 		Version:           version,
 	}, nil
+}
+
+func (m *MockFactory) ListModels(_ context.Context) (factoryapi.ListModelsResponse, error) {
+	if m.ListModelsErr != nil {
+		return factoryapi.ListModelsResponse{}, m.ListModelsErr
+	}
+	return m.Models, nil
+}
+
+func (m *MockFactory) GetModel(_ context.Context, modelName string) (factoryapi.ModelDetail, error) {
+	if m.GetModelErr != nil {
+		return factoryapi.ModelDetail{}, m.GetModelErr
+	}
+	if m.ModelDetails == nil {
+		return factoryapi.ModelDetail{}, apisurface.ErrModelNotFound
+	}
+	model, ok := m.ModelDetails[modelName]
+	if !ok {
+		return factoryapi.ModelDetail{}, apisurface.ErrModelNotFound
+	}
+	return model, nil
 }
 
 func (m *MockFactory) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {

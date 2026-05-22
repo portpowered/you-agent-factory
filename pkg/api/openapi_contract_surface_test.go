@@ -179,6 +179,8 @@ func assertPublishedOperations(t *testing.T, paths map[string]any) {
 		"/work/{id}":                  {"get"},
 		"/events":                     {"get"},
 		"/status":                     {"get"},
+		"/models":                     {"get"},
+		"/models/{model_name}":        {"get"},
 		"/provider-sessions/detail":   {"get"},
 		"/factory":                    {"post"},
 		"/factory/~current":           {"get"},
@@ -226,7 +228,7 @@ func assertPublishedSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	for _, schema := range []string{
 		"SubmitWorkRequest", "SubmitWorkResponse", "UpsertWorkRequestResponse", "WorkRequest", "Work", "WorkContent",
 		"WorkContentPart", "WorkContentPartType", "WorkTextContentPart", "WorkImageContentPart", "Relation", "ListWorkResponse",
-		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "Factory", "Workstation", "WorkstationKind",
+		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "Workstation", "WorkstationKind",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)
@@ -466,6 +468,13 @@ func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	assertResponseRef(t, saveEditableFactory, "400", "#/components/responses/SaveEditableFactoryDefinitionBadRequest")
 	assertResponseRef(t, saveEditableFactory, "409", "#/components/responses/SaveEditableFactoryDefinitionConflict")
 	assertResponseRef(t, saveEditableFactory, "404", "#/components/responses/CurrentFactoryNotFound")
+
+	listModels := pathOperation(t, paths, "/models", "get")
+	assertResponseSchemaRef(t, listModels, "200", "#/components/schemas/ListModelsResponse")
+
+	getModel := pathOperation(t, paths, "/models/{model_name}", "get")
+	assertResponseSchemaRef(t, getModel, "200", "#/components/schemas/ModelDetail")
+	assertResponseRef(t, getModel, "404", "#/components/responses/NotFound")
 }
 
 func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {

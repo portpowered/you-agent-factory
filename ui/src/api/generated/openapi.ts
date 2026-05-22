@@ -192,6 +192,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List discovered models
+         * @description Lists the concrete model identifiers exposed by the currently loaded runtime configuration together with capability, readiness, locality, load-state, and resource summary data.
+         */
+        get: operations["listModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models/{model_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one discovered model
+         * @description Returns one discovered model's readiness, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
+         */
+        get: operations["getModel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factories/{factory_id}/status": {
         parameters: {
             query?: never;
@@ -514,6 +554,74 @@ export interface components {
             totalTokens: number;
             resources?: components["schemas"]["ResourceUsage"][];
         };
+        ListModelsResponse: {
+            /** @description Discovered models exposed by the currently loaded runtime configuration. */
+            results: components["schemas"]["ModelSummary"][];
+        };
+        ModelSummary: {
+            /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+            name: string;
+            providerLocality: components["schemas"]["WorkerModelLocality"];
+            status: components["schemas"]["ModelStatus"];
+            loadState: components["schemas"]["ModelLoadState"];
+            /** @description Provider-agnostic operations supported by the discovered model. */
+            operations: components["schemas"]["ModelOperation"][];
+            /** @description Uppercase content modalities observed across the model's declared operation inputs and outputs. */
+            modalities: components["schemas"]["ModelOperationContentType"][];
+            /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
+            resources: components["schemas"]["ModelResourceSummary"][];
+        };
+        ModelDetail: {
+            /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+            name: string;
+            providerLocality: components["schemas"]["WorkerModelLocality"];
+            status: components["schemas"]["ModelStatus"];
+            loadState: components["schemas"]["ModelLoadState"];
+            /** @description Union of provider-agnostic operations supported by workers for this model. */
+            operations: components["schemas"]["ModelOperation"][];
+            /** @description Uppercase content modalities observed across all declared operation inputs and outputs. */
+            modalities: components["schemas"]["ModelOperationContentType"][];
+            /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
+            resources: components["schemas"]["ModelResourceSummary"][];
+            /** @description Worker-scoped capability declarations that contribute to this discovered model. */
+            capabilities: components["schemas"]["ModelCapability"][];
+            diagnostics: components["schemas"]["StringMap"];
+        };
+        ModelCapability: {
+            /** @description Customer-authored worker name that exposes this capability declaration. */
+            worker: string;
+            modelProvider?: components["schemas"]["WorkerModelProvider"];
+            providerLocality: components["schemas"]["WorkerModelLocality"];
+            /** @description Operations declared by this worker for the selected model. */
+            operations: components["schemas"]["ModelOperation"][];
+            /** @description Factory resource names referenced by the worker declaration. */
+            resourceNames: string[];
+        };
+        ModelResourceSummary: {
+            /** @description Factory-authored resource name. */
+            name: string;
+            type: components["schemas"]["ResourceType"];
+            /** @description Declared factory capacity for this resource. */
+            capacity: number;
+            /** @description Concrete model identifier when the resource is model-specific. */
+            model?: string;
+            /** @description Local runtime backend identifier for model resources. */
+            backend?: string;
+            /** @description Local load-policy metadata for model resources. */
+            loadPolicy?: string;
+            /** @description Cloud provider identity when the resource models quota or routing. */
+            provider?: string;
+        };
+        /**
+         * @description Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+         * @enum {string}
+         */
+        ModelStatus: "READY" | "UNAVAILABLE";
+        /**
+         * @description Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+         * @enum {string}
+         */
+        ModelLoadState: "UNLOADED" | "NOT_APPLICABLE";
         /**
          * @description Stable machine-readable error family for broader client grouping.
          * @enum {string}
@@ -1829,6 +1937,8 @@ export interface components {
          * @enum {string}
          */
         RelationType: "DEPENDS_ON" | "PARENT_CHILD" | "SPAWNED_BY";
+        /** @description Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`. */
+        ModelOperationName: string;
         /**
          * @description Canonical transcript entry type used by the dashboard transcript view.
          * @enum {string}
@@ -1866,8 +1976,6 @@ export interface components {
             /** @description Whether the entry only exposed encrypted content instead of plaintext. */
             encrypted?: boolean;
         };
-        /** @description Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`. */
-        ModelOperationName: string;
         /** @description Selector fields used to resolve one content part from ordered runtime input. */
         WorkstationOperationBindingSelector: {
             /** @description Match a content part by its authored slot field. */
@@ -2288,6 +2396,52 @@ export interface operations {
                     "application/json": components["schemas"]["StatusResponse"];
                 };
             };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discovered models for the current runtime. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListModelsResponse"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+                model_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discovered model detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };

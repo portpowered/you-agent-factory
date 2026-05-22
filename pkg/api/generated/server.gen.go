@@ -146,6 +146,12 @@ const (
 	Codex LoadableProviderSessionProvider = "codex"
 )
 
+// Defines values for ModelLoadState.
+const (
+	NOTAPPLICABLE ModelLoadState = "NOT_APPLICABLE"
+	UNLOADED      ModelLoadState = "UNLOADED"
+)
+
 // Defines values for ModelOperationContentType.
 const (
 	ModelOperationContentTypeAudio  ModelOperationContentType = "AUDIO"
@@ -153,6 +159,12 @@ const (
 	ModelOperationContentTypeImage  ModelOperationContentType = "IMAGE"
 	ModelOperationContentTypeJSON   ModelOperationContentType = "JSON"
 	ModelOperationContentTypeText   ModelOperationContentType = "TEXT"
+)
+
+// Defines values for ModelStatus.
+const (
+	READY       ModelStatus = "READY"
+	UNAVAILABLE ModelStatus = "UNAVAILABLE"
 )
 
 // Defines values for PromptTemplateDiagnosticKind.
@@ -1070,6 +1082,12 @@ type ListFactorySessionsResponse struct {
 	Sessions []FactorySessionSummary `json:"sessions"`
 }
 
+// ListModelsResponse defines model for ListModelsResponse.
+type ListModelsResponse struct {
+	// Results Discovered models exposed by the currently loaded runtime configuration.
+	Results []ModelSummary `json:"results"`
+}
+
 // ListWorkResponse defines model for ListWorkResponse.
 type ListWorkResponse struct {
 	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
@@ -1093,6 +1111,55 @@ type LoadableProviderSessionRef struct {
 	// Provider Canonical provider value for provider-session detail requests that can be loaded by the API.
 	Provider LoadableProviderSessionProvider `json:"provider"`
 }
+
+// ModelCapability defines model for ModelCapability.
+type ModelCapability struct {
+	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
+	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
+
+	// Operations Operations declared by this worker for the selected model.
+	Operations []ModelOperation `json:"operations"`
+
+	// ProviderLocality Provider locality for a model worker capability declaration.
+	ProviderLocality WorkerModelLocality `json:"providerLocality"`
+
+	// ResourceNames Factory resource names referenced by the worker declaration.
+	ResourceNames []string `json:"resourceNames"`
+
+	// Worker Customer-authored worker name that exposes this capability declaration.
+	Worker string `json:"worker"`
+}
+
+// ModelDetail defines model for ModelDetail.
+type ModelDetail struct {
+	// Capabilities Worker-scoped capability declarations that contribute to this discovered model.
+	Capabilities []ModelCapability `json:"capabilities"`
+	Diagnostics  StringMap         `json:"diagnostics"`
+
+	// LoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+	LoadState ModelLoadState `json:"loadState"`
+
+	// Modalities Uppercase content modalities observed across all declared operation inputs and outputs.
+	Modalities []ModelOperationContentType `json:"modalities"`
+
+	// Name Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	Name string `json:"name"`
+
+	// Operations Union of provider-agnostic operations supported by workers for this model.
+	Operations []ModelOperation `json:"operations"`
+
+	// ProviderLocality Provider locality for a model worker capability declaration.
+	ProviderLocality WorkerModelLocality `json:"providerLocality"`
+
+	// Resources Factory resource summaries associated with this model's workers or explicit model metadata.
+	Resources []ModelResourceSummary `json:"resources"`
+
+	// Status Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+	Status ModelStatus `json:"status"`
+}
+
+// ModelLoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+type ModelLoadState string
 
 // ModelOperation One provider-agnostic operation exposed by a model worker, such as `TTS`.
 type ModelOperation struct {
@@ -1122,6 +1189,57 @@ type ModelOperationSlot struct {
 
 	// Required Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
 	Required *bool `json:"required,omitempty"`
+}
+
+// ModelResourceSummary defines model for ModelResourceSummary.
+type ModelResourceSummary struct {
+	// Backend Local runtime backend identifier for model resources.
+	Backend *string `json:"backend,omitempty"`
+
+	// Capacity Declared factory capacity for this resource.
+	Capacity int `json:"capacity"`
+
+	// LoadPolicy Local load-policy metadata for model resources.
+	LoadPolicy *string `json:"loadPolicy,omitempty"`
+
+	// Model Concrete model identifier when the resource is model-specific.
+	Model *string `json:"model,omitempty"`
+
+	// Name Factory-authored resource name.
+	Name string `json:"name"`
+
+	// Provider Cloud provider identity when the resource models quota or routing.
+	Provider *string `json:"provider,omitempty"`
+
+	// Type Uppercase resource families supported by the public factory-config contract.
+	Type ResourceType `json:"type"`
+}
+
+// ModelStatus Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+type ModelStatus string
+
+// ModelSummary defines model for ModelSummary.
+type ModelSummary struct {
+	// LoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+	LoadState ModelLoadState `json:"loadState"`
+
+	// Modalities Uppercase content modalities observed across the model's declared operation inputs and outputs.
+	Modalities []ModelOperationContentType `json:"modalities"`
+
+	// Name Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	Name string `json:"name"`
+
+	// Operations Provider-agnostic operations supported by the discovered model.
+	Operations []ModelOperation `json:"operations"`
+
+	// ProviderLocality Provider locality for a model worker capability declaration.
+	ProviderLocality WorkerModelLocality `json:"providerLocality"`
+
+	// Resources Factory resource summaries associated with this model's workers or explicit model metadata.
+	Resources []ModelResourceSummary `json:"resources"`
+
+	// Status Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+	Status ModelStatus `json:"status"`
 }
 
 // OpenFactorySessionRequest defines model for OpenFactorySessionRequest.
@@ -2715,6 +2833,12 @@ type ServerInterface interface {
 	// Validate workstation prompt template
 	// (POST /factory/~current/workstations/{workstation_name}/prompt-template-validation)
 	ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request, workstationName string)
+	// List discovered models
+	// (GET /models)
+	ListModels(w http.ResponseWriter, r *http.Request)
+	// Get one discovered model
+	// (GET /models/{model_name})
+	GetModel(w http.ResponseWriter, r *http.Request, modelName string)
 	// Get provider session details
 	// (GET /provider-sessions/detail)
 	GetProviderSessionDetails(w http.ResponseWriter, r *http.Request, params GetProviderSessionDetailsParams)
@@ -3203,6 +3327,45 @@ func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTempla
 	handler.ServeHTTP(w, r)
 }
 
+// ListModels operation middleware
+func (siw *ServerInterfaceWrapper) ListModels(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListModels(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetModel operation middleware
+func (siw *ServerInterfaceWrapper) GetModel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "model_name" -------------
+	var modelName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "model_name", mux.Vars(r)["model_name"], &modelName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetModel(w, r, modelName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetProviderSessionDetails operation middleware
 func (siw *ServerInterfaceWrapper) GetProviderSessionDetails(w http.ResponseWriter, r *http.Request) {
 
@@ -3554,6 +3717,10 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-contract", wrapper.GetCurrentFactoryWorkstationPromptTemplateContract).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplate).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/models", wrapper.ListModels).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/models/{model_name}", wrapper.GetModel).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 

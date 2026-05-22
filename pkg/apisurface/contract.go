@@ -21,6 +21,8 @@ type APISurface interface {
 	GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error)
 	GetEditableFactoryDefinition(ctx context.Context) (factoryapi.EditableFactoryDefinition, error)
 	SaveEditableFactoryDefinition(ctx context.Context, request factoryapi.SaveEditableFactoryDefinitionRequest) (factoryapi.EditableFactoryDefinition, error)
+	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
+	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
 }
 
 // SessionAPISurface extends APISurface with explicit per-session routing while
@@ -61,6 +63,10 @@ var ErrFactorySessionNotFound = errors.New("factory session not found")
 // ErrEditableFactoryVersionStale reports that a complete editable-definition
 // save was based on an older factory definition version than the current one.
 var ErrEditableFactoryVersionStale = errors.New("editable factory definition version is stale")
+
+// ErrModelNotFound reports that the requested discovered model identifier is
+// not present in the current runtime configuration.
+var ErrModelNotFound = errors.New("model not found")
 
 // TopologyValidationError carries validation targets that the graph editor can
 // map back to form fields, nodes, edges, or save-level messages.

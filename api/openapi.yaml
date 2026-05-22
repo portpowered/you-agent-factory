@@ -21,6 +21,8 @@ tags:
     description: Runtime state, event stream, and trace inspection.
   - name: Provider Sessions
     description: Provider-owned session diagnostics for dashboard inspection.
+  - name: Models
+    description: Model discovery and capability inspection for the current runtime.
   - name: Workflows
     description: Stored workflow inspection.
 paths:
@@ -302,6 +304,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models:
+    get:
+      tags:
+        - Models
+      operationId: listModels
+      summary: List discovered models
+      description: Lists the concrete model identifiers exposed by the currently loaded runtime configuration together with capability, readiness, locality, load-state, and resource summary data.
+      responses:
+        '200':
+          description: Discovered models for the current runtime.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListModelsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models/{model_name}:
+    get:
+      tags:
+        - Models
+      operationId: getModel
+      summary: Get one discovered model
+      description: Returns one discovered model's readiness, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Discovered model detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
   /factories/{factory_id}/status:
@@ -1033,6 +1076,160 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ResourceUsage'
+    ListModelsResponse:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          description: Discovered models exposed by the currently loaded runtime configuration.
+          items:
+            $ref: '#/components/schemas/ModelSummary'
+    ModelSummary:
+      type: object
+      required:
+        - name
+        - providerLocality
+        - status
+        - loadState
+        - operations
+        - modalities
+        - resources
+      properties:
+        name:
+          type: string
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+        providerLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+        status:
+          $ref: '#/components/schemas/ModelStatus'
+        loadState:
+          $ref: '#/components/schemas/ModelLoadState'
+        operations:
+          type: array
+          description: Provider-agnostic operations supported by the discovered model.
+          items:
+            $ref: '#/components/schemas/ModelOperation'
+        modalities:
+          type: array
+          description: Uppercase content modalities observed across the model's declared operation inputs and outputs.
+          items:
+            $ref: '#/components/schemas/ModelOperationContentType'
+        resources:
+          type: array
+          description: Factory resource summaries associated with this model's workers or explicit model metadata.
+          items:
+            $ref: '#/components/schemas/ModelResourceSummary'
+    ModelDetail:
+      type: object
+      required:
+        - name
+        - providerLocality
+        - status
+        - loadState
+        - operations
+        - modalities
+        - resources
+        - capabilities
+        - diagnostics
+      properties:
+        name:
+          type: string
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+        providerLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+        status:
+          $ref: '#/components/schemas/ModelStatus'
+        loadState:
+          $ref: '#/components/schemas/ModelLoadState'
+        operations:
+          type: array
+          description: Union of provider-agnostic operations supported by workers for this model.
+          items:
+            $ref: '#/components/schemas/ModelOperation'
+        modalities:
+          type: array
+          description: Uppercase content modalities observed across all declared operation inputs and outputs.
+          items:
+            $ref: '#/components/schemas/ModelOperationContentType'
+        resources:
+          type: array
+          description: Factory resource summaries associated with this model's workers or explicit model metadata.
+          items:
+            $ref: '#/components/schemas/ModelResourceSummary'
+        capabilities:
+          type: array
+          description: Worker-scoped capability declarations that contribute to this discovered model.
+          items:
+            $ref: '#/components/schemas/ModelCapability'
+        diagnostics:
+          $ref: '#/components/schemas/StringMap'
+    ModelCapability:
+      type: object
+      required:
+        - worker
+        - providerLocality
+        - operations
+        - resourceNames
+      properties:
+        worker:
+          type: string
+          description: Customer-authored worker name that exposes this capability declaration.
+        modelProvider:
+          $ref: '#/components/schemas/WorkerModelProvider'
+        providerLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+        operations:
+          type: array
+          description: Operations declared by this worker for the selected model.
+          items:
+            $ref: '#/components/schemas/ModelOperation'
+        resourceNames:
+          type: array
+          description: Factory resource names referenced by the worker declaration.
+          items:
+            type: string
+    ModelResourceSummary:
+      type: object
+      required:
+        - name
+        - type
+        - capacity
+      properties:
+        name:
+          type: string
+          description: Factory-authored resource name.
+        type:
+          $ref: '#/components/schemas/ResourceType'
+        capacity:
+          type: integer
+          minimum: 0
+          description: Declared factory capacity for this resource.
+        model:
+          type: string
+          description: Concrete model identifier when the resource is model-specific.
+        backend:
+          type: string
+          description: Local runtime backend identifier for model resources.
+        loadPolicy:
+          type: string
+          description: Local load-policy metadata for model resources.
+        provider:
+          type: string
+          description: Cloud provider identity when the resource models quota or routing.
+    ModelStatus:
+      type: string
+      description: Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+      enum:
+        - READY
+        - UNAVAILABLE
+    ModelLoadState:
+      type: string
+      description: Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+      enum:
+        - UNLOADED
+        - NOT_APPLICABLE
     ErrorFamily:
       type: string
       description: Stable machine-readable error family for broader client grouping.
@@ -3719,6 +3916,10 @@ components:
         - Source work cannot proceed until the target work reaches the required state.
         - Target work is a child of the source work.
         - Target work was generated by a workstation handling the source work.
+    ModelOperationName:
+      type: string
+      description: Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+      pattern: ^[A-Z][A-Z0-9_]*$
     CodexSessionTranscriptEntryType:
       type: string
       description: Canonical transcript entry type used by the dashboard transcript view.
@@ -3781,10 +3982,6 @@ components:
         encrypted:
           type: boolean
           description: Whether the entry only exposed encrypted content instead of plaintext.
-    ModelOperationName:
-      type: string
-      description: Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
-      pattern: ^[A-Z][A-Z0-9_]*$
     WorkstationOperationBindingSelector:
       type: object
       additionalProperties: false

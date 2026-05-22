@@ -76,6 +76,9 @@ func defaultScaffoldDefinition() scaffoldDefinition {
       ]
     }
   ],
+  "resources": [
+    { "name": "agent-slot", "capacity": 1 }
+  ],
   "workers": [
     { "name": "processor" }
   ],
