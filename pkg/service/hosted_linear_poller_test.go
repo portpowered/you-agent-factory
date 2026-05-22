@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -208,6 +209,101 @@ func TestRunHostedLinearPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testi
 	}
 	if second.foundNewer {
 		t.Fatal("expected second cycle to stop at checkpoint with no newer issues")
+	}
+}
+
+func TestRunHostedLinearPollCycle_PushesFiltersIntoProviderQueryForBoundedResume(t *testing.T) {
+	var capturedQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		capturedQuery = payload.Query
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"issues": {
+					"nodes": [
+						{
+							"id": "issue-match",
+							"identifier": "ENG-144",
+							"title": "Filtered issue",
+							"description": "Visible only when provider-side filters apply",
+							"updatedAt": "2026-05-22T08:00:00Z",
+							"url": "https://linear.app/example/issue/ENG-144",
+							"team": {"id": "team-match", "key": "ENG", "name": "Engineering"},
+							"state": {"id": "state-match", "name": "Todo", "type": "unstarted"},
+							"assignee": null
+						}
+					],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	worker := hostedLinearWorkerConfigForTest(
+		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		func(cfg *interfaces.HostedLinearWorkerConfig) {
+			cfg.TeamIDs = []string{"team-match"}
+			cfg.StateIDs = []string{"state-match"}
+		},
+	)
+	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
+	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
+	if err := saveLinearCheckpoint(checkpointPath, linearCheckpoint{
+		IssueID:   "issue-older-match",
+		UpdatedAt: "2026-05-22T07:00:00Z",
+	}); err != nil {
+		t.Fatalf("seed checkpoint: %v", err)
+	}
+
+	var submitted []interfaces.WorkRequest
+	result, err := runHostedLinearPollCycle(
+		context.Background(),
+		linearPollerClient{endpoint: server.URL, client: server.Client(), logger: zap.NewNop()},
+		nil,
+		workstation,
+		worker,
+		func(_ context.Context, request interfaces.WorkRequest) error {
+			submitted = append(submitted, request)
+			return nil
+		},
+		checkpointPath,
+		"linear-secret-key",
+		zap.NewNop(),
+	)
+	if err != nil {
+		t.Fatalf("runHostedLinearPollCycle: %v", err)
+	}
+	if !strings.Contains(capturedQuery, `team: { id: { in: ["team-match"] } }`) {
+		t.Fatalf("query = %q, want team filter pushed into provider request", capturedQuery)
+	}
+	if !strings.Contains(capturedQuery, `state: { id: { in: ["state-match"] } }`) {
+		t.Fatalf("query = %q, want state filter pushed into provider request", capturedQuery)
+	}
+	if !result.foundNewer {
+		t.Fatal("expected hosted linear cycle to report newer filtered issues")
+	}
+	if len(submitted) != 1 {
+		t.Fatalf("submitted requests = %d, want 1", len(submitted))
+	}
+	normalized := normalizeSubmittedLinearWorkRequest(t, submitted[0])
+	if len(normalized) != 1 || normalized[0].WorkID != "linear:issue-match" {
+		t.Fatalf("normalized submissions = %#v, want only filtered issue", normalized)
+	}
+	checkpoint := readLinearCheckpointForTest(t, checkpointPath)
+	if checkpoint.IssueID != "issue-match" || checkpoint.UpdatedAt != "2026-05-22T08:00:00Z" {
+		t.Fatalf("checkpoint = %#v, want newest filtered issue fingerprint", checkpoint)
 	}
 }
 

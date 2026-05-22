@@ -82,6 +82,11 @@ type linearPollerClient struct {
 	logger   *zap.Logger
 }
 
+type linearIssueFilter struct {
+	TeamIDs  []string
+	StateIDs []string
+}
+
 func (fs *FactoryService) hostedPollerHTTPClient() *http.Client {
 	if fs != nil && fs.cfg != nil && fs.cfg.HostedPollerHTTPClient != nil {
 		return fs.cfg.HostedPollerHTTPClient
@@ -270,7 +275,7 @@ func collectHostedLinearIssues(
 	nextCheckpoint := linearCheckpoint{}
 
 	for pages < hostedLinearMaxPagesPerCycle {
-		page, err := client.fetchIssuesPage(ctx, apiKey, cursor)
+		page, err := client.fetchIssuesPage(ctx, apiKey, cursor, hostedLinearIssueFilterFromConfig(workerDef.Linear))
 		if err != nil {
 			return nil, linearCheckpoint{}, err
 		}
@@ -584,10 +589,43 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-func (c linearPollerClient) fetchIssuesPage(ctx context.Context, apiKey, cursor string) (linearIssuePage, error) {
+func hostedLinearIssueFilterFromConfig(cfg *interfaces.HostedLinearWorkerConfig) linearIssueFilter {
+	if cfg == nil {
+		return linearIssueFilter{}
+	}
+	return linearIssueFilter{
+		TeamIDs:  append([]string(nil), cfg.TeamIDs...),
+		StateIDs: append([]string(nil), cfg.StateIDs...),
+	}
+}
+
+func hostedLinearIssueFilterClause(filter linearIssueFilter) string {
+	clauses := make([]string, 0, 2)
+	if len(filter.TeamIDs) > 0 {
+		clauses = append(clauses, fmt.Sprintf("team: { id: { in: %s } }", hostedLinearGraphQLStringList(filter.TeamIDs)))
+	}
+	if len(filter.StateIDs) > 0 {
+		clauses = append(clauses, fmt.Sprintf("state: { id: { in: %s } }", hostedLinearGraphQLStringList(filter.StateIDs)))
+	}
+	if len(clauses) == 0 {
+		return ""
+	}
+	return ", filter: { " + strings.Join(clauses, " ") + " }"
+}
+
+func hostedLinearGraphQLStringList(values []string) string {
+	data, err := json.Marshal(values)
+	if err != nil {
+		return "[]"
+	}
+	return string(data)
+}
+
+func (c linearPollerClient) fetchIssuesPage(ctx context.Context, apiKey, cursor string, filter linearIssueFilter) (linearIssuePage, error) {
+	filterClause := hostedLinearIssueFilterClause(filter)
 	body := map[string]any{
-		"query": `query HostedLinearPollerIssues($first: Int!, $after: String) {
-  issues(first: $first, after: $after, orderBy: updatedAt) {
+		"query": fmt.Sprintf(`query HostedLinearPollerIssues($first: Int!, $after: String) {
+  issues(first: $first, after: $after, orderBy: updatedAt%s) {
     nodes {
       id
       identifier
@@ -616,7 +654,7 @@ func (c linearPollerClient) fetchIssuesPage(ctx context.Context, apiKey, cursor 
       endCursor
     }
   }
-}`,
+}`, filterClause),
 		"variables": map[string]any{
 			"first": hostedLinearPageSize,
 			"after": cursor,
