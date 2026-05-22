@@ -36,35 +36,11 @@ func List(cfg ListConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
-	if cfg.StateType != "" && !validWorkStateType(cfg.StateType) {
-		return fmt.Errorf("--state-type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED")
-	}
-	if cfg.SortBy != "" && cfg.SortBy != string(factoryapi.SortByStateType) {
-		return fmt.Errorf("--sort-by must be state.type")
+	if err := validateListConfig(cfg); err != nil {
+		return err
 	}
 
-	endpoint := url.URL{
-		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
-		Path:   sessionpath.ScopedPath("/work", cfg.SessionID),
-	}
-	query := endpoint.Query()
-	if cfg.StateName != "" {
-		query.Set("state.name", cfg.StateName)
-	}
-	if cfg.StateType != "" {
-		query.Set("state.type", cfg.StateType)
-	}
-	if cfg.SortBy != "" {
-		query.Set("sortBy", cfg.SortBy)
-	}
-	if cfg.MaxResults > 0 {
-		query.Set("maxResults", fmt.Sprintf("%d", cfg.MaxResults))
-	}
-	if cfg.NextToken != "" {
-		query.Set("nextToken", cfg.NextToken)
-	}
-	endpoint.RawQuery = query.Encode()
+	endpoint := listEndpoint(cfg)
 
 	client := &http.Client{Timeout: listRequestTimeout}
 	resp, err := client.Get(endpoint.String())
@@ -89,24 +65,56 @@ func List(cfg ListConfig) error {
 		encoder := json.NewEncoder(cfg.Output)
 		return encoder.Encode(result)
 	}
+	return renderListResult(cfg.Output, result)
+}
 
+func validateListConfig(cfg ListConfig) error {
+	if cfg.StateType != "" && !validWorkStateType(cfg.StateType) {
+		return fmt.Errorf("--state-type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED")
+	}
+	if cfg.SortBy != "" && cfg.SortBy != string(factoryapi.SortByStateType) {
+		return fmt.Errorf("--sort-by must be state.type")
+	}
+	return nil
+}
+
+func listEndpoint(cfg ListConfig) url.URL {
+	endpoint := url.URL{
+		Scheme: "http",
+		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
+		Path:   sessionpath.ScopedPath("/work", cfg.SessionID),
+	}
+	query := endpoint.Query()
+	setListQueryParam(query, "state.name", cfg.StateName)
+	setListQueryParam(query, "state.type", cfg.StateType)
+	setListQueryParam(query, "sortBy", cfg.SortBy)
+	if cfg.MaxResults > 0 {
+		query.Set("maxResults", fmt.Sprintf("%d", cfg.MaxResults))
+	}
+	setListQueryParam(query, "nextToken", cfg.NextToken)
+	endpoint.RawQuery = query.Encode()
+	return endpoint
+}
+
+func setListQueryParam(query url.Values, key, value string) {
+	if value != "" {
+		query.Set(key, value)
+	}
+}
+
+func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) error {
 	if len(result.Results) == 0 {
-		_, err = fmt.Fprintln(cfg.Output, "No work found.")
+		_, err := fmt.Fprintln(output, "No work found.")
 		return err
 	}
 
-	if _, err := fmt.Fprintln(cfg.Output, "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS"); err != nil {
+	if _, err := fmt.Fprintln(output, "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS"); err != nil {
 		return err
 	}
 	for _, work := range result.Results {
-		stateName := ""
-		stateType := ""
-		if work.State != nil {
-			stateName = work.State.Name
-			stateType = string(work.State.Type)
-		}
+		stateName, stateType := workStateColumns(work.State)
 		if _, err := fmt.Fprintf(
-			cfg.Output,
+			output,
 			"%s\t%s\t%s\t%s\t%s\n",
 			stringValue(work.WorkId),
 			work.Name,
@@ -118,6 +126,13 @@ func List(cfg ListConfig) error {
 		}
 	}
 	return nil
+}
+
+func workStateColumns(state *factoryapi.WorkState) (string, string) {
+	if state == nil {
+		return "", ""
+	}
+	return state.Name, string(state.Type)
 }
 
 func formatWorkRelations(relations *[]factoryapi.Relation) string {

@@ -551,91 +551,106 @@ func ruleHostedWorkers(cfg *interfaces.FactoryConfig) []Finding {
 	var findings []Finding
 	for wi, worker := range cfg.Workers {
 		basePath := fmt.Sprintf("workers[%d](%s)", wi, worker.Name)
-		switch worker.Type {
-		case interfaces.WorkerTypeHosted:
-			if strings.TrimSpace(worker.Provider) == "" {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     basePath + ".provider",
-					Message:  "hosted worker requires non-empty 'provider'",
-					Rule:     "hosted-worker-provider",
-				})
-			}
-			if worker.Provider != interfaces.HostedWorkerProviderLinear {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     basePath + ".provider",
-					Message:  fmt.Sprintf("unsupported hosted worker provider %q (supported: LINEAR)", worker.Provider),
-					Rule:     "hosted-worker-provider",
-				})
-			}
-			if worker.Auth == nil || strings.TrimSpace(worker.Auth.SecretRef) == "" {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     basePath + ".auth.secretRef",
-					Message:  "hosted worker requires auth.secretRef",
-					Rule:     "hosted-worker-auth-secret-ref",
-				})
-			}
-			if worker.Linear == nil {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     basePath + ".linear",
-					Message:  "LINEAR hosted worker requires provider-specific linear configuration",
-					Rule:     "hosted-worker-linear-config",
-				})
-				continue
-			}
-			if strings.TrimSpace(worker.Linear.Mapping.WorkType) == "" {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     basePath + ".linear.mapping.workType",
-					Message:  "LINEAR hosted worker requires linear.mapping.workType",
-					Rule:     "hosted-worker-linear-mapping-work-type",
-				})
-			}
-			if strings.TrimSpace(worker.Linear.Mapping.State) == "" {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     basePath + ".linear.mapping.state",
-					Message:  "LINEAR hosted worker requires linear.mapping.state",
-					Rule:     "hosted-worker-linear-mapping-state",
-				})
-			}
-			if worker.Linear.Claim != nil && strings.TrimSpace(worker.Linear.Claim.AssigneeField) == "" {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     basePath + ".linear.claim.assigneeField",
-					Message:  "LINEAR hosted worker claim config requires non-empty assigneeField when claim is present",
-					Rule:     "hosted-worker-linear-claim-assignee-field",
-				})
-			}
-		default:
-			if strings.TrimSpace(worker.Provider) != "" {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     basePath + ".provider",
-					Message:  fmt.Sprintf("worker type %q cannot declare hosted provider configuration", worker.Type),
-					Rule:     "hosted-worker-provider-unsupported",
-				})
-			}
-			if worker.Auth != nil {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     basePath + ".auth",
-					Message:  fmt.Sprintf("worker type %q cannot declare hosted auth configuration", worker.Type),
-					Rule:     "hosted-worker-auth-unsupported",
-				})
-			}
-			if worker.Linear != nil {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     basePath + ".linear",
-					Message:  fmt.Sprintf("worker type %q cannot declare hosted LINEAR configuration", worker.Type),
-					Rule:     "hosted-worker-linear-unsupported",
-				})
-			}
+		if worker.Type == interfaces.WorkerTypeHosted {
+			findings = append(findings, validateHostedWorker(basePath, worker)...)
+			continue
 		}
+		findings = append(findings, validateUnsupportedHostedWorkerFields(basePath, worker)...)
+	}
+	return findings
+}
+
+func validateHostedWorker(basePath string, worker interfaces.WorkerConfig) []Finding {
+	var findings []Finding
+	if strings.TrimSpace(worker.Provider) == "" {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".provider",
+			Message:  "hosted worker requires non-empty 'provider'",
+			Rule:     "hosted-worker-provider",
+		})
+	}
+	if worker.Provider != interfaces.HostedWorkerProviderLinear {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".provider",
+			Message:  fmt.Sprintf("unsupported hosted worker provider %q (supported: LINEAR)", worker.Provider),
+			Rule:     "hosted-worker-provider",
+		})
+	}
+	if worker.Auth == nil || strings.TrimSpace(worker.Auth.SecretRef) == "" {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".auth.secretRef",
+			Message:  "hosted worker requires auth.secretRef",
+			Rule:     "hosted-worker-auth-secret-ref",
+		})
+	}
+	if worker.Linear == nil {
+		return append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".linear",
+			Message:  "LINEAR hosted worker requires provider-specific linear configuration",
+			Rule:     "hosted-worker-linear-config",
+		})
+	}
+	return append(findings, validateHostedLinearWorker(basePath, worker.Linear)...)
+}
+
+func validateHostedLinearWorker(basePath string, cfg *interfaces.HostedLinearWorkerConfig) []Finding {
+	var findings []Finding
+	if strings.TrimSpace(cfg.Mapping.WorkType) == "" {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".linear.mapping.workType",
+			Message:  "LINEAR hosted worker requires linear.mapping.workType",
+			Rule:     "hosted-worker-linear-mapping-work-type",
+		})
+	}
+	if strings.TrimSpace(cfg.Mapping.State) == "" {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".linear.mapping.state",
+			Message:  "LINEAR hosted worker requires linear.mapping.state",
+			Rule:     "hosted-worker-linear-mapping-state",
+		})
+	}
+	if cfg.Claim != nil && strings.TrimSpace(cfg.Claim.AssigneeField) == "" {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".linear.claim.assigneeField",
+			Message:  "LINEAR hosted worker claim config requires non-empty assigneeField when claim is present",
+			Rule:     "hosted-worker-linear-claim-assignee-field",
+		})
+	}
+	return findings
+}
+
+func validateUnsupportedHostedWorkerFields(basePath string, worker interfaces.WorkerConfig) []Finding {
+	var findings []Finding
+	if strings.TrimSpace(worker.Provider) != "" {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".provider",
+			Message:  fmt.Sprintf("worker type %q cannot declare hosted provider configuration", worker.Type),
+			Rule:     "hosted-worker-provider-unsupported",
+		})
+	}
+	if worker.Auth != nil {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".auth",
+			Message:  fmt.Sprintf("worker type %q cannot declare hosted auth configuration", worker.Type),
+			Rule:     "hosted-worker-auth-unsupported",
+		})
+	}
+	if worker.Linear != nil {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".linear",
+			Message:  fmt.Sprintf("worker type %q cannot declare hosted LINEAR configuration", worker.Type),
+			Rule:     "hosted-worker-linear-unsupported",
+		})
 	}
 	return findings
 }

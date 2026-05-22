@@ -299,6 +299,7 @@ func TestListWork(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this list-work contract test keeps the relation, pagination, and status assertions together to preserve route-level intent.
 func TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection(t *testing.T) {
 	now := time.Now()
 	tokens := map[string]*interfaces.Token{

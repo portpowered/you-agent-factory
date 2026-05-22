@@ -40,34 +40,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
-	if len(cfg.Workstations) != 1 {
-		t.Fatalf("expected one workstation, got %d", len(cfg.Workstations))
-	}
-	ws := cfg.Workstations[0]
-	if ws.ID != "finish-chapter-id" || ws.Kind != interfaces.WorkstationKindStandard {
-		t.Fatalf("expected current topology fields to map, got %#v", ws)
-	}
-	if ws.Type != interfaces.WorkstationTypeLogical || ws.PromptTemplate != "Finish {{ .WorkID }}." {
-		t.Fatalf("expected current runtime fields to map, got %#v", ws)
-	}
-	if ws.Resources[0].Capacity != 2 {
-		t.Fatalf("expected resource usage capacity 2, got %d", ws.Resources[0].Capacity)
-	}
-	if len(ws.Guards) != 1 || ws.Guards[0].Type != interfaces.GuardTypeVisitCount {
-		t.Fatalf("expected visit_count workstation guard to map, got %#v", ws.Guards)
-	}
-	if ws.Guards[0].Workstation != "review-story" || ws.Guards[0].MaxVisits != 3 {
-		t.Fatalf("expected visit_count workstation guard details, got %#v", ws.Guards[0])
-	}
-	if ws.Inputs[1].Guard == nil {
-		t.Fatal("expected input guards array to map to internal input guard")
-	}
-	if ws.Inputs[1].Guard.ParentInput != "chapter" || ws.Inputs[1].Guard.SpawnedBy != "chapter-parser" {
-		t.Fatalf("expected current guard fields to map, got %#v", ws.Inputs[1].Guard)
-	}
-	if got := ws.Env["TEAM"]; got != `{{ index .Tags "team" }}` {
-		t.Fatalf("expected env TEAM to be preserved, got %q in %#v", got, ws.Env)
-	}
+	assertCanonicalWorkstationSchema(t, cfg)
 }
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalWorkstationCronFields(t *testing.T) {
@@ -88,42 +61,9 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalWorkstationCronFields(t
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
 	}
-	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
-		t.Fatalf("expected one generated workstation, got %#v", generated.Workstations)
-	}
-
-	workstation := (*generated.Workstations)[0]
-	if workstation.Cron == nil {
-		t.Fatal("expected generated cron to decode")
-	}
-	if workstation.Cron.Schedule != "*/5 * * * *" {
-		t.Fatalf("expected generated cron schedule to decode, got %#v", workstation.Cron)
-	}
-	if workstation.Cron.TriggerAtStart == nil || !*workstation.Cron.TriggerAtStart {
-		t.Fatalf("expected generated cron triggerAtStart=true, got %#v", workstation.Cron.TriggerAtStart)
-	}
-	if workstation.Cron.Jitter == nil || *workstation.Cron.Jitter != "1s" {
-		t.Fatalf("expected generated cron jitter to decode, got %#v", workstation.Cron.Jitter)
-	}
-	if workstation.Cron.ExpiryWindow == nil || *workstation.Cron.ExpiryWindow != "20s" {
-		t.Fatalf("expected generated cron expiryWindow to decode, got %#v", workstation.Cron.ExpiryWindow)
-	}
-
-	generatedJSON, err := json.Marshal(generated)
-	if err != nil {
-		t.Fatalf("marshal generated factory boundary: %v", err)
-	}
-	serialized := string(generatedJSON)
-	for _, field := range []string{`"schedule"`, `"triggerAtStart"`, `"jitter"`, `"expiryWindow"`} {
-		if !strings.Contains(serialized, field) {
-			t.Fatalf("expected generated boundary JSON to retain canonical cron field %s: %s", field, serialized)
-		}
-	}
-	for _, retiredField := range []string{`"trigger_at_start"`, `"expiry_window"`, `"interval"`} {
-		if strings.Contains(serialized, retiredField) {
-			t.Fatalf("generated boundary JSON must not include retired cron field %s: %s", retiredField, serialized)
-		}
-	}
+	workstation := requireSingleGeneratedWorkstation(t, generated)
+	assertGeneratedCronWorkstation(t, workstation)
+	assertCanonicalCronJSON(t, generated)
 }
 
 func TestFactoryConfigFromOpenAPIJSON_MapsClassifierWorkstationRoutes(t *testing.T) {
@@ -255,76 +195,17 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
 	}
-	if generated.Id == nil || *generated.Id != "customer-project" {
-		t.Fatalf("expected generated id customer-project, got %#v", generated.Id)
-	}
-	if generated.Workers == nil || len(*generated.Workers) != 1 {
-		t.Fatalf("expected one generated worker, got %#v", generated.Workers)
-	}
-	worker := (*generated.Workers)[0]
-	if worker.ModelProvider == nil || *worker.ModelProvider != factoryapi.WorkerModelProviderClaude {
-		t.Fatalf("expected generated worker modelProvider CLAUDE, got %#v", worker.ModelProvider)
-	}
-	if worker.StopToken == nil || *worker.StopToken != "COMPLETE" {
-		t.Fatalf("expected generated worker stopToken COMPLETE, got %#v", worker.StopToken)
-	}
-	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
-		t.Fatalf("expected one generated workstation, got %#v", generated.Workstations)
-	}
-	workstation := (*generated.Workstations)[0]
-	if workstation.Body == nil || *workstation.Body != "Finish {{ .WorkID }}." {
-		t.Fatalf("expected generated body to survive boundary decode, got %#v", workstation.Body)
-	}
-	generatedJSON, err := json.Marshal(generated)
-	if err != nil {
-		t.Fatalf("marshal generated factory boundary: %v", err)
-	}
-	var serialized struct {
-		Workstations []map[string]any `json:"workstations"`
-	}
-	if err := json.Unmarshal(generatedJSON, &serialized); err != nil {
-		t.Fatalf("unmarshal generated factory boundary JSON: %v", err)
-	}
-	if len(serialized.Workstations) != 1 {
-		t.Fatalf("expected one serialized workstation, got %#v", serialized.Workstations)
-	}
-	if _, ok := serialized.Workstations[0]["promptTemplate"]; ok {
-		t.Fatalf("expected generated workstation JSON to omit promptTemplate, got %#v", serialized.Workstations[0])
-	}
-	if body, ok := serialized.Workstations[0]["body"].(string); !ok || body != "Finish {{ .WorkID }}." {
-		t.Fatalf("expected generated workstation JSON body to stay canonical, got %#v", serialized.Workstations[0])
-	}
-	if workstation.Resources == nil || len(*workstation.Resources) != 1 || (*workstation.Resources)[0].Capacity != 2 {
-		t.Fatalf("expected generated resources capacity 2, got %#v", workstation.Resources)
-	}
-	if len(workstation.Inputs) != 2 || workstation.Inputs[1].Guards == nil || len(*workstation.Inputs[1].Guards) != 1 {
-		t.Fatalf("expected generated nested guards to survive boundary decode, got %#v", workstation.Inputs)
-	}
-	guard := (*workstation.Inputs[1].Guards)[0]
-	if guard.ParentInput == nil || *guard.ParentInput != "chapter" || guard.SpawnedBy == nil || *guard.SpawnedBy != "chapter-parser" {
-		t.Fatalf("expected generated guard camelCase fields to survive boundary decode, got %#v", guard)
-	}
+	assertGeneratedNestedFactoryBoundary(t, generated)
 
 	cfg, err := FactoryConfigFromOpenAPI(generated)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
 	}
-	if cfg.Workstations[0].Type != interfaces.WorkstationTypeModel {
-		t.Fatalf("expected runtime workstation type MODEL_WORKSTATION, got %#v", cfg.Workstations[0])
-	}
-	if cfg.Workstations[0].Resources[0].Capacity != 2 {
-		t.Fatalf("expected runtime resources capacity 2, got %#v", cfg.Workstations[0].Resources)
-	}
-	if cfg.Workstations[0].Inputs[1].Guard == nil {
-		t.Fatal("expected runtime guard to survive generated boundary mapping")
-	}
-	if cfg.Workstations[0].Inputs[1].Guard.ParentInput != "chapter" || cfg.Workstations[0].Inputs[1].Guard.SpawnedBy != "chapter-parser" {
-		t.Fatalf("expected runtime guard fields to match generated boundary, got %#v", cfg.Workstations[0].Inputs[1].Guard)
-	}
+	assertRuntimeNestedFactoryConfig(t, &cfg)
 }
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T) {
-	cfgJSON := []byte(`{
+	assertGeneratedAndRuntimeInputGuardMapping(t, []byte(`{
 		"name":"same-name-input-guard-factory",
 		"workTypes": [
 			{"name":"planItem","states":[{"name":"ready","type":"PROCESSING"}]},
@@ -340,48 +221,11 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T)
 			],
 			"outputs":[{"workType":"taskItem","state":"matched"}]
 		}]
-	}`)
-
-	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
-	if err != nil {
-		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
-	}
-	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
-		t.Fatalf("expected one generated workstation, got %#v", generated.Workstations)
-	}
-	workstation := (*generated.Workstations)[0]
-	if len(workstation.Inputs) != 2 || workstation.Inputs[1].Guards == nil || len(*workstation.Inputs[1].Guards) != 1 {
-		t.Fatalf("expected generated same-name guard to survive boundary decode, got %#v", workstation.Inputs)
-	}
-	guard := (*workstation.Inputs[1].Guards)[0]
-	if guard.Type != factoryapi.GuardTypeSameName {
-		t.Fatalf("expected generated guard type SAME_NAME, got %#v", guard.Type)
-	}
-	if guard.MatchInput == nil || *guard.MatchInput != "planItem" {
-		t.Fatalf("expected generated guard matchInput planItem, got %#v", guard.MatchInput)
-	}
-	if guard.ParentInput != nil || guard.SpawnedBy != nil {
-		t.Fatalf("expected same-name guard to keep parent-aware fields unset, got %#v", guard)
-	}
-
-	cfg, err := FactoryConfigFromOpenAPI(generated)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
-	}
-	runtimeGuard := cfg.Workstations[0].Inputs[1].Guard
-	if runtimeGuard == nil {
-		t.Fatal("expected runtime same-name guard to survive generated mapping")
-	}
-	if runtimeGuard.Type != interfaces.GuardTypeSameName || runtimeGuard.MatchInput != "planItem" {
-		t.Fatalf("expected runtime same-name guard fields to match generated boundary, got %#v", runtimeGuard)
-	}
-	if runtimeGuard.ParentInput != "" || runtimeGuard.SpawnedBy != "" {
-		t.Fatalf("expected runtime same-name guard to keep parent-aware fields empty, got %#v", runtimeGuard)
-	}
+	}`), factoryapi.GuardTypeSameName, interfaces.GuardTypeSameName)
 }
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameTraceIDInputGuard(t *testing.T) {
-	cfgJSON := []byte(`{
+	assertGeneratedAndRuntimeInputGuardMapping(t, []byte(`{
 		"name":"same-trace-input-guard-factory",
 		"workTypes": [
 			{"name":"planItem","states":[{"name":"ready","type":"PROCESSING"}]},
@@ -397,44 +241,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameTraceIDInputGuard(t *testing
 			],
 			"outputs":[{"workType":"taskItem","state":"matched"}]
 		}]
-	}`)
-
-	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
-	if err != nil {
-		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
-	}
-	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
-		t.Fatalf("expected one generated workstation, got %#v", generated.Workstations)
-	}
-	workstation := (*generated.Workstations)[0]
-	if len(workstation.Inputs) != 2 || workstation.Inputs[1].Guards == nil || len(*workstation.Inputs[1].Guards) != 1 {
-		t.Fatalf("expected generated same-trace guard to survive boundary decode, got %#v", workstation.Inputs)
-	}
-	guard := (*workstation.Inputs[1].Guards)[0]
-	if guard.Type != factoryapi.GuardTypeSameTraceID {
-		t.Fatalf("expected generated guard type SAME_TRACE_ID, got %#v", guard.Type)
-	}
-	if guard.MatchInput == nil || *guard.MatchInput != "planItem" {
-		t.Fatalf("expected generated guard matchInput planItem, got %#v", guard.MatchInput)
-	}
-	if guard.ParentInput != nil || guard.SpawnedBy != nil {
-		t.Fatalf("expected same-trace guard to keep parent-aware fields unset, got %#v", guard)
-	}
-
-	cfg, err := FactoryConfigFromOpenAPI(generated)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
-	}
-	runtimeGuard := cfg.Workstations[0].Inputs[1].Guard
-	if runtimeGuard == nil {
-		t.Fatal("expected runtime same-trace guard to survive generated mapping")
-	}
-	if runtimeGuard.Type != interfaces.GuardTypeSameTraceID || runtimeGuard.MatchInput != "planItem" {
-		t.Fatalf("expected runtime same-trace guard fields to match generated boundary, got %#v", runtimeGuard)
-	}
-	if runtimeGuard.ParentInput != "" || runtimeGuard.SpawnedBy != "" {
-		t.Fatalf("expected runtime same-trace guard to keep parent-aware fields empty, got %#v", runtimeGuard)
-	}
+	}`), factoryapi.GuardTypeSameTraceID, interfaces.GuardTypeSameTraceID)
 }
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t *testing.T) {
@@ -621,6 +428,230 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsInferenceThrottleGuardOnInput(t 
 	if !strings.Contains(err.Error(), "workstations[0].inputs[0].guards[0].type") {
 		t.Fatalf("expected input guard field path in error, got %v", err)
 	}
+}
+
+func assertCanonicalWorkstationSchema(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
+	if len(cfg.Workstations) != 1 {
+		t.Fatalf("expected one workstation, got %d", len(cfg.Workstations))
+	}
+	ws := cfg.Workstations[0]
+	if ws.ID != "finish-chapter-id" || ws.Kind != interfaces.WorkstationKindStandard {
+		t.Fatalf("expected current topology fields to map, got %#v", ws)
+	}
+	if ws.Type != interfaces.WorkstationTypeLogical || ws.PromptTemplate != "Finish {{ .WorkID }}." {
+		t.Fatalf("expected current runtime fields to map, got %#v", ws)
+	}
+	if ws.Resources[0].Capacity != 2 {
+		t.Fatalf("expected resource usage capacity 2, got %d", ws.Resources[0].Capacity)
+	}
+	if len(ws.Guards) != 1 || ws.Guards[0].Type != interfaces.GuardTypeVisitCount {
+		t.Fatalf("expected visit_count workstation guard to map, got %#v", ws.Guards)
+	}
+	if ws.Guards[0].Workstation != "review-story" || ws.Guards[0].MaxVisits != 3 {
+		t.Fatalf("expected visit_count workstation guard details, got %#v", ws.Guards[0])
+	}
+	if ws.Inputs[1].Guard == nil {
+		t.Fatal("expected input guards array to map to internal input guard")
+	}
+	if ws.Inputs[1].Guard.ParentInput != "chapter" || ws.Inputs[1].Guard.SpawnedBy != "chapter-parser" {
+		t.Fatalf("expected current guard fields to map, got %#v", ws.Inputs[1].Guard)
+	}
+	if got := ws.Env["TEAM"]; got != `{{ index .Tags "team" }}` {
+		t.Fatalf("expected env TEAM to be preserved, got %q in %#v", got, ws.Env)
+	}
+}
+
+func requireSingleGeneratedWorkstation(t *testing.T, generated factoryapi.Factory) factoryapi.Workstation {
+	t.Helper()
+
+	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
+		t.Fatalf("expected one generated workstation, got %#v", generated.Workstations)
+	}
+	return (*generated.Workstations)[0]
+}
+
+func assertGeneratedCronWorkstation(t *testing.T, workstation factoryapi.Workstation) {
+	t.Helper()
+
+	if workstation.Cron == nil {
+		t.Fatal("expected generated cron to decode")
+	}
+	if workstation.Cron.Schedule != "*/5 * * * *" {
+		t.Fatalf("expected generated cron schedule to decode, got %#v", workstation.Cron)
+	}
+	if workstation.Cron.TriggerAtStart == nil || !*workstation.Cron.TriggerAtStart {
+		t.Fatalf("expected generated cron triggerAtStart=true, got %#v", workstation.Cron.TriggerAtStart)
+	}
+	if workstation.Cron.Jitter == nil || *workstation.Cron.Jitter != "1s" {
+		t.Fatalf("expected generated cron jitter to decode, got %#v", workstation.Cron.Jitter)
+	}
+	if workstation.Cron.ExpiryWindow == nil || *workstation.Cron.ExpiryWindow != "20s" {
+		t.Fatalf("expected generated cron expiryWindow to decode, got %#v", workstation.Cron.ExpiryWindow)
+	}
+}
+
+func assertCanonicalCronJSON(t *testing.T, generated factoryapi.Factory) {
+	t.Helper()
+
+	generatedJSON, err := json.Marshal(generated)
+	if err != nil {
+		t.Fatalf("marshal generated factory boundary: %v", err)
+	}
+	serialized := string(generatedJSON)
+	for _, field := range []string{`"schedule"`, `"triggerAtStart"`, `"jitter"`, `"expiryWindow"`} {
+		if !strings.Contains(serialized, field) {
+			t.Fatalf("expected generated boundary JSON to retain canonical cron field %s: %s", field, serialized)
+		}
+	}
+	for _, retiredField := range []string{`"trigger_at_start"`, `"expiry_window"`, `"interval"`} {
+		if strings.Contains(serialized, retiredField) {
+			t.Fatalf("generated boundary JSON must not include retired cron field %s: %s", retiredField, serialized)
+		}
+	}
+}
+
+func assertGeneratedNestedFactoryBoundary(t *testing.T, generated factoryapi.Factory) {
+	t.Helper()
+
+	assertGeneratedNestedFactoryIdentity(t, generated)
+	workstation := requireSingleGeneratedWorkstation(t, generated)
+	assertGeneratedNestedWorkstationBody(t, workstation)
+	assertGeneratedNestedFactoryJSON(t, generated)
+	assertGeneratedNestedWorkstationResources(t, workstation)
+	assertGeneratedNestedWorkstationGuard(t, workstation)
+}
+
+func assertGeneratedNestedFactoryJSON(t *testing.T, generated factoryapi.Factory) {
+	t.Helper()
+
+	generatedJSON, err := json.Marshal(generated)
+	if err != nil {
+		t.Fatalf("marshal generated factory boundary: %v", err)
+	}
+	var serialized struct {
+		Workstations []map[string]any `json:"workstations"`
+	}
+	if err := json.Unmarshal(generatedJSON, &serialized); err != nil {
+		t.Fatalf("unmarshal generated factory boundary JSON: %v", err)
+	}
+	if len(serialized.Workstations) != 1 {
+		t.Fatalf("expected one serialized workstation, got %#v", serialized.Workstations)
+	}
+	if _, ok := serialized.Workstations[0]["promptTemplate"]; ok {
+		t.Fatalf("expected generated workstation JSON to omit promptTemplate, got %#v", serialized.Workstations[0])
+	}
+	if body, ok := serialized.Workstations[0]["body"].(string); !ok || body != "Finish {{ .WorkID }}." {
+		t.Fatalf("expected generated workstation JSON body to stay canonical, got %#v", serialized.Workstations[0])
+	}
+}
+
+func assertGeneratedNestedFactoryIdentity(t *testing.T, generated factoryapi.Factory) {
+	t.Helper()
+
+	if generated.Id == nil || *generated.Id != "customer-project" {
+		t.Fatalf("expected generated id customer-project, got %#v", generated.Id)
+	}
+	if generated.Workers == nil || len(*generated.Workers) != 1 {
+		t.Fatalf("expected one generated worker, got %#v", generated.Workers)
+	}
+	worker := (*generated.Workers)[0]
+	if worker.ModelProvider == nil || *worker.ModelProvider != factoryapi.WorkerModelProviderClaude {
+		t.Fatalf("expected generated worker modelProvider CLAUDE, got %#v", worker.ModelProvider)
+	}
+	if worker.StopToken == nil || *worker.StopToken != "COMPLETE" {
+		t.Fatalf("expected generated worker stopToken COMPLETE, got %#v", worker.StopToken)
+	}
+}
+
+func assertGeneratedNestedWorkstationBody(t *testing.T, workstation factoryapi.Workstation) {
+	t.Helper()
+
+	if workstation.Body == nil || *workstation.Body != "Finish {{ .WorkID }}." {
+		t.Fatalf("expected generated body to survive boundary decode, got %#v", workstation.Body)
+	}
+}
+
+func assertGeneratedNestedWorkstationResources(t *testing.T, workstation factoryapi.Workstation) {
+	t.Helper()
+
+	if workstation.Resources == nil || len(*workstation.Resources) != 1 || (*workstation.Resources)[0].Capacity != 2 {
+		t.Fatalf("expected generated resources capacity 2, got %#v", workstation.Resources)
+	}
+}
+
+func assertGeneratedNestedWorkstationGuard(t *testing.T, workstation factoryapi.Workstation) {
+	t.Helper()
+
+	if len(workstation.Inputs) != 2 || workstation.Inputs[1].Guards == nil || len(*workstation.Inputs[1].Guards) != 1 {
+		t.Fatalf("expected generated nested guards to survive boundary decode, got %#v", workstation.Inputs)
+	}
+	guard := (*workstation.Inputs[1].Guards)[0]
+	if guard.ParentInput == nil || *guard.ParentInput != "chapter" || guard.SpawnedBy == nil || *guard.SpawnedBy != "chapter-parser" {
+		t.Fatalf("expected generated guard camelCase fields to survive boundary decode, got %#v", guard)
+	}
+}
+
+func assertRuntimeNestedFactoryConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
+	if cfg.Workstations[0].Type != interfaces.WorkstationTypeModel {
+		t.Fatalf("expected runtime workstation type MODEL_WORKSTATION, got %#v", cfg.Workstations[0])
+	}
+	if cfg.Workstations[0].Resources[0].Capacity != 2 {
+		t.Fatalf("expected runtime resources capacity 2, got %#v", cfg.Workstations[0].Resources)
+	}
+	if cfg.Workstations[0].Inputs[1].Guard == nil {
+		t.Fatal("expected runtime guard to survive generated boundary mapping")
+	}
+	if cfg.Workstations[0].Inputs[1].Guard.ParentInput != "chapter" || cfg.Workstations[0].Inputs[1].Guard.SpawnedBy != "chapter-parser" {
+		t.Fatalf("expected runtime guard fields to match generated boundary, got %#v", cfg.Workstations[0].Inputs[1].Guard)
+	}
+}
+
+func assertGeneratedAndRuntimeInputGuardMapping(t *testing.T, cfgJSON []byte, generatedType factoryapi.GuardType, runtimeType interfaces.GuardType) {
+	t.Helper()
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	guard := requireGeneratedInputGuard(t, generated)
+	if guard.Type != generatedType {
+		t.Fatalf("expected generated guard type %s, got %#v", generatedType, guard.Type)
+	}
+	if guard.MatchInput == nil || *guard.MatchInput != "planItem" {
+		t.Fatalf("expected generated guard matchInput planItem, got %#v", guard.MatchInput)
+	}
+	if guard.ParentInput != nil || guard.SpawnedBy != nil {
+		t.Fatalf("expected generated guard to keep parent-aware fields unset, got %#v", guard)
+	}
+
+	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	runtimeGuard := cfg.Workstations[0].Inputs[1].Guard
+	if runtimeGuard == nil {
+		t.Fatal("expected runtime guard to survive generated mapping")
+	}
+	if runtimeGuard.Type != runtimeType || runtimeGuard.MatchInput != "planItem" {
+		t.Fatalf("expected runtime guard fields to match generated boundary, got %#v", runtimeGuard)
+	}
+	if runtimeGuard.ParentInput != "" || runtimeGuard.SpawnedBy != "" {
+		t.Fatalf("expected runtime guard to keep parent-aware fields empty, got %#v", runtimeGuard)
+	}
+}
+
+func requireGeneratedInputGuard(t *testing.T, generated factoryapi.Factory) factoryapi.Guard {
+	t.Helper()
+
+	workstation := requireSingleGeneratedWorkstation(t, generated)
+	if len(workstation.Inputs) != 2 || workstation.Inputs[1].Guards == nil || len(*workstation.Inputs[1].Guards) != 1 {
+		t.Fatalf("expected generated input guard to survive boundary decode, got %#v", workstation.Inputs)
+	}
+	return (*workstation.Inputs[1].Guards)[0]
 }
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredFanInFieldAtBoundary(t *testing.T) {

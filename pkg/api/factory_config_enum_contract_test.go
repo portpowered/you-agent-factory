@@ -60,6 +60,15 @@ func TestFactoryConfigContract_GeneratedModelsUseEnumBackedFieldsForTightenedCon
 func TestFactoryConfigContract_CanonicalPayloadExercisesGeneratedEnumBackedFields(t *testing.T) {
 	factory := decodeGeneratedFactoryForSmoke(t, []byte(factoryConfigSmokeCanonicalJSON()))
 
+	assertCanonicalFactoryTopLevelEnums(t, factory)
+	assertCanonicalFactoryWorkTypeEnums(t, factory)
+	assertCanonicalFactoryWorkerEnums(t, factory)
+	assertCanonicalFactoryWorkstationEnums(t, factory)
+}
+
+func assertCanonicalFactoryTopLevelEnums(t *testing.T, factory generated.Factory) {
+	t.Helper()
+
 	if factory.InputTypes == nil || len(*factory.InputTypes) != 1 {
 		t.Fatalf("canonical factory inputTypes = %#v, want one enum-backed input type", factory.InputTypes)
 	}
@@ -78,6 +87,10 @@ func TestFactoryConfigContract_CanonicalPayloadExercisesGeneratedEnumBackedField
 	if (*factory.Guards)[0].ModelProvider != generated.WorkerModelProviderClaude {
 		t.Fatalf("canonical factory guard modelProvider = %#v, want CLAUDE", (*factory.Guards)[0].ModelProvider)
 	}
+}
+
+func assertCanonicalFactoryWorkTypeEnums(t *testing.T, factory generated.Factory) {
+	t.Helper()
 
 	if factory.WorkTypes == nil || len(*factory.WorkTypes) != 2 {
 		t.Fatalf("canonical factory workTypes = %#v, want parent/story work types", factory.WorkTypes)
@@ -89,6 +102,10 @@ func TestFactoryConfigContract_CanonicalPayloadExercisesGeneratedEnumBackedField
 	if states[0].Type != generated.WorkStateTypeINITIAL || states[1].Type != generated.WorkStateTypeFAILED || states[2].Type != generated.WorkStateTypeTERMINAL {
 		t.Fatalf("canonical work state types = %#v, want INITIAL/FAILED/TERMINAL", []generated.WorkStateType{states[0].Type, states[1].Type, states[2].Type})
 	}
+}
+
+func assertCanonicalFactoryWorkerEnums(t *testing.T, factory generated.Factory) {
+	t.Helper()
 
 	if factory.Workers == nil || len(*factory.Workers) != 1 {
 		t.Fatalf("canonical factory workers = %#v, want one worker", factory.Workers)
@@ -103,12 +120,27 @@ func TestFactoryConfigContract_CanonicalPayloadExercisesGeneratedEnumBackedField
 	if worker.ExecutorProvider == nil || *worker.ExecutorProvider != generated.WorkerProviderScriptWrap {
 		t.Fatalf("canonical worker executorProvider = %#v, want SCRIPT_WRAP", worker.ExecutorProvider)
 	}
+}
+
+func assertCanonicalFactoryWorkstationEnums(t *testing.T, factory generated.Factory) {
+	t.Helper()
 
 	if factory.Workstations == nil || len(*factory.Workstations) != 3 {
 		t.Fatalf("canonical factory workstations = %#v, want execute-story/fanout/guard-cycle", factory.Workstations)
 	}
 
 	executeStory := (*factory.Workstations)[0]
+	assertCanonicalExecuteStoryWorkstationEnums(t, executeStory)
+
+	guardCycle := (*factory.Workstations)[2]
+	if guardCycle.Type == nil || *guardCycle.Type != generated.WorkstationTypeLogicalMove {
+		t.Fatalf("canonical loop-breaker type = %#v, want LOGICAL_MOVE", guardCycle.Type)
+	}
+}
+
+func assertCanonicalExecuteStoryWorkstationEnums(t *testing.T, executeStory generated.Workstation) {
+	t.Helper()
+
 	if executeStory.Behavior == nil || *executeStory.Behavior != generated.WorkstationKindCron {
 		t.Fatalf("canonical workstation behavior = %#v, want CRON", executeStory.Behavior)
 	}
@@ -123,11 +155,6 @@ func TestFactoryConfigContract_CanonicalPayloadExercisesGeneratedEnumBackedField
 	}
 	if len(executeStory.Inputs) < 2 || executeStory.Inputs[1].Guards == nil || len(*executeStory.Inputs[1].Guards) != 1 || (*executeStory.Inputs[1].Guards)[0].Type != generated.GuardTypeAllChildrenComplete {
 		t.Fatalf("canonical workstation input guards = %#v, want ALL_CHILDREN_COMPLETE", executeStory.Inputs)
-	}
-
-	guardCycle := (*factory.Workstations)[2]
-	if guardCycle.Type == nil || *guardCycle.Type != generated.WorkstationTypeLogicalMove {
-		t.Fatalf("canonical loop-breaker type = %#v, want LOGICAL_MOVE", guardCycle.Type)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -458,6 +459,12 @@ func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	assertMappedCronTransition(t, net)
+	assertMappedSystemTimeExpiryTransition(t, net)
+}
+
+func assertMappedCronTransition(t *testing.T, net *state.Net) {
+	t.Helper()
 
 	tr := net.Transitions["daily-refresh"]
 	if tr == nil {
@@ -485,6 +492,20 @@ func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 	if net.WorkTypes[interfaces.SystemTimeWorkTypeID] == nil {
 		t.Fatalf("expected system time work type to be materialized")
 	}
+	if len(tr.OutputArcs) != 1 || tr.OutputArcs[0].PlaceID != "task:init" {
+		t.Fatalf("expected cron output to be preserved, got %+v", tr.OutputArcs)
+	}
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("expected cron rejection to follow failure routing, got %+v", tr.RejectionArcs)
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("expected cron failure to route to task:failed, got %+v", tr.FailureArcs)
+	}
+}
+
+func assertMappedSystemTimeExpiryTransition(t *testing.T, net *state.Net) {
+	t.Helper()
+
 	expiry := net.Transitions[interfaces.SystemTimeExpiryTransitionID]
 	if expiry == nil {
 		t.Fatalf("expected system time expiry transition")
@@ -510,15 +531,6 @@ func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 	}
 	if expiryArc.Mode != interfaces.ArcModeConsume || expiryArc.Cardinality.Mode != petri.CardinalityAll {
 		t.Fatalf("expected expiry to consume all expired time tokens, got mode=%v cardinality=%v", expiryArc.Mode, expiryArc.Cardinality.Mode)
-	}
-	if len(tr.OutputArcs) != 1 || tr.OutputArcs[0].PlaceID != "task:init" {
-		t.Fatalf("expected cron output to be preserved, got %+v", tr.OutputArcs)
-	}
-	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
-		t.Fatalf("expected cron rejection to follow failure routing, got %+v", tr.RejectionArcs)
-	}
-	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
-		t.Fatalf("expected cron failure to route to task:failed, got %+v", tr.FailureArcs)
 	}
 }
 

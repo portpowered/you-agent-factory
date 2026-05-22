@@ -326,6 +326,7 @@ func assertRalphScaffoldPaths(t *testing.T, base string) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this scaffold contract helper keeps the generated init runtime config matrix visible in one place.
 func assertRalphRuntimeConfig(t *testing.T, base string) {
 	t.Helper()
 
@@ -606,6 +607,7 @@ func assertInitRuntimeConfig(t *testing.T, base, wantModel, wantProvider string)
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this scaffold assertion keeps the canonical init output inventory together for reviewer-readable verification.
 func assertInitScaffoldFilesCanonical(t *testing.T, base, wantProvider string) {
 	t.Helper()
 

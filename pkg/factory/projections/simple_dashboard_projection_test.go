@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this dashboard projection case keeps the active-dispatch observability contract together in one scenario.
 func TestBuildSimpleDashboardProjection_TracksActiveDispatchState(t *testing.T) {
 	t0 := time.Date(2026, 5, 5, 15, 0, 0, 0, time.UTC)
 	state, err := ReconstructFactoryWorldState([]factoryapi.FactoryEvent{
@@ -207,6 +208,7 @@ func dashboardProjectionOutputWorkItem() interfaces.FactoryWorkItem {
 	return item
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper intentionally validates the full terminal projection contract in one place.
 func assertTerminalProjection(
 	t *testing.T,
 	state interfaces.FactoryWorldState,

@@ -146,6 +146,7 @@ func assertDeterministicExpandedPayload(t *testing.T, payload map[string]any) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this runtime-shape helper keeps the expanded config contract readable in one assertion pass.
 func assertDeterministicExpandedRuntimeConfig(t *testing.T, dir string) {
 	t.Helper()
 
@@ -785,6 +786,7 @@ Existing workstation body.
 	return dir, workerAgentsPath, workstationAgentsPath, promptPath
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the preserved split-definition contract inline across all authored files.
 func assertExistingSplitDefinitionsPreserved(t *testing.T, dir, inputPath, workerAgentsPath, workstationAgentsPath, promptPath string) {
 	t.Helper()
 

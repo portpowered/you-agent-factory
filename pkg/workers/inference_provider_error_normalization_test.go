@@ -755,6 +755,7 @@ type normalizedProviderFailureExpectation struct {
 	requireTimeoutDiag     bool
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper intentionally validates the full normalized provider failure contract in one place.
 func assertNormalizedProviderFailure(t *testing.T, err error, want normalizedProviderFailureExpectation) {
 	t.Helper()
 

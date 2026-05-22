@@ -89,33 +89,16 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, opti
 	if err != nil {
 		return nil, err
 	}
-
 	targetDir := filepath.Join(rootDir, segment)
-	if _, err := os.Stat(targetDir); err == nil {
-		if !options.replaceExisting {
-			return nil, fmt.Errorf("%w: factory %q already exists", ErrNamedFactoryAlreadyExists, segment)
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("check existing factory %q: %w", segment, err)
-	} else if options.replaceExisting {
-		return nil, fmt.Errorf("replace factory %q: %w", segment, os.ErrNotExist)
+	if err := validateNamedFactoryTarget(targetDir, segment, options); err != nil {
+		return nil, err
 	}
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create factory root %s: %w", rootDir, err)
 	}
-
-	mapper := NewFactoryConfigMapper()
-	factoryCfg, err := mapper.Expand(canonicalFactoryJSON)
+	factoryCfg, canonical, err := normalizeNamedFactoryPayload(segment, canonicalFactoryJSON)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parse factory %q config: %w", ErrInvalidNamedFactory, segment, err)
-	}
-	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(factoryCfg)
-	if err != nil {
-		return nil, fmt.Errorf("%w: normalize authored factory %q config: %w", ErrInvalidNamedFactory, segment, err)
-	}
-	canonical, err := mapper.Flatten(authoredFactoryCfg)
-	if err != nil {
-		return nil, fmt.Errorf("%w: normalize factory %q config: %w", ErrInvalidNamedFactory, segment, err)
+		return nil, err
 	}
 
 	sourcePath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
@@ -143,21 +126,66 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, opti
 	if loadRuntimeConfig == nil {
 		loadRuntimeConfig = LoadRuntimeConfig
 	}
-	if _, err := loadRuntimeConfig(stagingDir, nil); err != nil {
-		return nil, fmt.Errorf("%w: validate factory %q config: %w", ErrInvalidNamedFactory, segment, err)
-	}
-	if options.replaceExisting {
-		if err := replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir); err != nil {
-			return nil, err
-		}
-	} else if err := os.Rename(stagingDir, targetDir); err != nil {
-		return nil, fmt.Errorf("commit factory %q: %w", segment, err)
+	if err := commitNamedFactoryLayout(rootDir, segment, stagingDir, targetDir, options, loadRuntimeConfig); err != nil {
+		return nil, err
 	}
 	keepStaging = true
 	return &NamedFactoryPersistResult{
 		FactoryDir:                      targetDir,
 		PortableBundledFileReplacements: clonePortableBundledFileReplacements(replacements),
 	}, nil
+}
+
+func validateNamedFactoryTarget(targetDir, segment string, options namedFactoryPersistOptions) error {
+	if _, err := os.Stat(targetDir); err == nil {
+		if options.replaceExisting {
+			return nil
+		}
+		return fmt.Errorf("%w: factory %q already exists", ErrNamedFactoryAlreadyExists, segment)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("check existing factory %q: %w", segment, err)
+	}
+	if options.replaceExisting {
+		return fmt.Errorf("replace factory %q: %w", segment, os.ErrNotExist)
+	}
+	return nil
+}
+
+func normalizeNamedFactoryPayload(segment string, canonicalFactoryJSON []byte) (*interfaces.FactoryConfig, []byte, error) {
+	mapper := NewFactoryConfigMapper()
+	factoryCfg, err := mapper.Expand(canonicalFactoryJSON)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: parse factory %q config: %w", ErrInvalidNamedFactory, segment, err)
+	}
+	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(factoryCfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: normalize authored factory %q config: %w", ErrInvalidNamedFactory, segment, err)
+	}
+	canonical, err := mapper.Flatten(authoredFactoryCfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: normalize factory %q config: %w", ErrInvalidNamedFactory, segment, err)
+	}
+	return factoryCfg, canonical, nil
+}
+
+func commitNamedFactoryLayout(
+	rootDir string,
+	segment string,
+	stagingDir string,
+	targetDir string,
+	options namedFactoryPersistOptions,
+	loadRuntimeConfig func(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error),
+) error {
+	if _, err := loadRuntimeConfig(stagingDir, nil); err != nil {
+		return fmt.Errorf("%w: validate factory %q config: %w", ErrInvalidNamedFactory, segment, err)
+	}
+	if options.replaceExisting {
+		return replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir)
+	}
+	if err := os.Rename(stagingDir, targetDir); err != nil {
+		return fmt.Errorf("commit factory %q: %w", segment, err)
+	}
+	return nil
 }
 
 func replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir string) error {

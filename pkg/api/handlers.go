@@ -1,4 +1,5 @@
 // backendsizecheck:ignore-file this legacy API transport surface stays centralized until dedicated handler-splitting work lands.
+// pkgmaintcheck:ignore-file-lines legacy API transport handlers still share generated-surface wiring; split by route family in dedicated follow-up work to avoid transport regressions.
 package api
 
 import (
@@ -911,6 +912,7 @@ func (s *Server) getEvents(
 		}
 	}
 }
+
 // --- Helpers ---
 
 func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenResponse {

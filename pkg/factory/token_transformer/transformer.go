@@ -175,13 +175,8 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 		color.Payload = []byte(in.Output)
 	}
 
-	if color.DataType == interfaces.DataTypeResource {
-		if consumed := matchingConsumedResourceToken(in.ConsumedTokens, color.WorkTypeID); consumed != nil {
-			token := interfaces.CloneToken(*consumed)
-			token.PlaceID = arc.PlaceID
-			token.EnteredAt = in.Now
-			return &token, nil
-		}
+	if token := reuseConsumedResourceToken(in, arc, color); token != nil {
+		return token, nil
 	}
 
 	token := &interfaces.Token{
@@ -193,39 +188,64 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 		History:   interfaces.CloneTokenHistory(in.History),
 	}
 
+	applyOutputOutcome(token, in, t.places[arc.PlaceID], t.workTypes)
+	return token, nil
+}
+
+func reuseConsumedResourceToken(in OutputTokenInput, arc petri.Arc, color interfaces.TokenColor) *interfaces.Token {
+	if color.DataType != interfaces.DataTypeResource {
+		return nil
+	}
+	consumed := matchingConsumedResourceToken(in.ConsumedTokens, color.WorkTypeID)
+	if consumed == nil {
+		return nil
+	}
+	token := interfaces.CloneToken(*consumed)
+	token.PlaceID = arc.PlaceID
+	token.EnteredAt = in.Now
+	return &token
+}
+
+func applyOutputOutcome(
+	token *interfaces.Token,
+	in OutputTokenInput,
+	place *petri.Place,
+	workTypes map[string]*state.WorkType,
+) {
 	switch in.Outcome {
 	case interfaces.OutcomeContinue:
-		if token.Color.Tags == nil {
-			token.Color.Tags = make(map[string]string)
-		}
-		token.Color.Tags["continue_feedback"] = in.Feedback
+		setOutputFeedbackTag(token, "continue_feedback", in.Feedback)
 	case interfaces.OutcomeRejected:
-		if token.Color.Tags == nil {
-			token.Color.Tags = make(map[string]string)
+		setOutputFeedbackTag(token, interfaces.RejectionFeedback, in.Feedback)
+		if isRejectedFailurePlace(place, workTypes, token.Color.WorkTypeID) {
+			appendOutputFailure(token, in.TransitionID, in.Feedback, in.Now)
 		}
-		token.Color.Tags[interfaces.RejectionFeedback] = in.Feedback
 	case interfaces.OutcomeFailed:
-		token.History.LastError = in.Error
-		token.History.FailureLog = append(token.History.FailureLog, interfaces.FailureRecord{
-			TransitionID: in.TransitionID,
-			Error:        in.Error,
-			Timestamp:    in.Now,
-		})
+		appendOutputFailure(token, in.TransitionID, in.Error, in.Now)
 	}
+}
 
-	if in.Outcome == interfaces.OutcomeRejected {
-		place := t.places[arc.PlaceID]
-		if place != nil && state.CategoryForState(t.workTypes, token.Color.WorkTypeID, place.State) == state.StateCategoryFailed {
-			token.History.LastError = in.Feedback
-			token.History.FailureLog = append(token.History.FailureLog, interfaces.FailureRecord{
-				TransitionID: in.TransitionID,
-				Error:        in.Feedback,
-				Timestamp:    in.Now,
-			})
-		}
+func setOutputFeedbackTag(token *interfaces.Token, key, value string) {
+	if token.Color.Tags == nil {
+		token.Color.Tags = make(map[string]string)
 	}
+	token.Color.Tags[key] = value
+}
 
-	return token, nil
+func appendOutputFailure(token *interfaces.Token, transitionID, message string, now time.Time) {
+	token.History.LastError = message
+	token.History.FailureLog = append(token.History.FailureLog, interfaces.FailureRecord{
+		TransitionID: transitionID,
+		Error:        message,
+		Timestamp:    now,
+	})
+}
+
+func isRejectedFailurePlace(place *petri.Place, workTypes map[string]*state.WorkType, workTypeID string) bool {
+	if place == nil {
+		return false
+	}
+	return state.CategoryForState(workTypes, workTypeID, place.State) == state.StateCategoryFailed
 }
 
 func (t *Transformer) initialPlaceID(workTypeID string) (string, error) {

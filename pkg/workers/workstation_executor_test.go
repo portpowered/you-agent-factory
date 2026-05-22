@@ -111,6 +111,7 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this workstation execution contract test keeps canonical runtime field assertions together on the worker seam.
 func TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFields(t *testing.T) {
 	projectRoot := t.TempDir()
 

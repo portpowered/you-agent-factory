@@ -387,6 +387,7 @@ func TestRecordingProvider_Infer_RetryableFailureKeepsAttemptCounterUntilTermina
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this recording-provider regression keeps the misconfigured-provider event contract together in one scenario.
 func TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEvent(t *testing.T) {
 	events := &recordingEvents{}
 	provider := NewRecordingProvider(nil, events.record, WithRecordingProviderClock(sequenceClock(

@@ -24,6 +24,13 @@ type EventStreamArtifactResult struct {
 	SkippedTrailingBlocks int
 }
 
+type eventStreamArtifactBuilder struct {
+	blockIndex            int
+	dataLines             []string
+	events                []factoryapi.FactoryEvent
+	skippedTrailingBlocks int
+}
+
 const legacyEventStreamCronPlaceholderSchedule = "* * * * *"
 
 // ArtifactFromEventStream parses an SSE-style event stream whose payloads are
@@ -33,73 +40,34 @@ const legacyEventStreamCronPlaceholderSchedule = "* * * * *"
 func ArtifactFromEventStream(r io.Reader) (*EventStreamArtifactResult, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxEventStreamLineBytes)
-
-	var (
-		dataLines             []string
-		events                []factoryapi.FactoryEvent
-		skippedTrailingBlocks int
-		blockIndex            int
-	)
-
-	flushBlock := func(atEOF bool) error {
-		if len(dataLines) == 0 {
-			return nil
-		}
-		blockIndex += 1
-		payload := strings.Join(dataLines, "\n")
-		dataLines = dataLines[:0]
-
-		var event factoryapi.FactoryEvent
-		if err := json.Unmarshal([]byte(payload), &event); err != nil {
-			if atEOF && len(events) > 0 {
-				skippedTrailingBlocks += 1
-				return nil
-			}
-			return fmt.Errorf("decode event stream block %d: %w", blockIndex, err)
-		}
-		if event.Id == "" || event.Type == "" {
-			if atEOF && len(events) > 0 {
-				skippedTrailingBlocks += 1
-				return nil
-			}
-			return fmt.Errorf("decode event stream block %d: required replay event fields missing", blockIndex)
-		}
-		if event.SchemaVersion == "" {
-			event.SchemaVersion = factoryapi.AgentFactoryEventV1
-		}
-		events = append(events, event)
-		return nil
-	}
+	builder := eventStreamArtifactBuilder{}
 
 	for scanner.Scan() {
-		line := scanner.Text()
-		switch {
+		switch line := scanner.Text(); {
 		case line == "":
-			if err := flushBlock(false); err != nil {
+			if err := builder.flushBlock(false); err != nil {
 				return nil, err
 			}
-		case strings.HasPrefix(line, "data: "):
-			dataLines = append(dataLines, line[6:])
-		case strings.HasPrefix(line, "data:"):
-			dataLines = append(dataLines, strings.TrimLeft(line[5:], " \t"))
+		default:
+			builder.appendLine(line)
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("scan event stream: %w", err)
 	}
-	if err := flushBlock(true); err != nil {
+	if err := builder.flushBlock(true); err != nil {
 		return nil, err
 	}
-	if len(events) == 0 {
+	if len(builder.events) == 0 {
 		return nil, fmt.Errorf("event stream contained no replayable events")
 	}
-	if err := normalizeEventStreamRunRequestFactories(events); err != nil {
+	if err := normalizeEventStreamRunRequestFactories(builder.events); err != nil {
 		return nil, err
 	}
 
 	artifact := &interfaces.ReplayArtifact{
 		SchemaVersion: CurrentSchemaVersion,
-		Events:        append([]factoryapi.FactoryEvent(nil), events...),
+		Events:        append([]factoryapi.FactoryEvent(nil), builder.events...),
 	}
 	if err := hydrateArtifactFromEvents(artifact); err != nil {
 		return nil, err
@@ -109,9 +77,48 @@ func ArtifactFromEventStream(r io.Reader) (*EventStreamArtifactResult, error) {
 	}
 	return &EventStreamArtifactResult{
 		Artifact:              artifact,
-		ParsedEvents:          len(events),
-		SkippedTrailingBlocks: skippedTrailingBlocks,
+		ParsedEvents:          len(builder.events),
+		SkippedTrailingBlocks: builder.skippedTrailingBlocks,
 	}, nil
+}
+
+func (b *eventStreamArtifactBuilder) appendLine(line string) {
+	switch {
+	case strings.HasPrefix(line, "data: "):
+		b.dataLines = append(b.dataLines, line[6:])
+	case strings.HasPrefix(line, "data:"):
+		b.dataLines = append(b.dataLines, strings.TrimLeft(line[5:], " \t"))
+	}
+}
+
+func (b *eventStreamArtifactBuilder) flushBlock(atEOF bool) error {
+	if len(b.dataLines) == 0 {
+		return nil
+	}
+	b.blockIndex++
+	payload := strings.Join(b.dataLines, "\n")
+	b.dataLines = b.dataLines[:0]
+
+	var event factoryapi.FactoryEvent
+	if err := json.Unmarshal([]byte(payload), &event); err != nil {
+		return b.decodeBlockError(atEOF, err)
+	}
+	if event.Id == "" || event.Type == "" {
+		return b.decodeBlockError(atEOF, fmt.Errorf("required replay event fields missing"))
+	}
+	if event.SchemaVersion == "" {
+		event.SchemaVersion = factoryapi.AgentFactoryEventV1
+	}
+	b.events = append(b.events, event)
+	return nil
+}
+
+func (b *eventStreamArtifactBuilder) decodeBlockError(atEOF bool, err error) error {
+	if atEOF && len(b.events) > 0 {
+		b.skippedTrailingBlocks++
+		return nil
+	}
+	return fmt.Errorf("decode event stream block %d: %w", b.blockIndex, err)
 }
 
 // ArtifactFromEventStreamFile opens and parses a saved event stream file into a
@@ -336,6 +343,12 @@ func mergeRuntimeWorkstationFields(merged *factoryapi.Factory, authored factorya
 }
 
 func mergeRuntimeWorkstation(workstation *factoryapi.Workstation, authored factoryapi.Workstation) {
+	mergeRuntimeWorkstationIdentity(workstation, authored)
+	mergeRuntimeWorkstationFlow(workstation, authored)
+	mergeRuntimeWorkstationExecution(workstation, authored)
+}
+
+func mergeRuntimeWorkstationIdentity(workstation *factoryapi.Workstation, authored factoryapi.Workstation) {
 	if workstation.Id == nil {
 		workstation.Id = authored.Id
 	}
@@ -348,6 +361,9 @@ func mergeRuntimeWorkstation(workstation *factoryapi.Workstation, authored facto
 	if workstation.Worker == "" {
 		workstation.Worker = authored.Worker
 	}
+}
+
+func mergeRuntimeWorkstationFlow(workstation *factoryapi.Workstation, authored factoryapi.Workstation) {
 	if len(workstation.Inputs) == 0 {
 		workstation.Inputs = authored.Inputs
 	}
@@ -363,6 +379,9 @@ func mergeRuntimeWorkstation(workstation *factoryapi.Workstation, authored facto
 	if workstation.OnRejection == nil {
 		workstation.OnRejection = authored.OnRejection
 	}
+}
+
+func mergeRuntimeWorkstationExecution(workstation *factoryapi.Workstation, authored factoryapi.Workstation) {
 	if workstation.Resources == nil || len(*workstation.Resources) == 0 {
 		workstation.Resources = authored.Resources
 	}

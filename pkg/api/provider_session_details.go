@@ -125,25 +125,48 @@ const (
 )
 
 func resolveCodexSessionFile(root, id string) (resolvedCodexSessionFile, error) {
-	cleanRoot, err := filepath.Abs(filepath.Clean(root))
+	cleanRoot, resolvedRoot, err := resolveCodexSessionsRoot(root)
 	if err != nil {
-		return resolvedCodexSessionFile{}, fmt.Errorf("resolve codex sessions root: %w", err)
-	}
-
-	rootInfo, err := os.Stat(cleanRoot)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return resolvedCodexSessionFile{}, errProviderSessionNotFound
-		}
-		return resolvedCodexSessionFile{}, fmt.Errorf("stat codex sessions root: %w", err)
-	}
-	if !rootInfo.IsDir() {
-		return resolvedCodexSessionFile{}, fmt.Errorf("codex sessions root is not a directory: %s", cleanRoot)
+		return resolvedCodexSessionFile{}, err
 	}
 
 	targetName := "rollout-" + id + ".jsonl"
+	matches, err := collectCodexSessionMatches(cleanRoot, id, targetName)
+	if err != nil {
+		return resolvedCodexSessionFile{}, err
+	}
+	if len(matches) == 0 {
+		return resolvedCodexSessionFile{}, errProviderSessionNotFound
+	}
+	sort.Strings(matches)
+	return buildResolvedCodexSessionCandidates(cleanRoot, resolvedRoot, matches, targetName)
+}
+
+func resolveCodexSessionsRoot(root string) (string, string, error) {
+	cleanRoot, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		return "", "", fmt.Errorf("resolve codex sessions root: %w", err)
+	}
+	rootInfo, err := os.Stat(cleanRoot)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", "", errProviderSessionNotFound
+		}
+		return "", "", fmt.Errorf("stat codex sessions root: %w", err)
+	}
+	if !rootInfo.IsDir() {
+		return "", "", fmt.Errorf("codex sessions root is not a directory: %s", cleanRoot)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(cleanRoot)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve codex sessions root symlinks: %w", err)
+	}
+	return cleanRoot, resolvedRoot, nil
+}
+
+func collectCodexSessionMatches(cleanRoot, id, targetName string) ([]string, error) {
 	matches := make([]string, 0, 1)
-	err = filepath.WalkDir(cleanRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(cleanRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -159,45 +182,47 @@ func resolveCodexSessionFile(root, id string) (resolvedCodexSessionFile, error) 
 		return nil
 	})
 	if err != nil {
-		return resolvedCodexSessionFile{}, fmt.Errorf("walk codex sessions root: %w", err)
+		return nil, fmt.Errorf("walk codex sessions root: %w", err)
 	}
-	if len(matches) == 0 {
-		return resolvedCodexSessionFile{}, errProviderSessionNotFound
-	}
-	sort.Strings(matches)
+	return matches, nil
+}
 
-	resolvedRoot, err := filepath.EvalSymlinks(cleanRoot)
-	if err != nil {
-		return resolvedCodexSessionFile{}, fmt.Errorf("resolve codex sessions root symlinks: %w", err)
-	}
+func buildResolvedCodexSessionCandidates(cleanRoot, resolvedRoot string, matches []string, targetName string) (resolvedCodexSessionFile, error) {
 	candidates := make([]resolvedCodexSessionFile, 0, len(matches))
 	for _, match := range matches {
-		resolvedMatch, err := filepath.EvalSymlinks(match)
+		candidate, err := resolvedCodexSessionCandidate(cleanRoot, resolvedRoot, match, targetName)
 		if err != nil {
-			return resolvedCodexSessionFile{}, fmt.Errorf("resolve provider session symlink: %w", err)
+			return resolvedCodexSessionFile{}, err
 		}
-		if !pathInsideRoot(resolvedRoot, resolvedMatch) {
-			return resolvedCodexSessionFile{}, errInvalidProviderSessionIdentifier
-		}
-		info, err := os.Stat(resolvedMatch)
-		if err != nil {
-			return resolvedCodexSessionFile{}, fmt.Errorf("stat provider session file: %w", err)
-		}
-		rel, err := filepath.Rel(cleanRoot, match)
-		if err != nil {
-			return resolvedCodexSessionFile{}, fmt.Errorf("rel provider session file: %w", err)
-		}
-		modifiedAt := info.ModTime().UTC()
-		candidates = append(candidates, resolvedCodexSessionFile{
-			absolutePath: resolvedMatch,
-			relativePath: filepath.ToSlash(rel),
-			sizeBytes:    info.Size(),
-			modifiedAt:   &modifiedAt,
-			layout:       classifyCodexSessionFileLayout(filepath.Base(match), targetName),
-		})
+		candidates = append(candidates, candidate)
 	}
-
 	return selectResolvedCodexSessionFile(candidates)
+}
+
+func resolvedCodexSessionCandidate(cleanRoot, resolvedRoot, match, targetName string) (resolvedCodexSessionFile, error) {
+	resolvedMatch, err := filepath.EvalSymlinks(match)
+	if err != nil {
+		return resolvedCodexSessionFile{}, fmt.Errorf("resolve provider session symlink: %w", err)
+	}
+	if !pathInsideRoot(resolvedRoot, resolvedMatch) {
+		return resolvedCodexSessionFile{}, errInvalidProviderSessionIdentifier
+	}
+	info, err := os.Stat(resolvedMatch)
+	if err != nil {
+		return resolvedCodexSessionFile{}, fmt.Errorf("stat provider session file: %w", err)
+	}
+	rel, err := filepath.Rel(cleanRoot, match)
+	if err != nil {
+		return resolvedCodexSessionFile{}, fmt.Errorf("rel provider session file: %w", err)
+	}
+	modifiedAt := info.ModTime().UTC()
+	return resolvedCodexSessionFile{
+		absolutePath: resolvedMatch,
+		relativePath: filepath.ToSlash(rel),
+		sizeBytes:    info.Size(),
+		modifiedAt:   &modifiedAt,
+		layout:       classifyCodexSessionFileLayout(filepath.Base(match), targetName),
+	}, nil
 }
 
 func matchesCodexSessionBaseName(baseName, id, exactName string) bool {

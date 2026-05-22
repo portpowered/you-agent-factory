@@ -54,62 +54,110 @@ func reduceReplayEvents(artifact *interfaces.ReplayArtifact) (*replayEventLog, e
 	inferenceAttemptsByDispatchID := make(map[string]replayInferenceAttempt)
 	workByID := make(map[string]interfaces.Work)
 	for _, event := range artifact.Events {
-		switch event.Type {
-		case factoryapi.FactoryEventTypeRunRequest:
-			payload, err := runStartedPayloadFromEvent(event)
-			if err != nil {
-				return nil, err
-			}
-			reduced.Factory = payload.Factory
-			reduced.WallClock = replayWallClockFromGenerated(payload.WallClock)
-			reduced.Diagnostics = replayDiagnosticsFromGenerated(payload.Diagnostics)
-		case factoryapi.FactoryEventTypeWorkRequest:
-			submissions, err := replaySubmissionsFromEvent(event)
-			if err != nil {
-				return nil, err
-			}
-			reduced.Submissions = append(reduced.Submissions, submissions...)
-			indexReplaySubmissionWork(workByID, submissions)
-		case factoryapi.FactoryEventTypeDispatchRequest:
-			dispatch, err := replayDispatchFromEvent(reduced.Factory, event, workByID)
-			if err != nil {
-				return nil, err
-			}
-			reduced.Dispatches = append(reduced.Dispatches, dispatch)
-		case factoryapi.FactoryEventTypeInferenceResponse:
-			dispatchID, attempt, err := replayInferenceAttemptFromEvent(event)
-			if err != nil {
-				return nil, err
-			}
-			if dispatchID != "" {
-				current := inferenceAttemptsByDispatchID[dispatchID]
-				if attempt.attempt >= current.attempt {
-					inferenceAttemptsByDispatchID[dispatchID] = attempt
-				}
-			}
-		case factoryapi.FactoryEventTypeDispatchResponse:
-			completion, err := replayCompletionFromEvent(event, inferenceAttemptsByDispatchID[stringValue(event.Context.DispatchId)])
-			if err != nil {
-				return nil, err
-			}
-			reduced.Completions = append(reduced.Completions, completion)
-		case factoryapi.FactoryEventTypeRunResponse:
-			payload, err := event.Payload.AsRunResponseEventPayload()
-			if err != nil {
-				return nil, fmt.Errorf("decode run finished event %q: %w", event.Id, err)
-			}
-			if wallClock := replayWallClockFromGenerated(payload.WallClock); wallClock != nil {
-				reduced.WallClock = wallClock
-			}
-			if diagnostics := replayDiagnosticsFromGenerated(payload.Diagnostics); len(diagnostics.Notes) > 0 || len(diagnostics.Workers) > 0 {
-				reduced.Diagnostics = diagnostics
-			}
+		if err := reduceReplayEvent(reduced, event, workByID, inferenceAttemptsByDispatchID); err != nil {
+			return nil, err
 		}
 	}
 	if !generatedFactoryHasConfig(reduced.Factory) {
 		return nil, fmt.Errorf("replay event log RUN_REQUEST factory is required")
 	}
 	return reduced, nil
+}
+
+func reduceReplayEvent(
+	reduced *replayEventLog,
+	event factoryapi.FactoryEvent,
+	workByID map[string]interfaces.Work,
+	inferenceAttemptsByDispatchID map[string]replayInferenceAttempt,
+) error {
+	switch event.Type {
+	case factoryapi.FactoryEventTypeRunRequest:
+		return applyReplayRunRequest(reduced, event)
+	case factoryapi.FactoryEventTypeWorkRequest:
+		return applyReplayWorkRequest(reduced, event, workByID)
+	case factoryapi.FactoryEventTypeDispatchRequest:
+		return applyReplayDispatchRequest(reduced, event, workByID)
+	case factoryapi.FactoryEventTypeInferenceResponse:
+		return applyReplayInferenceResponse(event, inferenceAttemptsByDispatchID)
+	case factoryapi.FactoryEventTypeDispatchResponse:
+		return applyReplayDispatchResponse(reduced, event, inferenceAttemptsByDispatchID)
+	case factoryapi.FactoryEventTypeRunResponse:
+		return applyReplayRunResponse(reduced, event)
+	default:
+		return nil
+	}
+}
+
+func applyReplayRunRequest(reduced *replayEventLog, event factoryapi.FactoryEvent) error {
+	payload, err := runStartedPayloadFromEvent(event)
+	if err != nil {
+		return err
+	}
+	reduced.Factory = payload.Factory
+	reduced.WallClock = replayWallClockFromGenerated(payload.WallClock)
+	reduced.Diagnostics = replayDiagnosticsFromGenerated(payload.Diagnostics)
+	return nil
+}
+
+func applyReplayWorkRequest(reduced *replayEventLog, event factoryapi.FactoryEvent, workByID map[string]interfaces.Work) error {
+	submissions, err := replaySubmissionsFromEvent(event)
+	if err != nil {
+		return err
+	}
+	reduced.Submissions = append(reduced.Submissions, submissions...)
+	indexReplaySubmissionWork(workByID, submissions)
+	return nil
+}
+
+func applyReplayDispatchRequest(reduced *replayEventLog, event factoryapi.FactoryEvent, workByID map[string]interfaces.Work) error {
+	dispatch, err := replayDispatchFromEvent(reduced.Factory, event, workByID)
+	if err != nil {
+		return err
+	}
+	reduced.Dispatches = append(reduced.Dispatches, dispatch)
+	return nil
+}
+
+func applyReplayInferenceResponse(event factoryapi.FactoryEvent, inferenceAttemptsByDispatchID map[string]replayInferenceAttempt) error {
+	dispatchID, attempt, err := replayInferenceAttemptFromEvent(event)
+	if err != nil {
+		return err
+	}
+	if dispatchID == "" {
+		return nil
+	}
+	current := inferenceAttemptsByDispatchID[dispatchID]
+	if attempt.attempt >= current.attempt {
+		inferenceAttemptsByDispatchID[dispatchID] = attempt
+	}
+	return nil
+}
+
+func applyReplayDispatchResponse(
+	reduced *replayEventLog,
+	event factoryapi.FactoryEvent,
+	inferenceAttemptsByDispatchID map[string]replayInferenceAttempt,
+) error {
+	completion, err := replayCompletionFromEvent(event, inferenceAttemptsByDispatchID[stringValue(event.Context.DispatchId)])
+	if err != nil {
+		return err
+	}
+	reduced.Completions = append(reduced.Completions, completion)
+	return nil
+}
+
+func applyReplayRunResponse(reduced *replayEventLog, event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsRunResponseEventPayload()
+	if err != nil {
+		return fmt.Errorf("decode run finished event %q: %w", event.Id, err)
+	}
+	if wallClock := replayWallClockFromGenerated(payload.WallClock); wallClock != nil {
+		reduced.WallClock = wallClock
+	}
+	if diagnostics := replayDiagnosticsFromGenerated(payload.Diagnostics); len(diagnostics.Notes) > 0 || len(diagnostics.Workers) > 0 {
+		reduced.Diagnostics = diagnostics
+	}
+	return nil
 }
 
 func validateReplayEventEnvelope(artifact *interfaces.ReplayArtifact) error {

@@ -87,6 +87,36 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 	r.stateValue.EventTime = event.Context.EventTime
 	switch event.Type {
+	case factoryapi.FactoryEventTypeRunRequest,
+		factoryapi.FactoryEventTypeInitialStructureRequest,
+		factoryapi.FactoryEventTypeFactoryChange:
+		return r.applyStructureEvent(event)
+	case factoryapi.FactoryEventTypeWorkRequest:
+		return r.applyWorkRequestEvent(event)
+	case factoryapi.FactoryEventTypeRelationshipChangeRequest:
+		return r.applyRelationshipChangeEvent(event)
+	case factoryapi.FactoryEventTypeDispatchRequest:
+		return r.applyDispatchRequestEvent(event)
+	case factoryapi.FactoryEventTypeInferenceRequest:
+		return r.applyInferenceRequestEvent(event)
+	case factoryapi.FactoryEventTypeInferenceResponse:
+		return r.applyInferenceResponseEvent(event)
+	case factoryapi.FactoryEventTypeScriptRequest:
+		return r.applyScriptRequestEvent(event)
+	case factoryapi.FactoryEventTypeScriptResponse:
+		return r.applyScriptResponseEvent(event)
+	case factoryapi.FactoryEventTypeDispatchResponse:
+		return r.applyDispatchResponseEvent(event)
+	case factoryapi.FactoryEventTypeFactoryStateResponse:
+		return r.applyFactoryStateResponseEvent(event)
+	case factoryapi.FactoryEventTypeRunResponse:
+		return nil
+	}
+	return nil
+}
+
+func (r *factoryWorldReducer) applyStructureEvent(event factoryapi.FactoryEvent) error {
+	switch event.Type {
 	case factoryapi.FactoryEventTypeRunRequest:
 		payload, err := event.Payload.AsRunRequestEventPayload()
 		if err != nil {
@@ -109,63 +139,88 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 			return err
 		}
 		r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload(payload)))
-	case factoryapi.FactoryEventTypeWorkRequest:
-		payload, err := event.Payload.AsWorkRequestEventPayload()
-		if err != nil {
-			return err
-		}
-		r.applyWorkRequest(event.Context, payload)
-	case factoryapi.FactoryEventTypeRelationshipChangeRequest:
-		payload, err := event.Payload.AsRelationshipChangeRequestEventPayload()
-		if err != nil {
-			return err
-		}
-		r.applyRelationshipChange(event.Context, payload)
-	case factoryapi.FactoryEventTypeDispatchRequest:
-		payload, err := event.Payload.AsDispatchRequestEventPayload()
-		if err != nil {
-			return err
-		}
-		r.applyDispatchCreated(event, payload)
-	case factoryapi.FactoryEventTypeInferenceRequest:
-		payload, err := event.Payload.AsInferenceRequestEventPayload()
-		if err != nil {
-			return err
-		}
-		r.applyInferenceRequest(event, payload)
-	case factoryapi.FactoryEventTypeInferenceResponse:
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
-		if err != nil {
-			return err
-		}
-		r.applyInferenceResponse(event, payload)
-	case factoryapi.FactoryEventTypeScriptRequest:
-		payload, err := event.Payload.AsScriptRequestEventPayload()
-		if err != nil {
-			return err
-		}
-		r.applyScriptRequest(event, payload)
-	case factoryapi.FactoryEventTypeScriptResponse:
-		payload, err := event.Payload.AsScriptResponseEventPayload()
-		if err != nil {
-			return err
-		}
-		r.applyScriptResponse(event, payload)
-	case factoryapi.FactoryEventTypeDispatchResponse:
-		payload, err := event.Payload.AsDispatchResponseEventPayload()
-		if err != nil {
-			return err
-		}
-		r.applyDispatchCompleted(event, payload)
-	case factoryapi.FactoryEventTypeFactoryStateResponse:
-		payload, err := event.Payload.AsFactoryStateResponseEventPayload()
-		if err != nil {
-			return err
-		}
-		r.applyFactoryStateChange(payload)
-	case factoryapi.FactoryEventTypeRunResponse:
-		return nil
 	}
+	return nil
+}
+
+func (r *factoryWorldReducer) applyWorkRequestEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsWorkRequestEventPayload()
+	if err != nil {
+		return err
+	}
+	r.applyWorkRequest(event.Context, payload)
+	return nil
+}
+
+func (r *factoryWorldReducer) applyRelationshipChangeEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsRelationshipChangeRequestEventPayload()
+	if err != nil {
+		return err
+	}
+	r.applyRelationshipChange(event.Context, payload)
+	return nil
+}
+
+func (r *factoryWorldReducer) applyDispatchRequestEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsDispatchRequestEventPayload()
+	if err != nil {
+		return err
+	}
+	r.applyDispatchCreated(event, payload)
+	return nil
+}
+
+func (r *factoryWorldReducer) applyInferenceRequestEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsInferenceRequestEventPayload()
+	if err != nil {
+		return err
+	}
+	r.applyInferenceRequest(event, payload)
+	return nil
+}
+
+func (r *factoryWorldReducer) applyInferenceResponseEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsInferenceResponseEventPayload()
+	if err != nil {
+		return err
+	}
+	r.applyInferenceResponse(event, payload)
+	return nil
+}
+
+func (r *factoryWorldReducer) applyScriptRequestEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsScriptRequestEventPayload()
+	if err != nil {
+		return err
+	}
+	r.applyScriptRequest(event, payload)
+	return nil
+}
+
+func (r *factoryWorldReducer) applyScriptResponseEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsScriptResponseEventPayload()
+	if err != nil {
+		return err
+	}
+	r.applyScriptResponse(event, payload)
+	return nil
+}
+
+func (r *factoryWorldReducer) applyDispatchResponseEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		return err
+	}
+	r.applyDispatchCompleted(event, payload)
+	return nil
+}
+
+func (r *factoryWorldReducer) applyFactoryStateResponseEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsFactoryStateResponseEventPayload()
+	if err != nil {
+		return err
+	}
+	r.applyFactoryStateChange(payload)
 	return nil
 }
 
@@ -458,23 +513,48 @@ func (r *factoryWorldReducer) outputPlaceForWork(workstationID string, outcome f
 	if !ok {
 		return ""
 	}
-	routes := workstation.OutputPlaceIDs
+	return r.outputPlaceForOutcome(workstation, outcome, workTypeID)
+}
+
+func (r *factoryWorldReducer) outputPlaceForOutcome(
+	workstation interfaces.FactoryWorkstation,
+	outcome factoryapi.WorkOutcome,
+	workTypeID string,
+) string {
+	routes, ok := routedOutputPlaces(workstation, outcome)
+	if !ok {
+		return ""
+	}
+	if route := r.matchOutputRoute(routes, workTypeID); route != "" {
+		return route
+	}
+	if outcome == factoryapi.WorkOutcomeFailed {
+		return r.failedPlaceForWorkType(workTypeID)
+	}
+	return ""
+}
+
+func routedOutputPlaces(workstation interfaces.FactoryWorkstation, outcome factoryapi.WorkOutcome) ([]string, bool) {
 	switch outcome {
 	case factoryapi.WorkOutcomeContinue:
 		if len(workstation.ContinuePlaceIDs) == 0 {
-			return ""
+			return nil, false
 		}
-		routes = workstation.ContinuePlaceIDs
+		return workstation.ContinuePlaceIDs, true
 	case factoryapi.WorkOutcomeRejected:
 		if len(workstation.RejectionPlaceIDs) == 0 {
-			return ""
+			return nil, false
 		}
-		routes = workstation.RejectionPlaceIDs
+		return workstation.RejectionPlaceIDs, true
 	case factoryapi.WorkOutcomeFailed:
 		if len(workstation.FailurePlaceIDs) > 0 {
-			routes = workstation.FailurePlaceIDs
+			return workstation.FailurePlaceIDs, true
 		}
 	}
+	return workstation.OutputPlaceIDs, true
+}
+
+func (r *factoryWorldReducer) matchOutputRoute(routes []string, workTypeID string) string {
 	for _, placeID := range routes {
 		if place, ok := r.topologyPlace(placeID); ok && placeMatchesWorkType(place, workTypeID) {
 			return place.ID
@@ -483,11 +563,13 @@ func (r *factoryWorldReducer) outputPlaceForWork(workstationID string, outcome f
 			return placeID
 		}
 	}
-	if outcome == factoryapi.WorkOutcomeFailed {
-		for _, place := range r.stateValue.Topology.Places {
-			if placeMatchesWorkType(place, workTypeID) && place.Category == "FAILED" {
-				return place.ID
-			}
+	return ""
+}
+
+func (r *factoryWorldReducer) failedPlaceForWorkType(workTypeID string) string {
+	for _, place := range r.stateValue.Topology.Places {
+		if placeMatchesWorkType(place, workTypeID) && place.Category == "FAILED" {
+			return place.ID
 		}
 	}
 	return ""

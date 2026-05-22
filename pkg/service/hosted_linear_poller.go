@@ -280,24 +280,11 @@ func collectHostedLinearIssues(
 			return nil, linearCheckpoint{}, err
 		}
 		pages++
-		if nextCheckpoint.IssueID == "" && len(page.Issues) > 0 {
-			nextCheckpoint = linearCheckpoint{
-				IssueID:   page.Issues[0].ID,
-				UpdatedAt: page.Issues[0].UpdatedAt,
-			}
-		}
-
-		for _, issue := range page.Issues {
-			if issue.ID == checkpoint.IssueID && issue.UpdatedAt == checkpoint.UpdatedAt && checkpoint.IssueID != "" {
-				foundCheckpoint = true
-				break
-			}
-			if !hostedLinearIssueMatchesFilters(issue, workerDef.Linear) {
-				continue
-			}
-			collected = append(collected, issue)
-		}
-		if foundCheckpoint || !page.More || page.Next == "" {
+		nextCheckpoint = advanceLinearCheckpoint(nextCheckpoint, page.Issues)
+		pageIssues, pageFoundCheckpoint := collectNewHostedLinearPageIssues(page.Issues, checkpoint, workerDef.Linear)
+		collected = append(collected, pageIssues...)
+		foundCheckpoint = foundCheckpoint || pageFoundCheckpoint
+		if shouldStopHostedLinearPaging(foundCheckpoint, page) {
 			break
 		}
 		cursor = page.Next
@@ -319,6 +306,41 @@ func collectHostedLinearIssues(
 	})
 
 	return collected, nextCheckpoint, nil
+}
+
+func advanceLinearCheckpoint(current linearCheckpoint, issues []linearIssue) linearCheckpoint {
+	if current.IssueID != "" || len(issues) == 0 {
+		return current
+	}
+	return linearCheckpoint{
+		IssueID:   issues[0].ID,
+		UpdatedAt: issues[0].UpdatedAt,
+	}
+}
+
+func collectNewHostedLinearPageIssues(
+	issues []linearIssue,
+	checkpoint linearCheckpoint,
+	cfg *interfaces.HostedLinearWorkerConfig,
+) ([]linearIssue, bool) {
+	collected := make([]linearIssue, 0, len(issues))
+	for _, issue := range issues {
+		if issueMatchesLinearCheckpoint(issue, checkpoint) {
+			return collected, true
+		}
+		if hostedLinearIssueMatchesFilters(issue, cfg) {
+			collected = append(collected, issue)
+		}
+	}
+	return collected, false
+}
+
+func issueMatchesLinearCheckpoint(issue linearIssue, checkpoint linearCheckpoint) bool {
+	return checkpoint.IssueID != "" && issue.ID == checkpoint.IssueID && issue.UpdatedAt == checkpoint.UpdatedAt
+}
+
+func shouldStopHostedLinearPaging(foundCheckpoint bool, page linearIssuePage) bool {
+	return foundCheckpoint || !page.More || page.Next == ""
 }
 
 func hostedLinearIssueMatchesFilters(issue linearIssue, cfg *interfaces.HostedLinearWorkerConfig) bool {

@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this subscription contract test keeps replay ordering and live-stream assertions together at the runtime seam.
 func TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents(t *testing.T) {
 	f := newPassingInlineRuntime(t)
 
@@ -417,6 +418,7 @@ func TestNew_ServiceModeWorkerPoolResultSignalCompletesLateSubmission(t *testing
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this runtime snapshot test keeps lifecycle, topology, and observability assertions in one readable flow.
 func TestGetEngineStateSnapshot_AggregatesRuntimeLifecycleUptimeAndTopology(t *testing.T) {
 	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	executor := &blockingExecutor{

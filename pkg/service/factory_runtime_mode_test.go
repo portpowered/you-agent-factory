@@ -31,6 +31,7 @@ func TestBuildFactoryService_RecordAndReplayTogetherRejected(t *testing.T) {
 }
 
 // portos:func-length-exception owner=agent-factory reason=legacy-service-mode-fixture review=2026-07-18 removal=split-late-submit-fixture-before-next-service-mode-change
+// pkgmaintcheck:ignore-cyclomatic-complexity this service-mode runtime test keeps idle-startup and late-submission assertions together on the public seam.
 func TestBuildFactoryService_ServiceModeAcceptsLateSubmissionAfterIdleStartup(t *testing.T) {
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, minimalFactoryConfig())
@@ -164,6 +165,7 @@ func TestBuildFactoryService_BatchModeRejectsLateSubmissionAfterTermination(t *t
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this runtime observability test keeps snapshot and event-stream assertions together in one service flow.
 func TestFactoryService_RunPreservesSnapshotAndFactoryEventObservability(t *testing.T) {
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, minimalFactoryConfig())
