@@ -5,7 +5,7 @@ describe("submitWork", () => {
     vi.unstubAllGlobals();
   });
 
-  it("posts to /work and returns the accepted trace id", async () => {
+  it("posts to the explicit default-session work route and returns the accepted trace id", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ traceId: "trace-story" }), {
         headers: {
@@ -24,7 +24,7 @@ describe("submitWork", () => {
       }),
     ).resolves.toEqual({ traceId: "trace-story" });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/work",
+      "/factories/~default/work",
       expect.objectContaining({
         body: JSON.stringify({
           name: "Driver review",
@@ -65,7 +65,7 @@ describe("submitWork", () => {
     );
   });
 
-  it("posts an explicit empty payload without dropping the submit-work contract field", async () => {
+  it("posts an explicit empty payload through the default-session scoped route without dropping the submit-work contract field", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ traceId: "trace-story" }), {
         headers: {
@@ -84,7 +84,7 @@ describe("submitWork", () => {
       }),
     ).resolves.toEqual({ traceId: "trace-story" });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/work",
+      "/factories/~default/work",
       expect.objectContaining({
         body: JSON.stringify({
           name: "Empty payload review",

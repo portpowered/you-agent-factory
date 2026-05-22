@@ -7,57 +7,59 @@ import {
 
 describe("getCurrentEditableFactoryDefinition", () => {
   it("loads the current factory through the existing API and preserves editable workstation fields", async () => {
-    const factoryDefinition = await getCurrentEditableFactoryDefinition({
-      fetch: vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            factoryDefinition: {
-              id: "factory-current",
-              name: "Current Factory",
-              workers: [
-                {
-                  model: "gpt-5",
-                  name: "writer",
-                  type: "MODEL_WORKER",
-                },
-              ],
-              workstations: [
-                {
-                  body: "Summarize the work item before review.",
-                  inputs: [
-                    {
-                      state: "queued",
-                      workType: "task",
-                    },
-                  ],
-                  name: "Draft",
-                  outputs: [
-                    {
-                      state: "reviewed",
-                      workType: "task",
-                    },
-                  ],
-                  promptFile: "prompts/draft.md",
-                  type: "MODEL_WORKSTATION",
-                  worker: "writer",
-                },
-              ],
-              workTypes: [],
-            },
-            version: {
-              logical: 7,
-              physical: "2026-05-18T14:22:00Z",
-            },
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-            statusText: "OK",
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          factoryDefinition: {
+            id: "factory-current",
+            name: "Current Factory",
+            workers: [
+              {
+                model: "gpt-5",
+                name: "writer",
+                type: "MODEL_WORKER",
+              },
+            ],
+            workstations: [
+              {
+                body: "Summarize the work item before review.",
+                inputs: [
+                  {
+                    state: "queued",
+                    workType: "task",
+                  },
+                ],
+                name: "Draft",
+                outputs: [
+                  {
+                    state: "reviewed",
+                    workType: "task",
+                  },
+                ],
+                promptFile: "prompts/draft.md",
+                type: "MODEL_WORKSTATION",
+                worker: "writer",
+              },
+            ],
+            workTypes: [],
           },
-        ),
+          version: {
+            logical: 7,
+            physical: "2026-05-18T14:22:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
       ),
+    );
+
+    const factoryDefinition = await getCurrentEditableFactoryDefinition({
+      fetch: fetchMock,
     });
 
     expect(factoryDefinition).toEqual({
@@ -93,6 +95,12 @@ describe("getCurrentEditableFactoryDefinition", () => {
       ],
       workTypes: [],
     });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factories/~default/factory/~current/editable-definition",
+      {
+        method: "GET",
+      },
+    );
   });
 
   it("returns version metadata together with the editable current factory definition document", async () => {
@@ -341,7 +349,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
     );
 
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/factory/~current/editable-definition"),
+      "/factories/~default/factory/~current/editable-definition",
       expect.objectContaining({
         body: JSON.stringify({
           baseVersion: {

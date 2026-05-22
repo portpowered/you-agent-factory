@@ -199,7 +199,9 @@ describe("SubmitWorkWidget", () => {
     );
     expect(submittingStatus.className).toContain("text-on-foreground");
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/work");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
+    );
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       method: "POST",
     });

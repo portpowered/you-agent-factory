@@ -773,7 +773,7 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factory/~current/editable-definition",
+          path: "/factories/~default/factory/~current/editable-definition",
           response: {
             body: editableConfigurationDocument,
           },
@@ -813,7 +813,7 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factory/~current/editable-definition",
+          path: "/factories/~default/factory/~current/editable-definition",
           response: {
             body: editableConfigurationDocument,
           },
@@ -854,7 +854,7 @@ export const CurrentSelectionPromptHintVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factory/~current/editable-definition",
+          path: "/factories/~default/factory/~current/editable-definition",
           response: {
             body: editableConfigurationDocument,
           },
@@ -904,7 +904,7 @@ export const DashboardSubmitWorkIntegrationSmoke = {
       fetchMocks: [
         {
           method: "POST",
-          path: "/work",
+          path: "/factories/~default/work",
           response: {
             body: {
               traceId: "trace-submit-story",
@@ -969,7 +969,7 @@ export const DashboardSubmitWorkRetryableFailure = {
       fetchMocks: [
         {
           method: "POST",
-          path: "/work",
+          path: "/factories/~default/work",
           response: {
             body: {
               code: "BAD_REQUEST",

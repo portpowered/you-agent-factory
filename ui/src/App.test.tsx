@@ -53,6 +53,7 @@ import { reloadDashboardLayoutFromStorage } from "./features/bento";
 import { useDashboardBentoStore } from "./features/bento/state";
 import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
 import { resetSelectionHistoryStore } from "./features/current-selection/state";
+import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import {
   useDashboardSessionStore,
 } from "./features/dashboard/state/dashboardSessionStore";
@@ -1856,7 +1857,10 @@ describe("App shell import and export flows", () => {
               ? `${input.pathname}${input.search}`
               : input.url;
 
-        if (path === "/factory/~current") {
+        if (
+          path ===
+          `/factories/${DEFAULT_FACTORY_SESSION_ID}/factory/~current`
+        ) {
           return jsonResponse(currentNamedFactoryExportResponse);
         }
 
@@ -2016,7 +2020,10 @@ describe("App shell import and export flows", () => {
             ? `${input.pathname}${input.search}`
             : input.url;
 
-      if (path === "/factory/~current") {
+      if (
+        path ===
+        `/factories/${DEFAULT_FACTORY_SESSION_ID}/factory/~current`
+      ) {
         return jsonResponse(currentNamedFactoryExportResponse);
       }
 
@@ -2273,7 +2280,7 @@ describe("App shell import and export flows", () => {
         screen.getByRole("region", { name: "dashboard summary" }),
       ).toBeTruthy();
       expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
-        "/factory/~current",
+        `/factories/${DEFAULT_FACTORY_SESSION_ID}/factory/~current`,
       ]);
       expect(exportProbe.getDownloadedBlob()).toBeNull();
       expect(exportProbe.getDownloadedFilename()).toBe("");
@@ -2319,7 +2326,10 @@ describe("App shell import and export flows", () => {
             ? `${input.pathname}${input.search}`
             : input.url;
 
-      if (path !== "/factory/~current") {
+      if (
+        path !==
+        `/factories/${DEFAULT_FACTORY_SESSION_ID}/factory/~current`
+      ) {
         throw new Error(`unexpected fetch for ${path}`);
       }
 
@@ -2986,7 +2996,9 @@ describe("App streamed replay smoke flows", () => {
     if (!stream) {
       throw new Error("expected factory event stream to be opened");
     }
-    expect(stream.url).toBe("/events");
+    expect(stream.url).toBe(
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
 
     act(() => {
       for (const event of selectedTickTimelineEvents) {
@@ -3957,7 +3969,9 @@ describe("App dashboard follow-up flows", () => {
       ),
     ).toBeTruthy();
     const submitCalls = nonPromptTemplateFetchPaths(fetchMock);
-    expect(submitCalls).toEqual(["/work"]);
+    expect(submitCalls).toEqual([
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
+    ]);
     expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
       name: "Dashboard smoke request",
       payload: "Review the failed dashboard submission smoke.",
@@ -3983,8 +3997,13 @@ describe("App dashboard follow-up flows", () => {
     expect(
       await submitWorkScope.findByText("work_type_name is required"),
     ).toBeTruthy();
-    expect(submitCalls).toEqual(["/work"]);
-    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work", "/work"]);
+    expect(submitCalls).toEqual([
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
+    ]);
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
+    ]);
     expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
       name: "Retry dashboard request",
       payload: "Retry the broken submission from the dashboard shell.",
@@ -4050,7 +4069,9 @@ describe("App dashboard follow-up flows", () => {
         "Your request was submitted. Trace ID: trace-submit-story.",
       ),
     ).toBeTruthy();
-    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work"]);
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
+    ]);
     expect(fetchMock.mock.calls.at(-1)?.[1]).toMatchObject({
       method: "POST",
     });
@@ -4093,7 +4114,9 @@ describe("App dashboard follow-up flows", () => {
         "Your request was submitted. Trace ID: trace-submit-story.",
       ),
     ).toBeTruthy();
-    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work"]);
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
+    ]);
     expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
       name: "Dashboard empty payload request",
       payload: "",
@@ -4158,7 +4181,9 @@ describe("App dashboard follow-up flows", () => {
     expect(
       await submitWorkScope.findByText("work_type_name is required"),
     ).toBeTruthy();
-    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual(["/work"]);
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
+    ]);
     expect(workType.value).toBe("story");
     expect(requestName.value).toBe("Retry dashboard request");
     expect(requestText.value).toBe(
