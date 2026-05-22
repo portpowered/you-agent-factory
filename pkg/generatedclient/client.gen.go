@@ -75,6 +75,13 @@ const (
 	ModelOperationContentTypeText   ModelOperationContentType = "TEXT"
 )
 
+// Defines values for ResourceType.
+const (
+	ResourceTypeInvocationSlot ResourceType = "INVOCATION_SLOT"
+	ResourceTypeModel          ResourceType = "MODEL"
+	ResourceTypeProviderQuota  ResourceType = "PROVIDER_QUOTA"
+)
+
 // Defines values for RunnerID.
 const (
 	RunnerIDCodex     RunnerID = "codex"
@@ -364,11 +371,26 @@ type RequiredTool struct {
 
 // Resource Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas.
 type Resource struct {
+	// Backend Backend identifier for local model resources, such as a managed runtime or embedded inference backend.
+	Backend *string `json:"backend,omitempty"`
+
 	// Capacity Total units of this resource available to the factory at one time.
 	Capacity int `json:"capacity"`
 
+	// LoadPolicy Load policy for local model resources, such as `ON_DEMAND` or `EAGER`.
+	LoadPolicy *string `json:"loadPolicy,omitempty"`
+
+	// Model Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`.
+	Model *string `json:"model,omitempty"`
+
 	// Name Resource name referenced from worker requirements and workstation resourceUsage entries.
 	Name string `json:"name"`
+
+	// Provider Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources.
+	Provider *string `json:"provider,omitempty"`
+
+	// Type Uppercase resource families supported by the public factory-config contract.
+	Type *ResourceType `json:"type,omitempty"`
 }
 
 // ResourceManifest Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
@@ -385,6 +407,9 @@ type ResourceRequirement struct {
 	Capacity int    `json:"capacity"`
 	Name     string `json:"name"`
 }
+
+// ResourceType Uppercase resource families supported by the public factory-config contract.
+type ResourceType string
 
 // RunnerID Stable built-in runner identifiers supported by factory and workstation runner selection.
 type RunnerID string

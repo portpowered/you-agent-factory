@@ -126,6 +126,44 @@ func TestFactoryConfigFromOpenAPIJSON_MapsModelInvokeOperation(t *testing.T) {
 	}
 }
 
+func TestFactoryConfigFromOpenAPIJSON_MapsTypedModelResources(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"tts-factory",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"resources": [{
+			"name":"omnivoice-cache",
+			"type":"MODEL",
+			"capacity":1,
+			"model":"OMNIVOICE_Q4_K_M",
+			"backend":"LLAMACPP",
+			"loadPolicy":"ON_DEMAND"
+		}],
+		"workers": [{"name":"tts-worker","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"name":"speak-story",
+			"worker":"tts-worker",
+			"type":"MODEL_WORKSTATION",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if len(cfg.Resources) != 1 {
+		t.Fatalf("expected one resource, got %#v", cfg.Resources)
+	}
+	resource := cfg.Resources[0]
+	if resource.Type != interfaces.ResourceTypeModel {
+		t.Fatalf("resource type = %q, want MODEL", resource.Type)
+	}
+	if resource.Model != "OMNIVOICE_Q4_K_M" || resource.Backend != "LLAMACPP" || resource.LoadPolicy != "ON_DEMAND" {
+		t.Fatalf("resource metadata = %#v, want model/backend/loadPolicy preserved", resource)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalWorkstationCronFields(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"cron-factory",

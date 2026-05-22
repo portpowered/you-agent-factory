@@ -1,0 +1,14 @@
+type: string
+description: Uppercase resource families supported by the public factory-config contract.
+x-enum-varnames:
+  - ResourceTypeModel
+  - ResourceTypeProviderQuota
+  - ResourceTypeInvocationSlot
+enum:
+  - MODEL
+  - PROVIDER_QUOTA
+  - INVOCATION_SLOT
+x-enum-descriptions:
+  - Local or embedded model capacity resource.
+  - Cloud-provider quota resource for one provider or model lane.
+  - Generic invocation concurrency slot resource.

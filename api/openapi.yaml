@@ -2828,10 +2828,40 @@ components:
         name:
           type: string
           description: Resource name referenced from worker requirements and workstation resourceUsage entries.
+        type:
+          $ref: '#/components/schemas/ResourceType'
+          description: Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`.
         capacity:
           type: integer
           minimum: 1
           description: Total units of this resource available to the factory at one time.
+        model:
+          type: string
+          description: Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`.
+        backend:
+          type: string
+          description: Backend identifier for local model resources, such as a managed runtime or embedded inference backend.
+        loadPolicy:
+          type: string
+          description: Load policy for local model resources, such as `ON_DEMAND` or `EAGER`.
+        provider:
+          type: string
+          description: Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources.
+    ResourceType:
+      type: string
+      description: Uppercase resource families supported by the public factory-config contract.
+      x-enum-varnames:
+        - ResourceTypeModel
+        - ResourceTypeProviderQuota
+        - ResourceTypeInvocationSlot
+      enum:
+        - MODEL
+        - PROVIDER_QUOTA
+        - INVOCATION_SLOT
+      x-enum-descriptions:
+        - Local or embedded model capacity resource.
+        - Cloud-provider quota resource for one provider or model lane.
+        - Generic invocation concurrency slot resource.
     Worker:
       description: A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
       type: object

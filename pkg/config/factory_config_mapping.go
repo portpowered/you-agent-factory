@@ -172,8 +172,13 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		resources := make([]factoryapi.Resource, len(cfg.Resources))
 		for i, resource := range cfg.Resources {
 			resources[i] = factoryapi.Resource{
-				Name:     resource.Name,
-				Capacity: resource.Capacity,
+				Name:       resource.Name,
+				Type:       resourceTypePtrIfNotEmpty(resource.Type),
+				Capacity:   resource.Capacity,
+				Model:      stringPtrIfNotEmpty(resource.Model),
+				Backend:    stringPtrIfNotEmpty(resource.Backend),
+				LoadPolicy: stringPtrIfNotEmpty(resource.LoadPolicy),
+				Provider:   stringPtrIfNotEmpty(resource.Provider),
 			}
 		}
 		apiCfg.Resources = &resources
@@ -565,6 +570,14 @@ func resourceRequirementsAPIFromInternal(resources []interfaces.ResourceConfig) 
 		}
 	}
 	return &values
+}
+
+func resourceTypePtrIfNotEmpty(value string) *factoryapi.ResourceType {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	canonical := factoryapi.ResourceType(publicFactoryResourceTypeFromInternal(value))
+	return &canonical
 }
 
 func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factoryapi.Guard {

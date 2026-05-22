@@ -121,6 +121,7 @@ type FactoryService struct {
 	clock          factory.Clock
 	recording      *replay.Recorder
 	logSink        *logging.RuntimeLogSink
+	modelResources *localModelResourceLimiter
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)
@@ -303,6 +304,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(cfg.RunnerID, loadedFactoryCfg.FactoryConfig())
 	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
+	modelResources := newLocalModelResourceLimiter()
 	workerOpts, err := loadWorkersFromConfig(
 		loadedFactoryCfg.FactoryDir(),
 		loadedFactoryCfg.FactoryConfig(),
@@ -316,6 +318,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
 		clock.Now,
+		modelResources,
 	)
 	if err != nil {
 		logger.Error("failed to load workers from config", zap.Error(err))
@@ -404,6 +407,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		clock:          clock,
 		recording:      recording,
 		logSink:        logSink,
+		modelResources: modelResources,
 	}, nil
 }
 
@@ -499,6 +503,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
 		clock.Now,
+		fs.modelResources,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load workers: %w", err)
@@ -2121,6 +2126,7 @@ func loadWorkersFromConfig(
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
 	now func() time.Time,
+	modelResources *localModelResourceLimiter,
 ) ([]factory.FactoryOption, error) {
 	var opts []factory.FactoryOption
 	logger.Info("loading workers from runtime config", "working-directory", factoryDir)
@@ -2141,7 +2147,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workers.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, now)
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, now, modelResources)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -2173,6 +2179,7 @@ func loadWorkersFromConfig(
 // inner executor for the configured worker type. Returns nil for unsupported types.
 func buildWorkerExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
+	factoryCfg *interfaces.FactoryConfig,
 	workerName string,
 	factoryRunnerID string,
 	logger logging.Logger,
@@ -2182,6 +2189,7 @@ func buildWorkerExecutor(
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
 	now func() time.Time,
+	modelResources *localModelResourceLimiter,
 ) workers.WorkerExecutor {
 	def, ok := runtimeCfg.Worker(workerName)
 	if !ok {
@@ -2223,6 +2231,7 @@ func buildWorkerExecutor(
 		agentOpts := []workers.AgentExecutorOption{
 			workers.WithLogger(logger),
 		}
+		runner = modelResources.wrapRunner(runner, factoryCfg, def)
 		agentExec := workers.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
 		return &workers.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,

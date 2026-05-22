@@ -156,6 +156,9 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 	if err := normalizeFactoryInputTypeEntries(root); err != nil {
 		return nil, err
 	}
+	if err := normalizeFactoryResourceEntries(root); err != nil {
+		return nil, err
+	}
 	if err := normalizeFactoryWorkerEntries(root); err != nil {
 		return nil, err
 	}
@@ -163,6 +166,23 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 		return nil, err
 	}
 	return v, nil
+}
+
+func normalizeFactoryResourceEntries(root map[string]any) error {
+	resources, ok := root["resources"].([]any)
+	if !ok {
+		return nil
+	}
+	for i, item := range resources {
+		resource, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(resource, "type", fmt.Sprintf("resources[%d].type", i), interfaces.StrictPublicFactoryResourceType); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func normalizeFactoryGuardEntries(root map[string]any) error {

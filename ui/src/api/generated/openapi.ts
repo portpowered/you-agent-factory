@@ -1428,9 +1428,24 @@ export interface components {
         Resource: {
             /** @description Resource name referenced from worker requirements and workstation resourceUsage entries. */
             name: string;
+            /** @description Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`. */
+            type?: components["schemas"]["ResourceType"];
             /** @description Total units of this resource available to the factory at one time. */
             capacity: number;
+            /** @description Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`. */
+            model?: string;
+            /** @description Backend identifier for local model resources, such as a managed runtime or embedded inference backend. */
+            backend?: string;
+            /** @description Load policy for local model resources, such as `ON_DEMAND` or `EAGER`. */
+            loadPolicy?: string;
+            /** @description Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources. */
+            provider?: string;
         };
+        /**
+         * @description Uppercase resource families supported by the public factory-config contract.
+         * @enum {string}
+         */
+        ResourceType: "MODEL" | "PROVIDER_QUOTA" | "INVOCATION_SLOT";
         /** @description A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script. */
         Worker: {
             /** @description Worker name referenced by Workstation.worker. */

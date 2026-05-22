@@ -1036,6 +1036,8 @@ components:
       $ref: './components/schemas/data-models/WorkStateType.yaml'
     Resource:
       $ref: './components/schemas/data-models/Resource.yaml'
+    ResourceType:
+      $ref: './components/schemas/data-models/ResourceType.yaml'
     Worker:
       $ref: './components/schemas/data-models/Worker.yaml'
     WorkerType:

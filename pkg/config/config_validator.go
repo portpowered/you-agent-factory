@@ -136,6 +136,7 @@ func NewConfigValidator(opts ...ConfigValidatorOption) *ConfigValidator {
 		ruleModelInvokeWorkstations,
 		ruleWorkerReferences,
 		rulePerInputGuards,
+		ruleResourceDefinitions,
 		ruleResourceUsage,
 		ruleRequiredTools(cv.requiredToolChecker),
 		ruleBundledFiles,
@@ -209,6 +210,26 @@ func ruleResourceUsage(cfg *interfaces.FactoryConfig) []Finding {
 		validResources[r.Name] = true
 	}
 
+	for wi, worker := range cfg.Workers {
+		for ri, ru := range worker.Resources {
+			path := fmt.Sprintf("workers[%d](%s).resources[%d]", wi, worker.Name, ri)
+			if !validResources[ru.Name] {
+				findings = append(findings, Finding{
+					Severity: SeverityError, Path: path,
+					Message: fmt.Sprintf("references non-existent resource %q", ru.Name),
+					Rule:    "resource-usage-ref",
+				})
+			}
+			if ru.Capacity <= 0 {
+				findings = append(findings, Finding{
+					Severity: SeverityError, Path: path,
+					Message: "capacity must be positive",
+					Rule:    "resource-usage-capacity",
+				})
+			}
+		}
+	}
+
 	for wi, ws := range cfg.Workstations {
 		for ri, ru := range ws.Resources {
 			path := fmt.Sprintf("workstations[%d](%s).resources[%d]", wi, ws.Name, ri)
@@ -228,6 +249,82 @@ func ruleResourceUsage(cfg *interfaces.FactoryConfig) []Finding {
 			}
 		}
 	}
+	return findings
+}
+
+func ruleResourceDefinitions(cfg *interfaces.FactoryConfig) []Finding {
+	if cfg == nil || len(cfg.Resources) == 0 {
+		return nil
+	}
+
+	var findings []Finding
+	for i, resource := range cfg.Resources {
+		basePath := fmt.Sprintf("resources[%d](%s)", i, resource.Name)
+		if strings.TrimSpace(resource.Name) == "" {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".name",
+				Message:  "missing required 'name' field",
+				Rule:     "resource-name",
+			})
+		}
+		if resource.Capacity <= 0 {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".capacity",
+				Message:  "capacity must be positive",
+				Rule:     "resource-capacity",
+			})
+		}
+
+		switch strings.TrimSpace(resource.Type) {
+		case "", interfaces.ResourceTypeInvocationSlot:
+			continue
+		case interfaces.ResourceTypeModel:
+			if strings.TrimSpace(resource.Model) == "" {
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     basePath + ".model",
+					Message:  "MODEL resources require a non-empty model identifier",
+					Rule:     "resource-model-model",
+				})
+			}
+			if strings.TrimSpace(resource.Backend) == "" {
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     basePath + ".backend",
+					Message:  "MODEL resources require a non-empty backend",
+					Rule:     "resource-model-backend",
+				})
+			}
+			if strings.TrimSpace(resource.LoadPolicy) == "" {
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     basePath + ".loadPolicy",
+					Message:  "MODEL resources require a non-empty loadPolicy",
+					Rule:     "resource-model-load-policy",
+				})
+			}
+		case interfaces.ResourceTypeProviderQuota:
+			if strings.TrimSpace(resource.Provider) == "" {
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     basePath + ".provider",
+					Message:  "PROVIDER_QUOTA resources require a non-empty provider identity",
+					Rule:     "resource-provider-quota-provider",
+				})
+			}
+			if strings.TrimSpace(resource.Model) == "" {
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     basePath + ".model",
+					Message:  "PROVIDER_QUOTA resources require a non-empty model identifier",
+					Rule:     "resource-provider-quota-model",
+				})
+			}
+		}
+	}
+
 	return findings
 }
 

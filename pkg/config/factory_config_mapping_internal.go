@@ -79,8 +79,13 @@ func resourcesInternalFromAPI(resources []factoryapi.Resource) []interfaces.Reso
 	values := make([]interfaces.ResourceConfig, len(resources))
 	for i, resource := range resources {
 		values[i] = interfaces.ResourceConfig{
-			Name:     resource.Name,
-			Capacity: resource.Capacity,
+			Name:       resource.Name,
+			Type:       internalFactoryResourceTypeFromPublic(enumStringValue(resource.Type)),
+			Capacity:   resource.Capacity,
+			Model:      stringValue(resource.Model),
+			Backend:    stringValue(resource.Backend),
+			LoadPolicy: stringValue(resource.LoadPolicy),
+			Provider:   stringValue(resource.Provider),
 		}
 	}
 	return values
@@ -412,6 +417,13 @@ func resourceRequirementsInternalFromAPI(resources *[]factoryapi.ResourceRequire
 		}
 	}
 	return values
+}
+
+func enumStringValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
 
 func workstationGuardsInternalFromAPI(guards *[]factoryapi.Guard) []interfaces.GuardConfig {

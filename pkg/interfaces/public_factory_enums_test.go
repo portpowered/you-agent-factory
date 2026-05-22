@@ -56,6 +56,14 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 			strict:     StrictPublicFactoryWorkerModelOperationContentType,
 		},
 		{
+			name:       "resource type",
+			alias:      "MODEL",
+			unknown:    "custom-resource",
+			want:       ResourceTypeModel,
+			permissive: PermissivePublicFactoryResourceType,
+			strict:     StrictPublicFactoryResourceType,
+		},
+		{
 			name:       "workstation type",
 			alias:      "MODEL_INVOKE",
 			unknown:    "CUSTOM_WORKSTATION",
@@ -115,6 +123,9 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	if got := GeneratedPublicFactoryWorkerModelOperationContentType("  AUDIO  "); got != factoryapi.ModelOperationContentType("AUDIO") {
 		t.Fatalf("worker operation content type = %q, want AUDIO", got)
 	}
+	if got := PermissivePublicFactoryResourceType("  MODEL  "); got != ResourceTypeModel {
+		t.Fatalf("resource type = %q, want MODEL", got)
+	}
 	if got := GeneratedPublicFactoryWorkerModelProvider("  mystery-provider  "); got != factoryapi.WorkerModelProvider("mystery-provider") {
 		t.Fatalf("worker model provider = %q, want trimmed unknown to round-trip", got)
 	}
@@ -126,6 +137,9 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	}
 	if got := GeneratedPublicFactoryWorkerModelOperationContentType("  sound  "); got != factoryapi.ModelOperationContentType("sound") {
 		t.Fatalf("worker operation content type = %q, want trimmed unknown to round-trip", got)
+	}
+	if got := PermissivePublicFactoryResourceType("  custom-resource  "); got != "custom-resource" {
+		t.Fatalf("resource type = %q, want trimmed unknown to round-trip", got)
 	}
 	if got := GeneratedPublicFactoryWorkstationType("  CUSTOM_WORKSTATION  "); got != factoryapi.WorkstationType("CUSTOM_WORKSTATION") {
 		t.Fatalf("workstation type = %q, want trimmed unknown to round-trip", got)

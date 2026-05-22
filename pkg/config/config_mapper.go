@@ -140,7 +140,7 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 		cm.addCronTimeInputArc(ws, t)
 
 		// Handle resource usage: generate consume arcs (input) and release arcs (output).
-		for _, ru := range ws.Resources {
+		for _, ru := range combinedTransitionResourceUsage(cfg, ws) {
 			resourcePlaceID := fmt.Sprintf("%s:%s", ru.Name, interfaces.ResourceStateAvailable)
 
 			// Consume arc: take resource token(s) when transition fires.
@@ -166,6 +166,37 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 		}
 	}
 	return transitions
+}
+
+func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interfaces.FactoryWorkstationConfig) []interfaces.ResourceConfig {
+	combined := make(map[string]interfaces.ResourceConfig, len(ws.Resources))
+	order := make([]string, 0, len(ws.Resources))
+
+	appendResources := func(resources []interfaces.ResourceConfig) {
+		for _, resource := range resources {
+			if existing, ok := combined[resource.Name]; ok {
+				existing.Capacity += resource.Capacity
+				combined[resource.Name] = existing
+				continue
+			}
+			combined[resource.Name] = resource
+			order = append(order, resource.Name)
+		}
+	}
+
+	if worker, ok := factoryConfigWorker(cfg, ws.WorkerTypeName); ok && worker != nil {
+		appendResources(worker.Resources)
+	}
+	appendResources(ws.Resources)
+
+	if len(order) == 0 {
+		return nil
+	}
+	out := make([]interfaces.ResourceConfig, 0, len(order))
+	for _, name := range order {
+		out = append(out, combined[name])
+	}
+	return out
 }
 
 func (cm *ConfigMapper) applyWorkstationGuards(ws interfaces.FactoryWorkstationConfig, t *petri.Transition) {

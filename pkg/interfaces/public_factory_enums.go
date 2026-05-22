@@ -33,6 +33,12 @@ var publicFactoryWorkerModelOperationContentTypeAliases = map[string]string{
 	ModelOperationContentTypeBinary: ModelOperationContentTypeBinary,
 }
 
+var publicFactoryResourceTypeAliases = map[string]string{
+	ResourceTypeModel:          ResourceTypeModel,
+	ResourceTypeProviderQuota:  ResourceTypeProviderQuota,
+	ResourceTypeInvocationSlot: ResourceTypeInvocationSlot,
+}
+
 var publicFactoryWorkstationTypeAliases = map[string]string{
 	WorkstationTypeLogical: WorkstationTypeLogical,
 	WorkstationTypeInvoke:  WorkstationTypeInvoke,
@@ -166,6 +172,16 @@ func PermissivePublicFactoryWorkerModelOperationContentType(value string) string
 // StrictPublicFactoryWorkerModelOperationContentType canonicalizes supported public capability content types and rejects unknown values.
 func StrictPublicFactoryWorkerModelOperationContentType(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelOperationContentTypeAliases, false)
+}
+
+// PermissivePublicFactoryResourceType canonicalizes supported public resource types and preserves unknown values.
+func PermissivePublicFactoryResourceType(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryResourceTypeAliases, true)
+}
+
+// StrictPublicFactoryResourceType canonicalizes supported public resource types and rejects unknown values.
+func StrictPublicFactoryResourceType(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryResourceTypeAliases, false)
 }
 
 // PermissivePublicFactoryWorkstationType canonicalizes supported public workstation types and preserves unknown values.

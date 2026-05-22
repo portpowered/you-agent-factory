@@ -408,6 +408,7 @@ func assertFactorySchemaDescriptions(t *testing.T, workType, resource, worker, w
 
 	assertOpenAPI3Description(t, "Resource", resource.Description)
 	assertOpenAPI3PropertyDescription(t, resource, "Resource", "name")
+	assertOpenAPI3PropertyDescription(t, resource, "Resource", "type")
 	assertOpenAPI3PropertyDescription(t, resource, "Resource", "capacity")
 
 	assertOpenAPI3Description(t, "Worker", worker.Description)

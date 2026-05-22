@@ -16,6 +16,9 @@ const (
 	publicFactoryWorkerModelProviderCodex        = "CODEX"
 	publicFactoryWorkerModelLocalityLocal        = "LOCAL"
 	publicFactoryWorkerModelLocalityCloud        = "CLOUD"
+	publicFactoryResourceTypeModel               = "MODEL"
+	publicFactoryResourceTypeProviderQuota       = "PROVIDER_QUOTA"
+	publicFactoryResourceTypeInvocationSlot      = "INVOCATION_SLOT"
 	publicFactoryModelOperationContentTypeText   = "TEXT"
 	publicFactoryModelOperationContentTypeImage  = "IMAGE"
 	publicFactoryModelOperationContentTypeAudio  = "AUDIO"
@@ -56,6 +59,12 @@ var publicFactoryModelOperationContentTypeAliases = map[string]string{
 	publicFactoryModelOperationContentTypeAudio:  publicFactoryModelOperationContentTypeAudio,
 	publicFactoryModelOperationContentTypeJSON:   publicFactoryModelOperationContentTypeJSON,
 	publicFactoryModelOperationContentTypeBinary: publicFactoryModelOperationContentTypeBinary,
+}
+
+var publicFactoryResourceTypeAliases = map[string]string{
+	publicFactoryResourceTypeModel:          publicFactoryResourceTypeModel,
+	publicFactoryResourceTypeProviderQuota:  publicFactoryResourceTypeProviderQuota,
+	publicFactoryResourceTypeInvocationSlot: publicFactoryResourceTypeInvocationSlot,
 }
 
 var publicFactoryRootGuardTypeAliases = map[string]string{
@@ -205,6 +214,20 @@ func internalFactoryModelOperationContentTypeFromPublic(value factoryapi.ModelOp
 		return canonical
 	}
 	return strings.TrimSpace(string(value))
+}
+
+func publicFactoryResourceTypeFromInternal(value string) string {
+	if canonical := interfaces.PermissivePublicFactoryResourceType(value); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(value)
+}
+
+func internalFactoryResourceTypeFromPublic(value string) string {
+	if canonical := interfaces.StrictPublicFactoryResourceType(value); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(value)
 }
 
 func publicFactoryWorkstationKindFromInternal(kind interfaces.WorkstationKind) factoryapi.WorkstationKind {

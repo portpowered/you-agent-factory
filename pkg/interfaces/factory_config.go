@@ -52,9 +52,20 @@ const (
 )
 
 type ResourceConfig struct {
-	Name     string `json:"name"`
-	Capacity int    `json:"capacity"`
+	Name       string `json:"name"`
+	Type       string `json:"type,omitempty"`
+	Capacity   int    `json:"capacity"`
+	Model      string `json:"model,omitempty"`
+	Backend    string `json:"backend,omitempty"`
+	LoadPolicy string `json:"loadPolicy,omitempty"`
+	Provider   string `json:"provider,omitempty"`
 }
+
+const (
+	ResourceTypeModel          = "MODEL"
+	ResourceTypeProviderQuota  = "PROVIDER_QUOTA"
+	ResourceTypeInvocationSlot = "INVOCATION_SLOT"
+)
 
 // PortableResourceManifestConfig declares portability-only resources that are
 // distinct from runtime-capacity resources.
