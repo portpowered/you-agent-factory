@@ -3850,6 +3850,9 @@ describe("App dashboard layout and graph behavior", () => {
 
     await screen.findByRole("heading", { name: "you-agent-factory" });
 
+    const station20 = await screen.findByRole("button", {
+      name: "Select Station 20 workstation",
+    });
     await waitFor(() => {
       expect(
         screen.getAllByRole("button", { name: /Select .* workstation/ }),
@@ -3862,9 +3865,6 @@ describe("App dashboard layout and graph behavior", () => {
 
     expect(screen.getByRole("button", { name: "Zoom Out" })).toBeTruthy();
 
-    const station20 = await screen.findByRole("button", {
-      name: "Select Station 20 workstation",
-    });
     fireEvent.click(station20);
 
     await waitFor(() => {
