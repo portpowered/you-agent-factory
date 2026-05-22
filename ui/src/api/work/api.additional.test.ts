@@ -169,4 +169,33 @@ describe("submitWork error handling", () => {
       }),
     );
   });
+
+  it("falls back to the generic message when the error response body is empty", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("", {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 503,
+          statusText: "Service Unavailable",
+        }),
+      ),
+    );
+
+    await expect(
+      submitWork({
+        name: "Empty body review",
+        payload: "Review the runtime failure.",
+        workTypeName: "story",
+      }),
+    ).rejects.toEqual(
+      new SubmitWorkAPIError({
+        message: "Dashboard submission failed. Try again in a moment.",
+        status: 503,
+        statusText: "Service Unavailable",
+      }),
+    );
+  });
 });
