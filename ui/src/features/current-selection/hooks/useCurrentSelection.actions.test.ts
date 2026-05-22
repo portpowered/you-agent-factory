@@ -12,7 +12,7 @@ const helperMocks = vi.hoisted(() => ({
   findTerminalWorkItem: vi.fn(),
   inferStateWorkTerminalStatus: vi.fn(),
   placeNodeID: vi.fn(),
-  resolveTrackedWorkSelection: vi.fn(),
+  resolveWorkItemSelectionByWorkID: vi.fn(),
 }));
 
 vi.mock("../useCurrentSelection.helpers", () => helperMocks);
@@ -22,7 +22,7 @@ describe("useCurrentSelectionActions", () => {
     vi.clearAllMocks();
   });
 
-  it("opens terminal work detail with a workstation-request preference and falls back to the current selection when unresolved", () => {
+  it("opens terminal work detail and falls back to the current selection when unresolved", () => {
     const commitSelectionState = vi.fn();
     const currentSelection: DashboardSelection = {
       kind: "node",
@@ -43,7 +43,7 @@ describe("useCurrentSelectionActions", () => {
       workItem,
     };
 
-    helperMocks.resolveTrackedWorkSelection.mockReturnValueOnce(null);
+    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(null);
 
     const actions = useCurrentSelectionActions({
       commitSelectionState,
@@ -57,7 +57,7 @@ describe("useCurrentSelectionActions", () => {
 
     actions.openTerminalWorkDetail("failed", terminalItem);
 
-    expect(helperMocks.resolveTrackedWorkSelection).toHaveBeenCalledWith(
+    expect(helperMocks.resolveWorkItemSelectionByWorkID).toHaveBeenCalledWith(
       expect.objectContaining({
         dispatchID: "dispatch-blocked-analysis",
         terminalWorkDetail: expect.objectContaining({
@@ -65,7 +65,6 @@ describe("useCurrentSelectionActions", () => {
           failureMessage: "Provider rate limit exceeded.",
           failureReason: "provider_rate_limit",
           label: "Blocked Analysis Story",
-          preferWorkstationRequest: true,
           status: "failed",
           traceWorkID: "work-blocked-analysis",
           workItem,
@@ -76,8 +75,64 @@ describe("useCurrentSelectionActions", () => {
     expect(commitSelectionState).toHaveBeenCalledWith({
       selection: currentSelection,
       terminalWorkDetail: expect.objectContaining({
-        preferWorkstationRequest: true,
+        dispatchID: "dispatch-blocked-analysis",
       }),
+    });
+  });
+
+  it("opens terminal work detail on the resolved work-item path when the clicked work can be tracked", () => {
+    const commitSelectionState = vi.fn();
+    const resolvedSelection: DashboardSelection = {
+      dispatchId: "dispatch-done-story",
+      kind: "work-item",
+      nodeId: "complete",
+      workItem: {
+        display_name: "Done Story",
+        work_id: "work-done-story",
+        work_type_id: "story",
+      },
+    };
+    const terminalItem: TerminalWorkItem = {
+      dispatchID: "dispatch-done-story",
+      label: "Done Story",
+      traceWorkID: "work-done-story",
+      workItem: resolvedSelection.workItem,
+    };
+
+    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(resolvedSelection);
+
+    const actions = useCurrentSelectionActions({
+      commitSelectionState,
+      completedWorkItems: [],
+      failedWorkItems: [],
+      projectedWorkstationRequestsByDispatchID: undefined,
+      selection: {
+        dispatchId: "dispatch-review",
+        kind: "workstation-request",
+        nodeId: "review",
+        request: {
+          dispatch_id: "dispatch-review",
+          workstation_node_id: "review",
+        } as never,
+      },
+      snapshot: null,
+      terminalWorkDetail: null,
+    });
+
+    actions.openTerminalWorkDetail("completed", terminalItem);
+
+    expect(commitSelectionState).toHaveBeenCalledWith({
+      selection: resolvedSelection,
+      terminalWorkDetail: {
+        attempts: undefined,
+        dispatchID: "dispatch-done-story",
+        failureMessage: undefined,
+        failureReason: undefined,
+        label: "Done Story",
+        status: "completed",
+        traceWorkID: "work-done-story",
+        workItem: resolvedSelection.workItem,
+      },
     });
   });
 
@@ -88,7 +143,7 @@ describe("useCurrentSelectionActions", () => {
       nodeId: "plan",
     };
 
-    helperMocks.resolveTrackedWorkSelection.mockReturnValueOnce(resolvedSelection);
+    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(resolvedSelection);
 
     const terminalWorkDetail = {
       label: "Alpha Story",
@@ -106,7 +161,18 @@ describe("useCurrentSelectionActions", () => {
       terminalWorkDetail,
     });
 
-    actions.selectWorkByID("work-alpha");
+    actions.selectWorkByID("work-alpha", {
+      dispatchID: "dispatch-review-active",
+      nodeID: "review",
+    });
+
+    expect(helperMocks.resolveWorkItemSelectionByWorkID).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dispatchID: "dispatch-review-active",
+        nodeID: "review",
+        workID: "work-alpha",
+      }),
+    );
 
     expect(commitSelectionState).toHaveBeenCalledWith({
       selection: resolvedSelection,
@@ -128,7 +194,7 @@ describe("useCurrentSelectionActions", () => {
     };
 
     helperMocks.placeNodeID.mockReturnValueOnce("review");
-    helperMocks.resolveTrackedWorkSelection.mockReturnValueOnce(null);
+    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(null);
     helperMocks.inferStateWorkTerminalStatus.mockReturnValueOnce("failed");
     helperMocks.findTerminalWorkItem.mockReturnValueOnce(undefined);
 
@@ -169,6 +235,36 @@ describe("useCurrentSelectionActions", () => {
         traceWorkID: "work-blocked-analysis",
         workItem,
       },
+    });
+  });
+
+  it("keeps explicit workstation-request selection separate from work-by-id selection", () => {
+    const commitSelectionState = vi.fn();
+    const request = {
+      dispatch_id: "dispatch-review",
+      workstation_node_id: "review",
+    } as never;
+
+    const actions = useCurrentSelectionActions({
+      commitSelectionState,
+      completedWorkItems: [],
+      failedWorkItems: [],
+      projectedWorkstationRequestsByDispatchID: undefined,
+      selection: null,
+      snapshot: null,
+      terminalWorkDetail: null,
+    });
+
+    actions.selectWorkstationRequest(request);
+
+    expect(commitSelectionState).toHaveBeenCalledWith({
+      selection: {
+        dispatchId: "dispatch-review",
+        kind: "workstation-request",
+        nodeId: "review",
+        request,
+      },
+      terminalWorkDetail: null,
     });
   });
 });

@@ -236,12 +236,7 @@ const defaultDraftState = {
 interface ReactFlowCurrentActivityCardProps {
   now: number;
   onSelectStateNode: (placeId: string) => void;
-  onSelectWorkItem: (
-    dispatchId: string,
-    nodeId: string,
-    execution: unknown,
-    workItem: unknown,
-  ) => void;
+  onSelectWorkID: (workID: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   selection: CurrentActivitySelection | null;
   snapshot: typeof semanticWorkflowDashboardSnapshot;
@@ -253,7 +248,7 @@ function createProps(
   return {
     now: Date.parse("2026-04-08T12:00:00Z"),
     onSelectStateNode: vi.fn(),
-    onSelectWorkItem: vi.fn(),
+    onSelectWorkID: vi.fn(),
     onSelectWorkstation: vi.fn(),
     selection: null,
     snapshot: semanticWorkflowDashboardSnapshot,

@@ -1,10 +1,12 @@
 import { resolveSupportedLocale } from "../../../i18n";
-import type { TerminalWorkDetail } from "../../current-selection";
 import {
   CompletedFailedWorkstationCard,
-  type TerminalWorkItem,
-  type TerminalWorkStatus,
 } from "./terminal-work-card";
+import type {
+  TerminalWorkDetail,
+  TerminalWorkItem,
+  TerminalWorkStatus,
+} from "../types";
 
 export interface TerminalWorkWidgetProps {
   completedItems: TerminalWorkItem[];

@@ -7,11 +7,7 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type {
-  DashboardActiveExecution,
-  DashboardSnapshot,
-  DashboardWorkItemRef,
-} from "../../../api/dashboard/types";
+import type { DashboardActiveExecution, DashboardSnapshot } from "../../../api/dashboard/types";
 import type { FactoryValue } from "../../../api/named-factory";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
@@ -109,11 +105,9 @@ interface ReactFlowCurrentActivityCardProps {
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
   onSelectStateNode: (placeId: string) => void;
-  onSelectWorkItem: (
-    dispatchId: string,
-    nodeId: string,
-    execution: DashboardActiveExecution,
-    workItem: DashboardWorkItemRef,
+  onSelectWorkID: (
+    workID: string,
+    hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
   onSelectWorkstation: (nodeId: string) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
@@ -176,7 +170,7 @@ function useCurrentActivityBaseNodes({
   handleAssignments,
   now,
   onSelectStateNode,
-  onSelectWorkItem,
+  onSelectWorkID,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -185,7 +179,7 @@ function useCurrentActivityBaseNodes({
   ReactFlowCurrentActivityCardProps,
   | "now"
   | "onSelectStateNode"
-  | "onSelectWorkItem"
+  | "onSelectWorkID"
   | "onSelectWorkstation"
   | "selection"
   | "snapshot"
@@ -210,7 +204,7 @@ function useCurrentActivityBaseNodes({
         handleAssignments,
         now,
         onSelectStateNode,
-        onSelectWorkItem,
+        onSelectWorkID,
         onSelectWorkstation,
         selection,
         snapshot,
@@ -224,7 +218,7 @@ function useCurrentActivityBaseNodes({
       handleAssignments,
       now,
       onSelectStateNode,
-      onSelectWorkItem,
+      onSelectWorkID,
       onSelectWorkstation,
       selection,
       snapshot,
@@ -236,7 +230,7 @@ function useCurrentActivityBaseNodes({
 export function useCurrentActivityGraphViewModel({
   now,
   onSelectStateNode,
-  onSelectWorkItem,
+  onSelectWorkID,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -244,7 +238,7 @@ export function useCurrentActivityGraphViewModel({
   ReactFlowCurrentActivityCardProps,
   | "now"
   | "onSelectStateNode"
-  | "onSelectWorkItem"
+  | "onSelectWorkID"
   | "onSelectWorkstation"
   | "selection"
   | "snapshot"
@@ -289,7 +283,7 @@ export function useCurrentActivityGraphViewModel({
     handleAssignments,
     now,
     onSelectStateNode,
-    onSelectWorkItem,
+    onSelectWorkID,
     onSelectWorkstation,
     selection,
     snapshot,

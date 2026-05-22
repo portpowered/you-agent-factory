@@ -123,7 +123,7 @@ function renderWorkflowActivityBentoCard({
         now={Date.parse("2026-04-08T12:00:04Z")}
         selection={selection}
         snapshot={snapshot}
-        onSelectWorkItem={vi.fn()}
+        onSelectWorkID={vi.fn()}
         onSelectStateNode={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />

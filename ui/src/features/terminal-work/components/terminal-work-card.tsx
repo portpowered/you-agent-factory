@@ -1,8 +1,4 @@
 import { useState } from "react";
-import type {
-  DashboardProviderSessionAttempt,
-  DashboardWorkItemRef,
-} from "../../../api/dashboard/types";
 import {
   DASHBOARD_WIDGET_CLASS,
   DETAIL_CARD_CLASS,
@@ -24,19 +20,8 @@ import { cn } from "../../../lib/cn";
 import type { GraphSemanticIconKind } from "../../flowchart/graph-semantic-icon";
 import { GraphSemanticIcon } from "../../flowchart/graph-semantic-icon";
 import { getTerminalWorkMessages } from "../messages";
-
-export type TerminalWorkStatus = "completed" | "failed";
-
-export interface TerminalWorkItem {
-  attempts?: DashboardProviderSessionAttempt[];
-  dispatchID?: string;
-  failureMessage?: string;
-  failureReason?: string;
-  label: string;
-  traceWorkID: string;
-  workItem?: DashboardWorkItemRef;
-  workstationName?: string;
-}
+import type { TerminalWorkItem, TerminalWorkStatus } from "../types";
+export type { TerminalWorkItem, TerminalWorkStatus } from "../types";
 
 export interface CompletedFailedWorkstationCardProps {
   className?: string;

@@ -1,8 +1,4 @@
-import type {
-  DashboardActiveExecution,
-  DashboardSnapshot,
-  DashboardWorkItemRef,
-} from "../../../api/dashboard/types";
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { AgentBentoCard } from "../../../components/ui";
 import type { DashboardSelection } from "../../current-selection";
 import type { CurrentActivityImportController } from "../current-activity-import-controller";
@@ -20,11 +16,9 @@ interface WorkflowActivityBentoCardProps {
   now: number;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
-  onSelectWorkItem: (
-    dispatchId: string,
-    nodeId: string,
-    execution: DashboardActiveExecution,
-    workItem: DashboardWorkItemRef,
+  onSelectWorkID: (
+    workID: string,
+    hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
@@ -38,7 +32,7 @@ export function WorkflowActivityBentoCard({
   now,
   selection,
   snapshot,
-  onSelectWorkItem,
+  onSelectWorkID,
   onSelectStateNode,
   onSelectWorkstation,
 }: WorkflowActivityBentoCardProps) {
@@ -68,7 +62,7 @@ export function WorkflowActivityBentoCard({
           selection={toCurrentActivitySelection(selection)}
           showHeaderActions={false}
           snapshot={snapshot}
-          onSelectWorkItem={onSelectWorkItem}
+          onSelectWorkID={onSelectWorkID}
           onSelectStateNode={onSelectStateNode}
           onSelectWorkstation={onSelectWorkstation}
         />

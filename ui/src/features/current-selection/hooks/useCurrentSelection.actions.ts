@@ -14,7 +14,7 @@ import {
   findTerminalWorkItem,
   inferStateWorkTerminalStatus,
   placeNodeID,
-  resolveTrackedWorkSelection,
+  resolveWorkItemSelectionByWorkID,
 } from "../useCurrentSelection.helpers";
 
 type CurrentSelectionActionArgs = {
@@ -27,6 +27,11 @@ type CurrentSelectionActionArgs = {
   terminalWorkDetail: TerminalWorkDetail | null;
 };
 
+export type WorkSelectionHint = {
+  dispatchID?: string;
+  nodeID?: string;
+};
+
 export function useCurrentSelectionActions({
   commitSelectionState,
   completedWorkItems,
@@ -36,13 +41,14 @@ export function useCurrentSelectionActions({
   snapshot,
   terminalWorkDetail,
 }: CurrentSelectionActionArgs) {
-  const commitResolvedWorkSelection = (
+  const resolveCanonicalWorkItemSelection = (
     workID: string,
     detail: TerminalWorkDetail | null,
-    dispatchID?: string,
+    hint?: WorkSelectionHint,
   ) => {
-    const resolvedSelection = resolveTrackedWorkSelection({
-      dispatchID,
+    const resolvedSelection = resolveWorkItemSelectionByWorkID({
+      dispatchID: hint?.dispatchID,
+      nodeID: hint?.nodeID,
       snapshot,
       terminalWorkDetail: detail,
       workID,
@@ -76,10 +82,11 @@ export function useCurrentSelectionActions({
     });
   };
 
-  const selectWorkByID = (workID: string) => {
-    const { resolvedSelection } = commitResolvedWorkSelection(
+  const selectWorkByID = (workID: string, hint?: WorkSelectionHint) => {
+    const { resolvedSelection } = resolveCanonicalWorkItemSelection(
       workID,
       terminalWorkDetail,
+      hint,
     );
     if (!resolvedSelection) {
       return;
@@ -101,10 +108,10 @@ export function useCurrentSelectionActions({
 
   const openTerminalWorkDetail = (status: TerminalWorkStatus, item: TerminalWorkItem) => {
     const detail = buildTerminalWorkDetail(status, item);
-    const { resolvedSelection } = commitResolvedWorkSelection(
+    const { resolvedSelection } = resolveCanonicalWorkItemSelection(
       item.traceWorkID,
       detail,
-      item.dispatchID,
+      { dispatchID: item.dispatchID },
     );
 
     commitSelectionState({
@@ -177,7 +184,7 @@ function resolveStateWorkItemSelection({
   snapshot: DashboardSnapshot | null | undefined;
   workItem: DashboardWorkItemRef;
 }): DashboardSelection | null {
-  return resolveTrackedWorkSelection({
+  return resolveWorkItemSelectionByWorkID({
     nodeID: placeNodeID(snapshot, place),
     snapshot,
     workID: workItem.work_id,
@@ -211,7 +218,6 @@ function buildTerminalWorkDetail(
     failureMessage: item.failureMessage,
     failureReason: item.failureReason,
     label: item.label,
-    preferWorkstationRequest: true,
     status,
     traceWorkID: item.traceWorkID,
     workItem: item.workItem,

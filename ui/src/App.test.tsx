@@ -3261,11 +3261,12 @@ describe("App streamed replay smoke flows", () => {
     ).toBeNull();
 
     fireEvent.click(
-      (
-        await screen.findAllByRole("button", {
-          name: new RegExp(runtimeDetailsFixtureIDs.activeWorkLabel),
-        })
-      )[0],
+      screen.getByRole("button", { name: "Select Review workstation" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `Select work item ${runtimeDetailsFixtureIDs.activeWorkLabel}`,
+      }),
     );
 
     const pendingSelection = await screen.findByRole("article", {

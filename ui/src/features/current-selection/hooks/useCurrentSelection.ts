@@ -19,6 +19,7 @@ import type {
   TerminalWorkDetail,
 } from "../types";
 import { useCurrentSelectionActions } from "./useCurrentSelection.actions";
+import type { WorkSelectionHint } from "./useCurrentSelection.actions";
 import {
   useCurrentSelectionDerivedState,
   useSelectionSynchronization,
@@ -50,7 +51,7 @@ export interface CurrentSelectionState {
   selection: DashboardSelection | null;
   selectStateNode: (placeId: string) => void;
   selectStateWorkItem: (place: DashboardPlaceRef, workItem: StatePositionWorkItem) => void;
-  selectWorkByID: (workID: string) => void;
+  selectWorkByID: (workID: string, hint?: WorkSelectionHint) => void;
   selectWorkItem: (
     dispatchId: string,
     nodeId: string,

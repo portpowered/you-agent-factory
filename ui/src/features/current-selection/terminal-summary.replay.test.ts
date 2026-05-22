@@ -4,7 +4,7 @@ import { buildFactoryTimelineSnapshot } from "../timeline/state/factoryTimelineS
 import { parseReplayFixtureEvents } from "../../testing/replay-fixtures";
 import { buildTerminalWorkItems } from "./useCurrentSelection.selection-helpers";
 import { resolveProjectedWorkstationRequestsByDispatchID } from "./useCurrentSelection.request-helpers";
-import { resolveTrackedWorkSelection } from "./useCurrentSelection.selection-helpers";
+import { resolveWorkItemSelectionByWorkID } from "./useCurrentSelection.selection-helpers";
 
 describe("terminal summary replay regression", () => {
   it("uses replayed terminal dispatch outcomes instead of earlier provider-attempt context", () => {
@@ -57,7 +57,7 @@ describe("terminal summary replay regression", () => {
     }
 
     expect(
-      resolveTrackedWorkSelection({
+      resolveWorkItemSelectionByWorkID({
         dispatchID: fixFailedItem.dispatchID,
         snapshot,
         terminalWorkDetail: {

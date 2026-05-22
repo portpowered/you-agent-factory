@@ -1,8 +1,4 @@
-import type {
-  DashboardActiveExecution,
-  DashboardSnapshot,
-  DashboardWorkItemRef,
-} from "../../api/dashboard/types";
+import type { DashboardActiveExecution, DashboardSnapshot } from "../../api/dashboard/types";
 import type { CurrentActivityNode } from "../flowchart/current-activity-nodes";
 import type { GraphLayout, PositionedEdge, PositionedPlaceNode, PositionedWorkstationNode } from "../flowchart/layout";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
@@ -210,11 +206,9 @@ interface BuildCurrentActivityNodesInput {
   locale?: string;
   now: number;
   onSelectStateNode: (placeId: string) => void;
-  onSelectWorkItem: (
-    dispatchId: string,
-    nodeId: string,
-    execution: DashboardActiveExecution,
-    workItem: DashboardWorkItemRef,
+  onSelectWorkID: (
+    workID: string,
+    hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
   onSelectWorkstation: (nodeId: string) => void;
   selection: CurrentActivitySelection | null;
@@ -333,7 +327,7 @@ function buildWorkstationNode(
         input.activeGraphHighlights.hasActiveFlow &&
         !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
       now: input.now,
-      onSelectWorkItem: input.onSelectWorkItem,
+      onSelectWorkID: input.onSelectWorkID,
       onSelectWorkstation: input.onSelectWorkstation,
       outgoingHandleCount:
         input.handleAssignments.outgoingHandleCounts.get(positionedNode.nodeId) ??
@@ -373,7 +367,7 @@ export function buildCurrentActivityNodes({
   locale,
   now,
   onSelectStateNode,
-  onSelectWorkItem,
+  onSelectWorkID,
   onSelectWorkstation,
   selection,
   snapshot,
@@ -389,7 +383,7 @@ export function buildCurrentActivityNodes({
     locale,
     now,
     onSelectStateNode,
-    onSelectWorkItem,
+    onSelectWorkID,
     onSelectWorkstation,
     selection,
     snapshot,
