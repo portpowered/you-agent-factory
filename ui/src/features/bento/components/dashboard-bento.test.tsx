@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import type { LoadableProviderSessionRef } from "../../current-selection";
 
 import { DashboardBento } from "./dashboard-bento";
 
@@ -34,19 +35,58 @@ const currentSelectionState = {
   undoSelection: vi.fn(),
 };
 
-vi.mock("../../current-selection", () => ({
-  CurrentSelectionWidget: () => <section>Current selection card</section>,
-  ProviderSessionWidget: () => <section>Provider session card</section>,
-  useCurrentSelection: () => currentSelectionState,
-  useCurrentSelectionDetails: () => ({
-    selectedWorkExecutionDetails: null,
-  }),
-  useSelectedProviderSessionState: () => ({
-    selectedProviderSession: null,
-    selectedProviderSessionKey: null,
-    setSelectedProviderSession: vi.fn(),
-  }),
-}));
+const SHARED_SELECTED_SESSION: LoadableProviderSessionRef = {
+  dispatchID: "dispatch-review-active",
+  id: "sess-shared",
+  kind: "session_id",
+  provider: "codex",
+};
+
+vi.mock("../../current-selection", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+
+  return {
+    CurrentSelectionWidget: ({
+      onSelectProviderSession,
+    }: {
+      onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
+    }) => (
+      <section>
+        <p>Current selection card</p>
+        <button
+          onClick={() => onSelectProviderSession?.(SHARED_SELECTED_SESSION)}
+          type="button"
+        >
+          Select shared provider session
+        </button>
+      </section>
+    ),
+    ProviderSessionWidget: ({
+      selectedProviderSession,
+    }: {
+      selectedProviderSession: LoadableProviderSessionRef | null;
+    }) => (
+      <section>
+        Provider session card
+        {selectedProviderSession ? `: ${selectedProviderSession.id}` : ""}
+      </section>
+    ),
+    useCurrentSelection: () => currentSelectionState,
+    useCurrentSelectionDetails: () => ({
+      selectedWorkExecutionDetails: null,
+    }),
+    useSelectedProviderSessionState: () => {
+      const [selectedProviderSession, setSelectedProviderSession] =
+        React.useState<LoadableProviderSessionRef | null>(null);
+
+      return {
+        selectedProviderSession,
+        selectedProviderSessionKey: selectedProviderSession?.id ?? null,
+        setSelectedProviderSession,
+      };
+    },
+  };
+});
 
 vi.mock("../../import", () => ({
   DashboardImportPreviewDialog: () => null,
@@ -192,6 +232,22 @@ describe("DashboardBento", () => {
     );
     expect(screen.getByTestId("provider-session").textContent).toContain(
       "Provider session card",
+    );
+  });
+
+  it("keeps provider-session selection centralized between the current selection and provider-session cards", () => {
+    render(<DashboardBento />);
+
+    expect(screen.getByTestId("provider-session").textContent).not.toContain(
+      SHARED_SELECTED_SESSION.id,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select shared provider session" }),
+    );
+
+    expect(screen.getByTestId("provider-session").textContent).toContain(
+      SHARED_SELECTED_SESSION.id,
     );
   });
 });
