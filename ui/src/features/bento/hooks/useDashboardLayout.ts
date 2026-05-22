@@ -12,6 +12,7 @@ const LEGACY_WORK_OUTCOME_WIDGET_IDS = ["completion-trend", "failure-trend"] as 
 
 export const DASHBOARD_WIDGET_IDS = {
   currentSelection: "current-selection",
+  providerSession: "provider-session",
   submitWork: "submit-work",
   terminalWork: "terminal-work",
   trace: "trace",
@@ -32,11 +33,20 @@ export const DEFAULT_DASHBOARD_LAYOUT: AgentBentoLayoutItem[] = [
     minH: 4,
     minW: 3,
   },
-  { id: DASHBOARD_WIDGET_IDS.terminalWork, x: 4, y: 12, w: 4, h: 5, minH: 3, minW: 3 },
+  {
+    id: DASHBOARD_WIDGET_IDS.providerSession,
+    x: 4,
+    y: 12,
+    w: 4,
+    h: 5,
+    minH: 4,
+    minW: 3,
+  },
+  { id: DASHBOARD_WIDGET_IDS.terminalWork, x: 8, y: 12, w: 4, h: 5, minH: 3, minW: 3 },
   {
     id: DASHBOARD_WIDGET_IDS.workOutcomeChart,
     x: 8,
-    y: 12,
+    y: 17,
     w: 4,
     h: 6,
     minH: 5,
@@ -45,7 +55,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: AgentBentoLayoutItem[] = [
   {
     id: DASHBOARD_WIDGET_IDS.submitWork,
     x: 8,
-    y: 18,
+    y: 23,
     w: 4,
     h: 6,
     minH: 5,
@@ -56,7 +66,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: AgentBentoLayoutItem[] = [
     x: 0,
     y: 18,
     w: 8,
-    h: 9,
+    h: 11,
     minH: 7,
     minW: 5,
   },
@@ -124,7 +134,9 @@ export function reloadDashboardLayoutFromStorage(): void {
 }
 
 function migrateDashboardLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {
-  const normalizedLayout = migrateTraceLayout(migrateWorkOutcomeLayout(layout));
+  const normalizedLayout = migrateProviderSessionLayout(
+    migrateTraceLayout(migrateWorkOutcomeLayout(layout)),
+  );
 
   const legacySelectionItem = LEGACY_SELECTION_WIDGET_IDS
     .map((id) => normalizedLayout.find((item) => item.id === id))
@@ -147,6 +159,21 @@ function migrateDashboardLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayou
       ...legacySelectionItem,
       id: DASHBOARD_WIDGET_IDS.currentSelection,
     },
+  ];
+}
+
+function migrateProviderSessionLayout(
+  layout: AgentBentoLayoutItem[],
+): AgentBentoLayoutItem[] {
+  if (layout.some((item) => item.id === DASHBOARD_WIDGET_IDS.providerSession)) {
+    return layout;
+  }
+
+  return [
+    ...layout,
+    DEFAULT_DASHBOARD_LAYOUT.find(
+      (item) => item.id === DASHBOARD_WIDGET_IDS.providerSession,
+    ) as AgentBentoLayoutItem,
   ];
 }
 
