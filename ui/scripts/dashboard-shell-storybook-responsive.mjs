@@ -88,7 +88,10 @@ export async function verifyDashboardShellConsolidation(
   viewport,
 ) {
   const toolbar = await waitForStoryRegion(page, "dashboard summary");
-  const board = await waitForStoryRegion(page, "Infinite You bento board");
+  const board = await waitForStoryRegion(
+    page,
+    "you-agent-factory bento board",
+  );
   const workTotalsCard = board.getByRole("article", { name: "Work totals" });
   const headerExportButton = toolbar.getByRole("button", {
     name: "Export PNG",
@@ -97,7 +100,7 @@ export async function verifyDashboardShellConsolidation(
     name: "Return to current tick",
   });
   const streamStatus = toolbar.getByRole("status", {
-    name: /Infinite You event stream (connecting|live)/,
+    name: /you-agent-factory event stream (connecting|live)/,
   });
   const moveButton = board.getByRole("button", { name: "Move Work totals" });
 
