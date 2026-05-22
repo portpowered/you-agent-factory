@@ -22,8 +22,9 @@ GitHub Actions automation for that lane lives in
 `.github/workflows/long-local-inference.yml`; it restores `.cache/managed-models`
 between runs, installs the runtime from per-platform
 `OMNIVOICE_COMMAND_URL_*` repository variables when available, and otherwise
-builds the repo-owned `cmd/omnivoice-llamacpp` companion before `make
-long-tests` executes.
+builds the real `ServeurpersoCom/omnivoice.cpp` `omnivoice-tts` backend from a
+pinned commit before building the repo-owned `cmd/omnivoice-llamacpp` adapter
+that speaks the shared subprocess contract used by the service and long tests.
 
 The default lane runs one repository-owned package-discovery command through
 `make test-functional`: `go run ./cmd/functionallane` uses

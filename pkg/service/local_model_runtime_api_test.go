@@ -22,7 +22,7 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
 		response: interfaces.InferenceResponse{
-			Content: `[{"type":"AUDIO","file":"` + audioPath + `","contentType":"audio/wav"}]`,
+			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
 
@@ -34,11 +34,12 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 	defer cancel()
 
 	svc, err := BuildFactoryService(ctx, &FactoryServiceConfig{
-		Dir:                       dir,
-		RuntimeMode:               interfaces.RuntimeModeService,
-		Port:                      1,
-		Logger:                    zap.NewNop(),
-		LocalModelRuntimeOverride: runtime,
+		Dir:                                     dir,
+		RuntimeMode:                             interfaces.RuntimeModeService,
+		Port:                                    1,
+		Logger:                                  zap.NewNop(),
+		LocalModelRuntimeOverride:               runtime,
+		SkipBuiltInRunnerPrerequisiteValidation: true,
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)

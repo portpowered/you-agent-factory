@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -69,7 +70,7 @@ func TestInvokeModel_UsesManagedLocalModelRuntimeAndReusesLoadedHandle(t *testin
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
 		response: interfaces.InferenceResponse{
-			Content: `[{"type":"AUDIO","file":"` + audioPath + `","contentType":"audio/wav"}]`,
+			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
@@ -121,7 +122,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 	provider := &providerCallRecorder{}
 	runtime := &fakeLocalModelRuntime{
 		response: interfaces.InferenceResponse{
-			Content: `[{"type":"AUDIO","file":"` + audioPath + `","contentType":"audio/wav"}]`,
+			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
 	factoryCfg := localModelFactoryConfig()
@@ -249,7 +250,7 @@ func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*wor
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
 		response: interfaces.InferenceResponse{
-			Content: `[{"type":"AUDIO","file":"` + audioPath + `","contentType":"audio/wav"}]`,
+			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
 	factoryCfg := localModelFactoryConfig()
@@ -397,4 +398,18 @@ func localModelTestCacheLayout(t *testing.T) localModelCacheLayout {
 			"/models/omnivoice-tokenizer-Q4_K_M.gguf",
 		},
 	}
+}
+
+func mustMarshalAudioContentResponse(t *testing.T, audioPath string) string {
+	t.Helper()
+	content := []interfaces.WorkContentPart{{
+		Type:        interfaces.WorkContentPartTypeAudio,
+		File:        audioPath,
+		ContentType: "audio/wav",
+	}}
+	data, err := json.Marshal(content)
+	if err != nil {
+		t.Fatalf("marshal audio content response: %v", err)
+	}
+	return string(data)
 }

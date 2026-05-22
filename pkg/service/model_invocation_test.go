@@ -15,7 +15,7 @@ func TestInvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	provider := &providerCallRecorder{
 		responses: []interfaces.InferenceResponse{{
-			Content: `[{"type":"AUDIO","file":"` + audioPath + `","contentType":"audio/wav"}]`,
+			Content: mustMarshalAudioContentResponse(t, audioPath),
 		}},
 	}
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{

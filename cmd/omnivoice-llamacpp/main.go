@@ -1,27 +1,46 @@
 package main
 
 import (
-	"encoding/binary"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
 const (
-	omniVoiceSampleRate = 24000
-	omniVoiceChannels   = 1
-	omniVoiceBits       = 16
+	defaultOmniVoiceTTSCommand = "omnivoice-tts"
+	omniVoiceTTSCommandEnv     = "OMNIVOICE_TTS_COMMAND"
+	omniVoiceLanguageEnv       = "OMNIVOICE_TTS_LANGUAGE"
+	defaultOmniVoiceLanguage   = "English"
 )
 
 type invocationPayload struct {
 	Operation  string `json:"operation"`
 	OutputFile string `json:"outputFile"`
 	Text       string `json:"text"`
+}
+
+type commandExecutor interface {
+	Run(command string, args []string, stdin []byte) ([]byte, []byte, error)
+}
+
+type execCommandExecutor struct{}
+
+func (execCommandExecutor) Run(command string, args []string, stdin []byte) ([]byte, []byte, error) {
+	cmd := exec.Command(command, args...)
+	cmd.Stdin = bytes.NewReader(stdin)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.Bytes(), stderr.Bytes(), err
 }
 
 func main() {
@@ -32,6 +51,10 @@ func main() {
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	return runWithExecutor(args, stdin, stdout, stderr, execCommandExecutor{})
+}
+
+func runWithExecutor(args []string, stdin io.Reader, stdout, stderr io.Writer, executor commandExecutor) error {
 	if len(args) == 0 {
 		return errors.New("usage: omnivoice-llamacpp invoke --model <path> --tokenizer <path> --output <wav>")
 	}
@@ -62,11 +85,15 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if payloadPath := strings.TrimSpace(payload.OutputFile); payloadPath != "" {
 		outputPath = payloadPath
 	}
-	if err := writeSynthesizedWAV(outputPath, text); err != nil {
+	backendCommand, err := resolveBackendCommand()
+	if err != nil {
 		return err
 	}
-	_, _ = stdout.Write([]byte("{\"status\":\"ok\"}\n"))
-	_, _ = stderr.Write([]byte("generated audio with repo-owned OMNIVOICE runtime companion\n"))
+	if err := invokeRealRuntime(executor, backendCommand, modelPath, tokenizerPath, outputPath, text, stderr); err != nil {
+		return err
+	}
+	_, _ = stdout.Write([]byte("{\"content\":[{\"type\":\"AUDIO\",\"slot\":\"audio\",\"file\":\"" + jsonEscape(outputPath) + "\",\"contentType\":\"audio/wav\"}]}\n"))
+	_, _ = stderr.Write([]byte("generated audio with real OMNIVOICE backend via omnivoice-tts\n"))
 	return nil
 }
 
@@ -125,82 +152,88 @@ func decodeInvocationPayload(stdin io.Reader) (invocationPayload, error) {
 	return payload, nil
 }
 
-func writeSynthesizedWAV(path string, text string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create output directory: %w", err)
-	}
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create output file: %w", err)
-	}
-	defer file.Close()
-
-	samples := synthesizedSamples(text)
-	dataSize := len(samples) * 2
-	if _, err := file.Write([]byte("RIFF")); err != nil {
-		return fmt.Errorf("write wav riff header: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, uint32(36+dataSize)); err != nil {
-		return fmt.Errorf("write wav size: %w", err)
-	}
-	if _, err := file.Write([]byte("WAVEfmt ")); err != nil {
-		return fmt.Errorf("write wav format header: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, uint32(16)); err != nil {
-		return fmt.Errorf("write wav fmt chunk size: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, uint16(1)); err != nil {
-		return fmt.Errorf("write wav audio format: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, uint16(omniVoiceChannels)); err != nil {
-		return fmt.Errorf("write wav channels: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, uint32(omniVoiceSampleRate)); err != nil {
-		return fmt.Errorf("write wav sample rate: %w", err)
-	}
-	byteRate := omniVoiceSampleRate * omniVoiceChannels * omniVoiceBits / 8
-	if err := binary.Write(file, binary.LittleEndian, uint32(byteRate)); err != nil {
-		return fmt.Errorf("write wav byte rate: %w", err)
-	}
-	blockAlign := omniVoiceChannels * omniVoiceBits / 8
-	if err := binary.Write(file, binary.LittleEndian, uint16(blockAlign)); err != nil {
-		return fmt.Errorf("write wav block align: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, uint16(omniVoiceBits)); err != nil {
-		return fmt.Errorf("write wav bits per sample: %w", err)
-	}
-	if _, err := file.Write([]byte("data")); err != nil {
-		return fmt.Errorf("write wav data chunk header: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, uint32(dataSize)); err != nil {
-		return fmt.Errorf("write wav data size: %w", err)
-	}
-	for _, sample := range samples {
-		if err := binary.Write(file, binary.LittleEndian, sample); err != nil {
-			return fmt.Errorf("write wav sample data: %w", err)
+func resolveBackendCommand() (string, error) {
+	if command := strings.TrimSpace(os.Getenv(omniVoiceTTSCommandEnv)); command != "" {
+		resolved, err := resolveExecutable(command)
+		if err != nil {
+			return "", fmt.Errorf("resolve %s: %w", omniVoiceTTSCommandEnv, err)
 		}
+		return resolved, nil
+	}
+
+	if currentExecutable, err := os.Executable(); err == nil {
+		sibling := filepath.Join(filepath.Dir(currentExecutable), backendExecutableName())
+		if info, statErr := os.Stat(sibling); statErr == nil && !info.IsDir() {
+			return sibling, nil
+		}
+	}
+
+	resolved, err := resolveExecutable(defaultOmniVoiceTTSCommand)
+	if err != nil {
+		return "", fmt.Errorf("resolve %q: %w", defaultOmniVoiceTTSCommand, err)
+	}
+	return resolved, nil
+}
+
+func resolveExecutable(command string) (string, error) {
+	if strings.ContainsAny(command, `/\`) {
+		info, err := os.Stat(command)
+		if err != nil {
+			return "", err
+		}
+		if info.IsDir() {
+			return "", fmt.Errorf("%q is a directory", command)
+		}
+		return command, nil
+	}
+	return exec.LookPath(command)
+}
+
+func backendExecutableName() string {
+	if runtime.GOOS == "windows" {
+		return defaultOmniVoiceTTSCommand + ".exe"
+	}
+	return defaultOmniVoiceTTSCommand
+}
+
+func invokeRealRuntime(executor commandExecutor, backendCommand string, modelPath string, tokenizerPath string, outputPath string, text string, stderr io.Writer) error {
+	requestStdin := []byte(text)
+	args := []string{
+		"--model", modelPath,
+		"--codec", tokenizerPath,
+		"--lang", stringsTrimSpaceOrDefault(os.Getenv(omniVoiceLanguageEnv), defaultOmniVoiceLanguage),
+		"-o", outputPath,
+	}
+	backendStdout, backendStderr, err := executor.Run(backendCommand, args, requestStdin)
+	if len(backendStdout) > 0 {
+		_, _ = stderr.Write(backendStdout)
+		if !bytes.HasSuffix(backendStdout, []byte("\n")) {
+			_, _ = stderr.Write([]byte("\n"))
+		}
+	}
+	if len(backendStderr) > 0 {
+		_, _ = stderr.Write(backendStderr)
+		if !bytes.HasSuffix(backendStderr, []byte("\n")) {
+			_, _ = stderr.Write([]byte("\n"))
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("run omnivoice-tts backend %q: %w", backendCommand, err)
 	}
 	return nil
 }
 
-func synthesizedSamples(text string) []int16 {
-	runes := []rune(text)
-	durationSeconds := 1.0 + math.Min(float64(len(runes))/32.0, 2.0)
-	totalSamples := int(durationSeconds * omniVoiceSampleRate)
-	samples := make([]int16, totalSamples)
-	baseFrequency := 220.0 + float64(len(runes)%11)*17.0
-	amplitude := 0.28 * float64(math.MaxInt16)
-	for i := range samples {
-		t := float64(i) / omniVoiceSampleRate
-		envelope := 0.85
-		if t < 0.03 {
-			envelope = t / 0.03
-		} else if remaining := durationSeconds - t; remaining < 0.08 {
-			envelope = math.Max(remaining/0.08, 0)
-		}
-		mod := math.Sin(2 * math.Pi * 3.0 * t)
-		value := math.Sin(2*math.Pi*baseFrequency*t+0.35*mod) + 0.4*math.Sin(2*math.Pi*baseFrequency*0.5*t)
-		samples[i] = int16(amplitude * envelope * value / 1.4)
+func stringsTrimSpaceOrDefault(value string, fallback string) string {
+	if trimmed := strings.TrimSpace(value); trimmed != "" {
+		return trimmed
 	}
-	return samples
+	return fallback
+}
+
+func jsonEscape(value string) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return value
+	}
+	return strings.Trim(string(encoded), "\"")
 }
