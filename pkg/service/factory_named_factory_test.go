@@ -277,6 +277,7 @@ func TestFactoryService_CreateNamedFactory_ActivatesPersistedFactoryFromDefaultR
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this named-factory portability test keeps bundled-file materialization assertions together on the service seam.
 func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledFiles(t *testing.T) {
 	rootDir := t.TempDir()
 	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)

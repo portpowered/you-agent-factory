@@ -101,58 +101,80 @@ func NormalizeGeneratedSubmissionBatch(batch interfaces.GeneratedSubmissionBatch
 	usedByWorkID := map[string]bool{}
 	usedByName := map[string]bool{}
 	for _, submitted := range batch.Submissions {
-		match := -1
-		if submitted.WorkID != "" {
-			for i, req := range normalized {
-				if usedByWorkID[req.WorkID] {
-					continue
-				}
-				if req.WorkID == submitted.WorkID {
-					match = i
-					break
-				}
-			}
-		}
-		if match == -1 && submitted.Name != "" {
-			for i, req := range normalized {
-				if usedByName[req.Name] {
-					continue
-				}
-				if req.Name == submitted.Name {
-					match = i
-					break
-				}
-			}
-		}
+		match := normalizedSubmissionMatch(normalized, submitted, usedByWorkID, usedByName)
 		if match < 0 {
 			continue
 		}
 		usedByWorkID[normalized[match].WorkID] = true
 		usedByName[normalized[match].Name] = true
 
-		next := normalized[match]
-		if submitted.TargetState != "" {
-			next.TargetState = submitted.TargetState
-		}
-		if submitted.ExecutionID != "" {
-			next.ExecutionID = submitted.ExecutionID
-		}
-		if len(submitted.Tags) > 0 {
-			if next.Tags == nil {
-				next.Tags = map[string]string{}
-			}
-			maps.Copy(next.Tags, submitted.Tags)
-		}
-		if len(submitted.Relations) > 0 {
-			next.Relations = appendUniquePetriRelations(clonePetriRelations(submitted.Relations), next.Relations)
-		}
-		if len(submitted.PreviousChainingTraceIDs) > 0 {
-			next.PreviousChainingTraceIDs = interfaces.CanonicalChainingTraceIDs(submitted.PreviousChainingTraceIDs)
-		}
-		normalized[match] = next
+		normalized[match] = applyGeneratedSubmissionOverrides(normalized[match], submitted)
 	}
 
 	return normalized, nil
+}
+
+func normalizedSubmissionMatch(
+	normalized []interfaces.SubmitRequest,
+	submitted interfaces.SubmitRequest,
+	usedByWorkID map[string]bool,
+	usedByName map[string]bool,
+) int {
+	if submitted.WorkID != "" {
+		if match := matchNormalizedSubmissionByWorkID(normalized, submitted.WorkID, usedByWorkID); match >= 0 {
+			return match
+		}
+	}
+	if submitted.Name != "" {
+		return matchNormalizedSubmissionByName(normalized, submitted.Name, usedByName)
+	}
+	return -1
+}
+
+func matchNormalizedSubmissionByWorkID(normalized []interfaces.SubmitRequest, workID string, usedByWorkID map[string]bool) int {
+	for i, req := range normalized {
+		if usedByWorkID[req.WorkID] {
+			continue
+		}
+		if req.WorkID == workID {
+			return i
+		}
+	}
+	return -1
+}
+
+func matchNormalizedSubmissionByName(normalized []interfaces.SubmitRequest, name string, usedByName map[string]bool) int {
+	for i, req := range normalized {
+		if usedByName[req.Name] {
+			continue
+		}
+		if req.Name == name {
+			return i
+		}
+	}
+	return -1
+}
+
+func applyGeneratedSubmissionOverrides(next interfaces.SubmitRequest, submitted interfaces.SubmitRequest) interfaces.SubmitRequest {
+	if submitted.TargetState != "" {
+		next.TargetState = submitted.TargetState
+	}
+	if submitted.ExecutionID != "" {
+		next.ExecutionID = submitted.ExecutionID
+	}
+	if len(submitted.Tags) > 0 {
+		if next.Tags == nil {
+			next.Tags = map[string]string{}
+		}
+		maps.Copy(next.Tags, submitted.Tags)
+	}
+	if len(submitted.Relations) > 0 {
+		next.Relations = appendUniquePetriRelations(clonePetriRelations(submitted.Relations), next.Relations)
+	}
+	if len(submitted.PreviousChainingTraceIDs) > 0 {
+		next.PreviousChainingTraceIDs = interfaces.CanonicalChainingTraceIDs(submitted.PreviousChainingTraceIDs)
+	}
+	return next
 }
 
 // WorkRequestFromSubmitRequests wraps normalized submit requests in the

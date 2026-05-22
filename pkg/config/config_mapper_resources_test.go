@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
@@ -48,57 +49,8 @@ func TestConfigMapping_ResourceUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
 	}
-
-	// Verify resource place was created with correct ID and state.
-	resourcePlace := outputNet.Places["gpu:available"]
-	if resourcePlace == nil {
-		t.Fatal("expected resource place 'gpu:available' to exist")
-	}
-	if resourcePlace.TypeID != "gpu" {
-		t.Errorf("resource place type: expected 'gpu', got %q", resourcePlace.TypeID)
-	}
-	if resourcePlace.State != "available" {
-		t.Errorf("resource place state: expected 'available', got %q", resourcePlace.State)
-	}
-
-	// Verify transition has consume and release arcs.
-	tr := outputNet.Transitions["processor"]
-	if tr == nil {
-		t.Fatal("expected transition 'processor' to exist")
-	}
-
-	// Should have 2 input arcs: normal input + resource consume.
-	if len(tr.InputArcs) != 2 {
-		t.Fatalf("expected 2 input arcs, got %d", len(tr.InputArcs))
-	}
-	consumeArc := tr.InputArcs[1]
-	if consumeArc.PlaceID != "gpu:available" {
-		t.Errorf("consume arc place: expected 'gpu:available', got %q", consumeArc.PlaceID)
-	}
-	if consumeArc.Name != "gpu:consume:processor" {
-		t.Errorf("consume arc name: expected 'gpu:consume:processor', got %q", consumeArc.Name)
-	}
-	if consumeArc.Mode != interfaces.ArcModeConsume {
-		t.Errorf("consume arc mode: expected CONSUME, got %d", consumeArc.Mode)
-	}
-	if consumeArc.Cardinality.Mode != petri.CardinalityN || consumeArc.Cardinality.Count != 1 {
-		t.Errorf("consume arc cardinality: expected N(1), got %d(%d)", consumeArc.Cardinality.Mode, consumeArc.Cardinality.Count)
-	}
-
-	// Should have 2 output arcs: normal output + resource release.
-	if len(tr.OutputArcs) != 2 {
-		t.Fatalf("expected 2 output arcs, got %d", len(tr.OutputArcs))
-	}
-	releaseArc := tr.OutputArcs[1]
-	if releaseArc.PlaceID != "gpu:available" {
-		t.Errorf("release arc place: expected 'gpu:available', got %q", releaseArc.PlaceID)
-	}
-	if releaseArc.Name != "gpu:release:processor" {
-		t.Errorf("release arc name: expected 'gpu:release:processor', got %q", releaseArc.Name)
-	}
-	if releaseArc.Cardinality.Mode != petri.CardinalityN || releaseArc.Cardinality.Count != 1 {
-		t.Errorf("release arc cardinality: expected N(1), got %d(%d)", releaseArc.Cardinality.Mode, releaseArc.Cardinality.Count)
-	}
+	assertMappedResourcePlace(t, outputNet)
+	assertMappedResourceTransition(t, outputNet, "processor")
 }
 
 // portos:func-length-exception owner=agent-factory reason=legacy-resource-fixture review=2026-07-18 removal=split-shared-resource-fixture-before-next-resource-change
@@ -217,6 +169,59 @@ func TestConfigMapping_ValidationRejectsNonexistentResource(t *testing.T) {
 	_, err := mapper.Map(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected validation error for resource_usage referencing non-existent resource")
+	}
+}
+
+func assertMappedResourcePlace(t *testing.T, outputNet *state.Net) {
+	t.Helper()
+
+	resourcePlace := outputNet.Places["gpu:available"]
+	if resourcePlace == nil {
+		t.Fatal("expected resource place 'gpu:available' to exist")
+	}
+	if resourcePlace.TypeID != "gpu" {
+		t.Errorf("resource place type: expected 'gpu', got %q", resourcePlace.TypeID)
+	}
+	if resourcePlace.State != "available" {
+		t.Errorf("resource place state: expected 'available', got %q", resourcePlace.State)
+	}
+}
+
+func assertMappedResourceTransition(t *testing.T, outputNet *state.Net, transitionName string) {
+	t.Helper()
+
+	tr := outputNet.Transitions[transitionName]
+	if tr == nil {
+		t.Fatalf("expected transition %q to exist", transitionName)
+	}
+	if len(tr.InputArcs) != 2 {
+		t.Fatalf("expected 2 input arcs, got %d", len(tr.InputArcs))
+	}
+	consumeArc := tr.InputArcs[1]
+	if consumeArc.PlaceID != "gpu:available" {
+		t.Errorf("consume arc place: expected 'gpu:available', got %q", consumeArc.PlaceID)
+	}
+	if consumeArc.Name != "gpu:consume:"+transitionName {
+		t.Errorf("consume arc name: expected %q, got %q", "gpu:consume:"+transitionName, consumeArc.Name)
+	}
+	if consumeArc.Mode != interfaces.ArcModeConsume {
+		t.Errorf("consume arc mode: expected CONSUME, got %d", consumeArc.Mode)
+	}
+	if consumeArc.Cardinality.Mode != petri.CardinalityN || consumeArc.Cardinality.Count != 1 {
+		t.Errorf("consume arc cardinality: expected N(1), got %d(%d)", consumeArc.Cardinality.Mode, consumeArc.Cardinality.Count)
+	}
+	if len(tr.OutputArcs) != 2 {
+		t.Fatalf("expected 2 output arcs, got %d", len(tr.OutputArcs))
+	}
+	releaseArc := tr.OutputArcs[1]
+	if releaseArc.PlaceID != "gpu:available" {
+		t.Errorf("release arc place: expected 'gpu:available', got %q", releaseArc.PlaceID)
+	}
+	if releaseArc.Name != "gpu:release:"+transitionName {
+		t.Errorf("release arc name: expected %q, got %q", "gpu:release:"+transitionName, releaseArc.Name)
+	}
+	if releaseArc.Cardinality.Mode != petri.CardinalityN || releaseArc.Cardinality.Count != 1 {
+		t.Errorf("release arc cardinality: expected N(1), got %d(%d)", releaseArc.Cardinality.Mode, releaseArc.Cardinality.Count)
 	}
 }
 

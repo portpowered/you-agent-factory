@@ -345,6 +345,7 @@ func assertEventHistoryRequestLineage(t *testing.T, event factoryapi.FactoryEven
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the full response-lineage contract together across generated work, fan-in, and fan-out assertions.
 func assertEventHistoryResponseLineage(t *testing.T, event factoryapi.FactoryEvent) {
 	t.Helper()
 

@@ -47,6 +47,7 @@ func TestSubmitWork(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this contract-heavy submit boundary test keeps the full canonical request and response shape in one reviewer-readable flow.
 func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)

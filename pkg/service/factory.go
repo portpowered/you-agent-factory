@@ -1,4 +1,5 @@
 // backendsizecheck:ignore-file this legacy service orchestration file remains oversized until dedicated refactor work lands.
+// pkgmaintcheck:ignore-file-lines legacy runtime orchestration still spans startup, activation, and shutdown boundaries; split it in dedicated follow-up slices instead of risking behavior drift here.
 package service
 
 import (
@@ -100,6 +101,21 @@ type serviceRunState struct {
 	ctx       context.Context
 	sessionID string
 	runtime   *liveRuntimeHandle
+}
+
+type runtimeBundleBuildInput struct {
+	dir                   string
+	folderPath            string
+	cfg                   *FactoryServiceConfig
+	loadedFactoryCfg      *factoryconfig.LoadedFactoryConfig
+	logger                *zap.Logger
+	clock                 factory.Clock
+	recordPath            string
+	workflowID            string
+	providerOverride      workers.Provider
+	providerCommandRunner workers.CommandRunner
+	commandRunnerOverride workers.CommandRunner
+	additionalFactoryOpts []factory.FactoryOption
 }
 
 // FactoryService is an instantiation of a factory along with its runtime
@@ -250,6 +266,71 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	if err := validateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
+	factoryRootDir, baseLogger, logSink, logger, err := buildPrimaryServiceLogger(cfg)
+	if err != nil {
+		return nil, err
+	}
+	serviceBuilt := false
+	defer func() {
+		if !serviceBuilt {
+			_ = logSink.Close()
+		}
+	}()
+	if cfg.ReplayPath == "" {
+		resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(cfg.Dir)
+		if err != nil {
+			return nil, fmt.Errorf("resolve factory dir: %w", err)
+		}
+		cfg.Dir = resolvedDir
+	}
+
+	logger = newSessionLogger(logger, defaultFactorySessionID, factoryRootDir, cfg.Dir)
+	loadedFactoryCfg, replayArtifact, err := loadFactoryConfigForService(cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+	clock := serviceClockForMode(cfg.Clock, replayArtifact)
+	replaySideEffects, replayFactoryOpts, err := replayFactoryModeOptions(replayArtifact)
+	if err != nil {
+		return nil, err
+	}
+	runtimeBundle, err := buildRuntimeBundle(ctx, runtimeBundleBuildInput{
+		dir:                   cfg.Dir,
+		folderPath:            factoryRootDir,
+		cfg:                   cfg,
+		loadedFactoryCfg:      loadedFactoryCfg,
+		logger:                logger,
+		clock:                 clock,
+		recordPath:            cfg.RecordPath,
+		workflowID:            cfg.WorkflowID,
+		providerOverride:      providerOverrideForMode(cfg, replaySideEffects),
+		providerCommandRunner: providerCommandRunnerForMode(cfg, loadedFactoryCfg),
+		commandRunnerOverride: commandRunnerOverrideForMode(cfg, loadedFactoryCfg, replaySideEffects),
+		additionalFactoryOpts: replayFactoryOpts,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	serviceBuilt = true
+	return &FactoryService{
+		factoryRootDir: factoryRootDir,
+		sessions:       newLiveRuntimeSessionManager(),
+		eventHistory:   runtimeBundle.eventHistory,
+		factory:        runtimeBundle.factory,
+		listener:       runtimeBundle.listener,
+		net:            runtimeBundle.net,
+		cfg:            cfg,
+		runtimeCfg:     runtimeBundle.runtimeCfg,
+		baseLogger:     baseLogger,
+		logger:         logger,
+		clock:          clock,
+		recording:      runtimeBundle.recording,
+		logSink:        logSink,
+	}, nil
+}
+
+func buildPrimaryServiceLogger(cfg *FactoryServiceConfig) (string, *zap.Logger, *logging.RuntimeLogSink, *zap.Logger, error) {
 	factoryRootDir := cfg.Dir
 	baseLogger := cfg.Logger
 	if baseLogger == nil {
@@ -261,187 +342,214 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	}
 	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, cfg.RuntimeLogDir, cfg.RuntimeLogConfig)
 	if err != nil {
-		return nil, err
+		return "", nil, nil, nil, err
 	}
-	serviceBuilt := false
-	defer func() {
-		if !serviceBuilt {
-			_ = logSink.Close()
-		}
-	}()
-	logger := logSink.Logger()
 	cfg.RuntimeInstanceID = runtimeInstanceID
 	cfg.Logger = baseLogger
+	return factoryRootDir, baseLogger, logSink, logSink.Logger(), nil
+}
 
-	if cfg.ReplayPath == "" {
-		resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(cfg.Dir)
-		if err != nil {
-			return nil, fmt.Errorf("resolve factory dir: %w", err)
-		}
-		cfg.Dir = resolvedDir
-	}
-
-	logger = newSessionLogger(logger, defaultFactorySessionID, factoryRootDir, cfg.Dir)
-
+func loadFactoryConfigForService(
+	cfg *FactoryServiceConfig,
+	logger *zap.Logger,
+) (*factoryconfig.LoadedFactoryConfig, *interfaces.ReplayArtifact, error) {
 	logger.Info("loading factory config", zap.String("dir", cfg.Dir))
 	loadedFactoryCfg, replayArtifact, err := loadFactoryConfigForMode(cfg)
 	if err != nil {
 		logger.Error("failed to load factory config", zap.Error(err))
-		return nil, fmt.Errorf("load factory config: %w", err)
+		return nil, nil, fmt.Errorf("load factory config: %w", err)
 	}
 	warnPortableBundledReplacementReport(logger, "runtime config load replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
 	warnReplayMetadataMismatches(cfg, replayArtifact, logger)
-	clock := cfg.Clock
+	return loadedFactoryCfg, replayArtifact, nil
+}
+
+func serviceClockForMode(clock factory.Clock, replayArtifact *interfaces.ReplayArtifact) factory.Clock {
 	if clock == nil && replayArtifact != nil {
 		clock = replay.NewArtifactClock(replayArtifact)
 	}
 	if clock == nil {
 		clock = clockwork.NewRealClock()
 	}
-	clock = factory.EnsureClock(clock)
-	var replaySideEffects *replay.SideEffects
-	var replaySubmissionHook *replay.SubmissionHook
-	var replayDeliveryPlan *replay.CompletionDeliveryPlan
-	if replayArtifact != nil {
-		replaySideEffects, err = replay.NewSideEffects(replayArtifact)
-		if err != nil {
-			return nil, fmt.Errorf("build replay side effects: %w", err)
-		}
-		replaySubmissionHook, err = replay.NewSubmissionHook(replayArtifact)
-		if err != nil {
-			return nil, fmt.Errorf("build replay submission hook: %w", err)
-		}
-		replayDeliveryPlan, err = replay.NewCompletionDeliveryPlan(replayArtifact)
-		if err != nil {
-			return nil, fmt.Errorf("build replay completion delivery plan: %w", err)
-		}
-	}
+	return factory.EnsureClock(clock)
+}
 
-	mapper := factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig())
+func replayFactoryModeOptions(
+	replayArtifact *interfaces.ReplayArtifact,
+) (*replay.SideEffects, []factory.FactoryOption, error) {
+	if replayArtifact == nil {
+		return nil, nil, nil
+	}
+	replaySideEffects, err := replay.NewSideEffects(replayArtifact)
 	if err != nil {
-		logger.Error("failed to map factory config", zap.Error(err))
+		return nil, nil, fmt.Errorf("build replay side effects: %w", err)
+	}
+	replaySubmissionHook, err := replay.NewSubmissionHook(replayArtifact)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build replay submission hook: %w", err)
+	}
+	replayDeliveryPlan, err := replay.NewCompletionDeliveryPlan(replayArtifact)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build replay completion delivery plan: %w", err)
+	}
+	return replaySideEffects, []factory.FactoryOption{
+		factory.WithSubmissionHook(replaySubmissionHook),
+		factory.WithCompletionDeliveryPlanner(replayDeliveryPlan),
+	}, nil
+}
+
+func buildRuntimeBundle(
+	ctx context.Context,
+	input runtimeBundleBuildInput,
+) (*replacementFactoryRuntime, error) {
+	mapper := factoryconfig.ConfigMapper{}
+	net, err := mapper.Map(ctx, input.loadedFactoryCfg.FactoryConfig())
+	if err != nil {
+		input.logger.Error("failed to map factory config", zap.Error(err))
 		return nil, fmt.Errorf("map factory config: %w", err)
 	}
 
-	effectiveFactoryRunnerID := effectiveFactoryRunnerID(cfg.RunnerID, loadedFactoryCfg.FactoryConfig())
-	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
+	effectiveFactoryRunnerID := effectiveFactoryRunnerID(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
+	eventHistory := factory.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	modelResources := newLocalModelResourceLimiter()
-	modelAssets := newHuggingFaceModelAssetPuller(strings.TrimSpace(cfg.ModelCacheDir))
-	localModelRuntime := cfg.LocalModelRuntimeOverride
+	modelAssets := newHuggingFaceModelAssetPuller(strings.TrimSpace(input.cfg.ModelCacheDir))
+	localModelRuntime := input.cfg.LocalModelRuntimeOverride
 	if localModelRuntime == nil {
 		localModelRuntime = newOmniVoiceLocalRuntime(nil)
 	}
 	localModels := newManagedLocalModelManager(modelAssets, localModelRuntime)
 	workerOpts, err := loadWorkersFromConfig(
-		loadedFactoryCfg.FactoryDir(),
-		loadedFactoryCfg.FactoryConfig(),
+		input.loadedFactoryCfg.FactoryDir(),
+		input.loadedFactoryCfg.FactoryConfig(),
 		effectiveFactoryRunnerID,
-		loadedFactoryCfg,
-		logging.NewZapLogger(logger, cfg.Verbose),
-		cfg.SkipBuiltInRunnerPrerequisiteValidation,
-		providerOverrideForMode(cfg, replaySideEffects),
-		providerCommandRunnerForMode(cfg, loadedFactoryCfg),
-		commandRunnerOverrideForMode(cfg, loadedFactoryCfg, replaySideEffects),
+		input.loadedFactoryCfg,
+		logging.NewZapLogger(input.logger, input.cfg.Verbose),
+		input.cfg.SkipBuiltInRunnerPrerequisiteValidation,
+		input.providerOverride,
+		input.providerCommandRunner,
+		input.commandRunnerOverride,
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
 		eventHistory.RecordModelEvent,
-		clock.Now,
+		input.clock.Now,
 		modelResources,
 		localModels,
 	)
 	if err != nil {
-		logger.Error("failed to load workers from config", zap.Error(err))
+		input.logger.Error("failed to load workers from config", zap.Error(err))
 		return nil, fmt.Errorf("load workers: %w", err)
 	}
 
-	recordingArtifact, err := newRecordingArtifact(
-		cfg,
-		loadedFactoryCfg.FactoryDir(),
-		loadedFactoryCfg.FactoryConfig(),
-		loadedFactoryCfg,
-		clock,
+	recording, err := buildRuntimeRecorder(
+		input.cfg,
+		input.loadedFactoryCfg.FactoryDir(),
+		input.loadedFactoryCfg.FactoryConfig(),
+		input.loadedFactoryCfg,
+		input.clock,
+		input.recordPath,
+		input.workflowID,
 	)
 	if err != nil {
 		return nil, err
 	}
-	var recording *replay.Recorder
-	if recordingArtifact != nil {
-		recording, err = replay.NewRecorder(
-			cfg.RecordPath,
-			recordingArtifact,
-			replay.WithFlushInterval(cfg.RecordFlushInterval),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("create replay recorder: %w", err)
-		}
-	}
 
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
-		factory.WithRuntimeMode(cfg.RuntimeMode),
-		factory.WithLogger(logging.NewZapLogger(logger, cfg.Verbose)),
-		factory.WithRuntimeConfig(loadedFactoryCfg),
-		factory.WithWorkflowContext(runtimeWorkflowContext(loadedFactoryCfg.FactoryConfig())),
-		factory.WithClock(clock),
+		factory.WithRuntimeMode(input.cfg.RuntimeMode),
+		factory.WithLogger(logging.NewZapLogger(input.logger, input.cfg.Verbose)),
+		factory.WithRuntimeConfig(input.loadedFactoryCfg),
+		factory.WithWorkflowContext(runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig())),
+		factory.WithClock(input.clock),
 		factory.WithFactoryEventHistory(eventHistory),
 	}
-	if cfg.RecordPath != "" {
+	if input.recordPath != "" {
 		opts = append(opts, factory.WithFactoryEventRecorder(func(event factoryapi.FactoryEvent) {
 			if recording != nil {
 				recording.RecordEvent(event)
 			}
 		}))
 	}
-	if replaySubmissionHook != nil {
-		opts = append(opts, factory.WithSubmissionHook(replaySubmissionHook))
-	}
-	if replayDeliveryPlan != nil {
-		opts = append(opts, factory.WithCompletionDeliveryPlanner(replayDeliveryPlan))
-	}
+	opts = append(opts, input.additionalFactoryOpts...)
 	opts = append(opts, workerOpts...)
-	opts = append(opts, cfg.ExtraOptions...)
+	opts = append(opts, input.cfg.ExtraOptions...)
 
-	f, err := runtime.New(opts...)
+	activeFactory, err := runtime.New(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create factory: %w", err)
 	}
+	listener, err := buildRuntimeListener(input.dir, activeFactory, input.logger, net)
+	if err != nil {
+		return nil, err
+	}
 
-	// Always use the inputs/ directory.
-	inputsDir := filepath.Join(cfg.Dir, interfaces.InputsDir)
+	return &replacementFactoryRuntime{
+		dir:          input.dir,
+		folderPath:   input.folderPath,
+		eventHistory: eventHistory,
+		factory:      activeFactory,
+		listener:     listener,
+		net:          net,
+		runtimeCfg:   input.loadedFactoryCfg,
+		logger:       input.logger,
+		recording:    recording,
+		recordPath:   input.recordPath,
+	}, nil
+}
 
-	var listener *listeners.FileWatcher
-	if dirExists(inputsDir) {
-		listener = listeners.NewFileWatcher(inputsDir, f, logger, listeners.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)))
-		logger.Info("using inputs/ directory", zap.String("dir", inputsDir))
-	} else {
-		// Create inputs/ for new factories.
+func buildRuntimeRecorder(
+	cfg *FactoryServiceConfig,
+	factoryDir string,
+	factoryCfg *interfaces.FactoryConfig,
+	runtimeCfg interfaces.RuntimeDefinitionLookup,
+	clock factory.Clock,
+	recordPath string,
+	workflowID string,
+) (*replay.Recorder, error) {
+	recordingArtifact, err := newRecordingArtifact(
+		&FactoryServiceConfig{
+			RecordPath: recordPath,
+			WorkflowID: workflowID,
+		},
+		factoryDir,
+		factoryCfg,
+		runtimeCfg,
+		clock,
+	)
+	if err != nil || recordingArtifact == nil {
+		return nil, err
+	}
+	recording, err := replay.NewRecorder(
+		recordPath,
+		recordingArtifact,
+		replay.WithFlushInterval(cfg.RecordFlushInterval),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create replay recorder: %w", err)
+	}
+	return recording, nil
+}
+
+func buildRuntimeListener(
+	factoryDir string,
+	activeFactory factory.Factory,
+	logger *zap.Logger,
+	net *state.Net,
+) (*listeners.FileWatcher, error) {
+	inputsDir := filepath.Join(factoryDir, interfaces.InputsDir)
+	if !dirExists(inputsDir) {
 		if err := os.MkdirAll(inputsDir, 0o755); err != nil {
 			return nil, fmt.Errorf("create inputs dir: %w", err)
 		}
-		listener = listeners.NewFileWatcher(inputsDir, f, logger, listeners.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)))
+	} else {
+		logger.Info("using inputs/ directory", zap.String("dir", inputsDir))
 	}
-
-	serviceBuilt = true
-	return &FactoryService{
-		factoryRootDir: factoryRootDir,
-		sessions:       newLiveRuntimeSessionManager(),
-		eventHistory:   eventHistory,
-		factory:        f,
-		listener:       listener,
-		net:            net,
-		cfg:            cfg,
-		runtimeCfg:     loadedFactoryCfg,
-		baseLogger:     baseLogger,
-		logger:         logger,
-		clock:          clock,
-		recording:      recording,
-		logSink:        logSink,
-		modelResources: modelResources,
-		modelAssets:    modelAssets,
-		localModels:    localModels,
-	}, nil
+	return listeners.NewFileWatcher(
+		inputsDir,
+		activeFactory,
+		logger,
+		listeners.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)),
+	), nil
 }
 
 // ActivateNamedFactory builds a replacement runtime from a persisted named
@@ -509,117 +617,27 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 	}()
 	warnPortableBundledReplacementReport(logger, "named factory activation replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
 	loadedFactoryCfg.SetRuntimeBaseDir(fs.cfg.ExecutionBaseDir)
-
-	mapper := factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig())
-	if err != nil {
-		return nil, fmt.Errorf("map factory config: %w", err)
-	}
-
-	clock := fs.clock
-	if clock == nil {
-		clock = factory.EnsureClock(clockwork.NewRealClock())
-	}
-	effectiveFactoryRunnerID := effectiveFactoryRunnerID(fs.cfg.RunnerID, loadedFactoryCfg.FactoryConfig())
-	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
-	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
-	workerOpts, err := loadWorkersFromConfig(
-		loadedFactoryCfg.FactoryDir(),
-		loadedFactoryCfg.FactoryConfig(),
-		effectiveFactoryRunnerID,
-		loadedFactoryCfg,
-		logging.NewZapLogger(logger, fs.cfg.Verbose),
-		fs.cfg.SkipBuiltInRunnerPrerequisiteValidation,
-		providerOverrideForMode(fs.cfg, nil),
-		providerCommandRunnerForMode(fs.cfg, loadedFactoryCfg),
-		commandRunnerOverrideForMode(fs.cfg, loadedFactoryCfg, nil),
-		eventHistory.RecordScriptEvent,
-		eventHistory.RecordInferenceEvent,
-		eventHistory.RecordModelEvent,
-		clock.Now,
-		fs.modelResources,
-		fs.localModels,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("load workers: %w", err)
-	}
-
+	clock := factory.EnsureClock(fs.clock)
 	recordPath := sessionScopedRecordPath(fs.cfg.RecordPath, sessionID)
-	recordingArtifact, err := newRecordingArtifact(
-		&FactoryServiceConfig{
-			RecordPath: recordPath,
-			WorkflowID: fs.cfg.WorkflowID,
-		},
-		loadedFactoryCfg.FactoryDir(),
-		loadedFactoryCfg.FactoryConfig(),
-		loadedFactoryCfg,
-		clock,
-	)
+	replacementRuntime, err := buildRuntimeBundle(ctx, runtimeBundleBuildInput{
+		dir:                   factoryDir,
+		folderPath:            folderPath,
+		cfg:                   fs.cfg,
+		loadedFactoryCfg:      loadedFactoryCfg,
+		logger:                logger,
+		clock:                 clock,
+		recordPath:            recordPath,
+		workflowID:            fs.cfg.WorkflowID,
+		providerOverride:      providerOverrideForMode(fs.cfg, nil),
+		providerCommandRunner: providerCommandRunnerForMode(fs.cfg, loadedFactoryCfg),
+		commandRunnerOverride: commandRunnerOverrideForMode(fs.cfg, loadedFactoryCfg, nil),
+	})
 	if err != nil {
 		return nil, err
 	}
-	var recording *replay.Recorder
-	if recordingArtifact != nil {
-		recording, err = replay.NewRecorder(
-			recordPath,
-			recordingArtifact,
-			replay.WithFlushInterval(fs.cfg.RecordFlushInterval),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("create replay recorder: %w", err)
-		}
-	}
-
-	opts := []factory.FactoryOption{
-		factory.WithNet(net),
-		factory.WithRuntimeMode(fs.cfg.RuntimeMode),
-		factory.WithLogger(logging.NewZapLogger(logger, fs.cfg.Verbose)),
-		factory.WithRuntimeConfig(loadedFactoryCfg),
-		factory.WithWorkflowContext(runtimeWorkflowContext(loadedFactoryCfg.FactoryConfig())),
-		factory.WithClock(clock),
-		factory.WithFactoryEventHistory(eventHistory),
-	}
-	if recordPath != "" {
-		opts = append(opts, factory.WithFactoryEventRecorder(func(event factoryapi.FactoryEvent) {
-			if recording != nil {
-				recording.RecordEvent(event)
-			}
-		}))
-	}
-	opts = append(opts, workerOpts...)
-	opts = append(opts, fs.cfg.ExtraOptions...)
-
-	replacementFactory, err := runtime.New(opts...)
-	if err != nil {
-		return nil, fmt.Errorf("create factory: %w", err)
-	}
-
-	inputsDir := filepath.Join(factoryDir, interfaces.InputsDir)
-	if err := os.MkdirAll(inputsDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create inputs dir: %w", err)
-	}
-
-	replacementListener := listeners.NewFileWatcher(
-		inputsDir,
-		replacementFactory,
-		logger,
-		listeners.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)),
-	)
 	runtimeBuilt = true
-
-	return &replacementFactoryRuntime{
-		dir:          factoryDir,
-		folderPath:   folderPath,
-		eventHistory: eventHistory,
-		factory:      replacementFactory,
-		listener:     replacementListener,
-		net:          net,
-		runtimeCfg:   loadedFactoryCfg,
-		logger:       logger,
-		logSink:      logSink,
-		recording:    recording,
-		recordPath:   recordPath,
-	}, nil
+	replacementRuntime.logSink = logSink
+	return replacementRuntime, nil
 }
 
 func providerOverrideForMode(cfg *FactoryServiceConfig, sideEffects *replay.SideEffects) workers.Provider {
@@ -681,102 +699,18 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 		fs.clearRunState()
 		sidecars.Wait()
 	}()
-	if !serviceMode {
-		listener := fs.listener
-		sidecars.Add(1)
-		go func() {
-			defer sidecars.Done()
-			if listener == nil {
-				return
-			}
-			if err := listener.Watch(runCtx); err != nil && !errors.Is(err, context.Canceled) {
-				fs.logger.Error("file watcher error", zap.Error(err))
-			}
-		}()
+	fs.startRunSidecars(runCtx, &sidecars, serviceMode)
+	if err := fs.prepareRunInputs(ctx, serviceMode); err != nil {
+		return err
 	}
-
-	// Start dashboard loop if a renderer is provided.
-	fs.startTime = fs.clock.Now()
-	if fs.cfg.SimpleDashboardRenderer != nil {
-		sidecars.Add(1)
-		go func() {
-			defer sidecars.Done()
-			fs.dashboardLoop(runCtx)
-		}()
+	currentRuntime, err := fs.startDefaultRuntime(ctx, runCtx, serviceMode)
+	if err != nil {
+		return err
 	}
+	fs.startAPIServerSidecar(runCtx, &sidecars)
+	fs.logServiceStartup()
 
-	if !serviceMode {
-		if err := fs.preseedCurrentRuntimeInputs(ctx); err != nil {
-			return err
-		}
-	}
-
-	// Submit initial work if specified.
-	if fs.cfg.WorkFile != "" {
-		if err := fs.submitWorkFile(ctx); err != nil {
-			return err
-		}
-	}
-
-	currentRuntime = fs.startLiveRuntime(runCtx, fs.currentRuntimeBundle())
-	fs.registerLiveSession(defaultFactorySessionID, currentRuntime, true)
-	fs.setRunState(runCtx, defaultFactorySessionID, currentRuntime)
-	if err := fs.waitForLiveRuntimeStart(ctx, currentRuntime); err != nil {
-		fs.clearRunState()
-		fs.unregisterLiveSession(defaultFactorySessionID)
-		stopErr := fs.stopLiveRuntime(currentRuntime)
-		if isCanceledServiceStartup(ctx, err) {
-			if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-				return stopErr
-			}
-			return nil
-		}
-		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-			return errors.Join(fmt.Errorf("start runtime: %w", err), stopErr)
-		}
-		return fmt.Errorf("start runtime: %w", err)
-	}
-	if serviceMode {
-		if err := fs.startLiveRuntimeSidecars(runCtx, currentRuntime); err != nil {
-			fs.clearRunState()
-			fs.unregisterLiveSession(defaultFactorySessionID)
-			_ = fs.stopLiveRuntime(currentRuntime)
-			return err
-		}
-	}
-
-	// Start the API server only after the default runtime is fully started so
-	// callers never observe a partially initialized service surface.
-	if fs.cfg.APIServerStarter != nil && fs.cfg.Port > 0 {
-		sidecars.Add(1)
-		go func() {
-			defer sidecars.Done()
-			if err := fs.cfg.APIServerStarter(runCtx, fs, fs.cfg.Port, fs.logger); err != nil {
-				fs.logger.Error("API server error", zap.Error(err))
-			}
-		}()
-	}
-
-	runtimeLogConfig := fs.logSink.Config()
-	fs.logger.Info("factory started",
-		zap.String("dir", fs.cfg.Dir),
-		zap.String("runtime_log_path", fs.logSink.Path()),
-		zap.String("runtime_log_appender", logging.RuntimeLogAppenderZapRollingFile),
-		zap.Int("runtime_log_max_size_mb", runtimeLogConfig.MaxSize),
-		zap.Int("runtime_log_max_backups", runtimeLogConfig.MaxBackups),
-		zap.Int("runtime_log_max_age_days", runtimeLogConfig.MaxAge),
-		zap.Bool("runtime_log_compress", runtimeLogConfig.Compress),
-		zap.String("runtime_env_log_channel", logging.RuntimeEnvLogChannelRecord),
-		zap.String("runtime_success_command_output", logging.RuntimeSuccessCommandOutputPolicy),
-		zap.String("runtime_failure_command_output", logging.RuntimeFailureCommandOutputPolicy),
-		zap.String("runtime_verbose_command_output", logging.RuntimeVerboseCommandOutputPolicy),
-		zap.String("record_command_diagnostics", logging.RuntimeRecordCommandDiagnosticsMode),
-		zap.String("runtime_mode", string(runtimeModeOrDefault(fs.cfg.RuntimeMode))),
-		zap.Bool("mock-workers", fs.cfg.MockWorkersConfig != nil),
-		zap.Int("port", fs.cfg.Port),
-	)
-
-	err := fs.waitForActiveRuntime(ctx)
+	err = fs.waitForActiveRuntime(ctx)
 	currentRuntime = fs.currentLiveRuntime()
 	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) && err == nil {
 		err = stopErr
@@ -798,6 +732,133 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	return nil
 }
 
+func (fs *FactoryService) startRunSidecars(runCtx context.Context, sidecars *sync.WaitGroup, serviceMode bool) {
+	if !serviceMode {
+		fs.startListenerSidecar(runCtx, sidecars, fs.listener, fs.logger)
+	}
+	fs.startDashboardSidecar(runCtx, sidecars)
+}
+
+func (fs *FactoryService) startListenerSidecar(
+	runCtx context.Context,
+	sidecars *sync.WaitGroup,
+	listener *listeners.FileWatcher,
+	logger *zap.Logger,
+) {
+	sidecars.Add(1)
+	go func() {
+		defer sidecars.Done()
+		if listener == nil {
+			return
+		}
+		if err := listener.Watch(runCtx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("file watcher error", zap.Error(err))
+		}
+	}()
+}
+
+func (fs *FactoryService) startDashboardSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
+	fs.startTime = fs.clock.Now()
+	if fs.cfg.SimpleDashboardRenderer == nil {
+		return
+	}
+	sidecars.Add(1)
+	go func() {
+		defer sidecars.Done()
+		fs.dashboardLoop(runCtx)
+	}()
+}
+
+func (fs *FactoryService) prepareRunInputs(ctx context.Context, serviceMode bool) error {
+	if !serviceMode {
+		if err := fs.preseedCurrentRuntimeInputs(ctx); err != nil {
+			return err
+		}
+	}
+	if fs.cfg.WorkFile != "" {
+		if err := fs.submitWorkFile(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (fs *FactoryService) startDefaultRuntime(
+	ctx context.Context,
+	runCtx context.Context,
+	serviceMode bool,
+) (*liveRuntimeHandle, error) {
+	currentRuntime := fs.startLiveRuntime(runCtx, fs.currentRuntimeBundle())
+	fs.registerLiveSession(defaultFactorySessionID, currentRuntime, true)
+	fs.setRunState(runCtx, defaultFactorySessionID, currentRuntime)
+	if err := fs.waitForLiveRuntimeStart(ctx, currentRuntime); err != nil {
+		return nil, fs.handleDefaultRuntimeStartFailure(ctx, currentRuntime, err)
+	}
+	if serviceMode {
+		if err := fs.startLiveRuntimeSidecars(runCtx, currentRuntime); err != nil {
+			fs.clearRunState()
+			fs.unregisterLiveSession(defaultFactorySessionID)
+			_ = fs.stopLiveRuntime(currentRuntime)
+			return nil, err
+		}
+	}
+	return currentRuntime, nil
+}
+
+func (fs *FactoryService) handleDefaultRuntimeStartFailure(
+	ctx context.Context,
+	currentRuntime *liveRuntimeHandle,
+	startErr error,
+) error {
+	fs.clearRunState()
+	fs.unregisterLiveSession(defaultFactorySessionID)
+	stopErr := fs.stopLiveRuntime(currentRuntime)
+	if isCanceledServiceStartup(ctx, startErr) {
+		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+			return stopErr
+		}
+		return nil
+	}
+	if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+		return errors.Join(fmt.Errorf("start runtime: %w", startErr), stopErr)
+	}
+	return fmt.Errorf("start runtime: %w", startErr)
+}
+
+func (fs *FactoryService) startAPIServerSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
+	if fs.cfg.APIServerStarter == nil || fs.cfg.Port <= 0 {
+		return
+	}
+	sidecars.Add(1)
+	go func() {
+		defer sidecars.Done()
+		if err := fs.cfg.APIServerStarter(runCtx, fs, fs.cfg.Port, fs.logger); err != nil {
+			fs.logger.Error("API server error", zap.Error(err))
+		}
+	}()
+}
+
+func (fs *FactoryService) logServiceStartup() {
+	runtimeLogConfig := fs.logSink.Config()
+	fs.logger.Info("factory started",
+		zap.String("dir", fs.cfg.Dir),
+		zap.String("runtime_log_path", fs.logSink.Path()),
+		zap.String("runtime_log_appender", logging.RuntimeLogAppenderZapRollingFile),
+		zap.Int("runtime_log_max_size_mb", runtimeLogConfig.MaxSize),
+		zap.Int("runtime_log_max_backups", runtimeLogConfig.MaxBackups),
+		zap.Int("runtime_log_max_age_days", runtimeLogConfig.MaxAge),
+		zap.Bool("runtime_log_compress", runtimeLogConfig.Compress),
+		zap.String("runtime_env_log_channel", logging.RuntimeEnvLogChannelRecord),
+		zap.String("runtime_success_command_output", logging.RuntimeSuccessCommandOutputPolicy),
+		zap.String("runtime_failure_command_output", logging.RuntimeFailureCommandOutputPolicy),
+		zap.String("runtime_verbose_command_output", logging.RuntimeVerboseCommandOutputPolicy),
+		zap.String("record_command_diagnostics", logging.RuntimeRecordCommandDiagnosticsMode),
+		zap.String("runtime_mode", string(runtimeModeOrDefault(fs.cfg.RuntimeMode))),
+		zap.Bool("mock-workers", fs.cfg.MockWorkersConfig != nil),
+		zap.Int("port", fs.cfg.Port),
+	)
+}
+
 func (fs *FactoryService) activateReplacementRuntime(
 	ctx context.Context,
 	rootDir string,
@@ -806,11 +867,7 @@ func (fs *FactoryService) activateReplacementRuntime(
 ) error {
 	runState := fs.currentRunState()
 	if runState == nil || runState.runtime == nil || runState.ctx == nil {
-		if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, name); err != nil {
-			return err
-		}
-		fs.swapActiveRuntime(replacement)
-		return nil
+		return fs.activateReplacementWithoutLiveRuntime(rootDir, name, replacement)
 	}
 
 	restoreCurrentSidecars := false
@@ -828,32 +885,67 @@ func (fs *FactoryService) activateReplacementRuntime(
 		return err
 	}
 
-	replacementHandle := fs.startLiveRuntime(runState.ctx, replacement)
-	if err := fs.waitForLiveRuntimeStart(ctx, replacementHandle); err != nil {
-		_ = fs.stopLiveRuntime(replacementHandle)
-		return fmt.Errorf("start replacement runtime: %w", err)
-	}
-
-	if serviceMode {
-		if err := fs.startLiveRuntimeSidecars(runState.ctx, replacementHandle); err != nil {
-			_ = fs.stopLiveRuntime(replacementHandle)
-			return fmt.Errorf("start replacement runtime sidecars: %w", err)
-		}
-	}
-	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, name); err != nil {
-		if serviceMode {
-			fs.stopLiveRuntimeSidecars(replacementHandle)
-		}
-		_ = fs.stopLiveRuntime(replacementHandle)
+	replacementHandle, err := fs.startReplacementRuntime(ctx, runState.ctx, replacement, serviceMode)
+	if err != nil {
 		return err
 	}
-
+	if err := fs.persistReplacementRuntime(rootDir, name, replacementHandle, serviceMode); err != nil {
+		return err
+	}
 	fs.publishFactoryChangeEvent(ctx, runState.runtime, replacement)
 	restoreCurrentSidecars = false
 	fs.registerLiveSession(runState.sessionID, replacementHandle, true)
 	fs.setRunState(runState.ctx, runState.sessionID, replacementHandle)
 	if err := fs.stopLiveRuntime(runState.runtime); err != nil && !errors.Is(err, context.Canceled) {
 		fs.logger.Warn("prior runtime shutdown failed", zap.Error(err))
+	}
+	return nil
+}
+
+func (fs *FactoryService) activateReplacementWithoutLiveRuntime(
+	rootDir string,
+	name string,
+	replacement *replacementFactoryRuntime,
+) error {
+	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, name); err != nil {
+		return err
+	}
+	fs.swapActiveRuntime(replacement)
+	return nil
+}
+
+func (fs *FactoryService) startReplacementRuntime(
+	ctx context.Context,
+	runCtx context.Context,
+	replacement *replacementFactoryRuntime,
+	serviceMode bool,
+) (*liveRuntimeHandle, error) {
+	replacementHandle := fs.startLiveRuntime(runCtx, replacement)
+	if err := fs.waitForLiveRuntimeStart(ctx, replacementHandle); err != nil {
+		_ = fs.stopLiveRuntime(replacementHandle)
+		return nil, fmt.Errorf("start replacement runtime: %w", err)
+	}
+	if serviceMode {
+		if err := fs.startLiveRuntimeSidecars(runCtx, replacementHandle); err != nil {
+			_ = fs.stopLiveRuntime(replacementHandle)
+			return nil, fmt.Errorf("start replacement runtime sidecars: %w", err)
+		}
+	}
+	return replacementHandle, nil
+}
+
+func (fs *FactoryService) persistReplacementRuntime(
+	rootDir string,
+	name string,
+	replacementHandle *liveRuntimeHandle,
+	serviceMode bool,
+) error {
+	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, name); err != nil {
+		if serviceMode {
+			fs.stopLiveRuntimeSidecars(replacementHandle)
+		}
+		_ = fs.stopLiveRuntime(replacementHandle)
+		return err
 	}
 	return nil
 }
@@ -1545,27 +1637,9 @@ func (fs *FactoryService) SaveEditableFactoryDefinition(ctx context.Context, req
 	if fs == nil {
 		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("factory service is required")
 	}
-
-	current, err := fs.GetCurrentNamedFactory(ctx)
+	current, payload, err := fs.validateEditableFactorySave(ctx, request)
 	if err != nil {
 		return factoryapi.EditableFactoryDefinition{}, err
-	}
-	if current.Name == apisurface.DefaultCurrentFactoryName {
-		return factoryapi.EditableFactoryDefinition{}, ErrCurrentNamedFactoryNotFound
-	}
-	if request.FactoryDefinition.Name != current.Name {
-		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
-	}
-	if err := apisurface.ValidateWritableNamedFactoryName(request.FactoryDefinition.Name); err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
-	}
-	if err := validateEditableFactoryTopology(request.FactoryDefinition); err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
-	}
-
-	payload, err := json.Marshal(request.FactoryDefinition)
-	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("marshal editable factory payload: %w", err)
 	}
 
 	fs.activationMu.Lock()
@@ -1592,11 +1666,7 @@ func (fs *FactoryService) SaveEditableFactoryDefinition(ctx context.Context, req
 		}
 	}
 
-	sessionID := defaultFactorySessionID
-	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
-		sessionID = runState.sessionID
-	}
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, rootDir, factoryDir, sessionID)
+	replacement, err := fs.buildEditableFactoryReplacement(ctx, rootDir, factoryDir)
 	if err != nil {
 		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, request.FactoryDefinition.Name, err)
 	}
@@ -1619,6 +1689,45 @@ func (fs *FactoryService) SaveEditableFactoryDefinition(ctx context.Context, req
 		FactoryDefinition: saved,
 		Version:           version,
 	}, nil
+}
+
+func (fs *FactoryService) validateEditableFactorySave(
+	ctx context.Context,
+	request factoryapi.SaveEditableFactoryDefinitionRequest,
+) (factoryapi.Factory, []byte, error) {
+	current, err := fs.GetCurrentNamedFactory(ctx)
+	if err != nil {
+		return factoryapi.Factory{}, nil, err
+	}
+	if current.Name == apisurface.DefaultCurrentFactoryName {
+		return factoryapi.Factory{}, nil, ErrCurrentNamedFactoryNotFound
+	}
+	if request.FactoryDefinition.Name != current.Name {
+		return factoryapi.Factory{}, nil, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
+	}
+	if err := apisurface.ValidateWritableNamedFactoryName(request.FactoryDefinition.Name); err != nil {
+		return factoryapi.Factory{}, nil, err
+	}
+	if err := validateEditableFactoryTopology(request.FactoryDefinition); err != nil {
+		return factoryapi.Factory{}, nil, err
+	}
+	payload, err := json.Marshal(request.FactoryDefinition)
+	if err != nil {
+		return factoryapi.Factory{}, nil, fmt.Errorf("marshal editable factory payload: %w", err)
+	}
+	return current, payload, nil
+}
+
+func (fs *FactoryService) buildEditableFactoryReplacement(
+	ctx context.Context,
+	rootDir string,
+	factoryDir string,
+) (*replacementFactoryRuntime, error) {
+	sessionID := defaultFactorySessionID
+	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
+		sessionID = runState.sessionID
+	}
+	return fs.buildReplacementFactoryRuntime(ctx, rootDir, factoryDir, sessionID)
 }
 
 func (fs *FactoryService) requireFreshEditableFactoryVersion(baseVersion *factoryapi.HybridLogicalTimestamp, name factoryapi.FactoryName) error {

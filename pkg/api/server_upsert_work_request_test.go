@@ -135,6 +135,7 @@ func TestUpsertWorkRequest_FirstSubmitAndRepeatedRequestID(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this upsert boundary test keeps the full relation and runtime mapping contract inline for reviewer-readable coverage.
 func TestUpsertWorkRequest_MapsWorkTypeNameAndRelationsToRuntime(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)

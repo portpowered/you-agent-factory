@@ -388,6 +388,7 @@ func TestFileWatcher_JSONFactoryRequestBatchMapsWorkTypeName(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this watcher batch-contract test keeps parent-child mapping and canonical submit assertions in one scenario.
 func TestFileWatcher_JSONFactoryRequestBatchAcceptsParentChildByWorkName(t *testing.T) {
 	dir := setupWatchDir(t)
 	data := []byte(`{

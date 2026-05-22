@@ -134,73 +134,93 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		return factoryapi.Factory{}
 	}
 
-	apiCfg := factoryapi.Factory{Name: factoryReferenceName(cfg)}
-	if cfg.Project != "" {
-		apiCfg.Id = stringPtr(cfg.Project)
+	return factoryapi.Factory{
+		Name:            factoryReferenceName(cfg),
+		Id:              stringPtrIfNotEmpty(cfg.Project),
+		Guards:          factoryGuardsAPIFromInternal(cfg.Guards),
+		InputTypes:      inputTypesAPIFromInternal(cfg.InputTypes),
+		WorkTypes:       workTypesAPIFromInternal(cfg.WorkTypes),
+		Resources:       resourcesAPIFromInternal(cfg.Resources),
+		SupportingFiles: resourceManifestAPIFromInternal(cfg.ResourceManifest),
+		Workers:         workersAPIFromInternal(cfg.Workers),
+		Workstations:    workstationsAPIFromInternal(cfg.Workstations),
 	}
-	if len(cfg.Guards) > 0 {
-		apiCfg.Guards = factoryGuardsAPIFromInternal(cfg.Guards)
+}
+
+func inputTypesAPIFromInternal(inputTypes []interfaces.InputTypeConfig) *[]factoryapi.InputType {
+	if len(inputTypes) == 0 {
+		return nil
 	}
-	if len(cfg.InputTypes) > 0 {
-		inputTypes := make([]factoryapi.InputType, len(cfg.InputTypes))
-		for i, inputType := range cfg.InputTypes {
-			inputTypes[i] = factoryapi.InputType{
-				Name: inputType.Name,
-				Type: publicFactoryInputKindFromInternal(inputType.Type),
+	result := make([]factoryapi.InputType, len(inputTypes))
+	for i, inputType := range inputTypes {
+		result[i] = factoryapi.InputType{
+			Name: inputType.Name,
+			Type: publicFactoryInputKindFromInternal(inputType.Type),
+		}
+	}
+	return &result
+}
+
+func workTypesAPIFromInternal(workTypes []interfaces.WorkTypeConfig) *[]factoryapi.WorkType {
+	if len(workTypes) == 0 {
+		return nil
+	}
+	result := make([]factoryapi.WorkType, len(workTypes))
+	for i, workType := range workTypes {
+		states := make([]factoryapi.WorkState, len(workType.States))
+		for stateIndex, state := range workType.States {
+			states[stateIndex] = factoryapi.WorkState{
+				Name: state.Name,
+				Type: factoryapi.WorkStateType(state.Type),
 			}
 		}
-		apiCfg.InputTypes = &inputTypes
-	}
-	if len(cfg.WorkTypes) > 0 {
-		workTypes := make([]factoryapi.WorkType, len(cfg.WorkTypes))
-		for i, workType := range cfg.WorkTypes {
-			states := make([]factoryapi.WorkState, len(workType.States))
-			for si, state := range workType.States {
-				states[si] = factoryapi.WorkState{
-					Name: state.Name,
-					Type: factoryapi.WorkStateType(state.Type),
-				}
-			}
-			workTypes[i] = factoryapi.WorkType{
-				Name:   workType.Name,
-				States: states,
-			}
+		result[i] = factoryapi.WorkType{
+			Name:   workType.Name,
+			States: states,
 		}
-		apiCfg.WorkTypes = &workTypes
 	}
-	if len(cfg.Resources) > 0 {
-		resources := make([]factoryapi.Resource, len(cfg.Resources))
-		for i, resource := range cfg.Resources {
-			resources[i] = factoryapi.Resource{
-				Name:       resource.Name,
-				Type:       resourceTypePtrIfNotEmpty(resource.Type),
-				Capacity:   resource.Capacity,
-				Model:      stringPtrIfNotEmpty(resource.Model),
-				Backend:    stringPtrIfNotEmpty(resource.Backend),
-				LoadPolicy: stringPtrIfNotEmpty(resource.LoadPolicy),
-				Provider:   stringPtrIfNotEmpty(resource.Provider),
-			}
+	return &result
+}
+
+func resourcesAPIFromInternal(resources []interfaces.ResourceConfig) *[]factoryapi.Resource {
+	if len(resources) == 0 {
+		return nil
+	}
+	result := make([]factoryapi.Resource, len(resources))
+	for i, resource := range resources {
+		result[i] = factoryapi.Resource{
+			Name:       resource.Name,
+			Type:       resourceTypePtrIfNotEmpty(resource.Type),
+			Capacity:   resource.Capacity,
+			Model:      stringPtrIfNotEmpty(resource.Model),
+			Backend:    stringPtrIfNotEmpty(resource.Backend),
+			LoadPolicy: stringPtrIfNotEmpty(resource.LoadPolicy),
+			Provider:   stringPtrIfNotEmpty(resource.Provider),
 		}
-		apiCfg.Resources = &resources
 	}
-	if cfg.ResourceManifest != nil {
-		apiCfg.SupportingFiles = resourceManifestAPIFromInternal(cfg.ResourceManifest)
+	return &result
+}
+
+func workersAPIFromInternal(workers []interfaces.WorkerConfig) *[]factoryapi.Worker {
+	if len(workers) == 0 {
+		return nil
 	}
-	if len(cfg.Workers) > 0 {
-		workers := make([]factoryapi.Worker, len(cfg.Workers))
-		for i, worker := range cfg.Workers {
-			workers[i] = *workerDefinitionAPIFromInternal(&worker)
-		}
-		apiCfg.Workers = &workers
+	result := make([]factoryapi.Worker, len(workers))
+	for i, worker := range workers {
+		result[i] = *workerDefinitionAPIFromInternal(&worker)
 	}
-	if len(cfg.Workstations) > 0 {
-		workstations := make([]factoryapi.Workstation, 0, len(cfg.Workstations))
-		for _, workstation := range cfg.Workstations {
-			workstations = append(workstations, workstationAPIFromInternal(workstation))
-		}
-		apiCfg.Workstations = &workstations
+	return &result
+}
+
+func workstationsAPIFromInternal(workstations []interfaces.FactoryWorkstationConfig) *[]factoryapi.Workstation {
+	if len(workstations) == 0 {
+		return nil
 	}
-	return apiCfg
+	result := make([]factoryapi.Workstation, 0, len(workstations))
+	for _, workstation := range workstations {
+		result = append(result, workstationAPIFromInternal(workstation))
+	}
+	return &result
 }
 
 func factoryReferenceName(cfg *interfaces.FactoryConfig) factoryapi.FactoryName {

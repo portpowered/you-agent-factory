@@ -61,6 +61,7 @@ func TestValidateWorkRequestTraceFields(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this normalization contract test keeps shared-request, trace, and relation assertions inline for readability.
 func TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace(t *testing.T) {
 	request := interfaces.WorkRequest{
 		RequestID:              "request-1",

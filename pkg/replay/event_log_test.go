@@ -406,6 +406,7 @@ func safeDiagnosticReductionFixture() *interfaces.WorkDiagnostics {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the replay completion diagnostics contract together across all supported branches.
 func assertReducedCompletionSafeDiagnostics(t *testing.T, completion replayCompletion) {
 	t.Helper()
 

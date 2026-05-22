@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -34,6 +35,117 @@ var retiredFactoryEventTypeStrings = []string{
 	"DISPATCH_COMPLETED",
 	"FACTORY_STATE_CHANGE",
 	"RUN_FINISHED",
+}
+
+var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(factoryapi.FactoryEvent_Payload) error{
+	factoryapi.FactoryEventTypeRunRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsRunRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeInitialStructureRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsInitialStructureRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeFactoryChange: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsFactoryChangeEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeWorkRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsWorkRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeRelationshipChangeRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsRelationshipChangeRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeDispatchRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsDispatchRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeModelRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsModelRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeModelResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsModelResponseEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeInferenceRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsInferenceRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeInferenceResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsInferenceResponseEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeScriptRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsScriptRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeScriptResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsScriptResponseEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeDispatchResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsDispatchResponseEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeFactoryStateResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsFactoryStateResponseEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeRunResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsRunResponseEventPayload()
+		return err
+	},
+}
+
+var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.FactoryEvent_Payload, any) error{
+	reflect.TypeOf(factoryapi.RunRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromRunRequestEventPayload(value.(factoryapi.RunRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.InitialStructureRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromInitialStructureRequestEventPayload(value.(factoryapi.InitialStructureRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.FactoryChangeEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromFactoryChangeEventPayload(value.(factoryapi.FactoryChangeEventPayload))
+	},
+	reflect.TypeOf(factoryapi.WorkRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromWorkRequestEventPayload(value.(factoryapi.WorkRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.RelationshipChangeRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromRelationshipChangeRequestEventPayload(value.(factoryapi.RelationshipChangeRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.DispatchRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromDispatchRequestEventPayload(value.(factoryapi.DispatchRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.ModelRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromModelRequestEventPayload(value.(factoryapi.ModelRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.ModelResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromModelResponseEventPayload(value.(factoryapi.ModelResponseEventPayload))
+	},
+	reflect.TypeOf(factoryapi.InferenceRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromInferenceRequestEventPayload(value.(factoryapi.InferenceRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.InferenceResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromInferenceResponseEventPayload(value.(factoryapi.InferenceResponseEventPayload))
+	},
+	reflect.TypeOf(factoryapi.ScriptRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromScriptRequestEventPayload(value.(factoryapi.ScriptRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.ScriptResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromScriptResponseEventPayload(value.(factoryapi.ScriptResponseEventPayload))
+	},
+	reflect.TypeOf(factoryapi.DispatchResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromDispatchResponseEventPayload(value.(factoryapi.DispatchResponseEventPayload))
+	},
+	reflect.TypeOf(factoryapi.FactoryStateResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromFactoryStateResponseEventPayload(value.(factoryapi.FactoryStateResponseEventPayload))
+	},
+	reflect.TypeOf(factoryapi.RunResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromRunResponseEventPayload(value.(factoryapi.RunResponseEventPayload))
+	},
 }
 
 func generatedNamedFactoryFixture() factoryapi.Factory {
@@ -78,69 +190,12 @@ func generatedNamedFactoryFixture() factoryapi.Factory {
 func requireGeneratedFactoryEventPayloadRoundTrip(t *testing.T, event factoryapi.FactoryEvent) {
 	t.Helper()
 
-	switch event.Type {
-	case factoryapi.FactoryEventTypeRunRequest:
-		if _, err := event.Payload.AsRunRequestEventPayload(); err != nil {
-			t.Fatalf("decode %s run-request payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeInitialStructureRequest:
-		if _, err := event.Payload.AsInitialStructureRequestEventPayload(); err != nil {
-			t.Fatalf("decode %s initial-structure payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeFactoryChange:
-		if _, err := event.Payload.AsFactoryChangeEventPayload(); err != nil {
-			t.Fatalf("decode %s factory-change payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeWorkRequest:
-		if _, err := event.Payload.AsWorkRequestEventPayload(); err != nil {
-			t.Fatalf("decode %s work-request payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeRelationshipChangeRequest:
-		if _, err := event.Payload.AsRelationshipChangeRequestEventPayload(); err != nil {
-			t.Fatalf("decode %s relationship-change payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeDispatchRequest:
-		if _, err := event.Payload.AsDispatchRequestEventPayload(); err != nil {
-			t.Fatalf("decode %s dispatch-request payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeModelRequest:
-		if _, err := event.Payload.AsModelRequestEventPayload(); err != nil {
-			t.Fatalf("decode %s model-request payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeModelResponse:
-		if _, err := event.Payload.AsModelResponseEventPayload(); err != nil {
-			t.Fatalf("decode %s model-response payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeInferenceRequest:
-		if _, err := event.Payload.AsInferenceRequestEventPayload(); err != nil {
-			t.Fatalf("decode %s inference-request payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeInferenceResponse:
-		if _, err := event.Payload.AsInferenceResponseEventPayload(); err != nil {
-			t.Fatalf("decode %s inference-response payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeScriptRequest:
-		if _, err := event.Payload.AsScriptRequestEventPayload(); err != nil {
-			t.Fatalf("decode %s script-request payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeScriptResponse:
-		if _, err := event.Payload.AsScriptResponseEventPayload(); err != nil {
-			t.Fatalf("decode %s script-response payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeDispatchResponse:
-		if _, err := event.Payload.AsDispatchResponseEventPayload(); err != nil {
-			t.Fatalf("decode %s dispatch-response payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeFactoryStateResponse:
-		if _, err := event.Payload.AsFactoryStateResponseEventPayload(); err != nil {
-			t.Fatalf("decode %s factory-state payload: %v", event.Id, err)
-		}
-	case factoryapi.FactoryEventTypeRunResponse:
-		if _, err := event.Payload.AsRunResponseEventPayload(); err != nil {
-			t.Fatalf("decode %s run-response payload: %v", event.Id, err)
-		}
-	default:
+	decode, ok := generatedFactoryEventPayloadDecoders[event.Type]
+	if !ok {
 		t.Fatalf("unexpected canonical event type %q", event.Type)
+	}
+	if err := decode(event.Payload); err != nil {
+		t.Fatalf("decode %s %s payload: %v", event.Id, strings.ToLower(strings.ReplaceAll(string(event.Type), "_", "-")), err)
 	}
 }
 
@@ -182,42 +237,11 @@ func factoryEventPayload(t *testing.T, payload any) factoryapi.FactoryEvent_Payl
 	t.Helper()
 
 	var eventPayload factoryapi.FactoryEvent_Payload
-	var err error
-	switch typed := payload.(type) {
-	case factoryapi.RunRequestEventPayload:
-		err = eventPayload.FromRunRequestEventPayload(typed)
-	case factoryapi.InitialStructureRequestEventPayload:
-		err = eventPayload.FromInitialStructureRequestEventPayload(typed)
-	case factoryapi.FactoryChangeEventPayload:
-		err = eventPayload.FromFactoryChangeEventPayload(typed)
-	case factoryapi.WorkRequestEventPayload:
-		err = eventPayload.FromWorkRequestEventPayload(typed)
-	case factoryapi.RelationshipChangeRequestEventPayload:
-		err = eventPayload.FromRelationshipChangeRequestEventPayload(typed)
-	case factoryapi.DispatchRequestEventPayload:
-		err = eventPayload.FromDispatchRequestEventPayload(typed)
-	case factoryapi.ModelRequestEventPayload:
-		err = eventPayload.FromModelRequestEventPayload(typed)
-	case factoryapi.ModelResponseEventPayload:
-		err = eventPayload.FromModelResponseEventPayload(typed)
-	case factoryapi.InferenceRequestEventPayload:
-		err = eventPayload.FromInferenceRequestEventPayload(typed)
-	case factoryapi.InferenceResponseEventPayload:
-		err = eventPayload.FromInferenceResponseEventPayload(typed)
-	case factoryapi.ScriptRequestEventPayload:
-		err = eventPayload.FromScriptRequestEventPayload(typed)
-	case factoryapi.ScriptResponseEventPayload:
-		err = eventPayload.FromScriptResponseEventPayload(typed)
-	case factoryapi.DispatchResponseEventPayload:
-		err = eventPayload.FromDispatchResponseEventPayload(typed)
-	case factoryapi.FactoryStateResponseEventPayload:
-		err = eventPayload.FromFactoryStateResponseEventPayload(typed)
-	case factoryapi.RunResponseEventPayload:
-		err = eventPayload.FromRunResponseEventPayload(typed)
-	default:
+	encode, ok := generatedFactoryEventPayloadEncoders[reflect.TypeOf(payload)]
+	if !ok {
 		t.Fatalf("unsupported event payload type %T", payload)
 	}
-	if err != nil {
+	if err := encode(&eventPayload, payload); err != nil {
 		t.Fatalf("encode generated FactoryEvent payload: %v", err)
 	}
 	return eventPayload

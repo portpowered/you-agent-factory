@@ -142,47 +142,63 @@ func scanTransitionExhaustionUses(file *ast.File, fset *token.FileSet, petriAlia
 			if scanErr != nil {
 				return false
 			}
-			switch typed := node.(type) {
-			case *ast.SelectorExpr:
-				ident, ok := typed.X.(*ast.Ident)
-				if !ok || typed.Sel == nil || typed.Sel.Name != "TransitionExhaustion" {
-					return true
-				}
-				if _, ok := petriAliases[ident.Name]; !ok {
-					return true
-				}
-				scanErr = visit(funcName, fset.Position(typed.Sel.Pos()).Line)
+			if line, matched := selectorTransitionExhaustionLine(node, fset, petriAliases); matched {
+				scanErr = visit(funcName, line)
 				return false
-			case *ast.Ident:
-				if file.Name.Name != "petri" || typed.Name != "TransitionExhaustion" {
-					return true
-				}
-				parentIsSelector := false
-				ast.Inspect(decl, func(inner ast.Node) bool {
-					selector, ok := inner.(*ast.SelectorExpr)
-					if !ok || selector.Sel == nil {
-						return true
-					}
-					if selector.Sel == typed {
-						parentIsSelector = true
-						return false
-					}
-					return true
-				})
-				if parentIsSelector {
-					return true
-				}
-				scanErr = visit(funcName, fset.Position(typed.Pos()).Line)
-				return false
-			default:
-				return true
 			}
+			if line, matched := identTransitionExhaustionLine(file, decl, node, fset); matched {
+				scanErr = visit(funcName, line)
+				return false
+			}
+			return true
 		})
 		if scanErr != nil {
 			return scanErr
 		}
 	}
 	return nil
+}
+
+func selectorTransitionExhaustionLine(node ast.Node, fset *token.FileSet, petriAliases map[string]struct{}) (int, bool) {
+	typed, ok := node.(*ast.SelectorExpr)
+	if !ok {
+		return 0, false
+	}
+	ident, ok := typed.X.(*ast.Ident)
+	if !ok || typed.Sel == nil || typed.Sel.Name != "TransitionExhaustion" {
+		return 0, false
+	}
+	if _, ok := petriAliases[ident.Name]; !ok {
+		return 0, false
+	}
+	return fset.Position(typed.Sel.Pos()).Line, true
+}
+
+func identTransitionExhaustionLine(file *ast.File, decl ast.Decl, node ast.Node, fset *token.FileSet) (int, bool) {
+	typed, ok := node.(*ast.Ident)
+	if !ok || file.Name.Name != "petri" || typed.Name != "TransitionExhaustion" {
+		return 0, false
+	}
+	if selectorUsesIdent(decl, typed) {
+		return 0, false
+	}
+	return fset.Position(typed.Pos()).Line, true
+}
+
+func selectorUsesIdent(decl ast.Decl, target *ast.Ident) bool {
+	parentIsSelector := false
+	ast.Inspect(decl, func(inner ast.Node) bool {
+		selector, ok := inner.(*ast.SelectorExpr)
+		if !ok || selector.Sel == nil {
+			return true
+		}
+		if selector.Sel == target {
+			parentIsSelector = true
+			return false
+		}
+		return true
+	})
+	return parentIsSelector
 }
 
 func transitionImportAliases(file *ast.File) map[string]struct{} {

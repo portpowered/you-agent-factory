@@ -322,6 +322,7 @@ func TestBuildFactoryService_RecordModeRecordsSubmittedWorkAtEngineTick(t *testi
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper intentionally validates the replay artifact event contract in one place.
 func assertReplayArtifactStoresCanonicalEvents(t *testing.T, path string, artifact *interfaces.ReplayArtifact, wantSubsequence []factoryapi.FactoryEventType) {
 	t.Helper()
 
@@ -379,6 +380,7 @@ func forbiddenReplayConfigStorageKeys() []string {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this record-mode runtime test keeps late artifact streaming assertions together on the service seam.
 func TestBuildFactoryService_RecordModeStreamsReadableArtifactBeforeShutdown(t *testing.T) {
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, minimalFactoryConfig())

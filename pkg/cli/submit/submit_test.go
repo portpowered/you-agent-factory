@@ -60,6 +60,7 @@ func TestSubmit_BlankName(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this CLI boundary test keeps the JSON request contract, headers, and response assertions in one flow.
 func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	// Start a mock server that validates the request and returns success.
 	var receivedReq factoryapi.SubmitWorkRequest

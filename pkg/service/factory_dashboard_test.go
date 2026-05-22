@@ -90,6 +90,7 @@ func TestFactoryService_SimpleDashboardRenderInputUsesRenderData(t *testing.T) {
 	assertSimpleDashboardSessionRowsMatchRenderData(t, failed)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this service-mode API seam test keeps callback, submit, subscribe, and snapshot assertions in one flow.
 func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing.T) {
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, minimalFactoryConfig())

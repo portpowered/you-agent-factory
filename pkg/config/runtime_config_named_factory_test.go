@@ -19,66 +19,9 @@ func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 	}
 
 	wantDir := filepath.Join(rootDir, "alpha")
-	if factoryDir != wantDir {
-		t.Fatalf("factory dir = %q, want %q", factoryDir, wantDir)
-	}
-	for _, path := range []string{
-		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
-		filepath.Join(factoryDir, interfaces.InputsDir),
-		filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName),
-		filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName),
-		filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-alpha", interfaces.FactoryAgentsFileName),
-	} {
-		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("expected persisted named-factory path %s: %v", path, err)
-		}
-	}
-
-	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
-	if err != nil {
-		t.Fatalf("ReadFile(factory.json): %v", err)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(factoryJSON, &payload); err != nil {
-		t.Fatalf("Unmarshal(factory.json): %v", err)
-	}
-	workerPayloads, ok := payload["workers"].([]any)
-	if !ok || len(workerPayloads) != 1 {
-		t.Fatalf("expected one persisted worker payload, got %#v", payload["workers"])
-	}
-	workerPayload, ok := workerPayloads[0].(map[string]any)
-	if !ok {
-		t.Fatalf("expected persisted worker payload object, got %#v", workerPayloads[0])
-	}
-	if _, ok := workerPayload["body"]; ok {
-		t.Fatalf("expected persisted worker payload to omit inline body, got %#v", workerPayload)
-	}
-	workstationPayloads, ok := payload["workstations"].([]any)
-	if !ok || len(workstationPayloads) != 1 {
-		t.Fatalf("expected one persisted workstation payload, got %#v", payload["workstations"])
-	}
-	workstationPayload, ok := workstationPayloads[0].(map[string]any)
-	if !ok {
-		t.Fatalf("expected persisted workstation payload object, got %#v", workstationPayloads[0])
-	}
-	if _, ok := workstationPayload["body"]; ok {
-		t.Fatalf("expected persisted workstation payload to omit inline body, got %#v", workstationPayload)
-	}
-
-	workerAgents, err := os.ReadFile(filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName))
-	if err != nil {
-		t.Fatalf("ReadFile(worker AGENTS.md): %v", err)
-	}
-	if got := string(workerAgents); got != "You are the executor.\n" {
-		t.Fatalf("persisted worker AGENTS.md = %q, want body-only worker content", got)
-	}
-	workstationAgents, err := os.ReadFile(filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-alpha", interfaces.FactoryAgentsFileName))
-	if err != nil {
-		t.Fatalf("ReadFile(workstation AGENTS.md): %v", err)
-	}
-	if got := string(workstationAgents); got != "Implement {{ .WorkID }}.\n" {
-		t.Fatalf("persisted workstation AGENTS.md = %q, want body-only workstation content", got)
-	}
+	assertPersistedNamedFactoryLayout(t, factoryDir, wantDir)
+	assertPersistedNamedFactoryPayload(t, factoryDir)
+	assertPersistedNamedFactoryAgents(t, factoryDir)
 
 	loaded, err := LoadRuntimeConfig(factoryDir, nil)
 	if err != nil {
@@ -117,35 +60,7 @@ func TestPersistNamedFactory_StripsSupportedBundledFileInlineContentFromFactoryJ
 	if !ok || len(bundledFiles) != 3 {
 		t.Fatalf("expected three bundled files, got %#v", resourceManifest["bundledFiles"])
 	}
-	for _, entry := range bundledFiles {
-		bundledFile, ok := entry.(map[string]any)
-		if !ok {
-			t.Fatalf("expected bundled file object, got %#v", entry)
-		}
-		content, ok := bundledFile["content"].(map[string]any)
-		if !ok {
-			t.Fatalf("expected bundled file content object, got %#v", bundledFile["content"])
-		}
-		targetPath, _ := bundledFile["targetPath"].(string)
-		switch targetPath {
-		case "Makefile":
-			if got := content["inline"]; got != "test:\n\tgo test ./...\n" {
-				t.Fatalf("expected persisted root helper inline content to stay inlined, got %#v", content)
-			}
-			if got := content["encoding"]; got != "utf-8" {
-				t.Fatalf("expected persisted root helper encoding to stay canonical, got %#v", content)
-			}
-		case "factory/docs/README.md", "factory/scripts/execute-story.ps1":
-			if _, ok := content["inline"]; ok {
-				t.Fatalf("expected persisted bundled file inline content to be omitted, got %#v", content)
-			}
-			if got := content["encoding"]; got != "utf-8" {
-				t.Fatalf("expected persisted bundled file encoding to stay canonical, got %#v", content)
-			}
-		default:
-			t.Fatalf("unexpected persisted bundled file targetPath = %#v", targetPath)
-		}
-	}
+	assertPersistedBundledFileEntries(t, bundledFiles)
 
 	loaded, err := LoadRuntimeConfig(factoryDir, nil)
 	if err != nil {
@@ -433,5 +348,118 @@ func TestResolveNamedFactoryDir_RejectsDirectoryWithoutFactoryConfig(t *testing.
 	}
 	if got := err.Error(); !containsAll(got, `resolve factory "beta"`, "find factory config") {
 		t.Fatalf("expected missing-config resolution error, got %v", err)
+	}
+}
+
+func assertPersistedNamedFactoryLayout(t *testing.T, factoryDir, wantDir string) {
+	t.Helper()
+
+	if factoryDir != wantDir {
+		t.Fatalf("factory dir = %q, want %q", factoryDir, wantDir)
+	}
+	for _, path := range []string{
+		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+		filepath.Join(factoryDir, interfaces.InputsDir),
+		filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName),
+		filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-alpha", interfaces.FactoryAgentsFileName),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected persisted named-factory path %s: %v", path, err)
+		}
+	}
+}
+
+func assertPersistedNamedFactoryPayload(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(factoryJSON, &payload); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	workerPayloads, ok := payload["workers"].([]any)
+	if !ok || len(workerPayloads) != 1 {
+		t.Fatalf("expected one persisted worker payload, got %#v", payload["workers"])
+	}
+	workerPayload, ok := workerPayloads[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected persisted worker payload object, got %#v", workerPayloads[0])
+	}
+	if _, ok := workerPayload["body"]; ok {
+		t.Fatalf("expected persisted worker payload to omit inline body, got %#v", workerPayload)
+	}
+	workstationPayloads, ok := payload["workstations"].([]any)
+	if !ok || len(workstationPayloads) != 1 {
+		t.Fatalf("expected one persisted workstation payload, got %#v", payload["workstations"])
+	}
+	workstationPayload, ok := workstationPayloads[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected persisted workstation payload object, got %#v", workstationPayloads[0])
+	}
+	if _, ok := workstationPayload["body"]; ok {
+		t.Fatalf("expected persisted workstation payload to omit inline body, got %#v", workstationPayload)
+	}
+}
+
+func assertPersistedNamedFactoryAgents(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	workerAgents, err := os.ReadFile(filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName))
+	if err != nil {
+		t.Fatalf("ReadFile(worker AGENTS.md): %v", err)
+	}
+	if got := string(workerAgents); got != "You are the executor.\n" {
+		t.Fatalf("persisted worker AGENTS.md = %q, want body-only worker content", got)
+	}
+	workstationAgents, err := os.ReadFile(filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-alpha", interfaces.FactoryAgentsFileName))
+	if err != nil {
+		t.Fatalf("ReadFile(workstation AGENTS.md): %v", err)
+	}
+	if got := string(workstationAgents); got != "Implement {{ .WorkID }}.\n" {
+		t.Fatalf("persisted workstation AGENTS.md = %q, want body-only workstation content", got)
+	}
+}
+
+func assertPersistedBundledFileEntries(t *testing.T, bundledFiles []any) {
+	t.Helper()
+
+	for _, entry := range bundledFiles {
+		bundledFile, ok := entry.(map[string]any)
+		if !ok {
+			t.Fatalf("expected bundled file object, got %#v", entry)
+		}
+		content, ok := bundledFile["content"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected bundled file content object, got %#v", bundledFile["content"])
+		}
+		assertPersistedBundledFileContent(t, bundledFile["targetPath"], content)
+	}
+}
+
+func assertPersistedBundledFileContent(t *testing.T, targetPathValue any, content map[string]any) {
+	t.Helper()
+
+	targetPath, _ := targetPathValue.(string)
+	switch targetPath {
+	case "Makefile":
+		if got := content["inline"]; got != "test:\n\tgo test ./...\n" {
+			t.Fatalf("expected persisted root helper inline content to stay inlined, got %#v", content)
+		}
+		if got := content["encoding"]; got != "utf-8" {
+			t.Fatalf("expected persisted root helper encoding to stay canonical, got %#v", content)
+		}
+	case "factory/docs/README.md", "factory/scripts/execute-story.ps1":
+		if _, ok := content["inline"]; ok {
+			t.Fatalf("expected persisted bundled file inline content to be omitted, got %#v", content)
+		}
+		if got := content["encoding"]; got != "utf-8" {
+			t.Fatalf("expected persisted bundled file encoding to stay canonical, got %#v", content)
+		}
+	default:
+		t.Fatalf("unexpected persisted bundled file targetPath = %#v", targetPath)
 	}
 }

@@ -123,58 +123,13 @@ func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *t
 	if err != nil {
 		t.Fatalf("mapper.Expand: %v", err)
 	}
-
-	if len(cfg.WorkTypes) != 1 || cfg.WorkTypes[0].Name != "story" {
-		t.Fatalf("expected one parsed work type named story, got %#v", cfg.WorkTypes)
-	}
-	if cfg.Project != "analytics-platform" {
-		t.Fatalf("expected id analytics-platform to map to project, got %q", cfg.Project)
-	}
-	if cfg.Name != "analytics-factory" {
-		t.Fatalf("expected name analytics-factory to map through boundary, got %q", cfg.Name)
-	}
-
-	if cfg.Workstations[0].ID != "execute-story-id" {
-		t.Fatalf("expected workstation id execute-story-id, got %q", cfg.Workstations[0].ID)
-	}
-	if cfg.Workstations[0].Kind != "cron" {
-		t.Fatalf("expected workstation kind cron, got %q", cfg.Workstations[0].Kind)
-	}
-	if cfg.Workstations[0].Resources[0].Capacity != 2 {
-		t.Fatalf("expected canonical capacity 2, got %d", cfg.Workstations[0].Resources[0].Capacity)
-	}
-	if cfg.Workstations[0].Cron == nil || cfg.Workstations[0].Cron.Jitter != "1s" || cfg.Workstations[0].Cron.ExpiryWindow != "20s" {
-		t.Fatalf("expected cron jitter and expiry_window to be preserved, got %#v", cfg.Workstations[0].Cron)
-	}
-	if cfg.Workstations[0].Cron.Schedule != "*/10 * * * *" || !cfg.Workstations[0].Cron.TriggerAtStart {
-		t.Fatalf("expected cron schedule and trigger_at_start to be preserved, got %#v", cfg.Workstations[0].Cron)
-	}
+	assertExpandedCanonicalBoundaryConfig(t, cfg)
 
 	flattened, err := mapper.Flatten(cfg)
 	if err != nil {
 		t.Fatalf("mapper.Flatten: %v", err)
 	}
-
-	var payload map[string]any
-	if err := json.Unmarshal(flattened, &payload); err != nil {
-		t.Fatalf("unmarshal flattened payload: %v", err)
-	}
-
-	if _, ok := payload["workTypes"]; !ok {
-		t.Fatalf("expected flattened payload to use workTypes key")
-	}
-	if _, ok := payload["work_types"]; ok {
-		t.Fatalf("expected flattened payload not to include work_types key")
-	}
-	workstationsPayload := payload["workstations"].([]any)
-	workstationPayload := workstationsPayload[0].(map[string]any)
-	cronPayload := workstationPayload["cron"].(map[string]any)
-	if _, ok := cronPayload["expiryWindow"]; !ok {
-		t.Fatalf("expected canonical cron config to use expiryWindow key")
-	}
-	if _, ok := cronPayload["expiry_window"]; ok {
-		t.Fatalf("expected canonical cron config not to include expiry_window key")
-	}
+	assertFlattenedCanonicalBoundaryPayload(t, flattened)
 }
 
 func TestFactoryConfigMapper_FlattenAndExpandPreservesNonSuccessRouteArrays(t *testing.T) {
@@ -244,6 +199,59 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesNonSuccessRouteArrays(t *t
 	}
 	if !reflect.DeepEqual(got.OnFailure, want.OnFailure) {
 		t.Fatalf("onFailure roundtrip mismatch\n got: %#v\nwant: %#v", got.OnFailure, want.OnFailure)
+	}
+}
+
+func assertExpandedCanonicalBoundaryConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
+	if len(cfg.WorkTypes) != 1 || cfg.WorkTypes[0].Name != "story" {
+		t.Fatalf("expected one parsed work type named story, got %#v", cfg.WorkTypes)
+	}
+	if cfg.Project != "analytics-platform" {
+		t.Fatalf("expected id analytics-platform to map to project, got %q", cfg.Project)
+	}
+	if cfg.Name != "analytics-factory" {
+		t.Fatalf("expected name analytics-factory to map through boundary, got %q", cfg.Name)
+	}
+	if cfg.Workstations[0].ID != "execute-story-id" {
+		t.Fatalf("expected workstation id execute-story-id, got %q", cfg.Workstations[0].ID)
+	}
+	if cfg.Workstations[0].Kind != "cron" {
+		t.Fatalf("expected workstation kind cron, got %q", cfg.Workstations[0].Kind)
+	}
+	if cfg.Workstations[0].Resources[0].Capacity != 2 {
+		t.Fatalf("expected canonical capacity 2, got %d", cfg.Workstations[0].Resources[0].Capacity)
+	}
+	if cfg.Workstations[0].Cron == nil || cfg.Workstations[0].Cron.Jitter != "1s" || cfg.Workstations[0].Cron.ExpiryWindow != "20s" {
+		t.Fatalf("expected cron jitter and expiry_window to be preserved, got %#v", cfg.Workstations[0].Cron)
+	}
+	if cfg.Workstations[0].Cron.Schedule != "*/10 * * * *" || !cfg.Workstations[0].Cron.TriggerAtStart {
+		t.Fatalf("expected cron schedule and trigger_at_start to be preserved, got %#v", cfg.Workstations[0].Cron)
+	}
+}
+
+func assertFlattenedCanonicalBoundaryPayload(t *testing.T, flattened []byte) {
+	t.Helper()
+
+	var payload map[string]any
+	if err := json.Unmarshal(flattened, &payload); err != nil {
+		t.Fatalf("unmarshal flattened payload: %v", err)
+	}
+	if _, ok := payload["workTypes"]; !ok {
+		t.Fatalf("expected flattened payload to use workTypes key")
+	}
+	if _, ok := payload["work_types"]; ok {
+		t.Fatalf("expected flattened payload not to include work_types key")
+	}
+	workstationsPayload := payload["workstations"].([]any)
+	workstationPayload := workstationsPayload[0].(map[string]any)
+	cronPayload := workstationPayload["cron"].(map[string]any)
+	if _, ok := cronPayload["expiryWindow"]; !ok {
+		t.Fatalf("expected canonical cron config to use expiryWindow key")
+	}
+	if _, ok := cronPayload["expiry_window"]; ok {
+		t.Fatalf("expected canonical cron config not to include expiry_window key")
 	}
 }
 

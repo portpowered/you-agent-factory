@@ -19,65 +19,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
-// backendsizecheck:ignore-function this API integration test keeps the full cross-session assertion path in one place until the harness is split.
 func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing.T) {
 	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
 	defaultFactoryID := "root-runtime"
 	betaFactoryID := "beta-runtime"
-	defaultSession := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
-				"tok-default-1": listWorkToken("tok-default-1", "default-work-1", "task:init", "task", now),
-			},
-		},
-		Net: &state.Net{
-			Places: map[string]*petri.Place{
-				"task:init": {ID: "task:init", TypeID: "task", State: "init"},
-				"task:done": {ID: "task:done", TypeID: "task", State: "done"},
-			},
-			WorkTypes: map[string]*state.WorkType{
-				"task": {
-					ID: "task",
-					States: []state.StateDefinition{
-						{Value: "init", Category: state.StateCategoryInitial},
-						{Value: "done", Category: state.StateCategoryTerminal},
-					},
-				},
-			},
-		},
-		FactoryEventStream: &interfaces.FactoryEventStream{
-			History: []factoryapi.FactoryEvent{{Id: "factory-event/work-request/default-history", Type: factoryapi.FactoryEventTypeWorkRequest}},
-			Events:  make(chan factoryapi.FactoryEvent),
-		},
-		CurrentNamedFactory: &factoryapi.Factory{Name: apisurface.DefaultCurrentFactoryName, Id: &defaultFactoryID},
-	}
-	betaSession := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
-				"tok-beta-1": listWorkToken("tok-beta-1", "beta-work-1", "task:init", "task", now),
-			},
-		},
-		Net: &state.Net{
-			Places: map[string]*petri.Place{
-				"task:init": {ID: "task:init", TypeID: "task", State: "init"},
-				"task:done": {ID: "task:done", TypeID: "task", State: "done"},
-			},
-			WorkTypes: map[string]*state.WorkType{
-				"task": {
-					ID: "task",
-					States: []state.StateDefinition{
-						{Value: "init", Category: state.StateCategoryInitial},
-						{Value: "done", Category: state.StateCategoryTerminal},
-					},
-				},
-			},
-		},
-		FactoryEventStream: &interfaces.FactoryEventStream{
-			History: []factoryapi.FactoryEvent{{Id: "factory-event/work-request/beta-history", Type: factoryapi.FactoryEventTypeWorkRequest}},
-			Events:  make(chan factoryapi.FactoryEvent),
-		},
-		CurrentNamedFactory: &factoryapi.Factory{Name: "beta", Id: &betaFactoryID},
-	}
+	defaultSession := newSessionScopedMockFactory(now, &defaultFactoryID, apisurface.DefaultCurrentFactoryName, "tok-default-1", "default-work-1", "factory-event/work-request/default-history")
+	betaSession := newSessionScopedMockFactory(now, &betaFactoryID, "beta", "tok-beta-1", "beta-work-1", "factory-event/work-request/beta-history")
 	srv := newTestServer(&testutil.MockFactory{
 		CurrentNamedFactory: &factoryapi.Factory{Name: apisurface.DefaultCurrentFactoryName, Id: &defaultFactoryID},
 		SessionFactories: map[string]*testutil.MockFactory{
@@ -88,33 +35,77 @@ func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
-	submitResp, err := http.Post(server.URL+"/factories/session-beta/work", "application/json", bytes.NewBufferString(`{"name":"scoped-submit","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"scoped"}}`))
-	if err != nil {
-		t.Fatalf("POST /factories/session-beta/work: %v", err)
+	assertScopedSessionSubmit(t, server.URL, betaSession, defaultSession)
+	assertScopedSessionList(t, server.URL, betaSession, defaultSession)
+	assertScopedSessionWorkRead(t, server.URL)
+	assertScopedSessionStatus(t, server.URL)
+	assertScopedCurrentFactory(t, server.URL, "beta")
+	assertScopedSessionEvents(t, server.URL, "factory-event/work-request/beta-history")
+}
+
+func newSessionScopedMockFactory(
+	now time.Time,
+	factoryID *string,
+	factoryName string,
+	tokenID string,
+	workID string,
+	historyEventID string,
+) *testutil.MockFactory {
+	return &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: map[string]*interfaces.Token{
+				tokenID: listWorkToken(tokenID, workID, "task:init", "task", now),
+			},
+		},
+		Net: sessionScopedStateNet(),
+		FactoryEventStream: &interfaces.FactoryEventStream{
+			History: []factoryapi.FactoryEvent{{Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest}},
+			Events:  make(chan factoryapi.FactoryEvent),
+		},
+		CurrentNamedFactory: &factoryapi.Factory{Name: factoryName, Id: factoryID},
 	}
-	defer submitResp.Body.Close()
-	if submitResp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(submitResp.Body)
-		t.Fatalf("POST /factories/session-beta/work status = %d, want 201: %s", submitResp.StatusCode, string(body))
+}
+
+func sessionScopedStateNet() *state.Net {
+	return &state.Net{
+		Places: map[string]*petri.Place{
+			"task:init": {ID: "task:init", TypeID: "task", State: "init"},
+			"task:done": {ID: "task:done", TypeID: "task", State: "done"},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "done", Category: state.StateCategoryTerminal},
+				},
+			},
+		},
 	}
+}
+
+func assertScopedSessionSubmit(t *testing.T, serverURL string, betaSession *testutil.MockFactory, defaultSession *testutil.MockFactory) {
+	t.Helper()
+
+	response := requireHTTPSuccess(t, http.MethodPost, serverURL+"/factories/session-beta/work", bytes.NewBufferString(`{"name":"scoped-submit","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"scoped"}}`), "application/json", http.StatusCreated)
+	defer response.Body.Close()
+
 	if len(betaSession.WorkRequests) != 1 {
 		t.Fatalf("beta submitted work requests = %d, want 1", len(betaSession.WorkRequests))
 	}
 	if len(defaultSession.WorkRequests) != 0 {
 		t.Fatalf("default submitted work requests = %d, want 0", len(defaultSession.WorkRequests))
 	}
+}
 
-	listResp, err := http.Get(server.URL + "/factories/session-beta/work")
-	if err != nil {
-		t.Fatalf("GET /factories/session-beta/work: %v", err)
-	}
-	defer listResp.Body.Close()
-	if listResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(listResp.Body)
-		t.Fatalf("GET /factories/session-beta/work status = %d, want 200: %s", listResp.StatusCode, string(body))
-	}
+func assertScopedSessionList(t *testing.T, serverURL string, betaSession *testutil.MockFactory, defaultSession *testutil.MockFactory) {
+	t.Helper()
+
+	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factories/session-beta/work", nil, "", http.StatusOK)
+	defer response.Body.Close()
+
 	var listBody factoryapi.ListWorkResponse
-	if err := json.NewDecoder(listResp.Body).Decode(&listBody); err != nil {
+	if err := json.NewDecoder(response.Body).Decode(&listBody); err != nil {
 		t.Fatalf("decode scoped list response: %v", err)
 	}
 	if len(listBody.Results) != 1 || stringValue(listBody.Results[0].WorkId) != "beta-work-1" {
@@ -126,61 +117,98 @@ func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing
 	if defaultSession.EngineStateSnapshotCalls != 0 {
 		t.Fatalf("default session snapshot calls = %d, want 0 after scoped list", defaultSession.EngineStateSnapshotCalls)
 	}
+}
 
-	workResp, err := http.Get(server.URL + "/factories/session-beta/work/tok-beta-1")
-	if err != nil {
-		t.Fatalf("GET /factories/session-beta/work/tok-beta-1: %v", err)
-	}
-	defer workResp.Body.Close()
-	if workResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(workResp.Body)
-		t.Fatalf("GET /factories/session-beta/work/tok-beta-1 status = %d, want 200: %s", workResp.StatusCode, string(body))
-	}
+func assertScopedSessionWorkRead(t *testing.T, serverURL string) {
+	t.Helper()
 
-	statusResp, err := http.Get(server.URL + "/factories/session-beta/status")
-	if err != nil {
-		t.Fatalf("GET /factories/session-beta/status: %v", err)
-	}
-	defer statusResp.Body.Close()
-	if statusResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(statusResp.Body)
-		t.Fatalf("GET /factories/session-beta/status status = %d, want 200: %s", statusResp.StatusCode, string(body))
-	}
+	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factories/session-beta/work/tok-beta-1", nil, "", http.StatusOK)
+	defer response.Body.Close()
+}
 
-	currentResp, err := http.Get(server.URL + "/factories/session-beta/factory/~current")
-	if err != nil {
-		t.Fatalf("GET /factories/session-beta/factory/~current: %v", err)
-	}
-	defer currentResp.Body.Close()
-	if currentResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(currentResp.Body)
-		t.Fatalf("GET /factories/session-beta/factory/~current status = %d, want 200: %s", currentResp.StatusCode, string(body))
-	}
+func assertScopedSessionStatus(t *testing.T, serverURL string) {
+	t.Helper()
+
+	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factories/session-beta/status", nil, "", http.StatusOK)
+	defer response.Body.Close()
+}
+
+func assertScopedCurrentFactory(t *testing.T, serverURL string, wantName string) {
+	t.Helper()
+
+	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factories/session-beta/factory/~current", nil, "", http.StatusOK)
+	defer response.Body.Close()
+
 	var currentBody factoryapi.Factory
-	if err := json.NewDecoder(currentResp.Body).Decode(&currentBody); err != nil {
+	if err := json.NewDecoder(response.Body).Decode(&currentBody); err != nil {
 		t.Fatalf("decode scoped current factory response: %v", err)
 	}
-	if currentBody.Name != "beta" {
-		t.Fatalf("scoped current factory name = %q, want beta", currentBody.Name)
+	if currentBody.Name != wantName {
+		t.Fatalf("scoped current factory name = %q, want %s", currentBody.Name, wantName)
 	}
+}
 
-	eventsReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/factories/session-beta/events", nil)
+func assertScopedSessionEvents(t *testing.T, serverURL string, wantEventID string) {
+	t.Helper()
+
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/factories/session-beta/events", nil)
 	if err != nil {
 		t.Fatalf("new scoped /events request: %v", err)
 	}
-	eventsResp, err := http.DefaultClient.Do(eventsReq)
+	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatalf("GET /factories/session-beta/events: %v", err)
 	}
-	defer eventsResp.Body.Close()
-	if eventsResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(eventsResp.Body)
-		t.Fatalf("GET /factories/session-beta/events status = %d, want 200: %s", eventsResp.StatusCode, string(body))
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET /factories/session-beta/events status = %d, want 200: %s", response.StatusCode, string(body))
 	}
-	streamed := readSSEFactoryEvent(t, bufio.NewReader(eventsResp.Body))
-	if streamed.Id != "factory-event/work-request/beta-history" {
-		t.Fatalf("scoped streamed event id = %q, want beta history", streamed.Id)
+
+	streamed := readSSEFactoryEvent(t, bufio.NewReader(response.Body))
+	if streamed.Id != wantEventID {
+		t.Fatalf("scoped streamed event id = %q, want %s", streamed.Id, wantEventID)
 	}
+}
+
+func requireHTTPSuccess(
+	t *testing.T,
+	method string,
+	url string,
+	body io.Reader,
+	contentType string,
+	wantStatus int,
+) *http.Response {
+	t.Helper()
+
+	var (
+		response *http.Response
+		err      error
+	)
+	switch method {
+	case http.MethodGet:
+		response, err = http.Get(url)
+	case http.MethodPost:
+		response, err = http.Post(url, contentType, body)
+	default:
+		request, requestErr := http.NewRequestWithContext(context.Background(), method, url, body)
+		if requestErr != nil {
+			t.Fatalf("%s %s request: %v", method, url, requestErr)
+		}
+		if contentType != "" {
+			request.Header.Set("Content-Type", contentType)
+		}
+		response, err = http.DefaultClient.Do(request)
+	}
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+	if response.StatusCode != wantStatus {
+		bodyBytes, _ := io.ReadAll(response.Body)
+		response.Body.Close()
+		t.Fatalf("%s %s status = %d, want %d: %s", method, url, response.StatusCode, wantStatus, string(bodyBytes))
+	}
+	return response
 }
 
 func TestSessionScopedAPI_UnknownSessionReturnsNotFound(t *testing.T) {

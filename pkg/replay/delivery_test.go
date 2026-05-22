@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this replay hook test keeps the tick-ordered work request event contract readable in one end-to-end flow.
 func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 	hook, err := NewSubmissionHook(testReplayArtifact(t, replayWorkRequestEvent(t, "request-1", 2, "api", []factoryapi.Work{{
 		Name:         "work-1",

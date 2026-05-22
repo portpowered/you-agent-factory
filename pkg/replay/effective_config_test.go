@@ -326,6 +326,7 @@ func assertReplayInitialTopologyProjection(t *testing.T, replayProjection interf
 	})
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this generated-factory contract test keeps the canonical workstation projection assertions in one readable flow.
 func TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{

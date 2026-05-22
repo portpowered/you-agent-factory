@@ -457,6 +457,7 @@ func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPag
 	assertListJSONPage(t, secondOut.Bytes(), "work-2", nil, "second")
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this JSON output test keeps the generated page shape assertions together so the CLI surface stays reviewer-readable.
 func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
 	nextToken := "cursor-2"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -57,26 +57,7 @@ Execute the story script.
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
-	if len(cfg.Workers) != 1 || len(cfg.Workstations) != 1 {
-		t.Fatalf("expected flattened config to preserve one worker and workstation, got %d/%d", len(cfg.Workers), len(cfg.Workstations))
-	}
-	worker := cfg.Workers[0]
-	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "powershell" {
-		t.Fatalf("flattened worker definition = %#v", worker)
-	}
-	if len(worker.Args) != 2 || worker.Args[0] != "-File" || worker.Args[1] != "scripts/execute-story.ps1" {
-		t.Fatalf("flattened worker args = %#v", worker.Args)
-	}
-	workstation := cfg.Workstations[0]
-	if workstation.Type != interfaces.WorkstationTypeModel {
-		t.Fatalf("flattened workstation type = %q, want %q", workstation.Type, interfaces.WorkstationTypeModel)
-	}
-	if workstation.WorkingDirectory != "/repo/{{ .WorkID }}" || workstation.Worktree != "worktrees/{{ .WorkID }}" {
-		t.Fatalf("flattened workstation execution context = %#v", workstation)
-	}
-	if workstation.Env["SCRIPT_MODE"] != "portable" {
-		t.Fatalf("flattened workstation env = %#v", workstation.Env)
-	}
+	assertFlattenedInlineScriptConfig(t, cfg)
 
 	standaloneDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(standaloneDir, interfaces.FactoryConfigFile), flattened, 0o644); err != nil {
@@ -87,26 +68,7 @@ Execute the story script.
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(standalone flattened config): %v", err)
 	}
-	loadedWorker, ok := loaded.Worker("executor")
-	if !ok {
-		t.Fatal("expected flattened script worker definition to load")
-	}
-	if loadedWorker.Type != interfaces.WorkerTypeScript || loadedWorker.Command != "powershell" || loadedWorker.Timeout != "45m" {
-		t.Fatalf("loaded script worker definition = %#v", loadedWorker)
-	}
-	loadedWorkstation, ok := loaded.Workstation("execute-story")
-	if !ok {
-		t.Fatal("expected flattened inline workstation definition to load")
-	}
-	if loadedWorkstation.Type != interfaces.WorkstationTypeModel {
-		t.Fatalf("loaded workstation type = %q, want %q", loadedWorkstation.Type, interfaces.WorkstationTypeModel)
-	}
-	if loadedWorkstation.WorkingDirectory != "/repo/{{ .WorkID }}" || loadedWorkstation.Worktree != "worktrees/{{ .WorkID }}" {
-		t.Fatalf("loaded workstation execution context = %#v", loadedWorkstation)
-	}
-	if loadedWorkstation.Env["SCRIPT_MODE"] != "portable" {
-		t.Fatalf("loaded workstation env = %#v", loadedWorkstation.Env)
-	}
+	assertLoadedInlineScriptRuntime(t, loaded)
 }
 
 func TestLoadRuntimeConfig_RejectsMissingSplitWorkstationWhenScriptExecutionContextIsInline(t *testing.T) {
@@ -162,5 +124,55 @@ func TestLoadRuntimeConfig_RejectsMissingSplitWorkstationWhenScriptExecutionCont
 	}
 	if strings.Contains(err.Error(), `workstation "execute-story"`) {
 		t.Fatalf("expected error to point at the missing workstation only, got %v", err)
+	}
+}
+
+func assertFlattenedInlineScriptConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
+	if len(cfg.Workers) != 1 || len(cfg.Workstations) != 1 {
+		t.Fatalf("expected flattened config to preserve one worker and workstation, got %d/%d", len(cfg.Workers), len(cfg.Workstations))
+	}
+	worker := cfg.Workers[0]
+	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "powershell" {
+		t.Fatalf("flattened worker definition = %#v", worker)
+	}
+	if len(worker.Args) != 2 || worker.Args[0] != "-File" || worker.Args[1] != "scripts/execute-story.ps1" {
+		t.Fatalf("flattened worker args = %#v", worker.Args)
+	}
+	workstation := cfg.Workstations[0]
+	if workstation.Type != interfaces.WorkstationTypeModel {
+		t.Fatalf("flattened workstation type = %q, want %q", workstation.Type, interfaces.WorkstationTypeModel)
+	}
+	if workstation.WorkingDirectory != "/repo/{{ .WorkID }}" || workstation.Worktree != "worktrees/{{ .WorkID }}" {
+		t.Fatalf("flattened workstation execution context = %#v", workstation)
+	}
+	if workstation.Env["SCRIPT_MODE"] != "portable" {
+		t.Fatalf("flattened workstation env = %#v", workstation.Env)
+	}
+}
+
+func assertLoadedInlineScriptRuntime(t *testing.T, loaded *LoadedFactoryConfig) {
+	t.Helper()
+
+	loadedWorker, ok := loaded.Worker("executor")
+	if !ok {
+		t.Fatal("expected flattened script worker definition to load")
+	}
+	if loadedWorker.Type != interfaces.WorkerTypeScript || loadedWorker.Command != "powershell" || loadedWorker.Timeout != "45m" {
+		t.Fatalf("loaded script worker definition = %#v", loadedWorker)
+	}
+	loadedWorkstation, ok := loaded.Workstation("execute-story")
+	if !ok {
+		t.Fatal("expected flattened inline workstation definition to load")
+	}
+	if loadedWorkstation.Type != interfaces.WorkstationTypeModel {
+		t.Fatalf("loaded workstation type = %q, want %q", loadedWorkstation.Type, interfaces.WorkstationTypeModel)
+	}
+	if loadedWorkstation.WorkingDirectory != "/repo/{{ .WorkID }}" || loadedWorkstation.Worktree != "worktrees/{{ .WorkID }}" {
+		t.Fatalf("loaded workstation execution context = %#v", loadedWorkstation)
+	}
+	if loadedWorkstation.Env["SCRIPT_MODE"] != "portable" {
+		t.Fatalf("loaded workstation env = %#v", loadedWorkstation.Env)
 	}
 }

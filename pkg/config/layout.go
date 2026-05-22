@@ -392,6 +392,12 @@ func applyWorkerRuntimeDefinition(worker *interfaces.WorkerConfig, def *interfac
 		return
 	}
 	runtimeDef := CloneWorkerConfig(*def)
+	applyWorkerRuntimeIdentity(worker, runtimeDef)
+	applyWorkerRuntimeExecution(worker, runtimeDef)
+	applyWorkerRuntimeResources(worker, runtimeDef)
+}
+
+func applyWorkerRuntimeIdentity(worker *interfaces.WorkerConfig, runtimeDef interfaces.WorkerConfig) {
 	if worker.Name == "" && runtimeDef.Name != "" {
 		worker.Name = runtimeDef.Name
 	}
@@ -419,14 +425,14 @@ func applyWorkerRuntimeDefinition(worker *interfaces.WorkerConfig, def *interfac
 	if runtimeDef.SessionID != "" {
 		worker.SessionID = runtimeDef.SessionID
 	}
+}
+
+func applyWorkerRuntimeExecution(worker *interfaces.WorkerConfig, runtimeDef interfaces.WorkerConfig) {
 	if runtimeDef.Command != "" {
 		worker.Command = runtimeDef.Command
 	}
 	if len(runtimeDef.Args) > 0 {
 		worker.Args = append([]string(nil), runtimeDef.Args...)
-	}
-	if len(runtimeDef.Resources) > 0 {
-		worker.Resources = append([]interfaces.ResourceConfig(nil), runtimeDef.Resources...)
 	}
 	if runtimeDef.Concurrency != 0 {
 		worker.Concurrency = runtimeDef.Concurrency
@@ -448,6 +454,12 @@ func applyWorkerRuntimeDefinition(worker *interfaces.WorkerConfig, def *interfac
 	}
 	if runtimeDef.Body != "" {
 		worker.Body = runtimeDef.Body
+	}
+}
+
+func applyWorkerRuntimeResources(worker *interfaces.WorkerConfig, runtimeDef interfaces.WorkerConfig) {
+	if len(runtimeDef.Resources) > 0 {
+		worker.Resources = append([]interfaces.ResourceConfig(nil), runtimeDef.Resources...)
 	}
 }
 

@@ -390,6 +390,7 @@ func TestAgentExecutor_PropagatesExecutionMetadataToProviderRequest(t *testing.T
 	assertExecutionMetadataEqual(t, want, provider.lastReq.Dispatch.Execution)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this inference request contract test keeps the canonical dispatch payload assertions together on the worker seam.
 func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{

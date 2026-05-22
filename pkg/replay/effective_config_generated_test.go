@@ -59,6 +59,7 @@ Fallback body.
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the embedded generated-factory artifact contract together across all authored sections.
 func assertEmbeddedGeneratedFactory(t *testing.T, generated factoryapi.Factory, factoryDir string) {
 	t.Helper()
 
