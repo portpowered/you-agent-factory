@@ -1,5 +1,10 @@
 import { factoryAPIURL } from "../baseUrl";
 import type { components, operations } from "../generated/openapi";
+import {
+  extractAPIErrorPayload,
+  isAPIRecord,
+  readAPIResponseBody,
+} from "../transport";
 export type ProviderSessionDetailResponse =
   components["schemas"]["ProviderSessionDetailResponse"];
 export type ProviderSessionDetailRef =
@@ -13,11 +18,6 @@ export type ProviderSessionDetailsAPIErrorCode =
 
 export interface GetProviderSessionDetailsOptions {
   fetch?: typeof globalThis.fetch;
-}
-
-interface APIErrorResponse {
-  code?: string;
-  message?: string;
 }
 
 const GET_PROVIDER_SESSION_DETAIL_ENDPOINT = "/provider-sessions/detail";
@@ -90,9 +90,9 @@ export async function getProviderSessionDetails(
     );
   }
 
-  const responseBody = await readResponseBody(response);
+  const responseBody = await readAPIResponseBody(response);
   if (!response.ok) {
-    const errorBody = asAPIErrorResponse(responseBody);
+    const errorBody = extractAPIErrorPayload(responseBody);
     throw new ProviderSessionDetailsAPIError(
       errorBody?.message ??
         "The provider-session detail API rejected the request.",
@@ -144,30 +144,6 @@ export function toProviderSessionDetailRef(session: {
   };
 }
 
-async function readResponseBody(response: Response): Promise<unknown> {
-  const rawBody = await response.text();
-  if (rawBody.length === 0) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(rawBody) as unknown;
-  } catch {
-    return rawBody;
-  }
-}
-
-function asAPIErrorResponse(value: unknown): APIErrorResponse | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  return {
-    code: typeof value.code === "string" ? value.code : undefined,
-    message: typeof value.message === "string" ? value.message : undefined,
-  };
-}
-
 function normalizeProviderSessionDetailsAPIErrorCode(
   code: string | undefined,
 ): ProviderSessionDetailsAPIErrorCode {
@@ -184,20 +160,16 @@ function isProviderSessionDetailResponse(
   value: unknown,
 ): value is ProviderSessionDetailResponse {
   return (
-    isRecord(value) &&
-    isRecord(value.providerSession) &&
-    isRecord(value.source) &&
-    isRecord(value.parse) &&
+    isAPIRecord(value) &&
+    isAPIRecord(value.providerSession) &&
+    isAPIRecord(value.source) &&
+    isAPIRecord(value.parse) &&
     Array.isArray(value.parse.turns) &&
     Array.isArray(value.parse.functionCalls) &&
     Array.isArray(value.parse.reasoning) &&
     Array.isArray(value.parse.parseErrors) &&
     Array.isArray(value.parse.unknownEvents)
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function normalizeProviderSessionID(value: string | null | undefined): string | null {

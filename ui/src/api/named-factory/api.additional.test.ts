@@ -8,10 +8,6 @@ const canonicalFactory = {
 } as const;
 
 describe("named factory API error handling", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("fails fast when activation fetch is unavailable", async () => {
     await expect(
       createFactory(canonicalFactory, {

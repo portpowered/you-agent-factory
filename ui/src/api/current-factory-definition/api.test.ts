@@ -202,6 +202,38 @@ describe("getCurrentEditableFactoryDefinition", () => {
     });
   });
 
+  it("normalizes INVALID_FACTORY editable-definition rejections into INVALID_FACTORY_DEFINITION", async () => {
+    await expect(
+      getCurrentEditableFactoryDefinitionDocument({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "INVALID_FACTORY",
+              message: "The editable definition payload is invalid.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 400,
+              statusText: "Bad Request",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY_DEFINITION",
+      message: "The editable definition payload is invalid.",
+      name: "CurrentEditableFactoryDefinitionError",
+      responseBody: {
+        code: "INVALID_FACTORY",
+        message: "The editable definition payload is invalid.",
+      },
+      status: 400,
+      statusText: "Bad Request",
+    });
+  });
+
   it("rejects current-factory payloads that are not editable canonical factory definitions", async () => {
     let thrown: unknown;
 
@@ -430,6 +462,59 @@ describe("getCurrentEditableFactoryDefinition", () => {
       ],
     });
   });
+
+  it("preserves valid structured save error targets from mixed target arrays", async () => {
+    await expect(
+      saveCurrentEditableFactoryDefinitionDocument(
+        {
+          baseVersion: {
+            logical: 9,
+            physical: "2026-05-18T14:25:00Z",
+          },
+          factoryDefinition: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code: "STALE_FACTORY_VERSION",
+                message: "The editable definition is stale.",
+                targets: [
+                  {
+                    id: "base-version",
+                    kind: "save",
+                  },
+                  "invalid-target-entry",
+                ],
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 409,
+                statusText: "Conflict",
+              },
+            ),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "STALE_FACTORY_VERSION",
+      status: 409,
+      targets: [
+        {
+          id: "base-version",
+          kind: "save",
+        },
+      ],
+    });
+  });
+
   it("preserves active-work save rejections from the editable current-factory API", async () => {
     await expect(
       saveCurrentEditableFactoryDefinitionDocument(

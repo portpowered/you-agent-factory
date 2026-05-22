@@ -102,6 +102,72 @@ describe("getProviderSessionDetails", () => {
     });
   });
 
+  it("falls back to INTERNAL_ERROR for unknown provider-session API error codes while preserving the API message", async () => {
+    await expect(
+      getProviderSessionDetails(
+        {
+          id: "sess_alpha",
+          kind: "session_id",
+          provider: "codex",
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code: "SOMETHING_NEW",
+                message: "Provider session detail loading failed.",
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 500,
+                statusText: "Internal Server Error",
+              },
+            ),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "Provider session detail loading failed.",
+      name: "ProviderSessionDetailsAPIError",
+      responseBody: {
+        code: "SOMETHING_NEW",
+        message: "Provider session detail loading failed.",
+      },
+      status: 500,
+      statusText: "Internal Server Error",
+    });
+  });
+
+  it("preserves raw provider-session error bodies when the API response is not JSON", async () => {
+    await expect(
+      getProviderSessionDetails(
+        {
+          id: "sess_alpha",
+          kind: "session_id",
+          provider: "codex",
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response("temporarily unavailable", {
+              status: 503,
+              statusText: "Service Unavailable",
+            }),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "The provider-session detail API rejected the request.",
+      name: "ProviderSessionDetailsAPIError",
+      responseBody: "temporarily unavailable",
+      status: 503,
+      statusText: "Service Unavailable",
+    });
+  });
+
   it("rejects invalid success payloads", async () => {
     let thrown: unknown;
 
