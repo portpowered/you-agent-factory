@@ -6,6 +6,7 @@ import {
   FactoryGraphEditorActionPopover,
   FactoryGraphEditorConfirmationDialog,
   FactoryGraphEditorModeToggle,
+  FactoryGraphEditorStatus,
   type FactoryGraphEditorTool,
   FactoryGraphEditorToolbar,
   FactoryGraphEditorVisibilityPanel,
@@ -100,6 +101,38 @@ describe("factory graph editor controls", () => {
         name: "Enter factory graph editor",
       }),
     ).toBeTruthy();
+  });
+
+  it("renders the unavailable status reason and disables entering edit mode", () => {
+    render(
+      <>
+        <FactoryGraphEditorStatus
+          editorMode={false}
+          editorUnavailableReason="Classifier workstation routes are read-only in this editor."
+          hasChanges={false}
+          isDefinitionLoading={false}
+        />
+        <FactoryGraphEditorModeToggle
+          disabled
+          editorMode={false}
+          onClick={() => {}}
+          tooltipOverride="Classifier workstation routes are read-only in this editor."
+        />
+      </>,
+    );
+
+    expect(
+      screen.getByText(
+        "Editor unavailable: Classifier workstation routes are read-only in this editor.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", {
+          name: "Classifier workstation routes are read-only in this editor.",
+        })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
   });
 
   it("keeps action popovers keyboard reachable without right-click", async () => {

@@ -46,8 +46,13 @@ export function WorkflowActivityBentoCard({
         <CurrentActivityGraphHeaderActions
           compact
           editorMode={editor.editorMode}
+          editorUnavailableClassifierWorkstationName={
+            editor.editorUnavailableClassifierWorkstationName
+          }
           hasChanges={editor.draftState.hasChanges}
-          isDefinitionLoading={editor.editableDefinitionQuery.status === "pending"}
+          isDefinitionLoading={
+            editor.editableDefinitionQuery.status === "pending"
+          }
           loadErrorMessage={editor.editableDefinitionQuery.error?.message}
           locale={locale}
           onToggle={editor.handleEditorModeToggle}

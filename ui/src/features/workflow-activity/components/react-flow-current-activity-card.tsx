@@ -7,7 +7,10 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { DashboardActiveExecution, DashboardSnapshot } from "../../../api/dashboard/types";
+import type {
+  DashboardActiveExecution,
+  DashboardSnapshot,
+} from "../../../api/dashboard/types";
 import type { FactoryValue } from "../../../api/named-factory";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
@@ -15,7 +18,10 @@ import { cn } from "../../../lib/cn";
 import { FactoryGraphEditorDraftActions } from "../../factory-graph-editor/factory-graph-editor-draft-actions";
 import type { CurrentActivityNode } from "../../flowchart/current-activity-nodes";
 import { buildGraphLayout, type GraphLayout } from "../../flowchart/layout";
-import type { FactoryPngImportValue, ReadFactoryImportFile } from "../../import";
+import type {
+  FactoryPngImportValue,
+  ReadFactoryImportFile,
+} from "../../import";
 import {
   type CurrentActivityImportController,
   useCurrentActivityImportController,
@@ -24,12 +30,8 @@ import {
   groupActiveExecutionsByWorkstationNodeID,
   useActiveExecutions,
 } from "../react-flow-current-activity-card-active-executions";
-import {
-  useCurrentActivityGraphEditor,
-} from "../react-flow-current-activity-card-editor";
-import {
-  CurrentActivityGraphHeaderActions,
-} from "./react-flow-current-activity-card-editor-chrome";
+import { useCurrentActivityGraphEditor } from "../react-flow-current-activity-card-editor";
+import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { useFactoryGraphEditorViewModel } from "../react-flow-current-activity-card-editor-graph";
 import {
@@ -389,6 +391,9 @@ export function ReactFlowCurrentActivityCardView(
         <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
           <CurrentActivityGraphHeaderActions
             editorMode={editor.editorMode}
+            editorUnavailableClassifierWorkstationName={
+              editor.editorUnavailableClassifierWorkstationName
+            }
             hasChanges={editor.draftState.hasChanges}
             isDefinitionLoading={
               editor.editableDefinitionQuery.status === "pending"
