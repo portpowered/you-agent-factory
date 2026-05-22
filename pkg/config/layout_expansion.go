@@ -58,42 +58,69 @@ func copySupportedPortableBundledFilesFromSource(sourceDir, targetDir string, cf
 	}
 
 	for _, bundledFile := range cfg.ResourceManifest.BundledFiles {
-		if !shouldOmitSupportedPortableBundledInline(bundledFile) || strings.TrimSpace(bundledFile.Content.Inline) != "" {
-			continue
-		}
-		sourcePath, ok := supportedPortableBundledSourcePath(sourceDir, bundledFile)
-		if !ok {
-			continue
-		}
-		info, err := os.Stat(sourcePath)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			return fmt.Errorf("stat portable bundled file %s: %w", sourcePath, err)
-		}
-		if !info.Mode().IsRegular() {
-			continue
-		}
-		target, err := portableBundledTargetPath(validationRoot.targetDir, bundledFile.TargetPath)
-		if err != nil {
-			return fmt.Errorf("resolve bundled file %q: %w", bundledFile.TargetPath, err)
-		}
-		if err := validatePortableBundledFilesystemPath(validationRoot, bundledFile.TargetPath, target); err != nil {
-			return fmt.Errorf("resolve bundled file %q: %w", bundledFile.TargetPath, err)
-		}
-		data, err := os.ReadFile(sourcePath)
-		if err != nil {
-			return fmt.Errorf("read portable bundled file %s: %w", sourcePath, err)
-		}
-		if err := os.MkdirAll(filepath.Dir(target.path), 0o755); err != nil {
-			return fmt.Errorf("create bundled file directory for %s: %w", target.path, err)
-		}
-		if err := writePortableBundledFile(target.path, data, portableBundledFileMode(bundledFile)); err != nil {
-			return fmt.Errorf("write bundled file %s: %w", target.path, err)
+		if err := copySupportedPortableBundledFileFromSource(validationRoot, sourceDir, bundledFile); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func copySupportedPortableBundledFileFromSource(
+	validationRoot portableBundledValidationRoot,
+	sourceDir string,
+	bundledFile interfaces.BundledFileConfig,
+) error {
+	if !shouldCopySupportedPortableBundledFile(bundledFile) {
+		return nil
+	}
+	sourcePath, ok := supportedPortableBundledSourcePath(sourceDir, bundledFile)
+	if !ok {
+		return nil
+	}
+	target, shouldCopy, err := resolvePortableBundledCopyTarget(validationRoot, bundledFile.TargetPath, sourcePath)
+	if err != nil || !shouldCopy {
+		return err
+	}
+	data, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return fmt.Errorf("read portable bundled file %s: %w", sourcePath, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(target.path), 0o755); err != nil {
+		return fmt.Errorf("create bundled file directory for %s: %w", target.path, err)
+	}
+	if err := writePortableBundledFile(target.path, data, portableBundledFileMode(bundledFile)); err != nil {
+		return fmt.Errorf("write bundled file %s: %w", target.path, err)
+	}
+	return nil
+}
+
+func shouldCopySupportedPortableBundledFile(bundledFile interfaces.BundledFileConfig) bool {
+	return shouldOmitSupportedPortableBundledInline(bundledFile) && strings.TrimSpace(bundledFile.Content.Inline) == ""
+}
+
+func resolvePortableBundledCopyTarget(
+	validationRoot portableBundledValidationRoot,
+	targetPath string,
+	sourcePath string,
+) (portableBundledResolvedTarget, bool, error) {
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return portableBundledResolvedTarget{}, false, nil
+		}
+		return portableBundledResolvedTarget{}, false, fmt.Errorf("stat portable bundled file %s: %w", sourcePath, err)
+	}
+	if !info.Mode().IsRegular() {
+		return portableBundledResolvedTarget{}, false, nil
+	}
+	target, err := portableBundledTargetPath(validationRoot.targetDir, targetPath)
+	if err != nil {
+		return portableBundledResolvedTarget{}, false, fmt.Errorf("resolve bundled file %q: %w", targetPath, err)
+	}
+	if err := validatePortableBundledFilesystemPath(validationRoot, targetPath, target); err != nil {
+		return portableBundledResolvedTarget{}, false, fmt.Errorf("resolve bundled file %q: %w", targetPath, err)
+	}
+	return target, true, nil
 }
 
 func writeExpandedWorkerFiles(targetDir string, workerConfigs []interfaces.WorkerConfig) error {
@@ -283,18 +310,15 @@ func firstReferencedScriptArg(command string, args []string) (string, error) {
 	nextValueIsScriptPath := false
 	for _, arg := range args {
 		trimmed := strings.TrimSpace(arg)
-		if nextValueIsScriptPath {
-			nextValueIsScriptPath = false
-			if trimmed == "" || trimmed == "--" || strings.Contains(trimmed, "{{") || strings.Contains(trimmed, "}}") {
-				continue
-			}
+		if nextValueIsScriptPath && shouldUseScriptArg(trimmed) {
 			return normalizeFactoryRelativeScriptPath(trimmed)
 		}
+		nextValueIsScriptPath = false
 		if skipNextValue {
 			skipNextValue = false
 			continue
 		}
-		if trimmed == "" || strings.Contains(trimmed, "{{") || strings.Contains(trimmed, "}}") {
+		if !shouldInspectScriptArg(trimmed) {
 			continue
 		}
 		if trimmed == "--" {
@@ -318,6 +342,14 @@ func firstReferencedScriptArg(command string, args []string) (string, error) {
 	return "", nil
 }
 
+func shouldUseScriptArg(trimmed string) bool {
+	return shouldInspectScriptArg(trimmed) && trimmed != "--"
+}
+
+func shouldInspectScriptArg(trimmed string) bool {
+	return trimmed != "" && !strings.Contains(trimmed, "{{") && !strings.Contains(trimmed, "}}")
+}
+
 type interpreterArgFlagMode int
 
 const (
@@ -328,7 +360,7 @@ const (
 
 func interpreterFlagModeForArg(command, arg string) interpreterArgFlagMode {
 	normalized := strings.ToLower(strings.TrimSpace(arg))
-	if normalized == "" || !strings.HasPrefix(normalized, "-") || strings.Contains(normalized, "=") {
+	if !shouldInspectInterpreterFlag(normalized) {
 		return interpreterArgFlagIgnore
 	}
 
@@ -368,6 +400,10 @@ func interpreterFlagModeForArg(command, arg string) interpreterArgFlagMode {
 	}
 
 	return interpreterArgFlagIgnore
+}
+
+func shouldInspectInterpreterFlag(normalized string) bool {
+	return normalized != "" && strings.HasPrefix(normalized, "-") && !strings.Contains(normalized, "=")
 }
 
 func interpreterCommandKey(command string) string {

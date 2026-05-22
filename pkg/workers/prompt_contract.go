@@ -459,71 +459,84 @@ func (v *promptTemplateValidator) resolveFieldChain(base promptValidationValue, 
 	if current.displayPath == "" {
 		current.displayPath = display
 	}
-	for index, field := range fields {
+	for _, field := range fields {
 		nextPath := fieldPath(current.displayPath, field)
-		switch current.kind {
-		case promptValidationValueRoot:
-			switch field {
-			case "Inputs":
-				current = promptValidationValue{kind: promptValidationValueInputsSlice, displayPath: ".Inputs"}
-			case "Context":
-				current = promptValidationValue{kind: promptValidationValueContext, displayPath: ".Context"}
-			default:
-				v.addUnknownFieldDiagnostic(pos, nextPath, field, "prompt root")
-				return promptValidationValue{kind: promptValidationValueUnknown, displayPath: nextPath}
-			}
-		case promptValidationValueToken:
-			current = resolveTokenField(field, nextPath)
-			if current.kind == promptValidationValueUnknown {
-				v.addUnknownFieldDiagnostic(pos, nextPath, field, "input token")
-				return current
-			}
-		case promptValidationValueHistory:
-			current = resolveHistoryField(field, nextPath)
-			if current.kind == promptValidationValueUnknown {
-				v.addUnknownFieldDiagnostic(pos, nextPath, field, "prompt history")
-				return current
-			}
-		case promptValidationValueContext:
-			current = resolveContextField(field, nextPath)
-			if current.kind == promptValidationValueUnknown {
-				v.addUnknownFieldDiagnostic(pos, nextPath, field, "prompt context")
-				return current
-			}
-		case promptValidationValueRelation:
-			current = resolveRelationField(field, nextPath)
-			if current.kind == promptValidationValueUnknown {
-				v.addUnknownFieldDiagnostic(pos, nextPath, field, "relation")
-				return current
-			}
-		case promptValidationValueTagsMap, promptValidationValueEnvMap:
-			v.addDiagnostic(PromptTemplateDiagnostic{
-				Kind:        PromptTemplateDiagnosticKindInvalidVariable,
-				Message:     fmt.Sprintf("%s is a map. Access keys with index and a quoted key instead of dot notation.", current.displayPath),
-				Path:        nextPath,
-				SourceText:  nextPath,
-				StartOffset: int(pos),
-				EndOffset:   int(pos) + len(nextPath) - 1,
-			})
-			return promptValidationValue{kind: promptValidationValueUnknown, displayPath: nextPath}
-		case promptValidationValueInputsSlice, promptValidationValueRelationsSlice, promptValidationValueFailureLog, promptValidationValueContent:
-			v.addDiagnostic(PromptTemplateDiagnostic{
-				Kind:        PromptTemplateDiagnosticKindInvalidVariable,
-				Message:     fmt.Sprintf("%s is a collection. Index or range it before reading %s.", current.displayPath, field),
-				Path:        nextPath,
-				SourceText:  nextPath,
-				StartOffset: int(pos),
-				EndOffset:   int(pos) + len(nextPath) - 1,
-			})
-			return promptValidationValue{kind: promptValidationValueUnknown, displayPath: nextPath}
-		default:
-			if current.kind != promptValidationValueUnknown && index < len(fields) {
-				v.addUnknownFieldDiagnostic(pos, nextPath, field, "scalar value")
-			}
+		next, ok := v.resolveNextFieldValue(current, field, nextPath, pos)
+		if !ok {
 			return promptValidationValue{kind: promptValidationValueUnknown, displayPath: nextPath}
 		}
+		current = next
 	}
 	return current
+}
+
+func (v *promptTemplateValidator) resolveNextFieldValue(
+	current promptValidationValue,
+	field string,
+	nextPath string,
+	pos parse.Pos,
+) (promptValidationValue, bool) {
+	switch current.kind {
+	case promptValidationValueRoot:
+		return v.resolveRootField(field, nextPath, pos)
+	case promptValidationValueToken:
+		return v.resolveNamedField(field, nextPath, pos, "input token", resolveTokenField)
+	case promptValidationValueHistory:
+		return v.resolveNamedField(field, nextPath, pos, "prompt history", resolveHistoryField)
+	case promptValidationValueContext:
+		return v.resolveNamedField(field, nextPath, pos, "prompt context", resolveContextField)
+	case promptValidationValueRelation:
+		return v.resolveNamedField(field, nextPath, pos, "relation", resolveRelationField)
+	case promptValidationValueTagsMap, promptValidationValueEnvMap:
+		v.addCollectionAccessDiagnostic(pos, nextPath, fmt.Sprintf("%s is a map. Access keys with index and a quoted key instead of dot notation.", current.displayPath))
+		return promptValidationValue{}, false
+	case promptValidationValueInputsSlice, promptValidationValueRelationsSlice, promptValidationValueFailureLog, promptValidationValueContent:
+		v.addCollectionAccessDiagnostic(pos, nextPath, fmt.Sprintf("%s is a collection. Index or range it before reading %s.", current.displayPath, field))
+		return promptValidationValue{}, false
+	default:
+		if current.kind != promptValidationValueUnknown {
+			v.addUnknownFieldDiagnostic(pos, nextPath, field, "scalar value")
+		}
+		return promptValidationValue{}, false
+	}
+}
+
+func (v *promptTemplateValidator) resolveRootField(field, nextPath string, pos parse.Pos) (promptValidationValue, bool) {
+	switch field {
+	case "Inputs":
+		return promptValidationValue{kind: promptValidationValueInputsSlice, displayPath: ".Inputs"}, true
+	case "Context":
+		return promptValidationValue{kind: promptValidationValueContext, displayPath: ".Context"}, true
+	default:
+		v.addUnknownFieldDiagnostic(pos, nextPath, field, "prompt root")
+		return promptValidationValue{}, false
+	}
+}
+
+func (v *promptTemplateValidator) resolveNamedField(
+	field string,
+	nextPath string,
+	pos parse.Pos,
+	subject string,
+	resolve func(string, string) promptValidationValue,
+) (promptValidationValue, bool) {
+	next := resolve(field, nextPath)
+	if next.kind != promptValidationValueUnknown {
+		return next, true
+	}
+	v.addUnknownFieldDiagnostic(pos, nextPath, field, subject)
+	return promptValidationValue{}, false
+}
+
+func (v *promptTemplateValidator) addCollectionAccessDiagnostic(pos parse.Pos, nextPath, message string) {
+	v.addDiagnostic(PromptTemplateDiagnostic{
+		Kind:        PromptTemplateDiagnosticKindInvalidVariable,
+		Message:     message,
+		Path:        nextPath,
+		SourceText:  nextPath,
+		StartOffset: int(pos),
+		EndOffset:   int(pos) + len(nextPath) - 1,
+	})
 }
 
 func (v *promptTemplateValidator) addUnknownFieldDiagnostic(pos parse.Pos, path, field, subject string) {

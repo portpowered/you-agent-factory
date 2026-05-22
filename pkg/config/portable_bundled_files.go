@@ -132,45 +132,39 @@ func supportedPortableBundledSourcePath(factoryDir string, bundledFile interface
 	targetPath := filepath.ToSlash(strings.TrimSpace(bundledFile.TargetPath))
 	switch bundledFile.Type {
 	case interfaces.BundledFileTypeScript:
-		if !strings.HasPrefix(targetPath, portableBundledScriptRoot) {
-			return "", false
-		}
-		relativePath := strings.TrimPrefix(targetPath, portableBundledScriptRoot)
-		if relativePath == "" {
-			return "", false
-		}
-		return filepath.Join(factoryDir, filepath.FromSlash(filepath.Join("scripts", relativePath))), true
+		return supportedPortableBundledSubdirPath(factoryDir, targetPath, portableBundledScriptRoot, "scripts")
 	case interfaces.BundledFileTypeDoc:
-		if !strings.HasPrefix(targetPath, portableBundledDocRoot) {
-			return "", false
-		}
-		relativePath := strings.TrimPrefix(targetPath, portableBundledDocRoot)
-		if relativePath == "" {
-			return "", false
-		}
-		return filepath.Join(factoryDir, filepath.FromSlash(filepath.Join("docs", relativePath))), true
+		return supportedPortableBundledSubdirPath(factoryDir, targetPath, portableBundledDocRoot, "docs")
 	case interfaces.BundledFileTypeInput:
-		if !strings.HasPrefix(targetPath, portableBundledInputRoot) {
-			return "", false
-		}
-		relativePath := strings.TrimPrefix(targetPath, portableBundledInputRoot)
-		if relativePath == "" {
-			return "", false
-		}
-		return filepath.Join(factoryDir, filepath.FromSlash(filepath.Join(interfaces.InputsDir, relativePath))), true
+		return supportedPortableBundledSubdirPath(factoryDir, targetPath, portableBundledInputRoot, interfaces.InputsDir)
 	case interfaces.BundledFileTypeRootHelper:
-		switch targetPath {
-		case "Makefile":
-			factoryLocalPath := filepath.Join(factoryDir, "Makefile")
-			if _, err := os.Stat(factoryLocalPath); err == nil {
-				return factoryLocalPath, true
-			}
-			return filepath.Join(filepath.Dir(factoryDir), "Makefile"), true
-		case "factory/portable-dependencies.json":
-			return filepath.Join(factoryDir, "portable-dependencies.json"), true
-		default:
-			return "", false
+		return supportedPortableBundledRootHelperPath(factoryDir, targetPath)
+	default:
+		return "", false
+	}
+}
+
+func supportedPortableBundledSubdirPath(factoryDir, targetPath, targetRoot, localDir string) (string, bool) {
+	if !strings.HasPrefix(targetPath, targetRoot) {
+		return "", false
+	}
+	relativePath := strings.TrimPrefix(targetPath, targetRoot)
+	if relativePath == "" {
+		return "", false
+	}
+	return filepath.Join(factoryDir, filepath.FromSlash(filepath.Join(localDir, relativePath))), true
+}
+
+func supportedPortableBundledRootHelperPath(factoryDir, targetPath string) (string, bool) {
+	switch targetPath {
+	case "Makefile":
+		factoryLocalPath := filepath.Join(factoryDir, "Makefile")
+		if _, err := os.Stat(factoryLocalPath); err == nil {
+			return factoryLocalPath, true
 		}
+		return filepath.Join(filepath.Dir(factoryDir), "Makefile"), true
+	case "factory/portable-dependencies.json":
+		return filepath.Join(factoryDir, "portable-dependencies.json"), true
 	default:
 		return "", false
 	}
@@ -437,41 +431,10 @@ func collectSharedFactoryStarterWork(factoryDir string, cfg *interfaces.FactoryC
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() || !entry.Type().IsRegular() {
+		if !shouldCollectPortableStarterWorkEntry(path, entry) {
 			return nil
 		}
-
-		name := filepath.Base(path)
-		if isPortableStarterWorkIgnoredFile(name) {
-			return nil
-		}
-
-		relativePath, err := filepath.Rel(inputsDir, path)
-		if err != nil {
-			return fmt.Errorf("resolve starter work path %s: %w", path, err)
-		}
-		relativePath = filepath.ToSlash(relativePath)
-		parts := strings.Split(relativePath, "/")
-		if len(parts) != 3 {
-			return nil
-		}
-		if !validWorkTypes[parts[0]] {
-			return nil
-		}
-
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("read starter work %s: %w", path, err)
-		}
-		bundledFiles = append(bundledFiles, interfaces.BundledFileConfig{
-			Type:       interfaces.BundledFileTypeInput,
-			TargetPath: filepath.ToSlash(filepath.Join(portableFactoryDirName, interfaces.InputsDir, relativePath)),
-			Content: interfaces.BundledFileContentConfig{
-				Encoding: interfaces.BundledFileEncodingUTF8,
-				Inline:   string(content),
-			},
-		})
-		return nil
+		return appendPortableStarterWorkFile(&bundledFiles, inputsDir, path, validWorkTypes)
 	}); err != nil {
 		return nil, fmt.Errorf("collect shared factory starter work: %w", err)
 	}
@@ -480,6 +443,51 @@ func collectSharedFactoryStarterWork(factoryDir string, cfg *interfaces.FactoryC
 		return bundledFiles[i].TargetPath < bundledFiles[j].TargetPath
 	})
 	return bundledFiles, nil
+}
+
+func shouldCollectPortableStarterWorkEntry(path string, entry fs.DirEntry) bool {
+	if entry.IsDir() || !entry.Type().IsRegular() {
+		return false
+	}
+	return !isPortableStarterWorkIgnoredFile(filepath.Base(path))
+}
+
+func appendPortableStarterWorkFile(
+	bundledFiles *[]interfaces.BundledFileConfig,
+	inputsDir string,
+	path string,
+	validWorkTypes map[string]bool,
+) error {
+	relativePath, ok, err := portableStarterWorkRelativePath(inputsDir, path, validWorkTypes)
+	if err != nil || !ok {
+		return err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read starter work %s: %w", path, err)
+	}
+	*bundledFiles = append(*bundledFiles, interfaces.BundledFileConfig{
+		Type:       interfaces.BundledFileTypeInput,
+		TargetPath: filepath.ToSlash(filepath.Join(portableFactoryDirName, interfaces.InputsDir, relativePath)),
+		Content: interfaces.BundledFileContentConfig{
+			Encoding: interfaces.BundledFileEncodingUTF8,
+			Inline:   string(content),
+		},
+	})
+	return nil
+}
+
+func portableStarterWorkRelativePath(inputsDir, path string, validWorkTypes map[string]bool) (string, bool, error) {
+	relativePath, err := filepath.Rel(inputsDir, path)
+	if err != nil {
+		return "", false, fmt.Errorf("resolve starter work path %s: %w", path, err)
+	}
+	relativePath = filepath.ToSlash(relativePath)
+	parts := strings.Split(relativePath, "/")
+	if len(parts) != 3 || !validWorkTypes[parts[0]] {
+		return "", false, nil
+	}
+	return relativePath, true, nil
 }
 
 func isPortableStarterWorkIgnoredFile(name string) bool {
