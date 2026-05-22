@@ -247,7 +247,6 @@ function buildDashboardCards({
           now={now}
           onSelectProviderSession={providerSessionState.setSelectedProviderSession}
           onSelectTraceID={setSelectedTraceID}
-          selectedProviderSession={providerSessionState.selectedProviderSession}
           selectedProviderSessionKey={
             providerSessionState.selectedProviderSessionKey
           }

@@ -32,7 +32,6 @@ export interface CurrentSelectionWidgetProps {
   onSelectTraceID?: (traceID: string) => void;
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   selectedTrace?: DashboardTrace;
-  selectedProviderSession?: LoadableProviderSessionRef | null;
   selectedProviderSessionKey?: string | null;
   selectedWorkExecutionDetails: SelectedWorkItemExecutionDetails | null;
   widgetId?: string;
@@ -48,7 +47,6 @@ function renderCurrentSelectionDetailCard({
   now,
   onSelectTraceID,
   saveState,
-  selectedProviderSession,
   selectedProviderSessionKey,
   selectedTrace,
   selectedWorkExecutionDetails,
@@ -68,7 +66,6 @@ function renderCurrentSelectionDetailCard({
   saveState: ReturnType<
     typeof useSaveEditableWorkstationConfiguration
   >["saveState"];
-  selectedProviderSession: LoadableProviderSessionRef | null;
   selectedProviderSessionKey: string | null;
   selectedTrace?: DashboardTrace;
   selectedWorkExecutionDetails: SelectedWorkItemExecutionDetails | null;
@@ -105,7 +102,6 @@ function renderCurrentSelectionDetailCard({
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={selectWorkByID}
         selectedNode={selectedNode}
-        selectedProviderSession={selectedProviderSession}
         selectedProviderSessionKey={selectedProviderSessionKey}
         selectedTrace={selectedTrace}
         selection={selection}
@@ -157,7 +153,6 @@ function renderCurrentSelectionDetailCard({
         providerSessions={selectedNodeProviderSessions}
         saveState={saveState}
         selectedNode={selectedNode}
-        selectedProviderSession={selectedProviderSession}
         selectedProviderSessionKey={selectedProviderSessionKey}
         selectedRequest={selectedWorkstationRequest}
         selectedWorkID={selectedWorkID}
@@ -179,7 +174,6 @@ export function CurrentSelectionWidget({
   onSelectTraceID,
   onSelectProviderSession,
   selectedTrace,
-  selectedProviderSession: controlledSelectedProviderSession,
   selectedProviderSessionKey: controlledSelectedProviderSessionKey,
   selectedWorkExecutionDetails,
   widgetId = "current-selection",
@@ -212,8 +206,6 @@ export function CurrentSelectionWidget({
     selectedWorkRequestHistory,
     selection,
   });
-  const selectedProviderSession =
-    controlledSelectedProviderSession ?? providerSessionState.selectedProviderSession;
   const selectedProviderSessionKey =
     controlledSelectedProviderSessionKey ?? providerSessionState.selectedProviderSessionKey;
   const handleSelectProviderSession =
@@ -236,7 +228,6 @@ export function CurrentSelectionWidget({
     now,
     onSelectTraceID,
     saveState: workstationSave.saveState,
-    selectedProviderSession,
     selectedProviderSessionKey,
     selectedTrace,
     selectedWorkExecutionDetails,

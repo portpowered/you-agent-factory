@@ -107,7 +107,6 @@ function buildSelectedWorkItemFixture() {
 describe("CurrentSelectionWidget provider-session selection", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
-    vi.stubGlobal("fetch", vi.fn());
     vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
       data: {
         diagnostics: [],
@@ -154,10 +153,9 @@ describe("CurrentSelectionWidget provider-session selection", () => {
 
   afterEach(() => {
     resetSelectionHistoryStore();
-    vi.unstubAllGlobals();
   });
 
-  it("keeps an inference-attempt-only provider session selected in current-selection state", async () => {
+  it("keeps an inference-attempt-only provider session selected in current-selection state without rendering duplicate detail", async () => {
     const user = userEvent.setup();
     const { dispatchId, execution, selectedNode, selection, snapshot, workItem } =
       buildSelectedWorkItemFixture();
@@ -181,47 +179,6 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       providerSessions: [],
       selectedNode,
       workItem,
-    });
-
-    vi.mocked(globalThis.fetch).mockImplementation((input) => {
-      const requestURL = String(input);
-      if (!requestURL.includes("id=sess_inference_only")) {
-        throw new Error(`unexpected provider-session request: ${requestURL}`);
-      }
-
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            parse: {
-              eventCount: 1,
-              functionCalls: [],
-              lineCount: 1,
-              malformedLineCount: 0,
-              parseErrors: [],
-              reasoning: [],
-              turns: [],
-              unknownEventCount: 0,
-              unknownEvents: [],
-            },
-            providerSession: {
-              id: "sess_inference_only",
-              kind: "session_id",
-              provider: "codex",
-            },
-            source: {
-              relativePath: "2026/05/18/rollout-sess_inference_only.jsonl",
-              sizeBytes: 640,
-            },
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-            statusText: "OK",
-          },
-        ),
-      );
     });
 
     renderWithQueryClient(
@@ -266,18 +223,13 @@ describe("CurrentSelectionWidget provider-session selection", () => {
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
-      within(currentSelection).getByRole("heading", {
+      within(currentSelection).queryByRole("heading", {
         name: "Selected session details",
       }),
-    ).toBeTruthy();
-    expect(
-      await within(currentSelection).findByText(
-        "2026/05/18/rollout-sess_inference_only.jsonl",
-      ),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
-  it("renders selected provider-session details for timestamp-prefixed Codex session files", async () => {
+  it("keeps selection controls available for timestamp-prefixed Codex session files without embedding the detail panel", async () => {
     const user = userEvent.setup();
     const { dispatchId, execution, selectedNode, selection, snapshot, workItem } =
       buildSelectedWorkItemFixture();
@@ -305,57 +257,6 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       providerSessions: [],
       selectedNode,
       workItem,
-    });
-
-    vi.mocked(globalThis.fetch).mockImplementation((input) => {
-      const requestURL = String(input);
-      if (!requestURL.includes(`id=${codexSessionID}`)) {
-        throw new Error(`unexpected provider-session request: ${requestURL}`);
-      }
-
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            parse: {
-              eventCount: 2,
-              functionCalls: [],
-              lineCount: 2,
-              malformedLineCount: 0,
-              parseErrors: [],
-              reasoning: [],
-              turns: [
-                {
-                  eventCount: 2,
-                  functionCallCount: 0,
-                  index: 1,
-                  reasoningCount: 0,
-                  responseItemCount: 1,
-                  startedAt: "2026-05-20T10:35:24Z",
-                },
-              ],
-              unknownEventCount: 0,
-              unknownEvents: [],
-            },
-            providerSession: {
-              id: codexSessionID,
-              kind: "session_id",
-              provider: "codex",
-            },
-            source: {
-              relativePath:
-                "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl",
-              sizeBytes: 2048,
-            },
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-            statusText: "OK",
-          },
-        ),
-      );
     });
 
     renderWithQueryClient(
@@ -392,19 +293,13 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     );
 
     expect(
-      await within(currentSelection).findByRole("heading", {
+      within(currentSelection).queryByRole("heading", {
         name: "Selected session details",
       }),
-    ).toBeTruthy();
-    expect(
-      within(currentSelection).getByText(
-        "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl",
-      ),
-    ).toBeTruthy();
-    expect(within(currentSelection).getByText("Turn 1")).toBeTruthy();
+    ).toBeNull();
   });
 
-  it("refreshes the shared session-detail panel when switching between inference-attempt sessions", async () => {
+  it("updates which session is selected when switching between inference-attempt sessions without showing duplicate detail", async () => {
     const user = userEvent.setup();
     const { dispatchId, execution, selectedNode, selection, workItem } =
       buildSelectedWorkItemFixture();
@@ -439,54 +334,6 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       providerSessions: [],
       selectedNode,
       workItem,
-    });
-
-    let resolveSecondResponse: ((value: Response) => void) | null = null;
-    vi.mocked(globalThis.fetch).mockImplementation((input) => {
-      const requestURL = String(input);
-      if (requestURL.includes("id=sess_inference_first")) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              parse: {
-                eventCount: 1,
-                functionCalls: [],
-                lineCount: 1,
-                malformedLineCount: 0,
-                parseErrors: [],
-                reasoning: [],
-                turns: [],
-                unknownEventCount: 0,
-                unknownEvents: [],
-              },
-              providerSession: {
-                id: "sess_inference_first",
-                kind: "session_id",
-                provider: "codex",
-              },
-              source: {
-                relativePath: "2026/05/18/rollout-sess_inference_first.jsonl",
-                sizeBytes: 640,
-              },
-            }),
-            {
-              headers: {
-                "Content-Type": "application/json",
-              },
-              status: 200,
-              statusText: "OK",
-            },
-          ),
-        );
-      }
-
-      if (requestURL.includes("id=sess_inference_second")) {
-        return new Promise<Response>((resolve) => {
-          resolveSecondResponse = resolve;
-        });
-      }
-
-      throw new Error(`unexpected provider-session request: ${requestURL}`);
     });
 
     renderWithQueryClient(
@@ -528,59 +375,24 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     await user.click(firstButton);
 
     expect(
-      await within(currentSelection).findByText(
-        "2026/05/18/rollout-sess_inference_first.jsonl",
-      ),
-    ).toBeTruthy();
-
-    await user.click(secondButton);
-
-    expect(within(currentSelection).getByText("Loading session details...")).toBeTruthy();
+      firstButton.getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(secondButton.getAttribute("aria-pressed")).toBe("false");
     expect(
       within(currentSelection).queryByText(
         "2026/05/18/rollout-sess_inference_first.jsonl",
       ),
     ).toBeNull();
 
-    resolveSecondResponse?.(
-      new Response(
-        JSON.stringify({
-          parse: {
-            eventCount: 1,
-            functionCalls: [],
-            lineCount: 1,
-            malformedLineCount: 0,
-            parseErrors: [],
-            reasoning: [],
-            turns: [],
-            unknownEventCount: 0,
-            unknownEvents: [],
-          },
-          providerSession: {
-            id: "sess_inference_second",
-            kind: "session_id",
-            provider: "codex",
-          },
-          source: {
-            relativePath: "2026/05/18/rollout-sess_inference_second.jsonl",
-            sizeBytes: 768,
-          },
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          status: 200,
-          statusText: "OK",
-        },
-      ),
-    );
+    await user.click(secondButton);
 
+    expect(firstButton.getAttribute("aria-pressed")).toBe("false");
+    expect(secondButton.getAttribute("aria-pressed")).toBe("true");
     expect(
-      await within(currentSelection).findByText(
-        "2026/05/18/rollout-sess_inference_second.jsonl",
-      ),
-    ).toBeTruthy();
+      within(currentSelection).queryByRole("heading", {
+        name: "Selected session details",
+      }),
+    ).toBeNull();
   });
 });
 

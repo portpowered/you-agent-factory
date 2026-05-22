@@ -125,6 +125,82 @@ function buildSelectedTrace(workItem: DashboardWorkItemRef): DashboardTrace {
   };
 }
 
+describe("WorkItemDetailCard provider-session selection", () => {
+  it("keeps provider-session selection controls in dispatch history without embedding duplicate session detail", async () => {
+    const user = userEvent.setup();
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        onSelectProviderSession={vi.fn()}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[
+          workstationRequest(dispatchID, {
+            inference_attempts: [
+              inferenceAttempt(dispatchID, {
+                attempt: 1,
+                outcome: "SUCCEEDED",
+                provider_session: {
+                  id: "sess-current-selection-only",
+                  kind: "session_id",
+                  provider: "codex",
+                },
+                response: "Use the dedicated widget for session detail.",
+              }),
+            ],
+            outcome: "ACCEPTED",
+            response_view: {
+              outcome: "ACCEPTED",
+              output_work_items: [workItem],
+            },
+            trace_ids: ["trace-active-story"],
+            work_items: [workItem],
+          }),
+        ]}
+      />,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "Workstation dispatches",
+    });
+    const dispatchCard = within(dispatchHistory).getAllByRole("article")[0];
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected dispatch history card with inference attempts");
+    }
+
+    const inferenceAttemptsSection = expandDispatchSection(
+      dispatchCard,
+      "Inference attempts",
+    );
+    expandInferenceAttempt(inferenceAttemptsSection, 1);
+    await user.click(
+      within(inferenceAttemptsSection).getByRole("button", {
+        name: "Select provider session codex / session_id / sess-current-selection-only for dispatch dispatch-review-active",
+      }),
+    );
+
+    expect(
+      screen.queryByRole("heading", { name: "Selected session details" }),
+    ).toBeNull();
+  });
+});
+
 describe("WorkItemDetailCard summary", () => {
   it("renders loadable inference-attempt provider sessions as selectable controls", async () => {
     const user = userEvent.setup();
