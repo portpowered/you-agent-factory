@@ -372,21 +372,26 @@ async function expectPromptHintBrowserFlow(
   const promptField = await sectionScope.findByRole("textbox", {
     name: "Prompt",
   });
-  const helpButton = sectionScope.getByRole("button", {
-    name: "Open prompt variable help",
-  });
   const saveButton = within(currentSelection).getByRole("button", {
     name: "Save changes",
   });
 
-  helpButton.focus();
-  await userEvent.keyboard("{Enter}");
   await expect(
-    await sectionScope.findByText("This workstation exposes 1 authored input."),
+    await sectionScope.findByText(
+      "Autocomplete is ready with 2 variables for 1 authored input.",
+    ),
   ).toBeVisible();
-  await expect(sectionScope.getByText(".WorkID")).toBeVisible();
-  await expect(sectionScope.getByText("{{ .WorkID }}")).toBeVisible();
-  await expect(sectionScope.getByText(".Inputs[1].Payload")).toBeVisible();
+  await expect(
+    sectionScope.getByText(
+      "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
+    ),
+  ).toBeVisible();
+  await expect(
+    sectionScope.queryByRole("button", {
+      name: "Open prompt variable help",
+    }),
+  ).toBeNull();
+  await expect(sectionScope.queryByText("Prompt variable help")).toBeNull();
 
   promptField.focus();
   await userEvent.clear(promptField);
@@ -398,11 +403,6 @@ async function expectPromptHintBrowserFlow(
   await expect(sectionScope.getByText(".Inputs[1]")).toBeVisible();
   await expect(sectionScope.getAllByText("(index .Inputs 1)")[0]).toBeVisible();
   await expect(saveButton).toBeDisabled();
-
-  const diagnosticUnderline = section.querySelector(
-    "mark.decoration-wavy",
-  ) as HTMLElement | null;
-  expect(diagnosticUnderline?.textContent).toContain("(index .Inputs 1)");
 }
 
 function LocalePropagationStory() {

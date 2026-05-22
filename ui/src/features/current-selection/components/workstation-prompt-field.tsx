@@ -1,6 +1,3 @@
-import { useEffect, useMemo, useRef } from "react";
-
-import { Textarea } from "../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -9,6 +6,7 @@ import {
 import { cn } from "../../../lib/cn";
 import type { WorkstationDetailCardProps } from "../detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages";
+import { WorkstationPromptEditor } from "./workstation-prompt-editor";
 
 export function EditableConfigurationPromptInput({
   messages,
@@ -20,8 +18,6 @@ export function EditableConfigurationPromptInput({
     { status: "ready" }
   >;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const overlayRef = useRef<HTMLDivElement | null>(null);
   const diagnosticsId = "editable-workstation-prompt-diagnostics";
   const errorId = "editable-workstation-prompt-error";
   const describedBy = [
@@ -31,60 +27,91 @@ export function EditableConfigurationPromptInput({
     .filter(Boolean)
     .join(" ");
 
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    const overlay = overlayRef.current;
-    if (!textarea || !overlay) {
-      return;
-    }
-
-    const syncScroll = () => {
-      overlay.scrollTop = textarea.scrollTop;
-      overlay.scrollLeft = textarea.scrollLeft;
-    };
-
-    syncScroll();
-    textarea.addEventListener("scroll", syncScroll);
-    return () => textarea.removeEventListener("scroll", syncScroll);
-  }, []);
-
   return (
     <div className="grid gap-2">
-      <div className="relative">
-        <div
-          aria-hidden="true"
-          className={cn(
-            "pointer-events-none absolute inset-0 overflow-hidden rounded-xl border border-af-overlay/14 px-3 py-3 text-sm text-transparent",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-          ref={overlayRef}
-        >
-          <PromptDiagnosticOverlay
-            diagnostics={state.promptDiagnostics}
-            prompt={state.draft.prompt}
-          />
-        </div>
-        <Textarea
+      <div>
+        <WorkstationPromptEditor
+          ariaLabel={messages.promptFieldLabel}
           aria-describedby={describedBy || undefined}
-          aria-invalid={state.validationErrors.prompt ? "true" : undefined}
+          ariaInvalid={Boolean(state.validationErrors.prompt)}
+          autocompleteState={state.promptHelpState}
           className={cn(
-            "relative z-10 bg-transparent",
+            "bg-transparent",
             state.promptDiagnostics.length > 0
               ? "border-af-danger/45 focus-visible:border-af-danger focus-visible:ring-af-danger/20"
               : undefined,
             DASHBOARD_BODY_TEXT_CLASS,
           )}
-          id="editable-workstation-prompt"
-          onChange={(event) => state.onPromptChange(event.target.value)}
-          ref={textareaRef}
+          diagnostics={state.promptDiagnostics}
+          hasDiagnostics={state.promptDiagnostics.length > 0}
+          loadingMessage={messages.editableConfigurationPromptEditorLoading}
+          onChange={state.onPromptChange}
+          startupErrorMessage={messages.editableConfigurationPromptEditorError}
           value={state.draft.prompt}
         />
       </div>
+      <EditableConfigurationPromptAutocompleteFeedback
+        messages={messages}
+        state={state}
+      />
       <EditableConfigurationPromptValidationFeedback
         diagnosticsId={diagnosticsId}
         messages={messages}
         state={state}
       />
+    </div>
+  );
+}
+
+function EditableConfigurationPromptAutocompleteFeedback({
+  messages,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  if (state.promptHelpState.status === "loading") {
+    return (
+      <p className={cn("m-0 text-af-ink/70", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        {messages.editableConfigurationPromptHelpLoading}
+      </p>
+    );
+  }
+
+  if (state.promptHelpState.status === "error") {
+    return (
+      <p
+        className={cn("m-0 text-af-danger-ink", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+        role="alert"
+      >
+        {messages.editableConfigurationPromptHelpErrorPrefix}{" "}
+        {state.promptHelpState.errorMessage}
+      </p>
+    );
+  }
+
+  if (state.promptHelpState.status === "empty") {
+    return (
+      <p className={cn("m-0 text-af-ink/70", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        {state.promptHelpState.message}
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-1 rounded-xl border border-af-overlay/10 bg-af-overlay/4 p-3">
+      <p className={cn("m-0 text-af-ink/72", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        {messages.editableConfigurationPromptAutocompleteSummary(
+          state.promptHelpState.contract.availableVariables.length,
+          state.promptHelpState.contract.inputCount,
+        )}
+      </p>
+      <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        {messages.editableConfigurationPromptAutocompleteDetail}
+      </p>
     </div>
   );
 }
@@ -145,10 +172,17 @@ function EditableConfigurationPromptValidationFeedback({
           {messages.editableConfigurationPromptDiagnosticsHeading}
         </h5>
         <ul className="m-0 grid list-none gap-2 p-0">
-          {state.promptDiagnostics.map((diagnostic, index) => (
+          {state.promptDiagnostics.map((diagnostic) => (
             <li
               className="grid gap-1 rounded-lg border border-af-danger/18 bg-af-overlay/4 p-2"
-              key={`${diagnostic.kind}:${diagnostic.path ?? diagnostic.sourceText ?? index}`}
+              key={[
+                diagnostic.kind,
+                diagnostic.path ?? "",
+                diagnostic.sourceText ?? "",
+                diagnostic.startOffset ?? "",
+                diagnostic.endOffset ?? "",
+                diagnostic.message,
+              ].join(":")}
             >
               <p
                 className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
@@ -169,197 +203,6 @@ function EditableConfigurationPromptValidationFeedback({
       </div>
     </div>
   );
-}
-
-function PromptDiagnosticOverlay({
-  diagnostics,
-  prompt,
-}: {
-  diagnostics: Extract<
-    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
-    { status: "ready" }
-  >["promptDiagnostics"];
-  prompt: string;
-}) {
-  const segments = useMemo(
-    () => buildPromptDiagnosticSegments(prompt, diagnostics),
-    [diagnostics, prompt],
-  );
-
-  return (
-    <pre className="m-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-      {segments.map((segment) =>
-        segment.hasDiagnostic ? (
-          <mark
-            className="bg-transparent text-transparent underline decoration-wavy decoration-2 decoration-af-danger"
-            key={segment.key}
-          >
-            {segment.text}
-          </mark>
-        ) : (
-          <span key={segment.key}>{segment.text}</span>
-        ),
-      )}
-    </pre>
-  );
-}
-
-function buildPromptDiagnosticSegments(
-  prompt: string,
-  diagnostics: Extract<
-    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
-    { status: "ready" }
-  >["promptDiagnostics"],
-) {
-  if (prompt.length === 0 || diagnostics.length === 0) {
-    return [{ hasDiagnostic: false, key: "segment:0:0", text: prompt }];
-  }
-
-  const ranges = normalizePromptDiagnosticRanges(prompt, diagnostics);
-  if (ranges.length === 0) {
-    return [{ hasDiagnostic: false, key: "segment:0:0", text: prompt }];
-  }
-
-  const segments: Array<{ hasDiagnostic: boolean; key: string; text: string }> =
-    [];
-  let cursor = 0;
-  for (const range of ranges) {
-    if (cursor < range.start) {
-      segments.push({
-        hasDiagnostic: false,
-        key: `segment:${cursor}:${range.start}:plain`,
-        text: prompt.slice(cursor, range.start),
-      });
-    }
-
-    segments.push({
-      hasDiagnostic: true,
-      key: `segment:${range.start}:${range.end}:diagnostic`,
-      text: prompt.slice(range.start, range.end),
-    });
-    cursor = range.end;
-  }
-
-  if (cursor < prompt.length) {
-    segments.push({
-      hasDiagnostic: false,
-      key: `segment:${cursor}:${prompt.length}:plain`,
-      text: prompt.slice(cursor),
-    });
-  }
-
-  return segments;
-}
-
-function normalizePromptDiagnosticRanges(
-  prompt: string,
-  diagnostics: Extract<
-    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
-    { status: "ready" }
-  >["promptDiagnostics"],
-) {
-  const ranges = diagnostics
-    .map((diagnostic, index) =>
-      resolvePromptDiagnosticRange(prompt, diagnostic, index),
-    )
-    .filter((range): range is { end: number; start: number } => range !== null)
-    .sort((left, right) => left.start - right.start || left.end - right.end);
-
-  if (ranges.length === 0) {
-    return [];
-  }
-
-  const merged: Array<{ end: number; start: number }> = [ranges[0]];
-  for (const range of ranges.slice(1)) {
-    const current = merged[merged.length - 1];
-    if (range.start <= current.end) {
-      current.end = Math.max(current.end, range.end);
-      continue;
-    }
-
-    merged.push(range);
-  }
-
-  return merged;
-}
-
-function resolvePromptDiagnosticRange(
-  prompt: string,
-  diagnostic: Extract<
-    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
-    { status: "ready" }
-  >["promptDiagnostics"][number],
-  diagnosticIndex: number,
-) {
-  if (
-    typeof diagnostic.startOffset === "number" &&
-    typeof diagnostic.endOffset === "number"
-  ) {
-    const start = utf8ByteOffsetToCodeUnitIndex(prompt, diagnostic.startOffset);
-    const end = utf8ByteOffsetToCodeUnitIndex(prompt, diagnostic.endOffset + 1);
-    if (start < end) {
-      return { end, start };
-    }
-  }
-
-  if (diagnostic.sourceText) {
-    const sourceTextIndex = nthIndexOf(prompt, diagnostic.sourceText, diagnosticIndex);
-    if (sourceTextIndex >= 0) {
-      return {
-        end: sourceTextIndex + diagnostic.sourceText.length,
-        start: sourceTextIndex,
-      };
-    }
-  }
-
-  return null;
-}
-
-function nthIndexOf(text: string, query: string, occurrence: number) {
-  let fromIndex = 0;
-  let matchIndex = -1;
-
-  for (let index = 0; index <= occurrence; index += 1) {
-    matchIndex = text.indexOf(query, fromIndex);
-    if (matchIndex < 0) {
-      return -1;
-    }
-    fromIndex = matchIndex + query.length;
-  }
-
-  return matchIndex;
-}
-
-function utf8ByteOffsetToCodeUnitIndex(text: string, oneBasedByteOffset: number) {
-  if (oneBasedByteOffset <= 1) {
-    return 0;
-  }
-
-  const targetByteCount = oneBasedByteOffset - 1;
-  let bytesSeen = 0;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const codePoint = text.codePointAt(index);
-    if (codePoint == null) {
-      return index;
-    }
-
-    const codeUnitWidth = codePoint > 0xffff ? 2 : 1;
-    const byteWidth =
-      codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-    if (bytesSeen >= targetByteCount) {
-      return index;
-    }
-
-    bytesSeen += byteWidth;
-    if (bytesSeen >= targetByteCount) {
-      return index + codeUnitWidth;
-    }
-
-    index += codeUnitWidth - 1;
-  }
-
-  return text.length;
 }
 
 function diagnosticLabel(

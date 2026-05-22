@@ -27,6 +27,8 @@ export interface WorkstationDetailMessages {
   editableConfigurationSaveSuccess: string;
   editableConfigurationValidationStatus: string;
   editableConfigurationPromptRequired: string;
+  editableConfigurationPromptEditorLoading: string;
+  editableConfigurationPromptEditorError: string;
   editableConfigurationPromptValidationLoading: string;
   editableConfigurationPromptValidationFallbackError: string;
   editableConfigurationPromptValidationErrorPrefix: string;
@@ -39,12 +41,11 @@ export interface WorkstationDetailMessages {
   editableConfigurationPromptHelpEmpty: string;
   editableConfigurationPromptHelpFallbackError: string;
   editableConfigurationPromptHelpErrorPrefix: string;
-  editableConfigurationPromptHelpHeading: string;
-  editableConfigurationPromptHelpOpenActionLabel: string;
-  editableConfigurationPromptHelpCloseActionLabel: string;
-  editableConfigurationPromptHelpAvailableHeading: string;
-  editableConfigurationPromptHelpUnavailableHeading: string;
-  editableConfigurationPromptHelpInputCountSummary: (count: number) => string;
+  editableConfigurationPromptAutocompleteSummary: (
+    variableCount: number,
+    inputCount: number,
+  ) => string;
+  editableConfigurationPromptAutocompleteDetail: string;
   editableConfigurationSaveFallbackError: string;
   editableConfigurationWorkerMissing: string;
   editableConfigurationWorkerOptionsEmpty: string;

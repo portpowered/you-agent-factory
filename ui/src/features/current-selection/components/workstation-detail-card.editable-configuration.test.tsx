@@ -236,6 +236,9 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByLabelText("Worker")).toBeTruthy();
     expect(
+      screen.getByLabelText("Prompt").getAttribute("data-monaco-editor"),
+    ).toBe("workstation-prompt");
+    expect(
       screen.getByDisplayValue(
         "Review the latest story changes before approval.",
       ),
@@ -345,7 +348,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(onPromptChange).toHaveBeenCalledWith("Updated prompt");
   });
 
-  it("shows prompt variable help inline from the current workstation contract", () => {
+  it("shows inline Monaco guidance from the current workstation contract", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
@@ -364,21 +367,24 @@ describe("WorkstationDetailCard editable configuration", () => {
         name: "Expand editable configuration",
       }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open prompt variable help" }),
-    );
 
     expect(
-      screen.getByText("This workstation exposes 1 authored input."),
+      screen.getByText(
+        "Autocomplete is ready with 2 variables for 1 authored input.",
+      ),
     ).toBeTruthy();
-    expect(screen.getByText("Available variables")).toBeTruthy();
-    expect(screen.getByText(".WorkID")).toBeTruthy();
-    expect(screen.getByText("{{ .WorkID }}")).toBeTruthy();
-    expect(screen.getByText("Unavailable access patterns")).toBeTruthy();
-    expect(screen.getByText(".Inputs[1].Payload")).toBeTruthy();
     expect(
-      screen.getByText("Only input 0 is available for this workstation."),
+      screen.getByText(
+        "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
+      ),
     ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Open prompt variable help" }),
+    ).toBeNull();
+    expect(screen.queryByText("Prompt variable help")).toBeNull();
+    expect(screen.queryByText("Available variables")).toBeNull();
+    expect(screen.queryByText(".WorkID")).toBeNull();
+    expect(screen.queryByText("{{ .WorkID }}")).toBeNull();
   });
 
   it("renders inline prompt diagnostics with squiggle feedback for invalid variables", () => {
@@ -530,8 +536,13 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    const squiggle = editableConfigurationSection().querySelector("mark");
-    expect(squiggle?.textContent).toBe("index .Context.Env 0");
+    const editor = editableConfigurationSection().querySelector(
+      "[data-monaco-editor='workstation-prompt']",
+    );
+    expect(editor?.getAttribute("data-monaco-marker-count")).toBe("1");
+    expect(editor?.getAttribute("data-monaco-marker-messages")).toContain(
+      "Template execution would fail: value has type int; should be string.",
+    );
   });
 
   it("renders explicit prompt-validation loading and error states", () => {
@@ -625,9 +636,13 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    const squiggles = editableConfigurationSection().querySelectorAll("mark");
-    expect(squiggles).toHaveLength(1);
-    expect(squiggles[0]?.textContent).toBe("{{ .Prompt }}");
+    const editor = editableConfigurationSection().querySelector(
+      "[data-monaco-editor='workstation-prompt']",
+    );
+    expect(editor?.getAttribute("data-monaco-marker-count")).toBe("2");
+    expect(editor?.getAttribute("data-monaco-marker-ranges")).toContain(
+      "\"startColumn\":5",
+    );
   });
 
   it("uses byte offsets correctly when diagnostics begin after multibyte characters", () => {
@@ -666,8 +681,12 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    const squiggle = editableConfigurationSection().querySelector("mark");
-    expect(squiggle?.textContent).toBe("{{ .Prompt }}");
+    const editor = editableConfigurationSection().querySelector(
+      "[data-monaco-editor='workstation-prompt']",
+    );
+    expect(editor?.getAttribute("data-monaco-marker-ranges")).toContain(
+      "\"startColumn\":4",
+    );
   });
 
   it("clamps diagnostic offsets that start at byte one or extend past the prompt end", () => {
@@ -705,8 +724,12 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    const squiggle = editableConfigurationSection().querySelector("mark");
-    expect(squiggle?.textContent).toBe("Prompt");
+    const editor = editableConfigurationSection().querySelector(
+      "[data-monaco-editor='workstation-prompt']",
+    );
+    expect(editor?.getAttribute("data-monaco-marker-ranges")).toContain(
+      "\"endColumn\":7",
+    );
   });
 
   it("falls back to source-text matching when authoritative offsets are unavailable", () => {
@@ -748,13 +771,13 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    const squiggles = Array.from(
-      editableConfigurationSection().querySelectorAll("mark"),
-    ).map((element) => element.textContent);
-    expect(squiggles).toEqual(["{{ .Prompt }}", "{{ .Prompt }}"]);
+    const editor = editableConfigurationSection().querySelector(
+      "[data-monaco-editor='workstation-prompt']",
+    );
+    expect(editor?.getAttribute("data-monaco-marker-count")).toBe("2");
   });
 
-  it("renders loading, empty, and error prompt variable help states explicitly", () => {
+  it("keeps prompt guidance inline without a separate prompt variable help disclosure", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const { rerender } = render(
@@ -774,15 +797,16 @@ describe("WorkstationDetailCard editable configuration", () => {
         name: "Expand editable configuration",
       }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open prompt variable help" }),
-    );
 
     expect(
-      screen.getByText(
+      screen.queryByRole("button", { name: "Open prompt variable help" }),
+    ).toBeNull();
+
+    expect(
+      screen.getAllByText(
         "Loading available prompt variables for this workstation.",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
 
     rerender(
       <WorkstationDetailCard
@@ -801,10 +825,10 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
-      screen.getByText(
+      screen.getAllByText(
         "No prompt variable help is available for this workstation.",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
 
     rerender(
       <WorkstationDetailCard
@@ -821,12 +845,12 @@ describe("WorkstationDetailCard editable configuration", () => {
       />,
     );
 
-    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
     expect(
-      screen.getByText(
+      screen.getAllByText(
         "Prompt variable help unavailable. Current named factory workstation not found.",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it("renders explicit worker empty and stale-selection states", () => {

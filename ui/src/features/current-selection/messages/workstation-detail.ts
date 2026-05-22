@@ -49,6 +49,10 @@ const workstationDetailMessagesByLocale = {
       "Resolve the highlighted fields before saving this workstation.",
     editableConfigurationPromptRequired:
       "Enter a prompt before saving this workstation.",
+    editableConfigurationPromptEditorLoading:
+      "Starting the prompt editor for this workstation.",
+    editableConfigurationPromptEditorError:
+      "The prompt editor could not be started. Reload this workstation and try again.",
     editableConfigurationPromptValidationLoading:
       "Validating prompt variables for the current draft.",
     editableConfigurationPromptValidationFallbackError:
@@ -70,15 +74,10 @@ const workstationDetailMessagesByLocale = {
       "Prompt variable help could not be loaded.",
     editableConfigurationPromptHelpErrorPrefix:
       "Prompt variable help unavailable.",
-    editableConfigurationPromptHelpHeading: "Prompt variable help",
-    editableConfigurationPromptHelpOpenActionLabel: "Open prompt variable help",
-    editableConfigurationPromptHelpCloseActionLabel:
-      "Close prompt variable help",
-    editableConfigurationPromptHelpAvailableHeading: "Available variables",
-    editableConfigurationPromptHelpUnavailableHeading:
-      "Unavailable access patterns",
-    editableConfigurationPromptHelpInputCountSummary: (count) =>
-      `This workstation exposes ${singularPlural(count, "authored input", "authored inputs")}.`,
+    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+      `Autocomplete is ready with ${singularPlural(variableCount, "variable", "variables")} for ${singularPlural(inputCount, "authored input", "authored inputs")}.`,
+    editableConfigurationPromptAutocompleteDetail:
+      "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
     editableConfigurationSaveFallbackError:
       "The running factory could not be saved.",
     editableConfigurationWorkerMissing:
@@ -217,6 +216,10 @@ const workstationDetailMessagesByLocale = {
       "このワークステーションを保存する前に、強調表示された項目を修正してください。",
     editableConfigurationPromptRequired:
       "このワークステーションを保存する前にプロンプトを入力してください。",
+    editableConfigurationPromptEditorLoading:
+      "このワークステーションのプロンプトエディターを起動しています。",
+    editableConfigurationPromptEditorError:
+      "プロンプトエディターを起動できませんでした。このワークステーションを再読み込みしてもう一度お試しください。",
     editableConfigurationPromptValidationLoading:
       "この下書きのプロンプト変数を検証しています。",
     editableConfigurationPromptValidationFallbackError:
@@ -238,16 +241,10 @@ const workstationDetailMessagesByLocale = {
       "プロンプト変数ヘルプを読み込めませんでした。",
     editableConfigurationPromptHelpErrorPrefix:
       "プロンプト変数ヘルプは利用できません。",
-    editableConfigurationPromptHelpHeading: "プロンプト変数ヘルプ",
-    editableConfigurationPromptHelpOpenActionLabel:
-      "プロンプト変数ヘルプを開く",
-    editableConfigurationPromptHelpCloseActionLabel:
-      "プロンプト変数ヘルプを閉じる",
-    editableConfigurationPromptHelpAvailableHeading: "利用可能な変数",
-    editableConfigurationPromptHelpUnavailableHeading:
-      "利用できないアクセスパターン",
-    editableConfigurationPromptHelpInputCountSummary: (count) =>
-      `このワークステーションは ${count} 件の入力を公開しています。`,
+    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+      `${inputCount} 件の入力コンテキストで ${variableCount} 件の補完候補を利用できます。`,
+    editableConfigurationPromptAutocompleteDetail:
+      "{{ ... }} の中で入力すると候補が表示され、エディターの補完コマンドで手動表示することもできます。",
     editableConfigurationSaveFallbackError:
       "実行中ファクトリーを保存できませんでした。",
     editableConfigurationWorkerMissing:
@@ -386,6 +383,10 @@ const workstationDetailMessagesByLocale = {
       "이 워크스테이션을 저장하기 전에 강조 표시된 필드를 수정하세요.",
     editableConfigurationPromptRequired:
       "이 워크스테이션을 저장하기 전에 프롬프트를 입력하세요.",
+    editableConfigurationPromptEditorLoading:
+      "이 워크스테이션의 프롬프트 편집기를 시작하는 중입니다.",
+    editableConfigurationPromptEditorError:
+      "프롬프트 편집기를 시작할 수 없습니다. 이 워크스테이션을 다시 불러오고 다시 시도하세요.",
     editableConfigurationPromptValidationLoading:
       "현재 초안의 프롬프트 변수를 검증하는 중입니다.",
     editableConfigurationPromptValidationFallbackError:
@@ -407,15 +408,10 @@ const workstationDetailMessagesByLocale = {
       "프롬프트 변수 도움말을 불러올 수 없습니다.",
     editableConfigurationPromptHelpErrorPrefix:
       "프롬프트 변수 도움말을 사용할 수 없습니다.",
-    editableConfigurationPromptHelpHeading: "프롬프트 변수 도움말",
-    editableConfigurationPromptHelpOpenActionLabel: "프롬프트 변수 도움말 열기",
-    editableConfigurationPromptHelpCloseActionLabel:
-      "프롬프트 변수 도움말 닫기",
-    editableConfigurationPromptHelpAvailableHeading: "사용 가능한 변수",
-    editableConfigurationPromptHelpUnavailableHeading:
-      "사용할 수 없는 접근 패턴",
-    editableConfigurationPromptHelpInputCountSummary: (count) =>
-      `이 워크스테이션은 ${count}개의 작성된 입력을 노출합니다.`,
+    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+      `${inputCount}개의 입력 컨텍스트에서 ${variableCount}개의 자동완성 변수를 사용할 수 있습니다.`,
+    editableConfigurationPromptAutocompleteDetail:
+      "{{ ... }} 안에서 입력하면 추천이 나타나고, 프롬프트 편집기 어디서나 Monaco 자동완성 명령으로 수동 호출할 수도 있습니다.",
     editableConfigurationSaveFallbackError:
       "실행 중인 팩토리를 저장할 수 없습니다.",
     editableConfigurationWorkerMissing:
@@ -547,6 +543,9 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
     editableConfigurationPromptRequired: "保存此工作站前请输入提示词。",
+    editableConfigurationPromptEditorLoading: "正在启动此工作站的提示词编辑器。",
+    editableConfigurationPromptEditorError:
+      "无法启动提示词编辑器。请重新加载此工作站后重试。",
     editableConfigurationPromptValidationLoading: "正在校验当前草稿中的提示词变量。",
     editableConfigurationPromptValidationFallbackError: "无法完成提示词校验。",
     editableConfigurationPromptValidationErrorPrefix: "提示词校验不可用。",
@@ -564,13 +563,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptHelpFallbackError:
       "无法加载提示词变量帮助信息。",
     editableConfigurationPromptHelpErrorPrefix: "提示词变量帮助信息不可用。",
-    editableConfigurationPromptHelpHeading: "提示词变量帮助",
-    editableConfigurationPromptHelpOpenActionLabel: "打开提示词变量帮助",
-    editableConfigurationPromptHelpCloseActionLabel: "关闭提示词变量帮助",
-    editableConfigurationPromptHelpAvailableHeading: "可用变量",
-    editableConfigurationPromptHelpUnavailableHeading: "不可用访问模式",
-    editableConfigurationPromptHelpInputCountSummary: (count) =>
-      `此工作站公开了 ${count} 个已编写输入。`,
+    editableConfigurationPromptAutocompleteSummary: (variableCount, inputCount) =>
+      `自动补全已就绪，可为 ${inputCount} 个已编写输入上下文提供 ${variableCount} 个变量候选。`,
+    editableConfigurationPromptAutocompleteDetail:
+      "在 {{ ... }} 内输入时会显示建议，也可以在提示词编辑器任意位置手动触发 Monaco 补全。",
     editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",
     editableConfigurationWorkerMissing:
       "所选工作站引用的工作器已不在当前工厂定义中。请重新加载当前选择并选择其他工作器。",

@@ -29,10 +29,14 @@ async function listFiles(rootDir, currentDir = rootDir) {
   return files.sort();
 }
 
-async function normalizeSingleAsset(extension, targetName) {
-  const assetNames = (await readdir(assetsDir)).filter((name) => name.endsWith(extension));
+async function normalizeEntryAsset(extension, targetName) {
+  const assetNames = (await readdir(assetsDir)).filter(
+    (name) =>
+      name.endsWith(extension) &&
+      (name === targetName || name.startsWith("index-")),
+  );
   if (assetNames.length !== 1) {
-    throw new Error(`Expected exactly one ${extension} asset in dist/assets, found ${assetNames.length}.`);
+    throw new Error(`Expected exactly one ${extension} entry asset in dist/assets, found ${assetNames.length}.`);
   }
 
   const sourcePath = path.join(assetsDir, assetNames[0]);
@@ -118,8 +122,8 @@ func init() {
   );
 }
 
-await normalizeSingleAsset(".js", "index.js");
-await normalizeSingleAsset(".css", "index.css");
+await normalizeEntryAsset(".js", "index.js");
+await normalizeEntryAsset(".css", "index.css");
 await rewriteIndexHtml();
 await rm(legacyDistStampPath, { force: true });
 await pruneEmptyDirectories(distDir);
