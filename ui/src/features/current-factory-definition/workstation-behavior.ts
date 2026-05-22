@@ -39,3 +39,9 @@ export function workerSupportsPollerBehavior(
     worker?.type === "HOSTED_WORKER" || worker?.type === "SCRIPT_WORKER"
   );
 }
+
+export function workstationBehaviorRequiresPrompt(
+  behavior: EditableWorkstationBehavior,
+): boolean {
+  return behavior !== "POLLER";
+}

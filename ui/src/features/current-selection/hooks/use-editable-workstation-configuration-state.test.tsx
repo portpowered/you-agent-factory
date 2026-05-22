@@ -500,6 +500,51 @@ describe("useEditableWorkstationConfigurationState", () => {
       },
     });
   });
+
+  it("keeps empty-body pollers saveable in the current-selection editor", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          behavior: "POLLER",
+          prompt: "",
+          workerName: "linear-poller",
+          workerOptions: [{ name: "linear-poller", type: "HOSTED_WORKER" }],
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        behavior: "POLLER",
+        prompt: "",
+        workerName: "linear-poller",
+      },
+      hasValidationErrors: false,
+      status: "ready",
+      validationErrors: {},
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition
+        : undefined,
+    ).toMatchObject({
+      workstations: [
+        {
+          behavior: "POLLER",
+          body: "",
+          worker: "linear-poller",
+        },
+      ],
+    });
+  });
 });
 
 function buildEditableDefinitionResult(

@@ -9,6 +9,7 @@ import {
   resolveEditableWorkstationValues,
 } from "../../current-factory-definition/workstation-editable-values";
 import {
+  workstationBehaviorRequiresPrompt,
   workerSupportsPollerBehavior,
   type EditableWorkstationBehavior,
 } from "../../current-factory-definition/workstation-behavior";
@@ -59,10 +60,14 @@ export function useEditableWorkstationConfigurationState(
       selectedNode,
       selection,
     );
+  const shouldValidatePrompt =
+    isNodeSelection &&
+    sessionState != null &&
+    workstationBehaviorRequiresPrompt(sessionState.draft.behavior);
   const promptValidation = useCurrentWorkstationPromptTemplateValidation(
     selectedNode?.workstation_name,
     sessionState?.draft.prompt,
-    isNodeSelection,
+    shouldValidatePrompt,
   );
 
   if (!isNodeSelection) {
@@ -173,6 +178,7 @@ export function validateEditableWorkstationDraft(
   > = getWorkstationDetailMessages(undefined),
 ): EditableWorkstationValidationErrors {
   const validationErrors: EditableWorkstationValidationErrors = {};
+  const promptIsRequired = workstationBehaviorRequiresPrompt(draft.behavior);
 
   if (draft.workerName.trim().length === 0) {
     validationErrors.workerName = messages.editableConfigurationWorkerRequired;
@@ -198,14 +204,15 @@ export function validateEditableWorkstationDraft(
       messages.editableConfigurationBehaviorPollerWorkerUnsupported;
   }
 
-  if (draft.prompt.trim().length === 0) {
+  if (promptIsRequired && draft.prompt.trim().length === 0) {
     validationErrors.prompt = messages.editableConfigurationPromptRequired;
-  } else if (promptValidationState.status === "loading") {
+  } else if (promptIsRequired && promptValidationState.status === "loading") {
     validationErrors.prompt =
       messages.editableConfigurationPromptValidationLoading;
-  } else if (promptValidationState.status === "error") {
+  } else if (promptIsRequired && promptValidationState.status === "error") {
     validationErrors.prompt = `${messages.editableConfigurationPromptValidationErrorPrefix} ${promptValidationState.errorMessage}`;
   } else if (
+    promptIsRequired &&
     promptValidationState.status === "ready" &&
     promptValidationState.diagnostics.length > 0
   ) {
