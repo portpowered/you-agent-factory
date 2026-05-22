@@ -39,6 +39,9 @@ func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testin
 	if resp.Parse.LineCount != 4 || resp.Parse.EventCount != 3 || resp.Parse.MalformedLineCount != 1 || resp.Parse.UnknownEventCount != 1 {
 		t.Fatalf("parse summary = %#v, want line/event/malformed/unknown counts", resp.Parse)
 	}
+	if len(resp.Transcript) != 1 || resp.Transcript[0].Type != factoryapi.Reasoning || resp.Transcript[0].Order != 1 {
+		t.Fatalf("transcript = %#v, want one reasoning transcript entry", resp.Transcript)
+	}
 	if len(resp.Parse.Turns) != 1 || resp.Parse.Turns[0].ReasoningCount != 1 || len(resp.Parse.Reasoning) != 1 || resp.Parse.Reasoning[0].SourceType != "reasoning" {
 		t.Fatalf("parse detail = %#v, want reasoning turn summary", resp.Parse)
 	}
@@ -118,6 +121,28 @@ func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 	}
 	if len(summary.Reasoning) != 1 || stringValue(summary.Reasoning[0].Summary) != `["checked input"]` || summary.Reasoning[0].Encrypted == nil || !*summary.Reasoning[0].Encrypted {
 		t.Fatalf("reasoning = %#v, want summary and encrypted marker", summary.Reasoning)
+	}
+	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("parse codex session details: %v", err)
+	}
+	if len(parsed.Transcript) != 4 {
+		t.Fatalf("transcript = %#v, want four ordered transcript entries", parsed.Transcript)
+	}
+	if parsed.Transcript[0].Type != factoryapi.Reasoning || stringValue(parsed.Transcript[0].SourceType) != "reasoning" || intValue(parsed.Transcript[0].LineNumber) != 2 {
+		t.Fatalf("first transcript entry = %#v, want reasoning line 2", parsed.Transcript[0])
+	}
+	if parsed.Transcript[1].Type != factoryapi.ToolCall || stringValue(parsed.Transcript[1].Name) != "exec_command" || stringValue(parsed.Transcript[1].Arguments) != `{"cmd":"go test ./pkg/api"}` {
+		t.Fatalf("second transcript entry = %#v, want exec_command tool call", parsed.Transcript[1])
+	}
+	if parsed.Transcript[2].Type != factoryapi.ToolOutput || stringValue(parsed.Transcript[2].Output) != "ok" || stringValue(parsed.Transcript[2].Status) != "completed" {
+		t.Fatalf("third transcript entry = %#v, want completed tool output", parsed.Transcript[2])
+	}
+	if parsed.Transcript[3].Type != factoryapi.ToolCall || stringValue(parsed.Transcript[3].Name) != "apply_patch" || stringValue(parsed.Transcript[3].Status) != "in_progress" {
+		t.Fatalf("fourth transcript entry = %#v, want in-progress apply_patch tool call", parsed.Transcript[3])
+	}
+	if parsed.Transcript[3].Order != 4 {
+		t.Fatalf("final transcript entry order = %d, want 4", parsed.Transcript[3].Order)
 	}
 	if summary.TokenUsage == nil || intValue(summary.TokenUsage.InputTokens) != 100 || intValue(summary.TokenUsage.CachedInputTokens) != 40 || intValue(summary.TokenUsage.OutputTokens) != 25 || intValue(summary.TokenUsage.ReasoningOutputTokens) != 5 || intValue(summary.TokenUsage.TotalTokens) != 130 {
 		t.Fatalf("token usage = %#v, want total consumed token fields", summary.TokenUsage)

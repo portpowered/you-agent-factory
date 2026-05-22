@@ -164,6 +164,7 @@ function isProviderSessionDetailResponse(
     isAPIRecord(value.providerSession) &&
     isAPIRecord(value.source) &&
     isAPIRecord(value.parse) &&
+    Array.isArray(value.transcript) &&
     Array.isArray(value.parse.turns) &&
     Array.isArray(value.parse.functionCalls) &&
     Array.isArray(value.parse.reasoning) &&

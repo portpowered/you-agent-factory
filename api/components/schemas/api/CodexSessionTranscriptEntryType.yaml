@@ -1,0 +1,9 @@
+type: string
+description: Canonical transcript entry type used by the dashboard transcript view.
+enum:
+  - user_message
+  - assistant_message
+  - reasoning
+  - tool_call
+  - tool_output
+  - system_event
