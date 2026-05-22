@@ -684,7 +684,16 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	if err := fs.waitForLiveRuntimeStart(ctx, currentRuntime); err != nil {
 		fs.clearRunState()
 		fs.unregisterLiveSession(defaultFactorySessionID)
-		_ = fs.stopLiveRuntime(currentRuntime)
+		stopErr := fs.stopLiveRuntime(currentRuntime)
+		if isCanceledServiceStartup(ctx, err) {
+			if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+				return stopErr
+			}
+			return nil
+		}
+		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+			return errors.Join(fmt.Errorf("start runtime: %w", err), stopErr)
+		}
 		return fmt.Errorf("start runtime: %w", err)
 	}
 	if serviceMode {
@@ -1096,6 +1105,10 @@ func (fs *FactoryService) waitForLiveRuntimeStart(ctx context.Context, handle *l
 			}
 		}
 	}
+}
+
+func isCanceledServiceStartup(ctx context.Context, err error) bool {
+	return ctx != nil && ctx.Err() != nil && errors.Is(err, context.Canceled)
 }
 
 func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
