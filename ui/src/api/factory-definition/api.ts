@@ -95,6 +95,7 @@ const WORKSTATION_KEYS = new Set([
   "worktree",
 ]);
 const WORKSTATION_IO_KEYS = new Set(["guards", "state", "workType"]);
+const CLASSIFICATION_ROUTE_KEYS = new Set(["label", "outputs"]);
 const GUARD_KEYS = new Set([
   "matchConfig",
   "matchInput",
@@ -554,6 +555,7 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
 
 function decodeClassificationRoute(value: unknown, path: string): FactoryClassificationRoute {
   const record = expectObject(value, path);
+  rejectUnknownKeys(record, CLASSIFICATION_ROUTE_KEYS, path);
 
   return {
     label: readRequiredString(record, "label", path),
