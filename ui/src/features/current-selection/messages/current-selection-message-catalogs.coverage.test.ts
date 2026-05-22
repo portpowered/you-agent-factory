@@ -113,6 +113,8 @@ const invokeProviderSessionDetail = (
   formatter: (...args: never[]) => unknown,
 ) => {
   switch (key satisfies keyof ProviderSessionDetailMessages) {
+    case "transcriptLineNumberLabel":
+      return [formatter({ lineNumber: 42 } as never)];
     case "lineLabel":
     case "unknownEventOnLineLabel":
       return [formatter({ lineNumber: 42 } as never)];
@@ -121,6 +123,15 @@ const invokeProviderSessionDetail = (
         formatter({ order: 1 } as never),
         formatter({ order: 2, turnIndex: 7 } as never),
       ];
+    case "transcriptTimestampLabel":
+      return [formatter({ timestamp: "2026-05-22T11:00:00Z" } as never)];
+    case "transcriptToggleLabel":
+      return [
+        formatter({ expanded: false, section: "Arguments" } as never),
+        formatter({ expanded: true, section: "Output" } as never),
+      ];
+    case "transcriptTurnLabel":
+      return [formatter({ turnIndex: 3 } as never)];
     case "turnLabel":
       return [formatter({ index: 3 } as never)];
     default:

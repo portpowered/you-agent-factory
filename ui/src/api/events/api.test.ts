@@ -38,7 +38,7 @@ describe("factory events API", () => {
     );
   });
 
-  it("opens the event stream and translates lifecycle plus message events", () => {
+  it("opens the explicit default-session event stream and translates lifecycle plus message events", () => {
     const onEvent = vi.fn();
     const onStatusChange = vi.fn();
     vi.stubGlobal("EventSource", MockEventSource);
@@ -46,7 +46,7 @@ describe("factory events API", () => {
     const stream = openFactoryEventStream(onEvent, onStatusChange);
 
     expect(stream).toBeInstanceOf(MockEventSource);
-    expect(stream?.url).toBe("/events");
+    expect(stream?.url).toBe("/factories/~default/events");
     expect(onStatusChange).toHaveBeenCalledWith("connecting", "Connecting to factory events...");
 
     stream?.onopen?.(new Event("open"));

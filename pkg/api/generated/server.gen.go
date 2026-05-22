@@ -26,6 +26,16 @@ const (
 	Utf8 BundledFileContentEncoding = "utf-8"
 )
 
+// Defines values for CodexSessionTranscriptEntryType.
+const (
+	AssistantMessage CodexSessionTranscriptEntryType = "assistant_message"
+	Reasoning        CodexSessionTranscriptEntryType = "reasoning"
+	SystemEvent      CodexSessionTranscriptEntryType = "system_event"
+	ToolCall         CodexSessionTranscriptEntryType = "tool_call"
+	ToolOutput       CodexSessionTranscriptEntryType = "tool_output"
+	UserMessage      CodexSessionTranscriptEntryType = "user_message"
+)
+
 // Defines values for ErrorFamily.
 const (
 	ErrorFamilyBadRequest          ErrorFamily = "BAD_REQUEST"
@@ -385,6 +395,54 @@ type CodexSessionTokenUsage struct {
 	ReasoningOutputTokens *int `json:"reasoningOutputTokens,omitempty"`
 	TotalTokens           *int `json:"totalTokens,omitempty"`
 }
+
+// CodexSessionTranscriptEntry defines model for CodexSessionTranscriptEntry.
+type CodexSessionTranscriptEntry struct {
+	// Arguments Compact tool-call arguments when present.
+	Arguments *string `json:"arguments,omitempty"`
+
+	// CallId Provider tool-call identifier when present.
+	CallId *string `json:"callId,omitempty"`
+
+	// Encrypted Whether the entry only exposed encrypted content instead of plaintext.
+	Encrypted *bool `json:"encrypted,omitempty"`
+
+	// LineNumber One-based JSONL line number that produced this transcript entry when applicable.
+	LineNumber *int `json:"lineNumber,omitempty"`
+
+	// Name Tool or function name when present.
+	Name *string `json:"name,omitempty"`
+
+	// Order Stable chronological order of the transcript entry in the session stream.
+	Order int `json:"order"`
+
+	// Output Compact tool output when present.
+	Output *string `json:"output,omitempty"`
+
+	// SourceType Raw provider event or item type that produced this transcript entry.
+	SourceType *string `json:"sourceType,omitempty"`
+
+	// Status Provider or inferred status value when present.
+	Status *string `json:"status,omitempty"`
+
+	// Summary Compact summary text when the provider emits a separate summary channel.
+	Summary *string `json:"summary,omitempty"`
+
+	// Text Plaintext transcript body when present.
+	Text *string `json:"text,omitempty"`
+
+	// Timestamp Provider event timestamp when present in the source session stream.
+	Timestamp *time.Time `json:"timestamp,omitempty"`
+
+	// TurnIndex One-based inferred turn index when the session parser can associate the entry with a turn.
+	TurnIndex *int `json:"turnIndex,omitempty"`
+
+	// Type Canonical transcript entry type used by the dashboard transcript view.
+	Type CodexSessionTranscriptEntryType `json:"type"`
+}
+
+// CodexSessionTranscriptEntryType Canonical transcript entry type used by the dashboard transcript view.
+type CodexSessionTranscriptEntryType string
 
 // CodexSessionTurnSummary defines model for CodexSessionTurnSummary.
 type CodexSessionTurnSummary struct {
@@ -1132,6 +1190,9 @@ type ProviderSessionDetailResponse struct {
 	Parse           CodexSessionParseSummary      `json:"parse"`
 	ProviderSession LoadableProviderSessionRef    `json:"providerSession"`
 	Source          ProviderSessionSourceMetadata `json:"source"`
+
+	// Transcript Ordered transcript entries extracted from the provider-session stream.
+	Transcript []CodexSessionTranscriptEntry `json:"transcript"`
 }
 
 // ProviderSessionMetadata defines model for ProviderSessionMetadata.

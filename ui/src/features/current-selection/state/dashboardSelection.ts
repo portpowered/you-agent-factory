@@ -1,5 +1,6 @@
 import type {
   DashboardActiveExecution,
+  DashboardRuntimeWorkstationRequest,
   DashboardSnapshot,
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
@@ -181,10 +182,7 @@ export function findWorkItemReference(
   const workstationRequestWorkItem = Object.values(
     snapshot.runtime.workstation_requests_by_dispatch_id ?? {},
   )
-    .flatMap((request) => [
-      ...(request.request.input_work_items ?? []),
-      ...(request.response?.output_work_items ?? []),
-    ])
+    .flatMap((request) => workItemsFromRetainedRequest(request))
     .find((workItem) => workItem.work_id === workID);
   if (workstationRequestWorkItem) {
     return workstationRequestWorkItem;
@@ -215,3 +213,24 @@ export function findWorkstationNodeIDForPlace(
   return undefined;
 }
 
+function workItemsFromRetainedRequest(
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+): DashboardWorkItemRef[] {
+  const runtimeRequest = "request" in request ? request.request : undefined;
+  const runtimeResponse =
+    "response" in request && typeof request.response === "object"
+      ? request.response
+      : undefined;
+  const projectedRequestView = "request_view" in request ? request.request_view : undefined;
+  const projectedResponseView =
+    "response_view" in request ? request.response_view : undefined;
+  const projectedWorkItems = "work_items" in request ? request.work_items : undefined;
+
+  return [
+    ...(runtimeRequest?.input_work_items ?? []),
+    ...(runtimeResponse?.output_work_items ?? []),
+    ...(projectedRequestView?.input_work_items ?? []),
+    ...(projectedResponseView?.output_work_items ?? []),
+    ...(projectedWorkItems ?? []),
+  ];
+}

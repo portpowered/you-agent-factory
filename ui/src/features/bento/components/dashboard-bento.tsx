@@ -5,8 +5,10 @@ import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useAppLocale } from "../../../i18n";
 import {
   CurrentSelectionWidget,
+  ProviderSessionWidget,
   useCurrentSelection,
   useCurrentSelectionDetails,
+  useSelectedProviderSessionState,
 } from "../../current-selection";
 import { DashboardImportPreviewDialog } from "../../import";
 import { SubmitWorkWidget } from "../../submit-work";
@@ -102,6 +104,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     currentSelection.selectedWorkID,
     selectedTraceID,
   );
+  const providerSessionState = useSelectedProviderSessionState(currentSelection);
   const { selectedWorkExecutionDetails } = useCurrentSelectionDetails({
     currentSelection,
     selectedTrace,
@@ -119,6 +122,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     importController,
     locale: resolvedLocale,
     now,
+    providerSessionState,
     selectedTrace,
     selectedTraceID,
     selectedWorkExecutionDetails,
@@ -161,6 +165,7 @@ interface DashboardCardBuilderArgs {
   importController: ReturnType<typeof useCurrentActivityImportController>;
   locale?: string;
   now: number;
+  providerSessionState: ReturnType<typeof useSelectedProviderSessionState>;
   selectedTrace: ReturnType<typeof useTraceDrilldown>["selectedTrace"];
   selectedTraceID: string | null;
   selectedWorkExecutionDetails: ReturnType<
@@ -177,6 +182,7 @@ function buildDashboardCards({
   importController,
   locale,
   now,
+  providerSessionState,
   selectedTrace,
   selectedTraceID,
   selectedWorkExecutionDetails,
@@ -198,7 +204,7 @@ function buildDashboardCards({
           locale={locale}
           now={now}
           onSelectStateNode={currentSelection.selectStateNode}
-          onSelectWorkItem={currentSelection.selectWorkItem}
+          onSelectWorkID={currentSelection.selectWorkByID}
           onSelectWorkstation={currentSelection.selectWorkstation}
           selection={currentSelection.selection}
           snapshot={snapshot}
@@ -239,10 +245,24 @@ function buildDashboardCards({
           }
           locale={locale}
           now={now}
+          onSelectProviderSession={providerSessionState.setSelectedProviderSession}
           onSelectTraceID={setSelectedTraceID}
+          selectedProviderSessionKey={
+            providerSessionState.selectedProviderSessionKey
+          }
           selectedTrace={selectedTrace}
           selectedWorkExecutionDetails={selectedWorkExecutionDetails}
           widgetId={DASHBOARD_WIDGET_IDS.currentSelection}
+        />
+      ),
+    },
+    {
+      id: DASHBOARD_WIDGET_IDS.providerSession,
+      children: (
+        <ProviderSessionWidget
+          locale={locale}
+          selectedProviderSession={providerSessionState.selectedProviderSession}
+          widgetId={DASHBOARD_WIDGET_IDS.providerSession}
         />
       ),
     },

@@ -200,7 +200,7 @@ describe("CurrentSelectionWidget localization", () => {
       }),
     );
     expect(
-      await within(englishSelection).findByText("Loading session details..."),
+      within(englishSelection).getByText("Session selected"),
     ).toBeTruthy();
 
     rerender(
@@ -227,7 +227,7 @@ describe("CurrentSelectionWidget localization", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(localizedSelection).getByText("正在加载会话详情..."),
+      within(localizedSelection).getByText("会话已选中"),
     ).toBeTruthy();
     expect(
       within(localizedSelection).getByText(fixture.workItem.work_id),

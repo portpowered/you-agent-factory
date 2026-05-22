@@ -23,6 +23,14 @@ describe("getProviderSessionDetails", () => {
             unknownEventCount: 0,
             unknownEvents: [],
           },
+          transcript: [
+            {
+              lineNumber: 2,
+              order: 1,
+              sourceType: "reasoning",
+              type: "reasoning",
+            },
+          ],
           providerSession: {
             id: "sess_alpha",
             kind: "session_id",

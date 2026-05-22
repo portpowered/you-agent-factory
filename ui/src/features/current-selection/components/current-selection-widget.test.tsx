@@ -446,13 +446,13 @@ describe("CurrentSelectionWidget", () => {
       }),
     ).toBeNull();
     expect(
-      within(currentSelection).getByRole("heading", {
+      within(currentSelection).queryByRole("heading", {
         name: "Selected session details",
       }),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
-  it("refreshes the session-detail panel when a different provider-session card is selected", async () => {
+  it("updates provider-session pressed state when a different provider-session card is selected", async () => {
     const user = userEvent.setup();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
@@ -512,54 +512,6 @@ describe("CurrentSelectionWidget", () => {
         snapshot.runtime.workstation_requests_by_dispatch_id,
     });
 
-    let resolveSecondResponse: ((value: Response) => void) | null = null;
-    vi.mocked(globalThis.fetch).mockImplementation((input) => {
-      const requestURL = String(input);
-      if (requestURL.includes("id=sess_first")) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              parse: {
-                eventCount: 1,
-                functionCalls: [],
-                lineCount: 1,
-                malformedLineCount: 0,
-                parseErrors: [],
-                reasoning: [],
-                turns: [],
-                unknownEventCount: 0,
-                unknownEvents: [],
-              },
-              providerSession: {
-                id: "sess_first",
-                kind: "session_id",
-                provider: "codex",
-              },
-              source: {
-                relativePath: "2026/05/18/rollout-sess_first.jsonl",
-                sizeBytes: 256,
-              },
-            }),
-            {
-              headers: {
-                "Content-Type": "application/json",
-              },
-              status: 200,
-              statusText: "OK",
-            },
-          ),
-        );
-      }
-
-      if (requestURL.includes("id=sess_second")) {
-        return new Promise<Response>((resolve) => {
-          resolveSecondResponse = resolve;
-        });
-      }
-
-      throw new Error(`unexpected provider-session request: ${requestURL}`);
-    });
-
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
@@ -585,58 +537,19 @@ describe("CurrentSelectionWidget", () => {
 
     await user.click(firstButton);
 
-    expect(
-      await within(currentSelection).findByText(
-        "2026/05/18/rollout-sess_first.jsonl",
-      ),
-    ).toBeTruthy();
+    expect(firstButton.getAttribute("aria-pressed")).toBe("true");
+    expect(secondButton.getAttribute("aria-pressed")).toBe("false");
+    expect(within(currentSelection).getByText("Session selected")).toBeTruthy();
 
     await user.click(secondButton);
 
-    expect(within(currentSelection).getByText("Loading session details...")).toBeTruthy();
+    expect(firstButton.getAttribute("aria-pressed")).toBe("false");
+    expect(secondButton.getAttribute("aria-pressed")).toBe("true");
     expect(
-      within(currentSelection).queryByText("2026/05/18/rollout-sess_first.jsonl"),
+      within(currentSelection).queryByRole("heading", {
+        name: "Selected session details",
+      }),
     ).toBeNull();
-
-    resolveSecondResponse?.(
-      new Response(
-        JSON.stringify({
-          parse: {
-            eventCount: 1,
-            functionCalls: [],
-            lineCount: 1,
-            malformedLineCount: 0,
-            parseErrors: [],
-            reasoning: [],
-            turns: [],
-            unknownEventCount: 0,
-            unknownEvents: [],
-          },
-          providerSession: {
-            id: "sess_second",
-            kind: "session_id",
-            provider: "codex",
-          },
-          source: {
-            relativePath: "2026/05/18/rollout-sess_second.jsonl",
-            sizeBytes: 384,
-          },
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          status: 200,
-          statusText: "OK",
-        },
-      ),
-    );
-
-    expect(
-      await within(currentSelection).findByText(
-        "2026/05/18/rollout-sess_second.jsonl",
-      ),
-    ).toBeTruthy();
   });
 
   it("renders selected state details when a state node is active", () => {

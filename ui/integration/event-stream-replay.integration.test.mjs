@@ -28,6 +28,16 @@ const browserScenarioTimeoutMs = 240_000;
 const readyTimeoutMs = 90_000;
 const replayDelayMs = 25;
 const uiInteractionTimeoutMs = 10_000;
+const defaultFactorySessionID = "~default";
+const defaultEventsPath = `/factories/${defaultFactorySessionID}/events`;
+const defaultCurrentFactoryPath =
+  `/factories/${defaultFactorySessionID}/factory/~current`;
+const defaultEditableDefinitionPath =
+  `${defaultCurrentFactoryPath}/editable-definition`;
+const promptTemplateContractPathPattern =
+  /^\/(?:factories\/~default\/)?factory\/~current\/workstations\/[^/]+\/prompt-template-contract$/;
+const promptTemplateValidationPathPattern =
+  /^\/(?:factories\/~default\/)?factory\/~current\/workstations\/[^/]+\/prompt-template-validation$/;
 
 let apiServer = null;
 let apiOrigin = "";
@@ -362,7 +372,18 @@ async function startReplayServer(lines, options = {}) {
       return;
     }
 
-    if (request.url === "/factory/~current" && request.method === "GET") {
+    if (request.url === "/favicon.ico") {
+      response.writeHead(204, {
+        "Access-Control-Allow-Origin": "*",
+      });
+      response.end();
+      return;
+    }
+
+    if (
+      request.url === defaultCurrentFactoryPath &&
+      request.method === "GET"
+    ) {
       if (currentFactoryDefinition === null) {
         response.writeHead(404, {
           "Access-Control-Allow-Origin": "*",
@@ -413,9 +434,7 @@ async function startReplayServer(lines, options = {}) {
     }
 
     if (
-      request.url?.match(
-        /^\/factory\/~current\/workstations\/[^/]+\/prompt-template-contract$/,
-      ) &&
+      request.url?.match(promptTemplateContractPathPattern) &&
       request.method === "GET"
     ) {
       response.writeHead(200, {
@@ -427,9 +446,7 @@ async function startReplayServer(lines, options = {}) {
     }
 
     if (
-      request.url?.match(
-        /^\/factory\/~current\/workstations\/[^/]+\/prompt-template-validation$/,
-      ) &&
+      request.url?.match(promptTemplateValidationPathPattern) &&
       request.method === "POST"
     ) {
       response.writeHead(200, {
@@ -441,7 +458,7 @@ async function startReplayServer(lines, options = {}) {
     }
 
     if (
-      request.url === "/factory/~current/editable-definition" &&
+      request.url === defaultEditableDefinitionPath &&
       request.method === "GET"
     ) {
       if (currentFactoryDefinition === null) {
@@ -467,7 +484,7 @@ async function startReplayServer(lines, options = {}) {
     }
 
     if (
-      request.url === "/factory/~current/editable-definition" &&
+      request.url === defaultEditableDefinitionPath &&
       request.method === "PUT"
     ) {
       let requestBody = "";
@@ -525,7 +542,7 @@ async function startReplayServer(lines, options = {}) {
       return;
     }
 
-    if (request.url !== "/events") {
+    if (request.url !== defaultEventsPath) {
       response.writeHead(404, {
         "Access-Control-Allow-Origin": "*",
         "Content-Type": "text/plain; charset=utf-8",

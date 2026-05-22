@@ -88,7 +88,7 @@ func loadProviderSessionDetails(root, id string) (factoryapi.ProviderSessionDeta
 	}
 	defer file.Close()
 
-	parse, err := parseCodexSessionSummary(file)
+	parsed, err := parseCodexSessionDetails(file)
 	if err != nil {
 		return factoryapi.ProviderSessionDetailResponse{}, err
 	}
@@ -104,7 +104,8 @@ func loadProviderSessionDetails(root, id string) (factoryapi.ProviderSessionDeta
 			SizeBytes:    resolved.sizeBytes,
 			ModifiedAt:   resolved.modifiedAt,
 		},
-		Parse: parse,
+		Parse:      parsed.Summary,
+		Transcript: parsed.Transcript,
 	}, nil
 }
 
@@ -251,7 +252,20 @@ func pathInsideRoot(root, path string) bool {
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
+type parsedCodexSessionDetails struct {
+	Summary    factoryapi.CodexSessionParseSummary
+	Transcript []factoryapi.CodexSessionTranscriptEntry
+}
+
 func parseCodexSessionSummary(reader io.Reader) (factoryapi.CodexSessionParseSummary, error) {
+	parsed, err := parseCodexSessionDetails(reader)
+	if err != nil {
+		return factoryapi.CodexSessionParseSummary{}, err
+	}
+	return parsed.Summary, nil
+}
+
+func parseCodexSessionDetails(reader io.Reader) (parsedCodexSessionDetails, error) {
 	parser := codexSessionParser{
 		summary: factoryapi.CodexSessionParseSummary{
 			Turns:         []factoryapi.CodexSessionTurnSummary{},
@@ -260,6 +274,7 @@ func parseCodexSessionSummary(reader io.Reader) (factoryapi.CodexSessionParseSum
 			ParseErrors:   []factoryapi.CodexSessionLineError{},
 			UnknownEvents: []factoryapi.CodexSessionUnknownEvent{},
 		},
+		transcript: []factoryapi.CodexSessionTranscriptEntry{},
 	}
 	bufferedReader := bufio.NewReader(reader)
 	lineNumber := 0
@@ -269,7 +284,7 @@ func parseCodexSessionSummary(reader io.Reader) (factoryapi.CodexSessionParseSum
 			break
 		}
 		if err != nil && !errors.Is(err, io.EOF) {
-			return factoryapi.CodexSessionParseSummary{}, fmt.Errorf("read provider session stream: %w", err)
+			return parsedCodexSessionDetails{}, fmt.Errorf("read provider session stream: %w", err)
 		}
 
 		lineNumber++
@@ -296,11 +311,15 @@ func parseCodexSessionSummary(reader io.Reader) (factoryapi.CodexSessionParseSum
 			break
 		}
 	}
-	return parser.summary, nil
+	return parsedCodexSessionDetails{
+		Summary:    parser.summary,
+		Transcript: parser.transcript,
+	}, nil
 }
 
 type codexSessionParser struct {
 	summary          factoryapi.CodexSessionParseSummary
+	transcript       []factoryapi.CodexSessionTranscriptEntry
 	currentTurnIndex int
 }
 
@@ -328,11 +347,13 @@ func (p *codexSessionParser) recordEventMessage(lineNumber int, event map[string
 	case "token_count":
 		p.recordTokenUsage(payload)
 	case "agent_message", "user_message", "task_started", "task_complete", "patch_apply_end":
-		p.ensureTurn(timestamp).EventCount++
+		turn := p.ensureTurn(timestamp)
+		turn.EventCount++
+		p.appendEventMessageTranscript(lineNumber, payloadType, payload, timestamp, turn)
 	case "agent_reasoning":
 		turn := p.ensureTurn(timestamp)
 		turn.EventCount++
-		p.appendReasoning("agent_reasoning", payload, turn)
+		p.appendReasoning("agent_reasoning", payload, timestamp, lineNumber, turn)
 	default:
 		p.recordUnknownEvent(lineNumber, "event_msg", payloadType)
 	}
@@ -358,13 +379,13 @@ func (p *codexSessionParser) recordResponseItem(lineNumber int, event map[string
 
 	switch itemType {
 	case "message":
-		return
+		p.appendResponseMessage(payload, timestamp, lineNumber, turn)
 	case "reasoning":
-		p.appendReasoning(itemType, payload, turn)
+		p.appendReasoning(itemType, payload, timestamp, lineNumber, turn)
 	case "function_call", "custom_tool_call":
-		p.appendFunctionCall(itemType, payload, turn)
+		p.appendFunctionCall(itemType, payload, timestamp, lineNumber, turn)
 	case "function_call_output", "custom_tool_call_output":
-		p.attachFunctionOutput(itemType, payload, turn)
+		p.attachFunctionOutput(itemType, payload, timestamp, lineNumber, turn)
 	default:
 		p.recordUnknownEvent(lineNumber, "response_item", itemType)
 	}
@@ -394,10 +415,10 @@ func (p *codexSessionParser) ensureTurn(startedAt *time.Time) *factoryapi.CodexS
 	return turn
 }
 
-func (p *codexSessionParser) appendFunctionCall(itemType string, payload map[string]any, turn *factoryapi.CodexSessionTurnSummary) {
+func (p *codexSessionParser) appendFunctionCall(itemType string, payload map[string]any, timestamp *time.Time, lineNumber int, turn *factoryapi.CodexSessionTurnSummary) {
 	turn.FunctionCallCount++
 	order := len(p.summary.FunctionCalls) + 1
-	p.summary.FunctionCalls = append(p.summary.FunctionCalls, factoryapi.CodexSessionFunctionCallSummary{
+	call := factoryapi.CodexSessionFunctionCallSummary{
 		Order:     order,
 		TurnIndex: intPtr(turn.Index),
 		CallId:    stringPtrIfNotEmpty(firstStringField(payload, "call_id", "callId", "id")),
@@ -405,10 +426,23 @@ func (p *codexSessionParser) appendFunctionCall(itemType string, payload map[str
 		Name:      stringPtrIfNotEmpty(firstStringField(payload, "name", "tool_name", "toolName")),
 		Arguments: stringPtrIfNotEmpty(firstCompactField(payload, "arguments", "arguments_json", "input")),
 		Status:    stringPtrIfNotEmpty(firstStringField(payload, "status")),
+	}
+	p.summary.FunctionCalls = append(p.summary.FunctionCalls, call)
+	p.transcript = append(p.transcript, factoryapi.CodexSessionTranscriptEntry{
+		Arguments:  call.Arguments,
+		CallId:     call.CallId,
+		LineNumber: intPtr(lineNumber),
+		Name:       call.Name,
+		Order:      len(p.transcript) + 1,
+		SourceType: stringPtrIfNotEmpty(itemType),
+		Status:     call.Status,
+		Timestamp:  timestamp,
+		TurnIndex:  call.TurnIndex,
+		Type:       factoryapi.CodexSessionTranscriptEntryType("tool_call"),
 	})
 }
 
-func (p *codexSessionParser) attachFunctionOutput(itemType string, payload map[string]any, turn *factoryapi.CodexSessionTurnSummary) {
+func (p *codexSessionParser) attachFunctionOutput(itemType string, payload map[string]any, timestamp *time.Time, lineNumber int, turn *factoryapi.CodexSessionTurnSummary) {
 	callID := firstStringField(payload, "call_id", "callId", "id")
 	output := firstCompactField(payload, "output", "content", "result")
 	status := firstStringField(payload, "status")
@@ -419,32 +453,120 @@ func (p *codexSessionParser) attachFunctionOutput(itemType string, payload map[s
 		if stringValue(p.summary.FunctionCalls[i].CallId) == callID && callID != "" {
 			p.summary.FunctionCalls[i].Output = stringPtrIfNotEmpty(output)
 			p.summary.FunctionCalls[i].Status = stringPtrIfNotEmpty(status)
+			p.appendToolOutputTranscript(itemType, callID, output, status, timestamp, lineNumber, p.summary.FunctionCalls[i].Name, p.summary.FunctionCalls[i].TurnIndex)
 			return
 		}
 	}
 
 	order := len(p.summary.FunctionCalls) + 1
-	p.summary.FunctionCalls = append(p.summary.FunctionCalls, factoryapi.CodexSessionFunctionCallSummary{
+	call := factoryapi.CodexSessionFunctionCallSummary{
 		Order:     order,
 		TurnIndex: intPtr(turn.Index),
 		CallId:    stringPtrIfNotEmpty(callID),
 		Type:      itemType,
 		Output:    stringPtrIfNotEmpty(output),
 		Status:    stringPtrIfNotEmpty(status),
-	})
+	}
+	p.summary.FunctionCalls = append(p.summary.FunctionCalls, call)
+	p.appendToolOutputTranscript(itemType, callID, output, status, timestamp, lineNumber, call.Name, call.TurnIndex)
 }
 
-func (p *codexSessionParser) appendReasoning(sourceType string, payload map[string]any, turn *factoryapi.CodexSessionTurnSummary) {
+func (p *codexSessionParser) appendReasoning(sourceType string, payload map[string]any, timestamp *time.Time, lineNumber int, turn *factoryapi.CodexSessionTurnSummary) {
 	turn.ReasoningCount++
 	order := len(p.summary.Reasoning) + 1
 	encrypted := firstStringField(payload, "encrypted_content", "encryptedContent") != ""
-	p.summary.Reasoning = append(p.summary.Reasoning, factoryapi.CodexSessionReasoningSummary{
+	reasoning := factoryapi.CodexSessionReasoningSummary{
 		Order:      order,
 		TurnIndex:  intPtr(turn.Index),
 		SourceType: sourceType,
 		Text:       stringPtrIfNotEmpty(firstReasoningText(payload)),
 		Summary:    stringPtrIfNotEmpty(firstCompactField(payload, "summary")),
 		Encrypted:  &encrypted,
+	}
+	p.summary.Reasoning = append(p.summary.Reasoning, reasoning)
+	p.transcript = append(p.transcript, factoryapi.CodexSessionTranscriptEntry{
+		Encrypted:  reasoning.Encrypted,
+		LineNumber: intPtr(lineNumber),
+		Order:      len(p.transcript) + 1,
+		SourceType: stringPtrIfNotEmpty(sourceType),
+		Summary:    reasoning.Summary,
+		Text:       reasoning.Text,
+		Timestamp:  timestamp,
+		TurnIndex:  reasoning.TurnIndex,
+		Type:       factoryapi.CodexSessionTranscriptEntryType("reasoning"),
+	})
+}
+
+func (p *codexSessionParser) appendEventMessageTranscript(
+	lineNumber int,
+	payloadType string,
+	payload map[string]any,
+	timestamp *time.Time,
+	turn *factoryapi.CodexSessionTurnSummary,
+) {
+	entryType := factoryapi.CodexSessionTranscriptEntryType("system_event")
+	switch payloadType {
+	case "user_message":
+		entryType = factoryapi.CodexSessionTranscriptEntryType("user_message")
+	case "agent_message":
+		entryType = factoryapi.CodexSessionTranscriptEntryType("assistant_message")
+	}
+
+	p.transcript = append(p.transcript, factoryapi.CodexSessionTranscriptEntry{
+		LineNumber: intPtr(lineNumber),
+		Order:      len(p.transcript) + 1,
+		SourceType: stringPtrIfNotEmpty(payloadType),
+		Text:       stringPtrIfNotEmpty(firstMessageText(payload)),
+		Timestamp:  timestamp,
+		TurnIndex:  intPtr(turn.Index),
+		Type:       entryType,
+	})
+}
+
+func (p *codexSessionParser) appendResponseMessage(
+	payload map[string]any,
+	timestamp *time.Time,
+	lineNumber int,
+	turn *factoryapi.CodexSessionTurnSummary,
+) {
+	role := firstStringField(payload, "role")
+	entryType := factoryapi.CodexSessionTranscriptEntryType("assistant_message")
+	if role == "user" {
+		entryType = factoryapi.CodexSessionTranscriptEntryType("user_message")
+	}
+
+	p.transcript = append(p.transcript, factoryapi.CodexSessionTranscriptEntry{
+		LineNumber: intPtr(lineNumber),
+		Order:      len(p.transcript) + 1,
+		SourceType: stringPtrIfNotEmpty("message"),
+		Text:       stringPtrIfNotEmpty(firstMessageText(payload)),
+		Timestamp:  timestamp,
+		TurnIndex:  intPtr(turn.Index),
+		Type:       entryType,
+	})
+}
+
+func (p *codexSessionParser) appendToolOutputTranscript(
+	itemType string,
+	callID string,
+	output string,
+	status string,
+	timestamp *time.Time,
+	lineNumber int,
+	name *string,
+	turnIndex *int,
+) {
+	p.transcript = append(p.transcript, factoryapi.CodexSessionTranscriptEntry{
+		CallId:     stringPtrIfNotEmpty(callID),
+		LineNumber: intPtr(lineNumber),
+		Name:       name,
+		Order:      len(p.transcript) + 1,
+		Output:     stringPtrIfNotEmpty(output),
+		SourceType: stringPtrIfNotEmpty(itemType),
+		Status:     stringPtrIfNotEmpty(status),
+		Timestamp:  timestamp,
+		TurnIndex:  turnIndex,
+		Type:       factoryapi.CodexSessionTranscriptEntryType("tool_output"),
 	})
 }
 
@@ -482,6 +604,32 @@ func firstReasoningText(payload map[string]any) string {
 	}
 	if summary := firstCompactField(payload, "summary"); summary != "" {
 		return summary
+	}
+	return ""
+}
+
+func firstMessageText(payload map[string]any) string {
+	if value := firstCompactField(payload, "text", "message", "content_text"); value != "" {
+		return value
+	}
+	if items, ok := payload["content"].([]any); ok {
+		parts := make([]string, 0, len(items))
+		for _, item := range items {
+			mapped, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			text := firstCompactField(mapped, "text", "content", "value")
+			if text != "" {
+				parts = append(parts, text)
+			}
+		}
+		if len(parts) > 0 {
+			return truncateSessionText(strings.Join(parts, "\n\n"))
+		}
+	}
+	if value := firstCompactField(payload, "content"); value != "" {
+		return value
 	}
 	return ""
 }

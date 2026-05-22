@@ -160,6 +160,59 @@ function expectLocalizedSelectionControlNames() {
   ).toBeTruthy();
 }
 
+describe("WorkstationDetailCard provider-session selection", () => {
+  it("keeps workstation run selection controls without embedding provider-session detail", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const providerSessions = snapshot.runtime.session.provider_sessions?.filter(
+      (attempt) =>
+        attempt.transition_id === selectedNode.transition_id ||
+        attempt.workstation_name === selectedNode.workstation_name,
+    );
+    const onSelectProviderSession = vi.fn();
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        now={DETAIL_CARD_NOW}
+        onSelectProviderSession={onSelectProviderSession}
+        providerSessions={requireValue(
+          providerSessions,
+          "expected workstation provider sessions fixture",
+        )}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const runHistorySection = screen
+      .getByRole("heading", { name: "Run history" })
+      .closest("section");
+    const resolvedRunHistorySection = requireValue(
+      runHistorySection,
+      "expected run history section",
+    );
+
+    fireEvent.click(
+      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }),
+    );
+    fireEvent.click(
+      within(resolvedRunHistorySection).getByRole("button", {
+        name: "Select provider session codex / session_id / sess-active-story for dispatch dispatch-review-active",
+      }),
+    );
+
+    expect(onSelectProviderSession).toHaveBeenCalledWith({
+      dispatchID: "dispatch-review-active",
+      id: "sess-active-story",
+      kind: "session_id",
+      provider: "codex",
+    });
+    expect(
+      screen.queryByRole("heading", { name: "Selected session details" }),
+    ).toBeNull();
+  });
+});
+
 describe("WorkstationDetailCard", () => {
   it("falls back to English workstation-detail copy for unsupported locales", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;

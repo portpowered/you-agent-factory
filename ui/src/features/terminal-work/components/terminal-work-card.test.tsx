@@ -253,6 +253,51 @@ describe("CompletedFailedWorkstationCard", () => {
     ).toBeNull();
   });
 
+  it("keeps selection styling controlled by props across rerenders", () => {
+    const { rerender } = render(
+      <CompletedFailedWorkstationCard
+        completedItems={[
+          { label: "Done Story", traceWorkID: "work-done-story" },
+        ]}
+        failedItems={[
+          { label: "Failed Story", traceWorkID: "work-failed-story" },
+        ]}
+        onSelectItem={vi.fn()}
+        selectedItem={{ label: "Done Story", status: "completed" }}
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole("button", { name: /Done Story/ })
+        .getAttribute("data-selected"),
+    ).toBe("true");
+
+    rerender(
+      <CompletedFailedWorkstationCard
+        completedItems={[
+          { label: "Done Story", traceWorkID: "work-done-story" },
+        ]}
+        failedItems={[
+          { label: "Failed Story", traceWorkID: "work-failed-story" },
+        ]}
+        onSelectItem={vi.fn()}
+        selectedItem={{ label: "Failed Story", status: "failed" }}
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole("button", { name: /Done Story/ })
+        .getAttribute("data-selected"),
+    ).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: /Failed Story/ })
+        .getAttribute("data-selected"),
+    ).toBe("true");
+  });
+
   it("renders explicit empty messages for each outcome row", () => {
     const messages = getTerminalWorkMessages("en");
 

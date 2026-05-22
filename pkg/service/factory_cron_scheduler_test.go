@@ -159,14 +159,21 @@ func TestFactoryService_ServiceModeCronScheduleConfigStartsAndStopsService(t *te
 	}()
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default cron runtime")
-	cancelRun()
-	select {
-	case err := <-errCh:
-		if err != nil {
-			t.Fatalf("Run after cancellation: %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for service-mode factory service to stop")
+	stopServiceModeRun(t, cancelRun, errCh)
+}
+
+func TestIsCanceledServiceStartup(t *testing.T) {
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if !isCanceledServiceStartup(canceledCtx, context.Canceled) {
+		t.Fatal("expected canceled startup to be treated as graceful shutdown")
+	}
+	if isCanceledServiceStartup(context.Background(), context.Canceled) {
+		t.Fatal("expected uncanceled parent context to preserve startup cancellation as an error")
+	}
+	if isCanceledServiceStartup(canceledCtx, context.DeadlineExceeded) {
+		t.Fatal("expected non-cancellation startup errors to remain failures")
 	}
 }
 

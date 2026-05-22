@@ -39,6 +39,9 @@ func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testin
 	if resp.Parse.LineCount != 4 || resp.Parse.EventCount != 3 || resp.Parse.MalformedLineCount != 1 || resp.Parse.UnknownEventCount != 1 {
 		t.Fatalf("parse summary = %#v, want line/event/malformed/unknown counts", resp.Parse)
 	}
+	if len(resp.Transcript) != 1 || resp.Transcript[0].Type != factoryapi.Reasoning || resp.Transcript[0].Order != 1 {
+		t.Fatalf("transcript = %#v, want one reasoning transcript entry", resp.Transcript)
+	}
 	if len(resp.Parse.Turns) != 1 || resp.Parse.Turns[0].ReasoningCount != 1 || len(resp.Parse.Reasoning) != 1 || resp.Parse.Reasoning[0].SourceType != "reasoning" {
 		t.Fatalf("parse detail = %#v, want reasoning turn summary", resp.Parse)
 	}
@@ -119,6 +122,28 @@ func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 	if len(summary.Reasoning) != 1 || stringValue(summary.Reasoning[0].Summary) != `["checked input"]` || summary.Reasoning[0].Encrypted == nil || !*summary.Reasoning[0].Encrypted {
 		t.Fatalf("reasoning = %#v, want summary and encrypted marker", summary.Reasoning)
 	}
+	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("parse codex session details: %v", err)
+	}
+	if len(parsed.Transcript) != 4 {
+		t.Fatalf("transcript = %#v, want four ordered transcript entries", parsed.Transcript)
+	}
+	if parsed.Transcript[0].Type != factoryapi.Reasoning || stringValue(parsed.Transcript[0].SourceType) != "reasoning" || intValue(parsed.Transcript[0].LineNumber) != 2 {
+		t.Fatalf("first transcript entry = %#v, want reasoning line 2", parsed.Transcript[0])
+	}
+	if parsed.Transcript[1].Type != factoryapi.ToolCall || stringValue(parsed.Transcript[1].Name) != "exec_command" || stringValue(parsed.Transcript[1].Arguments) != `{"cmd":"go test ./pkg/api"}` {
+		t.Fatalf("second transcript entry = %#v, want exec_command tool call", parsed.Transcript[1])
+	}
+	if parsed.Transcript[2].Type != factoryapi.ToolOutput || stringValue(parsed.Transcript[2].Output) != "ok" || stringValue(parsed.Transcript[2].Status) != "completed" {
+		t.Fatalf("third transcript entry = %#v, want completed tool output", parsed.Transcript[2])
+	}
+	if parsed.Transcript[3].Type != factoryapi.ToolCall || stringValue(parsed.Transcript[3].Name) != "apply_patch" || stringValue(parsed.Transcript[3].Status) != "in_progress" {
+		t.Fatalf("fourth transcript entry = %#v, want in-progress apply_patch tool call", parsed.Transcript[3])
+	}
+	if parsed.Transcript[3].Order != 4 {
+		t.Fatalf("final transcript entry order = %d, want 4", parsed.Transcript[3].Order)
+	}
 	if summary.TokenUsage == nil || intValue(summary.TokenUsage.InputTokens) != 100 || intValue(summary.TokenUsage.CachedInputTokens) != 40 || intValue(summary.TokenUsage.OutputTokens) != 25 || intValue(summary.TokenUsage.ReasoningOutputTokens) != 5 || intValue(summary.TokenUsage.TotalTokens) != 130 {
 		t.Fatalf("token usage = %#v, want total consumed token fields", summary.TokenUsage)
 	}
@@ -127,6 +152,86 @@ func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 	}
 	if len(summary.ParseErrors) != 1 || summary.ParseErrors[0].LineNumber != 10 {
 		t.Fatalf("parse errors = %#v, want malformed line retained", summary.ParseErrors)
+	}
+}
+
+func TestParseCodexSessionDetails_EmitsMixedTranscriptChronologically(t *testing.T) {
+	session := strings.Join([]string{
+		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
+		`{"timestamp":"2026-05-18T10:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Inspect the failing run."}]}}`,
+		`{"timestamp":"2026-05-18T10:00:02Z","type":"response_item","payload":{"type":"reasoning","summary":["Checking tool output"],"encrypted_content":"sealed"}}`,
+		`{"timestamp":"2026-05-18T10:00:03Z","type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec_command","arguments":{"cmd":"go test ./pkg/api"}}}`,
+		`{"timestamp":"2026-05-18T10:00:04Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"ok","status":"completed"}}`,
+		`{"timestamp":"2026-05-18T10:00:05Z","type":"event_msg","payload":{"type":"agent_message","message":"The package tests passed."}}`,
+		`{"timestamp":"2026-05-18T10:00:06Z","type":"event_msg","payload":{"type":"task_started","message":"Applying follow-up patch"}}`,
+		`{"timestamp":"2026-05-18T10:00:07Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"Need one more validation step."}}`,
+		`{"timestamp":"2026-05-18T10:00:08Z","type":"event_msg","payload":{"type":"new_future_event"}}`,
+		`{"timestamp":"2026-05-18T10:00:09Z","type":"unexpected_top_level"}`,
+		`{bad json`,
+	}, "\n")
+
+	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("parse codex session details: %v", err)
+	}
+
+	if parsed.Summary.LineCount != 11 || parsed.Summary.EventCount != 10 || parsed.Summary.MalformedLineCount != 1 || parsed.Summary.UnknownEventCount != 2 {
+		t.Fatalf("summary = %#v, want mixed-session diagnostic counts", parsed.Summary)
+	}
+	if len(parsed.Summary.Turns) != 1 || parsed.Summary.Turns[0].FunctionCallCount != 1 || parsed.Summary.Turns[0].ReasoningCount != 2 {
+		t.Fatalf("turn summary = %#v, want one turn with function and reasoning counts", parsed.Summary.Turns)
+	}
+	if len(parsed.Summary.UnknownEvents) != 2 || parsed.Summary.UnknownEvents[0].LineNumber != 9 || parsed.Summary.UnknownEvents[1].LineNumber != 10 {
+		t.Fatalf("unknown events = %#v, want unknown event_msg and top-level event retained", parsed.Summary.UnknownEvents)
+	}
+	if len(parsed.Summary.ParseErrors) != 1 || parsed.Summary.ParseErrors[0].LineNumber != 11 {
+		t.Fatalf("parse errors = %#v, want malformed line 11 retained", parsed.Summary.ParseErrors)
+	}
+
+	if len(parsed.Transcript) != 7 {
+		t.Fatalf("transcript = %#v, want seven ordered transcript entries", parsed.Transcript)
+	}
+
+	assertTranscriptEntry := func(index int, wantType factoryapi.CodexSessionTranscriptEntryType, wantLine int, wantText string) {
+		t.Helper()
+		entry := parsed.Transcript[index]
+		if entry.Order != index+1 || entry.Type != wantType || intValue(entry.LineNumber) != wantLine || stringValue(entry.Text) != wantText {
+			t.Fatalf("transcript[%d] = %#v, want order=%d type=%q line=%d text=%q", index, entry, index+1, wantType, wantLine, wantText)
+		}
+		if intValue(entry.TurnIndex) != 1 {
+			t.Fatalf("transcript[%d] turn index = %#v, want 1", index, entry.TurnIndex)
+		}
+	}
+
+	assertTranscriptEntry(0, factoryapi.UserMessage, 2, "Inspect the failing run.")
+	if parsed.Transcript[0].SourceType == nil || *parsed.Transcript[0].SourceType != "message" {
+		t.Fatalf("first transcript source type = %#v, want message", parsed.Transcript[0].SourceType)
+	}
+
+	if parsed.Transcript[1].Order != 2 || parsed.Transcript[1].Type != factoryapi.Reasoning || intValue(parsed.Transcript[1].LineNumber) != 3 || stringValue(parsed.Transcript[1].Summary) != `["Checking tool output"]` || parsed.Transcript[1].Encrypted == nil || !*parsed.Transcript[1].Encrypted {
+		t.Fatalf("transcript[1] = %#v, want encrypted reasoning summary on line 3", parsed.Transcript[1])
+	}
+
+	if parsed.Transcript[2].Order != 3 || parsed.Transcript[2].Type != factoryapi.ToolCall || intValue(parsed.Transcript[2].LineNumber) != 4 || stringValue(parsed.Transcript[2].Name) != "exec_command" {
+		t.Fatalf("transcript[2] = %#v, want tool call on line 4", parsed.Transcript[2])
+	}
+	if parsed.Transcript[3].Order != 4 || parsed.Transcript[3].Type != factoryapi.ToolOutput || intValue(parsed.Transcript[3].LineNumber) != 5 || stringValue(parsed.Transcript[3].Output) != "ok" || stringValue(parsed.Transcript[3].Status) != "completed" {
+		t.Fatalf("transcript[3] = %#v, want tool output on line 5", parsed.Transcript[3])
+	}
+
+	assertTranscriptEntry(4, factoryapi.AssistantMessage, 6, "The package tests passed.")
+	if parsed.Transcript[4].SourceType == nil || *parsed.Transcript[4].SourceType != "agent_message" {
+		t.Fatalf("assistant transcript source type = %#v, want agent_message", parsed.Transcript[4].SourceType)
+	}
+
+	assertTranscriptEntry(5, factoryapi.SystemEvent, 7, "Applying follow-up patch")
+	if parsed.Transcript[5].SourceType == nil || *parsed.Transcript[5].SourceType != "task_started" {
+		t.Fatalf("system-event transcript source type = %#v, want task_started", parsed.Transcript[5].SourceType)
+	}
+
+	assertTranscriptEntry(6, factoryapi.Reasoning, 8, "Need one more validation step.")
+	if parsed.Transcript[6].SourceType == nil || *parsed.Transcript[6].SourceType != "agent_reasoning" {
+		t.Fatalf("final reasoning transcript source type = %#v, want agent_reasoning", parsed.Transcript[6].SourceType)
 	}
 }
 

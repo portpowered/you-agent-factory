@@ -55,7 +55,7 @@ export const Verification = {
     dashboardApi: {
       eventSourceMocks: [
         {
-          path: "/events",
+          path: "/factories/~default/events",
           snapshot: defaultSessionSnapshot,
         },
         {

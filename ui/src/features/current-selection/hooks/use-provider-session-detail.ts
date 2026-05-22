@@ -15,6 +15,7 @@ export const PROVIDER_SESSION_DETAIL_QUERY_KEY = [
 export type ProviderSessionDetailViewState =
   | { status: "idle" }
   | { sessionDetail: ProviderSessionDetailResponse; status: "empty" }
+  | { sessionDetail: ProviderSessionDetailResponse; status: "empty-transcript" }
   | { message?: string; status: "error" }
   | { status: "loading" }
   | { status: "not-found" }
@@ -88,6 +89,13 @@ export function useProviderSessionDetail(
       return {
         sessionDetail: query.data,
         status: "parse-error",
+      };
+    }
+
+    if (query.data.transcript.length === 0) {
+      return {
+        sessionDetail: query.data,
+        status: "empty-transcript",
       };
     }
 

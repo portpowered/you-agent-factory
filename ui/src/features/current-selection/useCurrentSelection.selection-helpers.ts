@@ -24,7 +24,6 @@ import type {
   TerminalWorkDetail,
 } from "./types";
 import {
-  isScriptBackedWorkstationRequest,
   requestDispatchID,
   requestStartedAt,
   requestTransitionID,
@@ -32,7 +31,6 @@ import {
   requestWorkstationName,
   requestWorkItems,
   sortWorkstationRequests,
-  toDashboardWorkstationRequest,
   type DispatchWorkstationRequest,
 } from "./useCurrentSelection.request-helpers";
 
@@ -208,7 +206,7 @@ export function activeExecutionsForSelectedWorkstation(
   );
 }
 
-export function resolveTrackedWorkSelection({
+export function resolveWorkItemSelectionByWorkID({
   dispatchID,
   nodeID,
   snapshot,
@@ -232,10 +230,10 @@ export function resolveTrackedWorkSelection({
     dispatchID ??
     terminalWorkDetail?.dispatchID ??
     failedDetail?.dispatch_id;
-  const preferredSelection = resolvePreferredDispatchSelection({
+  const preferredSelection = resolvePreferredWorkItemSelection({
     failedDetail,
+    nodeID,
     preferredFailureDispatchID,
-    preferWorkstationRequest: terminalWorkDetail?.preferWorkstationRequest ?? false,
     snapshot,
     terminalWorkDetail,
     workID,
@@ -248,19 +246,6 @@ export function resolveTrackedWorkSelection({
   const workstationRequest = Object.values(
     workstationRequestsByDispatchID ?? snapshot.runtime.workstation_requests_by_dispatch_id ?? {},
   ).find((request) => requestWorkItems(request).some((item) => item.work_id === workID));
-
-  if (
-    workstationRequest &&
-    (terminalWorkDetail?.preferWorkstationRequest ||
-      isScriptBackedWorkstationRequest(workstationRequest))
-  ) {
-    return {
-      dispatchId: requestDispatchID(workstationRequest),
-      kind: "workstation-request",
-      nodeId: requestWorkstationNodeID(workstationRequest),
-      request: toDashboardWorkstationRequest(workstationRequest),
-    };
-  }
 
   for (const execution of Object.values(snapshot.runtime.active_executions_by_dispatch_id ?? {})) {
     const matchedWorkItem = execution.work_items?.find((candidate) => candidate.work_id === workID);
@@ -286,9 +271,9 @@ export function resolveTrackedWorkSelection({
   if (workstationRequest) {
     return {
       dispatchId: requestDispatchID(workstationRequest),
-      kind: "workstation-request",
+      kind: "work-item",
       nodeId: requestWorkstationNodeID(workstationRequest),
-      request: toDashboardWorkstationRequest(workstationRequest),
+      workItem: fallbackWorkItem,
     };
   }
 
@@ -346,18 +331,18 @@ export function resolveTrackedWorkSelection({
   return null;
 }
 
-function resolvePreferredDispatchSelection({
+function resolvePreferredWorkItemSelection({
   failedDetail,
+  nodeID,
   preferredFailureDispatchID,
-  preferWorkstationRequest,
   snapshot,
   terminalWorkDetail,
   workID,
   workstationRequestsByDispatchID,
 }: {
   failedDetail: DashboardFailedWorkDetail | undefined;
+  nodeID: string | undefined;
   preferredFailureDispatchID: string | undefined;
-  preferWorkstationRequest: boolean;
   snapshot: DashboardSnapshot;
   terminalWorkDetail: TerminalWorkDetail | null | undefined;
   workID: string;
@@ -367,22 +352,12 @@ function resolvePreferredDispatchSelection({
     return null;
   }
 
-  const preferredRequest = (
-    workstationRequestsByDispatchID ??
-    snapshot.runtime.workstation_requests_by_dispatch_id
-  )?.[preferredFailureDispatchID];
-  if (preferredRequest) {
-    return selectionFromWorkstationRequest(
-      preferWorkstationRequest,
-      preferredRequest,
-      workID,
-      failedDetail?.work_item ?? terminalWorkDetail?.workItem,
-    );
-  }
-
   const preferredExecution =
     snapshot.runtime.active_executions_by_dispatch_id?.[preferredFailureDispatchID];
-  if (preferredExecution) {
+  if (
+    preferredExecution &&
+    (!nodeID || preferredExecution.workstation_node_id === nodeID)
+  ) {
     const matchedWorkItem = preferredExecution.work_items?.find(
       (candidate) => candidate.work_id === workID,
     );
@@ -400,6 +375,18 @@ function resolvePreferredDispatchSelection({
     };
   }
 
+  const preferredRequest = (
+    workstationRequestsByDispatchID ??
+    snapshot.runtime.workstation_requests_by_dispatch_id
+  )?.[preferredFailureDispatchID];
+  if (preferredRequest) {
+    return selectionFromWorkstationRequest(
+      preferredRequest,
+      workID,
+      failedDetail?.work_item ?? terminalWorkDetail?.workItem,
+    );
+  }
+
   if (failedDetail?.dispatch_id === preferredFailureDispatchID) {
     return selectionFromFailedDetail(snapshot, failedDetail);
   }
@@ -408,20 +395,10 @@ function resolvePreferredDispatchSelection({
 }
 
 function selectionFromWorkstationRequest(
-  preferWorkstationRequest: boolean,
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
   workID: string,
   fallbackWorkItem: DashboardWorkItemRef | undefined,
 ): DashboardSelection | null {
-  if (preferWorkstationRequest || isScriptBackedWorkstationRequest(request)) {
-    return {
-      dispatchId: requestDispatchID(request),
-      kind: "workstation-request",
-      nodeId: requestWorkstationNodeID(request),
-      request: toDashboardWorkstationRequest(request),
-    };
-  }
-
   const resolvedWorkItem =
     requestWorkItems(request).find((candidate) => candidate.work_id === workID) ??
     fallbackWorkItem;

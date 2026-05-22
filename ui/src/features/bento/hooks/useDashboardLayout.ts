@@ -12,6 +12,7 @@ const LEGACY_WORK_OUTCOME_WIDGET_IDS = ["completion-trend", "failure-trend"] as 
 
 export const DASHBOARD_WIDGET_IDS = {
   currentSelection: "current-selection",
+  providerSession: "provider-session",
   submitWork: "submit-work",
   terminalWork: "terminal-work",
   trace: "trace",
@@ -32,11 +33,20 @@ export const DEFAULT_DASHBOARD_LAYOUT: AgentBentoLayoutItem[] = [
     minH: 4,
     minW: 3,
   },
-  { id: DASHBOARD_WIDGET_IDS.terminalWork, x: 4, y: 10, w: 4, h: 5, minH: 3, minW: 3 },
+  {
+    id: DASHBOARD_WIDGET_IDS.providerSession,
+    x: 4,
+    y: 10,
+    w: 4,
+    h: 5,
+    minH: 4,
+    minW: 3,
+  },
+  { id: DASHBOARD_WIDGET_IDS.terminalWork, x: 8, y: 10, w: 4, h: 5, minH: 3, minW: 3 },
   {
     id: DASHBOARD_WIDGET_IDS.workOutcomeChart,
     x: 8,
-    y: 10,
+    y: 15,
     w: 4,
     h: 6,
     minH: 5,
@@ -45,7 +55,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: AgentBentoLayoutItem[] = [
   {
     id: DASHBOARD_WIDGET_IDS.submitWork,
     x: 8,
-    y: 16,
+    y: 21,
     w: 4,
     h: 6,
     minH: 5,
@@ -56,7 +66,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: AgentBentoLayoutItem[] = [
     x: 0,
     y: 15,
     w: 8,
-    h: 9,
+    h: 11,
     minH: 7,
     minW: 5,
   },
@@ -124,8 +134,10 @@ export function reloadDashboardLayoutFromStorage(): void {
 }
 
 function migrateDashboardLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {
-  const normalizedLayout = migrateDashboardCompactionLayout(
-    migrateTraceLayout(migrateWorkOutcomeLayout(layout)),
+  const normalizedLayout = migrateProviderSessionLayout(
+    migrateDashboardCompactionLayout(
+      migrateTraceLayout(migrateWorkOutcomeLayout(layout)),
+    ),
   );
 
   const legacySelectionItem = LEGACY_SELECTION_WIDGET_IDS
@@ -173,8 +185,23 @@ function migrateDashboardCompactionLayout(
           };
         }
         return item;
+      case DASHBOARD_WIDGET_IDS.providerSession:
+        if (item.x === 4 && item.y === 12 && item.w === 4 && item.h === 5) {
+          return {
+            ...item,
+            y: 10,
+          };
+        }
+        return item;
       case DASHBOARD_WIDGET_IDS.terminalWork:
         if (item.x === 4 && item.y === 12 && item.w === 4 && item.h === 5) {
+          return {
+            ...item,
+            x: 8,
+            y: 10,
+          };
+        }
+        if (item.x === 8 && item.y === 12 && item.w === 4 && item.h === 5) {
           return {
             ...item,
             y: 10,
@@ -185,7 +212,13 @@ function migrateDashboardCompactionLayout(
         if (item.x === 8 && item.y === 12 && item.w === 4 && item.h === 6) {
           return {
             ...item,
-            y: 10,
+            y: 15,
+          };
+        }
+        if (item.x === 8 && item.y === 17 && item.w === 4 && item.h === 6) {
+          return {
+            ...item,
+            y: 15,
           };
         }
         return item;
@@ -193,7 +226,13 @@ function migrateDashboardCompactionLayout(
         if (item.x === 8 && item.y === 18 && item.w === 4 && item.h === 6) {
           return {
             ...item,
-            y: 16,
+            y: 21,
+          };
+        }
+        if (item.x === 8 && item.y === 23 && item.w === 4 && item.h === 6) {
+          return {
+            ...item,
+            y: 21,
           };
         }
         return item;
@@ -209,6 +248,21 @@ function migrateDashboardCompactionLayout(
         return item;
     }
   });
+}
+
+function migrateProviderSessionLayout(
+  layout: AgentBentoLayoutItem[],
+): AgentBentoLayoutItem[] {
+  if (layout.some((item) => item.id === DASHBOARD_WIDGET_IDS.providerSession)) {
+    return layout;
+  }
+
+  return [
+    ...layout,
+    DEFAULT_DASHBOARD_LAYOUT.find(
+      (item) => item.id === DASHBOARD_WIDGET_IDS.providerSession,
+    ) as AgentBentoLayoutItem,
+  ];
 }
 
 function migrateTraceLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {

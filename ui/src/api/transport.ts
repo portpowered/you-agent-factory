@@ -19,9 +19,7 @@ export async function readAPIResponseBody(
   }
 }
 
-export function isAPIRecord(
-  value: unknown,
-): value is Record<string, unknown> {
+export function isAPIRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -36,8 +34,7 @@ export function extractAPIErrorPayload<TTarget>(
   }
 
   const code = typeof value.code === "string" ? value.code : undefined;
-  const message =
-    typeof value.message === "string" ? value.message : undefined;
+  const message = typeof value.message === "string" ? value.message : undefined;
 
   if (code === undefined && message === undefined) {
     return null;
