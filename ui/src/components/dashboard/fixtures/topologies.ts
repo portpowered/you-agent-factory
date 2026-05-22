@@ -187,7 +187,7 @@ export const mediumBranchingDashboardTopology = {
 
 export const workstationKindParityDashboardTopology = {
   submit_work_types: [...storySubmitWorkTypes],
-  workstation_node_ids: ["plan", "review", "nightly-cron"],
+  workstation_node_ids: ["plan", "review", "nightly-cron", "linear-poller"],
   workstation_nodes_by_id: {
     plan: {
       node_id: "plan",
@@ -232,6 +232,19 @@ export const workstationKindParityDashboardTopology = {
       input_place_ids: ["schedule:tick"],
       output_place_ids: ["story:scheduled"],
       input_work_type_ids: ["schedule"],
+      output_work_type_ids: ["story"],
+    },
+    "linear-poller": {
+      node_id: "linear-poller",
+      transition_id: "linear-poller",
+      workstation_name: "Linear Poller",
+      worker_type: "hosted-worker",
+      workstation_kind: "poller",
+      input_places: [],
+      output_places: [workStatePlace("story", "scheduled", "PROCESSING")],
+      input_place_ids: [],
+      output_place_ids: ["story:scheduled"],
+      input_work_type_ids: [],
       output_work_type_ids: ["story"],
     },
   },
@@ -549,4 +562,3 @@ export const dashboardTopologyFixtures = {
   workstationKindParity: workstationKindParityDashboardTopology,
   twentyNode: twentyNodeDashboardTopology,
 } satisfies Record<string, DashboardTopology>;
-
