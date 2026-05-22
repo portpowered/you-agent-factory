@@ -9,10 +9,10 @@ export interface AgentBentoMessages {
 
 const agentBentoMessagesByLocale = {
   en: {
-    boardLabel: "Infinite You bento board",
+    boardLabel: "you-agent-factory bento board",
   },
   "zh-CN": {
-    boardLabel: "Infinite You Bento 看板",
+    boardLabel: "you-agent-factory Bento 看板",
   },
 } satisfies LocalizedMessageCatalog<AgentBentoMessages>;
 

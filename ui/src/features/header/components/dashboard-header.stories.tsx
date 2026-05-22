@@ -7,7 +7,7 @@ import {
 } from "../../../stories/dashboardStorySupport";
 
 export default {
-  title: "Infinite You/Dashboard/Dashboard Header",
+  title: "you-agent-factory/Dashboard/Dashboard Header",
   component: DashboardHeader,
   tags: ["test"],
 };

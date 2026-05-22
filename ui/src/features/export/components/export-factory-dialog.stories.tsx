@@ -9,7 +9,7 @@ const factory = {
 } as const;
 
 export default {
-  title: "Infinite You/Dashboard/Export Factory Dialog",
+  title: "you-agent-factory/Dashboard/Export Factory Dialog",
   component: ExportFactoryDialog,
   tags: ["test"],
 };

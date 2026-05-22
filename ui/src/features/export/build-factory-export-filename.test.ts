@@ -10,6 +10,6 @@ describe("buildFactoryExportFilename", () => {
   });
 
   it("falls back when the name has no slug characters", () => {
-    expect(buildFactoryExportFilename("!!!")).toBe("infinite-you.png");
+    expect(buildFactoryExportFilename("!!!")).toBe("you-agent-factory.png");
   });
 });

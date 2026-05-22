@@ -845,7 +845,7 @@ async function assertReplayScenarioRenders({
     expect(consoleErrors).toEqual([]);
     await page.getByRole("heading", { name: headingName }).waitFor();
     await page
-      .getByRole("region", { name: "Infinite You bento board" })
+      .getByRole("region", { name: "you-agent-factory bento board" })
       .waitFor();
     await page.getByRole("button", { name: workstationName }).waitFor();
     if (!inFlightSelectionTick) {
@@ -864,7 +864,7 @@ async function assertReplayScenarioRenders({
     const dashboardSummary = page.locator('[aria-label="dashboard summary"]');
     await dashboardSummary
       .getByRole("status", {
-        name: /Infinite You event stream (live|connecting|offline)/,
+        name: /you-agent-factory event stream (live|connecting|offline)/,
       })
       .waitFor();
     expect(
@@ -953,7 +953,7 @@ async function assertFactoryExportRoundTrip() {
       },
     );
     await page.goto(previewURL, { waitUntil: "domcontentloaded" });
-    await page.getByRole("heading", { name: "Infinite You" }).waitFor({
+    await page.getByRole("heading", { name: "you-agent-factory" }).waitFor({
       state: "visible",
       timeout: uiInteractionTimeoutMs,
     });
@@ -975,7 +975,7 @@ async function assertFactoryExportRoundTrip() {
     });
     await exportDialog
       .getByText(
-        "Confirming export keeps the current dashboard state unchanged and downloads a PNG artifact with embedded Infinite You factory metadata.",
+        "Confirming export keeps the current dashboard state unchanged and downloads a PNG artifact with embedded you-agent-factory factory metadata.",
       )
       .waitFor({
         state: "visible",

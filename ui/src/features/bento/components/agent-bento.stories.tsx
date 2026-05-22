@@ -34,7 +34,7 @@ function card(id: string, title: string, body: string) {
 }
 
 export default {
-  title: "Infinite You/Bento Layout",
+  title: "you-agent-factory/Bento Layout",
   component: AgentBentoLayout,
 };
 
@@ -51,7 +51,7 @@ export const Default = {
     const canvas = within(canvasElement);
 
     await expect(
-      await canvas.findByRole("region", { name: "Infinite You bento board" }),
+      await canvas.findByRole("region", { name: "you-agent-factory bento board" }),
     ).toBeVisible();
     await expect(await canvas.findByRole("article", { name: "Factory summary" })).toBeVisible();
     await expect(await canvas.findByText("One bento card can hold plain text.")).toBeVisible();

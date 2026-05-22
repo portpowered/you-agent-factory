@@ -14,7 +14,7 @@ describe("DashboardStatusPanel", () => {
     expect(
       screen.getByRole("heading", { name: "Timeline unavailable" }),
     ).toBeTruthy();
-    expect(screen.getByText("Infinite You").className).toContain("sr-only");
+    expect(screen.getByText("you-agent-factory").className).toContain("sr-only");
     expect(headerEyebrow?.textContent).toContain("∞");
     expect(headerEyebrow?.textContent).toContain("U");
     expect(screen.queryByText("Waiting for more timeline data.")).toBeNull();
