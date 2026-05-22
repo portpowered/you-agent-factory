@@ -16,7 +16,10 @@ interface WorkflowActivityBentoCardProps {
   now: number;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
-  onSelectWorkID: (workID: string) => void;
+  onSelectWorkID: (
+    workID: string,
+    hint?: { dispatchID?: string; nodeID?: string },
+  ) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
 }

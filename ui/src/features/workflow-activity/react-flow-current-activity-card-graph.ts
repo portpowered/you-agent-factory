@@ -206,7 +206,10 @@ interface BuildCurrentActivityNodesInput {
   locale?: string;
   now: number;
   onSelectStateNode: (placeId: string) => void;
-  onSelectWorkID: (workID: string) => void;
+  onSelectWorkID: (
+    workID: string,
+    hint?: { dispatchID?: string; nodeID?: string },
+  ) => void;
   onSelectWorkstation: (nodeId: string) => void;
   selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;

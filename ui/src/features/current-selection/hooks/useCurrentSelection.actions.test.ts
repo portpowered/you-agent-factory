@@ -161,7 +161,18 @@ describe("useCurrentSelectionActions", () => {
       terminalWorkDetail,
     });
 
-    actions.selectWorkByID("work-alpha");
+    actions.selectWorkByID("work-alpha", {
+      dispatchID: "dispatch-review-active",
+      nodeID: "review",
+    });
+
+    expect(helperMocks.resolveWorkItemSelectionByWorkID).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dispatchID: "dispatch-review-active",
+        nodeID: "review",
+        workID: "work-alpha",
+      }),
+    );
 
     expect(commitSelectionState).toHaveBeenCalledWith({
       selection: resolvedSelection,

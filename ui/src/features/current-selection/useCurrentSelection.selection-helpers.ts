@@ -232,6 +232,7 @@ export function resolveWorkItemSelectionByWorkID({
     failedDetail?.dispatch_id;
   const preferredSelection = resolvePreferredWorkItemSelection({
     failedDetail,
+    nodeID,
     preferredFailureDispatchID,
     snapshot,
     terminalWorkDetail,
@@ -332,6 +333,7 @@ export function resolveWorkItemSelectionByWorkID({
 
 function resolvePreferredWorkItemSelection({
   failedDetail,
+  nodeID,
   preferredFailureDispatchID,
   snapshot,
   terminalWorkDetail,
@@ -339,6 +341,7 @@ function resolvePreferredWorkItemSelection({
   workstationRequestsByDispatchID,
 }: {
   failedDetail: DashboardFailedWorkDetail | undefined;
+  nodeID: string | undefined;
   preferredFailureDispatchID: string | undefined;
   snapshot: DashboardSnapshot;
   terminalWorkDetail: TerminalWorkDetail | null | undefined;
@@ -349,21 +352,12 @@ function resolvePreferredWorkItemSelection({
     return null;
   }
 
-  const preferredRequest = (
-    workstationRequestsByDispatchID ??
-    snapshot.runtime.workstation_requests_by_dispatch_id
-  )?.[preferredFailureDispatchID];
-  if (preferredRequest) {
-    return selectionFromWorkstationRequest(
-      preferredRequest,
-      workID,
-      failedDetail?.work_item ?? terminalWorkDetail?.workItem,
-    );
-  }
-
   const preferredExecution =
     snapshot.runtime.active_executions_by_dispatch_id?.[preferredFailureDispatchID];
-  if (preferredExecution) {
+  if (
+    preferredExecution &&
+    (!nodeID || preferredExecution.workstation_node_id === nodeID)
+  ) {
     const matchedWorkItem = preferredExecution.work_items?.find(
       (candidate) => candidate.work_id === workID,
     );
@@ -379,6 +373,18 @@ function resolvePreferredWorkItemSelection({
       nodeId: preferredExecution.workstation_node_id,
       workItem: resolvedWorkItem,
     };
+  }
+
+  const preferredRequest = (
+    workstationRequestsByDispatchID ??
+    snapshot.runtime.workstation_requests_by_dispatch_id
+  )?.[preferredFailureDispatchID];
+  if (preferredRequest) {
+    return selectionFromWorkstationRequest(
+      preferredRequest,
+      workID,
+      failedDetail?.work_item ?? terminalWorkDetail?.workItem,
+    );
   }
 
   if (failedDetail?.dispatch_id === preferredFailureDispatchID) {

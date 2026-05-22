@@ -27,6 +27,11 @@ type CurrentSelectionActionArgs = {
   terminalWorkDetail: TerminalWorkDetail | null;
 };
 
+export type WorkSelectionHint = {
+  dispatchID?: string;
+  nodeID?: string;
+};
+
 export function useCurrentSelectionActions({
   commitSelectionState,
   completedWorkItems,
@@ -39,10 +44,11 @@ export function useCurrentSelectionActions({
   const resolveCanonicalWorkItemSelection = (
     workID: string,
     detail: TerminalWorkDetail | null,
-    dispatchID?: string,
+    hint?: WorkSelectionHint,
   ) => {
     const resolvedSelection = resolveWorkItemSelectionByWorkID({
-      dispatchID,
+      dispatchID: hint?.dispatchID,
+      nodeID: hint?.nodeID,
       snapshot,
       terminalWorkDetail: detail,
       workID,
@@ -76,10 +82,11 @@ export function useCurrentSelectionActions({
     });
   };
 
-  const selectWorkByID = (workID: string) => {
+  const selectWorkByID = (workID: string, hint?: WorkSelectionHint) => {
     const { resolvedSelection } = resolveCanonicalWorkItemSelection(
       workID,
       terminalWorkDetail,
+      hint,
     );
     if (!resolvedSelection) {
       return;
@@ -104,7 +111,7 @@ export function useCurrentSelectionActions({
     const { resolvedSelection } = resolveCanonicalWorkItemSelection(
       item.traceWorkID,
       detail,
-      item.dispatchID,
+      { dispatchID: item.dispatchID },
     );
 
     commitSelectionState({

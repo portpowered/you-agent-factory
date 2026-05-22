@@ -8,7 +8,10 @@ export interface WorkflowActivityWidgetProps {
   locale?: string;
   now: number;
   onSelectStateNode: (placeId: string) => void;
-  onSelectWorkID: (workID: string) => void;
+  onSelectWorkID: (
+    workID: string,
+    hint?: { dispatchID?: string; nodeID?: string },
+  ) => void;
   onSelectWorkstation: (nodeId: string) => void;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;

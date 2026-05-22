@@ -290,6 +290,29 @@ describe("useCurrentSelection.selection-helpers", () => {
     snapshot.runtime.active_executions_by_dispatch_id = {
       [activeExecution.dispatch_id]: activeExecution,
     };
+    snapshot.runtime.workstation_requests_by_dispatch_id = {
+      [activeExecution.dispatch_id]: {
+        ...scriptRequest,
+        dispatch_id: activeExecution.dispatch_id,
+        started_at: "2026-04-08T12:00:01Z",
+      },
+    };
+    expect(
+      resolveWorkItemSelectionByWorkID({
+        dispatchID: activeExecution.dispatch_id,
+        nodeID: "review",
+        snapshot,
+        workID: workAlpha.work_id,
+      }),
+    ).toEqual({
+      dispatchId: "dispatch-active",
+      execution: activeExecution,
+      kind: "work-item",
+      nodeId: "review",
+      workItem: workAlpha,
+    });
+
+    snapshot.runtime.workstation_requests_by_dispatch_id = {};
     expect(
       resolveWorkItemSelectionByWorkID({
         snapshot,

@@ -28,7 +28,10 @@ export interface WorkstationNodeData extends Record<string, unknown> {
   selectedWorkstation: boolean;
   workstation: DashboardWorkstationNode;
   onSelectWorkstation: (nodeId: string) => void;
-  onSelectWorkID: (workID: string) => void;
+  onSelectWorkID: (
+    workID: string,
+    hint?: { dispatchID?: string; nodeID?: string },
+  ) => void;
 }
 
 export type CurrentActivityWorkstationNode = Node<
@@ -245,7 +248,10 @@ function ActiveWorkstationNodeContent({
                 data-selected={workItemSelected ? "true" : undefined}
                 onClick={(event) => {
                   event.stopPropagation();
-                  data.onSelectWorkID(workItem.work_id);
+                  data.onSelectWorkID(workItem.work_id, {
+                    dispatchID: execution.dispatch_id,
+                    nodeID: data.workstation.node_id,
+                  });
                 }}
                 title={`${workItemLabel} - ${durationLabel}`}
                 type="button"

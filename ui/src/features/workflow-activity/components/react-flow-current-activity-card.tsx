@@ -105,7 +105,10 @@ interface ReactFlowCurrentActivityCardProps {
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
   onSelectStateNode: (placeId: string) => void;
-  onSelectWorkID: (workID: string) => void;
+  onSelectWorkID: (
+    workID: string,
+    hint?: { dispatchID?: string; nodeID?: string },
+  ) => void;
   onSelectWorkstation: (nodeId: string) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
   selection: CurrentActivitySelection | null;

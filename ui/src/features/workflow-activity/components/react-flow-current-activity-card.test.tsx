@@ -375,7 +375,9 @@ function renderCurrentActivity({
   snapshot,
   selection = null,
 }: RenderCurrentActivityOptions) {
-  const onSelectWorkID = vi.fn<(workID: string) => void>();
+  const onSelectWorkID = vi.fn<
+    (workID: string, hint?: { dispatchID?: string; nodeID?: string }) => void
+  >();
   const onSelectStateNode = vi.fn<(placeId: string) => void>();
   const onSelectWorkstation = vi.fn<(nodeId: string) => void>();
 
@@ -2804,7 +2806,10 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     await waitFor(() => {
       expect(onSelectWorkID).toHaveBeenCalled();
     });
-    expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story");
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story", {
+      dispatchID: "dispatch-review-active",
+      nodeID: "review",
+    });
   });
 
   it("caps workstation work item names at three and summarizes the rest", async () => {
@@ -3065,7 +3070,10 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     await waitFor(() => {
       expect(onSelectWorkID).toHaveBeenCalled();
     });
-    expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story-3");
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story-3", {
+      dispatchID: "dispatch-review-active",
+      nodeID: "review",
+    });
 
     cleanup();
     renderCurrentActivity({

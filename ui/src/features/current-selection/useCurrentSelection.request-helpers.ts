@@ -181,21 +181,6 @@ export function requestWorkstationNodeID(
     : request.transitionId ?? request.transition_id ?? "";
 }
 
-export function isScriptBackedWorkstationRequest(
-  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
-): boolean {
-  if (isProjectedWorkstationRequest(request)) {
-    return request.script_request !== undefined || request.script_response !== undefined;
-  }
-
-  return (
-    request.request.scriptRequest !== undefined ||
-    request.request.script_request !== undefined ||
-    request.response?.scriptResponse !== undefined ||
-    request.response?.script_response !== undefined
-  );
-}
-
 export function toDashboardWorkstationRequest(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
   inferenceAttemptsByRequestID?: Record<string, DashboardInferenceAttempt>,
