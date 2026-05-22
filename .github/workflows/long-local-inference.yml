@@ -26,14 +26,17 @@ jobs:
             runner: ubuntu-latest
             command_name: omnivoice-llamacpp
             backend_url: ${{ vars.OMNIVOICE_COMMAND_URL_LINUX_AMD64 }}
+            ggml_backend: ""
           - os_id: macos
             runner: macos-15-intel
             command_name: omnivoice-llamacpp
             backend_url: ${{ vars.OMNIVOICE_COMMAND_URL_MACOS_AMD64 }}
+            ggml_backend: CPU
           - os_id: windows
             runner: windows-latest
             command_name: omnivoice-llamacpp.exe
             backend_url: ${{ vars.OMNIVOICE_COMMAND_URL_WINDOWS_AMD64 }}
+            ggml_backend: ""
     env:
       INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS: "1"
       INFINITE_YOU_OMNIVOICE_CACHE_DIR: ${{ github.workspace }}/.cache/managed-models
@@ -41,6 +44,7 @@ jobs:
       OMNIVOICE_COMMAND_EXTRACT_DIR: ${{ github.workspace }}/.cache/omnivoice-command/extract
       OMNIVOICE_COMMAND_NAME: ${{ matrix.command_name }}
       OMNIVOICE_COMMAND_URL: ${{ matrix.backend_url }}
+      GGML_BACKEND: ${{ matrix.ggml_backend }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
