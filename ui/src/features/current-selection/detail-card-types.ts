@@ -17,6 +17,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
 import type { EditableWorkstationValues } from "../current-factory-definition/workstation-editable-values";
+import type { EditableWorkstationBehavior } from "../current-factory-definition/workstation-behavior";
 import type { WorkstationDetailMessages } from "./messages";
 import type { CurrentSelectionDetailMessages } from "./messages/current-selection-detail";
 import type { LoadableProviderSessionRef } from "./provider-session-details";
@@ -133,6 +134,7 @@ export interface WorkstationDetailCardProps {
 }
 
 export interface EditableWorkstationValidationErrors {
+  behavior?: string;
   prompt?: string;
   workerName?: string;
 }
@@ -162,7 +164,11 @@ export type EditableWorkstationPromptValidationState =
       status: "ready";
     };
 
-export type EditableWorkstationOverwriteField = "prompt" | "runner" | "worker";
+export type EditableWorkstationOverwriteField =
+  | "behavior"
+  | "prompt"
+  | "runner"
+  | "worker";
 
 export type EditableWorkstationWorkerOptionsState =
   | { status: "ready"; options: string[] }
@@ -175,6 +181,7 @@ export type EditableWorkstationConfigurationState =
   | { message: string; status: "empty" }
   | {
       draft: {
+        behavior: EditableWorkstationBehavior;
         prompt: string;
         runnerName: RunnerID | null;
         workerName: string;
@@ -183,6 +190,7 @@ export type EditableWorkstationConfigurationState =
       initialValues: EditableWorkstationValues;
       isDirty: boolean;
       markChangesSaved: () => void;
+      onBehaviorChange: (value: EditableWorkstationBehavior) => void;
       onPromptChange: (value: string) => void;
       onRunnerChange: (value: RunnerID | null) => void;
       onWorkerChange: (value: string) => void;

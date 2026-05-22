@@ -9,6 +9,9 @@ export function resolveEditableWorkstationOverwriteFields(
 ): EditableWorkstationOverwriteField[] {
   const fields: EditableWorkstationOverwriteField[] = [];
 
+  if (draft.behavior !== latestDefinitionDraft.behavior) {
+    fields.push("behavior");
+  }
   if (draft.prompt !== latestDefinitionDraft.prompt) {
     fields.push("prompt");
   }
@@ -26,7 +29,7 @@ export function formatEditableOverwriteFieldLabels(
   overwriteFieldNames: EditableWorkstationOverwriteField[],
   messages: Pick<
     WorkstationDetailMessages,
-    "promptFieldLabel" | "runnerFieldLabel" | "workerFieldLabel"
+    "kindLabel" | "promptFieldLabel" | "runnerFieldLabel" | "workerFieldLabel"
   >,
 ) {
   return formatList(
@@ -38,10 +41,12 @@ function fieldLabel(
   field: EditableWorkstationOverwriteField,
   messages: Pick<
     WorkstationDetailMessages,
-    "promptFieldLabel" | "runnerFieldLabel" | "workerFieldLabel"
+    "kindLabel" | "promptFieldLabel" | "runnerFieldLabel" | "workerFieldLabel"
   >,
 ) {
   switch (field) {
+    case "behavior":
+      return messages.kindLabel.toLowerCase();
     case "prompt":
       return messages.promptFieldLabel.toLowerCase();
     case "runner":

@@ -1,0 +1,10 @@
+description: Deterministic issue-to-work mapping fields owned by a hosted Linear worker.
+type: object
+additionalProperties: false
+properties:
+  workType:
+    type: string
+    description: Canonical submitted work type emitted for matched Linear issues.
+  state:
+    type: string
+    description: Canonical submitted work state emitted for matched Linear issues.

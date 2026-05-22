@@ -2,6 +2,7 @@ import type { DashboardWorkstationNode } from "../../api/dashboard/types";
 import {
   CRON_WORKSTATION_KIND,
   EXHAUSTION_WORKSTATION_KIND,
+  POLLER_WORKSTATION_KIND,
   REPEATER_WORKSTATION_KIND,
   STANDARD_WORKSTATION_KIND,
   SUPPORTED_WORKSTATION_ICON_METADATA,
@@ -43,6 +44,12 @@ describe("workstationIconMetadata", () => {
         label: "Cron workstation",
         semanticKind: CRON_WORKSTATION_KIND,
       },
+      {
+        className: "text-af-accent/78",
+        iconKind: "poller",
+        label: "Poller workstation",
+        semanticKind: POLLER_WORKSTATION_KIND,
+      },
     ]);
   });
 
@@ -77,6 +84,16 @@ describe("workstationIconMetadata", () => {
       label: "Cron workstation",
       semanticKind: CRON_WORKSTATION_KIND,
     });
+    expect(
+      workstationIconMetadata(
+        dashboardWorkstationNode({ workstation_kind: POLLER_WORKSTATION_KIND }),
+      ),
+    ).toEqual({
+      className: "text-af-accent/78",
+      iconKind: "poller",
+      label: "Poller workstation",
+      semanticKind: POLLER_WORKSTATION_KIND,
+    });
   });
 
   it("preserves the exhaustion-rule special case ahead of workstation-kind fallback", () => {
@@ -110,4 +127,3 @@ describe("workstationIconMetadata", () => {
     });
   });
 });
-

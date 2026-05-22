@@ -41,6 +41,7 @@ describe("factory graph editor additions", () => {
     expect(
       createFactoryGraphAddEntityDraft("workstation", baseFactoryDefinition),
     ).toMatchObject({
+      behavior: "STANDARD",
       kind: "workstation",
       workerName: "writer",
     });
@@ -71,6 +72,21 @@ describe("factory graph editor additions", () => {
     expect(
       validateFactoryGraphAddEntityDraft(
         {
+          behavior: "POLLER",
+          body: "",
+          kind: "workstation",
+          name: "linear-poller",
+          workerName: "writer",
+        },
+        baseFactoryDefinition,
+      ),
+    ).toEqual({
+      behavior: "Poller workstations must use a script or hosted worker.",
+    });
+
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
           capacity: "0",
           kind: "resource",
           name: "gpu",
@@ -82,10 +98,36 @@ describe("factory graph editor additions", () => {
     });
   });
 
-  it("appends pending entities to the graph draft in canonical factory shape", () => {
+  it("appends poller behavior to new workstations in canonical factory shape", () => {
     const nextDraft = applyFactoryGraphAddEntityDraft(
       createEmptyFactoryGraphDraft(),
       {
+        behavior: "POLLER",
+        body: "Review the story output.",
+        kind: "workstation",
+        name: "review",
+        workerName: "writer",
+      },
+    );
+
+    expect(nextDraft.additions.workstations).toEqual([
+      {
+        behavior: "POLLER",
+        body: "Review the story output.",
+        inputs: [],
+        name: "review",
+        outputs: [],
+        type: "MODEL_WORKSTATION",
+        worker: "writer",
+      },
+    ]);
+  });
+
+  it("omits explicit standard behavior for new workstations", () => {
+    const nextDraft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        behavior: "STANDARD",
         body: "Review the story output.",
         kind: "workstation",
         name: "review",

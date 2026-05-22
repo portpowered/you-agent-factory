@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -78,6 +79,7 @@ func NewProviderErrorSmokeHarness(
 	}
 
 	dir := CopyFixtureDir(t, fixtureDir)
+	clearProviderErrorSmokeWorktreeTemplates(t, dir)
 	writeProviderErrorSmokeWorkerConfig(t, dir, cfg.workerName, provider, model, cfg.promptBody)
 
 	providerRunner := NewProviderCommandRunner()
@@ -214,4 +216,39 @@ func buildRunningProviderErrorSmokeServiceHarness(
 	})
 
 	return serviceHarness
+}
+
+func clearProviderErrorSmokeWorktreeTemplates(t *testing.T, dir string) {
+	t.Helper()
+
+	path := filepath.Join(dir, interfaces.FactoryConfigFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("clearProviderErrorSmokeWorktreeTemplates: read %s: %v", path, err)
+	}
+
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("clearProviderErrorSmokeWorktreeTemplates: unmarshal %s: %v", path, err)
+	}
+
+	workstations, ok := cfg["workstations"].([]any)
+	if !ok {
+		return
+	}
+	for _, raw := range workstations {
+		workstation, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		delete(workstation, "worktree")
+	}
+
+	updated, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("clearProviderErrorSmokeWorktreeTemplates: marshal %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, updated, 0o644); err != nil {
+		t.Fatalf("clearProviderErrorSmokeWorktreeTemplates: write %s: %v", path, err)
+	}
 }

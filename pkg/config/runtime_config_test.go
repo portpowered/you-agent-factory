@@ -224,6 +224,69 @@ Execute {{ .WorkID }}.
 	}
 }
 
+func TestLoadRuntimeConfig_LoadsHostedLinearWorkerFrontmatter(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "queued", "type": "PROCESSING"},
+			},
+		}},
+		"workers": []map[string]any{{"name": "linear-poller"}},
+		"workstations": []map[string]any{{
+			"name":     "poll-linear",
+			"behavior": "POLLER",
+			"worker":   "linear-poller",
+			"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs":  []map[string]string{{"workType": "story", "state": "queued"}},
+		}},
+	})
+	writeRuntimeWorkerAgentsMD(t, factoryDir, "linear-poller", `---
+type: HOSTED_WORKER
+provider: LINEAR
+auth:
+  secretRef: secrets/linear-api-key
+linear:
+  pollInterval: 30s
+  teamIds: ["team-a"]
+  mapping:
+    workType: story
+    state: init
+  claim:
+    assigneeField: assignee.email
+---
+Hosted Linear poller.
+`)
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "poll-linear", `---
+worker: linear-poller
+---
+Poll Linear.
+`)
+
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+
+	workerDef, ok := loaded.Worker("linear-poller")
+	if !ok {
+		t.Fatal("expected linear-poller worker definition")
+	}
+	if workerDef.Type != interfaces.WorkerTypeHosted || workerDef.Provider != interfaces.HostedWorkerProviderLinear {
+		t.Fatalf("hosted worker identity = %#v", workerDef)
+	}
+	if workerDef.Auth == nil || workerDef.Auth.SecretRef != "secrets/linear-api-key" {
+		t.Fatalf("hosted worker auth = %#v", workerDef.Auth)
+	}
+	if workerDef.Linear == nil || workerDef.Linear.Mapping.WorkType != "story" || workerDef.Linear.Mapping.State != "init" {
+		t.Fatalf("hosted worker linear mapping = %#v", workerDef.Linear)
+	}
+}
+
 func TestLoadRuntimeConfig_RejectsMissingBodyOnlyWorkerAgentsFileForSplitAuthoredLayout(t *testing.T) {
 	factoryDir := t.TempDir()
 

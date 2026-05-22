@@ -450,13 +450,19 @@ export const PendingEdgeChanges = {
   render: () => <PendingEdgeChangesStory />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const edgeLabels = canvas.getAllByText(/route$/);
+    const failureRoute = await canvas.findByRole("button", {
+      name: "Failure route from review to story:queued",
+    });
+    const successRoute = await canvas.findByRole("button", {
+      name: "Success route from review to story:done",
+    });
     const edgePaths = Array.from(
       canvasElement.querySelectorAll(".react-flow__edge-path"),
     );
 
     await expect(canvas.getByText("review")).toBeVisible();
-    await expect(edgeLabels).toHaveLength(2);
+    await expect(failureRoute).toBeVisible();
+    await expect(successRoute).toBeVisible();
     await expect(edgePaths).toHaveLength(2);
     await expect(edgePaths[0]?.getAttribute("style") ?? "").toContain(
       "var(--color-af-danger-ink)",

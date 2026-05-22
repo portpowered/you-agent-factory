@@ -5,11 +5,13 @@ import { EXHAUSTION_WORKSTATION_KIND, isExhaustionWorkstation } from "./workstat
 export const STANDARD_WORKSTATION_KIND = "standard";
 export const REPEATER_WORKSTATION_KIND = "repeater";
 export const CRON_WORKSTATION_KIND = "cron";
+export const POLLER_WORKSTATION_KIND = "poller";
 
 export const SUPPORTED_WORKSTATION_ICON_KINDS = [
   STANDARD_WORKSTATION_KIND,
   REPEATER_WORKSTATION_KIND,
   CRON_WORKSTATION_KIND,
+  POLLER_WORKSTATION_KIND,
 ] as const;
 
 export type SupportedWorkstationIconKind = (typeof SUPPORTED_WORKSTATION_ICON_KINDS)[number];
@@ -30,6 +32,12 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
     iconKind: "cron",
     label: "Cron workstation",
     semanticKind: CRON_WORKSTATION_KIND,
+  },
+  [POLLER_WORKSTATION_KIND]: {
+    className: "text-af-accent/78",
+    iconKind: "poller",
+    label: "Poller workstation",
+    semanticKind: POLLER_WORKSTATION_KIND,
   },
   [EXHAUSTION_WORKSTATION_KIND]: {
     className: "text-af-danger-ink/76",
@@ -69,6 +77,9 @@ export function workstationSemanticKind(
   if (workstation.workstation_kind === CRON_WORKSTATION_KIND) {
     return CRON_WORKSTATION_KIND;
   }
+  if (workstation.workstation_kind === POLLER_WORKSTATION_KIND) {
+    return POLLER_WORKSTATION_KIND;
+  }
   return STANDARD_WORKSTATION_KIND;
 }
 
@@ -77,4 +88,3 @@ export function workstationIconMetadata(
 ): WorkstationIconMetadata {
   return WORKSTATION_ICON_METADATA_BY_KIND[workstationSemanticKind(workstation)];
 }
-

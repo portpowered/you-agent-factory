@@ -87,8 +87,23 @@ func (c *CronWorkstationType) HandleResult(_ interfaces.WorkResult) PostResultAc
 	return ActionAdvance
 }
 
+// PollerWorkstationType identifies service-supervised ingress pollers. Until
+// poller-specific lifecycle orchestration runs, completed dispatches still
+// route through the normal arc handling.
+type PollerWorkstationType struct{}
+
+// Kind returns WorkstationKindPoller.
+func (p *PollerWorkstationType) Kind() interfaces.WorkstationKind {
+	return interfaces.WorkstationKindPoller
+}
+
+// HandleResult routes poller execution results through normal arc handling.
+func (p *PollerWorkstationType) HandleResult(_ interfaces.WorkResult) PostResultAction {
+	return ActionAdvance
+}
+
 // NewWorkstationTypeRegistry creates a registry pre-populated with the "standard"
-// "repeater", and "cron" types.
+// "repeater", "cron", and "poller" types.
 func NewWorkstationTypeRegistry() *WorkstationTypeRegistry {
 	r := &WorkstationTypeRegistry{
 		strategies: make(map[interfaces.WorkstationKind]WorkstationTypeStrategy),
@@ -96,6 +111,7 @@ func NewWorkstationTypeRegistry() *WorkstationTypeRegistry {
 	r.Register(&StandardWorkstationType{})
 	r.Register(&RepeaterWorkstationType{})
 	r.Register(&CronWorkstationType{})
+	r.Register(&PollerWorkstationType{})
 	return r
 }
 

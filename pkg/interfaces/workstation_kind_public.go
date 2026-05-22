@@ -10,6 +10,7 @@ const (
 	publicFactoryWorkstationKindStandard = "STANDARD"
 	publicFactoryWorkstationKindRepeater = "REPEATER"
 	publicFactoryWorkstationKindCron     = "CRON"
+	publicFactoryWorkstationKindPoller   = "POLLER"
 )
 
 func normalizePublicWorkstationKind(value string, acceptInternal bool, preserveUnknown bool) string {
@@ -23,6 +24,8 @@ func normalizePublicWorkstationKind(value string, acceptInternal bool, preserveU
 		return publicFactoryWorkstationKindRepeater
 	case publicFactoryWorkstationKindCron:
 		return publicFactoryWorkstationKindCron
+	case publicFactoryWorkstationKindPoller:
+		return publicFactoryWorkstationKindPoller
 	default:
 		if acceptInternal {
 			switch trimmed {
@@ -32,6 +35,8 @@ func normalizePublicWorkstationKind(value string, acceptInternal bool, preserveU
 				return publicFactoryWorkstationKindRepeater
 			case string(WorkstationKindCron):
 				return publicFactoryWorkstationKindCron
+			case string(WorkstationKindPoller):
+				return publicFactoryWorkstationKindPoller
 			}
 		}
 		if preserveUnknown {

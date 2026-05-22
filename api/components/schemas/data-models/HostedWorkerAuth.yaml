@@ -1,0 +1,9 @@
+description: >-
+  Hosted-worker authentication contract. V1 hosted workers accept only secret
+  references rather than inline credentials or OAuth-style fields.
+type: object
+additionalProperties: false
+properties:
+  secretRef:
+    type: string
+    description: Referenced secret name that resolves the hosted provider API key at runtime.

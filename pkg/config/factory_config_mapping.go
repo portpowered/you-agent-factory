@@ -371,10 +371,13 @@ func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.W
 	}
 	return &factoryapi.Worker{
 		Type:             workerTypePtrIfNotEmpty(def.Type),
+		Provider:         hostedWorkerProviderPtrIfNotEmpty(def.Provider),
 		Name:             def.Name,
 		Args:             stringSlicePtr(def.Args),
+		Auth:             hostedWorkerAuthAPIFromInternal(def.Auth),
 		Body:             stringPtrIfNotEmpty(def.Body),
 		Command:          stringPtrIfNotEmpty(def.Command),
+		Linear:           hostedLinearWorkerAPIFromInternal(def.Linear),
 		Model:            stringPtrIfNotEmpty(def.Model),
 		ModelProvider:    workerModelProviderPtrIfNotEmpty(def.ModelProvider),
 		ExecutorProvider: workerProviderPtrIfNotEmpty(def.ExecutorProvider),
@@ -389,6 +392,44 @@ func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.W
 // OpenAPI worker model.
 func WorkerConfigToOpenAPI(worker interfaces.WorkerConfig) factoryapi.Worker {
 	return *workerDefinitionAPIFromInternal(&worker)
+}
+
+func hostedWorkerAuthAPIFromInternal(auth *interfaces.HostedWorkerAuthConfig) *factoryapi.HostedWorkerAuth {
+	if auth == nil {
+		return nil
+	}
+	return &factoryapi.HostedWorkerAuth{
+		SecretRef: stringPtrIfNotEmpty(auth.SecretRef),
+	}
+}
+
+func hostedLinearWorkerAPIFromInternal(cfg *interfaces.HostedLinearWorkerConfig) *factoryapi.HostedLinearWorkerConfig {
+	if cfg == nil {
+		return nil
+	}
+	return &factoryapi.HostedLinearWorkerConfig{
+		PollInterval: stringPtrIfNotEmpty(cfg.PollInterval),
+		TeamIds:      stringSlicePtr(cfg.TeamIDs),
+		StateIds:     stringSlicePtr(cfg.StateIDs),
+		Mapping:      hostedLinearWorkerMappingAPIFromInternal(cfg.Mapping),
+		Claim:        hostedLinearWorkerClaimAPIFromInternal(cfg.Claim),
+	}
+}
+
+func hostedLinearWorkerMappingAPIFromInternal(mapping interfaces.HostedLinearWorkerMappingConfig) *factoryapi.HostedLinearWorkerMapping {
+	return &factoryapi.HostedLinearWorkerMapping{
+		WorkType: stringPtrIfNotEmpty(mapping.WorkType),
+		State:    stringPtrIfNotEmpty(mapping.State),
+	}
+}
+
+func hostedLinearWorkerClaimAPIFromInternal(claim *interfaces.HostedLinearWorkerClaimConfig) *factoryapi.HostedLinearWorkerClaim {
+	if claim == nil {
+		return nil
+	}
+	return &factoryapi.HostedLinearWorkerClaim{
+		AssigneeField: stringPtrIfNotEmpty(claim.AssigneeField),
+	}
 }
 
 func mergeCanonicalStopWords(base []string, extra []string) []string {
@@ -555,6 +596,14 @@ func workerProviderPtrIfNotEmpty(value string) *factoryapi.WorkerProvider {
 		return nil
 	}
 	enumValue := publicFactoryWorkerProviderFromInternal(value)
+	return &enumValue
+}
+
+func hostedWorkerProviderPtrIfNotEmpty(value string) *factoryapi.HostedWorkerProvider {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	enumValue := factoryapi.HostedWorkerProvider(publicFactoryHostedWorkerProviderFromInternal(value))
 	return &enumValue
 }
 

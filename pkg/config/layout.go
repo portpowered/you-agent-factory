@@ -194,6 +194,20 @@ func cloneFactoryGuardConfigs(configs []interfaces.FactoryGuardConfig) []interfa
 func CloneWorkerConfig(def interfaces.WorkerConfig) interfaces.WorkerConfig {
 	def.Args = append([]string(nil), def.Args...)
 	def.Resources = append([]interfaces.ResourceConfig(nil), def.Resources...)
+	if def.Auth != nil {
+		auth := *def.Auth
+		def.Auth = &auth
+	}
+	if def.Linear != nil {
+		linear := *def.Linear
+		linear.TeamIDs = append([]string(nil), def.Linear.TeamIDs...)
+		linear.StateIDs = append([]string(nil), def.Linear.StateIDs...)
+		if def.Linear.Claim != nil {
+			claim := *def.Linear.Claim
+			linear.Claim = &claim
+		}
+		def.Linear = &linear
+	}
 	return def
 }
 
@@ -325,6 +339,9 @@ func applyWorkerRuntimeDefinition(worker *interfaces.WorkerConfig, def *interfac
 	if runtimeDef.Type != "" {
 		worker.Type = runtimeDef.Type
 	}
+	if runtimeDef.Provider != "" {
+		worker.Provider = runtimeDef.Provider
+	}
 	if runtimeDef.Model != "" {
 		worker.Model = runtimeDef.Model
 	}
@@ -357,6 +374,12 @@ func applyWorkerRuntimeDefinition(worker *interfaces.WorkerConfig, def *interfac
 	}
 	if runtimeDef.SkipPermissions {
 		worker.SkipPermissions = true
+	}
+	if runtimeDef.Auth != nil {
+		worker.Auth = cloneHostedWorkerAuthConfig(runtimeDef.Auth)
+	}
+	if runtimeDef.Linear != nil {
+		worker.Linear = cloneHostedLinearWorkerConfig(runtimeDef.Linear)
 	}
 	if runtimeDef.Body != "" {
 		worker.Body = runtimeDef.Body
@@ -570,6 +593,7 @@ func workerDefForExpansion(def interfaces.WorkerConfig) interfaces.WorkerConfig 
 
 	return interfaces.WorkerConfig{
 		Type:             def.Type,
+		Provider:         def.Provider,
 		Model:            def.Model,
 		ModelProvider:    def.ModelProvider,
 		ExecutorProvider: def.ExecutorProvider,
@@ -581,6 +605,8 @@ func workerDefForExpansion(def interfaces.WorkerConfig) interfaces.WorkerConfig 
 		Timeout:          def.Timeout,
 		StopToken:        def.StopToken,
 		SkipPermissions:  def.SkipPermissions,
+		Auth:             cloneHostedWorkerAuthConfig(def.Auth),
+		Linear:           cloneHostedLinearWorkerConfig(def.Linear),
 		Body:             def.Body,
 	}
 }
@@ -650,16 +676,19 @@ func splitRuntimeEntityDirExists(dir string) bool {
 }
 
 type workerFrontmatter struct {
-	Type             string                      `yaml:"type"`
-	Model            string                      `yaml:"model,omitempty"`
-	ModelProvider    string                      `yaml:"modelProvider,omitempty"`
-	ExecutorProvider string                      `yaml:"executorProvider,omitempty"`
-	Command          string                      `yaml:"command,omitempty"`
-	Args             []string                    `yaml:"args,omitempty"`
-	Resources        []interfaces.ResourceConfig `yaml:"resources,omitempty"`
-	Timeout          string                      `yaml:"timeout,omitempty"`
-	StopToken        string                      `yaml:"stopToken,omitempty"`
-	SkipPermissions  bool                        `yaml:"skipPermissions,omitempty"`
+	Type             string                               `yaml:"type"`
+	Provider         string                               `yaml:"provider,omitempty"`
+	Model            string                               `yaml:"model,omitempty"`
+	ModelProvider    string                               `yaml:"modelProvider,omitempty"`
+	ExecutorProvider string                               `yaml:"executorProvider,omitempty"`
+	Command          string                               `yaml:"command,omitempty"`
+	Args             []string                             `yaml:"args,omitempty"`
+	Resources        []interfaces.ResourceConfig          `yaml:"resources,omitempty"`
+	Timeout          string                               `yaml:"timeout,omitempty"`
+	StopToken        string                               `yaml:"stopToken,omitempty"`
+	SkipPermissions  bool                                 `yaml:"skipPermissions,omitempty"`
+	Auth             *interfaces.HostedWorkerAuthConfig   `yaml:"auth,omitempty"`
+	Linear           *interfaces.HostedLinearWorkerConfig `yaml:"linear,omitempty"`
 }
 
 type workstationFrontmatter struct {
@@ -780,6 +809,7 @@ func workerFrontmatterForExpansion(def interfaces.WorkerConfig) workerFrontmatte
 	}
 	return workerFrontmatter{
 		Type:             def.Type,
+		Provider:         publicFactoryHostedWorkerProviderFromInternal(def.Provider),
 		Model:            def.Model,
 		ModelProvider:    modelProvider,
 		ExecutorProvider: executorProvider,
@@ -789,6 +819,8 @@ func workerFrontmatterForExpansion(def interfaces.WorkerConfig) workerFrontmatte
 		Timeout:          def.Timeout,
 		StopToken:        def.StopToken,
 		SkipPermissions:  def.SkipPermissions,
+		Auth:             cloneHostedWorkerAuthConfig(def.Auth),
+		Linear:           cloneHostedLinearWorkerConfig(def.Linear),
 	}
 }
 func inputGuardFrontmatterPtr(cfg *interfaces.InputGuardConfig) *inputGuardFrontmatter {

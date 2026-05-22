@@ -124,6 +124,58 @@ func TestRuleGuards_MatchesFieldsEmptyInputKey(t *testing.T) {
 	}
 }
 
+func TestRuleHostedWorkers_AcceptsHostedLinearWorker(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name:     "linear-poller",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &interfaces.HostedLinearWorkerConfig{
+			Mapping: interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		},
+	}}
+
+	findings := ruleHostedWorkers(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
+func TestRuleHostedWorkers_RejectsMissingSecretRefAndMapping(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name:     "linear-poller",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Auth:     &interfaces.HostedWorkerAuthConfig{},
+		Linear:   &interfaces.HostedLinearWorkerConfig{},
+	}}
+
+	findings := ruleHostedWorkers(cfg)
+	assertFindingMatch(t, findings, "hosted-worker-auth-secret-ref", "workers[0](linear-poller).auth.secretRef", "auth.secretRef")
+	assertFindingMatch(t, findings, "hosted-worker-linear-mapping-work-type", "workers[0](linear-poller).linear.mapping.workType", "mapping.workType")
+	assertFindingMatch(t, findings, "hosted-worker-linear-mapping-state", "workers[0](linear-poller).linear.mapping.state", "mapping.state")
+}
+
+func TestRuleHostedWorkers_RejectsHostedFieldsOnNonHostedWorker(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name:     "executor",
+		Type:     interfaces.WorkerTypeModel,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &interfaces.HostedLinearWorkerConfig{
+			Mapping: interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		},
+	}}
+
+	findings := ruleHostedWorkers(cfg)
+	assertFindingMatch(t, findings, "hosted-worker-provider-unsupported", "workers[0](executor).provider", "cannot declare hosted provider")
+	assertFindingMatch(t, findings, "hosted-worker-auth-unsupported", "workers[0](executor).auth", "cannot declare hosted auth")
+	assertFindingMatch(t, findings, "hosted-worker-linear-unsupported", "workers[0](executor).linear", "cannot declare hosted LINEAR")
+}
+
 func TestRuleGuards_ValidMatchesFieldsGuard(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
@@ -388,6 +440,44 @@ func TestRuleWorkstationKindAndWorker_ValidConfig(t *testing.T) {
 	f2 := ruleWorkerReferences(cfg)
 	if len(f1)+len(f2) != 0 {
 		t.Fatalf("expected no findings, got kind=%v worker=%v", f1, f2)
+	}
+}
+
+func TestRulePollerWorkstations_RejectsUnsupportedWorkerType(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name: "planner",
+		Type: interfaces.WorkerTypeModel,
+	}}
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "linear-poller",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "planner",
+	}}
+
+	findings := rulePollerWorkstations(cfg)
+	assertFindingExists(t, findings, "poller-worker-type")
+	if findings[0].Path != "workstations[0](linear-poller).worker" {
+		t.Fatalf("expected path to name poller workstation and worker field, got %q", findings[0].Path)
+	}
+	if got := findings[0].Message; !containsAll(got, `poller workstation "linear-poller"`, `worker "planner"`, `MODEL_WORKER`) {
+		t.Fatalf("expected explicit poller/worker relationship in message, got %q", got)
+	}
+}
+
+func TestRulePollerWorkstations_AcceptsScriptAndHostedWorkers(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{
+		{Name: "script-poller", Type: interfaces.WorkerTypeScript},
+		{Name: "hosted-poller", Type: interfaces.WorkerTypeHosted},
+	}
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
+		{Name: "script", Kind: interfaces.WorkstationKindPoller, WorkerTypeName: "script-poller"},
+		{Name: "hosted", Kind: interfaces.WorkstationKindPoller, WorkerTypeName: "hosted-poller"},
+	}
+
+	if findings := rulePollerWorkstations(cfg); len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
 	}
 }
 

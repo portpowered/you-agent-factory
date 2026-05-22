@@ -34,6 +34,9 @@ func TestWorkstationTypeRegistry_DefaultHasStandard(t *testing.T) {
 	if !r.IsValid(interfaces.WorkstationKindCron) {
 		t.Error("expected cron type to be registered by default")
 	}
+	if !r.IsValid(interfaces.WorkstationKindPoller) {
+		t.Error("expected poller type to be registered by default")
+	}
 }
 
 func TestWorkstationTypeRegistry_UnknownTypeInvalid(t *testing.T) {
@@ -81,10 +84,10 @@ func TestWorkstationTypeRegistry_Register(t *testing.T) {
 func TestWorkstationTypeRegistry_Kinds(t *testing.T) {
 	r := NewWorkstationTypeRegistry()
 	kinds := r.Kinds()
-	if len(kinds) != 3 {
-		t.Fatalf("expected 3 kinds (standard + repeater + cron), got %d", len(kinds))
+	if len(kinds) != 4 {
+		t.Fatalf("expected 4 kinds (standard + repeater + cron + poller), got %d", len(kinds))
 	}
-	foundStandard, foundRepeater, foundCron := false, false, false
+	foundStandard, foundRepeater, foundCron, foundPoller := false, false, false, false
 	for _, k := range kinds {
 		if k == interfaces.WorkstationKindStandard {
 			foundStandard = true
@@ -95,6 +98,9 @@ func TestWorkstationTypeRegistry_Kinds(t *testing.T) {
 		if k == interfaces.WorkstationKindCron {
 			foundCron = true
 		}
+		if k == interfaces.WorkstationKindPoller {
+			foundPoller = true
+		}
 	}
 	if !foundStandard {
 		t.Error("expected standard kind in registry")
@@ -104,6 +110,9 @@ func TestWorkstationTypeRegistry_Kinds(t *testing.T) {
 	}
 	if !foundCron {
 		t.Error("expected cron kind in registry")
+	}
+	if !foundPoller {
+		t.Error("expected poller kind in registry")
 	}
 }
 
@@ -145,6 +154,20 @@ func TestCronWorkstationType_HandleResult_AlwaysAdvances(t *testing.T) {
 	for _, outcome := range []interfaces.WorkOutcome{interfaces.OutcomeAccepted, interfaces.OutcomeContinue, interfaces.OutcomeRejected, interfaces.OutcomeFailed} {
 		result := interfaces.WorkResult{Outcome: outcome}
 		if got := c.HandleResult(result); got != ActionAdvance {
+			t.Errorf("outcome %q: expected %q, got %q", outcome, ActionAdvance, got)
+		}
+	}
+}
+
+func TestPollerWorkstationType_HandleResult_AlwaysAdvances(t *testing.T) {
+	p := &PollerWorkstationType{}
+	if p.Kind() != interfaces.WorkstationKindPoller {
+		t.Errorf("expected %q, got %q", interfaces.WorkstationKindPoller, p.Kind())
+	}
+
+	for _, outcome := range []interfaces.WorkOutcome{interfaces.OutcomeAccepted, interfaces.OutcomeContinue, interfaces.OutcomeRejected, interfaces.OutcomeFailed} {
+		result := interfaces.WorkResult{Outcome: outcome}
+		if got := p.HandleResult(result); got != ActionAdvance {
 			t.Errorf("outcome %q: expected %q, got %q", outcome, ActionAdvance, got)
 		}
 	}
