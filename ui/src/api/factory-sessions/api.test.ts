@@ -70,6 +70,15 @@ describe("factory sessions API", () => {
               name: "beta",
             },
           },
+          targets: [
+            {
+              factoryDir: "/workspace/project/beta",
+              ref: {
+                kind: "named",
+                name: "beta",
+              },
+            },
+          ],
         }),
         {
           headers: {
@@ -101,6 +110,15 @@ describe("factory sessions API", () => {
           name: "beta",
         },
       },
+      targets: [
+        {
+          factoryDir: "/workspace/project/beta",
+          ref: {
+            kind: "named",
+            name: "beta",
+          },
+        },
+      ],
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "/factory-sessions",
