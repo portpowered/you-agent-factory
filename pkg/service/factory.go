@@ -1,4 +1,5 @@
 // backendsizecheck:ignore-file this legacy service orchestration file remains oversized until dedicated refactor work lands.
+// pkgmaintcheck:ignore-file-lines legacy runtime orchestration still spans startup, activation, and shutdown boundaries; split it in dedicated follow-up slices instead of risking behavior drift here.
 package service
 
 import (
