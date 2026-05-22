@@ -35,6 +35,7 @@ var publicFactoryWorkerModelOperationContentTypeAliases = map[string]string{
 
 var publicFactoryWorkstationTypeAliases = map[string]string{
 	WorkstationTypeLogical: WorkstationTypeLogical,
+	WorkstationTypeInvoke:  WorkstationTypeInvoke,
 	WorkstationTypeModel:   WorkstationTypeModel,
 }
 

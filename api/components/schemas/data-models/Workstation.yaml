@@ -22,6 +22,9 @@ properties:
   type:
     $ref: './WorkstationType.yaml'
     description: Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type.
+  operation:
+    $ref: './ModelOperationName.yaml'
+    description: Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`.
   worker:
     type: string
     description: Name of a worker declared in the workers list.

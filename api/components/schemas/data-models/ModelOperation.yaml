@@ -5,8 +5,7 @@ required:
 description: One provider-agnostic operation exposed by a model worker, such as `TTS`.
 properties:
   name:
-    type: string
-    description: Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+    $ref: './ModelOperationName.yaml'
   inputs:
     type: array
     description: Named operation input slots this worker can consume.

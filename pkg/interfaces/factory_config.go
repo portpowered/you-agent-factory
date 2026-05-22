@@ -122,6 +122,7 @@ type FactoryWorkstationConfig struct {
 	Name                  string            `json:"name" yaml:"name,omitempty"`
 	Kind                  WorkstationKind   `json:"behavior,omitempty" yaml:"behavior,omitempty"`
 	Type                  string            `json:"type,omitempty" yaml:"type,omitempty"`
+	Operation             string            `json:"operation,omitempty" yaml:"operation,omitempty"`
 	WorkerTypeName        string            `json:"worker" yaml:"worker,omitempty"`
 	Runner                string            `json:"runner,omitempty" yaml:"runner,omitempty"`
 	PromptFile            string            `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`

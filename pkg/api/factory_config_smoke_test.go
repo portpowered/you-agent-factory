@@ -580,6 +580,7 @@ func assertFactoryConfigSmokeEnumRefs(t *testing.T) {
 	assertSchemaPropertyRef(t, schemas, "Worker", "modelLocality", "#/components/schemas/WorkerModelLocality")
 	assertSchemaArrayItemRef(t, schemas, "Worker", "operations", "#/components/schemas/ModelOperation")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "behavior", "#/components/schemas/WorkstationKind")
+	assertSchemaPropertyRef(t, schemas, "Workstation", "operation", "#/components/schemas/ModelOperationName")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "type", "#/components/schemas/WorkstationType")
 	assertSchemaPropertyRef(t, schemas, "Guard", "type", "#/components/schemas/GuardType")
 }

@@ -238,6 +238,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 		Body:                  stringPtrIfNotEmpty(promptBody),
 		Limits:                workstationLimitsAPIFromInternal(normalized.Limits),
 		OutputSchema:          stringPtrIfNotEmpty(normalized.OutputSchema),
+		Operation:             stringPtrIfNotEmpty(normalized.Operation),
 		PromptFile:            stringPtrIfNotEmpty(normalized.PromptFile),
 		Type:                  workstationTypePtrIfNotEmpty(normalized.Type),
 	}

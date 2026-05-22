@@ -274,6 +274,7 @@ const (
 // Defines values for WorkstationType.
 const (
 	WorkstationTypeLogicalMove      WorkstationType = "LOGICAL_MOVE"
+	WorkstationTypeModelInvoke      WorkstationType = "MODEL_INVOKE"
 	WorkstationTypeModelWorkstation WorkstationType = "MODEL_WORKSTATION"
 )
 
@@ -1092,7 +1093,7 @@ type ModelOperation struct {
 	Inputs *[]ModelOperationSlot `json:"inputs,omitempty"`
 
 	// Name Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
-	Name string `json:"name"`
+	Name ModelOperationName `json:"name"`
 
 	// Outputs Named operation output slots this worker can produce.
 	Outputs *[]ModelOperationSlot `json:"outputs,omitempty"`
@@ -1100,6 +1101,9 @@ type ModelOperation struct {
 
 // ModelOperationContentType Uppercase content-part categories supported by worker model-operation capability slots.
 type ModelOperationContentType string
+
+// ModelOperationName Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+type ModelOperationName = string
 
 // ModelOperationSlot One named capability slot declared by a model operation.
 type ModelOperationSlot struct {
@@ -1885,6 +1889,9 @@ type Workstation struct {
 
 	// OnRejection Optional destination emitted when the worker rejects the current work without a hard failure.
 	OnRejection *[]WorkstationIO `json:"onRejection,omitempty"`
+
+	// Operation Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+	Operation *ModelOperationName `json:"operation,omitempty"`
 
 	// OutputSchema JSON schema string used to validate or parse structured model output when configured.
 	OutputSchema *string `json:"outputSchema,omitempty"`

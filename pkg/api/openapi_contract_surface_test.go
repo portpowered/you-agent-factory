@@ -345,10 +345,11 @@ func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	workstationSchema := schemaObject(t, schemas, "Workstation")
 	workstationProperties := schemaProperties(t, workstationSchema, "Workstation")
 	assertPropertyRef(t, workstationProperties, "behavior", "#/components/schemas/WorkstationKind")
+	assertPropertyRef(t, workstationProperties, "operation", "#/components/schemas/ModelOperationName")
 	assertPropertyRef(t, workstationProperties, "type", "#/components/schemas/WorkstationType")
 	assertPropertiesAbsent(t, workstationProperties, "Workstation", "timeout", "runtime_type")
 	assertEnumValues(t, schemaObject(t, schemas, "WorkstationKind"), "WorkstationKind", []string{"STANDARD", "REPEATER", "CRON"})
-	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"MODEL_WORKSTATION", "LOGICAL_MOVE"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"MODEL_WORKSTATION", "MODEL_INVOKE", "LOGICAL_MOVE"})
 
 	factorySchema := schemaObject(t, schemas, "Factory")
 	factoryProperties := schemaProperties(t, factorySchema, "Factory")
@@ -414,7 +415,7 @@ func assertFactorySchemaDescriptions(t *testing.T, workType, resource, worker, w
 	}
 
 	assertOpenAPI3Description(t, "Workstation", workstation.Description)
-	for _, propertyName := range []string{"name", "behavior", "type", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "guards"} {
+	for _, propertyName := range []string{"name", "behavior", "type", "operation", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "guards"} {
 		assertOpenAPI3PropertyDescription(t, workstation, "Workstation", propertyName)
 	}
 	workstationLimits := assertOpenAPI3RefPropertyDescription(t, workstation, "Workstation", "limits")

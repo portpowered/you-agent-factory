@@ -359,6 +359,9 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {
 			return err
 		}
+		if err := normalizeFactoryModelOperationName(workstation, "operation", fmt.Sprintf("workstations[%d].operation", i)); err != nil {
+			return err
+		}
 		if err := normalizeFactoryWorkstationGuardEntries(workstation, i); err != nil {
 			return err
 		}

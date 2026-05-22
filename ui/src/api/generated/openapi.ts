@@ -1484,8 +1484,7 @@ export interface components {
         WorkerProvider: "SCRIPT_WRAP";
         /** @description One provider-agnostic operation exposed by a model worker, such as `TTS`. */
         ModelOperation: {
-            /** @description Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`. */
-            name: string;
+            name: components["schemas"]["ModelOperationName"];
             /** @description Named operation input slots this worker can consume. */
             inputs?: components["schemas"]["ModelOperationSlot"][];
             /** @description Named operation output slots this worker can produce. */
@@ -1525,6 +1524,8 @@ export interface components {
             behavior?: components["schemas"]["WorkstationKind"];
             /** @description Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type. */
             type?: components["schemas"]["WorkstationType"];
+            /** @description Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`. */
+            operation?: components["schemas"]["ModelOperationName"];
             /** @description Name of a worker declared in the workers list. */
             worker: string;
             /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner. */
@@ -1581,7 +1582,7 @@ export interface components {
          * @description Runtime workstation implementation types supported by the public factory-config contract.
          * @enum {string}
          */
-        WorkstationType: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
+        WorkstationType: "MODEL_WORKSTATION" | "MODEL_INVOKE" | "LOGICAL_MOVE";
         /** @description Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported. */
         WorkstationCron: {
             /** @description Standard five-field cron expression used to produce internal time work while the factory service is running. */
@@ -1846,6 +1847,8 @@ export interface components {
             /** @description Whether the entry only exposed encrypted content instead of plaintext. */
             encrypted?: boolean;
         };
+        /** @description Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`. */
+        ModelOperationName: string;
     };
     responses: {
         /** @description Request payload or parameter was invalid. */

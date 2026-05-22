@@ -1,8 +1,10 @@
 package api
 
 import (
+	"encoding/json"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/api/generated"
@@ -33,6 +35,7 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 	assertSchemaArrayItemRef(t, schemas, "Worker", "operations", "#/components/schemas/ModelOperation")
 	assertSchemaPropertyRef(t, schemas, "Factory", "runner", "#/components/schemas/RunnerID")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "behavior", "#/components/schemas/WorkstationKind")
+	assertSchemaPropertyRef(t, schemas, "Workstation", "operation", "#/components/schemas/ModelOperationName")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "runner", "#/components/schemas/RunnerID")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "type", "#/components/schemas/WorkstationType")
 	assertSchemaPropertyRef(t, schemas, "Guard", "type", "#/components/schemas/GuardType")
@@ -51,6 +54,7 @@ func TestFactoryConfigContract_GeneratedModelsUseEnumBackedFieldsForTightenedCon
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "Operations", reflect.TypeOf((*[]generated.ModelOperation)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Factory{}), "Runner", reflect.TypeOf((*generated.RunnerID)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Behavior", reflect.TypeOf((*generated.WorkstationKind)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Operation", reflect.TypeOf((*string)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Runner", reflect.TypeOf((*generated.RunnerID)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Type", reflect.TypeOf((*generated.WorkstationType)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnContinue", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
@@ -130,6 +134,23 @@ func TestFactoryConfigContract_CanonicalPayloadExercisesGeneratedEnumBackedField
 	guardCycle := (*factory.Workstations)[2]
 	if guardCycle.Type == nil || *guardCycle.Type != generated.WorkstationTypeLogicalMove {
 		t.Fatalf("canonical loop-breaker type = %#v, want LOGICAL_MOVE", guardCycle.Type)
+	}
+
+	modelInvokeType := generated.WorkstationTypeModelInvoke
+	modelInvokeOperation := "TTS"
+	payloadBytes, err := json.Marshal(generated.Workstation{
+		Name:      "tts",
+		Worker:    "executor",
+		Type:      &modelInvokeType,
+		Operation: &modelInvokeOperation,
+		Inputs:    []generated.WorkstationIO{{WorkType: "story", State: "init"}},
+		Outputs:   []generated.WorkstationIO{{WorkType: "story", State: "complete"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal generated MODEL_INVOKE workstation: %v", err)
+	}
+	if !strings.Contains(string(payloadBytes), `"operation":"TTS"`) {
+		t.Fatalf("expected MODEL_INVOKE workstation payload to include operation, got %s", string(payloadBytes))
 	}
 }
 

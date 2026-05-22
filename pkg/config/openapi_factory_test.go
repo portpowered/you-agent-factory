@@ -70,6 +70,44 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 	}
 }
 
+func TestFactoryConfigFromOpenAPIJSON_MapsModelInvokeOperation(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"tts-factory",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{
+			"name":"tts-worker",
+			"type":"MODEL_WORKER",
+			"operations":[{
+				"name":"TTS",
+				"inputs":[{"name":"text","contentTypes":["TEXT"],"required":true}],
+				"outputs":[{"name":"audio","contentTypes":["AUDIO"]}]
+			}]
+		}],
+		"workstations": [{
+			"name":"speak-story",
+			"worker":"tts-worker",
+			"type":"MODEL_INVOKE",
+			"operation":"TTS",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if len(cfg.Workstations) != 1 {
+		t.Fatalf("expected one workstation, got %d", len(cfg.Workstations))
+	}
+	if got := cfg.Workstations[0].Type; got != interfaces.WorkstationTypeInvoke {
+		t.Fatalf("workstation type = %q, want MODEL_INVOKE", got)
+	}
+	if got := cfg.Workstations[0].Operation; got != "TTS" {
+		t.Fatalf("workstation operation = %q, want TTS", got)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalWorkstationCronFields(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"cron-factory",
@@ -734,6 +772,24 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 				}]
 			}`,
 		},
+		{
+			name:      "workstation operation",
+			fieldPath: "workstations[0].operation",
+			value:     "tts",
+			payload: `{
+				"name":"workstation-operation-factory",
+				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+				"workers": [{"name":"executor","type":"MODEL_WORKER"}],
+				"workstations": [{
+					"name":"execute-story",
+					"worker":"executor",
+					"type":"MODEL_INVOKE",
+					"operation":"tts",
+					"inputs":[{"workType":"story","state":"init"}],
+					"outputs":[{"workType":"story","state":"complete"}]
+				}]
+			}`,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -775,7 +831,8 @@ func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBo
 			"name":"execute-story",
 			"behavior":"STANDARD",
 			"worker":"executor",
-			"type":"MODEL_WORKSTATION",
+			"type":"MODEL_INVOKE",
+			"operation":"TTS",
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"complete"}]
 		}]
@@ -818,8 +875,11 @@ func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBo
 	if len(cfg.Workers[0].Operations) != 1 || cfg.Workers[0].Operations[0].Name != "TTS" {
 		t.Fatalf("expected runtime worker TTS operation, got %#v", cfg.Workers[0].Operations)
 	}
-	if got := cfg.Workstations[0].Type; got != interfaces.WorkstationTypeModel {
-		t.Fatalf("expected runtime workstation type MODEL_WORKSTATION, got %q", got)
+	if got := cfg.Workstations[0].Type; got != interfaces.WorkstationTypeInvoke {
+		t.Fatalf("expected runtime workstation type MODEL_INVOKE, got %q", got)
+	}
+	if got := cfg.Workstations[0].Operation; got != "TTS" {
+		t.Fatalf("expected runtime workstation operation TTS, got %q", got)
 	}
 }
 

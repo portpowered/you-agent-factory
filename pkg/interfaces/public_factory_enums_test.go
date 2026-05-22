@@ -57,9 +57,9 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 		},
 		{
 			name:       "workstation type",
-			alias:      "LOGICAL_MOVE",
+			alias:      "MODEL_INVOKE",
 			unknown:    "CUSTOM_WORKSTATION",
-			want:       WorkstationTypeLogical,
+			want:       WorkstationTypeInvoke,
 			permissive: PermissivePublicFactoryWorkstationType,
 			strict:     StrictPublicFactoryWorkstationType,
 		},
@@ -221,8 +221,8 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 		},
 		{
 			name:          "workstation type",
-			supported:     "  LOGICAL_MOVE  ",
-			wantSupported: "LOGICAL_MOVE",
+			supported:     "  MODEL_INVOKE  ",
+			wantSupported: "MODEL_INVOKE",
 			unknown:       "  CUSTOM_WORKSTATION  ",
 			wantUnknown:   "CUSTOM_WORKSTATION",
 			ptr:           generatedPublicFactoryWorkstationTypeStringPtr,

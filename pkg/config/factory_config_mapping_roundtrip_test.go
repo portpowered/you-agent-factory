@@ -464,7 +464,8 @@ func TestWorkstationConfigToOpenAPI_UsesBodyAsCanonicalExportPromptField(t *test
 	workstation := interfaces.FactoryWorkstationConfig{
 		Name:           "execute-story",
 		WorkerTypeName: "executor",
-		Type:           interfaces.WorkstationTypeModel,
+		Type:           interfaces.WorkstationTypeInvoke,
+		Operation:      "TTS",
 		Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
 		Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "done"}},
 		Body:           "fallback body that should stay private to authored runtime config",
@@ -474,6 +475,9 @@ func TestWorkstationConfigToOpenAPI_UsesBodyAsCanonicalExportPromptField(t *test
 	got := WorkstationConfigToOpenAPI(workstation)
 	if got.Body == nil || *got.Body != "Implement {{ .WorkID }}." {
 		t.Fatalf("expected exported workstation body to carry prompt template, got %#v", got.Body)
+	}
+	if got.Operation == nil || *got.Operation != "TTS" {
+		t.Fatalf("expected exported workstation operation TTS, got %#v", got.Operation)
 	}
 }
 

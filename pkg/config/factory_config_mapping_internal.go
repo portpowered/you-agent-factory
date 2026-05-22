@@ -249,6 +249,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		ID:                    stringValue(workstation.Id),
 		Name:                  workstation.Name,
 		WorkerTypeName:        workstation.Worker,
+		Operation:             stringValue(workstation.Operation),
 		Type:                  internalFactoryWorkstationTypeFromPublic(workstation.Type),
 		PromptFile:            stringValue(workstation.PromptFile),
 		OutputSchema:          stringValue(workstation.OutputSchema),
