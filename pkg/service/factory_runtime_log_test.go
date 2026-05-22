@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this runtime-log smoke test keeps the structured log contract inline across correlated record assertions.
 func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, minimalFactoryConfig())
@@ -238,6 +239,7 @@ func TestFactoryService_RunWritesWorkerPoolLifecycleEventsToRuntimeLog(t *testin
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this command-runner log test keeps stdout, stderr, and correlation assertions on one reviewer-readable flow.
 func TestFactoryService_RunWritesCommandRunnerEventsWithOutputsToRuntimeLog(t *testing.T) {
 	work, logPath := runRuntimeLogFixture(t, runtimeLogFixtureOptions{
 		runtimeInstanceID: "runtime-command-runner-log-test",

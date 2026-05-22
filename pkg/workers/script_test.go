@@ -517,6 +517,7 @@ func executeRecordedScript(t *testing.T, executor *ScriptExecutor) interfaces.Wo
 	return result
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the shared command-runner request contract visible in one reviewer-readable assertion flow.
 func assertSharedRunnerRequest(t *testing.T, runner *capturingCommandRunner, wantExecution interfaces.ExecutionMetadata) {
 	t.Helper()
 
@@ -850,6 +851,7 @@ func stringSliceValueForScriptTest(value *[]string) []string {
 	return out
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the script request event contract together across prompt, execution, and dispatch metadata assertions.
 func assertScriptRequestEvent(t *testing.T, event factoryapi.FactoryEvent) {
 	t.Helper()
 
@@ -886,6 +888,7 @@ func assertScriptRequestEvent(t *testing.T, event factoryapi.FactoryEvent) {
 	assertEventDoesNotLeakScriptInternals(t, event)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper intentionally validates the full script response payload contract in one place.
 func assertScriptResponsePayload(
 	t *testing.T,
 	event factoryapi.FactoryEvent,

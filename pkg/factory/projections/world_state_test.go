@@ -362,6 +362,7 @@ func TestReconstructFactoryWorldState_PreservesSafeResponseDiagnostics(t *testin
 	assertSafeResponseDiagnosticsState(t, state)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this reducer regression test keeps the safe inference diagnostics matrix inline to preserve world-state intent.
 func TestReconstructFactoryWorldState_PreservesSafeInferenceAttemptDiagnostics(t *testing.T) {
 	t0 := time.Date(2026, 4, 18, 10, 0, 0, 0, time.UTC)
 	state, err := ReconstructFactoryWorldState(safeResponseDiagnosticsProjectionEvents(t0), 3)

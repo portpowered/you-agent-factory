@@ -400,6 +400,7 @@ func assertRuntimeSafeBoundaryOmittedInferenceFields(t *testing.T, payload any, 
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper intentionally validates the full safe boundary request view contract in one place.
 func assertSafeBoundaryRequestView(
 	t *testing.T,
 	state interfaces.FactoryWorldState,

@@ -15,6 +15,7 @@ import (
 )
 
 // portos:func-length-exception owner=agent-factory reason=generated-factory-serialization-fixture review=2026-07-18 removal=split-fixture-builder-before-next-factory-serialization-change
+// pkgmaintcheck:ignore-cyclomatic-complexity this generated-factory artifact test keeps split-definition embedding assertions together on the public contract seam.
 func TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{

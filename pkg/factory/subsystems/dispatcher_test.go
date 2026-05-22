@@ -640,6 +640,7 @@ func newSingleTransitionDispatchFixture() (*DispatcherSubsystem, *interfaces.Eng
 	return dispatcher, snapshot
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the full dispatch mutation contract together for transition-level assertions.
 func assertSingleTransitionDispatchResult(t *testing.T, result *interfaces.TickResult) {
 	t.Helper()
 	if result == nil {

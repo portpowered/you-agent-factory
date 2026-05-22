@@ -408,6 +408,7 @@ func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesFromNormalized
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this failure-pipeline regression keeps the retryable Windows exit corpus and metadata assertions inline.
 func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPreservesRetryableProviderMetadata(t *testing.T) {
 	n := buildPipelineNet()
 	tp := newTestPipeline(n)
