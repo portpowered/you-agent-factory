@@ -18,8 +18,8 @@ import { DASHBOARD_BODY_TEXT_CLASS, DASHBOARD_SUPPORTING_LABELS_CLASS } from "..
 import { getHeaderControlsMessages } from "./messages/header-controls";
 import { useDashboardSessionTabsState } from "./use-dashboard-session-tabs-state";
 
-const SESSION_TABS_SHELL_CLASS = "mt-3 flex w-full flex-col gap-3 border-t border-af-overlay/10 pt-3";
-const SESSION_HEADER_ROW_CLASS = "flex items-center justify-between gap-3";
+const SESSION_TABS_SHELL_CLASS = "mt-2 flex w-full flex-col gap-2 border-t border-af-overlay/10 pt-2";
+const SESSION_HEADER_ROW_CLASS = "flex items-center justify-between gap-2";
 const SESSION_SECTION_LABEL_CLASS = cn(
   "text-xs uppercase tracking-[0.18em] text-af-ink/52",
   DASHBOARD_SUPPORTING_LABELS_CLASS,

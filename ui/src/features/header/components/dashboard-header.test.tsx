@@ -138,9 +138,16 @@ describe("DashboardHeader", () => {
     expect(exportButton.getAttribute("aria-expanded")).toBe("false");
     expect(wordmark.className).toContain("sr-only");
     expect(toolbar.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
+    expect(toolbar.className).toContain("mb-3");
+    expect(toolbar.className).toContain("gap-2");
+    expect(toolbar.className).toContain("p-2");
     expect(heading.textContent).toContain("∞");
     expect(heading.textContent).toContain("U");
     expect(toolbar.firstElementChild).toBe(heading);
+    expect(heading.firstElementChild?.className).toContain("gap-3");
+    expect(
+      heading.querySelector('[aria-hidden="true"]')?.className,
+    ).toContain("h-12");
     expect(slider.closest("div")?.parentElement?.className).toContain(
       "justify-end",
     );
