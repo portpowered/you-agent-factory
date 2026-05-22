@@ -29,38 +29,9 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 	dir := scaffoldLocalModelLongTestFactoryDir(t, localModelLongTestFactoryConfig())
 	writeLocalModelLongTestWorkerConfig(t, dir)
 	writeLocalModelLongTestWorkstationConfig(t, dir)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	svc, err := BuildFactoryService(ctx, &FactoryServiceConfig{
-		Dir:                                     dir,
-		RuntimeMode:                             interfaces.RuntimeModeService,
-		Port:                                    1,
-		Logger:                                  zap.NewNop(),
-		LocalModelRuntimeOverride:               runtime,
-		SkipBuiltInRunnerPrerequisiteValidation: true,
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-	svc.modelAssets = staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
-	svc.localModels = newManagedLocalModelManager(svc.modelAssets, runtime)
-
-	runErrCh := make(chan error, 1)
-	go func() {
-		runErrCh <- svc.Run(ctx)
-	}()
-	waitForFactoryServiceRuntimeReady(t, svc)
-
-	server := httptest.NewServer(api.NewServer(svc, 0, zap.NewNop()).Handler())
+	server, shutdown := startLocalModelHTTPTestServer(t, dir, runtime)
+	defer shutdown()
 	defer server.Close()
-	defer func() {
-		cancel()
-		if err := <-runErrCh; err != nil && err != context.Canceled {
-			t.Fatalf("svc.Run: %v", err)
-		}
-	}()
 
 	body, err := json.Marshal(factoryapi.ModelInvocationRequest{
 		Operation: "TTS",
@@ -80,7 +51,77 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal invocation request: %v", err)
 	}
+	decoded := invokeLocalModelHTTP(t, server, body)
+	assertLocalModelHTTPInvocationResponse(t, decoded, audioPath)
+	if runtime.loadCount() != 1 || runtime.invocationCount() != 1 {
+		t.Fatalf("runtime load/invoke counts = %d/%d, want 1/1", runtime.loadCount(), runtime.invocationCount())
+	}
+}
 
+func TestBuildFactoryService_InitializesManagedLocalModelFields(t *testing.T) {
+	dir := scaffoldLocalModelLongTestFactoryDir(t, localModelLongTestFactoryConfig())
+	writeLocalModelLongTestWorkerConfig(t, dir)
+	writeLocalModelLongTestWorkstationConfig(t, dir)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	svc, err := BuildFactoryService(ctx, &FactoryServiceConfig{
+		Dir:                                     dir,
+		RuntimeMode:                             interfaces.RuntimeModeService,
+		Port:                                    1,
+		Logger:                                  zap.NewNop(),
+		LocalModelRuntimeOverride:               &fakeLocalModelRuntime{},
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.modelAssets == nil {
+		t.Fatal("expected BuildFactoryService to initialize modelAssets")
+	}
+	if svc.modelResources == nil {
+		t.Fatal("expected BuildFactoryService to initialize modelResources")
+	}
+	if svc.localModels == nil {
+		t.Fatal("expected BuildFactoryService to initialize localModels")
+	}
+}
+
+func startLocalModelHTTPTestServer(t *testing.T, dir string, runtime *fakeLocalModelRuntime) (*httptest.Server, func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	svc, err := BuildFactoryService(ctx, &FactoryServiceConfig{
+		Dir:                                     dir,
+		RuntimeMode:                             interfaces.RuntimeModeService,
+		Port:                                    1,
+		Logger:                                  zap.NewNop(),
+		LocalModelRuntimeOverride:               runtime,
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+	})
+	if err != nil {
+		cancel()
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	svc.modelAssets = staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
+	svc.localModels = newManagedLocalModelManager(svc.modelAssets, runtime)
+
+	runErrCh := make(chan error, 1)
+	go func() { runErrCh <- svc.Run(ctx) }()
+	waitForFactoryServiceRuntimeReady(t, svc)
+
+	server := httptest.NewServer(api.NewServer(svc, 0, zap.NewNop()).Handler())
+	shutdown := func() {
+		cancel()
+		if err := <-runErrCh; err != nil && err != context.Canceled {
+			t.Fatalf("svc.Run: %v", err)
+		}
+	}
+	return server, shutdown
+}
+
+func invokeLocalModelHTTP(t *testing.T, server *httptest.Server, body []byte) factoryapi.ModelInvocationResponse {
+	t.Helper()
 	resp, err := http.Post(server.URL+"/models/OMNIVOICE_Q4_K_M/invocations", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /models/.../invocations: %v", err)
@@ -96,6 +137,11 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		t.Fatalf("decode invocation response: %v", err)
 	}
+	return decoded
+}
+
+func assertLocalModelHTTPInvocationResponse(t *testing.T, decoded factoryapi.ModelInvocationResponse, audioPath string) {
+	t.Helper()
 	if decoded.ModelName != "OMNIVOICE_Q4_K_M" || decoded.Operation != "TTS" || decoded.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
 		t.Fatalf("invocation identity = %#v, want OMNIVOICE local TTS", decoded)
 	}
@@ -108,9 +154,6 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 	}
 	if audioPart.File != audioPath || stringValue(audioPart.ContentType) != "audio/wav" {
 		t.Fatalf("response audio part = %#v, want file %q and audio/wav", audioPart, audioPath)
-	}
-	if runtime.loadCount() != 1 || runtime.invocationCount() != 1 {
-		t.Fatalf("runtime load/invoke counts = %d/%d, want 1/1", runtime.loadCount(), runtime.invocationCount())
 	}
 }
 

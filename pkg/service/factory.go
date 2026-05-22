@@ -73,17 +73,20 @@ var ErrInvalidNamedFactory = apisurface.ErrInvalidNamedFactory
 var ErrCurrentNamedFactoryNotFound = apisurface.ErrCurrentNamedFactoryNotFound
 
 type replacementFactoryRuntime struct {
-	dir          string
-	folderPath   string
-	eventHistory *factory.FactoryEventHistory
-	factory      factory.Factory
-	listener     *listeners.FileWatcher
-	net          *state.Net
-	runtimeCfg   *factoryconfig.LoadedFactoryConfig
-	logger       *zap.Logger
-	logSink      *logging.RuntimeLogSink
-	recording    *replay.Recorder
-	recordPath   string
+	dir            string
+	folderPath     string
+	eventHistory   *factory.FactoryEventHistory
+	factory        factory.Factory
+	listener       *listeners.FileWatcher
+	net            *state.Net
+	runtimeCfg     *factoryconfig.LoadedFactoryConfig
+	modelResources *localModelResourceLimiter
+	modelAssets    modelAssetPuller
+	localModels    *managedLocalModelManager
+	logger         *zap.Logger
+	logSink        *logging.RuntimeLogSink
+	recording      *replay.Recorder
+	recordPath     string
 }
 
 type liveRuntimeHandle struct {
@@ -322,6 +325,9 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		net:            runtimeBundle.net,
 		cfg:            cfg,
 		runtimeCfg:     runtimeBundle.runtimeCfg,
+		modelResources: runtimeBundle.modelResources,
+		modelAssets:    runtimeBundle.modelAssets,
+		localModels:    runtimeBundle.localModels,
 		baseLogger:     baseLogger,
 		logger:         logger,
 		clock:          clock,
@@ -412,13 +418,7 @@ func buildRuntimeBundle(
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
 	eventHistory := factory.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
-	modelResources := newLocalModelResourceLimiter()
-	modelAssets := newHuggingFaceModelAssetPuller(strings.TrimSpace(input.cfg.ModelCacheDir))
-	localModelRuntime := input.cfg.LocalModelRuntimeOverride
-	if localModelRuntime == nil {
-		localModelRuntime = newOmniVoiceLocalRuntime(nil)
-	}
-	localModels := newManagedLocalModelManager(modelAssets, localModelRuntime)
+	modelResources, modelAssets, localModels := newRuntimeLocalModelDependencies(input.cfg)
 	workerOpts, err := loadWorkersFromConfig(
 		input.loadedFactoryCfg.FactoryDir(),
 		input.loadedFactoryCfg.FactoryConfig(),
@@ -484,17 +484,30 @@ func buildRuntimeBundle(
 	}
 
 	return &replacementFactoryRuntime{
-		dir:          input.dir,
-		folderPath:   input.folderPath,
-		eventHistory: eventHistory,
-		factory:      activeFactory,
-		listener:     listener,
-		net:          net,
-		runtimeCfg:   input.loadedFactoryCfg,
-		logger:       input.logger,
-		recording:    recording,
-		recordPath:   input.recordPath,
+		dir:            input.dir,
+		folderPath:     input.folderPath,
+		eventHistory:   eventHistory,
+		factory:        activeFactory,
+		listener:       listener,
+		net:            net,
+		runtimeCfg:     input.loadedFactoryCfg,
+		modelResources: modelResources,
+		modelAssets:    modelAssets,
+		localModels:    localModels,
+		logger:         input.logger,
+		recording:      recording,
+		recordPath:     input.recordPath,
 	}, nil
+}
+
+func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) (*localModelResourceLimiter, modelAssetPuller, *managedLocalModelManager) {
+	modelResources := newLocalModelResourceLimiter()
+	modelAssets := newHuggingFaceModelAssetPuller(strings.TrimSpace(cfg.ModelCacheDir))
+	localModelRuntime := cfg.LocalModelRuntimeOverride
+	if localModelRuntime == nil {
+		localModelRuntime = newOmniVoiceLocalRuntime(nil)
+	}
+	return modelResources, modelAssets, newManagedLocalModelManager(modelAssets, localModelRuntime)
 }
 
 func buildRuntimeRecorder(
@@ -999,17 +1012,20 @@ func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
 		return nil
 	}
 	return &replacementFactoryRuntime{
-		dir:          fs.cfg.Dir,
-		folderPath:   fs.factoryRootDir,
-		eventHistory: fs.eventHistory,
-		factory:      fs.factory,
-		listener:     fs.listener,
-		net:          fs.net,
-		runtimeCfg:   fs.runtimeCfg,
-		logger:       fs.logger,
-		logSink:      fs.logSink,
-		recording:    fs.recording,
-		recordPath:   fs.cfg.RecordPath,
+		dir:            fs.cfg.Dir,
+		folderPath:     fs.factoryRootDir,
+		eventHistory:   fs.eventHistory,
+		factory:        fs.factory,
+		listener:       fs.listener,
+		net:            fs.net,
+		runtimeCfg:     fs.runtimeCfg,
+		modelResources: fs.modelResources,
+		modelAssets:    fs.modelAssets,
+		localModels:    fs.localModels,
+		logger:         fs.logger,
+		logSink:        fs.logSink,
+		recording:      fs.recording,
+		recordPath:     fs.cfg.RecordPath,
 	}
 }
 
@@ -1285,6 +1301,9 @@ func (fs *FactoryService) swapActiveRuntime(runtimeBundle *replacementFactoryRun
 	fs.listener = runtimeBundle.listener
 	fs.net = runtimeBundle.net
 	fs.runtimeCfg = runtimeBundle.runtimeCfg
+	fs.modelResources = runtimeBundle.modelResources
+	fs.modelAssets = runtimeBundle.modelAssets
+	fs.localModels = runtimeBundle.localModels
 	fs.cfg.Dir = runtimeBundle.dir
 }
 
@@ -1296,6 +1315,9 @@ func (fs *FactoryService) clearActiveRuntime() {
 	fs.listener = nil
 	fs.net = nil
 	fs.runtimeCfg = nil
+	fs.modelResources = nil
+	fs.modelAssets = nil
+	fs.localModels = nil
 	if fs.cfg != nil && strings.TrimSpace(fs.factoryRootDir) != "" {
 		fs.cfg.Dir = fs.factoryRootDir
 	}

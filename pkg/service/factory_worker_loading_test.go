@@ -223,135 +223,148 @@ func TestLoadWorkersFromConfig_ModelInvokeContractExecutesAcrossLocalAndCloudWor
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			provider := &providerCallRecorder{
-				responses: []interfaces.InferenceResponse{{Content: "audio-ready"}},
-			}
-			factoryCfg := &interfaces.FactoryConfig{
-				Workstations: []interfaces.FactoryWorkstationConfig{{
-					Name:           "speak",
-					WorkerTypeName: "tts-worker",
-				}},
-				Workers: []interfaces.WorkerConfig{{
-					Name: "tts-worker",
-				}},
-			}
-			runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg,
-				map[string]*interfaces.WorkerConfig{
-					"tts-worker": {
-						Name:          "tts-worker",
-						Type:          interfaces.WorkerTypeModel,
-						Model:         tt.model,
-						ModelProvider: interfaces.RunnerIDCodex,
-						ModelLocality: tt.modelLocality,
-						Body:          "You are a TTS worker.",
-						Operations: []interfaces.ModelOperation{{
-							Name: "TTS",
-							Inputs: []interfaces.ModelOperationSlot{
-								{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}, Required: true},
-								{Name: "voice", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
-							},
-							Outputs: []interfaces.ModelOperationSlot{{
-								Name:         "audio",
-								ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
-							}},
-						}},
-					},
-				},
-				map[string]*interfaces.FactoryWorkstationConfig{
-					"speak": {
-						Name:           "speak",
-						Type:           interfaces.WorkstationTypeInvoke,
-						WorkerTypeName: "tts-worker",
-						Operation:      "TTS",
-						PromptTemplate: "Synthesize {{ (index .Inputs 0).WorkID }}",
-						OperationBindings: []interfaces.ModelOperationBinding{
-							{
-								Slot: "text",
-								Selector: &interfaces.ModelOperationBindingSelector{
-									Label: "utterance",
-									Type:  interfaces.ModelOperationContentTypeText,
-								},
-							},
-							{
-								Slot: "voice",
-								Config: []interfaces.WorkContentPart{{
-									Type: interfaces.WorkContentPartTypeJSON,
-									Role: "voice",
-									JSON: []byte(`{"name":"alloy"}`),
-								}},
-							},
-						},
-					},
-				},
-			)
-
-			opts, err := loadWorkersFromConfigForServiceTest("", factoryCfg, "", runtimeCfg, provider, nil, nil, nil, nil)
-			if err != nil {
-				t.Fatalf("loadWorkersFromConfig: %v", err)
-			}
-
-			fc := &factory.FactoryConfig{}
-			for _, opt := range opts {
-				opt(fc)
-			}
-
-			exec, ok := fc.WorkerExecutors["tts-worker"]
-			if !ok {
-				t.Fatal("expected tts-worker executor to be registered")
-			}
-			wsExec, ok := exec.(*workers.WorkstationExecutor)
-			if !ok {
-				t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
-			}
-
-			result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
-				DispatchID:      "dispatch-tts",
-				TransitionID:    "transition-tts",
-				WorkerType:      "tts-worker",
-				WorkstationName: "speak",
-				InputTokens: workers.InputTokens(interfaces.Token{
-					ID: "token-tts",
-					Color: interfaces.TokenColor{
-						WorkID: "work-tts",
-						Content: []interfaces.WorkContentPart{{
-							Type:  interfaces.WorkContentPartTypeText,
-							Label: "utterance",
-							Text:  "hello world",
-						}},
-					},
-				}),
-			})
+			provider, wsExec := modelInvokeExecutionFixture(t, tt.model, tt.modelLocality)
+			result, err := wsExec.Execute(context.Background(), modelInvokeDispatch())
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if result.Outcome != interfaces.OutcomeAccepted {
 				t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
 			}
-
-			calls := provider.Calls()
-			if len(calls) != 1 {
-				t.Fatalf("provider calls = %d, want 1", len(calls))
-			}
-			call := calls[0]
-			if call.Model != tt.model {
-				t.Fatalf("provider model = %q, want %q", call.Model, tt.model)
-			}
-			if call.ModelLocality != tt.modelLocality {
-				t.Fatalf("provider model locality = %q, want %q", call.ModelLocality, tt.modelLocality)
-			}
-			if call.ModelOperation != "TTS" {
-				t.Fatalf("provider model operation = %q, want TTS", call.ModelOperation)
-			}
-			if len(call.ModelBindings) != 2 {
-				t.Fatalf("provider model bindings = %#v, want 2 entries", call.ModelBindings)
-			}
-			if call.ModelBindings[0].Slot != "text" || call.ModelBindings[0].Source != interfaces.ModelOperationBindingSourceInput || call.ModelBindings[0].Content[0].Text != "hello world" {
-				t.Fatalf("text model binding = %#v, want generic text slot from input", call.ModelBindings[0])
-			}
-			if call.ModelBindings[1].Slot != "voice" || call.ModelBindings[1].Source != interfaces.ModelOperationBindingSourceConfig || string(call.ModelBindings[1].Content[0].JSON) != `{"name":"alloy"}` {
-				t.Fatalf("voice model binding = %#v, want config voice binding", call.ModelBindings[1])
-			}
+			assertModelInvokeProviderCall(t, provider.Calls(), tt.model, tt.modelLocality)
 		})
+	}
+}
+
+func modelInvokeExecutionFixture(t *testing.T, model string, modelLocality string) (*providerCallRecorder, *workers.WorkstationExecutor) {
+	t.Helper()
+	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: "audio-ready"}}}
+	factoryCfg := &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "speak", WorkerTypeName: "tts-worker"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "tts-worker"}},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg,
+		map[string]*interfaces.WorkerConfig{"tts-worker": modelInvokeRuntimeWorker(model, modelLocality)},
+		map[string]*interfaces.FactoryWorkstationConfig{"speak": modelInvokeWorkstationConfig()},
+	)
+	opts, err := loadWorkersFromConfigForServiceTest("", factoryCfg, "", runtimeCfg, provider, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+	exec, ok := fc.WorkerExecutors["tts-worker"]
+	if !ok {
+		t.Fatal("expected tts-worker executor to be registered")
+	}
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+	return provider, wsExec
+}
+
+func modelInvokeRuntimeWorker(model string, modelLocality string) *interfaces.WorkerConfig {
+	return &interfaces.WorkerConfig{
+		Name:          "tts-worker",
+		Type:          interfaces.WorkerTypeModel,
+		Model:         model,
+		ModelProvider: interfaces.RunnerIDCodex,
+		ModelLocality: modelLocality,
+		Body:          "You are a TTS worker.",
+		Operations: []interfaces.ModelOperation{{
+			Name: "TTS",
+			Inputs: []interfaces.ModelOperationSlot{
+				{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}, Required: true},
+				{Name: "voice", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+			},
+			Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+		}},
+	}
+}
+
+func modelInvokeWorkstationConfig() *interfaces.FactoryWorkstationConfig {
+	return &interfaces.FactoryWorkstationConfig{
+		Name:           "speak",
+		Type:           interfaces.WorkstationTypeInvoke,
+		WorkerTypeName: "tts-worker",
+		Operation:      "TTS",
+		PromptTemplate: "Synthesize {{ (index .Inputs 0).WorkID }}",
+		OperationBindings: []interfaces.ModelOperationBinding{
+			{
+				Slot: "text",
+				Selector: &interfaces.ModelOperationBindingSelector{
+					Label: "utterance",
+					Type:  interfaces.ModelOperationContentTypeText,
+				},
+			},
+			{
+				Slot: "voice",
+				Config: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeJSON,
+					Role: "voice",
+					JSON: []byte(`{"name":"alloy"}`),
+				}},
+			},
+		},
+	}
+}
+
+func modelInvokeDispatch() interfaces.WorkDispatch {
+	return interfaces.WorkDispatch{
+		DispatchID:      "dispatch-tts",
+		TransitionID:    "transition-tts",
+		WorkerType:      "tts-worker",
+		WorkstationName: "speak",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "token-tts",
+			Color: interfaces.TokenColor{
+				WorkID: "work-tts",
+				Content: []interfaces.WorkContentPart{{
+					Type:  interfaces.WorkContentPartTypeText,
+					Label: "utterance",
+					Text:  "hello world",
+				}},
+			},
+		}),
+	}
+}
+
+func assertModelInvokeProviderCall(t *testing.T, calls []interfaces.ProviderInferenceRequest, wantModel string, wantLocality string) {
+	t.Helper()
+	if len(calls) != 1 {
+		t.Fatalf("provider calls = %d, want 1", len(calls))
+	}
+	call := calls[0]
+	if call.Model != wantModel {
+		t.Fatalf("provider model = %q, want %q", call.Model, wantModel)
+	}
+	if call.ModelLocality != wantLocality {
+		t.Fatalf("provider model locality = %q, want %q", call.ModelLocality, wantLocality)
+	}
+	if call.ModelOperation != "TTS" {
+		t.Fatalf("provider model operation = %q, want TTS", call.ModelOperation)
+	}
+	if len(call.ModelBindings) != 2 {
+		t.Fatalf("provider model bindings = %#v, want 2 entries", call.ModelBindings)
+	}
+	assertModelInvokeTextBinding(t, call.ModelBindings[0])
+	assertModelInvokeVoiceBinding(t, call.ModelBindings[1])
+}
+
+func assertModelInvokeTextBinding(t *testing.T, binding interfaces.ResolvedModelOperationBinding) {
+	t.Helper()
+	if binding.Slot != "text" || binding.Source != interfaces.ModelOperationBindingSourceInput || binding.Content[0].Text != "hello world" {
+		t.Fatalf("text model binding = %#v, want generic text slot from input", binding)
+	}
+}
+
+func assertModelInvokeVoiceBinding(t *testing.T, binding interfaces.ResolvedModelOperationBinding) {
+	t.Helper()
+	if binding.Slot != "voice" || binding.Source != interfaces.ModelOperationBindingSourceConfig || string(binding.Content[0].JSON) != `{"name":"alloy"}` {
+		t.Fatalf("voice model binding = %#v, want config voice binding", binding)
 	}
 }
 

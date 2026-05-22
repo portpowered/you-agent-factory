@@ -71,7 +71,13 @@ func TestOmniVoiceLocalRuntime_LoadAndInvoke_ReturnsAudioContentFromOutputFile(t
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
+	assertOmniVoiceCommandRequest(t, got, workdir, files)
+	assertOmniVoiceInvocationPayload(t, got.Stdin)
+	assertOmniVoiceResponseContent(t, response.Content)
+}
 
+func assertOmniVoiceCommandRequest(t *testing.T, got workers.CommandRequest, workdir string, files []string) {
+	t.Helper()
 	if got.Command != "omnivoice-test" {
 		t.Fatalf("command = %q, want omnivoice-test", got.Command)
 	}
@@ -86,17 +92,23 @@ func TestOmniVoiceLocalRuntime_LoadAndInvoke_ReturnsAudioContentFromOutputFile(t
 		"--output", commandArgValue(t, got.Args, "--output"),
 	}
 	assertLocalModelStringSlicesEqual(t, wantArgs, got.Args)
+}
 
+func assertOmniVoiceInvocationPayload(t *testing.T, stdin []byte) {
+	t.Helper()
 	var payload omniVoiceInvocationPayload
-	if err := json.Unmarshal(got.Stdin, &payload); err != nil {
+	if err := json.Unmarshal(stdin, &payload); err != nil {
 		t.Fatalf("decode stdin payload: %v", err)
 	}
 	if payload.Operation != "TTS" || payload.Text != "hello local runtime" || payload.ModelName != "OMNIVOICE_Q4_K_M" || payload.Revision != "rev-test" {
 		t.Fatalf("stdin payload = %#v, want TTS text payload with model identity", payload)
 	}
+}
 
+func assertOmniVoiceResponseContent(t *testing.T, responseContent string) {
+	t.Helper()
 	var content []interfaces.WorkContentPart
-	if err := json.Unmarshal([]byte(response.Content), &content); err != nil {
+	if err := json.Unmarshal([]byte(responseContent), &content); err != nil {
 		t.Fatalf("decode response content: %v", err)
 	}
 	if len(content) != 1 {

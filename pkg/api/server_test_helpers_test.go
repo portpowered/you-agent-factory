@@ -177,60 +177,90 @@ func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkConte
 		t.Fatalf("content count = %d, want %d", len(*content), len(want))
 	}
 	for i, wantPart := range want {
-		switch wantPart.Type {
-		case interfaces.WorkContentPartTypeText:
-			part, err := (*content)[i].AsWorkTextContentPart()
-			if err != nil {
-				t.Fatalf("content[%d] decode text: %v", i, err)
-			}
-			if part.Type != factoryapi.WorkContentPartTypeText || part.Text != wantPart.Text {
-				t.Fatalf("content[%d] = %#v, want text %q", i, part, wantPart.Text)
-			}
-			assertGeneratedPartSharedFields(t, i, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, wantPart)
-		case interfaces.WorkContentPartTypeImage:
-			part, err := (*content)[i].AsWorkImageContentPart()
-			if err != nil {
-				t.Fatalf("content[%d] decode image: %v", i, err)
-			}
-			if part.Type != factoryapi.WorkContentPartTypeImage || part.File != wantPart.File {
-				t.Fatalf("content[%d] = %#v, want image %q", i, part, wantPart.File)
-			}
-			assertGeneratedPartSharedFields(t, i, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, wantPart)
-		case interfaces.WorkContentPartTypeAudio:
-			part, err := (*content)[i].AsWorkAudioContentPart()
-			if err != nil {
-				t.Fatalf("content[%d] decode audio: %v", i, err)
-			}
-			if part.Type != factoryapi.WorkContentPartTypeAudio || part.File != wantPart.File {
-				t.Fatalf("content[%d] = %#v, want audio %q", i, part, wantPart.File)
-			}
-			assertGeneratedPartSharedFields(t, i, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, wantPart)
-		case interfaces.WorkContentPartTypeJSON:
-			part, err := (*content)[i].AsWorkJsonContentPart()
-			if err != nil {
-				t.Fatalf("content[%d] decode json: %v", i, err)
-			}
-			rawJSON, err := json.Marshal(part.Json)
-			if err != nil {
-				t.Fatalf("content[%d] encode json: %v", i, err)
-			}
-			if part.Type != factoryapi.WorkContentPartTypeJSON || string(rawJSON) != string(wantPart.JSON) {
-				t.Fatalf("content[%d] = %#v, want json %s", i, part, wantPart.JSON)
-			}
-			assertGeneratedPartSharedFields(t, i, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, wantPart)
-		case interfaces.WorkContentPartTypeBinary:
-			part, err := (*content)[i].AsWorkBinaryContentPart()
-			if err != nil {
-				t.Fatalf("content[%d] decode binary: %v", i, err)
-			}
-			if part.Type != factoryapi.WorkContentPartTypeBinary || part.File != wantPart.File {
-				t.Fatalf("content[%d] = %#v, want binary %q", i, part, wantPart.File)
-			}
-			assertGeneratedPartSharedFields(t, i, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, wantPart)
-		default:
-			t.Fatalf("unsupported expected content type %q", wantPart.Type)
-		}
+		assertGeneratedWorkContentPart(t, (*content)[i], i, wantPart)
 	}
+}
+
+func assertGeneratedWorkContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+	t.Helper()
+	switch want.Type {
+	case interfaces.WorkContentPartTypeText:
+		assertGeneratedTextContentPart(t, got, index, want)
+	case interfaces.WorkContentPartTypeImage:
+		assertGeneratedImageContentPart(t, got, index, want)
+	case interfaces.WorkContentPartTypeAudio:
+		assertGeneratedAudioContentPart(t, got, index, want)
+	case interfaces.WorkContentPartTypeJSON:
+		assertGeneratedJSONContentPart(t, got, index, want)
+	case interfaces.WorkContentPartTypeBinary:
+		assertGeneratedBinaryContentPart(t, got, index, want)
+	default:
+		t.Fatalf("unsupported expected content type %q", want.Type)
+	}
+}
+
+func assertGeneratedTextContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+	t.Helper()
+	part, err := got.AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("content[%d] decode text: %v", index, err)
+	}
+	if part.Type != factoryapi.WorkContentPartTypeText || part.Text != want.Text {
+		t.Fatalf("content[%d] = %#v, want text %q", index, part, want.Text)
+	}
+	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
+}
+
+func assertGeneratedImageContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+	t.Helper()
+	part, err := got.AsWorkImageContentPart()
+	if err != nil {
+		t.Fatalf("content[%d] decode image: %v", index, err)
+	}
+	if part.Type != factoryapi.WorkContentPartTypeImage || part.File != want.File {
+		t.Fatalf("content[%d] = %#v, want image %q", index, part, want.File)
+	}
+	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
+}
+
+func assertGeneratedAudioContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+	t.Helper()
+	part, err := got.AsWorkAudioContentPart()
+	if err != nil {
+		t.Fatalf("content[%d] decode audio: %v", index, err)
+	}
+	if part.Type != factoryapi.WorkContentPartTypeAudio || part.File != want.File {
+		t.Fatalf("content[%d] = %#v, want audio %q", index, part, want.File)
+	}
+	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
+}
+
+func assertGeneratedJSONContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+	t.Helper()
+	part, err := got.AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("content[%d] decode json: %v", index, err)
+	}
+	rawJSON, err := json.Marshal(part.Json)
+	if err != nil {
+		t.Fatalf("content[%d] encode json: %v", index, err)
+	}
+	if part.Type != factoryapi.WorkContentPartTypeJSON || string(rawJSON) != string(want.JSON) {
+		t.Fatalf("content[%d] = %#v, want json %s", index, part, want.JSON)
+	}
+	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
+}
+
+func assertGeneratedBinaryContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+	t.Helper()
+	part, err := got.AsWorkBinaryContentPart()
+	if err != nil {
+		t.Fatalf("content[%d] decode binary: %v", index, err)
+	}
+	if part.Type != factoryapi.WorkContentPartTypeBinary || part.File != want.File {
+		t.Fatalf("content[%d] = %#v, want binary %q", index, part, want.File)
+	}
+	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
 func assertGeneratedPartSharedFields(t *testing.T, index int, slot *string, label *string, role *string, contentType *string, artifactID *string, metadata *factoryapi.WorkContentMetadata, want interfaces.WorkContentPart) {

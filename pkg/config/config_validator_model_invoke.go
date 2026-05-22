@@ -19,81 +19,102 @@ func ruleModelInvokeWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 
 	var findings []Finding
 	for workstationIndex, workstation := range cfg.Workstations {
-		basePath := fmt.Sprintf("workstations[%d](%s)", workstationIndex, workstation.Name)
-		workstationType := strings.TrimSpace(workstation.Type)
-		operationName := strings.TrimSpace(workstation.Operation)
-
-		if workstationType != interfaces.WorkstationTypeInvoke {
-			if operationName != "" {
-				findings = append(findings, Finding{
-					Severity: SeverityError,
-					Path:     basePath + ".operation",
-					Message:  "operation is only supported on MODEL_INVOKE workstations",
-					Rule:     "workstation-model-invoke-type",
-				})
-			}
-			continue
-		}
-
-		if operationName == "" {
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     basePath + ".operation",
-				Message:  "MODEL_INVOKE workstation requires an uppercase operation name",
-				Rule:     "workstation-model-invoke-operation",
-			})
-		}
-		if strings.TrimSpace(workstation.WorkerTypeName) == "" {
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     basePath + ".worker",
-				Message:  "MODEL_INVOKE workstation requires a worker reference",
-				Rule:     "workstation-model-invoke-worker",
-			})
-			continue
-		}
-
-		worker, ok := workersByName[workstation.WorkerTypeName]
-		if !ok {
-			continue
-		}
-		if strings.TrimSpace(worker.Type) != "" && worker.Type != interfaces.WorkerTypeModel {
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     basePath + ".worker",
-				Message:  fmt.Sprintf("worker %q is incompatible with MODEL_INVOKE; declare type MODEL_WORKER and model operations", workstation.WorkerTypeName),
-				Rule:     "workstation-model-invoke-worker-compatibility",
-			})
-			continue
-		}
-		if operationName == "" {
-			continue
-		}
-
-		operation, found := findWorkerOperation(worker.Operations, operationName)
-		if !found {
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     basePath + ".operation",
-				Message:  fmt.Sprintf("worker %q does not declare requested operation %q", workstation.WorkerTypeName, operationName),
-				Rule:     "workstation-model-invoke-operation-mismatch",
-			})
-			continue
-		}
-		if len(operation.Inputs) == 0 || len(operation.Outputs) == 0 {
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     basePath + ".operation",
-				Message:  fmt.Sprintf("worker %q operation %q has an incompatible content contract; MODEL_INVOKE requires at least one input slot and one output slot", workstation.WorkerTypeName, operationName),
-				Rule:     "workstation-model-invoke-content-contract",
-			})
-			continue
-		}
-
-		findings = append(findings, validateModelOperationBindings(workstation.OperationBindings, operation.Inputs, basePath+".operationBindings")...)
+		findings = append(findings, validateModelInvokeWorkstation(workstation, workstationIndex, workersByName)...)
 	}
 
 	return findings
+}
+
+func validateModelInvokeWorkstation(workstation interfaces.FactoryWorkstationConfig, workstationIndex int, workersByName map[string]interfaces.WorkerConfig) []Finding {
+	basePath := fmt.Sprintf("workstations[%d](%s)", workstationIndex, workstation.Name)
+	operationName := strings.TrimSpace(workstation.Operation)
+	if strings.TrimSpace(workstation.Type) != interfaces.WorkstationTypeInvoke {
+		return validateNonInvokeOperationUsage(basePath, operationName)
+	}
+
+	findings := requiredModelInvokeWorkstationFindings(workstation, basePath, operationName)
+	if strings.TrimSpace(workstation.WorkerTypeName) == "" {
+		return findings
+	}
+
+	worker, ok := workersByName[workstation.WorkerTypeName]
+	if !ok {
+		return findings
+	}
+	workerFindings, operation, ok := validateModelInvokeWorker(workstation, worker, basePath, operationName)
+	findings = append(findings, workerFindings...)
+	if !ok {
+		return findings
+	}
+
+	return append(findings, validateModelOperationBindings(workstation.OperationBindings, operation.Inputs, basePath+".operationBindings")...)
+}
+
+func validateNonInvokeOperationUsage(basePath string, operationName string) []Finding {
+	if operationName == "" {
+		return nil
+	}
+	return []Finding{{
+		Severity: SeverityError,
+		Path:     basePath + ".operation",
+		Message:  "operation is only supported on MODEL_INVOKE workstations",
+		Rule:     "workstation-model-invoke-type",
+	}}
+}
+
+func requiredModelInvokeWorkstationFindings(workstation interfaces.FactoryWorkstationConfig, basePath string, operationName string) []Finding {
+	var findings []Finding
+	if operationName == "" {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".operation",
+			Message:  "MODEL_INVOKE workstation requires an uppercase operation name",
+			Rule:     "workstation-model-invoke-operation",
+		})
+	}
+	if strings.TrimSpace(workstation.WorkerTypeName) == "" {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".worker",
+			Message:  "MODEL_INVOKE workstation requires a worker reference",
+			Rule:     "workstation-model-invoke-worker",
+		})
+	}
+	return findings
+}
+
+func validateModelInvokeWorker(workstation interfaces.FactoryWorkstationConfig, worker interfaces.WorkerConfig, basePath string, operationName string) ([]Finding, interfaces.ModelOperation, bool) {
+	if strings.TrimSpace(worker.Type) != "" && worker.Type != interfaces.WorkerTypeModel {
+		return []Finding{{
+			Severity: SeverityError,
+			Path:     basePath + ".worker",
+			Message:  fmt.Sprintf("worker %q is incompatible with MODEL_INVOKE; declare type MODEL_WORKER and model operations", workstation.WorkerTypeName),
+			Rule:     "workstation-model-invoke-worker-compatibility",
+		}}, interfaces.ModelOperation{}, false
+	}
+	if operationName == "" {
+		return nil, interfaces.ModelOperation{}, false
+	}
+
+	operation, found := findWorkerOperation(worker.Operations, operationName)
+	if !found {
+		return []Finding{{
+			Severity: SeverityError,
+			Path:     basePath + ".operation",
+			Message:  fmt.Sprintf("worker %q does not declare requested operation %q", workstation.WorkerTypeName, operationName),
+			Rule:     "workstation-model-invoke-operation-mismatch",
+		}}, interfaces.ModelOperation{}, false
+	}
+	if len(operation.Inputs) == 0 || len(operation.Outputs) == 0 {
+		return []Finding{{
+			Severity: SeverityError,
+			Path:     basePath + ".operation",
+			Message:  fmt.Sprintf("worker %q operation %q has an incompatible content contract; MODEL_INVOKE requires at least one input slot and one output slot", workstation.WorkerTypeName, operationName),
+			Rule:     "workstation-model-invoke-content-contract",
+		}}, interfaces.ModelOperation{}, false
+	}
+
+	return nil, operation, true
 }
 
 func findWorkerOperation(operations []interfaces.ModelOperation, name string) (interfaces.ModelOperation, bool) {

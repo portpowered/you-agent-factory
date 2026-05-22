@@ -856,6 +856,17 @@ func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBo
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
 	}
+	assertGeneratedCanonicalUppercaseWorkerEnums(t, generated)
+
+	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	assertRuntimeCanonicalUppercaseWorkerEnums(t, cfg)
+}
+
+func assertGeneratedCanonicalUppercaseWorkerEnums(t *testing.T, generated factoryapi.Factory) {
+	t.Helper()
 	if generated.Workers == nil || len(*generated.Workers) != 1 {
 		t.Fatalf("expected one generated worker, got %#v", generated.Workers)
 	}
@@ -872,11 +883,10 @@ func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBo
 	if worker.Operations == nil || len(*worker.Operations) != 1 {
 		t.Fatalf("expected one generated worker operation, got %#v", worker.Operations)
 	}
+}
 
-	cfg, err := FactoryConfigFromOpenAPI(generated)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
-	}
+func assertRuntimeCanonicalUppercaseWorkerEnums(t *testing.T, cfg interfaces.FactoryConfig) {
+	t.Helper()
 	if got := cfg.Workers[0].ModelProvider; got != "codex" {
 		t.Fatalf("expected runtime worker modelProvider codex, got %q", got)
 	}

@@ -303,7 +303,13 @@ func assertRecordedLocalModelExecutionEvents(t *testing.T, events []factoryapi.F
 		t.Fatalf("second event type = %s, want %s", events[1].Type, factoryapi.FactoryEventTypeModelResponse)
 	}
 
-	requestPayload, err := events[0].Payload.AsModelRequestEventPayload()
+	assertRecordedLocalModelRequestPayload(t, events[0])
+	assertRecordedLocalModelResponsePayload(t, events[1], audioPath)
+}
+
+func assertRecordedLocalModelRequestPayload(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	requestPayload, err := event.Payload.AsModelRequestEventPayload()
 	if err != nil {
 		t.Fatalf("decode model request payload: %v", err)
 	}
@@ -316,8 +322,11 @@ func assertRecordedLocalModelExecutionEvents(t *testing.T, events []factoryapi.F
 	if requestPayload.Bindings == nil || len(*requestPayload.Bindings) != 1 || (*requestPayload.Bindings)[0].Slot != "text" || (*requestPayload.Bindings)[0].Source != factoryapi.INPUT {
 		t.Fatalf("request bindings = %#v, want one resolved text input binding", requestPayload.Bindings)
 	}
+}
 
-	responsePayload, err := events[1].Payload.AsModelResponseEventPayload()
+func assertRecordedLocalModelResponsePayload(t *testing.T, event factoryapi.FactoryEvent, audioPath string) {
+	t.Helper()
+	responsePayload, err := event.Payload.AsModelResponseEventPayload()
 	if err != nil {
 		t.Fatalf("decode model response payload: %v", err)
 	}

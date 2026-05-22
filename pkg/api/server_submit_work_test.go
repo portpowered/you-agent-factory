@@ -101,28 +101,48 @@ func TestSubmitWork_AcceptsUppercaseAndExtendedCanonicalContent(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
+	assertUppercaseExtendedCanonicalSubmission(t, mf)
+}
+
+func assertUppercaseExtendedCanonicalSubmission(t *testing.T, mf *testutil.MockFactory) {
+	t.Helper()
 	if len(mf.Submitted) != 1 || len(mf.Submitted[0].Content) != 3 {
 		t.Fatalf("submitted content = %#v, want 3 canonical parts", mf.Submitted)
 	}
-	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Label != "prompt" {
-		t.Fatalf("submitted content[0] = %#v, want normalized text part with label", mf.Submitted[0].Content[0])
+	assertUppercaseExtendedTextPart(t, mf.Submitted[0].Content[0])
+	assertUppercaseExtendedAudioPart(t, mf.Submitted[0].Content[1])
+	assertUppercaseExtendedJSONPart(t, mf.Submitted[0].Content[2])
+	if string(mf.Submitted[0].Payload) != "Synthesize this" {
+		t.Fatalf("payload = %q, want legacy text projection from uppercase TEXT part", mf.Submitted[0].Payload)
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeAudio || mf.Submitted[0].Content[1].File != "artifacts/output.wav" || mf.Submitted[0].Content[1].ContentType != "audio/wav" || mf.Submitted[0].Content[1].ArtifactID != "artifact-audio-1" {
-		t.Fatalf("submitted content[1] = %#v, want canonical audio content", mf.Submitted[0].Content[1])
+}
+
+func assertUppercaseExtendedTextPart(t *testing.T, part interfaces.WorkContentPart) {
+	t.Helper()
+	if part.Type != interfaces.WorkContentPartTypeText || part.Label != "prompt" {
+		t.Fatalf("submitted content[0] = %#v, want normalized text part with label", part)
 	}
-	audioMetadata, _ := json.Marshal(mf.Submitted[0].Content[1].Metadata)
+}
+
+func assertUppercaseExtendedAudioPart(t *testing.T, part interfaces.WorkContentPart) {
+	t.Helper()
+	if part.Type != interfaces.WorkContentPartTypeAudio || part.File != "artifacts/output.wav" || part.ContentType != "audio/wav" || part.ArtifactID != "artifact-audio-1" {
+		t.Fatalf("submitted content[1] = %#v, want canonical audio content", part)
+	}
+	audioMetadata, _ := json.Marshal(part.Metadata)
 	if string(audioMetadata) != `{"voice":"alloy"}` {
 		t.Fatalf("audio metadata = %s, want voice metadata", audioMetadata)
 	}
+}
+
+func assertUppercaseExtendedJSONPart(t *testing.T, part interfaces.WorkContentPart) {
+	t.Helper()
 	jsonValue := map[string]any{}
-	if err := json.Unmarshal(mf.Submitted[0].Content[2].JSON, &jsonValue); err != nil {
+	if err := json.Unmarshal(part.JSON, &jsonValue); err != nil {
 		t.Fatalf("decode json content: %v", err)
 	}
-	if mf.Submitted[0].Content[2].Type != interfaces.WorkContentPartTypeJSON || jsonValue["voice"] != "alloy" || jsonValue["speed"] != float64(1) {
-		t.Fatalf("submitted content[2] = %#v, want canonical json content", mf.Submitted[0].Content[2])
-	}
-	if string(mf.Submitted[0].Payload) != "Synthesize this" {
-		t.Fatalf("payload = %q, want legacy text projection from uppercase TEXT part", mf.Submitted[0].Payload)
+	if part.Type != interfaces.WorkContentPartTypeJSON || jsonValue["voice"] != "alloy" || jsonValue["speed"] != float64(1) {
+		t.Fatalf("submitted content[2] = %#v, want canonical json content", part)
 	}
 }
 

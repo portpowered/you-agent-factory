@@ -147,6 +147,13 @@ func assertCanonicalFactoryWorkstationEnums(t *testing.T, factory generated.Fact
 func assertCanonicalExecuteStoryWorkstationEnums(t *testing.T, executeStory generated.Workstation) {
 	t.Helper()
 
+	assertCanonicalExecuteStoryBoundaryFields(t, executeStory)
+	assertCanonicalExecuteStoryGuardFields(t, executeStory)
+	assertGeneratedModelInvokeWorkstationOperation(t)
+}
+
+func assertCanonicalExecuteStoryBoundaryFields(t *testing.T, executeStory generated.Workstation) {
+	t.Helper()
 	if executeStory.Behavior == nil || *executeStory.Behavior != generated.WorkstationKindCron {
 		t.Fatalf("canonical workstation behavior = %#v, want CRON", executeStory.Behavior)
 	}
@@ -156,12 +163,20 @@ func assertCanonicalExecuteStoryWorkstationEnums(t *testing.T, executeStory gene
 	if executeStory.Type == nil || *executeStory.Type != generated.WorkstationTypeModelWorkstation {
 		t.Fatalf("canonical workstation type = %#v, want MODEL_WORKSTATION", executeStory.Type)
 	}
+}
+
+func assertCanonicalExecuteStoryGuardFields(t *testing.T, executeStory generated.Workstation) {
+	t.Helper()
 	if executeStory.Guards == nil || len(*executeStory.Guards) != 1 || (*executeStory.Guards)[0].Type != generated.GuardTypeVisitCount {
 		t.Fatalf("canonical workstation guards = %#v, want one VISIT_COUNT guard", executeStory.Guards)
 	}
 	if len(executeStory.Inputs) < 2 || executeStory.Inputs[1].Guards == nil || len(*executeStory.Inputs[1].Guards) != 1 || (*executeStory.Inputs[1].Guards)[0].Type != generated.GuardTypeAllChildrenComplete {
 		t.Fatalf("canonical workstation input guards = %#v, want ALL_CHILDREN_COMPLETE", executeStory.Inputs)
 	}
+}
+
+func assertGeneratedModelInvokeWorkstationOperation(t *testing.T) {
+	t.Helper()
 	modelInvokeType := generated.WorkstationTypeModelInvoke
 	modelInvokeOperation := "TTS"
 	payloadBytes, err := json.Marshal(generated.Workstation{
