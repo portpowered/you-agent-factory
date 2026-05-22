@@ -6,7 +6,7 @@ doc-id: agent-factory/reference/templates
 
 # Templates
 
-Agent Factory renders workstation prompts, workstation runtime fields, and
+you-agent-factory renders workstation prompts, workstation runtime fields, and
 script-worker arguments with Go `text/template` syntax. Template data comes
 from consumed input tokens under `.Inputs` and execution context under
 `.Context`.

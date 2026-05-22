@@ -13,7 +13,7 @@ maintained resource guide.
 
 Resources are bounded capacity pools that limit concurrent dispatches across
 workstations. They are declared once at the top level and then consumed by
-workstations while a dispatch is active.
+workstations while a you-agent-factory dispatch is active.
 
 ## Example
 

@@ -1,6 +1,6 @@
 # Example: Simple Story Review Workflow
 
-This example models a simple story execution and review loop as an agent factory configuration.
+This example models a simple story execution and review loop as a you-agent-factory configuration.
 
 ## Workflow
 

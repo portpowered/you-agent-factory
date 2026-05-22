@@ -421,6 +421,64 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesPortableResourceManifest(t
 	assertExpandedPortableResourceManifest(t, expanded)
 }
 
+func TestFactoryConfigMapper_FlattenAndExpandPreservesHostedLinearWorker(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	raw := []byte(`{
+		"name":"hosted-linear-roundtrip",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"queued","type":"PROCESSING"}]}],
+		"workers": [{
+			"name":"linear-poller",
+			"type":"HOSTED_WORKER",
+			"provider":"LINEAR",
+			"auth":{"secretRef":"secrets/linear-api-key"},
+			"linear":{
+				"pollInterval":"30s",
+				"teamIds":["team-a"],
+				"stateIds":["state-b"],
+				"mapping":{"workType":"story","state":"init"},
+				"claim":{"assigneeField":"assignee.email"}
+			}
+		}],
+		"workstations": [{
+			"name":"poll-linear",
+			"behavior":"POLLER",
+			"worker":"linear-poller",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"queued"}]
+		}]
+	}`)
+
+	cfg, err := mapper.Expand(raw)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+	worker := cfg.Workers[0]
+	if worker.Provider != interfaces.HostedWorkerProviderLinear {
+		t.Fatalf("expected hosted provider LINEAR, got %#v", worker)
+	}
+	if worker.Auth == nil || worker.Auth.SecretRef != "secrets/linear-api-key" {
+		t.Fatalf("expected hosted auth to round-trip, got %#v", worker.Auth)
+	}
+	if worker.Linear == nil || worker.Linear.Mapping.WorkType != "story" || worker.Linear.Mapping.State != "init" {
+		t.Fatalf("expected hosted linear mapping to round-trip, got %#v", worker.Linear)
+	}
+
+	flattened, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+	payload := mustDecodeFactoryPayload(t, flattened)
+	workerPayload := payload["workers"].([]any)[0].(map[string]any)
+	if got, ok := workerPayload["provider"].(string); !ok || got != "LINEAR" {
+		t.Fatalf("expected canonical hosted provider LINEAR, got %#v", workerPayload["provider"])
+	}
+	authPayload := workerPayload["auth"].(map[string]any)
+	if got, ok := authPayload["secretRef"].(string); !ok || got != "secrets/linear-api-key" {
+		t.Fatalf("expected canonical auth.secretRef, got %#v", authPayload)
+	}
+}
+
 func TestFactoryConfigMapper_ExpandParsesCanonicalWorkstationKindAndRuntimeType(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 

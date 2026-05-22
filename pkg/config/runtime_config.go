@@ -239,6 +239,7 @@ func hasInlineRuntimeDefinitions(cfg *interfaces.FactoryConfig) bool {
 
 func workerHasInlineRuntimeDefinitionFields(worker interfaces.WorkerConfig) bool {
 	return strings.TrimSpace(worker.Type) != "" ||
+		worker.Provider != "" ||
 		worker.Model != "" ||
 		worker.ModelProvider != "" ||
 		worker.ExecutorProvider != "" ||
@@ -250,6 +251,8 @@ func workerHasInlineRuntimeDefinitionFields(worker interfaces.WorkerConfig) bool
 		worker.Timeout != "" ||
 		worker.StopToken != "" ||
 		worker.SkipPermissions ||
+		worker.Auth != nil ||
+		worker.Linear != nil ||
 		worker.Body != ""
 }
 
@@ -263,6 +266,7 @@ func workerConfigFromInlineConfig(def *interfaces.WorkerConfig) (*interfaces.Wor
 	return &interfaces.WorkerConfig{
 		Name:             def.Name,
 		Type:             def.Type,
+		Provider:         def.Provider,
 		Model:            def.Model,
 		ModelProvider:    def.ModelProvider,
 		ExecutorProvider: def.ExecutorProvider,
@@ -274,6 +278,8 @@ func workerConfigFromInlineConfig(def *interfaces.WorkerConfig) (*interfaces.Wor
 		Timeout:          def.Timeout,
 		StopToken:        def.StopToken,
 		SkipPermissions:  def.SkipPermissions,
+		Auth:             cloneHostedWorkerAuthConfig(def.Auth),
+		Linear:           cloneHostedLinearWorkerConfig(def.Linear),
 		Body:             def.Body,
 	}, nil
 }

@@ -434,7 +434,7 @@ function LocalePropagationControls() {
 }
 
 export default {
-  title: "Infinite You/Workflow Dashboard",
+  title: "you-agent-factory/Workflow Dashboard",
   component: App,
 };
 
@@ -749,7 +749,7 @@ export const DashboardImprovementsSmokeNarrow = {
     );
 
     const dashboardGrid = await canvas.findByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const dashboardScope = within(dashboardGrid);
 
@@ -1026,7 +1026,7 @@ export const HeaderLocalizationVerification = {
     });
 
     await expect(
-      within(englishToolbar).getByRole("heading", { name: "Infinite You" }),
+      within(englishToolbar).getByRole("heading", { name: "you-agent-factory" }),
     ).toBeVisible();
     await expect(
       within(englishToolbar).getByRole("button", { name: "Export PNG" }),
@@ -1054,7 +1054,7 @@ export const HeaderLocalizationVerification = {
     await expect(await canvas.findByText("5/5")).toBeVisible();
     await expect(
       within(localizedToolbar).getByRole("status", {
-        name: /Infinite You 事件流(正在连接|在线)/,
+        name: /you-agent-factory 事件流(正在连接|在线)/,
       }),
     ).toBeVisible();
     await expect(

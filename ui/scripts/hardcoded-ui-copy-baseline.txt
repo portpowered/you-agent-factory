@@ -1,9 +1,12 @@
 # Baseline for the hardcoded UI copy check.
 # Entries are path|line|column|kind|text.
-src/api/current-factory-definition/api.ts|313|14|string-literal|INVALID_FACTORY_DEFINITION
-src/api/current-factory-definition/api.ts|315|14|string-literal|INTERNAL_ERROR
+src/api/current-factory-definition/api.ts|111|22|string-literal|The current factory editing API rejected the request.
+src/api/current-factory-definition/api.ts|133|7|string-literal|The current factory editing API rejected the save request.
+src/api/current-factory-definition/api.ts|287|14|string-literal|INVALID_FACTORY_DEFINITION
+src/api/current-factory-definition/api.ts|289|14|string-literal|INTERNAL_ERROR
 src/api/named-factory/api.ts|179|14|string-literal|INTERNAL_ERROR
 src/api/provider-session-details/api.ts|155|14|string-literal|INTERNAL_ERROR
+src/api/work/api.ts|94|14|string-literal|INTERNAL_ERROR
 src/components/ui/data-table.tsx|37|18|string-literal|No rows available.
 src/components/ui/dialog.tsx|29|16|string-literal|Close dialog
 src/components/ui/formatters.ts|48|12|string-literal|h m
@@ -76,20 +79,20 @@ src/features/factory-graph-editor/factory-graph-draft-validation.ts|132|14|strin
 src/features/factory-graph-editor/factory-graph-draft-validation.ts|161|16|string-literal|Relationship " " cannot connect to .
 src/features/factory-graph-editor/factory-graph-draft-validation.ts|264|14|string-literal|Workstation " " must keep one worker assignment.
 src/features/factory-graph-editor/factory-graph-draft-validation.ts|281|14|string-literal|Relationship " " references an unknown node.
-src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|202|22|string-literal|INITIAL
-src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|203|22|string-literal|PROCESSING
-src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|204|22|string-literal|TERMINAL
-src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|205|22|string-literal|FAILED
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|68|20|string-literal|Create a pending workstation and assign an existing worker.
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|71|14|string-literal|Workstation
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|74|20|string-literal|Add a model worker that can be assigned to workstations.
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|76|14|string-literal|Worker
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|79|20|string-literal|Define a new work type with its first ordered state.
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|81|14|string-literal|Work type
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|84|20|string-literal|Append a state to an existing work type.
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|87|14|string-literal|Work state
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|90|20|string-literal|Register a resource that workers or workstations can consume.
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|92|14|string-literal|Resource
+src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|203|22|string-literal|INITIAL
+src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|204|22|string-literal|PROCESSING
+src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|205|22|string-literal|TERMINAL
+src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|206|22|string-literal|FAILED
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|76|20|string-literal|Create a pending workstation and assign an existing worker.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|79|14|string-literal|Workstation
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|82|20|string-literal|Add a model worker that can be assigned to workstations.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|84|14|string-literal|Worker
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|87|20|string-literal|Define a new work type with its first ordered state.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|89|14|string-literal|Work type
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|92|20|string-literal|Append a state to an existing work type.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|95|14|string-literal|Work state
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|98|20|string-literal|Register a resource that workers or workstations can consume.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|100|14|string-literal|Resource
 src/features/factory-graph-editor/factory-graph-editor-connections.ts|31|20|string-literal|Provide this resource to a worker.
 src/features/factory-graph-editor/factory-graph-editor-connections.ts|34|14|string-literal|Worker
 src/features/factory-graph-editor/factory-graph-editor-connections.ts|39|20|string-literal|Provide this resource to a workstation.
@@ -171,36 +174,38 @@ src/features/flowchart/components/current-activity-place-node.tsx|207|12|string-
 src/features/flowchart/components/current-activity-place-node.tsx|280|12|string-literal|resource tokens
 src/features/flowchart/components/current-activity-workstation-node.tsx|219|19|jsx-attribute|Active
 src/features/flowchart/components/current-activity-workstation-node.tsx|224|21|jsx-prop|Active
-src/features/flowchart/components/graph-semantic-icon.tsx|38|12|string-literal|Active work
-src/features/flowchart/components/graph-semantic-icon.tsx|47|12|string-literal|Constraint
-src/features/flowchart/components/graph-semantic-icon.tsx|57|12|string-literal|Cron workstation
-src/features/flowchart/components/graph-semantic-icon.tsx|66|12|string-literal|Exhaustion rule
-src/features/flowchart/components/graph-semantic-icon.tsx|76|12|string-literal|Failed state
-src/features/flowchart/components/graph-semantic-icon.tsx|86|12|string-literal|Limit
-src/features/flowchart/components/graph-semantic-icon.tsx|96|12|string-literal|Processing state
-src/features/flowchart/components/graph-semantic-icon.tsx|107|12|string-literal|Queue state
-src/features/flowchart/components/graph-semantic-icon.tsx|118|12|string-literal|Repeater workstation
-src/features/flowchart/components/graph-semantic-icon.tsx|129|12|string-literal|Resource
-src/features/flowchart/components/graph-semantic-icon.tsx|139|12|string-literal|Terminal state
-src/features/flowchart/components/graph-semantic-icon.tsx|148|12|string-literal|Workstation
+src/features/flowchart/components/graph-semantic-icon.tsx|39|12|string-literal|Active work
+src/features/flowchart/components/graph-semantic-icon.tsx|48|12|string-literal|Constraint
+src/features/flowchart/components/graph-semantic-icon.tsx|58|12|string-literal|Cron workstation
+src/features/flowchart/components/graph-semantic-icon.tsx|67|12|string-literal|Poller workstation
+src/features/flowchart/components/graph-semantic-icon.tsx|78|12|string-literal|Exhaustion rule
+src/features/flowchart/components/graph-semantic-icon.tsx|88|12|string-literal|Failed state
+src/features/flowchart/components/graph-semantic-icon.tsx|98|12|string-literal|Limit
+src/features/flowchart/components/graph-semantic-icon.tsx|108|12|string-literal|Processing state
+src/features/flowchart/components/graph-semantic-icon.tsx|119|12|string-literal|Queue state
+src/features/flowchart/components/graph-semantic-icon.tsx|130|12|string-literal|Repeater workstation
+src/features/flowchart/components/graph-semantic-icon.tsx|141|12|string-literal|Resource
+src/features/flowchart/components/graph-semantic-icon.tsx|151|12|string-literal|Terminal state
+src/features/flowchart/components/graph-semantic-icon.tsx|160|12|string-literal|Workstation
 src/features/flowchart/layout.ts|114|10|string-literal|workstation:
 src/features/flowchart/layout.ts|118|10|string-literal|place:
-src/features/flowchart/workstation-icon-metadata.ts|31|12|string-literal|Cron workstation
-src/features/flowchart/workstation-icon-metadata.ts|37|12|string-literal|Exhaustion rule
-src/features/flowchart/workstation-icon-metadata.ts|43|12|string-literal|Repeater workstation
-src/features/flowchart/workstation-icon-metadata.ts|49|12|string-literal|Standard workstation
+src/features/flowchart/workstation-icon-metadata.ts|33|12|string-literal|Cron workstation
+src/features/flowchart/workstation-icon-metadata.ts|39|12|string-literal|Poller workstation
+src/features/flowchart/workstation-icon-metadata.ts|45|12|string-literal|Exhaustion rule
+src/features/flowchart/workstation-icon-metadata.ts|51|12|string-literal|Repeater workstation
+src/features/flowchart/workstation-icon-metadata.ts|57|12|string-literal|Standard workstation
 src/features/import/factory-png-import.ts|95|18|string-literal|The selected image could not be decoded for preview.
 src/features/import/factory-png-import.ts|109|18|string-literal|The browser could not create a preview for the selected image.
 src/features/import/factory-png-import.ts|137|18|string-literal|The selected image could not be read.
 src/features/import/factory-png-import.ts|147|18|string-literal|The selected file is not a PNG image.
 src/features/import/factory-png-import.ts|186|18|string-literal|The selected PNG image is invalid or truncated.
-src/features/import/factory-png-import.ts|195|16|string-literal|The selected PNG does not contain Infinite You factory metadata.
-src/features/import/factory-png-import.ts|210|18|string-literal|The Infinite You factory metadata is not valid JSON.
-src/features/import/factory-png-import.ts|220|18|string-literal|The Infinite You factory metadata must be an object.
-src/features/import/factory-png-import.ts|230|18|string-literal|The Infinite You factory metadata is missing the schema version.
-src/features/import/factory-png-import.ts|243|18|string-literal|The selected PNG uses an unsupported Infinite You factory metadata version.
-src/features/import/factory-png-import.ts|270|18|string-literal|The Infinite You factory metadata does not contain a valid factory payload.
-src/features/import/factory-png-import.ts|309|16|string-literal|The Infinite You factory metadata is missing the factory name.
+src/features/import/factory-png-import.ts|195|16|string-literal|The selected PNG does not contain you-agent-factory factory metadata.
+src/features/import/factory-png-import.ts|210|18|string-literal|The you-agent-factory factory metadata is not valid JSON.
+src/features/import/factory-png-import.ts|220|18|string-literal|The you-agent-factory factory metadata must be an object.
+src/features/import/factory-png-import.ts|230|18|string-literal|The you-agent-factory factory metadata is missing the schema version.
+src/features/import/factory-png-import.ts|243|18|string-literal|The selected PNG uses an unsupported you-agent-factory factory metadata version.
+src/features/import/factory-png-import.ts|270|18|string-literal|The you-agent-factory factory metadata does not contain a valid factory payload.
+src/features/import/factory-png-import.ts|309|16|string-literal|The you-agent-factory factory metadata is missing the factory name.
 src/features/timeline/state/timeline/replayGraphState.ts|220|10|string-literal|:resource:
 src/features/trace-drilldown/components/trace-workstation-path.tsx|280|67|string-literal|Unknown workstation
 src/features/trace-drilldown/components/trace-workstation-path.tsx|431|12|string-literal|border-af-overlay/10 bg-af-canvas

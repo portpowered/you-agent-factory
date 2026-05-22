@@ -7,7 +7,7 @@ authoring.
 
 ## Current Contract
 
-- Agent Factory renders templates with Go `text/template`.
+- you-agent-factory renders templates with Go `text/template`.
 - Workstation prompt bodies and files referenced by `promptFile` are template
   surfaces.
 - Script-worker `args`, workstation `workingDirectory`, workstation `worktree`,

@@ -103,6 +103,12 @@ const (
 const (
 	WorkerTypeModel  = "MODEL_WORKER"
 	WorkerTypeScript = "SCRIPT_WORKER"
+	WorkerTypeHosted = "HOSTED_WORKER"
+)
+
+// Hosted worker provider constants for public hosted worker config.
+const (
+	HostedWorkerProviderLinear = "LINEAR"
 )
 
 // WorkstationType constants for workstation AGENTS.md frontmatter.

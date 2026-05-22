@@ -247,8 +247,8 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 	doc := loadBundledOpenAPIDocument(t)
 	workerSchema := schemaObject(t, componentSchemas(t, doc), "Worker")
 	workerProperties := schemaProperties(t, workerSchema, "Worker")
-	assertSchemaPropertiesPresent(t, workerProperties, "Worker", "name", "modelProvider", "modelLocality", "executorProvider", "operations")
-	assertPropertiesAbsent(t, workerProperties, "Worker", "provider", "sessionId", "concurrency")
+	assertSchemaPropertiesPresent(t, workerProperties, "Worker", "name", "provider", "modelProvider", "modelLocality", "executorProvider", "operations")
+	assertPropertiesAbsent(t, workerProperties, "Worker", "sessionId", "concurrency")
 
 	modelProviderProperty, ok := workerProperties["modelProvider"].(map[string]any)
 	if !ok {
@@ -268,12 +268,12 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 	}
 
 	workerType := reflect.TypeOf(generated.Worker{})
-	for _, field := range []string{"ExecutorProvider", "ModelProvider", "ModelLocality", "Operations"} {
+	for _, field := range []string{"Provider", "ExecutorProvider", "ModelProvider", "ModelLocality", "Operations"} {
 		if _, ok := workerType.FieldByName(field); !ok {
 			t.Fatalf("generated.Worker must expose %s", field)
 		}
 	}
-	for _, retired := range []string{"Provider", "SessionId", "Concurrency"} {
+	for _, retired := range []string{"SessionId", "Concurrency"} {
 		if _, ok := workerType.FieldByName(retired); ok {
 			t.Fatalf("generated.Worker must not expose %s", retired)
 		}

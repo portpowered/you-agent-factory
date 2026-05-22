@@ -65,7 +65,7 @@ function LocalizedImportPreviewStory({ locale }: { locale: string }) {
 }
 
 export default {
-  title: "Infinite You/Dashboard/Import Preview Dialog",
+  title: "you-agent-factory/Dashboard/Import Preview Dialog",
   component: DashboardImportPreviewDialog,
   tags: ["test"],
 };

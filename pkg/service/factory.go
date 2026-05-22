@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,6 +52,8 @@ type SimpleDashboardRenderer func(input SimpleDashboardRenderInput)
 // cancelled. Callers (e.g. CLI) provide their own implementation to avoid
 // import cycles between service and api packages.
 type APIServerStarter func(ctx context.Context, runtime apisurface.APISurface, port int, logger *zap.Logger) error
+
+type secretResolver func(ctx context.Context, runtimeCfg interfaces.RuntimeConfigLookup, secretRef string) (string, error)
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
 // attempted while the current runtime still had active work.
@@ -220,6 +223,17 @@ type FactoryServiceConfig struct {
 	// exercising the full ScriptExecutor pipeline (arg templates, env
 	// merging, exit-code routing).
 	CommandRunnerOverride workers.CommandRunner
+	// HostedPollerHTTPClient, when non-nil, overrides the default HTTP client
+	// used by repository-owned hosted pollers such as the built-in Linear
+	// integration.
+	HostedPollerHTTPClient *http.Client
+	// HostedPollerSecretResolver, when non-nil, resolves hosted-worker
+	// auth.secretRef values at runtime instead of using the default env/file
+	// lookup behavior.
+	HostedPollerSecretResolver secretResolver
+	// HostedLinearEndpoint overrides the Linear GraphQL endpoint for tests.
+	// Empty uses the official default endpoint.
+	HostedLinearEndpoint string
 	// ModelCacheDir optionally overrides the default managed local-model cache
 	// directory under ~/.agent-factory/models.
 	ModelCacheDir string
@@ -1004,6 +1018,13 @@ func (fs *FactoryService) startLiveRuntimeSidecars(ctx context.Context, handle *
 		sidecarCtx,
 		&handle.sidecars,
 		handle.runtime.runtimeCfg.FactoryDir(),
+		handle.runtime.runtimeCfg.FactoryConfig(),
+		handle.runtime.runtimeCfg,
+		submitWorkRequestWithFactory(handle.runtime.factory),
+	)
+	fs.startPollerWatchersForRuntime(
+		sidecarCtx,
+		&handle.sidecars,
 		handle.runtime.runtimeCfg.FactoryConfig(),
 		handle.runtime.runtimeCfg,
 		submitWorkRequestWithFactory(handle.runtime.factory),

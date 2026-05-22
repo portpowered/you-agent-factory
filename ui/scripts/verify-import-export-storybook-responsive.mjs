@@ -31,40 +31,40 @@ export const storyChecks = [
   {
     assertions: verifyExportDialog,
     dialogName: "Export factory",
-    id: "infinite-you-dashboard-export-factory-dialog--ready",
+    id: "you-agent-factory-dashboard-export-factory-dialog--ready",
     label: "export dialog (en)",
   },
   {
     assertions: verifyLocalizedExportDialog,
     dialogName: "导出工厂",
-    id: "infinite-you-dashboard-export-factory-dialog--localized-zh-cn",
+    id: "you-agent-factory-dashboard-export-factory-dialog--localized-zh-cn",
     label: "export dialog (zh-CN)",
   },
   {
     assertions: verifyImportDialog,
     dialogName: "Review factory import",
-    id: "infinite-you-dashboard-import-preview-dialog--ready",
+    id: "you-agent-factory-dashboard-import-preview-dialog--ready",
     label: "import preview dialog (en)",
   },
   {
     assertions: verifyLocalizedImportDialog,
     dialogName: "检查工厂导入",
-    id: "infinite-you-dashboard-import-preview-dialog--localized-zh-cn",
+    id: "you-agent-factory-dashboard-import-preview-dialog--localized-zh-cn",
     label: "import preview dialog (zh-CN)",
   },
   {
     assertions: verifyDashboardHeader,
-    id: "infinite-you-dashboard-dashboard-header--responsive-verification",
+    id: "you-agent-factory-dashboard-dashboard-header--responsive-verification",
     label: "dashboard header",
   },
   {
     assertions: verifyDashboardSessionTabs,
-    id: "infinite-you-dashboard-session-tabs--open-flow-verification",
+    id: "you-agent-factory-dashboard-session-tabs--open-flow-verification",
     label: "dashboard session tabs",
   },
   {
     assertions: verifyDashboardShellConsolidation,
-    id: "infinite-you-workflow-dashboard--header-action-buttons-verification",
+    id: "you-agent-factory-workflow-dashboard--header-action-buttons-verification",
     label: "dashboard shared shell",
   },
   {
@@ -119,7 +119,7 @@ export const storyChecks = [
         page,
         viewport,
       }),
-    id: "infinite-you-workflow-dashboard--locale-propagation-verification",
+    id: "you-agent-factory-workflow-dashboard--locale-propagation-verification",
     label: "current selection widget (zh-CN)",
   },
   {
@@ -130,12 +130,12 @@ export const storyChecks = [
         page,
         viewport,
       }),
-    id: "infinite-you-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
+    id: "you-agent-factory-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
     label: "current selection provider-session success",
   },
   {
     assertions: verifyCurrentSelectionPromptHint,
-    id: "infinite-you-workflow-dashboard--current-selection-prompt-hint-verification",
+    id: "you-agent-factory-workflow-dashboard--current-selection-prompt-hint-verification",
     label: "current selection prompt hinting",
   },
 ];
@@ -323,14 +323,14 @@ export async function expectOrderedLeftEdges(locators, label) {
 }
 
 export async function verifyDashboardHeader(page, _dialog, viewport) {
-  const heading = page.getByRole("heading", { name: "Infinite You" });
-  const hiddenWordmark = heading.getByText("Infinite You");
+  const heading = page.getByRole("heading", { name: "you-agent-factory" });
+  const hiddenWordmark = heading.getByText("you-agent-factory");
   const slider = page.getByRole("slider", { name: "Timeline tick" });
   const languageButton = page.getByRole("button", {
     name: "Change language",
   });
   const streamStatus = page.getByRole("status", {
-    name: /Infinite You event stream (connecting|live)/,
+    name: /you-agent-factory event stream (connecting|live)/,
   });
   const currentButton = page.getByRole("button", {
     name: "Return to current tick",
@@ -338,7 +338,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   const exportButton = page.getByRole("button", { name: "Export PNG" });
 
   await expectVisible(heading, "Dashboard heading");
-  await expectVisible(hiddenWordmark, "Accessible Infinite You wordmark");
+  await expectVisible(hiddenWordmark, "Accessible you-agent-factory wordmark");
   await expectVisible(slider, "Timeline slider");
   await expectVisible(languageButton, "Language menu button");
   await expectVisible(streamStatus, "Dashboard stream status");

@@ -44,6 +44,23 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       });
     });
   });
+
+  it("allows empty-body pollers to stay saveable", () => {
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            behavior: "POLLER",
+            prompt: "",
+          }),
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    expect(result.current.canSave).toBe(true);
+    expect(result.current.saveState).toEqual({ status: "idle" });
+  });
 });
 
 function createQueryClientWrapper() {
@@ -58,22 +75,38 @@ function createQueryClientWrapper() {
   };
 }
 
-function buildReadyEditableConfigurationState(): EditableWorkstationConfigurationState {
+function buildReadyEditableConfigurationState(overrides?: {
+  behavior?: "STANDARD" | "REPEATER" | "POLLER";
+  prompt?: string;
+}): EditableWorkstationConfigurationState {
   return {
     draft: {
-      prompt: "Review the story.",
+      behavior: overrides?.behavior ?? "STANDARD",
+      prompt: overrides?.prompt ?? "Review the story.",
+      runnerName: null,
       workerName: "reviewer",
     },
     hasValidationErrors: false,
     initialValues: {
-      prompt: "Review the story.",
+      behavior: "STANDARD",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
+      effectiveRunnerName: "codex",
+      factoryRunnerName: null,
+      prompt: overrides?.prompt ?? "Review the story.",
+      runnerName: null,
+      runnerOptions: ["codex"],
       workerName: "reviewer",
       workerOptions: ["reviewer"],
+      workerTypeByName: {
+        reviewer: "MODEL_WORKER",
+      },
       workstationName: "Review",
     },
     isDirty: true,
     markChangesSaved: vi.fn(),
+    onBehaviorChange: vi.fn(),
     onPromptChange: vi.fn(),
+    onRunnerChange: vi.fn(),
     onWorkerChange: vi.fn(),
     overwriteFieldNames: [],
     pendingFactoryDefinition: {

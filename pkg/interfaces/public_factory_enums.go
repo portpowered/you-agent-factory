@@ -9,6 +9,7 @@ import (
 var publicFactoryWorkerTypeAliases = map[string]string{
 	WorkerTypeModel:  WorkerTypeModel,
 	WorkerTypeScript: WorkerTypeScript,
+	WorkerTypeHosted: WorkerTypeHosted,
 }
 
 var publicFactoryWorkerModelProviderAliases = map[string]string{
@@ -18,6 +19,10 @@ var publicFactoryWorkerModelProviderAliases = map[string]string{
 
 var publicFactoryWorkerProviderAliases = map[string]string{
 	publicFactoryWorkerProviderScriptWrap: publicFactoryWorkerProviderScriptWrap,
+}
+
+var publicFactoryHostedWorkerProviderAliases = map[string]string{
+	HostedWorkerProviderLinear: HostedWorkerProviderLinear,
 }
 
 var publicFactoryWorkerModelLocalityAliases = map[string]string{
@@ -154,6 +159,16 @@ func StrictPublicFactoryWorkerProvider(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerProviderAliases, false)
 }
 
+// PermissivePublicFactoryHostedWorkerProvider canonicalizes supported hosted worker providers and preserves unknown values.
+func PermissivePublicFactoryHostedWorkerProvider(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryHostedWorkerProviderAliases, true)
+}
+
+// StrictPublicFactoryHostedWorkerProvider canonicalizes supported hosted worker providers and rejects unknown values.
+func StrictPublicFactoryHostedWorkerProvider(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryHostedWorkerProviderAliases, false)
+}
+
 // PermissivePublicFactoryWorkerModelLocality canonicalizes supported public worker model localities and preserves unknown values.
 func PermissivePublicFactoryWorkerModelLocality(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelLocalityAliases, true)
@@ -242,6 +257,16 @@ func GeneratedPublicFactoryWorkerProvider(value string) factoryapi.WorkerProvide
 // GeneratedPublicFactoryWorkerProviderPtr returns the generated worker provider enum when non-empty.
 func GeneratedPublicFactoryWorkerProviderPtr(value string) *factoryapi.WorkerProvider {
 	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerProvider)
+}
+
+// GeneratedPublicFactoryHostedWorkerProvider returns the generated hosted worker provider enum.
+func GeneratedPublicFactoryHostedWorkerProvider(value string) string {
+	return PermissivePublicFactoryHostedWorkerProvider(value)
+}
+
+// GeneratedPublicFactoryHostedWorkerProviderPtr returns the generated hosted worker provider enum when non-empty.
+func GeneratedPublicFactoryHostedWorkerProviderPtr(value string) *string {
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryHostedWorkerProvider)
 }
 
 // GeneratedPublicFactoryWorkerModelLocality returns the generated worker model locality enum.

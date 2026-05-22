@@ -29,7 +29,7 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
-	logDir := filepath.Join(homeDir, ".agent-factory", "logs")
+	logDir := filepath.Join(homeDir, ".you-agent-factory", "logs")
 	runtimeInstanceID := "runtime-log-test"
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               dir,

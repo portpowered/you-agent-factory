@@ -1,6 +1,7 @@
 import { factoryAPIURL } from "../baseUrl";
 import type { components } from "../generated/openapi";
 import { factorySessionScopedPath } from "../session-routing";
+import { extractAPIErrorPayload, readAPIResponseBody } from "../transport";
 
 type SubmitWorkRequest = components["schemas"]["SubmitWorkRequest"];
 type SubmitWorkResponse = components["schemas"]["SubmitWorkResponse"];
@@ -41,11 +42,11 @@ export async function submitWork(
   const response = await fetch(
     factoryAPIURL(factorySessionScopedPath(SUBMIT_WORK_ENDPOINT, options.sessionID)),
     {
-    body: JSON.stringify(request),
-    headers: {
-      "Content-Type": "application/json",
-    },
-    method: "POST",
+      body: JSON.stringify(request),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
     },
   );
 
@@ -57,34 +58,40 @@ export async function submitWork(
 }
 
 async function submitWorkErrorFromResponse(response: Response): Promise<SubmitWorkAPIError> {
-  const errorResponse = await parseErrorResponse(response);
+  const responseBody = await readAPIResponseBody(response);
+  const errorResponse = extractAPIErrorPayload(responseBody);
+  const message = normalizeSubmitWorkErrorMessage(errorResponse?.message);
   return new SubmitWorkAPIError({
-    code: errorResponse?.code,
-    message: errorResponse?.message ?? GENERIC_SUBMIT_WORK_ERROR_MESSAGE,
+    code: message ? normalizeSubmitWorkErrorCode(errorResponse?.code) : undefined,
+    message: message ?? GENERIC_SUBMIT_WORK_ERROR_MESSAGE,
     status: response.status,
     statusText: response.statusText,
   });
 }
 
-async function parseErrorResponse(response: Response): Promise<ErrorResponse | null> {
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    return null;
+function normalizeSubmitWorkErrorMessage(message: string | undefined): string | undefined {
+  if (typeof message !== "string") {
+    return undefined;
   }
 
-  try {
-    const payload = (await response.json()) as Partial<ErrorResponse>;
-    if (typeof payload.message !== "string" || payload.message.length === 0) {
-      return null;
-    }
+  return message.length > 0 ? message : undefined;
+}
 
-    return {
-      code: payload.code ?? "INTERNAL_ERROR",
-      family: payload.family ?? "INTERNAL_SERVER_ERROR",
-      message: payload.message,
-    };
-  } catch {
-    return null;
+function normalizeSubmitWorkErrorCode(
+  code: string | undefined,
+): ErrorResponse["code"] | undefined {
+  switch (code) {
+    case "BAD_REQUEST":
+    case "INVALID_FACTORY_NAME":
+    case "FACTORY_ALREADY_EXISTS":
+    case "INVALID_FACTORY":
+    case "FACTORY_NOT_IDLE":
+    case "STALE_FACTORY_VERSION":
+    case "NOT_FOUND":
+    case "INTERNAL_ERROR":
+      return code;
+    default:
+      return "INTERNAL_ERROR";
   }
 }
 

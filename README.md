@@ -1,17 +1,17 @@
-# Infinite You
+# you-agent-factory
 
 [![CI](https://github.com/portpowered/infinite-you/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/portpowered/infinite-you/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/portpowered/infinite-you?display_name=tag)](https://github.com/portpowered/infinite-you/releases)
 [![Go Version](https://img.shields.io/badge/go-1.24-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE.md)
 
-Infinite You is an AI agent factory. It orchestrates AI agents for you so you can do more work without doing everything manually.
+you-agent-factory is an AI agent factory. It orchestrates AI agents for you so you can do more work without doing everything manually.
 
 ## Why?
 
 Leverage. 
 
-With __Infinite You__, you codify your process into a workflow with different AGENTs.md and run them as wrappers around OpenAI codex.
+With __you-agent-factory__, you codify your process into a workflow with different AGENTs.md and run them as wrappers around OpenAI codex.
 
 For example: 
 - dispatch 10 agents to run independently in separate work trees
@@ -63,7 +63,7 @@ you submit --name "driver-incident-review" --work-type-name task --payload reque
 
 
 ## Example
-Here's an example of the factory for infinite-you dispatching roughly 5-10 agents. 
+Here's an example of you-agent-factory dispatching roughly 5-10 agents.
 
 ![](docs/internal/resources/dashboard.gif)
 
@@ -92,13 +92,13 @@ flowchart LR
 ## Customization 
 
 See [authoring-factories](./docs/reference/authoring-factories.md) for the full configuration guide.
-Infinite you lets you customize your flow however you want. 
+you-agent-factory lets you customize your flow however you want.
 
-The overall system of how __infinite you__ works is relatively simple. 
+The overall system of how __you-agent-factory__ works is relatively simple.
 1. You have work. 
 2. Work goes to workstations where the work gets worked on by workers (agents, or just shell scripts)
 3. When the workstations complete the, work is converted to other work.  
-4. __Infinite you__ stops when no work remains.
+4. __you-agent-factory__ stops when no work remains.
 
 For packaged terminal docs, use the fixed `you docs <topic>` topics:
 `config`, `workstation`, `workers`, `resources`, `batch-work`, and
@@ -124,9 +124,9 @@ Drag the images from the examples/factories directory into the web interface's f
       <img src="examples/factories/doc-reviewer.png" alt="Doc reviewer factory" width="200" />
     </td>
     <td align="center">
-      <strong>Infinite you</strong><br />
+      <strong>you-agent-factory</strong><br />
       Meta factory that runs the factory.<br />
-      <img src="examples/factories/infinite-you.png" alt="Infinite you factory" width="200" />
+      <img src="examples/factories/infinite-you.png" alt="you-agent-factory example factory" width="200" />
     </td>
     <td align="center">
       <strong>Ralph</strong><br />

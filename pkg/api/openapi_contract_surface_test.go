@@ -353,7 +353,7 @@ func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	assertPropertyRef(t, workstationProperties, "type", "#/components/schemas/WorkstationType")
 	assertSchemaArrayItemRef(t, schemas, "Workstation", "operationBindings", "#/components/schemas/WorkstationOperationBinding")
 	assertPropertiesAbsent(t, workstationProperties, "Workstation", "timeout", "runtime_type")
-	assertEnumValues(t, schemaObject(t, schemas, "WorkstationKind"), "WorkstationKind", []string{"STANDARD", "REPEATER", "CRON"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkstationKind"), "WorkstationKind", []string{"STANDARD", "REPEATER", "CRON", "POLLER"})
 	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"MODEL_WORKSTATION", "MODEL_INVOKE", "LOGICAL_MOVE"})
 
 	factorySchema := schemaObject(t, schemas, "Factory")

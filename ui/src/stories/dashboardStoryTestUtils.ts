@@ -147,11 +147,11 @@ export async function expectTypographyRegressionSurface(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
-  const heading = await canvas.findByRole("heading", { name: "Infinite You" });
-  const hiddenWordmark = within(heading).getByText("Infinite You");
+  const heading = await canvas.findByRole("heading", { name: "you-agent-factory" });
+  const hiddenWordmark = within(heading).getByText("you-agent-factory");
   const toolbar = canvas.getByRole("region", { name: "dashboard summary" });
   const streamStatus = canvas.getByRole("status", {
-    name: /Infinite You event stream (connecting|live)/,
+    name: /you-agent-factory event stream (connecting|live)/,
   });
 
   expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
@@ -206,7 +206,7 @@ export async function expectTimelineToolbarAlignment(
   const toolbar = await canvas.findByRole("region", {
     name: "dashboard summary",
   });
-  const heading = within(toolbar).getByRole("heading", { name: "Infinite You" });
+  const heading = within(toolbar).getByRole("heading", { name: "you-agent-factory" });
   const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
     name: "Timeline tick",
   });
@@ -217,7 +217,7 @@ export async function expectTimelineToolbarAlignment(
     name: "Change language",
   });
   const streamStatus = within(toolbar).getByRole("status", {
-    name: /Infinite You event stream (connecting|live)/,
+    name: /you-agent-factory event stream (connecting|live)/,
   });
   const exportButton = within(toolbar).getByRole("button", { name: "Export PNG" });
   const sliderShell = requireValue(

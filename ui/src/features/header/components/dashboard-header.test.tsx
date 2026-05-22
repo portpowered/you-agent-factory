@@ -98,7 +98,7 @@ describe("DashboardHeader", () => {
     useFactoryTimelineStore.getState().reset();
     useDashboardStreamStore.setState({
       streamState: {
-        message: "Connecting to the Infinite You event stream.",
+        message: "Connecting to the you-agent-factory event stream.",
         status: "connecting",
       },
     });
@@ -113,8 +113,8 @@ describe("DashboardHeader", () => {
     const toolbar = screen.getByRole("region", {
       name: headerMessages.dashboardSummaryLabel,
     });
-    const heading = screen.getByRole("heading", { name: "Infinite You" });
-    const wordmark = screen.getByText("Infinite You");
+    const heading = screen.getByRole("heading", { name: "you-agent-factory" });
+    const wordmark = screen.getByText("you-agent-factory");
     const slider = screen.getByRole("slider", {
       name: headerMessages.sliderAriaLabel,
     });
@@ -200,7 +200,7 @@ describe("DashboardHeader", () => {
     act(() => {
       useDashboardStreamStore.setState({
         streamState: {
-          message: "Infinite You event stream is offline.",
+          message: "you-agent-factory event stream is offline.",
           status: "offline",
         },
       });

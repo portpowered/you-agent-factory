@@ -104,7 +104,7 @@ describe("verifyDashboardShellConsolidation", () => {
         .fn()
         .mockResolvedValue({ clientWidth: 1440, scrollWidth: 1440 }),
       getByRole: vi.fn((_role, options) => {
-        if (options?.name === "Infinite You bento board") {
+        if (options?.name === "you-agent-factory bento board") {
           return board;
         }
         return toolbar;
@@ -121,7 +121,7 @@ describe("verifyDashboardShellConsolidation", () => {
       name: "dashboard summary",
     });
     expect(page.getByRole).toHaveBeenCalledWith("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     expect(board.getByRole).toHaveBeenCalledWith("article", {
       name: "Work totals",

@@ -3,9 +3,12 @@ description: Worker implementation families supported by the public factory-conf
 x-enum-varnames:
   - WorkerTypeModelWorker
   - WorkerTypeScriptWorker
+  - WorkerTypeHostedWorker
 enum:
   - MODEL_WORKER
   - SCRIPT_WORKER
+  - HOSTED_WORKER
 x-enum-descriptions:
   - Model-backed worker that renders prompts and dispatches through the configured model provider.
   - Script-backed worker that executes a configured command instead of calling a model provider.
+  - Repository-owned hosted worker implementation selected by type-specific runtime code instead of a subprocess.

@@ -23,7 +23,6 @@ var retiredFactoryBoundaryFields = []retiredBoundaryField{
 }
 
 var retiredWorkerBoundaryFields = []retiredBoundaryField{
-	{key: "provider", replacement: "use executorProvider"},
 	{key: "model_provider", replacement: "use modelProvider"},
 	{key: "sessionId", replacement: "remove sessionId; provider sessions are runtime-owned"},
 	{key: "session_id", replacement: "remove sessionId; provider sessions are runtime-owned"},
@@ -125,6 +124,9 @@ func rejectRetiredWorkerBoundaryAliases(root map[string]any) error {
 }
 
 func rejectRetiredWorkerBoundaryObject(worker map[string]any, path string, includeDefinition bool) error {
+	if err := rejectRetiredHostedProviderAlias(worker, path); err != nil {
+		return err
+	}
 	if err := rejectRetiredBoundaryFields(worker, path, retiredWorkerBoundaryFields); err != nil {
 		return err
 	}
@@ -136,6 +138,20 @@ func rejectRetiredWorkerBoundaryObject(worker map[string]any, path string, inclu
 		return nil
 	}
 	return rejectRetiredWorkerBoundaryObject(definition, path+".definition", false)
+}
+
+func rejectRetiredHostedProviderAlias(worker map[string]any, path string) error {
+	rawProvider, hasProvider := worker["provider"]
+	if !hasProvider {
+		return nil
+	}
+	provider, _ := rawProvider.(string)
+	workerType, _ := worker["type"].(string)
+	if interfaces.StrictPublicFactoryWorkerType(workerType) == interfaces.WorkerTypeHosted &&
+		interfaces.StrictPublicFactoryHostedWorkerProvider(provider) != "" {
+		return nil
+	}
+	return fmt.Errorf("%s.provider is not supported; use executorProvider", path)
 }
 
 func rejectRetiredWorkstationBoundaryAliases(root map[string]any) error {

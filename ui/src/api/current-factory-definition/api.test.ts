@@ -6,6 +6,10 @@ import {
 } from "./api";
 
 describe("getCurrentEditableFactoryDefinition", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("loads the current factory through the existing API and preserves editable workstation fields", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -210,6 +214,52 @@ describe("getCurrentEditableFactoryDefinition", () => {
     });
   });
 
+  it("surfaces the existing unavailable-environment fallback when fetch is missing", async () => {
+    vi.stubGlobal("fetch", undefined);
+
+    await expect(
+      getCurrentEditableFactoryDefinitionDocument(),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+      message: "Current factory editing is unavailable in this environment.",
+      name: "CurrentEditableFactoryDefinitionError",
+    });
+  });
+
+  it("surfaces the existing network fallback when the editable-definition load request throws", async () => {
+    await expect(
+      getCurrentEditableFactoryDefinitionDocument({
+        fetch: vi.fn().mockRejectedValue(new Error("socket closed")),
+      }),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+      message:
+        "The dashboard could not reach the current factory editing API.",
+      name: "CurrentEditableFactoryDefinitionError",
+      responseBody: expect.any(Error),
+    });
+  });
+
+  it("keeps the existing load rejection fallback when the API does not return a structured error message", async () => {
+    await expect(
+      getCurrentEditableFactoryDefinitionDocument({
+        fetch: vi.fn().mockResolvedValue(
+          new Response("", {
+            status: 500,
+            statusText: "Internal Server Error",
+          }),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "The current factory editing API rejected the request.",
+      name: "CurrentEditableFactoryDefinitionError",
+      responseBody: null,
+      status: 500,
+      statusText: "Internal Server Error",
+    });
+  });
+
   it("normalizes INVALID_FACTORY editable-definition rejections into INVALID_FACTORY_DEFINITION", async () => {
     await expect(
       getCurrentEditableFactoryDefinitionDocument({
@@ -239,6 +289,42 @@ describe("getCurrentEditableFactoryDefinition", () => {
       },
       status: 400,
       statusText: "Bad Request",
+    });
+  });
+
+  it("rejects load success payloads that are not editable-definition documents", async () => {
+    await expect(
+      getCurrentEditableFactoryDefinitionDocument({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              version: {
+                logical: 12,
+                physical: "2026-05-18T14:30:00Z",
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "The current factory editing API returned an invalid response.",
+      name: "CurrentEditableFactoryDefinitionError",
+      responseBody: {
+        version: {
+          logical: 12,
+          physical: "2026-05-18T14:30:00Z",
+        },
+      },
+      status: 200,
+      statusText: "OK",
     });
   });
 
@@ -571,6 +657,131 @@ describe("getCurrentEditableFactoryDefinition", () => {
           kind: "save",
         },
       ],
+    });
+  });
+
+  it("surfaces the existing network fallback when the editable-definition save request throws", async () => {
+    await expect(
+      saveCurrentEditableFactoryDefinitionDocument(
+        {
+          factoryDefinition: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        },
+        {
+          fetch: vi.fn().mockRejectedValue(new Error("socket closed")),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+      message:
+        "The dashboard could not reach the current factory editing API.",
+      name: "CurrentEditableFactoryDefinitionError",
+      responseBody: expect.any(Error),
+    });
+  });
+
+  it("keeps the existing save rejection fallback when the API does not return a structured error message", async () => {
+    await expect(
+      saveCurrentEditableFactoryDefinitionDocument(
+        {
+          factoryDefinition: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response("", {
+              status: 500,
+              statusText: "Internal Server Error",
+            }),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "The current factory editing API rejected the save request.",
+      name: "CurrentEditableFactoryDefinitionError",
+      responseBody: null,
+      status: 500,
+      statusText: "Internal Server Error",
+    });
+  });
+
+  it("rejects save success payloads whose factory definition cannot be normalized canonically", async () => {
+    await expect(
+      saveCurrentEditableFactoryDefinitionDocument(
+        {
+          factoryDefinition: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                factoryDefinition: {
+                  name: "Current Factory",
+                  workers: [
+                    {
+                      model: 42,
+                      name: "writer",
+                      type: "MODEL_WORKER",
+                    },
+                  ],
+                  workstations: [],
+                  workTypes: [],
+                },
+                version: {
+                  logical: 12,
+                  physical: "2026-05-18T14:30:00Z",
+                },
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 200,
+                statusText: "OK",
+              },
+            ),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY_DEFINITION",
+      message:
+        "The current factory editing API returned a factory definition the dashboard cannot edit. factory.workers[0].model must be a string.",
+      name: "CurrentEditableFactoryDefinitionError",
+      responseBody: {
+        factoryDefinition: {
+          name: "Current Factory",
+          workers: [
+            {
+              model: 42,
+              name: "writer",
+              type: "MODEL_WORKER",
+            },
+          ],
+          workstations: [],
+          workTypes: [],
+        },
+        version: {
+          logical: 12,
+          physical: "2026-05-18T14:30:00Z",
+        },
+      },
+      status: 200,
+      statusText: "OK",
     });
   });
 });

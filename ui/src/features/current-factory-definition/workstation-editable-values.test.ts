@@ -39,6 +39,8 @@ describe("resolveEditableWorkstationValues", () => {
     };
 
     expect(resolveEditableWorkstationValues(factory, selectedNode)).toEqual({
+      behavior: "STANDARD",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: "Review the latest story changes before approval.",
@@ -46,6 +48,9 @@ describe("resolveEditableWorkstationValues", () => {
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
       workerName: "reviewer",
       workerOptions: ["reviewer"],
+      workerTypeByName: {
+        reviewer: "MODEL_WORKER",
+      },
       workstationName: "Review",
     });
   });
@@ -95,6 +100,8 @@ describe("resolveEditableWorkstationValues", () => {
     };
 
     expect(resolveEditableWorkstationValues(factory, selectedNode)).toEqual({
+      behavior: "STANDARD",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: "Review the latest story changes before approval.",
@@ -102,6 +109,7 @@ describe("resolveEditableWorkstationValues", () => {
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
       workerName: "missing-worker",
       workerOptions: [],
+      workerTypeByName: {},
       workstationName: "Review",
     });
   });
@@ -139,6 +147,7 @@ describe("resolveEditableWorkstationValues", () => {
       factory,
       selectedNode,
       {
+        behavior: "POLLER",
         prompt: "Review the updated prompt before approval.",
         runnerName: null,
         workerName: "reviewer",
@@ -155,6 +164,7 @@ describe("resolveEditableWorkstationValues", () => {
       ],
       workstations: [
         {
+          behavior: "POLLER",
           body: "Review the updated prompt before approval.",
           guards: [{ maxVisits: 1, type: "VISIT_COUNT" }],
           limits: { maxRetries: 3 },
@@ -206,6 +216,8 @@ describe("resolveEditableWorkstationValues", () => {
     };
 
     expect(resolveEditableWorkstationValues(factory, selectedNode)).toEqual({
+      behavior: "STANDARD",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
       prompt: "Review work",
@@ -213,6 +225,9 @@ describe("resolveEditableWorkstationValues", () => {
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
       workerName: "processor",
       workerOptions: ["processor"],
+      workerTypeByName: {
+        processor: "MODEL_WORKER",
+      },
       workstationName: "Review",
     });
   });
@@ -263,6 +278,7 @@ describe("resolveEditableWorkstationValues", () => {
 
     expect(
       applyEditableWorkstationDraft(factory, selectedNode, {
+        behavior: "STANDARD",
         prompt: "Updated review work",
         runnerName: "gemini",
         workerName: "reviewer",
@@ -310,10 +326,40 @@ describe("resolveEditableWorkstationValues", () => {
 
     expect(
       applyEditableWorkstationDraft(factory, selectedNode, {
+        behavior: "STANDARD",
         prompt: "Updated review work",
         runnerName: null,
         workerName: "missing-worker",
       }),
     ).toBeNull();
+  });
+
+  it("keeps cron behavior selectable for existing cron workstations", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          command: "./cron.sh",
+          name: "cron-runner",
+          type: "SCRIPT_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          behavior: "CRON",
+          cron: { schedule: "0 * * * *" },
+          inputs: [],
+          name: "Review",
+          outputs: [],
+          worker: "cron-runner",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(resolveEditableWorkstationValues(factory, selectedNode)).toMatchObject({
+      behavior: "CRON",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER", "CRON"],
+    });
   });
 });

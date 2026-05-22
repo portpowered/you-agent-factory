@@ -8,6 +8,11 @@ import {
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
 } from "../../current-factory-definition/workstation-editable-values";
+import {
+  workstationBehaviorRequiresPrompt,
+  workerSupportsPollerBehavior,
+  type EditableWorkstationBehavior,
+} from "../../current-factory-definition/workstation-behavior";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationPromptHelpState,
@@ -55,10 +60,14 @@ export function useEditableWorkstationConfigurationState(
       selectedNode,
       selection,
     );
+  const shouldValidatePrompt =
+    isNodeSelection &&
+    sessionState != null &&
+    workstationBehaviorRequiresPrompt(sessionState.draft.behavior);
   const promptValidation = useCurrentWorkstationPromptTemplateValidation(
     selectedNode?.workstation_name,
     sessionState?.draft.prompt,
-    isNodeSelection,
+    shouldValidatePrompt,
   );
 
   if (!isNodeSelection) {
@@ -163,11 +172,13 @@ export function validateEditableWorkstationDraft(
     | "editableConfigurationPromptValidationLoading"
     | "editableConfigurationPromptValidationErrorPrefix"
     | "editableConfigurationPromptDiagnosticsSummary"
+    | "editableConfigurationBehaviorPollerWorkerUnsupported"
     | "editableConfigurationWorkerRequired"
     | "editableConfigurationWorkerUnavailable"
   > = getWorkstationDetailMessages(undefined),
 ): EditableWorkstationValidationErrors {
   const validationErrors: EditableWorkstationValidationErrors = {};
+  const promptIsRequired = workstationBehaviorRequiresPrompt(draft.behavior);
 
   if (draft.workerName.trim().length === 0) {
     validationErrors.workerName = messages.editableConfigurationWorkerRequired;
@@ -178,15 +189,30 @@ export function validateEditableWorkstationDraft(
     validationErrors.workerName =
       messages.editableConfigurationWorkerUnavailable;
   }
+  if (
+    draft.behavior === "POLLER" &&
+    selectedEditableValues &&
+    !workerSupportsPollerBehavior(
+      draft.workerName.trim().length === 0
+        ? null
+        : {
+            type: selectedEditableValues.workerTypeByName[draft.workerName],
+          },
+    )
+  ) {
+    validationErrors.behavior =
+      messages.editableConfigurationBehaviorPollerWorkerUnsupported;
+  }
 
-  if (draft.prompt.trim().length === 0) {
+  if (promptIsRequired && draft.prompt.trim().length === 0) {
     validationErrors.prompt = messages.editableConfigurationPromptRequired;
-  } else if (promptValidationState.status === "loading") {
+  } else if (promptIsRequired && promptValidationState.status === "loading") {
     validationErrors.prompt =
       messages.editableConfigurationPromptValidationLoading;
-  } else if (promptValidationState.status === "error") {
+  } else if (promptIsRequired && promptValidationState.status === "error") {
     validationErrors.prompt = `${messages.editableConfigurationPromptValidationErrorPrefix} ${promptValidationState.errorMessage}`;
   } else if (
+    promptIsRequired &&
     promptValidationState.status === "ready" &&
     promptValidationState.diagnostics.length > 0
   ) {
@@ -200,7 +226,11 @@ export function validateEditableWorkstationDraft(
 export function hasEditableWorkstationValidationErrors(
   validationErrors: EditableWorkstationValidationErrors,
 ): boolean {
-  return Boolean(validationErrors.prompt || validationErrors.workerName);
+  return Boolean(
+    validationErrors.behavior ||
+      validationErrors.prompt ||
+      validationErrors.workerName,
+  );
 }
 
 function areEditableDraftsEqual(
@@ -208,6 +238,7 @@ function areEditableDraftsEqual(
   right: EditableWorkstationDraft,
 ): boolean {
   return (
+    left.behavior === right.behavior &&
     left.prompt === right.prompt &&
     left.runnerName === right.runnerName &&
     left.workerName === right.workerName
@@ -318,6 +349,19 @@ function buildReadyEditableWorkstationConfigurationState({
               draft: {
                 ...currentState.draft,
                 prompt: value,
+              },
+            }
+          : currentState,
+      );
+    },
+    onBehaviorChange: (value: EditableWorkstationBehavior) => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              draft: {
+                ...currentState.draft,
+                behavior: value,
               },
             }
           : currentState,

@@ -181,16 +181,20 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     const onClose = vi.fn();
     renderDialog({
       draft: {
+        behavior: "STANDARD",
         body: "",
         kind: "workstation",
         name: "review",
         workerName: "",
       },
-      errors: { workerName: "Choose a worker before adding a workstation." },
+      errors: { behavior: "Poller workstations must use a script or hosted worker." },
       onChange,
       onClose,
     });
 
+    fireEvent.change(screen.getByRole("combobox", { name: "Kind" }), {
+      target: { value: "POLLER" },
+    });
     fireEvent.change(
       screen.getByRole("combobox", { name: "Assigned worker" }),
       {
@@ -203,19 +207,30 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(onChange).toHaveBeenNthCalledWith(1, {
+      behavior: "POLLER",
+      body: "",
+      kind: "workstation",
+      name: "review",
+      workerName: "",
+    });
+    expect(onChange).toHaveBeenNthCalledWith(2, {
+      behavior: "STANDARD",
       body: "",
       kind: "workstation",
       name: "review",
       workerName: "writer",
     });
-    expect(onChange).toHaveBeenNthCalledWith(2, {
+    expect(onChange).toHaveBeenNthCalledWith(3, {
+      behavior: "STANDARD",
       body: "Review the draft.",
       kind: "workstation",
       name: "review",
       workerName: "",
     });
     expect(
-      screen.getByText("Choose a worker before adding a workstation."),
+      screen.getByText(
+        "Poller workstations must use a script or hosted worker.",
+      ),
     ).toBeTruthy();
     expect(onClose).toHaveBeenCalledTimes(1);
   });

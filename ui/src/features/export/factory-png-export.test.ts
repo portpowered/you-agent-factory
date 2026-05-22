@@ -406,7 +406,7 @@ describe("writeFactoryExportPng", () => {
     });
   });
 
-  it("replaces existing Infinite You metadata instead of appending duplicate metadata chunks", async () => {
+  it("replaces existing you-agent-factory metadata instead of appending duplicate metadata chunks", async () => {
     const sourcePng = fromBase64(ONE_PIXEL_PNG_BASE64);
     const firstExport = await writeFactoryExportPng({
       factory: {

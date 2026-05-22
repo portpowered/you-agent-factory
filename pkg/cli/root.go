@@ -43,7 +43,7 @@ const (
 
 const cliBinaryName = "you"
 
-// NewRootCommand creates the top-level Cobra command for the infinite-you CLI.
+// NewRootCommand creates the top-level Cobra command for the you-agent-factory CLI.
 func NewRootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:   cliBinaryName,
@@ -86,7 +86,7 @@ func newFactoryCommand() *cobra.Command {
 	factoryCmd := &cobra.Command{
 		Use:   "factory",
 		Short: "Inspect factory runtime state",
-		Long: "Inspect factory runtime state from a running infinite-you service.\n\n" +
+		Long: "Inspect factory runtime state from a running you-agent-factory service.\n\n" +
 			"Use the query subcommand to ask the live API server which factory is currently active " +
 			"instead of inferring runtime state from local factory files.",
 	}
@@ -100,7 +100,7 @@ func newFactoryQueryCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "query",
 		Short: "Show the current active factory",
-		Long: "Show the current active factory from a running infinite-you service.\n\n" +
+		Long: "Show the current active factory from a running you-agent-factory service.\n\n" +
 			"By default the command writes a human-readable table with the current factory name and " +
 			"runtime-identifying fields. Use --json for the API-shaped current-factory payload, and " +
 			"use --port to target the same server-port selection pattern as work list.",
@@ -219,7 +219,7 @@ func newWorkListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List work from a running factory",
-		Long: "List work from a running infinite-you service.\n\n" +
+		Long: "List work from a running you-agent-factory service.\n\n" +
 			"By default the command targets the default compatibility session. " +
 			"Use --session to route the request to one specific live factory session instead.",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -434,7 +434,7 @@ func newRunCommand() *cobra.Command {
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port; specifying this flag disables automatic fallback")
 	cmd.Flags().StringVar(&cfg.RecordPath, "record", "", "path to write a replay artifact for this run")
 	cmd.Flags().StringVar(&cfg.ReplayPath, "replay", "", "path to replay an existing replay artifact")
-	cmd.Flags().StringVar(&cfg.RuntimeLogDir, "runtime-log-dir", "", "directory for structured runtime log files (default: ~/.agent-factory/logs)")
+	cmd.Flags().StringVar(&cfg.RuntimeLogDir, "runtime-log-dir", "", "directory for structured runtime log files (default: ~/.you-agent-factory/logs)")
 	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxSize, "runtime-log-max-size-mb", cfg.RuntimeLogConfig.MaxSize, "rotate each runtime log file after this many megabytes")
 	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxBackups, "runtime-log-max-backups", cfg.RuntimeLogConfig.MaxBackups, "maximum rotated runtime log files to retain")
 	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxAge, "runtime-log-max-age-days", cfg.RuntimeLogConfig.MaxAge, "maximum days to retain rotated runtime log files")
@@ -480,7 +480,7 @@ func newSubmitCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "submit",
 		Short: "Submit work to a running factory",
-		Long: "Submit work to a running infinite-you service.\n\n" +
+		Long: "Submit work to a running you-agent-factory service.\n\n" +
 			"By default the command submits to the default compatibility session. " +
 			"Use --session to submit to one specific live factory session instead.",
 		RunE: func(cmd *cobra.Command, args []string) error {

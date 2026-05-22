@@ -28,6 +28,11 @@ func TestGeneratedPublicWorkstationKind(t *testing.T) {
 			want:  factoryapi.WorkstationKindCron,
 		},
 		{
+			name:  "poller runtime kind",
+			input: WorkstationKindPoller,
+			want:  factoryapi.WorkstationKind("POLLER"),
+		},
+		{
 			name:  "trimmed unknown kind",
 			input: WorkstationKind("  custom-kind  "),
 			want:  factoryapi.WorkstationKind("custom-kind"),
@@ -65,6 +70,11 @@ func TestStrictPublicWorkstationKind(t *testing.T) {
 			want:  "",
 		},
 		{
+			name:  "trimmed public poller",
+			input: "  POLLER  ",
+			want:  publicFactoryWorkstationKindPoller,
+		},
+		{
 			name:  "unknown kind rejected",
 			input: "custom-kind",
 			want:  "",
@@ -99,6 +109,11 @@ func TestGeneratedPublicWorkstationKindPtr(t *testing.T) {
 			name:  "supported kind",
 			input: WorkstationKind("  REPEATER  "),
 			want:  factoryapi.WorkstationKindRepeater,
+		},
+		{
+			name:  "poller kind",
+			input: WorkstationKind("  POLLER  "),
+			want:  factoryapi.WorkstationKind("POLLER"),
 		},
 		{
 			name:  "unknown trimmed kind",

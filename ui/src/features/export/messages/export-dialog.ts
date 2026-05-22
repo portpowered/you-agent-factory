@@ -38,7 +38,7 @@ const exportDialogMessagesByLocale = {
     exportUnavailable:
       "The current factory definition is not available for export yet.",
     exportingAction: "Exporting...",
-    hint: "Confirming export keeps the current dashboard state unchanged and downloads a PNG artifact with embedded Infinite You factory metadata.",
+    hint: "Confirming export keeps the current dashboard state unchanged and downloads a PNG artifact with embedded you-agent-factory factory metadata.",
     imageDescription:
       "Choose the image customers will see when they open the exported PNG.",
     imageLabel: "Cover image",
@@ -46,7 +46,7 @@ const exportDialogMessagesByLocale = {
     imageTypeValidation: "Choose an image file before exporting.",
     loadingStatus: "Loading the current authored factory definition.",
     nameDescription:
-      "This name is embedded in the exported Infinite You PNG metadata and used for the downloaded filename.",
+      "This name is embedded in the exported you-agent-factory PNG metadata and used for the downloaded filename.",
     nameLabel: "Factory name",
     namePlaceholder: "Factory name",
     nameRequiredValidation: "Enter a factory name before exporting.",
@@ -65,7 +65,7 @@ const exportDialogMessagesByLocale = {
     exportAction: "PNG をエクスポート",
     exportUnavailable: "現在のファクトリー定義はまだエクスポートできません。",
     exportingAction: "エクスポートしています...",
-    hint: "エクスポートを確定しても現在のダッシュボード状態は変わらず、Infinite You のファクトリーメタデータを埋め込んだ PNG アーティファクトがダウンロードされます。",
+    hint: "エクスポートを確定しても現在のダッシュボード状態は変わらず、you-agent-factory のファクトリーメタデータを埋め込んだ PNG アーティファクトがダウンロードされます。",
     imageDescription:
       "エクスポートした PNG を開いたときに顧客へ表示する画像を選択してください。",
     imageLabel: "カバー画像",
@@ -74,7 +74,7 @@ const exportDialogMessagesByLocale = {
     imageTypeValidation: "エクスポートする前に画像ファイルを選択してください。",
     loadingStatus: "現在作成中のファクトリー定義を読み込んでいます。",
     nameDescription:
-      "この名前はエクスポートされた Infinite You PNG メタデータに埋め込まれ、ダウンロードするファイル名にも使われます。",
+      "この名前はエクスポートされた you-agent-factory PNG メタデータに埋め込まれ、ダウンロードするファイル名にも使われます。",
     nameLabel: "ファクトリー名",
     namePlaceholder: "ファクトリー名",
     nameRequiredValidation:
@@ -94,14 +94,14 @@ const exportDialogMessagesByLocale = {
     exportAction: "PNG 내보내기",
     exportUnavailable: "현재 팩토리 정의는 아직 내보낼 수 없습니다.",
     exportingAction: "내보내는 중...",
-    hint: "내보내기를 확인해도 현재 대시보드 상태는 바뀌지 않으며 Infinite You 팩토리 메타데이터가 포함된 PNG 아티팩트를 다운로드합니다.",
+    hint: "내보내기를 확인해도 현재 대시보드 상태는 바뀌지 않으며 you-agent-factory 팩토리 메타데이터가 포함된 PNG 아티팩트를 다운로드합니다.",
     imageDescription: "내보낸 PNG를 열 때 고객에게 보여줄 이미지를 선택하세요.",
     imageLabel: "커버 이미지",
     imageRequiredValidation: "내보내기 전에 커버 이미지를 선택하세요.",
     imageTypeValidation: "내보내기 전에 이미지 파일을 선택하세요.",
     loadingStatus: "현재 작성된 팩토리 정의를 불러오는 중입니다.",
     nameDescription:
-      "이 이름은 내보낸 Infinite You PNG 메타데이터에 포함되며 다운로드 파일 이름에도 사용됩니다.",
+      "이 이름은 내보낸 you-agent-factory PNG 메타데이터에 포함되며 다운로드 파일 이름에도 사용됩니다.",
     nameLabel: "팩토리 이름",
     namePlaceholder: "팩토리 이름",
     nameRequiredValidation: "내보내기 전에 팩토리 이름을 입력하세요.",
@@ -119,14 +119,14 @@ const exportDialogMessagesByLocale = {
     exportAction: "导出 PNG",
     exportUnavailable: "当前工厂定义暂时无法导出。",
     exportingAction: "正在导出...",
-    hint: "确认导出不会更改当前仪表板状态，并会下载一个嵌入 Infinite You 工厂元数据的 PNG 产物。",
+    hint: "确认导出不会更改当前仪表板状态，并会下载一个嵌入 you-agent-factory 工厂元数据的 PNG 产物。",
     imageDescription: "选择客户打开导出的 PNG 时会看到的图片。",
     imageLabel: "封面图片",
     imageRequiredValidation: "请在导出前选择封面图片。",
     imageTypeValidation: "请在导出前选择图片文件。",
     loadingStatus: "正在加载当前编写的工厂定义。",
     nameDescription:
-      "该名称会嵌入导出的 Infinite You PNG 元数据中，并用于下载文件名。",
+      "该名称会嵌入导出的 you-agent-factory PNG 元数据中，并用于下载文件名。",
     nameLabel: "工厂名称",
     namePlaceholder: "工厂名称",
     nameRequiredValidation: "请在导出前输入工厂名称。",

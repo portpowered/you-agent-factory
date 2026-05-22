@@ -19,6 +19,7 @@ function editableConfigurationSection() {
 }
 
 function buildReadyEditableConfigurationState(overrides?: {
+  behavior?: "STANDARD" | "REPEATER" | "POLLER";
   promptDiagnostics?: Array<{
     endOffset?: number;
     kind: string;
@@ -75,7 +76,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         };
         status: "ready";
       };
-  validationErrors?: { prompt?: string; workerName?: string };
+  validationErrors?: { behavior?: string; prompt?: string; workerName?: string };
   workerName?: string;
   workerOptionsState?:
     | { status: "ready"; options: string[] }
@@ -83,6 +84,7 @@ function buildReadyEditableConfigurationState(overrides?: {
 }) {
   return {
     draft: {
+      behavior: overrides?.behavior ?? "STANDARD",
       prompt:
         overrides?.prompt ?? "Review the latest story changes before approval.",
       runnerName: "gemini",
@@ -93,6 +95,8 @@ function buildReadyEditableConfigurationState(overrides?: {
         overrides?.validationErrors?.workerName,
     ),
     initialValues: {
+      behavior: "STANDARD",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
       effectiveRunnerName: "gemini",
       factoryRunnerName: "codex",
       prompt: "Review the latest story changes before approval.",
@@ -100,14 +104,21 @@ function buildReadyEditableConfigurationState(overrides?: {
       runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
       workerName: "reviewer",
       workerOptions: ["reviewer", "planner"],
+      workerTypeByName: {
+        planner: "MODEL_WORKER",
+        reviewer: "MODEL_WORKER",
+      },
       workstationName: "Review",
     },
     isDirty: Boolean(
+      overrides?.behavior ||
       overrides?.validationErrors?.prompt ||
+        overrides?.validationErrors?.behavior ||
         overrides?.validationErrors?.workerName ||
         overrides?.prompt,
     ),
     markChangesSaved: vi.fn(),
+    onBehaviorChange: vi.fn(),
     onPromptChange: vi.fn(),
     onRunnerChange: vi.fn(),
     onWorkerChange: vi.fn(),
@@ -295,7 +306,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeNull();
   });
 
-  it("renders only worker and prompt controls in the editable form", () => {
+  it("renders behavior, worker, and prompt controls in the editable form", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const onPromptChange = vi.fn();
@@ -334,6 +345,8 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeTruthy();
     expect(screen.getByLabelText("Worker")).toBeTruthy();
     expect(screen.getByLabelText("Worker").tagName).toBe("SELECT");
+    expect(screen.getByLabelText("Kind")).toBeTruthy();
+    expect(screen.getByLabelText("Kind").tagName).toBe("SELECT");
     expect(screen.queryByLabelText("Model")).toBeNull();
     expect(screen.queryByLabelText("Template")).toBeNull();
 

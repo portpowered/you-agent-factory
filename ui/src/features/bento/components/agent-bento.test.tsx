@@ -87,7 +87,7 @@ describe("AgentBentoLayout", () => {
     ).parentElement;
 
     expect(
-      screen.getByRole("region", { name: "Infinite You bento board" }),
+      screen.getByRole("region", { name: "you-agent-factory bento board" }),
     ).toBeTruthy();
     expect(activityCard).toBeTruthy();
     expect(screen.getByRole("article", { name: "Trace grid" })).toBeTruthy();
@@ -184,10 +184,10 @@ describe("AgentBentoLayout", () => {
     );
 
     expect(
-      screen.getByRole("region", { name: "Infinite You Bento 看板" }),
+      screen.getByRole("region", { name: "you-agent-factory Bento 看板" }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("region", { name: "Infinite You bento board" }),
+      screen.queryByRole("region", { name: "you-agent-factory bento board" }),
     ).toBeNull();
   });
 
@@ -254,7 +254,7 @@ describe("AgentBentoLayout", () => {
     );
 
     const board = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const workTotals = screen.getByRole("article", { name: "Work totals" });
     const currentSelection = screen.getByRole("article", {

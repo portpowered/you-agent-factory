@@ -17,11 +17,11 @@ function livePath(pathname) {
 }
 
 async function waitForRenderedDashboard(page) {
-  await page.getByRole("heading", { level: 1, name: "Infinite You" }).waitFor();
+  await page.getByRole("heading", { level: 1, name: "you-agent-factory" }).waitFor();
   await page.getByText("Work totals").waitFor();
   await page.getByRole("button", { name: "Select step-one workstation" }).waitFor();
   await page.getByRole("button", { name: "Select step-two workstation" }).waitFor();
-  await page.getByRole("status", { name: "Infinite You event stream live" }).waitFor();
+  await page.getByRole("status", { name: "you-agent-factory event stream live" }).waitFor();
   await page.waitForFunction(() => {
     const workTotals = document.querySelector('[aria-label="work totals"]');
     if (!(workTotals instanceof HTMLElement)) {
@@ -95,15 +95,20 @@ async function main() {
     }
 
     const streamStatusName = await page
-      .getByRole("status", { name: "Infinite You event stream live" })
+      .getByRole("status", { name: "you-agent-factory event stream live" })
       .getAttribute("aria-label");
-    if (streamStatusName !== "Infinite You event stream live") {
+    if (streamStatusName !== "you-agent-factory event stream live") {
       throw new Error(
-        `dashboard stream status name = ${JSON.stringify(streamStatusName)}, want "Infinite You event stream live"`,
+        `dashboard stream status name = ${JSON.stringify(streamStatusName)}, want "you-agent-factory event stream live"`,
       );
     }
 
-    const visibleTexts = unique(["Infinite You", "Work totals", "step-one", "step-two"]);
+    const visibleTexts = unique([
+      "you-agent-factory",
+      "Work totals",
+      "step-one",
+      "step-two",
+    ]);
     process.stdout.write(
       `${JSON.stringify(
         {

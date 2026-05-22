@@ -105,7 +105,7 @@ describe("ExportFactoryDialog", () => {
     expect(screen.getByText(messages.loadingStatus)).toBeTruthy();
   });
 
-  it("renders Infinite You export copy for metadata and filename guidance", () => {
+  it("renders you-agent-factory export copy for metadata and filename guidance", () => {
     const messages = getExportDialogMessages("en");
     renderDialog();
 
@@ -268,7 +268,7 @@ describe("ExportFactoryDialog", () => {
     const messages = getExportDialogMessages("en");
     renderDialog({
       factory: null,
-      initialFactoryName: "infinite-you",
+      initialFactoryName: "you-agent-factory",
       preparationFailure: {
         code: "FACTORY_DEFINITION_UNAVAILABLE",
         message:

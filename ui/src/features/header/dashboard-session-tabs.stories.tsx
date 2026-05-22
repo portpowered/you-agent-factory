@@ -47,7 +47,7 @@ const reviewSession = {
 };
 
 export default {
-  title: "Infinite You/Dashboard/Session Tabs",
+  title: "you-agent-factory/Dashboard/Session Tabs",
   component: DashboardSessionTabs,
   tags: ["test"],
 };

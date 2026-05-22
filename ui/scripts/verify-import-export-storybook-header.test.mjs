@@ -118,7 +118,7 @@ describe("verifyDashboardHeader", () => {
       width: 1440,
     });
 
-    expect(page.heading.getByText).toHaveBeenCalledWith("Infinite You");
+    expect(page.heading.getByText).toHaveBeenCalledWith("you-agent-factory");
     expect(page.slider.focus).not.toHaveBeenCalled();
     expect(page.currentButton.focus).not.toHaveBeenCalled();
     expect(page.keyboard.press).not.toHaveBeenCalled();

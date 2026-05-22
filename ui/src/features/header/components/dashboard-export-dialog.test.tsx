@@ -134,7 +134,7 @@ describe("DashboardExportDialog", () => {
     ).toBeTruthy();
   });
 
-  it("falls back to the Infinite You filename slug when the current factory is unavailable", async () => {
+  it("falls back to the you-agent-factory filename slug when the current factory is unavailable", async () => {
     isExportDialogOpen = true;
     currentFactoryExportState = {
       currentFactoryExport: {
@@ -156,7 +156,7 @@ describe("DashboardExportDialog", () => {
           name: messages.nameLabel,
         }) as HTMLInputElement
       ).value,
-    ).toBe("infinite-you");
+    ).toBe("you-agent-factory");
   });
 
   it("renders the localized export dialog surface when a locale is provided", async () => {

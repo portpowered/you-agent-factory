@@ -45,7 +45,7 @@ const betaSessionSnapshot = buildSessionSnapshot({
 });
 
 export default {
-  title: "Infinite You/Workflow Dashboard/Session Switching",
+  title: "you-agent-factory/Workflow Dashboard/Session Switching",
   component: App,
   tags: ["test"],
 };

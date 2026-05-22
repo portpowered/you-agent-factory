@@ -1,0 +1,8 @@
+type: string
+description: Built-in repository-owned hosted worker providers supported by the public factory-config contract.
+x-enum-varnames:
+  - HostedWorkerProviderLinear
+enum:
+  - LINEAR
+x-enum-descriptions:
+  - Built-in hosted poller integration for the Linear GraphQL API.

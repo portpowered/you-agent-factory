@@ -1568,7 +1568,7 @@ describe("App current selection layout", () => {
     fireEvent.click(getActiveStorySelectionButton());
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const workInfo = await within(dashboardGrid).findByRole("article", {
       name: "Current selection",
@@ -1600,7 +1600,7 @@ describe("App current selection layout", () => {
     fireEvent.click(getActiveStorySelectionButton());
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const traceWidget = await within(dashboardGrid).findByRole("article", {
       name: "Trace drill-down",
@@ -1669,9 +1669,9 @@ describe("App current selection layout", () => {
   it("renders queued, in-flight, completed, and failed work in one ranged outcome chart", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const trendWidget = await within(dashboardGrid).findByRole("article", {
       name: "Work outcome chart",
@@ -1798,7 +1798,7 @@ describe("App current selection layout", () => {
     });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const trendWidget = await within(dashboardGrid).findByRole("article", {
       name: "Work outcome chart",
@@ -1839,9 +1839,9 @@ describe("App current selection layout", () => {
       },
     });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     expect(
       within(dashboardGrid).queryByRole("article", { name: "Failure trend" }),
@@ -1850,7 +1850,7 @@ describe("App current selection layout", () => {
     fireEvent.click(getActiveStorySelectionButton());
 
     const workDetail = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     expect(
       await within(workDetail).findByRole("article", {
@@ -1890,7 +1890,7 @@ describe("App current selection layout", () => {
     fireEvent.click(getActiveStorySelectionButton());
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
 
     const widgets = within(dashboardGrid).getAllByRole("article");
@@ -1942,9 +1942,9 @@ describe("App current selection layout", () => {
       },
     });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
     expect(
-      screen.getAllByRole("region", { name: "Infinite You bento board" }),
+      screen.getAllByRole("region", { name: "you-agent-factory bento board" }),
     ).toHaveLength(1);
     expect(screen.getByRole("article", { name: "Factory graph" })).toBeTruthy();
     expect(
@@ -1957,7 +1957,7 @@ describe("App current selection layout", () => {
     fireEvent.click(activeWorkButton);
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     expect(
       within(dashboardGrid).getByRole("article", {
@@ -2115,9 +2115,9 @@ describe("App current selection terminal states", () => {
       },
     });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     fireEvent.click(
       within(dashboardGrid).getByRole("button", { name: "Done Story" }),
@@ -2216,9 +2216,9 @@ describe("App current selection terminal states", () => {
       timelineSnapshots: [historicalTimelineSnapshot, terminalSnapshot],
     });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
 
     fireEvent.click(

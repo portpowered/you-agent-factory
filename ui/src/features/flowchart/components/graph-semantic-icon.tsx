@@ -13,6 +13,7 @@ export const GRAPH_SEMANTIC_ICON_KINDS = [
   "workstation",
   "repeater",
   "cron",
+  "poller",
   "exhaustion",
   "active-work",
 ] as const;
@@ -59,6 +60,17 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
       <>
         <circle cx="12" cy="12" r="8" />
         <path d="M12 7.5V12l3 2" />
+      </>
+    ),
+  },
+  poller: {
+    label: "Poller workstation",
+    paths: (
+      <>
+        <path d="M6 6.5h8a4 4 0 1 1 0 8H9.5" />
+        <path d="m7.5 4-3 2.5 3 2.5" />
+        <path d="M18 17.5H10a4 4 0 1 1 0-8h4.5" />
+        <path d="m16.5 20 3-2.5-3-2.5" />
       </>
     ),
   },
@@ -200,4 +212,3 @@ export function GraphSemanticIcon({
     </svg>
   );
 }
-

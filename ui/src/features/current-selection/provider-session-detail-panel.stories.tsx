@@ -13,7 +13,7 @@ const selectedProviderSession = {
 } as const;
 
 export default {
-  title: "Infinite You/Current Selection/Provider Session Detail Panel",
+  title: "you-agent-factory/Current Selection/Provider Session Detail Panel",
   component: ProviderSessionDetailPanel,
 };
 

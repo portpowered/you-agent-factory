@@ -25,7 +25,7 @@ export function DashboardExportDialog({ locale }: DashboardExportDialogProps) {
       initialFactoryName={
         currentFactoryExport.ok
           ? currentFactoryExport.factoryDefinition.name
-          : "infinite-you"
+          : "you-agent-factory"
       }
       isOpen={isExportDialogOpen}
       isPreparing={isPreparing}
