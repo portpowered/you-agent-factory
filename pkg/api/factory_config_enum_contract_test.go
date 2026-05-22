@@ -33,6 +33,7 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 	assertSchemaPropertyRef(t, schemas, "Workstation", "behavior", "#/components/schemas/WorkstationKind")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "runner", "#/components/schemas/RunnerID")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "type", "#/components/schemas/WorkstationType")
+	assertSchemaArrayItemRef(t, schemas, "Workstation", "classificationRoutes", "#/components/schemas/ClassificationRoute")
 	assertSchemaPropertyRef(t, schemas, "Guard", "type", "#/components/schemas/GuardType")
 }
 
@@ -49,6 +50,7 @@ func TestFactoryConfigContract_GeneratedModelsUseEnumBackedFieldsForTightenedCon
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Behavior", reflect.TypeOf((*generated.WorkstationKind)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Runner", reflect.TypeOf((*generated.RunnerID)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Type", reflect.TypeOf((*generated.WorkstationType)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "ClassificationRoutes", reflect.TypeOf((*[]generated.ClassificationRoute)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnContinue", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnRejection", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnFailure", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))

@@ -107,6 +107,7 @@ const (
 
 // WorkstationType constants for workstation AGENTS.md frontmatter.
 const (
-	WorkstationTypeModel   = "MODEL_WORKSTATION"
-	WorkstationTypeLogical = "LOGICAL_MOVE"
+	WorkstationTypeModel    = "MODEL_WORKSTATION"
+	WorkstationTypeLogical  = "LOGICAL_MOVE"
+	WorkstationTypeClassify = "CLASSIFIER_WORKSTATION"
 )

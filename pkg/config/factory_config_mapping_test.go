@@ -247,6 +247,54 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesNonSuccessRouteArrays(t *t
 	}
 }
 
+func TestFactoryConfigMapper_FlattenAndExpandPreservesClassificationRoutes(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	original := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "done", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "classifier"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "classify-task",
+			Type:           interfaces.WorkstationTypeClassify,
+			WorkerTypeName: "classifier",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+				{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+				{Label: "spam", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+			},
+			OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+		}},
+	}
+
+	flattened, err := mapper.Flatten(original)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+
+	payload := mustDecodeFactoryPayload(t, flattened)
+	workstationPayload := payload["workstations"].([]any)[0].(map[string]any)
+	routes, ok := workstationPayload["classificationRoutes"].([]any)
+	if !ok || len(routes) != 2 {
+		t.Fatalf("classificationRoutes should flatten as two routes, got %#v", workstationPayload["classificationRoutes"])
+	}
+
+	expanded, err := mapper.Expand(flattened)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+
+	if got, want := expanded.Workstations[0].ClassificationRoutes, original.Workstations[0].ClassificationRoutes; !reflect.DeepEqual(got, want) {
+		t.Fatalf("classificationRoutes roundtrip mismatch\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
 func TestFactoryConfigMapper_ExpandRejectsRetiredExhaustionRulesWithMigrationGuidance(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 

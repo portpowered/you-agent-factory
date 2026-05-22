@@ -27,6 +27,31 @@ func TestGeneratedFactoryContractsCompileAndRoundTrip(t *testing.T) {
 	assertGeneratedCurrentFactoryNotFoundJSON(t)
 }
 
+func TestGeneratedFactoryContractsSupportClassifierRoutes(t *testing.T) {
+	classifierType := factoryapi.WorkstationTypeClassifierWorkstation
+	namedFactory := factoryapi.Factory{
+		Name: "classifier-factory",
+		Workstations: &[]factoryapi.Workstation{{
+			Name:   "classify-task",
+			Type:   &classifierType,
+			Worker: "planner",
+			Inputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
+			ClassificationRoutes: &[]factoryapi.ClassificationRoute{
+				{Label: "approved", Outputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "done"}}},
+				{Label: "spam", Outputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}}},
+			},
+		}},
+	}
+
+	encoded, err := json.Marshal(namedFactory)
+	if err != nil {
+		t.Fatalf("marshal generated classifier factory: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"classificationRoutes"`) {
+		t.Fatalf("generated classifier factory JSON missing classificationRoutes: %s", encoded)
+	}
+}
+
 func generatedSubmitRequestFixture(t *testing.T) factoryapi.SubmitWorkRequest {
 	t.Helper()
 
@@ -112,7 +137,7 @@ func assertGeneratedOpenAPIBoundaryTypes(
 		Type:     &workstationRuntimeType,
 		Worker:   "agent",
 		Inputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
-		Outputs:  []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
+		Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 	}
 
 	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {

@@ -467,7 +467,7 @@ func crossBoundaryGeneratedWorkstation() generated.Workstation {
 		Name:      "Review",
 		Worker:    "reviewer",
 		Inputs:    []generated.WorkstationIO{{WorkType: "task", State: "init"}},
-		Outputs:   []generated.WorkstationIO{{WorkType: "task", State: "complete"}},
+		Outputs:   &[]generated.WorkstationIO{{WorkType: "task", State: "complete"}},
 		OnFailure: &[]generated.WorkstationIO{{WorkType: "task", State: "failed"}},
 	}
 }

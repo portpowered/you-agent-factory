@@ -8,7 +8,6 @@ required:
   - name
   - worker
   - inputs
-  - outputs
 properties:
   id:
     type: string
@@ -50,17 +49,22 @@ properties:
       $ref: './WorkstationIO.yaml'
   outputs:
     type: array
-    description: Work states emitted after this workstation succeeds.
+    description: Work states emitted after a non-classifier workstation succeeds. Classifier workstations must use classificationRoutes instead of normal success outputs.
     items:
       $ref: './WorkstationIO.yaml'
+  classificationRoutes:
+    type: array
+    description: Explicit label-to-destination routing used only by CLASSIFIER_WORKSTATION definitions. Each route must declare a unique non-empty label and one or more outputs.
+    items:
+      $ref: './ClassificationRoute.yaml'
   onContinue:
     type: array
-    description: Optional destination emitted when the workstation makes partial progress and should continue iterating.
+    description: Optional destination emitted when the workstation makes partial progress and should continue iterating. Classifier workstations must not declare onContinue.
     items:
       $ref: './WorkstationIO.yaml'
   onRejection:
     type: array
-    description: Optional destination emitted when the worker rejects the current work without a hard failure.
+    description: Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection.
     items:
       $ref: './WorkstationIO.yaml'
   onFailure:

@@ -58,6 +58,16 @@ function workstationRejectionIO(workstation: FactoryWorkstation): WorkstationIO[
   );
 }
 
+function workstationOutputIO(workstation: FactoryWorkstation): WorkstationIO[] {
+  const directOutputs = workstationRouteIOs(
+    (workstation as FactoryWorkstation & { outputs?: WorkstationIO[] | WorkstationIO | null })
+      .outputs,
+  );
+  const classificationOutputs =
+    (workstation.classificationRoutes ?? []).flatMap((route) => route.outputs ?? []);
+  return [...directOutputs, ...classificationOutputs];
+}
+
 function workstationSchedulingKind(workstation: FactoryWorkstation): string | undefined {
   return workstation.behavior ?? workstation.type;
 }
@@ -82,7 +92,7 @@ function projectWorkstationTopology(
   workstation: FactoryWorkstation,
 ): NonNullable<ProjectedInitialStructure["workstations"]>[number] {
   const inputs = workstation.inputs.filter(isPublicWorkstationIO);
-  const outputs = workstation.outputs.filter(isPublicWorkstationIO);
+  const outputs = workstationOutputIO(workstation).filter(isPublicWorkstationIO);
   const continuation = workstationContinueIO(workstation).filter(isPublicWorkstationIO);
   const failure = workstationFailureIO(workstation).filter(isPublicWorkstationIO);
   const rejection = workstationRejectionIO(workstation).filter(isPublicWorkstationIO);
@@ -131,7 +141,7 @@ export function normalizeFactoryPayload(
   for (const workstation of factoryWorkstations(factory)) {
     for (const io of [
       ...workstation.inputs,
-      ...workstation.outputs,
+      ...workstationOutputIO(workstation),
       ...workstationContinueIO(workstation),
       ...workstationFailureIO(workstation),
       ...workstationRejectionIO(workstation),

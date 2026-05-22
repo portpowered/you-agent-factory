@@ -126,6 +126,45 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalWorkstationCronFields(t
 	}
 }
 
+func TestFactoryConfigFromOpenAPIJSON_MapsClassifierWorkstationRoutes(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"classifier-factory",
+		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers": [{"name":"classifier","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"name":"classify-task",
+			"type":"CLASSIFIER_WORKSTATION",
+			"worker":"classifier",
+			"inputs":[{"workType":"task","state":"init"}],
+			"classificationRoutes":[
+				{"label":"approved","outputs":[{"workType":"task","state":"done"}]},
+				{"label":"spam","outputs":[{"workType":"task","state":"failed"}]}
+			],
+			"onFailure":[{"workType":"task","state":"failed"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	ws := cfg.Workstations[0]
+	if ws.Type != interfaces.WorkstationTypeClassify {
+		t.Fatalf("expected classifier workstation type, got %#v", ws)
+	}
+	if len(ws.ClassificationRoutes) != 2 || ws.ClassificationRoutes[1].Label != "spam" {
+		t.Fatalf("expected classifier routes to map, got %#v", ws.ClassificationRoutes)
+	}
+
+	public := WorkstationConfigToOpenAPI(ws)
+	if public.ClassificationRoutes == nil || len(*public.ClassificationRoutes) != 2 {
+		t.Fatalf("expected classifier routes to roundtrip to openapi, got %#v", public.ClassificationRoutes)
+	}
+	if public.Outputs != nil && len(*public.Outputs) != 0 {
+		t.Fatalf("expected classifier workstation to keep normal outputs empty, got %#v", public.Outputs)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"customer-facing-name",

@@ -1509,11 +1509,13 @@ export interface components {
             cron?: components["schemas"]["WorkstationCron"];
             /** @description Work states this workstation can consume before it dispatches. */
             inputs: components["schemas"]["WorkstationIO"][];
-            /** @description Work states emitted after this workstation succeeds. */
-            outputs: components["schemas"]["WorkstationIO"][];
-            /** @description Optional destination emitted when the workstation makes partial progress and should continue iterating. */
+            /** @description Work states emitted after a non-classifier workstation succeeds. Classifier workstations must use classificationRoutes instead of normal success outputs. */
+            outputs?: components["schemas"]["WorkstationIO"][];
+            /** @description Explicit label-to-destination routing used only by CLASSIFIER_WORKSTATION definitions. Each route must declare a unique non-empty label and one or more outputs. */
+            classificationRoutes?: components["schemas"]["ClassificationRoute"][];
+            /** @description Optional destination emitted when the workstation makes partial progress and should continue iterating. Classifier workstations must not declare onContinue. */
             onContinue?: components["schemas"]["WorkstationIO"][];
-            /** @description Optional destination emitted when the worker rejects the current work without a hard failure. */
+            /** @description Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection. */
             onRejection?: components["schemas"]["WorkstationIO"][];
             /** @description Optional destination emitted when the workstation fails permanently. */
             onFailure?: components["schemas"]["WorkstationIO"][];
@@ -1532,6 +1534,12 @@ export interface components {
             /** @description Environment variables added to the workstation execution context. */
             env?: components["schemas"]["StringMap"];
         };
+        ClassificationRoute: {
+            /** @description Case-sensitive classifier label that must match the trimmed classifier output exactly. */
+            label: string;
+            /** @description One or more authored destinations emitted when this classifier label is selected. */
+            outputs: components["schemas"]["WorkstationIO"][];
+        };
         /** @description Retry and execution ceilings applied to one workstation definition. */
         WorkstationLimits: {
             /** @description Maximum number of retry attempts after a failed dispatch before the workstation gives up. */
@@ -1549,7 +1557,7 @@ export interface components {
          * @description Runtime workstation implementation types supported by the public factory-config contract.
          * @enum {string}
          */
-        WorkstationType: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
+        WorkstationType: "MODEL_WORKSTATION" | "LOGICAL_MOVE" | "CLASSIFIER_WORKSTATION";
         /** @description Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported. */
         WorkstationCron: {
             /** @description Standard five-field cron expression used to produce internal time work while the factory service is running. */

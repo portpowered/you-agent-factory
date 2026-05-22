@@ -104,7 +104,7 @@ export function applyWorkstationEdgeChanges(
     workstationKey,
     "workstation-input",
   );
-  nextWorkstation.outputs = applyIOEdgeChanges(
+  nextWorkstation.outputs = applyOptionalIOEdgeChanges(
     nextWorkstation.outputs,
     draft,
     workstationKey,
@@ -219,6 +219,7 @@ function applyOptionalIOEdgeChanges(
   draft: FactoryGraphDraft,
   workstation: FactoryGraphNodeReference,
   kind:
+    | "workstation-output"
     | "workstation-on-continue"
     | "workstation-on-failure"
     | "workstation-on-rejection",

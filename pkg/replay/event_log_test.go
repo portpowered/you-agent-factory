@@ -41,7 +41,7 @@ func testGeneratedFactory() factoryapi.Factory {
 			Name:    "process",
 			Worker:  "worker-a",
 			Inputs:  []factoryapi.WorkstationIO{},
-			Outputs: []factoryapi.WorkstationIO{},
+			Outputs: &[]factoryapi.WorkstationIO{},
 		}},
 	}
 }

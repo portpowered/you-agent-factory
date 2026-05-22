@@ -243,13 +243,13 @@ func mergeGeneratedWorkstationsFixture() (*factoryapi.Factory, map[string]interf
 						Schedule: "0 * * * *",
 					},
 					Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "stale"}},
-					Outputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "stale-done"}},
+					Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "stale-done"}},
 				},
 				{
 					Name:    "zeta",
 					Worker:  "keep-worker",
 					Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "ready"}},
-					Outputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
+					Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
 				},
 			},
 		}, map[string]interfaces.FactoryWorkstationConfig{
@@ -306,7 +306,7 @@ func assertMergedGeneratedWorkstations(t *testing.T, factory *factoryapi.Factory
 	if !reflect.DeepEqual(got[0].Inputs, []factoryapi.WorkstationIO{{WorkType: "story", State: "review"}}) {
 		t.Fatalf("merged alpha inputs = %#v, want runtime inputs", got[0].Inputs)
 	}
-	if !reflect.DeepEqual(got[0].Outputs, []factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}}) {
+	if got[0].Outputs == nil || !reflect.DeepEqual(*got[0].Outputs, []factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}}) {
 		t.Fatalf("merged alpha outputs = %#v, want runtime outputs", got[0].Outputs)
 	}
 	if got[0].OnFailure == nil || !reflect.DeepEqual(*got[0].OnFailure, []factoryapi.WorkstationIO{{WorkType: "story", State: "failed"}}) {

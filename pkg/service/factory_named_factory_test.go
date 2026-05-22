@@ -731,7 +731,7 @@ func TestFactoryService_SaveEditableFactoryDefinition_RejectsDuplicateAndDanglin
 	}
 	*replacement.Workers = append(*replacement.Workers, (*replacement.Workers)[0])
 	(*replacement.Workstations)[0].Worker = "missing-worker"
-	(*replacement.Workstations)[0].Outputs = []factoryapi.WorkstationIO{{WorkType: "story", State: "missing-state"}}
+	(*replacement.Workstations)[0].Outputs = &[]factoryapi.WorkstationIO{{WorkType: "story", State: "missing-state"}}
 
 	_, err = svc.SaveEditableFactoryDefinition(context.Background(), factoryapi.SaveEditableFactoryDefinitionRequest{
 		FactoryDefinition: replacement,

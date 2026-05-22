@@ -555,7 +555,7 @@ func safeBoundaryGeneratedFactory() factoryapi.Factory {
 			Name:      "Process",
 			Worker:    "mock",
 			Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
-			Outputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "done"}},
+			Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "done"}},
 			OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
 		}},
 	}

@@ -48,7 +48,7 @@ func workstationsFromGenerated(workstations *[]factoryapi.Workstation) []interfa
 			Kind:              workstationKindString(workstation.Behavior),
 			Config:            nilIfEmptyStringMap(config),
 			InputPlaceIDs:     placeIDsFromGeneratedIOs(workstation.Inputs),
-			OutputPlaceIDs:    placeIDsFromGeneratedIOs(workstation.Outputs),
+			OutputPlaceIDs:    placeIDsFromGeneratedIOsPtr(workstation.Outputs),
 			ContinuePlaceIDs:  placeIDsFromGeneratedIOsPtr(workstation.OnContinue),
 			RejectionPlaceIDs: placeIDsFromGeneratedIOsPtr(workstation.OnRejection),
 			FailurePlaceIDs:   placeIDsFromGeneratedIOsPtr(workstation.OnFailure),

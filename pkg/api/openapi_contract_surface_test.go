@@ -323,9 +323,22 @@ func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	workstationProperties := schemaProperties(t, workstationSchema, "Workstation")
 	assertPropertyRef(t, workstationProperties, "behavior", "#/components/schemas/WorkstationKind")
 	assertPropertyRef(t, workstationProperties, "type", "#/components/schemas/WorkstationType")
+	classificationRoutesProperty, ok := workstationProperties["classificationRoutes"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.schemas.Workstation.properties.classificationRoutes is missing")
+	}
+	classificationRouteItems, ok := classificationRoutesProperty["items"].(map[string]any)
+	if !ok || classificationRouteItems["$ref"] != "#/components/schemas/ClassificationRoute" {
+		t.Fatalf("components.schemas.Workstation.properties.classificationRoutes.items must reference ClassificationRoute")
+	}
 	assertPropertiesAbsent(t, workstationProperties, "Workstation", "timeout", "runtime_type")
 	assertEnumValues(t, schemaObject(t, schemas, "WorkstationKind"), "WorkstationKind", []string{"STANDARD", "REPEATER", "CRON"})
-	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"MODEL_WORKSTATION", "LOGICAL_MOVE"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"MODEL_WORKSTATION", "LOGICAL_MOVE", "CLASSIFIER_WORKSTATION"})
+
+	classificationRouteSchema := schemaObject(t, schemas, "ClassificationRoute")
+	assertRequiredFields(t, classificationRouteSchema, "label", "outputs")
+	classificationRouteProperties := schemaProperties(t, classificationRouteSchema, "ClassificationRoute")
+	assertSchemaPropertiesPresent(t, classificationRouteProperties, "ClassificationRoute", "label", "outputs")
 
 	factorySchema := schemaObject(t, schemas, "Factory")
 	factoryProperties := schemaProperties(t, factorySchema, "Factory")
@@ -391,7 +404,7 @@ func assertFactorySchemaDescriptions(t *testing.T, workType, resource, worker, w
 	}
 
 	assertOpenAPI3Description(t, "Workstation", workstation.Description)
-	for _, propertyName := range []string{"name", "behavior", "type", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "guards"} {
+	for _, propertyName := range []string{"name", "behavior", "type", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "classificationRoutes", "guards"} {
 		assertOpenAPI3PropertyDescription(t, workstation, "Workstation", propertyName)
 	}
 	workstationLimits := assertOpenAPI3RefPropertyDescription(t, workstation, "Workstation", "limits")

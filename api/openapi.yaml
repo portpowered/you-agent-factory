@@ -2954,7 +2954,6 @@ components:
         - name
         - worker
         - inputs
-        - outputs
       properties:
         id:
           type: string
@@ -2996,17 +2995,22 @@ components:
             $ref: '#/components/schemas/WorkstationIO'
         outputs:
           type: array
-          description: Work states emitted after this workstation succeeds.
+          description: Work states emitted after a non-classifier workstation succeeds. Classifier workstations must use classificationRoutes instead of normal success outputs.
           items:
             $ref: '#/components/schemas/WorkstationIO'
+        classificationRoutes:
+          type: array
+          description: Explicit label-to-destination routing used only by CLASSIFIER_WORKSTATION definitions. Each route must declare a unique non-empty label and one or more outputs.
+          items:
+            $ref: '#/components/schemas/ClassificationRoute'
         onContinue:
           type: array
-          description: Optional destination emitted when the workstation makes partial progress and should continue iterating.
+          description: Optional destination emitted when the workstation makes partial progress and should continue iterating. Classifier workstations must not declare onContinue.
           items:
             $ref: '#/components/schemas/WorkstationIO'
         onRejection:
           type: array
-          description: Optional destination emitted when the worker rejects the current work without a hard failure.
+          description: Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection.
           items:
             $ref: '#/components/schemas/WorkstationIO'
         onFailure:
@@ -3041,6 +3045,21 @@ components:
         env:
           $ref: '#/components/schemas/StringMap'
           description: Environment variables added to the workstation execution context.
+    ClassificationRoute:
+      type: object
+      additionalProperties: false
+      required:
+        - label
+        - outputs
+      properties:
+        label:
+          type: string
+          description: Case-sensitive classifier label that must match the trimmed classifier output exactly.
+        outputs:
+          type: array
+          description: One or more authored destinations emitted when this classifier label is selected.
+          items:
+            $ref: '#/components/schemas/WorkstationIO'
     WorkstationLimits:
       type: object
       description: Retry and execution ceilings applied to one workstation definition.
@@ -3074,12 +3093,15 @@ components:
       x-enum-varnames:
         - WorkstationTypeModelWorkstation
         - WorkstationTypeLogicalMove
+        - WorkstationTypeClassifierWorkstation
       enum:
         - MODEL_WORKSTATION
         - LOGICAL_MOVE
+        - CLASSIFIER_WORKSTATION
       x-enum-descriptions:
         - Model-backed workstation that renders prompts and dispatches work through the configured worker.
         - Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
+        - Label-based classifier workstation that returns one plain string label and routes through classificationRoutes.
     WorkstationCron:
       type: object
       description: Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.
