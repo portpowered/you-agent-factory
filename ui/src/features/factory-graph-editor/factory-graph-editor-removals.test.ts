@@ -167,7 +167,6 @@ describe("factory graph editor removals", () => {
           },
         ],
         name: "review",
-        outputs: [],
         resources: [
           {
             capacity: 2,
