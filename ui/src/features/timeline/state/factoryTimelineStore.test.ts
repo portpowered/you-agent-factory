@@ -3365,9 +3365,9 @@ describe("factory timeline reconstruction dispatch projection", () => {
     });
   });
 
-  it("backfills completed trace dispatch snapshots when inference responses arrive after dispatch completion", () => {
-    const legacyWorkRequest = event(
-      "event-legacy-backfill-work-request",
+  it("backfills completed trace dispatch snapshots from canonical late inference responses", () => {
+    const lateWorkRequest = event(
+      "event-late-inference-work-request",
       2,
       FACTORY_EVENT_TYPES.workRequest,
       {
@@ -3375,85 +3375,85 @@ describe("factory timeline reconstruction dispatch projection", () => {
         type: "FACTORY_REQUEST_BATCH",
         works: [
           {
-            name: "Legacy Timeline Story",
-            trace_id: "trace-legacy-backfill",
-            work_id: "work-legacy-backfill",
+            name: "Late Inference Story",
+            trace_id: "trace-late-inference",
+            work_id: "work-late-inference",
             work_type_id: "story",
           },
         ],
       },
     );
-    legacyWorkRequest.context.requestId = "request-legacy-backfill";
-    legacyWorkRequest.context.traceIds = ["trace-legacy-backfill"];
-    legacyWorkRequest.context.workIds = ["work-legacy-backfill"];
+    lateWorkRequest.context.requestId = "request-late-inference";
+    lateWorkRequest.context.traceIds = ["trace-late-inference"];
+    lateWorkRequest.context.workIds = ["work-late-inference"];
 
-    const legacyDispatchRequest = event(
-      "event-legacy-backfill-dispatch-request",
+    const lateDispatchRequest = event(
+      "event-late-inference-dispatch-request",
       3,
       FACTORY_EVENT_TYPES.dispatchRequest,
       {
-        current_chaining_trace_id: "chain-legacy-backfill-current",
-        dispatchId: "dispatch-legacy-backfill",
+        current_chaining_trace_id: "chain-late-inference-current",
+        dispatchId: "dispatch-late-inference",
         inputs: [
           {
-            name: "Legacy Timeline Story",
-            trace_id: "trace-legacy-backfill",
-            work_id: "work-legacy-backfill",
+            name: "Late Inference Story",
+            trace_id: "trace-late-inference",
+            work_id: "work-late-inference",
             work_type_id: "story",
           },
         ],
         previous_chaining_trace_ids: [
-          "chain-legacy-backfill-a",
-          "chain-legacy-backfill-b",
+          "chain-late-inference-a",
+          "chain-late-inference-b",
         ],
         transitionId: "review",
         workstation: {
-          name: "Legacy Review",
+          name: "Late Inference Review",
         },
       },
     );
-    legacyDispatchRequest.context.traceIds = ["trace-legacy-backfill"];
-    legacyDispatchRequest.context.workIds = ["work-legacy-backfill"];
+    lateDispatchRequest.context.traceIds = ["trace-late-inference"];
+    lateDispatchRequest.context.workIds = ["work-late-inference"];
 
-    const legacyDispatchResponse = event(
-      "event-legacy-backfill-dispatch-response",
+    const lateDispatchResponse = event(
+      "event-late-inference-dispatch-response",
       4,
       FACTORY_EVENT_TYPES.dispatchResponse,
       {
-        current_chaining_trace_id: "chain-legacy-backfill-current",
-        dispatchId: "dispatch-legacy-backfill",
+        current_chaining_trace_id: "chain-late-inference-current",
+        dispatchId: "dispatch-late-inference",
         durationMillis: 640,
         outcome: "ACCEPTED",
-        output: "Legacy replay output",
+        output: "Late inference replay output",
         outputWork: [
           {
-            name: "Legacy Timeline Story",
+            name: "Late Inference Story",
             previous_chaining_trace_ids: [
-              "chain-legacy-backfill-a",
-              "chain-legacy-backfill-b",
+              "chain-late-inference-a",
+              "chain-late-inference-b",
             ],
             state: "done",
-            trace_id: "trace-legacy-backfill",
-            work_id: "work-legacy-backfill",
+            trace_id: "trace-late-inference",
+            work_id: "work-late-inference",
             work_type_id: "story",
           },
         ],
         previous_chaining_trace_ids: [
-          "chain-legacy-backfill-a",
-          "chain-legacy-backfill-b",
+          "chain-late-inference-a",
+          "chain-late-inference-b",
         ],
         transitionId: "review",
         workstation: {
-          name: "Legacy Review",
+          name: "Late Inference Review",
         },
       },
     );
-    legacyDispatchResponse.context.traceIds = ["trace-legacy-backfill"];
-    legacyDispatchResponse.context.workIds = ["work-legacy-backfill"];
-    legacyDispatchResponse.context.eventTime = "2026-04-16T12:00:04Z";
+    lateDispatchResponse.context.traceIds = ["trace-late-inference"];
+    lateDispatchResponse.context.workIds = ["work-late-inference"];
+    lateDispatchResponse.context.eventTime = "2026-04-16T12:00:04Z";
 
-    const legacyInferenceResponse = event(
-      "event-legacy-backfill-inference-response",
+    const lateInferenceResponse = event(
+      "event-late-inference-response",
       5,
       FACTORY_EVENT_TYPES.inferenceResponse,
       {
@@ -3463,70 +3463,68 @@ describe("factory timeline reconstruction dispatch projection", () => {
             model: "gpt-5.4-mini",
             provider: "openai",
             requestMetadata: {
-              prompt_source: "legacy-review-backfill",
+              prompt_source: "late-inference-review",
             },
             responseMetadata: {
-              provider_session_id: "legacy-session-2",
+              provider_session_id: "late-session-2",
             },
           },
         },
-        dispatchId: "dispatch-legacy-backfill",
         durationMillis: 700,
-        inferenceRequestId: "dispatch-legacy-backfill/inference-request/1",
+        inferenceRequestId: "dispatch-late-inference/inference-request/1",
         outcome: "SUCCEEDED",
         providerSession: {
-          id: "legacy-session-2",
+          id: "late-session-2",
           kind: "session_id",
           provider: "openai",
         },
-        response: "Legacy backfilled replay output",
-        transitionId: "legacy-payload-review",
+        response: "Late inference backfilled replay output",
       },
     );
-    legacyInferenceResponse.context.traceIds = ["trace-legacy-backfill"];
-    legacyInferenceResponse.context.workIds = ["work-legacy-backfill"];
-    legacyInferenceResponse.context.dispatchId = "dispatch-legacy-backfill";
-    legacyInferenceResponse.context.eventTime = "2026-04-16T12:00:05Z";
+    lateInferenceResponse.context.traceIds = ["trace-late-inference"];
+    lateInferenceResponse.context.workIds = ["work-late-inference"];
+    lateInferenceResponse.context.dispatchId = "dispatch-late-inference";
+    lateInferenceResponse.context.eventTime = "2026-04-16T12:00:05Z";
 
     const projected = buildFactoryTimelineSnapshot(
       [
         initialStructureRequest,
-        legacyWorkRequest,
-        legacyDispatchRequest,
-        legacyDispatchResponse,
-        legacyInferenceResponse,
+        lateWorkRequest,
+        lateDispatchRequest,
+        lateDispatchResponse,
+        lateInferenceResponse,
       ],
       5,
     );
 
     expect(
-      projected.tracesByWorkID["work-legacy-backfill"]?.dispatches[0],
+      projected.tracesByWorkID["work-late-inference"]?.dispatches[0],
     ).toMatchObject({
-      current_chaining_trace_id: "chain-legacy-backfill-current",
+      current_chaining_trace_id: "chain-late-inference-current",
       diagnostics: {
         provider: {
           model: "gpt-5.4-mini",
           provider: "openai",
           request_metadata: {
-            prompt_source: "legacy-review-backfill",
+            prompt_source: "late-inference-review",
           },
           response_metadata: {
-            provider_session_id: "legacy-session-2",
+            provider_session_id: "late-session-2",
           },
         },
       },
-      dispatch_id: "dispatch-legacy-backfill",
+      dispatch_id: "dispatch-late-inference",
       previous_chaining_trace_ids: [
-        "chain-legacy-backfill-a",
-        "chain-legacy-backfill-b",
+        "chain-late-inference-a",
+        "chain-late-inference-b",
       ],
       provider_session: {
-        id: "legacy-session-2",
+        id: "late-session-2",
         provider: "openai",
       },
-      token_names: ["Legacy Timeline Story"],
+      token_names: ["Late Inference Story"],
       work_types: ["story"],
-      workstation_name: "Legacy Review",
+      workstation_name: "Late Inference Review",
     });
     expect(projected.runtime.session.provider_sessions?.[0]).toMatchObject({
       diagnostics: {
@@ -3535,20 +3533,20 @@ describe("factory timeline reconstruction dispatch projection", () => {
           provider: "openai",
         },
       },
-      dispatch_id: "dispatch-legacy-backfill",
+      dispatch_id: "dispatch-late-inference",
       provider_session: {
-        id: "legacy-session-2",
+        id: "late-session-2",
         provider: "openai",
       },
-      workstation_name: "Legacy Review",
+      workstation_name: "Late Inference Review",
     });
     expect(
       projected.runtime.inference_attempts_by_dispatch_id?.[
-        "dispatch-legacy-backfill"
-      ]?.["dispatch-legacy-backfill/inference-request/1"],
+        "dispatch-late-inference"
+      ]?.["dispatch-late-inference/inference-request/1"],
     ).toMatchObject({
-      dispatch_id: "dispatch-legacy-backfill",
-      inference_request_id: "dispatch-legacy-backfill/inference-request/1",
+      dispatch_id: "dispatch-late-inference",
+      inference_request_id: "dispatch-late-inference/inference-request/1",
       transition_id: "review",
     });
   });
