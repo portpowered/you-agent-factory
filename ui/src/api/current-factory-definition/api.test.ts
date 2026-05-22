@@ -202,6 +202,38 @@ describe("getCurrentEditableFactoryDefinition", () => {
     });
   });
 
+  it("normalizes INVALID_FACTORY editable-definition rejections into INVALID_FACTORY_DEFINITION", async () => {
+    await expect(
+      getCurrentEditableFactoryDefinitionDocument({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "INVALID_FACTORY",
+              message: "The editable definition payload is invalid.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 400,
+              statusText: "Bad Request",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY_DEFINITION",
+      message: "The editable definition payload is invalid.",
+      name: "CurrentEditableFactoryDefinitionError",
+      responseBody: {
+        code: "INVALID_FACTORY",
+        message: "The editable definition payload is invalid.",
+      },
+      status: 400,
+      statusText: "Bad Request",
+    });
+  });
+
   it("rejects current-factory payloads that are not editable canonical factory definitions", async () => {
     let thrown: unknown;
 
