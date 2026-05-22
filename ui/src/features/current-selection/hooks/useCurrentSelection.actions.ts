@@ -14,7 +14,7 @@ import {
   findTerminalWorkItem,
   inferStateWorkTerminalStatus,
   placeNodeID,
-  resolveTrackedWorkSelection,
+  resolveWorkItemSelectionByWorkID,
 } from "../useCurrentSelection.helpers";
 
 type CurrentSelectionActionArgs = {
@@ -36,12 +36,12 @@ export function useCurrentSelectionActions({
   snapshot,
   terminalWorkDetail,
 }: CurrentSelectionActionArgs) {
-  const commitResolvedWorkSelection = (
+  const resolveCanonicalWorkItemSelection = (
     workID: string,
     detail: TerminalWorkDetail | null,
     dispatchID?: string,
   ) => {
-    const resolvedSelection = resolveTrackedWorkSelection({
+    const resolvedSelection = resolveWorkItemSelectionByWorkID({
       dispatchID,
       snapshot,
       terminalWorkDetail: detail,
@@ -77,7 +77,7 @@ export function useCurrentSelectionActions({
   };
 
   const selectWorkByID = (workID: string) => {
-    const { resolvedSelection } = commitResolvedWorkSelection(
+    const { resolvedSelection } = resolveCanonicalWorkItemSelection(
       workID,
       terminalWorkDetail,
     );
@@ -101,7 +101,7 @@ export function useCurrentSelectionActions({
 
   const openTerminalWorkDetail = (status: TerminalWorkStatus, item: TerminalWorkItem) => {
     const detail = buildTerminalWorkDetail(status, item);
-    const { resolvedSelection } = commitResolvedWorkSelection(
+    const { resolvedSelection } = resolveCanonicalWorkItemSelection(
       item.traceWorkID,
       detail,
       item.dispatchID,
@@ -177,7 +177,7 @@ function resolveStateWorkItemSelection({
   snapshot: DashboardSnapshot | null | undefined;
   workItem: DashboardWorkItemRef;
 }): DashboardSelection | null {
-  return resolveTrackedWorkSelection({
+  return resolveWorkItemSelectionByWorkID({
     nodeID: placeNodeID(snapshot, place),
     snapshot,
     workID: workItem.work_id,

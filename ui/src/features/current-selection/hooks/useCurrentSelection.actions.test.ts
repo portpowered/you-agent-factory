@@ -12,7 +12,7 @@ const helperMocks = vi.hoisted(() => ({
   findTerminalWorkItem: vi.fn(),
   inferStateWorkTerminalStatus: vi.fn(),
   placeNodeID: vi.fn(),
-  resolveTrackedWorkSelection: vi.fn(),
+  resolveWorkItemSelectionByWorkID: vi.fn(),
 }));
 
 vi.mock("../useCurrentSelection.helpers", () => helperMocks);
@@ -43,7 +43,7 @@ describe("useCurrentSelectionActions", () => {
       workItem,
     };
 
-    helperMocks.resolveTrackedWorkSelection.mockReturnValueOnce(null);
+    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(null);
 
     const actions = useCurrentSelectionActions({
       commitSelectionState,
@@ -57,7 +57,7 @@ describe("useCurrentSelectionActions", () => {
 
     actions.openTerminalWorkDetail("failed", terminalItem);
 
-    expect(helperMocks.resolveTrackedWorkSelection).toHaveBeenCalledWith(
+    expect(helperMocks.resolveWorkItemSelectionByWorkID).toHaveBeenCalledWith(
       expect.objectContaining({
         dispatchID: "dispatch-blocked-analysis",
         terminalWorkDetail: expect.objectContaining({
@@ -99,7 +99,7 @@ describe("useCurrentSelectionActions", () => {
       workItem: resolvedSelection.workItem,
     };
 
-    helperMocks.resolveTrackedWorkSelection.mockReturnValueOnce(resolvedSelection);
+    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(resolvedSelection);
 
     const actions = useCurrentSelectionActions({
       commitSelectionState,
@@ -143,7 +143,7 @@ describe("useCurrentSelectionActions", () => {
       nodeId: "plan",
     };
 
-    helperMocks.resolveTrackedWorkSelection.mockReturnValueOnce(resolvedSelection);
+    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(resolvedSelection);
 
     const terminalWorkDetail = {
       label: "Alpha Story",
@@ -183,7 +183,7 @@ describe("useCurrentSelectionActions", () => {
     };
 
     helperMocks.placeNodeID.mockReturnValueOnce("review");
-    helperMocks.resolveTrackedWorkSelection.mockReturnValueOnce(null);
+    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(null);
     helperMocks.inferStateWorkTerminalStatus.mockReturnValueOnce("failed");
     helperMocks.findTerminalWorkItem.mockReturnValueOnce(undefined);
 

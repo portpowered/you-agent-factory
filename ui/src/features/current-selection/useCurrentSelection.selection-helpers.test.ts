@@ -18,7 +18,7 @@ import {
   findTerminalWorkItem,
   inferStateWorkTerminalStatus,
   placeNodeID,
-  resolveTrackedWorkSelection,
+  resolveWorkItemSelectionByWorkID,
   terminalHistoryItemsForPlace,
 } from "./useCurrentSelection.selection-helpers";
 
@@ -232,7 +232,7 @@ describe("useCurrentSelection.selection-helpers", () => {
     expect(inferStateWorkTerminalStatus(null, reviewOutputPlace, workAlpha)).toBeNull();
   });
 
-  it("resolves tracked work selections to work-item selections across request, active, provider, failed, retained, and fallback paths", () => {
+  it("resolves work-by-id selection intent to work-item selections across request, active, provider, failed, retained, and fallback paths", () => {
     const snapshot = buildSnapshot();
     const scriptRequest: DashboardWorkstationRequest = {
       counts: {
@@ -267,7 +267,7 @@ describe("useCurrentSelection.selection-helpers", () => {
     };
 
     expect(
-      resolveTrackedWorkSelection({
+      resolveWorkItemSelectionByWorkID({
         snapshot,
         workID: workAlpha.work_id,
       }),
@@ -291,7 +291,7 @@ describe("useCurrentSelection.selection-helpers", () => {
       [activeExecution.dispatch_id]: activeExecution,
     };
     expect(
-      resolveTrackedWorkSelection({
+      resolveWorkItemSelectionByWorkID({
         snapshot,
         workID: workAlpha.work_id,
       }),
@@ -313,7 +313,7 @@ describe("useCurrentSelection.selection-helpers", () => {
       },
     ];
     expect(
-      resolveTrackedWorkSelection({
+      resolveWorkItemSelectionByWorkID({
         snapshot,
         workID: workAlpha.work_id,
       }),
@@ -346,7 +346,7 @@ describe("useCurrentSelection.selection-helpers", () => {
       },
     };
     expect(
-      resolveTrackedWorkSelection({
+      resolveWorkItemSelectionByWorkID({
         dispatchID: "dispatch-failed",
         snapshot,
         workID: workAlpha.work_id,
@@ -359,7 +359,7 @@ describe("useCurrentSelection.selection-helpers", () => {
     });
 
     expect(
-      resolveTrackedWorkSelection({
+      resolveWorkItemSelectionByWorkID({
         snapshot,
         terminalWorkDetail: {
           dispatchID: "dispatch-failed",
@@ -399,7 +399,7 @@ describe("useCurrentSelection.selection-helpers", () => {
     };
     snapshot.runtime.session.failed_work_details_by_work_id = {};
     expect(
-      resolveTrackedWorkSelection({
+      resolveWorkItemSelectionByWorkID({
         dispatchID: "dispatch-logical-move",
         snapshot,
         workID: workAlpha.work_id,
@@ -416,7 +416,7 @@ describe("useCurrentSelection.selection-helpers", () => {
       [reviewInputPlace.place_id]: [workAlpha],
     };
     expect(
-      resolveTrackedWorkSelection({
+      resolveWorkItemSelectionByWorkID({
         snapshot,
         workID: workAlpha.work_id,
       }),
@@ -428,7 +428,7 @@ describe("useCurrentSelection.selection-helpers", () => {
 
     snapshot.runtime.current_work_items_by_place_id = {};
     expect(
-      resolveTrackedWorkSelection({
+      resolveWorkItemSelectionByWorkID({
         nodeID: "repair",
         snapshot,
         terminalWorkDetail: {
@@ -444,7 +444,7 @@ describe("useCurrentSelection.selection-helpers", () => {
     });
 
     expect(
-      resolveTrackedWorkSelection({
+      resolveWorkItemSelectionByWorkID({
         snapshot,
         workID: "missing-work",
       }),

@@ -206,7 +206,7 @@ export function activeExecutionsForSelectedWorkstation(
   );
 }
 
-export function resolveTrackedWorkSelection({
+export function resolveWorkItemSelectionByWorkID({
   dispatchID,
   nodeID,
   snapshot,
@@ -230,7 +230,7 @@ export function resolveTrackedWorkSelection({
     dispatchID ??
     terminalWorkDetail?.dispatchID ??
     failedDetail?.dispatch_id;
-  const preferredSelection = resolvePreferredDispatchSelection({
+  const preferredSelection = resolvePreferredWorkItemSelection({
     failedDetail,
     preferredFailureDispatchID,
     snapshot,
@@ -330,7 +330,7 @@ export function resolveTrackedWorkSelection({
   return null;
 }
 
-function resolvePreferredDispatchSelection({
+function resolvePreferredWorkItemSelection({
   failedDetail,
   preferredFailureDispatchID,
   snapshot,

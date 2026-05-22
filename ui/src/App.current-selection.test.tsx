@@ -965,6 +965,70 @@ describe("App current selection", () => {
     ).toBeTruthy();
   });
 
+  it("follows the explicit selection contract: clicking work selects work, clicking a request selects a request", async () => {
+    renderApp({
+      snapshot: activeSnapshot,
+      traceFixtures: {
+        [activeWorkID]: traceSnapshot,
+      },
+      workstationRequestsByDispatchID: {
+        [dashboardWorkstationRequestFixtures.ready.dispatch_id]:
+          dashboardWorkstationRequestFixtures.ready,
+      },
+    });
+
+    fireEvent.click(getActiveStorySelectionButton());
+
+    const workDetail = await screen.findByRole("article", {
+      name: "Current selection",
+    });
+    expect(within(workDetail).getByText(activeWorkID)).toBeTruthy();
+    expect(
+      within(workDetail).queryByRole("heading", {
+        name: "Request details",
+      }),
+    ).toBeNull();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Select Review workstation" }),
+    );
+
+    const workstationDetail = await screen.findByRole("article", {
+      name: "Current selection",
+    });
+    const requestHistorySection = within(workstationDetail)
+      .getByRole("heading", { name: "Request history" })
+      .closest("section");
+    if (!(requestHistorySection instanceof HTMLElement)) {
+      throw new Error("expected workstation request history section");
+    }
+
+    fireEvent.click(
+      within(requestHistorySection).getByRole("button", {
+        name: "Expand",
+      }),
+    );
+    fireEvent.click(
+      within(requestHistorySection).getByRole("button", {
+        name: /\(dispatch-review-ready\)$/,
+      }),
+    );
+
+    const requestDetail = await screen.findByRole("article", {
+      name: "Current selection",
+    });
+    expect(
+      within(requestDetail).getByRole("heading", {
+        name: "Request details",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(requestDetail).queryByRole("heading", {
+        name: "Workstation dispatches",
+      }),
+    ).toBeNull();
+  });
+
   it("renders the selected-work empty dispatch-history state without reviving top-level execution details", async () => {
     const snapshotWithoutSelectedWorkDispatchHistory = {
       ...activeSnapshot,
