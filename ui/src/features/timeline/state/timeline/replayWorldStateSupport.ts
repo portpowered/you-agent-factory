@@ -83,15 +83,6 @@ export function syncCompletedDispatchAttempt(
   }
 }
 
-export function legacyInferencePayloadTransitionID(
-  payload: unknown,
-): string | undefined {
-  const transitionID = (payload as { transitionId?: unknown }).transitionId;
-  return typeof transitionID === "string" && transitionID.length > 0
-    ? transitionID
-    : undefined;
-}
-
 export function scriptRequestsForDispatch(
   state: ReplayWorldState,
   dispatchID: string,

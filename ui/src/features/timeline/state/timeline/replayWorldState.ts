@@ -36,7 +36,6 @@ import {
   applyScriptRequest,
   applyScriptResponse,
   inferenceAttemptsForDispatch,
-  legacyInferencePayloadTransitionID,
   resolveDispatchTransitionID,
   syncCompletedDispatchAttempt,
 } from "./replayWorldStateSupport";
@@ -301,7 +300,6 @@ function applyInferenceRequest(
   const attempts = inferenceAttemptsForDispatch(state, dispatchID);
   const current = attempts[payload.inferenceRequestId];
   const transitionID =
-    legacyInferencePayloadTransitionID(payload) ??
     current?.transition_id ??
     resolveDispatchTransitionID(state, dispatchID);
   if (!transitionID) {
@@ -332,7 +330,6 @@ function applyInferenceResponse(
   const attempts = inferenceAttemptsForDispatch(state, dispatchID);
   const current = attempts[payload.inferenceRequestId];
   const transitionID =
-    legacyInferencePayloadTransitionID(payload) ??
     current?.transition_id ??
     resolveDispatchTransitionID(state, dispatchID);
   if (!transitionID) {

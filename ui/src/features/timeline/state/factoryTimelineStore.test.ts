@@ -2531,6 +2531,62 @@ describe("factory timeline reconstruction request state", () => {
     ).toBeUndefined();
   });
 
+  it("resolves inference transition IDs from dispatch replay state instead of payload aliases", () => {
+    const payloadAliasInferenceRequest = event(
+      "event-payload-transition-inference-request",
+      4,
+      FACTORY_EVENT_TYPES.inferenceRequest,
+      {
+        attempt: 1,
+        inferenceRequestId: "dispatch-1/inference-request/payload-transition",
+        prompt: "This payload transition alias should not be used.",
+        transitionId: "payload-transition",
+      },
+    );
+    payloadAliasInferenceRequest.context.dispatchId = "dispatch-1";
+    payloadAliasInferenceRequest.context.traceIds = ["trace-1"];
+    payloadAliasInferenceRequest.context.workIds = ["work-1"];
+
+    const payloadAliasInferenceResponse = event(
+      "event-payload-transition-inference-response",
+      5,
+      FACTORY_EVENT_TYPES.inferenceResponse,
+      {
+        attempt: 1,
+        durationMillis: 10,
+        inferenceRequestId: "dispatch-1/inference-request/payload-transition",
+        outcome: "SUCCEEDED",
+        response: "Payload transition alias ignored.",
+        transitionId: "payload-response-transition",
+      },
+    );
+    payloadAliasInferenceResponse.context.dispatchId = "dispatch-1";
+    payloadAliasInferenceResponse.context.traceIds = ["trace-1"];
+    payloadAliasInferenceResponse.context.workIds = ["work-1"];
+
+    const projected = buildFactoryTimelineSnapshot(
+      [
+        initialStructureRequest,
+        workInput,
+        request,
+        payloadAliasInferenceRequest,
+        payloadAliasInferenceResponse,
+      ],
+      5,
+    );
+
+    expect(
+      projected.runtime.inference_attempts_by_dispatch_id?.["dispatch-1"]?.[
+        "dispatch-1/inference-request/payload-transition"
+      ],
+    ).toMatchObject({
+      dispatch_id: "dispatch-1",
+      inference_request_id: "dispatch-1/inference-request/payload-transition",
+      outcome: "SUCCEEDED",
+      transition_id: "review",
+    });
+  });
+
   it("reduces script request and response events into script-aware workstation state", () => {
     const events = [
       initialStructureRequest,
@@ -3424,7 +3480,7 @@ describe("factory timeline reconstruction dispatch projection", () => {
           provider: "openai",
         },
         response: "Legacy backfilled replay output",
-        transitionId: "review",
+        transitionId: "legacy-payload-review",
       },
     );
     legacyInferenceResponse.context.traceIds = ["trace-legacy-backfill"];
@@ -3485,6 +3541,15 @@ describe("factory timeline reconstruction dispatch projection", () => {
         provider: "openai",
       },
       workstation_name: "Legacy Review",
+    });
+    expect(
+      projected.runtime.inference_attempts_by_dispatch_id?.[
+        "dispatch-legacy-backfill"
+      ]?.["dispatch-legacy-backfill/inference-request/1"],
+    ).toMatchObject({
+      dispatch_id: "dispatch-legacy-backfill",
+      inference_request_id: "dispatch-legacy-backfill/inference-request/1",
+      transition_id: "review",
     });
   });
 });
