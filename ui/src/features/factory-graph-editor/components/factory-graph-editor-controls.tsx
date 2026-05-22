@@ -66,10 +66,12 @@ function EditModeIcon() {
 }
 
 export function FactoryGraphEditorModeToggle({
+  className,
   editorMode,
   locale,
   onClick,
 }: {
+  className?: string;
   editorMode: boolean;
   locale?: string;
   onClick: () => void;
@@ -84,7 +86,7 @@ export function FactoryGraphEditorModeToggle({
       aria-label={label}
       aria-pressed={editorMode}
       className={buttonVariants({
-        className: "shrink-0",
+        className: cn("shrink-0", className),
         size: "icon",
         tone: editorMode ? "secondary" : "outline",
       })}
@@ -98,12 +100,14 @@ export function FactoryGraphEditorModeToggle({
 }
 
 export function FactoryGraphEditorStatus({
+  className,
   editorMode,
   hasChanges,
   isDefinitionLoading,
   locale,
   loadErrorMessage,
 }: {
+  className?: string;
   editorMode: boolean;
   hasChanges: boolean;
   isDefinitionLoading: boolean;
@@ -116,6 +120,7 @@ export function FactoryGraphEditorStatus({
       <p
         className={cn(
           STATUS_PILL_CLASS,
+          className,
           "border-af-overlay/12 bg-af-overlay/6 text-af-ink/76",
         )}
       >
@@ -130,6 +135,7 @@ export function FactoryGraphEditorStatus({
         aria-live="polite"
         className={cn(
           STATUS_PILL_CLASS,
+          className,
           "border-af-accent/24 bg-af-accent/10 text-af-accent",
         )}
       >
@@ -144,6 +150,7 @@ export function FactoryGraphEditorStatus({
         aria-live="polite"
         className={cn(
           STATUS_PILL_CLASS,
+          className,
           "border-af-danger/30 bg-af-danger/8 text-af-danger-ink",
         )}
         role="status"
@@ -158,6 +165,7 @@ export function FactoryGraphEditorStatus({
       aria-live="polite"
       className={cn(
         STATUS_PILL_CLASS,
+        className,
         hasChanges
           ? "border-af-warning/30 bg-af-warning/10 text-af-warning-ink"
           : "border-af-accent/24 bg-af-accent/10 text-af-accent",

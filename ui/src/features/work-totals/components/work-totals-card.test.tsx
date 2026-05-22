@@ -23,9 +23,17 @@ describe("WorkTotalsCard", () => {
     const dispatchedCard = within(workTotals)
       .getByText("Dispatched")
       .closest("article");
+    const cardShell = screen.getByRole("article", { name: "Work totals" });
+    const cardHeader = cardShell.querySelector("header");
+    const moveHandle = within(cardShell).getByRole("button", {
+      name: "Move Work totals",
+    });
 
     expect(screen.getByRole("heading", { name: "Work totals" })).toBeTruthy();
     expect(workTotals.className).toContain("md:grid-cols-4");
+    expect(cardHeader?.className).toContain("min-h-11");
+    expect(cardHeader?.className).toContain("px-3");
+    expect(moveHandle.className).toContain("size-8");
     expect(screen.getByLabelText("In progress: 2")).toBeTruthy();
     expect(screen.getByLabelText("Completed: 3")).toBeTruthy();
     expect(screen.getByLabelText("Failed: 1")).toBeTruthy();

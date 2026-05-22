@@ -47,8 +47,10 @@ export function WorkflowActivityBentoCard({
 
   return (
     <AgentBentoCard
+      chromeDensity="compact"
       headerAction={
         <CurrentActivityGraphHeaderActions
+          compact
           editorMode={editor.editorMode}
           hasChanges={editor.draftState.hasChanges}
           isDefinitionLoading={editor.editableDefinitionQuery.status === "pending"}

@@ -32,7 +32,7 @@ export function WorkTotalsCard({
   const messages = getWorkTotalsMessages(locale);
 
   return (
-    <AgentBentoCard title={messages.cardTitle}>
+    <AgentBentoCard chromeDensity="compact" title={messages.cardTitle}>
       <section
         className="grid grid-cols-2 gap-2 md:grid-cols-4"
         aria-label={messages.regionLabel}
