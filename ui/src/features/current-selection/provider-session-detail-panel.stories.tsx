@@ -64,6 +64,14 @@ export const TimestampPrefixedSessionSuccess = {
                   "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl",
                 sizeBytes: 2048,
               },
+              transcript: [
+                {
+                  order: 1,
+                  text: "Summarize the rollout state for this work item.",
+                  turnIndex: 1,
+                  type: "user_message",
+                },
+              ],
             },
           },
         },

@@ -28,7 +28,11 @@ describe("ProviderSessionDetailPanel", () => {
       <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
     );
 
-    expect(screen.getByText("Loading session details...")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain(
+      "Loading session details...",
+    );
+    expect(screen.getByText("dispatch-review-active")).toBeTruthy();
+    expect(screen.getByText("sess_active")).toBeTruthy();
   });
 
   it("renders zh-CN provider-session loading and missing states", async () => {
@@ -55,14 +59,12 @@ describe("ProviderSessionDetailPanel", () => {
       />,
     );
 
-    expect(screen.getByText("正在加载会话详情...")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("正在加载会话详情...");
 
     await waitFor(() => {
-      expect(
-        screen.getByText(
-          "无法在已配置的 Codex sessions 目录下找到所选 provider-session 文件。",
-        ),
-      ).toBeTruthy();
+      expect(screen.getByRole("status").textContent).toContain(
+        "无法在已配置的 Codex sessions 目录下找到所选 provider-session 文件。",
+      );
     });
   });
 
@@ -88,11 +90,9 @@ describe("ProviderSessionDetailPanel", () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByText(
-          "The selected provider-session file could not be found under the configured Codex sessions directory.",
-        ),
-      ).toBeTruthy();
+      expect(screen.getByRole("status").textContent).toContain(
+        "The selected provider-session file could not be found under the configured Codex sessions directory.",
+      );
     });
   });
 
@@ -120,11 +120,9 @@ describe("ProviderSessionDetailPanel", () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByText(
-          "The selected session file did not contain any Codex event records.",
-        ),
-      ).toBeTruthy();
+      expect(screen.getByRole("status").textContent).toContain(
+        "The selected session file did not contain any Codex event records.",
+      );
     });
     expect(screen.getByText("2026/05/18/rollout-sess_active.jsonl")).toBeTruthy();
   });
@@ -158,15 +156,66 @@ describe("ProviderSessionDetailPanel", () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByText(
-          "The selected session file could not be parsed into Codex events. Review the malformed-line diagnostics below.",
-        ),
-      ).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toContain(
+        "The selected session file could not be parsed into Codex events. Review the malformed-line diagnostics below.",
+      );
     });
     expect(
       screen.getByText("invalid character '}' after object key:value pair"),
     ).toBeTruthy();
+  });
+
+  it("shows an empty-transcript state when parsing succeeds without transcript entries", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 2,
+            functionCalls: [],
+            lineCount: 2,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [],
+            turns: [
+              {
+                eventCount: 2,
+                functionCallCount: 0,
+                index: 1,
+                reasoningCount: 0,
+                responseItemCount: 0,
+                startedAt: "2026-05-18T14:10:00Z",
+              },
+            ],
+            unknownEventCount: 2,
+            unknownEvents: [
+              {
+                lineNumber: 1,
+                payloadType: "mystery_payload",
+                type: "mystery_event",
+              },
+              {
+                lineNumber: 2,
+                payloadType: "mystery_payload",
+                type: "mystery_event",
+              },
+            ],
+          },
+          transcript: [],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("status").textContent).toContain(
+        "The selected session was parsed, but it did not contain any transcript-visible entries.",
+      );
+    });
+    expect(screen.getByRole("heading", { name: "Parse diagnostics" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Token usage" })).toBeTruthy();
   });
 
   it("renders parsed source metadata, turns, function calls, reasoning, token usage, and diagnostics", async () => {
@@ -347,6 +396,7 @@ function buildProviderSessionDetailResponse(
   },
 ): ProviderSessionDetailResponse {
   return {
+    ...overrides,
     parse: {
       eventCount: 1,
       functionCalls: [],
@@ -370,6 +420,14 @@ function buildProviderSessionDetailResponse(
       sizeBytes: 2048,
       ...overrides.source,
     },
+    transcript: overrides.transcript ?? [
+      {
+        order: 1,
+        text: "Summarize the failing provider session.",
+        turnIndex: 1,
+        type: "user_message",
+      },
+    ],
   };
 }
 

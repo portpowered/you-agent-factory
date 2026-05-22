@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
@@ -50,90 +51,91 @@ function LoadedProviderSessionDetailPanel({
     selectedProviderSession.kind,
     selectedProviderSession.id,
   ].join(" / ");
+  const detail =
+    detailState.status === "empty" ||
+    detailState.status === "empty-transcript" ||
+    detailState.status === "parse-error" ||
+    detailState.status === "success"
+      ? detailState.sessionDetail
+      : null;
 
   return (
     <section
       aria-label={messages.selectedSessionHeading}
       className="mt-4 grid gap-3 border-t border-af-overlay/8 pt-4"
     >
-      <div className="grid gap-1">
+      <div className="grid gap-3">
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
           {messages.selectedSessionHeading}
         </h4>
-        <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-          <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-            {messages.sessionLabel}
-          </span>{" "}
-          <code className={DASHBOARD_BODY_CODE_CLASS}>{sessionLabel}</code>
-        </p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <DetailMetric label={messages.sessionLabel} value={sessionLabel} code />
+          <DetailMetric
+            label={messages.sessionStatusLabel}
+            value={getSessionStatusText(detailState.status, messages)}
+          />
+          <DetailMetric
+            label={messages.providerLabel}
+            value={selectedProviderSession.provider}
+            code
+          />
+          <DetailMetric
+            label={messages.kindLabel}
+            value={selectedProviderSession.kind}
+            code
+          />
+          <DetailMetric
+            label={messages.sessionIdLabel}
+            value={selectedProviderSession.id}
+            code
+          />
+          <DetailMetric
+            label={messages.dispatchLabel}
+            value={selectedProviderSession.dispatchID}
+            code
+          />
+        </div>
       </div>
       {detailState.status === "loading" ? (
-        <p className={DETAIL_COPY_CLASS}>{messages.loadingState}</p>
+        <StatusNotice>{messages.loadingState}</StatusNotice>
       ) : null}
       {detailState.status === "not-found" ? (
-        <p className={DETAIL_COPY_CLASS}>{messages.missingState}</p>
+        <StatusNotice>{messages.missingState}</StatusNotice>
       ) : null}
       {detailState.status === "error" ? (
-        <p className={DETAIL_COPY_CLASS}>
+        <StatusNotice tone="error">
           {messages.errorPrefix} {detailState.message ?? messages.unavailableState}
-        </p>
+        </StatusNotice>
       ) : null}
-      {detailState.status === "empty" ? (
+      {detail ? (
         <>
-          <SourceFileSection
-            detail={detailState.sessionDetail}
-            locale={locale}
-            session={selectedProviderSession}
-          />
-          <p className={DETAIL_COPY_CLASS}>{messages.emptyState}</p>
-        </>
-      ) : null}
-      {detailState.status === "parse-error" ? (
-        <>
-          <SourceFileSection
-            detail={detailState.sessionDetail}
-            locale={locale}
-            session={selectedProviderSession}
-          />
-          <ParseOverview
-            detail={detailState.sessionDetail}
-            locale={locale}
-          />
-          <p className={DETAIL_COPY_CLASS}>{messages.parseErrorState}</p>
-          <ParseDiagnosticsSection
-            detail={detailState.sessionDetail}
-            locale={locale}
-          />
-        </>
-      ) : null}
-      {detailState.status === "success" ? (
-        <>
-          <SourceFileSection
-            detail={detailState.sessionDetail}
-            locale={locale}
-            session={selectedProviderSession}
-          />
-          <ParseOverview
-            detail={detailState.sessionDetail}
-            locale={locale}
-          />
-          <TokenUsageSection
-            detail={detailState.sessionDetail}
-            locale={locale}
-          />
-          <TurnsSection detail={detailState.sessionDetail} locale={locale} />
-          <FunctionCallsSection
-            detail={detailState.sessionDetail}
-            locale={locale}
-          />
-          <ReasoningSection
-            detail={detailState.sessionDetail}
-            locale={locale}
-          />
-          <ParseDiagnosticsSection
-            detail={detailState.sessionDetail}
-            locale={locale}
-          />
+          <SourceFileSection detail={detail} locale={locale} />
+          {detailState.status !== "empty" ? (
+            <>
+              <ParseOverview detail={detail} locale={locale} />
+              <TokenUsageSection detail={detail} locale={locale} />
+            </>
+          ) : null}
+          {detailState.status === "empty" ? (
+            <StatusNotice>{messages.emptyState}</StatusNotice>
+          ) : null}
+          {detailState.status === "empty-transcript" ? (
+            <StatusNotice>{messages.emptyTranscriptState}</StatusNotice>
+          ) : null}
+          {detailState.status === "parse-error" ? (
+            <>
+              <StatusNotice tone="error">{messages.parseErrorState}</StatusNotice>
+              <ParseDiagnosticsSection detail={detail} locale={locale} />
+            </>
+          ) : null}
+          {detailState.status === "success" ? (
+            <>
+              <TurnsSection detail={detail} locale={locale} />
+              <FunctionCallsSection detail={detail} locale={locale} />
+              <ReasoningSection detail={detail} locale={locale} />
+              <ParseDiagnosticsSection detail={detail} locale={locale} />
+            </>
+          ) : null}
         </>
       ) : null}
     </section>
@@ -143,11 +145,9 @@ function LoadedProviderSessionDetailPanel({
 function SourceFileSection({
   detail,
   locale,
-  session,
 }: {
   detail: SessionDetail;
   locale?: string;
-  session: LoadableProviderSessionRef;
 }) {
   const messages = getProviderSessionDetailMessages(locale);
 
@@ -159,7 +159,6 @@ function SourceFileSection({
           label={messages.relativePathLabel}
           value={detail.source.relativePath}
         />
-        <DetailMetric label={messages.dispatchLabel} value={session.dispatchID} />
         <DetailMetric
           label={messages.sizeBytesLabel}
           value={`${detail.source.sizeBytes.toLocaleString()} ${messages.bytesLabel}`}
@@ -171,6 +170,53 @@ function SourceFileSection({
       </div>
     </section>
   );
+}
+
+function StatusNotice({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: "default" | "error";
+}) {
+  return (
+    <p
+      className={cn(
+        "m-0 rounded-lg border px-3 py-2.5",
+        tone === "error"
+          ? "border-af-danger/25 bg-af-danger/8 text-af-danger-ink"
+          : "border-af-overlay/10 bg-af-overlay/4 text-af-ink/82",
+        DASHBOARD_BODY_TEXT_CLASS,
+      )}
+      role={tone === "error" ? "alert" : "status"}
+    >
+      {children}
+    </p>
+  );
+}
+
+function getSessionStatusText(
+  status: ReturnType<typeof useProviderSessionDetail>["status"],
+  messages: ReturnType<typeof getProviderSessionDetailMessages>,
+) {
+  switch (status) {
+    case "idle":
+      return messages.unavailableState;
+    case "loading":
+      return messages.loadingState;
+    case "not-found":
+      return messages.missingState;
+    case "error":
+      return messages.unavailableState;
+    case "empty":
+      return messages.emptyState;
+    case "empty-transcript":
+      return messages.emptyTranscriptState;
+    case "parse-error":
+      return messages.parseErrorState;
+    case "success":
+      return messages.readyState;
+  }
 }
 
 function ParseOverview({
@@ -496,9 +542,11 @@ function ParseDiagnosticsSection({
 }
 
 function DetailMetric({
+  code = false,
   label,
   value,
 }: {
+  code?: boolean;
   label: string;
   value: number | string;
 }) {
@@ -506,7 +554,7 @@ function DetailMetric({
     <div className={PROVIDER_SESSION_CARD_CLASS}>
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       <p className={cn("m-0 mt-1", DASHBOARD_BODY_TEXT_CLASS)}>
-        {value}
+        {code ? <code className={DASHBOARD_BODY_CODE_CLASS}>{value}</code> : value}
       </p>
     </div>
   );

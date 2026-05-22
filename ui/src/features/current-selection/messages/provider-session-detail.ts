@@ -13,6 +13,8 @@ const providerSessionDetailMessagesByLocale = {
     dispatchLabel: "Dispatch",
     emptyState:
       "The selected session file did not contain any Codex event records.",
+    emptyTranscriptState:
+      "The selected session was parsed, but it did not contain any transcript-visible entries.",
     encryptedReasoningOnly: "Encrypted reasoning content only.",
     errorPrefix: "Session details could not be loaded.",
     eventCountLabel: "Parsed events",
@@ -25,9 +27,11 @@ const providerSessionDetailMessagesByLocale = {
     lineCountLabel: "Lines",
     loadingState: "Loading session details...",
     malformedLineCountLabel: "Malformed lines",
+    kindLabel: "Kind",
     missingState:
       "The selected provider-session file could not be found under the configured Codex sessions directory.",
     modifiedAtLabel: "Modified at",
+    providerLabel: "Provider",
     noTimestamp: "No timestamp",
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `Order ${order} / Turn ${turnIndex}` : `Order ${order}`,
@@ -36,13 +40,16 @@ const providerSessionDetailMessagesByLocale = {
     parseErrorsHeading: "Malformed records",
     parseErrorState:
       "The selected session file could not be parsed into Codex events. Review the malformed-line diagnostics below.",
+    readyState: "Ready",
     reasoningCountLabel: "Reasoning",
     reasoningHeading: "Reasoning",
     reasoningUnavailable: "No reasoning entries were recorded.",
     relativePathLabel: "Relative path",
     responseItemsLabel: "Response items",
     selectedSessionHeading: "Selected session details",
+    sessionIdLabel: "Session ID",
     sessionLabel: "Provider session",
+    sessionStatusLabel: "Status",
     sizeBytesLabel: "File size",
     sourceHeading: "Source file",
     tokenUsageHeading: "Token usage",
@@ -66,6 +73,8 @@ const providerSessionDetailMessagesByLocale = {
     dispatchLabel: "ディスパッチ",
     emptyState:
       "選択したセッションファイルには Codex のイベント記録が含まれていませんでした。",
+    emptyTranscriptState:
+      "選択したセッションは解析されましたが、文字起こしとして表示できるエントリは含まれていませんでした。",
     encryptedReasoningOnly: "暗号化された推論内容のみです。",
     errorPrefix: "セッション詳細を読み込めませんでした。",
     eventCountLabel: "解析済みイベント数",
@@ -79,9 +88,11 @@ const providerSessionDetailMessagesByLocale = {
     lineCountLabel: "行数",
     loadingState: "セッション詳細を読み込み中...",
     malformedLineCountLabel: "不正な行数",
+    kindLabel: "Kind",
     missingState:
       "選択した provider-session ファイルは、設定済み Codex sessions ディレクトリ配下に見つかりませんでした。",
     modifiedAtLabel: "更新日時",
+    providerLabel: "Provider",
     noTimestamp: "タイムスタンプなし",
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `順序 ${order} / ターン ${turnIndex}` : `順序 ${order}`,
@@ -90,13 +101,16 @@ const providerSessionDetailMessagesByLocale = {
     parseErrorsHeading: "不正なレコード",
     parseErrorState:
       "選択したセッションファイルを Codex イベントとして解析できませんでした。以下の不正な行の診断を確認してください。",
+    readyState: "準備完了",
     reasoningCountLabel: "推論",
     reasoningHeading: "推論",
     reasoningUnavailable: "推論エントリは記録されていません。",
     relativePathLabel: "相対パス",
     responseItemsLabel: "応答項目",
     selectedSessionHeading: "選択中セッションの詳細",
+    sessionIdLabel: "Session ID",
     sessionLabel: "Provider session",
+    sessionStatusLabel: "状態",
     sizeBytesLabel: "ファイルサイズ",
     sourceHeading: "ソースファイル",
     tokenUsageHeading: "トークン使用量",
@@ -122,6 +136,8 @@ const providerSessionDetailMessagesByLocale = {
     dispatchLabel: "디스패치",
     emptyState:
       "선택한 세션 파일에 Codex 이벤트 레코드가 포함되어 있지 않습니다.",
+    emptyTranscriptState:
+      "선택한 세션은 파싱되었지만, 대화 기록으로 표시할 수 있는 항목이 없습니다.",
     encryptedReasoningOnly: "암호화된 추론 내용만 있습니다.",
     errorPrefix: "세션 세부 정보를 불러올 수 없습니다.",
     eventCountLabel: "파싱된 이벤트",
@@ -135,9 +151,11 @@ const providerSessionDetailMessagesByLocale = {
     lineCountLabel: "줄 수",
     loadingState: "세션 세부 정보를 불러오는 중...",
     malformedLineCountLabel: "잘못된 줄 수",
+    kindLabel: "Kind",
     missingState:
       "선택한 provider-session 파일을 구성된 Codex sessions 디렉터리 아래에서 찾을 수 없습니다.",
     modifiedAtLabel: "수정 시각",
+    providerLabel: "Provider",
     noTimestamp: "타임스탬프 없음",
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `순서 ${order} / 턴 ${turnIndex}` : `순서 ${order}`,
@@ -146,13 +164,16 @@ const providerSessionDetailMessagesByLocale = {
     parseErrorsHeading: "잘못된 레코드",
     parseErrorState:
       "선택한 세션 파일을 Codex 이벤트로 파싱할 수 없습니다. 아래의 잘못된 줄 진단을 확인하세요.",
+    readyState: "준비됨",
     reasoningCountLabel: "추론",
     reasoningHeading: "추론",
     reasoningUnavailable: "추론 항목이 기록되지 않았습니다.",
     relativePathLabel: "상대 경로",
     responseItemsLabel: "응답 항목",
     selectedSessionHeading: "선택한 세션 세부 정보",
+    sessionIdLabel: "Session ID",
     sessionLabel: "Provider session",
+    sessionStatusLabel: "상태",
     sizeBytesLabel: "파일 크기",
     sourceHeading: "소스 파일",
     tokenUsageHeading: "토큰 사용량",
@@ -176,6 +197,7 @@ const providerSessionDetailMessagesByLocale = {
     cachedInputLabel: "缓存输入",
     dispatchLabel: "分派",
     emptyState: "所选会话文件不包含任何 Codex 事件记录。",
+    emptyTranscriptState: "所选会话已成功解析，但不包含可显示为会话记录的条目。",
     encryptedReasoningOnly: "仅包含加密的推理内容。",
     errorPrefix: "无法加载会话详情。",
     eventCountLabel: "已解析事件数",
@@ -188,9 +210,11 @@ const providerSessionDetailMessagesByLocale = {
     lineCountLabel: "行数",
     loadingState: "正在加载会话详情...",
     malformedLineCountLabel: "损坏行数",
+    kindLabel: "Kind",
     missingState:
       "无法在已配置的 Codex sessions 目录下找到所选 provider-session 文件。",
     modifiedAtLabel: "修改时间",
+    providerLabel: "Provider",
     noTimestamp: "无时间戳",
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `顺序 ${order} / 轮次 ${turnIndex}` : `顺序 ${order}`,
@@ -199,13 +223,16 @@ const providerSessionDetailMessagesByLocale = {
     parseErrorsHeading: "损坏记录",
     parseErrorState:
       "无法将所选会话文件解析为 Codex 事件。请检查下面的损坏行诊断。",
+    readyState: "就绪",
     reasoningCountLabel: "推理数",
     reasoningHeading: "推理",
     reasoningUnavailable: "没有记录任何推理条目。",
     relativePathLabel: "相对路径",
     responseItemsLabel: "响应项数",
     selectedSessionHeading: "已选会话详情",
+    sessionIdLabel: "会话 ID",
     sessionLabel: "Provider session",
+    sessionStatusLabel: "状态",
     sizeBytesLabel: "文件大小",
     sourceHeading: "源文件",
     tokenUsageHeading: "Token 用量",
