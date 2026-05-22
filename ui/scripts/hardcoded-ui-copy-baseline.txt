@@ -4,6 +4,7 @@ src/api/current-factory-definition/api.ts|313|14|string-literal|INVALID_FACTORY_
 src/api/current-factory-definition/api.ts|315|14|string-literal|INTERNAL_ERROR
 src/api/named-factory/api.ts|179|14|string-literal|INTERNAL_ERROR
 src/api/provider-session-details/api.ts|155|14|string-literal|INTERNAL_ERROR
+src/api/work/api.ts|88|14|string-literal|INTERNAL_ERROR
 src/components/ui/data-table.tsx|37|18|string-literal|No rows available.
 src/components/ui/dialog.tsx|29|16|string-literal|Close dialog
 src/components/ui/formatters.ts|48|12|string-literal|h m

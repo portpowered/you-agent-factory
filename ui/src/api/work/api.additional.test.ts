@@ -149,7 +149,7 @@ describe("submitWork error handling", () => {
         headers: {
           get: vi.fn().mockReturnValue(null),
         },
-        json: vi.fn(),
+        text: vi.fn().mockResolvedValue(""),
         status: 502,
         statusText: "Bad Gateway",
       } as unknown as Response),
