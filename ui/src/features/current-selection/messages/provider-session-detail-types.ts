@@ -1,8 +1,10 @@
 export interface ProviderSessionDetailMessages {
+  assistantMessageLabel: string;
   argumentsLabel: string;
   bytesLabel: string;
   callIdLabel: string;
   cachedInputLabel: string;
+  collapseAction: string;
   dispatchLabel: string;
   emptyState: string;
   emptyTranscriptState: string;
@@ -10,6 +12,7 @@ export interface ProviderSessionDetailMessages {
   errorPrefix: string;
   eventCountLabel: string;
   eventsLabel: string;
+  expandAction: string;
   functionCallCountLabel: string;
   functionCallsHeading: string;
   functionCallsUnavailable: string;
@@ -40,9 +43,21 @@ export interface ProviderSessionDetailMessages {
   sessionStatusLabel: string;
   sizeBytesLabel: string;
   sourceHeading: string;
+  systemEventLabel: string;
   tokenUsageHeading: string;
   tokenUsageUnavailable: string;
   totalLabel: string;
+  transcriptHeading: string;
+  transcriptLineNumberLabel: (params: { lineNumber: number }) => string;
+  transcriptMetadataSeparator: string;
+  transcriptTimestampLabel: (params: { timestamp: string }) => string;
+  transcriptToggleLabel: (params: {
+    expanded: boolean;
+    section: string;
+  }) => string;
+  transcriptTurnLabel: (params: { turnIndex: number }) => string;
+  toolCallLabel: string;
+  toolOutputLabel: string;
   turnLabel: (params: { index: number }) => string;
   unavailableValue: string;
   turnsHeading: string;
@@ -51,4 +66,6 @@ export interface ProviderSessionDetailMessages {
   unknownEventCountLabel: string;
   unknownEventOnLineLabel: (params: { lineNumber: number }) => string;
   unavailableState: string;
+  userMessageLabel: string;
+  reasoningTranscriptLabel: string;
 }

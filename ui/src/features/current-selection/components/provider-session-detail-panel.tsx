@@ -10,6 +10,7 @@ import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import { cn } from "../../../lib/cn";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
+import { TranscriptSection } from "./provider-session-transcript";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 import type { LoadableProviderSessionRef } from "../provider-session-details";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
@@ -130,6 +131,7 @@ function LoadedProviderSessionDetailPanel({
           ) : null}
           {detailState.status === "success" ? (
             <>
+              <TranscriptSection detail={detail} locale={locale} />
               <TurnsSection detail={detail} locale={locale} />
               <FunctionCallsSection detail={detail} locale={locale} />
               <ReasoningSection detail={detail} locale={locale} />
