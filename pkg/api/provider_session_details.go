@@ -609,7 +609,7 @@ func firstReasoningText(payload map[string]any) string {
 }
 
 func firstMessageText(payload map[string]any) string {
-	if value := firstCompactField(payload, "text", "message", "content_text", "content"); value != "" {
+	if value := firstCompactField(payload, "text", "message", "content_text"); value != "" {
 		return value
 	}
 	if items, ok := payload["content"].([]any); ok {
@@ -627,6 +627,9 @@ func firstMessageText(payload map[string]any) string {
 		if len(parts) > 0 {
 			return truncateSessionText(strings.Join(parts, "\n\n"))
 		}
+	}
+	if value := firstCompactField(payload, "content"); value != "" {
+		return value
 	}
 	return ""
 }
