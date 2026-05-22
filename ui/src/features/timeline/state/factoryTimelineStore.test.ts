@@ -2485,6 +2485,52 @@ describe("factory timeline reconstruction request state", () => {
     });
   });
 
+  it("ignores inference payload dispatch IDs without canonical dispatch context", () => {
+    const payloadOnlyInferenceRequest = event(
+      "event-payload-only-inference-request",
+      4,
+      FACTORY_EVENT_TYPES.inferenceRequest,
+      {
+        attempt: 1,
+        dispatchId: "dispatch-1",
+        inferenceRequestId: "dispatch-1/inference-request/payload-only",
+        prompt: "This payload alias should not attach.",
+        transitionId: "review",
+      },
+    );
+    const payloadOnlyInferenceResponse = event(
+      "event-payload-only-inference-response",
+      5,
+      FACTORY_EVENT_TYPES.inferenceResponse,
+      {
+        attempt: 1,
+        dispatchId: "dispatch-1",
+        durationMillis: 10,
+        inferenceRequestId: "dispatch-1/inference-request/payload-only",
+        outcome: "SUCCEEDED",
+        response: "Payload alias ignored.",
+        transitionId: "review",
+      },
+    );
+
+    const projected = buildFactoryTimelineSnapshot(
+      [
+        initialStructureRequest,
+        workInput,
+        request,
+        payloadOnlyInferenceRequest,
+        payloadOnlyInferenceResponse,
+      ],
+      5,
+    );
+
+    expect(
+      projected.runtime.inference_attempts_by_dispatch_id?.["dispatch-1"]?.[
+        "dispatch-1/inference-request/payload-only"
+      ],
+    ).toBeUndefined();
+  });
+
   it("reduces script request and response events into script-aware workstation state", () => {
     const events = [
       initialStructureRequest,
@@ -3383,6 +3429,7 @@ describe("factory timeline reconstruction dispatch projection", () => {
     );
     legacyInferenceResponse.context.traceIds = ["trace-legacy-backfill"];
     legacyInferenceResponse.context.workIds = ["work-legacy-backfill"];
+    legacyInferenceResponse.context.dispatchId = "dispatch-legacy-backfill";
     legacyInferenceResponse.context.eventTime = "2026-04-16T12:00:05Z";
 
     const projected = buildFactoryTimelineSnapshot(

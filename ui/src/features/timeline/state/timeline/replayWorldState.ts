@@ -36,7 +36,6 @@ import {
   applyScriptRequest,
   applyScriptResponse,
   inferenceAttemptsForDispatch,
-  legacyInferencePayloadDispatchID,
   legacyInferencePayloadTransitionID,
   resolveDispatchTransitionID,
   syncCompletedDispatchAttempt,
@@ -295,8 +294,7 @@ function applyInferenceRequest(
   event: InferenceRequestEvent,
 ): void {
   const { payload } = event;
-  const dispatchID =
-    event.context.dispatchId ?? legacyInferencePayloadDispatchID(payload);
+  const dispatchID = event.context.dispatchId;
   if (!dispatchID || !payload.inferenceRequestId) {
     return;
   }
@@ -327,8 +325,7 @@ function applyInferenceResponse(
   event: InferenceResponseEvent,
 ): void {
   const { payload } = event;
-  const dispatchID =
-    event.context.dispatchId ?? legacyInferencePayloadDispatchID(payload);
+  const dispatchID = event.context.dispatchId;
   if (!dispatchID || !payload.inferenceRequestId) {
     return;
   }

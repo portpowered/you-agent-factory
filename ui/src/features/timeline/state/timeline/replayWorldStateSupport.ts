@@ -1,7 +1,4 @@
-import type {
-  DashboardInferenceAttempt,
-} from "../../../../api/dashboard";
-import type { InferenceRequestPayload, InferenceResponsePayload } from "../../../../api/events";
+import type { DashboardInferenceAttempt } from "../../../../api/dashboard";
 import {
   completionToProviderSession,
   completionToTraceDispatch,
@@ -86,15 +83,8 @@ export function syncCompletedDispatchAttempt(
   }
 }
 
-export function legacyInferencePayloadDispatchID(
-  payload: InferenceRequestPayload | InferenceResponsePayload,
-): string | undefined {
-  const dispatchID = (payload as { dispatchId?: unknown }).dispatchId;
-  return typeof dispatchID === "string" && dispatchID.length > 0 ? dispatchID : undefined;
-}
-
 export function legacyInferencePayloadTransitionID(
-  payload: InferenceRequestPayload | InferenceResponsePayload,
+  payload: unknown,
 ): string | undefined {
   const transitionID = (payload as { transitionId?: unknown }).transitionId;
   return typeof transitionID === "string" && transitionID.length > 0
