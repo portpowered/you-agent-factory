@@ -4,6 +4,12 @@ import type {
   FactoryGraphDraft,
   FactoryWorkState,
 } from "./factory-graph-draft-types";
+import {
+  DEFAULT_WORKSTATION_BEHAVIOR,
+  resolveEditableWorkstationBehaviorOptions,
+  workerSupportsPollerBehavior,
+  type EditableWorkstationBehavior,
+} from "../current-factory-definition/workstation-behavior";
 
 export type FactoryGraphAddEntityKind =
   | "resource"
@@ -35,6 +41,7 @@ export type FactoryGraphAddEntityDraft =
       workTypeName: string;
     }
   | {
+      behavior: EditableWorkstationBehavior;
       body: string;
       kind: "workstation";
       name: string;
@@ -48,6 +55,7 @@ export type FactoryGraphAddEntityFieldErrors = Partial<
     | "model"
     | "name"
     | "stateType"
+    | "behavior"
     | "workTypeName"
     | "workerName",
     string
@@ -132,6 +140,7 @@ export function createFactoryGraphAddEntityDraft(
   }
 
   return {
+    behavior: DEFAULT_WORKSTATION_BEHAVIOR,
     body: "",
     kind,
     name: "",
@@ -195,6 +204,16 @@ export function validateFactoryGraphAddEntityDraft(
         "Choose an assigned worker before adding this workstation.";
     } else if (!workerExists(draft.workerName, factoryDefinition)) {
       errors.workerName = `Worker "${draft.workerName}" is not available in the current draft.`;
+    } else if (
+      draft.behavior === "POLLER" &&
+      !workerSupportsPollerBehavior(
+        (factoryDefinition?.workers ?? []).find(
+          (worker) => worker.name === draft.workerName,
+        ),
+      )
+    ) {
+      errors.behavior =
+        "Poller workstations must use a script or hosted worker.";
     }
   }
 
@@ -249,6 +268,9 @@ export function applyFactoryGraphAddEntityDraft(
   }
 
   nextDraft.additions.workstations.push({
+    ...(entityDraft.behavior === DEFAULT_WORKSTATION_BEHAVIOR
+      ? {}
+      : { behavior: entityDraft.behavior }),
     body: entityDraft.body.trim() || undefined,
     inputs: [],
     name: entityDraft.name.trim(),
@@ -310,4 +332,8 @@ function workerExists(
   return (factoryDefinition?.workers ?? []).some(
     (worker) => worker.name === workerName,
   );
+}
+
+export function editableWorkstationBehaviorOptions() {
+  return resolveEditableWorkstationBehaviorOptions(DEFAULT_WORKSTATION_BEHAVIOR);
 }

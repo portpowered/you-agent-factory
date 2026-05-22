@@ -5,6 +5,7 @@ import type {
   FactoryGraphAddEntityDraft,
   FactoryGraphAddEntityFieldErrors,
 } from "../factory-graph-editor-additions";
+import { editableWorkstationBehaviorOptions } from "../factory-graph-editor-additions";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 const FIELD_GROUP_CLASS = "grid gap-2";
@@ -212,6 +213,22 @@ function renderEntitySpecificFields({
 
   return (
     <>
+      <FactoryGraphEditorSelectField
+        error={errors.behavior}
+        inputId="factory-graph-add-workstation-kind"
+        label={messages.addDialogKindLabel}
+        onChange={(value) => {
+          onChange({
+            ...draft,
+            behavior: value as typeof draft.behavior,
+          });
+        }}
+        options={editableWorkstationBehaviorOptions().map((behavior) => ({
+          label: behavior,
+          value: behavior,
+        }))}
+        value={draft.behavior}
+      />
       <FactoryGraphEditorSelectField
         error={errors.workerName}
         inputId="factory-graph-add-worker-name"

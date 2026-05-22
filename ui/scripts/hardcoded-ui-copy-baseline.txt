@@ -76,20 +76,20 @@ src/features/factory-graph-editor/factory-graph-draft-validation.ts|132|14|strin
 src/features/factory-graph-editor/factory-graph-draft-validation.ts|161|16|string-literal|Relationship " " cannot connect to .
 src/features/factory-graph-editor/factory-graph-draft-validation.ts|264|14|string-literal|Workstation " " must keep one worker assignment.
 src/features/factory-graph-editor/factory-graph-draft-validation.ts|281|14|string-literal|Relationship " " references an unknown node.
-src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|202|22|string-literal|INITIAL
-src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|203|22|string-literal|PROCESSING
-src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|204|22|string-literal|TERMINAL
-src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|205|22|string-literal|FAILED
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|68|20|string-literal|Create a pending workstation and assign an existing worker.
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|71|14|string-literal|Workstation
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|74|20|string-literal|Add a model worker that can be assigned to workstations.
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|76|14|string-literal|Worker
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|79|20|string-literal|Define a new work type with its first ordered state.
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|81|14|string-literal|Work type
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|84|20|string-literal|Append a state to an existing work type.
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|87|14|string-literal|Work state
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|90|20|string-literal|Register a resource that workers or workstations can consume.
-src/features/factory-graph-editor/factory-graph-editor-additions.ts|92|14|string-literal|Resource
+src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|203|22|string-literal|INITIAL
+src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|204|22|string-literal|PROCESSING
+src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|205|22|string-literal|TERMINAL
+src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.tsx|206|22|string-literal|FAILED
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|76|20|string-literal|Create a pending workstation and assign an existing worker.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|79|14|string-literal|Workstation
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|82|20|string-literal|Add a model worker that can be assigned to workstations.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|84|14|string-literal|Worker
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|87|20|string-literal|Define a new work type with its first ordered state.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|89|14|string-literal|Work type
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|92|20|string-literal|Append a state to an existing work type.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|95|14|string-literal|Work state
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|98|20|string-literal|Register a resource that workers or workstations can consume.
+src/features/factory-graph-editor/factory-graph-editor-additions.ts|100|14|string-literal|Resource
 src/features/factory-graph-editor/factory-graph-editor-connections.ts|31|20|string-literal|Provide this resource to a worker.
 src/features/factory-graph-editor/factory-graph-editor-connections.ts|34|14|string-literal|Worker
 src/features/factory-graph-editor/factory-graph-editor-connections.ts|39|20|string-literal|Provide this resource to a workstation.

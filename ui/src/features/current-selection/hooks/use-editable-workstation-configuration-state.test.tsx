@@ -73,6 +73,7 @@ describe("useEditableWorkstationConfigurationState", () => {
 
     expect(result.current).toMatchObject({
       draft: {
+        behavior: "STANDARD",
         prompt: "",
         runnerName: "gemini",
         workerName: "",
@@ -181,9 +182,10 @@ describe("useEditableWorkstationConfigurationState", () => {
 
     await waitFor(() => {
       expect(result.current).toMatchObject({
-        draft: {
-          prompt: "Server refreshed prompt before local edits.",
-          workerName: "reviewer",
+      draft: {
+        behavior: "STANDARD",
+        prompt: "Server refreshed prompt before local edits.",
+        workerName: "reviewer",
         },
         isDirty: false,
         status: "ready",
@@ -229,6 +231,7 @@ describe("useEditableWorkstationConfigurationState", () => {
 
     expect(result.current).toMatchObject({
       draft: {
+        behavior: "STANDARD",
         prompt: "Keep this local review draft.",
         workerName: "planner",
       },
@@ -243,11 +246,13 @@ describe("useEditableWorkstationConfigurationState", () => {
 
     await waitFor(() => {
       expect(result.current).toMatchObject({
-        draft: {
-          prompt: "Plan the implementation.",
-          workerName: "planner",
+      draft: {
+        behavior: "STANDARD",
+        prompt: "Plan the implementation.",
+        workerName: "planner",
         },
         initialValues: {
+          behavior: "STANDARD",
           prompt: "Plan the implementation.",
           workerName: "planner",
           workstationName: "Plan",
@@ -264,7 +269,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           workerName: "missing-worker",
-          workerOptions: ["reviewer"],
+          workerOptions: [{ name: "reviewer", type: "MODEL_WORKER" }],
         }),
       ),
     );
@@ -417,16 +422,27 @@ describe("useEditableWorkstationConfigurationState", () => {
 
   it("formats loading and error prompt validation states into observable prompt errors", () => {
     const selectedEditableValues = {
+      behavior: "STANDARD",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
+      effectiveRunnerName: "codex",
+      factoryRunnerName: null,
       prompt: "Review the story.",
+      runnerName: null,
+      runnerOptions: ["codex"],
       workerName: "reviewer",
       workerOptions: ["reviewer"],
+      workerTypeByName: {
+        reviewer: "MODEL_WORKER",
+      },
       workstationName: "Review",
     };
 
     expect(
       validateEditableWorkstationDraft(
         {
+          behavior: "STANDARD",
           prompt: "Review the story.",
+          runnerName: null,
           workerName: "reviewer",
         },
         selectedEditableValues,
@@ -439,7 +455,9 @@ describe("useEditableWorkstationConfigurationState", () => {
     expect(
       validateEditableWorkstationDraft(
         {
+          behavior: "STANDARD",
           prompt: "Review the story.",
+          runnerName: null,
           workerName: "reviewer",
         },
         selectedEditableValues,
@@ -451,6 +469,35 @@ describe("useEditableWorkstationConfigurationState", () => {
     ).toEqual({
       prompt:
         "Prompt validation unavailable. Prompt validation API unavailable.",
+    });
+  });
+
+  it("blocks poller behavior when the selected worker is not poller-capable", async () => {
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onBehaviorChange("POLLER");
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        behavior: "POLLER",
+      },
+      hasValidationErrors: true,
+      status: "ready",
+      validationErrors: {
+        behavior:
+          "Poller workstations must use a script or hosted worker before saving this workstation.",
+      },
     });
   });
 });
@@ -469,21 +516,32 @@ function buildEditableDefinitionResult(
 }
 
 function buildEditableFactoryDefinition(overrides?: {
+  behavior?: "STANDARD" | "REPEATER" | "POLLER" | "CRON";
   prompt?: string;
   runnerName?: "codex" | "gemini" | "kiro" | "cursor-cli" | "opencode" | null;
   workerName?: string;
-  workerOptions?: string[];
+  workerOptions?: Array<{
+    name: string;
+    type: "HOSTED_WORKER" | "MODEL_WORKER" | "SCRIPT_WORKER";
+  }>;
 }): CanonicalFactoryDefinition {
   return {
     name: "Current Factory",
     runner: "codex",
-    workers: (overrides?.workerOptions ?? ["reviewer"]).map((name, index) => ({
-      model: `gpt-5.${index + 5}`,
-      name,
-      type: "MODEL_WORKER",
+    workers: (overrides?.workerOptions ?? [
+      { name: "reviewer", type: "MODEL_WORKER" as const },
+    ]).map((worker, index) => ({
+      model:
+        worker.type === "MODEL_WORKER" ? `gpt-5.${index + 5}` : undefined,
+      name: worker.name,
+      ...(worker.type === "SCRIPT_WORKER"
+        ? { command: "./poller.sh" }
+        : {}),
+      type: worker.type,
     })),
     workstations: [
       {
+        behavior: overrides?.behavior,
         body:
           overrides?.prompt ??
           "Review the latest story changes before approval.",

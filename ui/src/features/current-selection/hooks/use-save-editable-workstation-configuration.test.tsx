@@ -61,19 +61,32 @@ function createQueryClientWrapper() {
 function buildReadyEditableConfigurationState(): EditableWorkstationConfigurationState {
   return {
     draft: {
+      behavior: "STANDARD",
       prompt: "Review the story.",
+      runnerName: null,
       workerName: "reviewer",
     },
     hasValidationErrors: false,
     initialValues: {
+      behavior: "STANDARD",
+      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
+      effectiveRunnerName: "codex",
+      factoryRunnerName: null,
       prompt: "Review the story.",
+      runnerName: null,
+      runnerOptions: ["codex"],
       workerName: "reviewer",
       workerOptions: ["reviewer"],
+      workerTypeByName: {
+        reviewer: "MODEL_WORKER",
+      },
       workstationName: "Review",
     },
     isDirty: true,
     markChangesSaved: vi.fn(),
+    onBehaviorChange: vi.fn(),
     onPromptChange: vi.fn(),
+    onRunnerChange: vi.fn(),
     onWorkerChange: vi.fn(),
     overwriteFieldNames: [],
     pendingFactoryDefinition: {
