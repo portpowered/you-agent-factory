@@ -1,7 +1,9 @@
 # Baseline for the hardcoded UI copy check.
 # Entries are path|line|column|kind|text.
-src/api/current-factory-definition/api.ts|313|14|string-literal|INVALID_FACTORY_DEFINITION
-src/api/current-factory-definition/api.ts|315|14|string-literal|INTERNAL_ERROR
+src/api/current-factory-definition/api.ts|111|22|string-literal|The current factory editing API rejected the request.
+src/api/current-factory-definition/api.ts|133|7|string-literal|The current factory editing API rejected the save request.
+src/api/current-factory-definition/api.ts|287|14|string-literal|INVALID_FACTORY_DEFINITION
+src/api/current-factory-definition/api.ts|289|14|string-literal|INTERNAL_ERROR
 src/api/named-factory/api.ts|179|14|string-literal|INTERNAL_ERROR
 src/api/provider-session-details/api.ts|155|14|string-literal|INTERNAL_ERROR
 src/api/work/api.ts|94|14|string-literal|INTERNAL_ERROR
