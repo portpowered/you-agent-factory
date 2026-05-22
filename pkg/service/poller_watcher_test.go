@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,6 +15,117 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdoutToFactoryService(t *testing.T) {
+	factoryDir := t.TempDir()
+	workRequestJSON := []byte(`{
+		"requestId":"linear-issue-batch-1",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{"name":"issue-123","workTypeName":"task","payload":{"id":"ISSUE-123"}}]
+	}`)
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: workRequestJSON}}},
+	}
+	submitted := &aggregateSnapshotFactory{}
+	svc := &FactoryService{
+		cfg:     &FactoryServiceConfig{CommandRunnerOverride: runner},
+		logger:  zap.NewNop(),
+		factory: submitted,
+	}
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "poller-script",
+	}
+	worker := &interfaces.WorkerConfig{
+		Name:    "poller-script",
+		Type:    interfaces.WorkerTypeScript,
+		Command: "factory/scripts/poller.sh",
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		factoryDir,
+		&interfaces.FactoryConfig{Workers: []interfaces.WorkerConfig{{Name: "poller-script"}}, Workstations: []interfaces.FactoryWorkstationConfig{poller}},
+		map[string]*interfaces.WorkerConfig{"poller-script": worker},
+		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
+	)
+
+	err := svc.runScriptPoller(context.Background(), runner, runtimeCfg, poller, worker)
+	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
+		t.Fatalf("runScriptPoller error = %v, want unexpected exit after successful submit", err)
+	}
+	if submitted.submitCalls != 1 {
+		t.Fatalf("submit calls = %d, want 1", submitted.submitCalls)
+	}
+	if len(submitted.submissions) != 1 {
+		t.Fatalf("submitted requests = %d, want 1", len(submitted.submissions))
+	}
+	if submitted.submissions[0].RequestID != "linear-issue-batch-1" {
+		t.Fatalf("submitted request ID = %q, want linear-issue-batch-1", submitted.submissions[0].RequestID)
+	}
+	if submitted.submissions[0].Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("submitted request type = %q, want FACTORY_REQUEST_BATCH", submitted.submissions[0].Type)
+	}
+}
+
+func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdoutToFactoryService(t *testing.T) {
+	factoryDir := t.TempDir()
+	envelopeJSON := []byte(`{
+		"submissions":[
+			{
+				"requestId":"linear-issue-batch-2",
+				"workId":"linear-issue-124",
+				"name":"issue-124",
+				"workTypeName":"task",
+				"traceId":"trace-124"
+			}
+		]
+	}`)
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: envelopeJSON}}},
+	}
+	submitted := &aggregateSnapshotFactory{}
+	svc := &FactoryService{
+		cfg:     &FactoryServiceConfig{CommandRunnerOverride: runner},
+		logger:  zap.NewNop(),
+		factory: submitted,
+	}
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "poller-script",
+	}
+	worker := &interfaces.WorkerConfig{
+		Name:    "poller-script",
+		Type:    interfaces.WorkerTypeScript,
+		Command: "factory/scripts/poller.sh",
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		factoryDir,
+		&interfaces.FactoryConfig{Workers: []interfaces.WorkerConfig{{Name: "poller-script"}}, Workstations: []interfaces.FactoryWorkstationConfig{poller}},
+		map[string]*interfaces.WorkerConfig{"poller-script": worker},
+		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
+	)
+
+	err := svc.runScriptPoller(context.Background(), runner, runtimeCfg, poller, worker)
+	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
+		t.Fatalf("runScriptPoller error = %v, want unexpected exit after successful submit", err)
+	}
+	if len(submitted.submissions) != 1 {
+		t.Fatalf("submitted requests = %d, want 1", len(submitted.submissions))
+	}
+	workRequest := submitted.submissions[0]
+	if workRequest.RequestID != "linear-issue-batch-2" {
+		t.Fatalf("submitted request ID = %q, want linear-issue-batch-2", workRequest.RequestID)
+	}
+	if workRequest.Works == nil || len(workRequest.Works) != 1 {
+		t.Fatalf("submitted works = %#v, want one canonical work item", workRequest.Works)
+	}
+	if workRequest.Works[0].WorkID != "linear-issue-124" {
+		t.Fatalf("submitted work ID = %q, want linear-issue-124", workRequest.Works[0].WorkID)
+	}
+}
 
 func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndRestartsUnexpectedExit(t *testing.T) {
 	start := time.Date(2026, time.May, 22, 9, 0, 0, 0, time.UTC)
@@ -218,6 +330,25 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 	}
 }
 
+func TestParseScriptPollerOutput_RejectsUnsupportedRawFactoryEvents(t *testing.T) {
+	rawEventJSON, err := json.Marshal(map[string]any{
+		"events": []map[string]any{{
+			"type": "WORK_REQUEST",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal raw event payload: %v", err)
+	}
+
+	_, hasOutput, parseErr := parseScriptPollerOutput(rawEventJSON)
+	if !hasOutput {
+		t.Fatal("expected raw event payload to count as poller output")
+	}
+	if parseErr == nil || !strings.Contains(parseErr.Error(), "unsupported raw factory events") {
+		t.Fatalf("parse error = %v, want unsupported raw factory events", parseErr)
+	}
+}
+
 type pollerRunOutcome struct {
 	result        workers.CommandResult
 	err           error
@@ -288,8 +419,11 @@ func fieldString(value any) string {
 	}
 }
 
-func TestValidateScriptPollerOutput_RejectsNonEmptyStdout(t *testing.T) {
-	err := validateScriptPollerOutput([]byte("submitted work\n"))
+func TestParseScriptPollerOutput_RejectsMalformedStdout(t *testing.T) {
+	_, hasOutput, err := parseScriptPollerOutput([]byte("submitted work\n"))
+	if !hasOutput {
+		t.Fatal("expected non-empty stdout to count as poller output")
+	}
 	if err == nil {
 		t.Fatal("expected malformed stdout error")
 	}
