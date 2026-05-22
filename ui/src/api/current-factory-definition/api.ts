@@ -60,6 +60,15 @@ export interface SaveCurrentEditableFactoryDefinitionInput {
   factoryDefinition: CanonicalFactoryDefinition;
 }
 
+interface RequestEditableFactoryDefinitionDocumentOptions {
+  body?: string;
+  fetch?: typeof globalThis.fetch;
+  headers?: HeadersInit;
+  method: "GET" | "PUT";
+  rejectedMessage: string;
+  sessionID?: string | null;
+}
+
 const GET_CURRENT_EDITABLE_FACTORY_DEFINITION_ENDPOINT =
   "/factory/~current/editable-definition";
 
@@ -96,64 +105,11 @@ export async function getCurrentEditableFactoryDefinition(
 export async function getCurrentEditableFactoryDefinitionDocument(
   options: GetCurrentEditableFactoryDefinitionOptions = {},
 ): Promise<EditableFactoryDefinitionDocument> {
-  const fetchImplementation = options.fetch ?? globalThis.fetch;
-
-  if (typeof fetchImplementation !== "function") {
-    throw new CurrentEditableFactoryDefinitionError(
-      "Current factory editing is unavailable in this environment.",
-      {
-        code: "NETWORK_ERROR",
-      },
-    );
-  }
-
-  let response: Response;
-  try {
-    response = await fetchImplementation(
-      factoryAPIURL(
-        factorySessionScopedPath(
-          GET_CURRENT_EDITABLE_FACTORY_DEFINITION_ENDPOINT,
-          options.sessionID,
-        ),
-      ),
-      {
-        method: "GET",
-      },
-    );
-  } catch (error) {
-    throw new CurrentEditableFactoryDefinitionError(
-      "The dashboard could not reach the current factory editing API.",
-      {
-        cause: error,
-        code: "NETWORK_ERROR",
-        responseBody: error,
-      },
-    );
-  }
-
-  const responseBody = await readAPIResponseBody(response);
-  if (!response.ok) {
-    const errorBody = extractAPIErrorPayload(responseBody, {
-      isTarget: isErrorTarget,
-    });
-    throw new CurrentEditableFactoryDefinitionError(
-      errorBody?.message ??
-        "The current factory editing API rejected the request.",
-      {
-        code: normalizeCurrentEditableFactoryDefinitionErrorCode(
-          errorBody?.code,
-        ),
-        responseBody,
-        status: response.status,
-        statusText: response.statusText,
-        targets: errorBody?.targets,
-      },
-    );
-  }
-
-  return normalizeEditableFactoryDefinitionDocument(responseBody, {
-    status: response.status,
-    statusText: response.statusText,
+  return requestEditableFactoryDefinitionDocument({
+    fetch: options.fetch,
+    method: "GET",
+    rejectedMessage: "The current factory editing API rejected the request.",
+    sessionID: options.sessionID,
   });
 }
 
@@ -161,7 +117,33 @@ export async function saveCurrentEditableFactoryDefinitionDocument(
   input: SaveCurrentEditableFactoryDefinitionInput,
   options: SaveCurrentEditableFactoryDefinitionOptions = {},
 ): Promise<EditableFactoryDefinitionDocument> {
-  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const requestBody: SaveEditableFactoryDefinitionRequest = {
+    baseVersion: input.baseVersion,
+    factoryDefinition: input.factoryDefinition,
+  };
+
+  return requestEditableFactoryDefinitionDocument({
+    body: JSON.stringify(requestBody),
+    fetch: options.fetch,
+    headers: {
+      "content-type": "application/json",
+    },
+    method: "PUT",
+    rejectedMessage:
+      "The current factory editing API rejected the save request.",
+    sessionID: options.sessionID,
+  });
+}
+
+async function requestEditableFactoryDefinitionDocument({
+  body,
+  fetch,
+  headers,
+  method,
+  rejectedMessage,
+  sessionID,
+}: RequestEditableFactoryDefinitionDocumentOptions): Promise<EditableFactoryDefinitionDocument> {
+  const fetchImplementation = fetch ?? globalThis.fetch;
 
   if (typeof fetchImplementation !== "function") {
     throw new CurrentEditableFactoryDefinitionError(
@@ -172,26 +154,19 @@ export async function saveCurrentEditableFactoryDefinitionDocument(
     );
   }
 
-  const requestBody: SaveEditableFactoryDefinitionRequest = {
-    baseVersion: input.baseVersion,
-    factoryDefinition: input.factoryDefinition,
-  };
-
   let response: Response;
   try {
     response = await fetchImplementation(
       factoryAPIURL(
         factorySessionScopedPath(
           GET_CURRENT_EDITABLE_FACTORY_DEFINITION_ENDPOINT,
-          options.sessionID,
+          sessionID,
         ),
       ),
       {
-        body: JSON.stringify(requestBody),
-        headers: {
-          "content-type": "application/json",
-        },
-        method: "PUT",
+        body,
+        headers,
+        method,
       },
     );
   } catch (error) {
@@ -211,8 +186,7 @@ export async function saveCurrentEditableFactoryDefinitionDocument(
       isTarget: isErrorTarget,
     });
     throw new CurrentEditableFactoryDefinitionError(
-      errorBody?.message ??
-        "The current factory editing API rejected the save request.",
+      errorBody?.message ?? rejectedMessage,
       {
         code: normalizeCurrentEditableFactoryDefinitionErrorCode(
           errorBody?.code,
