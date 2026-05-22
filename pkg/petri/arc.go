@@ -4,13 +4,17 @@ import "github.com/portpowered/infinite-you/pkg/interfaces"
 
 // Arc connects a Place to a Transition (input) or a Transition to a Place (output).
 type Arc struct {
-	ID          string             `json:"id"`
-	Name        string             `json:"name"` // binding name — guards on other arcs reference this (e.g., "work", "design")
-	PlaceID     string             `json:"place_id"`
-	Direction   ArcDirection       `json:"direction"`   // INPUT or OUTPUT
-	Mode        interfaces.ArcMode `json:"mode"`        // CONSUME or OBSERVE (input arcs only; ignored for output arcs)
-	Guard       Guard              `json:"-"`           // nil for unconditional arcs; receives bindings from other named arcs
-	Cardinality ArcCardinality     `json:"cardinality"` // ONE, ALL, or a specific count
+	ID      string `json:"id"`
+	Name    string `json:"name"` // binding name — guards on other arcs reference this (e.g., "work", "design")
+	PlaceID string `json:"place_id"`
+	// ClassificationLabel scopes classifier workstation success arcs to one
+	// authored label while leaving unlabeled arcs such as resource release lanes
+	// available for every accepted classifier dispatch.
+	ClassificationLabel string             `json:"classification_label,omitempty"`
+	Direction           ArcDirection       `json:"direction"`   // INPUT or OUTPUT
+	Mode                interfaces.ArcMode `json:"mode"`        // CONSUME or OBSERVE (input arcs only; ignored for output arcs)
+	Guard               Guard              `json:"-"`           // nil for unconditional arcs; receives bindings from other named arcs
+	Cardinality         ArcCardinality     `json:"cardinality"` // ONE, ALL, or a specific count
 	// Input/output
 	TransitionID string `json:"transition_id"`
 }

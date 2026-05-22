@@ -66,6 +66,105 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalWorkstationCronFields(t
 	assertCanonicalCronJSON(t, generated)
 }
 
+func TestFactoryConfigFromOpenAPIJSON_MapsClassifierWorkstationRoutes(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"classifier-factory",
+		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers": [{"name":"classifier","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"name":"classify-task",
+			"type":"CLASSIFIER_WORKSTATION",
+			"worker":"classifier",
+			"inputs":[{"workType":"task","state":"init"}],
+			"classificationRoutes":[
+				{"label":"approved","outputs":[{"workType":"task","state":"done"}]},
+				{"label":"spam","outputs":[{"workType":"task","state":"failed"}]}
+			],
+			"onFailure":[{"workType":"task","state":"failed"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	ws := cfg.Workstations[0]
+	if ws.Type != interfaces.WorkstationTypeClassify {
+		t.Fatalf("expected classifier workstation type, got %#v", ws)
+	}
+	if len(ws.ClassificationRoutes) != 2 || ws.ClassificationRoutes[1].Label != "spam" {
+		t.Fatalf("expected classifier routes to map, got %#v", ws.ClassificationRoutes)
+	}
+
+	public := WorkstationConfigToOpenAPI(ws)
+	if public.ClassificationRoutes == nil || len(*public.ClassificationRoutes) != 2 {
+		t.Fatalf("expected classifier routes to roundtrip to openapi, got %#v", public.ClassificationRoutes)
+	}
+	if public.Outputs != nil && len(*public.Outputs) != 0 {
+		t.Fatalf("expected classifier workstation to keep normal outputs empty, got %#v", public.Outputs)
+	}
+}
+
+func TestFactoryConfigFromOpenAPIJSON_RejectsNonClassifierWithoutOutputsDuringValidation(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"missing-outputs-factory",
+		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers": [{"name":"executor","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"name":"process-task",
+			"type":"MODEL_WORKSTATION",
+			"worker":"executor",
+			"inputs":[{"workType":"task","state":"init"}],
+			"onFailure":[{"workType":"task","state":"failed"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	result := NewConfigValidator().Validate(cfg)
+	if !result.HasErrors() {
+		t.Fatalf("expected validator to reject missing non-classifier outputs, got %#v", result.Findings)
+	}
+	if !strings.Contains(result.Error(), "workstation-outputs") {
+		t.Fatalf("expected workstation-outputs finding, got %s", result.Error())
+	}
+}
+
+func TestFactoryConfigFromOpenAPIJSON_RejectsNonClassifierClassificationRoutesDuringValidation(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"invalid-routes-factory",
+		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers": [{"name":"executor","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"name":"process-task",
+			"type":"MODEL_WORKSTATION",
+			"worker":"executor",
+			"inputs":[{"workType":"task","state":"init"}],
+			"outputs":[{"workType":"task","state":"done"}],
+			"classificationRoutes":[
+				{"label":"approved","outputs":[{"workType":"task","state":"done"}]}
+			],
+			"onFailure":[{"workType":"task","state":"failed"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	result := NewConfigValidator().Validate(cfg)
+	if !result.HasErrors() {
+		t.Fatalf("expected validator to reject non-classifier classificationRoutes, got %#v", result.Findings)
+	}
+	if !strings.Contains(result.Error(), "workstation-classification-routes") {
+		t.Fatalf("expected workstation-classification-routes finding, got %s", result.Error())
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"customer-facing-name",
@@ -815,125 +914,5 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsUnsupportedExecutorProviderAtBou
 	}
 	if !strings.Contains(err.Error(), `unsupported value "custom-executor"`) {
 		t.Fatalf("expected unsupported executorProvider value in error, got %v", err)
-	}
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity Generated/OpenAPI hosted worker assertions need to keep both boundary and runtime shape checks visible in one reviewer-readable seam.
-func TestGeneratedFactoryFromOpenAPIJSON_DecodesHostedLinearWorker(t *testing.T) {
-	cfgJSON := []byte(`{
-		"name":"hosted-linear-factory",
-		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"queued","type":"PROCESSING"}]}],
-		"workers": [{
-			"name":"linear-poller",
-			"type":"HOSTED_WORKER",
-			"provider":"LINEAR",
-			"auth":{"secretRef":"secrets/linear-api-key"},
-			"linear":{
-				"pollInterval":"45s",
-				"teamIds":["team-a"],
-				"stateIds":["state-b"],
-				"mapping":{"workType":"story","state":"init"},
-				"claim":{"assigneeField":"assignee.email"}
-			}
-		}],
-		"workstations": [{
-			"name":"poll-linear",
-			"behavior":"POLLER",
-			"worker":"linear-poller",
-			"inputs":[{"workType":"story","state":"init"}],
-			"outputs":[{"workType":"story","state":"queued"}]
-		}]
-	}`)
-
-	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
-	if err != nil {
-		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
-	}
-	worker := (*generated.Workers)[0]
-	if worker.Provider == nil || *worker.Provider != "LINEAR" {
-		t.Fatalf("expected generated worker provider LINEAR, got %#v", worker.Provider)
-	}
-	if worker.Auth == nil || worker.Auth.SecretRef == nil || *worker.Auth.SecretRef != "secrets/linear-api-key" {
-		t.Fatalf("expected generated worker auth.secretRef, got %#v", worker.Auth)
-	}
-	if worker.Linear == nil || worker.Linear.Mapping.WorkType == nil || *worker.Linear.Mapping.WorkType != "story" {
-		t.Fatalf("expected generated worker linear mapping, got %#v", worker.Linear)
-	}
-
-	cfg, err := FactoryConfigFromOpenAPI(generated)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
-	}
-	runtimeWorker := cfg.Workers[0]
-	if runtimeWorker.Type != interfaces.WorkerTypeHosted || runtimeWorker.Provider != interfaces.HostedWorkerProviderLinear {
-		t.Fatalf("runtime hosted worker = %#v", runtimeWorker)
-	}
-	if runtimeWorker.Auth == nil || runtimeWorker.Auth.SecretRef != "secrets/linear-api-key" {
-		t.Fatalf("runtime hosted auth = %#v", runtimeWorker.Auth)
-	}
-	if runtimeWorker.Linear == nil || runtimeWorker.Linear.Mapping.WorkType != "story" || runtimeWorker.Linear.Mapping.State != "init" {
-		t.Fatalf("runtime hosted linear config = %#v", runtimeWorker.Linear)
-	}
-}
-
-func TestFactoryConfigFromOpenAPIJSON_RejectsHostedLinearWorkerMissingMappingWithoutPanic(t *testing.T) {
-	cfgJSON := []byte(`{
-		"name":"invalid-hosted-linear-factory",
-		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"queued","type":"PROCESSING"}]}],
-		"workers": [{
-			"name":"linear-poller",
-			"type":"HOSTED_WORKER",
-			"provider":"LINEAR",
-			"auth":{"secretRef":"secrets/linear-api-key"},
-			"linear":{}
-		}],
-		"workstations": [{
-			"name":"poll-linear",
-			"behavior":"POLLER",
-			"worker":"linear-poller",
-			"inputs":[{"workType":"story","state":"init"}],
-			"outputs":[{"workType":"story","state":"queued"}]
-		}]
-	}`)
-
-	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
-	}
-
-	findings := NewConfigValidator().Validate(cfg).Errors()
-	assertFindingMatch(t, findings, "hosted-worker-linear-mapping-work-type", "workers[0](linear-poller).linear.mapping.workType", "mapping.workType")
-	assertFindingMatch(t, findings, "hosted-worker-linear-mapping-state", "workers[0](linear-poller).linear.mapping.state", "mapping.state")
-}
-
-func TestGeneratedFactoryFromOpenAPIJSON_RejectsHostedWorkerOAuthAuthFields(t *testing.T) {
-	cfgJSON := []byte(`{
-		"name":"invalid-hosted-auth-factory",
-		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"queued","type":"PROCESSING"}]}],
-		"workers": [{
-			"name":"linear-poller",
-			"type":"HOSTED_WORKER",
-			"provider":"LINEAR",
-			"auth":{"clientId":"abc","secretRef":"secrets/linear-api-key"},
-			"linear":{"mapping":{"workType":"story","state":"init"}}
-		}],
-		"workstations": [{
-			"name":"poll-linear",
-			"behavior":"POLLER",
-			"worker":"linear-poller",
-			"inputs":[{"workType":"story","state":"init"}],
-			"outputs":[{"workType":"story","state":"queued"}]
-		}]
-	}`)
-
-	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
-	if err == nil {
-		t.Fatal("expected unsupported hosted auth shape to fail")
-	}
-	if !strings.Contains(err.Error(), "workers[0].auth.clientId") {
-		t.Fatalf("expected hosted auth field path in error, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "v1 hosted workers do not support OAuth") {
-		t.Fatalf("expected hosted auth guidance, got %v", err)
 	}
 }

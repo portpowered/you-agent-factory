@@ -219,6 +219,8 @@ export interface DashboardRuntimeWorkstationRequestResponse {
   outcome?: string;
   runner?: DashboardSelectedRunner;
   feedback?: string;
+  selectedClassificationLabel?: string;
+  selected_classification_label?: string;
   failureReason?: string;
   failure_reason?: string;
   failureMessage?: string;

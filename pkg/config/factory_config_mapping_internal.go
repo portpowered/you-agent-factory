@@ -230,7 +230,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	outputs, err := workstationIOsInternalFromAPI(workstation.Outputs, fieldPath+".outputs")
+	outputs, err := optionalWorkstationIOsInternalFromAPI(workstation.Outputs, fieldPath+".outputs")
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
@@ -239,6 +239,10 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
 	onRejection, err := optionalWorkstationIOsInternalFromAPI(workstation.OnRejection, fieldPath+".onRejection")
+	if err != nil {
+		return interfaces.FactoryWorkstationConfig{}, err
+	}
+	classificationRoutes, err := classificationRoutesInternalFromAPI(workstation.ClassificationRoutes, fieldPath+".classificationRoutes")
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
@@ -257,6 +261,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		Cron:                  workstationCronInternalFromAPI(workstation.Cron),
 		Inputs:                inputs,
 		Outputs:               outputs,
+		ClassificationRoutes:  classificationRoutes,
 		OnContinue:            onContinue,
 		OnRejection:           onRejection,
 		OnFailure:             onFailure,
@@ -324,6 +329,27 @@ func optionalWorkstationIOsInternalFromAPI(configs *[]factoryapi.WorkstationIO, 
 		return nil, nil
 	}
 	return workstationIOsInternalFromAPI(*configs, fieldPath)
+}
+
+func classificationRoutesInternalFromAPI(
+	routes *[]factoryapi.ClassificationRoute,
+	fieldPath string,
+) ([]interfaces.ClassificationRouteConfig, error) {
+	if routes == nil {
+		return nil, nil
+	}
+	values := make([]interfaces.ClassificationRouteConfig, len(*routes))
+	for i, route := range *routes {
+		outputs, err := workstationIOsInternalFromAPI(route.Outputs, fmt.Sprintf("%s[%d].outputs", fieldPath, i))
+		if err != nil {
+			return nil, err
+		}
+		values[i] = interfaces.ClassificationRouteConfig{
+			Label:   route.Label,
+			Outputs: outputs,
+		}
+	}
+	return values, nil
 }
 
 func factoryGuardsInternalFromAPI(guards *[]factoryapi.FactoryGuard) []interfaces.FactoryGuardConfig {

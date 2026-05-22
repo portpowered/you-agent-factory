@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -115,6 +116,19 @@ func rulePlaceReferences(cfg *interfaces.FactoryConfig) []Finding {
 				Rule:     "workstation-on-failure-ref",
 			})
 		}
+		for ri, route := range ws.ClassificationRoutes {
+			for oi, output := range route.Outputs {
+				if validPlaces[mapToID(output)] {
+					continue
+				}
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     fmt.Sprintf("workstations[%d](%s).classification_routes[%d](%s).outputs[%d]", wi, ws.Name, ri, route.Label, oi),
+					Message:  fmt.Sprintf("references non-existent state %q of work type %q", output.StateName, output.WorkTypeName),
+					Rule:     "workstation-classification-route-ref",
+				})
+			}
+		}
 	}
 	return findings
 }
@@ -228,7 +242,6 @@ func ruleWorkstationKind(cfg *interfaces.FactoryConfig) []Finding {
 		interfaces.WorkstationKindStandard: true,
 		interfaces.WorkstationKindRepeater: true,
 		interfaces.WorkstationKindCron:     true,
-		interfaces.WorkstationKindPoller:   true,
 	}
 	for wi, ws := range cfg.Workstations {
 		if ws.Kind == "" {
@@ -238,12 +251,131 @@ func ruleWorkstationKind(cfg *interfaces.FactoryConfig) []Finding {
 			findings = append(findings, Finding{
 				Severity: SeverityError,
 				Path:     fmt.Sprintf("workstations[%d](%s).kind", wi, ws.Name),
-				Message:  fmt.Sprintf("unknown kind %q (valid kinds: standard, repeater, cron)", ws.Kind),
+				Message:  fmt.Sprintf("unknown kind %q (valid kinds: standard, repeater, cron, poller)", ws.Kind),
 				Rule:     "workstation-kind",
 			})
 		}
 	}
 	return findings
+}
+
+func ruleClassifierWorkstations(cfg *interfaces.FactoryConfig) []Finding {
+	var findings []Finding
+
+	for wi, ws := range cfg.Workstations {
+		basePath := fmt.Sprintf("workstations[%d](%s)", wi, ws.Name)
+		if !isClassifierWorkstation(ws) {
+			findings = append(findings, validateNonClassifierRoutes(ws, basePath)...)
+			continue
+		}
+		findings = append(findings, validateClassifierRoutes(ws, basePath)...)
+	}
+
+	return findings
+}
+
+func validateNonClassifierRoutes(ws interfaces.FactoryWorkstationConfig, basePath string) []Finding {
+	var findings []Finding
+	if len(ws.Outputs) == 0 {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".outputs",
+			Message:  "non-classifier workstation requires at least one normal success output",
+			Rule:     "workstation-outputs",
+		})
+	}
+	if len(ws.ClassificationRoutes) != 0 {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".classification_routes",
+			Message:  "non-classifier workstation must not declare classificationRoutes",
+			Rule:     "workstation-classification-routes",
+		})
+	}
+	return findings
+}
+
+func validateClassifierRoutes(ws interfaces.FactoryWorkstationConfig, basePath string) []Finding {
+	var findings []Finding
+	if len(ws.ClassificationRoutes) == 0 {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".classification_routes",
+			Message:  "classifier workstation requires one or more classification routes",
+			Rule:     "classifier-workstation-routes",
+		})
+	}
+	if len(ws.Outputs) != 0 {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".outputs",
+			Message:  "classifier workstation must not declare normal success outputs; use classificationRoutes",
+			Rule:     "classifier-workstation-outputs",
+		})
+	}
+	if len(ws.OnContinue) != 0 {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".on_continue",
+			Message:  "classifier workstation must not declare onContinue",
+			Rule:     "classifier-workstation-on-continue",
+		})
+	}
+	if len(ws.OnRejection) != 0 {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".on_rejection",
+			Message:  "classifier workstation must not declare onRejection",
+			Rule:     "classifier-workstation-on-rejection",
+		})
+	}
+
+	seenLabels := make(map[string]struct{}, len(ws.ClassificationRoutes))
+	for ri, route := range ws.ClassificationRoutes {
+		findings = append(findings, validateClassifierRoute(route, ri, basePath, seenLabels)...)
+	}
+	return findings
+}
+
+func validateClassifierRoute(route interfaces.ClassificationRouteConfig, routeIndex int, basePath string, seenLabels map[string]struct{}) []Finding {
+	var findings []Finding
+	routePath := fmt.Sprintf("%s.classification_routes[%d]", basePath, routeIndex)
+	label := strings.TrimSpace(route.Label)
+	switch {
+	case label == "":
+		findings = append(findings, routeLabelFinding(routePath, "classification route label must be non-empty"))
+	case label != route.Label:
+		findings = append(findings, routeLabelFinding(routePath, "classification route label must not include leading or trailing whitespace"))
+	case json.Valid([]byte(label)):
+		findings = append(findings, routeLabelFinding(routePath, "classification route label must not be JSON literal text"))
+	default:
+		if _, exists := seenLabels[label]; exists {
+			findings = append(findings, routeLabelFinding(routePath, fmt.Sprintf("duplicate classification route label %q", label)))
+		}
+		seenLabels[label] = struct{}{}
+	}
+	if len(route.Outputs) == 0 {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     routePath + ".outputs",
+			Message:  "classification route requires at least one output",
+			Rule:     "classifier-workstation-route-outputs",
+		})
+	}
+	return findings
+}
+
+func routeLabelFinding(routePath string, message string) Finding {
+	return Finding{
+		Severity: SeverityError,
+		Path:     routePath + ".label",
+		Message:  message,
+		Rule:     "classifier-workstation-route-label",
+	}
+}
+
+func isClassifierWorkstation(ws interfaces.FactoryWorkstationConfig) bool {
+	return strings.TrimSpace(ws.Type) == interfaces.WorkstationTypeClassify
 }
 
 // --- Rule: poller workstation validation ---

@@ -65,7 +65,7 @@ func TestArtifactFromEventStream_NormalizesLegacyCronPayloads(t *testing.T) {
 			Name:     "daily-refresh",
 			Behavior: stringPtrIfNotEmpty(factoryapi.WorkstationKindCron),
 			Worker:   "executor",
-			Outputs: []factoryapi.WorkstationIO{{
+			Outputs: &[]factoryapi.WorkstationIO{{
 				WorkType: "task",
 				State:    "complete",
 			}},
@@ -207,7 +207,7 @@ func replayRecordedFactoryFixture() factoryapi.Factory {
 		}},
 		Workers: &[]factoryapi.Worker{{Name: "executor"}},
 		Workstations: &[]factoryapi.Workstation{{
-			Name: "execute-story", Worker: "executor", Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}}, Outputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}},
+			Name: "execute-story", Worker: "executor", Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}}, Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}},
 		}},
 	}
 }

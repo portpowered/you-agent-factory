@@ -286,19 +286,15 @@ describe("App graph behavior", () => {
     renderApp({ snapshot: twentyNodeSnapshot });
 
     await screen.findByRole("heading", { name: "you-agent-factory" });
-    expect(
-      await screen.findAllByRole(
-        "button",
-        { name: /Select .* workstation/ },
-        { timeout: 5000 },
-      ),
-    ).toHaveLength(20);
-    expect(screen.getAllByText("Station 20").length).toBeGreaterThanOrEqual(1);
-    expect(getStateNodeByLabel("story:step-6")).toBeTruthy();
-
     const station20 = await screen.findByRole("button", {
       name: "Select Station 20 workstation",
     });
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Select .* workstation/ })).toHaveLength(20);
+    });
+    expect(screen.getAllByText("Station 20").length).toBeGreaterThanOrEqual(1);
+    expect(getStateNodeByLabel("story:step-6")).toBeTruthy();
+
     fireEvent.click(station20);
     await waitFor(() => {
       expect(station20.getAttribute("aria-pressed")).toBe("true");

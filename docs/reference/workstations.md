@@ -35,7 +35,9 @@ inline runtime fields or a matching split `AGENTS.md` file on disk.
 `factory.json` declares the workflow topology. Each model or script
 workstation names a worker through `worker`, consumes one or more input places,
 and routes outcomes through `outputs`, `onContinue`, `onRejection`, or
-`onFailure`.
+`onFailure`. `CLASSIFIER_WORKSTATION` is the exception: it still uses a worker
+and inputs, but successful routing goes through authored
+`classificationRoutes` instead of normal success `outputs`.
 
 The bound worker supplies the execution backend and shared system
 instructions. The workstation supplies the step-specific prompt template,
@@ -46,13 +48,17 @@ environment, and routing.
 
 - Use `behavior` for scheduling behavior: `STANDARD`, `REPEATER`, `CRON`, or
   `POLLER`.
-- Use `type` for the runtime implementation: `MODEL_WORKSTATION` or
-  `LOGICAL_MOVE`.
+- Use `type` for the runtime implementation: `MODEL_WORKSTATION`,
+  `CLASSIFIER_WORKSTATION`, or `LOGICAL_MOVE`.
 - Use `worker` for the bound worker name. Omit it only for logical routing
   workstations such as `LOGICAL_MOVE`.
 - Route accepted results through `outputs`, ordinary partial-progress results
   through `onContinue`, rejected results through `onRejection`, and failed or
   timed-out results through `onFailure`.
+- `CLASSIFIER_WORKSTATION` returns one plain string label. Leading and trailing
+  whitespace are trimmed before matching, matching stays exact and
+  case-sensitive, and empty or non-string outputs fail instead of routing
+  through success.
 - Use workstation-level `guards` only for `VISIT_COUNT` gating. Use a guarded
   `LOGICAL_MOVE` workstation when you need an explicit loop-breaker route.
 
@@ -78,7 +84,7 @@ execute:
 |-------|----------|-------------|
 | `name` | Yes | Stable workstation name. This is also the transition ID in runtime events. |
 | `behavior` | No | Scheduling behavior. Use `STANDARD`, `REPEATER`, `CRON`, or `POLLER`. Defaults to `STANDARD`. |
-| `type` | Runtime config | Runtime implementation. Use `MODEL_WORKSTATION` for worker dispatch or `LOGICAL_MOVE` for no-worker routing. |
+| `type` | Runtime config | Runtime implementation. Use `MODEL_WORKSTATION` for worker dispatch, `CLASSIFIER_WORKSTATION` for single-label branch selection, or `LOGICAL_MOVE` for no-worker routing. |
 | `worker` | Usually | Worker name from `workers[].name`. Required for model/script dispatch, cron workstations, and poller workstations. Omit only for logical routing workstations. |
 | `inputs` | Usually | IO places that enable the workstation. Cron workstations may omit customer inputs but still consume internal time work. |
 | `outputs` | Usually | IO places produced when the worker returns accepted. Cron workstations require at least one output. |
@@ -97,16 +103,85 @@ execute:
 - `REPEATER` re-runs after continue results until the work is accepted or
   fails.
 - `CRON` runs on a schedule in service mode.
-- `POLLER` binds a poller-capable worker that the service runtime supervises as
-  one long-lived ingress loop.
 
 `type` answers "what runtime implementation handles the step?"
 
 - `MODEL_WORKSTATION` renders a prompt and dispatches to the bound worker.
+- `CLASSIFIER_WORKSTATION` renders a prompt and expects one plain string label
+  such as `approved`, `needs_review`, or `spam`.
 - `LOGICAL_MOVE` moves tokens without invoking a worker.
 
 Do not use `type` to express schedule semantics, and do not use `behavior` to
 replace runtime implementation.
+
+## Classifier Workstations
+
+Use `CLASSIFIER_WORKSTATION` when one workstation should return exactly one
+label and route through authored `classificationRoutes` instead of normal
+success outputs:
+
+```json
+{
+  "name": "triage",
+  "type": "CLASSIFIER_WORKSTATION",
+  "worker": "reviewer",
+  "inputs": [{ "workType": "task", "state": "init" }],
+  "classificationRoutes": [
+    {
+      "label": "approved",
+      "outputs": [{ "workType": "task", "state": "complete" }]
+    },
+    {
+      "label": "needs_review",
+      "outputs": [{ "workType": "task", "state": "in-review" }]
+    },
+    {
+      "label": "spam",
+      "outputs": [{ "workType": "task", "state": "failed" }]
+    }
+  ],
+  "onFailure": [{ "workType": "task", "state": "failed" }]
+}
+```
+
+Use classifier routing when the workstation's job is "choose exactly one
+authored branch label." Do not approximate that with normal `outputs`,
+`onContinue`, or `onRejection`:
+
+- Use `outputs` when accepted success always fans out to the same destinations.
+- Use `onContinue` when the work made ordinary partial progress and should
+  iterate again without being treated as a rejection.
+- Use `onRejection` when the work was actually rejected or sent back.
+- Use `CLASSIFIER_WORKSTATION` when success is one explicit label such as
+  `approved`, `needs_changes`, or `spam` and that label alone decides which
+  authored branch runs next.
+
+Classifier authoring stays intentionally strict:
+
+- `classificationRoutes` is required and must contain one or more entries.
+- Every route label must be non-empty, unique, free of surrounding whitespace,
+  and authored as plain text rather than JSON literal text such as
+  `"approved"`, `123`, `true`, `null`, `{...}`, or `[...]`.
+- Every route must declare one or more destination outputs.
+- Classifier workstations must not also declare normal success `outputs`,
+  `onContinue`, or `onRejection`.
+
+The successful classifier contract is one plain string label. The runtime trims
+surrounding whitespace before matching, preserves exact case-sensitive label
+matching, and routes only the selected label's destinations. It never falls
+back to a non-classification success path.
+
+Invalid classifier results fail through the ordinary `FAILED` lane:
+
+- Empty labels fail.
+- Unknown labels fail.
+- Non-string outputs fail.
+- Parse failures, execution errors, and timeouts fail.
+
+When `onFailure` is configured, those failures use it exactly as other
+workstation failures do. Successful classifier dispatches preserve the selected
+label in runtime evidence, replay, and projections; failed classifier attempts
+keep ordinary failure details and do not invent a selected label.
 
 ## Minimal Standard Step
 
@@ -141,8 +216,6 @@ terminal path.
 - Use `REPEATER` for iterative agent loops.
 - Use `CRON` only when the step should submit scheduled time work in service
   mode; keep the schedule under `cron.schedule`.
-- Use `POLLER` when the runtime should supervise a long-lived external ingress
-  loop that emits canonical submitted work into the factory.
 
 ### Standard Workstations
 
@@ -285,60 +358,6 @@ while canonical events retain it for replay and diagnostics.
 
 Do not use `cron.interval`; it is retired. Use `cron.schedule`.
 
-## Poller Kind
-
-### Poller Workstations
-
-Use `POLLER` when a workstation should stay alive in service mode and keep
-submitting ordinary work from an external system:
-
-```json
-{
-  "name": "linear-intake",
-  "behavior": "POLLER",
-  "worker": "linear-poller",
-  "outputs": [{ "workType": "task", "state": "init" }],
-  "onFailure": { "workType": "task", "state": "failed" }
-}
-```
-
-Poller workstations require:
-
-- `behavior: "POLLER"`
-- a `worker`
-- a bound worker whose `type` is `SCRIPT_WORKER` or `HOSTED_WORKER`
-
-Pollers are service-owned sidecars:
-
-- Service mode starts exactly one long-lived poll loop per enabled poller
-  workstation.
-- Batch mode does not start poller sidecars.
-- The runtime cancels pollers during shutdown or named-factory replacement
-  before replacement pollers become authoritative.
-- Unexpected script exit, malformed script output, malformed provider data, or
-  mapping failures produce diagnostics and restart with bounded backoff instead
-  of a tight crash loop.
-
-Pollers submit work only through canonical submit-style ingress. Use
-[Batch Inputs](batch-inputs.md#poller-stdout-contract) for the stdout contract,
-`requestId` idempotency rules, and the current script-poller payload shapes.
-
-Choose `POLLER` instead of the other workstation behaviors when:
-
-- `CRON` is wrong because you need a long-lived external poll loop rather than
-  internal time-triggered work.
-- `REPEATER` is wrong because you are not iterating one existing work item
-  through the same workstation.
-- Watched-file input is wrong because the runtime, not an external file drop,
-  should own poller lifecycle, restarts, and shutdown.
-
-V1 non-goals:
-
-- Pollers do not emit raw factory events.
-- Pollers do not support multi-instance coordination or leader election.
-- Script pollers currently emit one complete batch payload per run because the
-  runtime captures stdout when the subprocess exits.
-
 ## Runtime Fields
 
 These fields can live inline on `workstations[]` or in the workstation
@@ -346,7 +365,7 @@ These fields can live inline on `workstations[]` or in the workstation
 
 | Field | Description |
 |-------|-------------|
-| `type` | Runtime implementation. Use `MODEL_WORKSTATION` for prompt-rendered worker dispatch or `LOGICAL_MOVE` for no-worker pass-through routing. |
+| `type` | Runtime implementation. Use `MODEL_WORKSTATION` for prompt-rendered worker dispatch, `CLASSIFIER_WORKSTATION` for prompt-rendered single-label routing, or `LOGICAL_MOVE` for no-worker pass-through routing. |
 | `runner` | Stable runner override for this workstation. Supported built-in IDs are `codex`, `gemini`, `kiro`, `cursor-cli`, and `opencode`. |
 | `promptFile` | Path relative to the workstation directory. The file content becomes the prompt template. |
 | `promptTemplate` | Inline prompt template. Usually generated by config flattening; split `AGENTS.md` body is easier to author by hand. |

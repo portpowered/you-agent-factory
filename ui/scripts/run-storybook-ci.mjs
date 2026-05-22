@@ -10,7 +10,7 @@ const READY_TIMEOUT_MS = 30000;
 const POST_READY_SETTLE_MS = 1000;
 const POST_TEST_RUNNER_SETTLE_MS = 1000;
 const STORYBOOK_SMOKE_STORY_ID =
-  "infinite-you-dashboard-export-factory-dialog--ready";
+  "you-agent-factory-dashboard-export-factory-dialog--ready";
 const STORYBOOK_URL = `http://${HOST}:${PORT}`;
 const STORYBOOK_INDEX_URL = `${STORYBOOK_URL}/index.json`;
 const STORYBOOK_IFRAME_URL = `${STORYBOOK_URL}/iframe.html?id=${STORYBOOK_SMOKE_STORY_ID}&viewMode=story`;

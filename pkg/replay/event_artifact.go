@@ -387,7 +387,7 @@ func generatedWorkstationFromReplayConfig(name string, cfg interfaces.FactoryWor
 		generated.Inputs = []factoryapi.WorkstationIO{}
 	}
 	if generated.Outputs == nil {
-		generated.Outputs = []factoryapi.WorkstationIO{}
+		generated.Outputs = &[]factoryapi.WorkstationIO{}
 	}
 	return generated, nil
 }

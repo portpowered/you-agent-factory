@@ -174,10 +174,11 @@ func TestBuildFactoryService_ReplayModeDeliversRecordedCompletionAtLogicalTick(t
 		},
 	}
 	recordedResult := interfaces.WorkResult{
-		DispatchID:   recordedDispatch.DispatchID,
-		TransitionID: recordedDispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
-		Output:       "replayed provider output",
+		DispatchID:                  recordedDispatch.DispatchID,
+		TransitionID:                recordedDispatch.TransitionID,
+		Outcome:                     interfaces.OutcomeAccepted,
+		Output:                      "replayed provider output",
+		SelectedClassificationLabel: "approved",
 		Diagnostics: &interfaces.WorkDiagnostics{
 			Provider: &interfaces.ProviderDiagnostic{
 				ResponseMetadata: map[string]string{"request_id": "logical-tick-provider-1"},
@@ -227,6 +228,9 @@ func TestBuildFactoryService_ReplayModeDeliversRecordedCompletionAtLogicalTick(t
 	}
 	if completions[0].ObservedTick != 4 {
 		t.Fatalf("replay completion observed tick = %d, want 4", completions[0].ObservedTick)
+	}
+	if got := completions[0].Result.SelectedClassificationLabel; got != "approved" {
+		t.Fatalf("replay completion selected classification label = %q, want approved", got)
 	}
 
 	state, err := svc.GetEngineStateSnapshot(context.Background())
@@ -509,14 +513,15 @@ func serviceReplayWorkRequestEvent(t *testing.T, requestID string, tick int, sou
 func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, result interfaces.WorkResult, tick int) factoryapi.FactoryEvent {
 	t.Helper()
 	payload := factoryapi.DispatchResponseEventPayload{
-		CompletionId:    serviceStringPtr(completionID),
-		TransitionId:    result.TransitionID,
-		Outcome:         factoryapi.WorkOutcome(result.Outcome),
-		Output:          serviceStringPtr(result.Output),
-		Error:           serviceStringPtr(result.Error),
-		Feedback:        serviceStringPtr(result.Feedback),
-		ProviderFailure: serviceProviderFailurePtr(result.ProviderFailure),
-		Metrics:         serviceWorkMetricsPtr(result.Metrics),
+		CompletionId:                serviceStringPtr(completionID),
+		TransitionId:                result.TransitionID,
+		Outcome:                     factoryapi.WorkOutcome(result.Outcome),
+		Output:                      serviceStringPtr(result.Output),
+		Error:                       serviceStringPtr(result.Error),
+		Feedback:                    serviceStringPtr(result.Feedback),
+		SelectedClassificationLabel: serviceStringPtr(result.SelectedClassificationLabel),
+		ProviderFailure:             serviceProviderFailurePtr(result.ProviderFailure),
+		Metrics:                     serviceWorkMetricsPtr(result.Metrics),
 	}
 	var union factoryapi.FactoryEvent_Payload
 	if err := union.FromDispatchResponseEventPayload(payload); err != nil {

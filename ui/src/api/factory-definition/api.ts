@@ -15,6 +15,7 @@ type FactoryResourceRequirement = FactorySchemas["ResourceRequirement"];
 type FactoryRunnerID = FactorySchemas["RunnerID"];
 type FactoryWorker = FactorySchemas["Worker"];
 type FactoryWorkState = FactorySchemas["WorkState"];
+type FactoryClassificationRoute = FactorySchemas["ClassificationRoute"];
 type FactoryWorkstation = FactorySchemas["Workstation"];
 type FactoryWorkstationCron = FactorySchemas["WorkstationCron"];
 type FactoryWorkstationIO = FactorySchemas["WorkstationIO"];
@@ -70,6 +71,7 @@ const HOSTED_LINEAR_WORKER_CLAIM_KEYS = new Set(["assigneeField"]);
 const WORKSTATION_KEYS = new Set([
   "body",
   "copyReferencedScripts",
+  "classificationRoutes",
   "cron",
   "env",
   "guards",
@@ -93,6 +95,7 @@ const WORKSTATION_KEYS = new Set([
   "worktree",
 ]);
 const WORKSTATION_IO_KEYS = new Set(["guards", "state", "workType"]);
+const CLASSIFICATION_ROUTE_KEYS = new Set(["label", "outputs"]);
 const GUARD_KEYS = new Set([
   "matchConfig",
   "matchInput",
@@ -148,6 +151,7 @@ const WORKSTATION_BEHAVIOR_VALUES = new Set<
   "STANDARD",
 ]);
 const WORKSTATION_TYPE_VALUES = new Set<NonNullable<FactoryWorkstation["type"]>>([
+  "CLASSIFIER_WORKSTATION",
   "LOGICAL_MOVE",
   "MODEL_WORKSTATION",
 ]);
@@ -453,7 +457,6 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   const workstation: FactoryWorkstation = {
     inputs: readRequiredArray(record, "inputs", path, decodeWorkstationIO),
     name: readRequiredString(record, "name", path),
-    outputs: readRequiredArray(record, "outputs", path, decodeWorkstationIO),
     worker: readRequiredString(record, "worker", path),
   };
   const id = readOptionalString(record, "id", path);
@@ -464,6 +467,13 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   const limits = readOptionalObject(record, "limits", path, decodeWorkstationLimits);
   const body = readOptionalString(record, "body", path);
   const cron = readOptionalObject(record, "cron", path, decodeWorkstationCron);
+  const outputs = readOptionalArray(record, "outputs", path, decodeWorkstationIO);
+  const classificationRoutes = readOptionalArray(
+    record,
+    "classificationRoutes",
+    path,
+    decodeClassificationRoute,
+  );
   const onContinue = readOptionalArray(record, "onContinue", path, decodeWorkstationIO);
   const onRejection = readOptionalArray(record, "onRejection", path, decodeWorkstationIO);
   const onFailure = readOptionalArray(record, "onFailure", path, decodeWorkstationIO);
@@ -500,6 +510,12 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   if (cron !== undefined) {
     workstation.cron = cron;
   }
+  if (outputs !== undefined) {
+    workstation.outputs = outputs;
+  }
+  if (classificationRoutes !== undefined) {
+    workstation.classificationRoutes = classificationRoutes;
+  }
   if (onContinue !== undefined) {
     workstation.onContinue = onContinue;
   }
@@ -535,6 +551,16 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   }
 
   return workstation;
+}
+
+function decodeClassificationRoute(value: unknown, path: string): FactoryClassificationRoute {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, CLASSIFICATION_ROUTE_KEYS, path);
+
+  return {
+    label: readRequiredString(record, "label", path),
+    outputs: readRequiredArray(record, "outputs", path, decodeWorkstationIO),
+  };
 }
 
 function decodeWorkstationIO(value: unknown, path: string): FactoryWorkstationIO {

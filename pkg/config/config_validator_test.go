@@ -183,3 +183,20 @@ func TestRulePlaceReferences_AllValid(t *testing.T) {
 		t.Fatalf("expected no findings, got %v", findings)
 	}
 }
+
+func TestRulePlaceReferences_InvalidClassificationRouteOutput(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "classifier",
+		Type:           interfaces.WorkstationTypeClassify,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{{
+			Label:   "approved",
+			Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
+		}},
+	}}
+
+	findings := rulePlaceReferences(cfg)
+	assertFindingExists(t, findings, "workstation-classification-route-ref")
+}

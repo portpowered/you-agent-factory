@@ -248,6 +248,96 @@ func TestRuleWorkstationKind_UnknownKind(t *testing.T) {
 	assertFindingExists(t, findings, "workstation-kind")
 }
 
+func TestRuleClassifierWorkstations_RejectsNonClassifierWithoutOutputs(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "process-task",
+		Type:           interfaces.WorkstationTypeModel,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	assertFindingExists(t, findings, "workstation-outputs")
+}
+
+func TestRuleClassifierWorkstations_RejectsNonClassifierClassificationRoutes(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "process-task",
+		Type:           interfaces.WorkstationTypeModel,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+		},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	assertFindingExists(t, findings, "workstation-classification-routes")
+}
+
+func TestRuleClassifierWorkstations_RejectsMissingRoutesAndLegacySuccessPaths(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "classify-story",
+		Type:           interfaces.WorkstationTypeClassify,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		OnContinue:     []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		OnRejection:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	assertFindingExists(t, findings, "classifier-workstation-routes")
+	assertFindingExists(t, findings, "classifier-workstation-outputs")
+	assertFindingExists(t, findings, "classifier-workstation-on-continue")
+	assertFindingExists(t, findings, "classifier-workstation-on-rejection")
+}
+
+func TestRuleClassifierWorkstations_RejectsDuplicateLabelsWhitespaceAndEmptyOutputs(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "classify-story",
+		Type:           interfaces.WorkstationTypeClassify,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+			{Label: "approved"},
+			{Label: " needs_review ", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "review"}}},
+			{Label: "123", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "review"}}},
+			{Label: "   ", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+		},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	assertFindingExists(t, findings, "classifier-workstation-route-label")
+	assertFindingExists(t, findings, "classifier-workstation-route-outputs")
+}
+
+func TestRuleClassifierWorkstations_AllowsValidClassifierTopology(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "classify-story",
+		Type:           interfaces.WorkstationTypeClassify,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+			{Label: "needs_review", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+		},
+		OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
 func TestRuleCronWorkstations_ValidScheduleCron(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{

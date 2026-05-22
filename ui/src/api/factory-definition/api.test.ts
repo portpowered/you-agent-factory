@@ -458,6 +458,107 @@ describe("normalizeFactoryDefinition", () => {
     });
   });
 
+  it("accepts classifier workstations in the generated factory payload", () => {
+    expect(
+      normalizeFactoryDefinition({
+        name: "agent-factory",
+        workers: [{ name: "classifier" }],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "approved", type: "TERMINAL" },
+              { name: "failed", type: "FAILED" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            classificationRoutes: [
+              {
+                label: "approved",
+                outputs: [{ state: "approved", workType: "story" }],
+              },
+            ],
+            inputs: [{ state: "new", workType: "story" }],
+            name: "Classify",
+            onFailure: [{ state: "failed", workType: "story" }],
+            type: "CLASSIFIER_WORKSTATION",
+            worker: "classifier",
+          },
+        ],
+      }),
+    ).toEqual({
+      name: "agent-factory",
+      workers: [{ name: "classifier" }],
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "new", type: "INITIAL" },
+            { name: "approved", type: "TERMINAL" },
+            { name: "failed", type: "FAILED" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          classificationRoutes: [
+            {
+              label: "approved",
+              outputs: [{ state: "approved", workType: "story" }],
+            },
+          ],
+          inputs: [{ state: "new", workType: "story" }],
+          name: "Classify",
+          onFailure: [{ state: "failed", workType: "story" }],
+          type: "CLASSIFIER_WORKSTATION",
+          worker: "classifier",
+        },
+      ],
+    });
+  });
+
+  it("rejects unexpected keys inside classifier routes", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "agent-factory",
+        workers: [{ name: "classifier" }],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "approved", type: "TERMINAL" },
+              { name: "failed", type: "FAILED" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            classificationRoutes: [
+              {
+                label: "approved",
+                outputs: [{ state: "approved", workType: "story" }],
+                unexpected: "x",
+              },
+            ],
+            inputs: [{ state: "new", workType: "story" }],
+            name: "Classify",
+            onFailure: [{ state: "failed", workType: "story" }],
+            type: "CLASSIFIER_WORKSTATION",
+            worker: "classifier",
+          },
+        ],
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.workstations[0].classificationRoutes[0].unexpected is not allowed by the generated factory contract.",
+      ),
+    );
+  });
+
   it("allows a minimal factory payload without optional collections", () => {
     expect(
       normalizeFactoryDefinition({

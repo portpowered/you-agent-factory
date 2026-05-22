@@ -393,6 +393,154 @@ describe("getCurrentEditableFactoryDefinition", () => {
     });
   });
 
+  it("accepts editable-definition payloads with classifier workstations", async () => {
+    const document = await getCurrentEditableFactoryDefinitionDocument({
+      fetch: vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            factoryDefinition: {
+              name: "Current Factory",
+              workers: [{ name: "classifier" }],
+              workTypes: [
+                {
+                  name: "story",
+                  states: [
+                    { name: "new", type: "INITIAL" },
+                    { name: "approved", type: "TERMINAL" },
+                    { name: "failed", type: "FAILED" },
+                  ],
+                },
+              ],
+              workstations: [
+                {
+                  classificationRoutes: [
+                    {
+                      label: "approved",
+                      outputs: [{ state: "approved", workType: "story" }],
+                    },
+                  ],
+                  inputs: [{ state: "new", workType: "story" }],
+                  name: "Classify",
+                  onFailure: [{ state: "failed", workType: "story" }],
+                  type: "CLASSIFIER_WORKSTATION",
+                  worker: "classifier",
+                },
+              ],
+            },
+            version: {
+              logical: 12,
+              physical: "2026-05-18T14:30:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          },
+        ),
+      ),
+    });
+
+    expect(document).toEqual({
+      factoryDefinition: {
+        name: "Current Factory",
+        workers: [{ name: "classifier" }],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "approved", type: "TERMINAL" },
+              { name: "failed", type: "FAILED" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            classificationRoutes: [
+              {
+                label: "approved",
+                outputs: [{ state: "approved", workType: "story" }],
+              },
+            ],
+            inputs: [{ state: "new", workType: "story" }],
+            name: "Classify",
+            onFailure: [{ state: "failed", workType: "story" }],
+            type: "CLASSIFIER_WORKSTATION",
+            worker: "classifier",
+          },
+        ],
+      },
+      version: {
+        logical: 12,
+        physical: "2026-05-18T14:30:00Z",
+      },
+    });
+  });
+
+  it("rejects editable-definition payloads with unexpected classifier-route keys", async () => {
+    await expect(
+      getCurrentEditableFactoryDefinitionDocument({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              factoryDefinition: {
+                name: "Current Factory",
+                workers: [{ name: "classifier" }],
+                workTypes: [
+                  {
+                    name: "story",
+                    states: [
+                      { name: "new", type: "INITIAL" },
+                      { name: "approved", type: "TERMINAL" },
+                      { name: "failed", type: "FAILED" },
+                    ],
+                  },
+                ],
+                workstations: [
+                  {
+                    classificationRoutes: [
+                      {
+                        label: "approved",
+                        outputs: [{ state: "approved", workType: "story" }],
+                        unexpected: "x",
+                      },
+                    ],
+                    inputs: [{ state: "new", workType: "story" }],
+                    name: "Classify",
+                    onFailure: [{ state: "failed", workType: "story" }],
+                    type: "CLASSIFIER_WORKSTATION",
+                    worker: "classifier",
+                  },
+                ],
+              },
+              version: {
+                logical: 12,
+                physical: "2026-05-18T14:30:00Z",
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY_DEFINITION",
+      message:
+        "The current factory editing API returned a factory definition the dashboard cannot edit. factory.workstations[0].classificationRoutes[0].unexpected is not allowed by the generated factory contract.",
+      name: "CurrentEditableFactoryDefinitionError",
+      status: 200,
+      statusText: "OK",
+    });
+  });
+
   it("saves the editable current-factory definition with version metadata", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(

@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - label
+  - outputs
+properties:
+  label:
+    type: string
+    description: Case-sensitive classifier label that must match the trimmed classifier output exactly.
+  outputs:
+    type: array
+    description: One or more authored destinations emitted when this classifier label is selected.
+    items:
+      $ref: './WorkstationIO.yaml'

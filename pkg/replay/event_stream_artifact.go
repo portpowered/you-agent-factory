@@ -367,7 +367,7 @@ func mergeRuntimeWorkstationFlow(workstation *factoryapi.Workstation, authored f
 	if len(workstation.Inputs) == 0 {
 		workstation.Inputs = authored.Inputs
 	}
-	if len(workstation.Outputs) == 0 {
+	if workstation.Outputs == nil || len(*workstation.Outputs) == 0 {
 		workstation.Outputs = authored.Outputs
 	}
 	if workstation.OnFailure == nil {

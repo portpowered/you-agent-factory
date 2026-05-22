@@ -26,8 +26,9 @@ var publicFactoryHostedWorkerProviderAliases = map[string]string{
 }
 
 var publicFactoryWorkstationTypeAliases = map[string]string{
-	WorkstationTypeLogical: WorkstationTypeLogical,
-	WorkstationTypeModel:   WorkstationTypeModel,
+	WorkstationTypeClassify: WorkstationTypeClassify,
+	WorkstationTypeLogical:  WorkstationTypeLogical,
+	WorkstationTypeModel:    WorkstationTypeModel,
 }
 
 var publicFactoryRunnerIDAliases = map[string]string{

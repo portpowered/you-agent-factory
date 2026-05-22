@@ -1832,7 +1832,9 @@ func danglingFactoryReferenceTargets(factory factoryapi.Factory) []factoryapi.Er
 			targets = append(targets, editableFactoryErrorTarget("field", workstation.Name, fmt.Sprintf("factoryDefinition.workstations[%d].worker", workstationIndex)))
 		}
 		targets = append(targets, danglingIOTargets(workstation.Name, workstation.Inputs, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].inputs", workstationIndex))...)
-		targets = append(targets, danglingIOTargets(workstation.Name, workstation.Outputs, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].outputs", workstationIndex))...)
+		if workstation.Outputs != nil {
+			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.Outputs, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].outputs", workstationIndex))...)
+		}
 		if workstation.OnContinue != nil {
 			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnContinue, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].onContinue", workstationIndex))...)
 		}

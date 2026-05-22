@@ -114,8 +114,9 @@ const (
 
 // Defines values for WorkstationType.
 const (
-	WorkstationTypeLogicalMove      WorkstationType = "LOGICAL_MOVE"
-	WorkstationTypeModelWorkstation WorkstationType = "MODEL_WORKSTATION"
+	WorkstationTypeClassifierWorkstation WorkstationType = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeLogicalMove           WorkstationType = "LOGICAL_MOVE"
+	WorkstationTypeModelWorkstation      WorkstationType = "MODEL_WORKSTATION"
 )
 
 // BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.
@@ -144,6 +145,15 @@ type BundledFileContent struct {
 
 // BundledFileContentEncoding Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
 type BundledFileContentEncoding string
+
+// ClassificationRoute defines model for ClassificationRoute.
+type ClassificationRoute struct {
+	// Label Case-sensitive classifier label that must match the trimmed classifier output exactly.
+	Label string `json:"label"`
+
+	// Outputs One or more authored destinations emitted when this classifier label is selected.
+	Outputs []WorkstationIO `json:"outputs"`
+}
 
 // EditableFactoryDefinition defines model for EditableFactoryDefinition.
 type EditableFactoryDefinition struct {
@@ -476,6 +486,9 @@ type Workstation struct {
 	// Body Inline workstation instructions or script body when authored directly in factory config.
 	Body *string `json:"body,omitempty"`
 
+	// ClassificationRoutes Explicit label-to-destination routing used only by CLASSIFIER_WORKSTATION definitions. Each route must declare a unique non-empty label and one or more outputs.
+	ClassificationRoutes *[]ClassificationRoute `json:"classificationRoutes,omitempty"`
+
 	// CopyReferencedScripts Copy supported referenced script files into the expanded workstation layout when config expand runs.
 	CopyReferencedScripts *bool `json:"copyReferencedScripts,omitempty"`
 
@@ -498,20 +511,20 @@ type Workstation struct {
 	// Name Customer-authored workstation name used by guards, diagnostics, and authored references.
 	Name string `json:"name"`
 
-	// OnContinue Optional destination emitted when the workstation makes partial progress and should continue iterating.
+	// OnContinue Optional destination emitted when the workstation makes partial progress and should continue iterating. Classifier workstations must not declare onContinue.
 	OnContinue *[]WorkstationIO `json:"onContinue,omitempty"`
 
 	// OnFailure Optional destination emitted when the workstation fails permanently.
 	OnFailure *[]WorkstationIO `json:"onFailure,omitempty"`
 
-	// OnRejection Optional destination emitted when the worker rejects the current work without a hard failure.
+	// OnRejection Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection.
 	OnRejection *[]WorkstationIO `json:"onRejection,omitempty"`
 
 	// OutputSchema JSON schema string used to validate or parse structured model output when configured.
 	OutputSchema *string `json:"outputSchema,omitempty"`
 
-	// Outputs Work states emitted after this workstation succeeds.
-	Outputs []WorkstationIO `json:"outputs"`
+	// Outputs Work states emitted after a non-classifier workstation succeeds. Classifier workstations must use classificationRoutes instead of normal success outputs.
+	Outputs *[]WorkstationIO `json:"outputs,omitempty"`
 
 	// PromptFile Path to a prompt template file loaded for model-oriented workstation execution.
 	PromptFile *string `json:"promptFile,omitempty"`

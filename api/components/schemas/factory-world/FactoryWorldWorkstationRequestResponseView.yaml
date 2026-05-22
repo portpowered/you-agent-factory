@@ -7,6 +7,8 @@ properties:
     type: string
   feedback:
     type: string
+  selectedClassificationLabel:
+    type: string
   failureReason:
     type: string
   failureMessage:

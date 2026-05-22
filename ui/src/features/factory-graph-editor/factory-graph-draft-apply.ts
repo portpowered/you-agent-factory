@@ -104,35 +104,55 @@ export function applyWorkstationEdgeChanges(
     workstationKey,
     "workstation-input",
   );
-  nextWorkstation.outputs = applyIOEdgeChanges(
-    nextWorkstation.outputs,
-    draft,
-    workstationKey,
-    "workstation-output",
+  assignOptionalProperty(
+    nextWorkstation,
+    "outputs",
+    applyOptionalIOEdgeChanges(
+      nextWorkstation.outputs,
+      draft,
+      workstationKey,
+      "workstation-output",
+    ),
   );
-  nextWorkstation.onContinue = applyOptionalIOEdgeChanges(
-    nextWorkstation.onContinue,
-    draft,
-    workstationKey,
-    "workstation-on-continue",
+  assignOptionalProperty(
+    nextWorkstation,
+    "onContinue",
+    applyOptionalIOEdgeChanges(
+      nextWorkstation.onContinue,
+      draft,
+      workstationKey,
+      "workstation-on-continue",
+    ),
   );
-  nextWorkstation.onFailure = applyOptionalIOEdgeChanges(
-    nextWorkstation.onFailure,
-    draft,
-    workstationKey,
-    "workstation-on-failure",
+  assignOptionalProperty(
+    nextWorkstation,
+    "onFailure",
+    applyOptionalIOEdgeChanges(
+      nextWorkstation.onFailure,
+      draft,
+      workstationKey,
+      "workstation-on-failure",
+    ),
   );
-  nextWorkstation.onRejection = applyOptionalIOEdgeChanges(
-    nextWorkstation.onRejection,
-    draft,
-    workstationKey,
-    "workstation-on-rejection",
+  assignOptionalProperty(
+    nextWorkstation,
+    "onRejection",
+    applyOptionalIOEdgeChanges(
+      nextWorkstation.onRejection,
+      draft,
+      workstationKey,
+      "workstation-on-rejection",
+    ),
   );
-  nextWorkstation.resources = applyOptionalResourceEdgeChanges(
-    nextWorkstation.resources,
-    draft,
-    workstationKey,
-    "workstation-resource",
+  assignOptionalProperty(
+    nextWorkstation,
+    "resources",
+    applyOptionalResourceEdgeChanges(
+      nextWorkstation.resources,
+      draft,
+      workstationKey,
+      "workstation-resource",
+    ),
   );
 
   const removedAssignment = draft.edgeChanges.removals.some(
@@ -170,13 +190,29 @@ export function applyWorkerResourceChanges(
     name: worker.name,
   };
   const nextWorker = structuredClone(worker);
-  nextWorker.resources = applyOptionalResourceEdgeChanges(
-    nextWorker.resources,
-    draft,
-    workerKey,
-    "worker-resource",
+  assignOptionalProperty(
+    nextWorker,
+    "resources",
+    applyOptionalResourceEdgeChanges(
+      nextWorker.resources,
+      draft,
+      workerKey,
+      "worker-resource",
+    ),
   );
   return nextWorker;
+}
+
+function assignOptionalProperty<
+  T extends object,
+  K extends keyof T,
+>(target: T, key: K, value: T[K] | undefined): void {
+  if (value === undefined) {
+    delete target[key];
+    return;
+  }
+
+  target[key] = value;
 }
 
 function applyIOEdgeChanges(
@@ -219,6 +255,7 @@ function applyOptionalIOEdgeChanges(
   draft: FactoryGraphDraft,
   workstation: FactoryGraphNodeReference,
   kind:
+    | "workstation-output"
     | "workstation-on-continue"
     | "workstation-on-failure"
     | "workstation-on-rejection",

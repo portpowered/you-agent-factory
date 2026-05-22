@@ -14,6 +14,7 @@ import {
   FactoryGraphEditorStatus,
   type FactoryGraphEditorTool,
 } from "../../factory-graph-editor/factory-graph-editor-controls";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/factory-graph-draft-types";
 import type { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
 
@@ -97,6 +98,7 @@ const MODE_TOGGLE_COMPACT_CLASS =
 export function CurrentActivityGraphHeaderActions({
   compact = false,
   editorMode,
+  editorUnavailableClassifierWorkstationName,
   hasChanges,
   isDefinitionLoading,
   loadErrorMessage,
@@ -105,12 +107,21 @@ export function CurrentActivityGraphHeaderActions({
 }: {
   compact?: boolean;
   editorMode: boolean;
+  editorUnavailableClassifierWorkstationName?: string;
   hasChanges: boolean;
   isDefinitionLoading: boolean;
   loadErrorMessage?: string;
   locale?: string;
   onToggle: () => void;
 }) {
+  const messages = getFactoryGraphEditorMessages(locale);
+  const editorUnavailableReason =
+    editorUnavailableClassifierWorkstationName === undefined
+      ? undefined
+      : messages.modeClassifierRoutesUnavailable(
+          editorUnavailableClassifierWorkstationName,
+        );
+
   return (
     <div
       className={cn(
@@ -121,6 +132,7 @@ export function CurrentActivityGraphHeaderActions({
       <FactoryGraphEditorStatus
         className={compact ? STATUS_PILL_COMPACT_CLASS : undefined}
         editorMode={editorMode}
+        editorUnavailableReason={editorUnavailableReason}
         hasChanges={hasChanges}
         isDefinitionLoading={isDefinitionLoading}
         locale={locale}
@@ -128,9 +140,11 @@ export function CurrentActivityGraphHeaderActions({
       />
       <FactoryGraphEditorModeToggle
         className={compact ? MODE_TOGGLE_COMPACT_CLASS : undefined}
+        disabled={!editorMode && editorUnavailableReason !== undefined}
         editorMode={editorMode}
         locale={locale}
         onClick={onToggle}
+        tooltipOverride={editorUnavailableReason}
       />
     </div>
   );

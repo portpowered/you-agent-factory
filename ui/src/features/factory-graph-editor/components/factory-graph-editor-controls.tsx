@@ -10,6 +10,10 @@ import {
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
+export {
+  FactoryGraphEditorModeToggle,
+  FactoryGraphEditorStatus,
+} from "./factory-graph-editor-mode-controls";
 import { FactoryGraphEditorTooltipButton } from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
@@ -31,8 +35,6 @@ export interface FactoryGraphEditorVisibilityOption {
 
 const TOOLBAR_SHELL_CLASS =
   "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:translate-x-0 max-md:justify-between";
-const STATUS_PILL_CLASS =
-  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold";
 const MENU_LIST_CLASS = "grid gap-1";
 const MENU_ACTION_CLASS =
   "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent/20 hover:bg-af-overlay/6 focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:opacity-55";
@@ -46,136 +48,8 @@ const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
   warning: "border-af-warning/30 bg-af-warning/10 text-af-warning-ink",
 };
 
-function EditModeIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="18"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
-  );
-}
-
-export function FactoryGraphEditorModeToggle({
-  className,
-  editorMode,
-  locale,
-  onClick,
-}: {
-  className?: string;
-  editorMode: boolean;
-  locale?: string;
-  onClick: () => void;
-}) {
-  const messages = getFactoryGraphEditorMessages(locale);
-  const label = editorMode
-    ? messages.modeLeaveEditor
-    : messages.modeEnterEditor;
-
-  return (
-    <FactoryGraphEditorTooltipButton
-      aria-label={label}
-      aria-pressed={editorMode}
-      className={buttonVariants({
-        className: cn("shrink-0", className),
-        size: "icon",
-        tone: editorMode ? "secondary" : "outline",
-      })}
-      onClick={onClick}
-      tooltip={label}
-      type="button"
-    >
-      <EditModeIcon />
-    </FactoryGraphEditorTooltipButton>
-  );
-}
-
-export function FactoryGraphEditorStatus({
-  className,
-  editorMode,
-  hasChanges,
-  isDefinitionLoading,
-  locale,
-  loadErrorMessage,
-}: {
-  className?: string;
-  editorMode: boolean;
-  hasChanges: boolean;
-  isDefinitionLoading: boolean;
-  locale?: string;
-  loadErrorMessage?: string;
-}) {
-  const messages = getFactoryGraphEditorMessages(locale);
-  if (!editorMode) {
-    return (
-      <p
-        className={cn(
-          STATUS_PILL_CLASS,
-          className,
-          "border-af-overlay/12 bg-af-overlay/6 text-af-ink/76",
-        )}
-      >
-        {messages.modeObserve}
-      </p>
-    );
-  }
-
-  if (isDefinitionLoading) {
-    return (
-      <p
-        aria-live="polite"
-        className={cn(
-          STATUS_PILL_CLASS,
-          className,
-          "border-af-accent/24 bg-af-accent/10 text-af-accent",
-        )}
-      >
-        {messages.modeLoadingDefinition}
-      </p>
-    );
-  }
-
-  if (loadErrorMessage) {
-    return (
-      <p
-        aria-live="polite"
-        className={cn(
-          STATUS_PILL_CLASS,
-          className,
-          "border-af-danger/30 bg-af-danger/8 text-af-danger-ink",
-        )}
-        role="status"
-      >
-        {messages.modeUnavailablePrefix}: {loadErrorMessage}
-      </p>
-    );
-  }
-
-  return (
-    <p
-      aria-live="polite"
-      className={cn(
-        STATUS_PILL_CLASS,
-        className,
-        hasChanges
-          ? "border-af-warning/30 bg-af-warning/10 text-af-warning-ink"
-          : "border-af-accent/24 bg-af-accent/10 text-af-accent",
-      )}
-      role="status"
-    >
-      {hasChanges ? messages.modeUnsavedChanges : messages.modeActive}
-    </p>
-  );
-}
+const STATUS_PILL_CLASS =
+  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold";
 
 export function FactoryGraphEditorToolbar({
   activeTool,
@@ -206,7 +80,10 @@ export function FactoryGraphEditorToolbar({
   const messages = getFactoryGraphEditorMessages(locale);
 
   return (
-    <section aria-label={messages.toolbarAriaLabel} className={TOOLBAR_SHELL_CLASS}>
+    <section
+      aria-label={messages.toolbarAriaLabel}
+      className={TOOLBAR_SHELL_CLASS}
+    >
       <FactoryGraphEditorToolbarButton
         active={activeTool === "add"}
         description={messages.toolbarAddDescription}
@@ -228,9 +105,7 @@ export function FactoryGraphEditorToolbar({
         description={messages.toolbarDeleteDescription}
         disabled={!canInteract}
         label={messages.toolbarDeleteLabel}
-        onClick={() =>
-          onSelectTool(activeTool === "delete" ? null : "delete")
-        }
+        onClick={() => onSelectTool(activeTool === "delete" ? null : "delete")}
         tone={activeTool === "delete" ? "secondary" : "outline"}
       />
       <FactoryGraphEditorToolbarButton
@@ -277,9 +152,14 @@ export function FactoryGraphEditorVisibilityPanel({
   const messages = getFactoryGraphEditorMessages(locale);
 
   return (
-    <section aria-label={messages.toolbarVisibilityAriaLabel} className={VISIBILITY_PANEL_CLASS}>
+    <section
+      aria-label={messages.toolbarVisibilityAriaLabel}
+      className={VISIBILITY_PANEL_CLASS}
+    >
       <div className="grid gap-1">
-        <p className="m-0 text-sm font-semibold text-af-ink">{messages.denseGraphTitle}</p>
+        <p className="m-0 text-sm font-semibold text-af-ink">
+          {messages.denseGraphTitle}
+        </p>
         <p className="m-0 text-xs leading-5 text-af-ink/68">
           {messages.toolbarVisibilityDescription}
         </p>
@@ -377,20 +257,20 @@ function FactoryGraphEditorAddMenu({
         disabled={!canInteract}
         type="button"
       >
-          <svg
-            aria-hidden="true"
-            fill="none"
-            height="18"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.8"
-            viewBox="0 0 24 24"
-            width="18"
-          >
-            <path d="M12 5v14" />
-            <path d="M5 12h14" />
-          </svg>
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.8"
+          viewBox="0 0 24 24"
+          width="18"
+        >
+          <path d="M12 5v14" />
+          <path d="M5 12h14" />
+        </svg>
       </PopoverTrigger>
       <PopoverContent
         align="start"
