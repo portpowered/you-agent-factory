@@ -18,6 +18,12 @@ import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineSto
 import { DashboardHeader } from "./dashboard-header";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 
+vi.mock("../dashboard-session-tabs", () => ({
+  DashboardSessionTabs: ({ locale }: { locale: string }) => (
+    <div>Dashboard session tabs {locale}</div>
+  ),
+}));
+
 function timelineEvent(
   id: string,
   tick: number,
@@ -160,6 +166,7 @@ describe("DashboardHeader", () => {
     expect(streamStatus.className).toContain("h-10");
     expect(streamStatus.className).toContain("w-10");
     expect(streamStatus).toBeTruthy();
+    expect(screen.getByText("Dashboard session tabs en")).toBeTruthy();
     expect(useExportDialogStore.getState().isExportDialogOpen).toBe(false);
 
     fireEvent.click(exportButton);

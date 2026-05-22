@@ -1,4 +1,5 @@
 import { factoryAPIURL } from "../baseUrl";
+import { factorySessionScopedPath } from "../session-routing";
 import type { FactoryEvent } from "./types";
 import { FACTORY_EVENTS_ENDPOINT } from "./types";
 
@@ -21,6 +22,7 @@ function factoryEventSource(): EventSourceCtor | null {
 export function openFactoryEventStream(
   onEvent: (event: FactoryEvent) => void,
   onStatusChange: (status: "connecting" | "live" | "offline", message: string) => void,
+  sessionID?: string | null,
 ): EventSourceLike | null {
   const EventSourceImpl = factoryEventSource();
   if (EventSourceImpl === null) {
@@ -28,7 +30,9 @@ export function openFactoryEventStream(
     return null;
   }
 
-  const stream = new EventSourceImpl(factoryAPIURL(FACTORY_EVENTS_ENDPOINT));
+  const stream = new EventSourceImpl(
+    factoryAPIURL(factorySessionScopedPath(FACTORY_EVENTS_ENDPOINT, sessionID)),
+  );
   onStatusChange("connecting", "Connecting to factory events...");
   stream.onopen = () => {
     onStatusChange("live", "Factory event stream connected.");
@@ -43,4 +47,3 @@ export function openFactoryEventStream(
   });
   return stream;
 }
-

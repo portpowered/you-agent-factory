@@ -26,9 +26,31 @@ export default {
   component: App,
 };
 
+const defaultFactorySessionSummary = {
+  factoryDir: "/workspace/root",
+  folderPath: "/workspace/root",
+  id: "~default",
+  isDefault: true,
+  project: "root",
+  target: {
+    kind: "default" as const,
+  },
+};
+
 export const WorkChartTimelineVerification = {
   parameters: {
     dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions",
+          response: {
+            body: {
+              sessions: [defaultFactorySessionSummary],
+            },
+          },
+        },
+      ],
       timelineSnapshots: [
         historicalWorkOutcomeSnapshot,
         liveWorkOutcomeSnapshot,
@@ -72,6 +94,17 @@ export const HeaderActionButtonsVerification = {
   tags: ["test"],
   parameters: {
     dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions",
+          response: {
+            body: {
+              sessions: [defaultFactorySessionSummary],
+            },
+          },
+        },
+      ],
       timelineSnapshots: [
         historicalWorkOutcomeSnapshot,
         liveWorkOutcomeSnapshot,
@@ -145,6 +178,17 @@ export const HeaderTimelineAlignmentVerification = {
   tags: ["test"],
   parameters: {
     dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions",
+          response: {
+            body: {
+              sessions: [defaultFactorySessionSummary],
+            },
+          },
+        },
+      ],
       timelineSnapshots: [
         historicalWorkOutcomeSnapshot,
         liveWorkOutcomeSnapshot,

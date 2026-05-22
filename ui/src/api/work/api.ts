@@ -1,5 +1,6 @@
 import { factoryAPIURL } from "../baseUrl";
 import type { components } from "../generated/openapi";
+import { factorySessionScopedPath } from "../session-routing";
 
 type SubmitWorkRequest = components["schemas"]["SubmitWorkRequest"];
 type SubmitWorkResponse = components["schemas"]["SubmitWorkResponse"];
@@ -33,14 +34,20 @@ export class SubmitWorkAPIError extends Error {
   }
 }
 
-export async function submitWork(request: SubmitWorkRequest): Promise<SubmitWorkResponse> {
-  const response = await fetch(factoryAPIURL(SUBMIT_WORK_ENDPOINT), {
+export async function submitWork(
+  request: SubmitWorkRequest,
+  options: { sessionID?: string | null } = {},
+): Promise<SubmitWorkResponse> {
+  const response = await fetch(
+    factoryAPIURL(factorySessionScopedPath(SUBMIT_WORK_ENDPOINT, options.sessionID)),
+    {
     body: JSON.stringify(request),
     headers: {
       "Content-Type": "application/json",
     },
     method: "POST",
-  });
+    },
+  );
 
   if (response.status === 201) {
     return (await response.json()) as SubmitWorkResponse;
@@ -84,4 +91,3 @@ async function parseErrorResponse(response: Response): Promise<ErrorResponse | n
 export function isSubmitWorkAPIError(error: unknown): error is SubmitWorkAPIError {
   return error instanceof SubmitWorkAPIError;
 }
-

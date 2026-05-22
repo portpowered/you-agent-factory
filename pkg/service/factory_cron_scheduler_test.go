@@ -158,6 +158,7 @@ func TestFactoryService_ServiceModeCronScheduleConfigStartsAndStopsService(t *te
 		errCh <- svc.Run(runCtx)
 	}()
 
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default cron runtime")
 	cancelRun()
 	select {
 	case err := <-errCh:
@@ -598,6 +599,21 @@ func buildCronServiceForIngressTest(
 	go func() {
 		errCh <- svc.Run(runCtx)
 	}()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		handle := svc.currentLiveRuntime()
+		if handle != nil {
+			startCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			err := svc.waitForLiveRuntimeStart(startCtx, handle)
+			cancel()
+			if err != nil {
+				t.Fatalf("wait for cron service startup: %v", err)
+			}
+			return svc, runCtx, errCh, cancelRun
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for cron service runtime handle")
 	return svc, runCtx, errCh, cancelRun
 }
 

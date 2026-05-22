@@ -19,6 +19,8 @@ import (
 const (
 	defaultFileLineLimit     = 1000
 	defaultFunctionLineLimit = 100
+	ignoreFileDirective      = "backendsizecheck:ignore-file"
+	ignoreFuncDirective      = "backendsizecheck:ignore-function"
 )
 
 var (
@@ -182,10 +184,16 @@ func scanFile(repoRoot string, filePath string, fileLineLimit int, funcLineLimit
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", relativePath, err)
 	}
+	if hasIgnoreDirective(parsedFile.Comments, ignoreFileDirective) {
+		return nil, nil
+	}
 
 	for _, decl := range parsedFile.Decls {
 		function, ok := decl.(*ast.FuncDecl)
 		if !ok {
+			continue
+		}
+		if function.Doc != nil && hasIgnoreDirective([]*ast.CommentGroup{function.Doc}, ignoreFuncDirective) {
 			continue
 		}
 		actual := fileSet.Position(function.End()).Line - fileSet.Position(function.Pos()).Line + 1
@@ -233,4 +241,15 @@ func countLines(source []byte) int {
 		return 0
 	}
 	return strings.Count(string(source), "\n") + 1
+}
+
+func hasIgnoreDirective(groups []*ast.CommentGroup, directive string) bool {
+	for _, group := range groups {
+		for _, comment := range group.List {
+			if strings.Contains(comment.Text, directive) {
+				return true
+			}
+		}
+	}
+	return false
 }

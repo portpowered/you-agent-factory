@@ -38,7 +38,7 @@ func TestBuildReplacementFactoryRuntime_ServiceModeStaysRunningUntilCanceled(t *
 	}
 
 	createReplacementWatchChannel(t, betaDir, "task", "activated")
-	replacement, err := svc.buildReplacementFactoryRuntime(context.Background(), betaDir)
+	replacement, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID)
 	if err != nil {
 		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
 	}
@@ -90,6 +90,7 @@ func writeNamedFactoryFixture(t *testing.T, rootDir, name string) string {
 				"states": []map[string]string{
 					{"name": "init", "type": "INITIAL"},
 					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
 				},
 			},
 		},
@@ -102,12 +103,13 @@ func writeNamedFactoryFixture(t *testing.T, rootDir, name string) string {
 		},
 		"workstations": []map[string]any{
 			{
-				"name":    "execute-" + name,
-				"worker":  "executor",
-				"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
-				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
-				"type":    "MODEL_WORKSTATION",
-				"body":    "Implement {{ .WorkID }}.",
+				"name":      "execute-" + name,
+				"worker":    "executor",
+				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+				"type":      "MODEL_WORKSTATION",
+				"body":      "Implement {{ .WorkID }}.",
 			},
 		},
 	})

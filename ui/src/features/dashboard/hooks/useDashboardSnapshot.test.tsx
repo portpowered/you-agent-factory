@@ -4,11 +4,13 @@ import type { PropsWithChildren } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { createReplayHarness } from "../../../testing/replay-harness";
 import {
   CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
   CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
 } from "../../current-factory-definition";
+import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import { FACTORY_TIMELINE_DEBUG_STORAGE_KEY } from "../../timeline/state/factoryTimelineDebug";
 import {
   type WorldState,
@@ -252,6 +254,9 @@ describe("useDashboardSnapshot", () => {
     useDashboardStreamStore.setState({
       streamState: createDefaultDashboardStreamState(),
     });
+    useDashboardSessionStore.setState({
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
     useFactoryTimelineStore.setState({
       events: [],
       latestTick: SEEDED_SNAPSHOT.tick_count,
@@ -271,6 +276,9 @@ describe("useDashboardSnapshot", () => {
     vi.unstubAllGlobals();
     useDashboardStreamStore.setState({
       streamState: createDefaultDashboardStreamState(),
+    });
+    useDashboardSessionStore.setState({
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
     });
     useFactoryTimelineStore.getState().reset();
   });
@@ -302,6 +310,69 @@ describe("useDashboardSnapshot", () => {
     await waitFor(() => {
       expect(useFactoryTimelineStore.getState().selectedTick).toBe(REFRESHED_SNAPSHOT.tick_count);
     });
+  });
+
+  it("reconnects the stream to the selected non-default session and clears prior timeline state", async () => {
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    expect(replayHarness.getStreams()[0]?.url).toBe("/events");
+
+    act(() => {
+      useFactoryTimelineStore.setState({
+        events: CANONICAL_SELECTED_TICK_EVENTS,
+        latestTick: 6,
+        mode: "current",
+        receivedEventIDs: CANONICAL_SELECTED_TICK_EVENTS.map((event) => event.id),
+        selectedTick: 6,
+        worldViewCache: {
+          6: timelineSnapshot(REFRESHED_SNAPSHOT),
+        },
+      });
+    });
+
+    act(() => {
+      useDashboardSessionStore.getState().setSelectedSessionID("session-beta");
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(2);
+    });
+    expect(replayHarness.getStreams()[1]?.url).toBe(
+      "/factories/session-beta/events",
+    );
+    expect(useFactoryTimelineStore.getState().events).toEqual([]);
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+  });
+
+  it("clears timeline state and closes the stream when the last live session is deselected", async () => {
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    expect(replayHarness.getStreams()).toHaveLength(1);
+    useFactoryTimelineStore.setState({
+      events: CANONICAL_SELECTED_TICK_EVENTS,
+      latestTick: 6,
+      mode: "current",
+      receivedEventIDs: CANONICAL_SELECTED_TICK_EVENTS.map((event) => event.id),
+      selectedTick: 6,
+      worldViewCache: {
+        6: timelineSnapshot(REFRESHED_SNAPSHOT),
+      },
+    });
+
+    act(() => {
+      useDashboardSessionStore.getState().setSelectedSessionID(null);
+    });
+
+    await waitFor(() => {
+      expect(useFactoryTimelineStore.getState().events).toEqual([]);
+    });
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+    expect(useFactoryTimelineStore.getState().worldViewCache[6]).toBeUndefined();
+    expect(replayHarness.getStreams()).toHaveLength(1);
   });
 
   it("reduces raw canonical /events messages into the current timeline projection", async () => {

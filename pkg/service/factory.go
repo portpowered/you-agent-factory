@@ -1,16 +1,27 @@
+// backendsizecheck:ignore-file this legacy service orchestration file remains oversized until dedicated refactor work lands.
 package service
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jonboulle/clockwork"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/listeners"
@@ -59,11 +70,16 @@ var ErrCurrentNamedFactoryNotFound = apisurface.ErrCurrentNamedFactoryNotFound
 
 type replacementFactoryRuntime struct {
 	dir          string
+	folderPath   string
 	eventHistory *factory.FactoryEventHistory
 	factory      factory.Factory
 	listener     *listeners.FileWatcher
 	net          *state.Net
 	runtimeCfg   *factoryconfig.LoadedFactoryConfig
+	logger       *zap.Logger
+	logSink      *logging.RuntimeLogSink
+	recording    *replay.Recorder
+	recordPath   string
 }
 
 type liveRuntimeHandle struct {
@@ -78,8 +94,9 @@ type liveRuntimeHandle struct {
 }
 
 type serviceRunState struct {
-	ctx     context.Context
-	runtime *liveRuntimeHandle
+	ctx       context.Context
+	sessionID string
+	runtime   *liveRuntimeHandle
 }
 
 // FactoryService is an instantiation of a factory along with its runtime
@@ -90,6 +107,7 @@ type FactoryService struct {
 	activationMu   sync.RWMutex
 	runMu          sync.RWMutex
 	runState       *serviceRunState
+	sessions       *liveRuntimeSessionManager
 	factoryRootDir string
 	factory        factory.Factory
 	listener       *listeners.FileWatcher
@@ -97,6 +115,7 @@ type FactoryService struct {
 	cfg            *FactoryServiceConfig
 	runtimeCfg     *factoryconfig.LoadedFactoryConfig
 	eventHistory   *factory.FactoryEventHistory
+	baseLogger     *zap.Logger
 	logger         *zap.Logger
 	startTime      time.Time
 	clock          factory.Clock
@@ -106,6 +125,7 @@ type FactoryService struct {
 
 var _ factory.APIFactory = (*FactoryService)(nil)
 var _ apisurface.APISurface = (*FactoryService)(nil)
+var _ apisurface.SessionAPISurface = (*FactoryService)(nil)
 
 // FactoryServiceConfig holds all parameters needed to build and run a factory.
 type FactoryServiceConfig struct {
@@ -199,6 +219,1177 @@ type FactoryServiceConfig struct {
 	CommandRunnerOverride workers.CommandRunner
 }
 
+// BuildFactoryService loads factory.json from the config directory, constructs
+// the petri net, factory runtime, file watcher, and session metrics.
+// portos:func-length-exception owner=agent-factory reason=legacy-service-wiring review=2026-07-18 removal=split-replay-recording-worker-and-listener-builders-before-next-service-wiring-change
+func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryService, error) {
+	if err := validateReplayModeConfig(cfg); err != nil {
+		return nil, err
+	}
+	factoryRootDir := cfg.Dir
+	baseLogger := cfg.Logger
+	if baseLogger == nil {
+		baseLogger = zap.NewNop()
+	}
+	runtimeInstanceID := cfg.RuntimeInstanceID
+	if runtimeInstanceID == "" {
+		runtimeInstanceID = uuid.NewString()
+	}
+	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, cfg.RuntimeLogDir, cfg.RuntimeLogConfig)
+	if err != nil {
+		return nil, err
+	}
+	serviceBuilt := false
+	defer func() {
+		if !serviceBuilt {
+			_ = logSink.Close()
+		}
+	}()
+	logger := logSink.Logger()
+	cfg.RuntimeInstanceID = runtimeInstanceID
+	cfg.Logger = baseLogger
+
+	if cfg.ReplayPath == "" {
+		resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(cfg.Dir)
+		if err != nil {
+			return nil, fmt.Errorf("resolve factory dir: %w", err)
+		}
+		cfg.Dir = resolvedDir
+	}
+
+	logger = newSessionLogger(logger, defaultFactorySessionID, factoryRootDir, cfg.Dir)
+
+	logger.Info("loading factory config", zap.String("dir", cfg.Dir))
+	loadedFactoryCfg, replayArtifact, err := loadFactoryConfigForMode(cfg)
+	if err != nil {
+		logger.Error("failed to load factory config", zap.Error(err))
+		return nil, fmt.Errorf("load factory config: %w", err)
+	}
+	warnPortableBundledReplacementReport(logger, "runtime config load replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
+	warnReplayMetadataMismatches(cfg, replayArtifact, logger)
+	clock := cfg.Clock
+	if clock == nil && replayArtifact != nil {
+		clock = replay.NewArtifactClock(replayArtifact)
+	}
+	if clock == nil {
+		clock = clockwork.NewRealClock()
+	}
+	clock = factory.EnsureClock(clock)
+	var replaySideEffects *replay.SideEffects
+	var replaySubmissionHook *replay.SubmissionHook
+	var replayDeliveryPlan *replay.CompletionDeliveryPlan
+	if replayArtifact != nil {
+		replaySideEffects, err = replay.NewSideEffects(replayArtifact)
+		if err != nil {
+			return nil, fmt.Errorf("build replay side effects: %w", err)
+		}
+		replaySubmissionHook, err = replay.NewSubmissionHook(replayArtifact)
+		if err != nil {
+			return nil, fmt.Errorf("build replay submission hook: %w", err)
+		}
+		replayDeliveryPlan, err = replay.NewCompletionDeliveryPlan(replayArtifact)
+		if err != nil {
+			return nil, fmt.Errorf("build replay completion delivery plan: %w", err)
+		}
+	}
+
+	mapper := factoryconfig.ConfigMapper{}
+	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig())
+	if err != nil {
+		logger.Error("failed to map factory config", zap.Error(err))
+		return nil, fmt.Errorf("map factory config: %w", err)
+	}
+
+	effectiveFactoryRunnerID := effectiveFactoryRunnerID(cfg.RunnerID, loadedFactoryCfg.FactoryConfig())
+	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
+	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
+	workerOpts, err := loadWorkersFromConfig(
+		loadedFactoryCfg.FactoryDir(),
+		loadedFactoryCfg.FactoryConfig(),
+		effectiveFactoryRunnerID,
+		loadedFactoryCfg,
+		logging.NewZapLogger(logger, cfg.Verbose),
+		cfg.SkipBuiltInRunnerPrerequisiteValidation,
+		providerOverrideForMode(cfg, replaySideEffects),
+		providerCommandRunnerForMode(cfg, loadedFactoryCfg),
+		commandRunnerOverrideForMode(cfg, loadedFactoryCfg, replaySideEffects),
+		eventHistory.RecordScriptEvent,
+		eventHistory.RecordInferenceEvent,
+		clock.Now,
+	)
+	if err != nil {
+		logger.Error("failed to load workers from config", zap.Error(err))
+		return nil, fmt.Errorf("load workers: %w", err)
+	}
+
+	recordingArtifact, err := newRecordingArtifact(
+		cfg,
+		loadedFactoryCfg.FactoryDir(),
+		loadedFactoryCfg.FactoryConfig(),
+		loadedFactoryCfg,
+		clock,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var recording *replay.Recorder
+	if recordingArtifact != nil {
+		recording, err = replay.NewRecorder(
+			cfg.RecordPath,
+			recordingArtifact,
+			replay.WithFlushInterval(cfg.RecordFlushInterval),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("create replay recorder: %w", err)
+		}
+	}
+
+	opts := []factory.FactoryOption{
+		factory.WithNet(net),
+		factory.WithRuntimeMode(cfg.RuntimeMode),
+		factory.WithLogger(logging.NewZapLogger(logger, cfg.Verbose)),
+		factory.WithRuntimeConfig(loadedFactoryCfg),
+		factory.WithWorkflowContext(runtimeWorkflowContext(loadedFactoryCfg.FactoryConfig())),
+		factory.WithClock(clock),
+		factory.WithFactoryEventHistory(eventHistory),
+	}
+	if cfg.RecordPath != "" {
+		opts = append(opts, factory.WithFactoryEventRecorder(func(event factoryapi.FactoryEvent) {
+			if recording != nil {
+				recording.RecordEvent(event)
+			}
+		}))
+	}
+	if replaySubmissionHook != nil {
+		opts = append(opts, factory.WithSubmissionHook(replaySubmissionHook))
+	}
+	if replayDeliveryPlan != nil {
+		opts = append(opts, factory.WithCompletionDeliveryPlanner(replayDeliveryPlan))
+	}
+	opts = append(opts, workerOpts...)
+	opts = append(opts, cfg.ExtraOptions...)
+
+	f, err := runtime.New(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("create factory: %w", err)
+	}
+
+	// Always use the inputs/ directory.
+	inputsDir := filepath.Join(cfg.Dir, interfaces.InputsDir)
+
+	var listener *listeners.FileWatcher
+	if dirExists(inputsDir) {
+		listener = listeners.NewFileWatcher(inputsDir, f, logger, listeners.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)))
+		logger.Info("using inputs/ directory", zap.String("dir", inputsDir))
+	} else {
+		// Create inputs/ for new factories.
+		if err := os.MkdirAll(inputsDir, 0o755); err != nil {
+			return nil, fmt.Errorf("create inputs dir: %w", err)
+		}
+		listener = listeners.NewFileWatcher(inputsDir, f, logger, listeners.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)))
+	}
+
+	serviceBuilt = true
+	return &FactoryService{
+		factoryRootDir: factoryRootDir,
+		sessions:       newLiveRuntimeSessionManager(),
+		eventHistory:   eventHistory,
+		factory:        f,
+		listener:       listener,
+		net:            net,
+		cfg:            cfg,
+		runtimeCfg:     loadedFactoryCfg,
+		baseLogger:     baseLogger,
+		logger:         logger,
+		clock:          clock,
+		recording:      recording,
+		logSink:        logSink,
+	}, nil
+}
+
+// ActivateNamedFactory builds a replacement runtime from a persisted named
+// factory directory and swaps it in only after the current runtime is idle.
+func (fs *FactoryService) ActivateNamedFactory(ctx context.Context, name string) error {
+	if fs == nil {
+		return fmt.Errorf("factory service is required")
+	}
+	fs.activationMu.Lock()
+	defer fs.activationMu.Unlock()
+
+	if err := fs.requireIdleRuntime(ctx); err != nil {
+		return err
+	}
+
+	rootDir := fs.factoryRootDir
+	if rootDir == "" && fs.cfg != nil {
+		rootDir = fs.cfg.Dir
+	}
+	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(rootDir, name)
+	if err != nil {
+		return err
+	}
+
+	sessionID := defaultFactorySessionID
+	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
+		sessionID = runState.sessionID
+	}
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, rootDir, factoryDir, sessionID)
+	if err != nil {
+		return fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
+	}
+	if err := fs.requireIdleRuntime(ctx); err != nil {
+		return err
+	}
+	return fs.activateReplacementRuntime(ctx, rootDir, name, replacement)
+}
+
+func (fs *FactoryService) buildReplacementFactoryRuntime(
+	ctx context.Context,
+	folderPath string,
+	factoryDir string,
+	sessionID string,
+) (*replacementFactoryRuntime, error) {
+	baseLogger := fs.baseLogger
+	if baseLogger == nil {
+		baseLogger = zap.NewNop()
+	}
+
+	loadedFactoryCfg, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
+	if err != nil {
+		return nil, fmt.Errorf("load factory config: %w", err)
+	}
+	runtimeInstanceID := uuid.NewString()
+	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, fs.cfg.RuntimeLogDir, fs.cfg.RuntimeLogConfig)
+	if err != nil {
+		return nil, fmt.Errorf("build runtime logger: %w", err)
+	}
+	logger := newSessionLogger(logSink.Logger(), sessionID, folderPath, loadedFactoryCfg.FactoryDir())
+	runtimeBuilt := false
+	defer func() {
+		if !runtimeBuilt {
+			_ = logSink.Close()
+		}
+	}()
+	warnPortableBundledReplacementReport(logger, "named factory activation replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
+	loadedFactoryCfg.SetRuntimeBaseDir(fs.cfg.ExecutionBaseDir)
+
+	mapper := factoryconfig.ConfigMapper{}
+	net, err := mapper.Map(ctx, loadedFactoryCfg.FactoryConfig())
+	if err != nil {
+		return nil, fmt.Errorf("map factory config: %w", err)
+	}
+
+	clock := fs.clock
+	if clock == nil {
+		clock = factory.EnsureClock(clockwork.NewRealClock())
+	}
+	effectiveFactoryRunnerID := effectiveFactoryRunnerID(fs.cfg.RunnerID, loadedFactoryCfg.FactoryConfig())
+	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
+	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
+	workerOpts, err := loadWorkersFromConfig(
+		loadedFactoryCfg.FactoryDir(),
+		loadedFactoryCfg.FactoryConfig(),
+		effectiveFactoryRunnerID,
+		loadedFactoryCfg,
+		logging.NewZapLogger(logger, fs.cfg.Verbose),
+		fs.cfg.SkipBuiltInRunnerPrerequisiteValidation,
+		providerOverrideForMode(fs.cfg, nil),
+		providerCommandRunnerForMode(fs.cfg, loadedFactoryCfg),
+		commandRunnerOverrideForMode(fs.cfg, loadedFactoryCfg, nil),
+		eventHistory.RecordScriptEvent,
+		eventHistory.RecordInferenceEvent,
+		clock.Now,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load workers: %w", err)
+	}
+
+	recordPath := sessionScopedRecordPath(fs.cfg.RecordPath, sessionID)
+	recordingArtifact, err := newRecordingArtifact(
+		&FactoryServiceConfig{
+			RecordPath: recordPath,
+			WorkflowID: fs.cfg.WorkflowID,
+		},
+		loadedFactoryCfg.FactoryDir(),
+		loadedFactoryCfg.FactoryConfig(),
+		loadedFactoryCfg,
+		clock,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var recording *replay.Recorder
+	if recordingArtifact != nil {
+		recording, err = replay.NewRecorder(
+			recordPath,
+			recordingArtifact,
+			replay.WithFlushInterval(fs.cfg.RecordFlushInterval),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("create replay recorder: %w", err)
+		}
+	}
+
+	opts := []factory.FactoryOption{
+		factory.WithNet(net),
+		factory.WithRuntimeMode(fs.cfg.RuntimeMode),
+		factory.WithLogger(logging.NewZapLogger(logger, fs.cfg.Verbose)),
+		factory.WithRuntimeConfig(loadedFactoryCfg),
+		factory.WithWorkflowContext(runtimeWorkflowContext(loadedFactoryCfg.FactoryConfig())),
+		factory.WithClock(clock),
+		factory.WithFactoryEventHistory(eventHistory),
+	}
+	if recordPath != "" {
+		opts = append(opts, factory.WithFactoryEventRecorder(func(event factoryapi.FactoryEvent) {
+			if recording != nil {
+				recording.RecordEvent(event)
+			}
+		}))
+	}
+	opts = append(opts, workerOpts...)
+	opts = append(opts, fs.cfg.ExtraOptions...)
+
+	replacementFactory, err := runtime.New(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("create factory: %w", err)
+	}
+
+	inputsDir := filepath.Join(factoryDir, interfaces.InputsDir)
+	if err := os.MkdirAll(inputsDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create inputs dir: %w", err)
+	}
+
+	replacementListener := listeners.NewFileWatcher(
+		inputsDir,
+		replacementFactory,
+		logger,
+		listeners.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)),
+	)
+	runtimeBuilt = true
+
+	return &replacementFactoryRuntime{
+		dir:          factoryDir,
+		folderPath:   folderPath,
+		eventHistory: eventHistory,
+		factory:      replacementFactory,
+		listener:     replacementListener,
+		net:          net,
+		runtimeCfg:   loadedFactoryCfg,
+		logger:       logger,
+		logSink:      logSink,
+		recording:    recording,
+		recordPath:   recordPath,
+	}, nil
+}
+
+func providerOverrideForMode(cfg *FactoryServiceConfig, sideEffects *replay.SideEffects) workers.Provider {
+	if cfg.ProviderOverride != nil || sideEffects == nil {
+		return cfg.ProviderOverride
+	}
+	return sideEffects
+}
+
+func commandRunnerOverrideForMode(
+	cfg *FactoryServiceConfig,
+	runtimeCfg interfaces.RuntimeDefinitionLookup,
+	sideEffects *replay.SideEffects,
+) workers.CommandRunner {
+	next := cfg.CommandRunnerOverride
+	if next == nil && sideEffects != nil {
+		next = sideEffects
+	}
+	if cfg.MockWorkersConfig == nil {
+		return next
+	}
+	return &workers.MockWorkerCommandRunner{
+		Config:        cfg.MockWorkersConfig,
+		RuntimeConfig: runtimeCfg,
+		Next:          next,
+	}
+}
+
+func providerCommandRunnerForMode(cfg *FactoryServiceConfig, runtimeCfg interfaces.RuntimeDefinitionLookup) workers.CommandRunner {
+	if cfg.MockWorkersConfig == nil {
+		return cfg.ProviderCommandRunnerOverride
+	}
+	return &workers.MockWorkerCommandRunner{
+		Config:        cfg.MockWorkersConfig,
+		RuntimeConfig: runtimeCfg,
+		Next:          cfg.ProviderCommandRunnerOverride,
+	}
+}
+
+// Run starts the file watcher, dashboard, API server, and factory engine.
+// It blocks until ctx is cancelled or the factory reaches a terminal state.
+// portos:func-length-exception owner=agent-factory reason=legacy-service-run-loop review=2026-07-18 removal=split-sidecar-startup-recording-and-engine-shutdown-before-next-service-run-change
+func (fs *FactoryService) Run(ctx context.Context) error {
+	runCtx, cancelRunSidecars := context.WithCancel(ctx)
+	var sidecars sync.WaitGroup
+	var currentRuntime *liveRuntimeHandle
+	serviceMode := runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService
+
+	defer func() {
+		if currentRuntime != nil || fs.logSink == nil {
+			return
+		}
+		if err := fs.logSink.Close(); err != nil {
+			fs.logger.Warn("runtime log close failed", zap.Error(err))
+		}
+	}()
+	defer func() {
+		cancelRunSidecars()
+		fs.clearRunState()
+		sidecars.Wait()
+	}()
+	if !serviceMode {
+		listener := fs.listener
+		sidecars.Add(1)
+		go func() {
+			defer sidecars.Done()
+			if listener == nil {
+				return
+			}
+			if err := listener.Watch(runCtx); err != nil && !errors.Is(err, context.Canceled) {
+				fs.logger.Error("file watcher error", zap.Error(err))
+			}
+		}()
+	}
+
+	// Start dashboard loop if a renderer is provided.
+	fs.startTime = fs.clock.Now()
+	if fs.cfg.SimpleDashboardRenderer != nil {
+		sidecars.Add(1)
+		go func() {
+			defer sidecars.Done()
+			fs.dashboardLoop(runCtx)
+		}()
+	}
+
+	if !serviceMode {
+		if err := fs.preseedCurrentRuntimeInputs(ctx); err != nil {
+			return err
+		}
+	}
+
+	// Submit initial work if specified.
+	if fs.cfg.WorkFile != "" {
+		if err := fs.submitWorkFile(ctx); err != nil {
+			return err
+		}
+	}
+
+	currentRuntime = fs.startLiveRuntime(runCtx, fs.currentRuntimeBundle())
+	fs.registerLiveSession(defaultFactorySessionID, currentRuntime, true)
+	fs.setRunState(runCtx, defaultFactorySessionID, currentRuntime)
+	if err := fs.waitForLiveRuntimeStart(ctx, currentRuntime); err != nil {
+		fs.clearRunState()
+		fs.unregisterLiveSession(defaultFactorySessionID)
+		_ = fs.stopLiveRuntime(currentRuntime)
+		return fmt.Errorf("start runtime: %w", err)
+	}
+	if serviceMode {
+		if err := fs.startLiveRuntimeSidecars(runCtx, currentRuntime); err != nil {
+			fs.clearRunState()
+			fs.unregisterLiveSession(defaultFactorySessionID)
+			_ = fs.stopLiveRuntime(currentRuntime)
+			return err
+		}
+	}
+
+	// Start the API server only after the default runtime is fully started so
+	// callers never observe a partially initialized service surface.
+	if fs.cfg.APIServerStarter != nil && fs.cfg.Port > 0 {
+		sidecars.Add(1)
+		go func() {
+			defer sidecars.Done()
+			if err := fs.cfg.APIServerStarter(runCtx, fs, fs.cfg.Port, fs.logger); err != nil {
+				fs.logger.Error("API server error", zap.Error(err))
+			}
+		}()
+	}
+
+	runtimeLogConfig := fs.logSink.Config()
+	fs.logger.Info("factory started",
+		zap.String("dir", fs.cfg.Dir),
+		zap.String("runtime_log_path", fs.logSink.Path()),
+		zap.String("runtime_log_appender", logging.RuntimeLogAppenderZapRollingFile),
+		zap.Int("runtime_log_max_size_mb", runtimeLogConfig.MaxSize),
+		zap.Int("runtime_log_max_backups", runtimeLogConfig.MaxBackups),
+		zap.Int("runtime_log_max_age_days", runtimeLogConfig.MaxAge),
+		zap.Bool("runtime_log_compress", runtimeLogConfig.Compress),
+		zap.String("runtime_env_log_channel", logging.RuntimeEnvLogChannelRecord),
+		zap.String("runtime_success_command_output", logging.RuntimeSuccessCommandOutputPolicy),
+		zap.String("runtime_failure_command_output", logging.RuntimeFailureCommandOutputPolicy),
+		zap.String("runtime_verbose_command_output", logging.RuntimeVerboseCommandOutputPolicy),
+		zap.String("record_command_diagnostics", logging.RuntimeRecordCommandDiagnosticsMode),
+		zap.String("runtime_mode", string(runtimeModeOrDefault(fs.cfg.RuntimeMode))),
+		zap.Bool("mock-workers", fs.cfg.MockWorkersConfig != nil),
+		zap.Int("port", fs.cfg.Port),
+	)
+
+	err := fs.waitForActiveRuntime(ctx)
+	currentRuntime = fs.currentLiveRuntime()
+	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) && err == nil {
+		err = stopErr
+	}
+	if stopErr := fs.shutdownOtherLiveSessions(currentRuntime); stopErr != nil && err == nil {
+		err = stopErr
+	}
+	fs.clearRunState()
+	cancelRunSidecars()
+	sidecars.Wait()
+	// Print final dashboard.
+	if fs.cfg.SimpleDashboardRenderer != nil {
+		fs.renderDashboard(ctx)
+	}
+
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("factory run: %w", err)
+	}
+	return nil
+}
+
+func (fs *FactoryService) activateReplacementRuntime(
+	ctx context.Context,
+	rootDir string,
+	name string,
+	replacement *replacementFactoryRuntime,
+) error {
+	runState := fs.currentRunState()
+	if runState == nil || runState.runtime == nil || runState.ctx == nil {
+		if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, name); err != nil {
+			return err
+		}
+		fs.swapActiveRuntime(replacement)
+		return nil
+	}
+
+	restoreCurrentSidecars := false
+	serviceMode := fs.cfg != nil && runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService
+	if serviceMode {
+		fs.stopLiveRuntimeSidecars(runState.runtime)
+		restoreCurrentSidecars = true
+		defer func() {
+			if restoreCurrentSidecars {
+				fs.restoreLiveRuntimeSidecars(runState)
+			}
+		}()
+	}
+	if err := fs.requireIdleRuntime(ctx); err != nil {
+		return err
+	}
+
+	replacementHandle := fs.startLiveRuntime(runState.ctx, replacement)
+	if err := fs.waitForLiveRuntimeStart(ctx, replacementHandle); err != nil {
+		_ = fs.stopLiveRuntime(replacementHandle)
+		return fmt.Errorf("start replacement runtime: %w", err)
+	}
+
+	if serviceMode {
+		if err := fs.startLiveRuntimeSidecars(runState.ctx, replacementHandle); err != nil {
+			_ = fs.stopLiveRuntime(replacementHandle)
+			return fmt.Errorf("start replacement runtime sidecars: %w", err)
+		}
+	}
+	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, name); err != nil {
+		if serviceMode {
+			fs.stopLiveRuntimeSidecars(replacementHandle)
+		}
+		_ = fs.stopLiveRuntime(replacementHandle)
+		return err
+	}
+
+	fs.publishFactoryChangeEvent(ctx, runState.runtime, replacement)
+	restoreCurrentSidecars = false
+	fs.registerLiveSession(runState.sessionID, replacementHandle, true)
+	fs.setRunState(runState.ctx, runState.sessionID, replacementHandle)
+	if err := fs.stopLiveRuntime(runState.runtime); err != nil && !errors.Is(err, context.Canceled) {
+		fs.logger.Warn("prior runtime shutdown failed", zap.Error(err))
+	}
+	return nil
+}
+
+func (fs *FactoryService) requireIdleRuntime(ctx context.Context) error {
+	snapshot, err := fs.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return fmt.Errorf("read current runtime status: %w", err)
+	}
+	if snapshot.RuntimeStatus != interfaces.RuntimeStatusIdle {
+		return fmt.Errorf("%w: current runtime status is %s", ErrFactoryActivationRequiresIdle, snapshot.RuntimeStatus)
+	}
+	if snapshotHasActiveWork(snapshot) {
+		return fmt.Errorf("%w: current runtime has active work", ErrFactoryActivationRequiresIdle)
+	}
+	return nil
+}
+
+func snapshotHasActiveWork(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+	if snapshot == nil {
+		return false
+	}
+	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 {
+		return true
+	}
+	for _, token := range snapshot.Marking.Tokens {
+		if token == nil || token.Color.DataType == interfaces.DataTypeResource {
+			continue
+		}
+		if snapshot.Topology == nil {
+			return true
+		}
+		category := snapshot.Topology.StateCategoryForPlace(token.PlaceID)
+		if category != state.StateCategoryTerminal && category != state.StateCategoryFailed {
+			return true
+		}
+	}
+	return false
+}
+
+func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
+	if fs == nil {
+		return nil
+	}
+	if currentSession := fs.currentSession(); currentSession != nil && currentSession.handle != nil {
+		return currentSession.handle.runtime
+	}
+	fs.runtimeMu.RLock()
+	defer fs.runtimeMu.RUnlock()
+	if fs.factory == nil {
+		return nil
+	}
+	return &replacementFactoryRuntime{
+		dir:          fs.cfg.Dir,
+		folderPath:   fs.factoryRootDir,
+		eventHistory: fs.eventHistory,
+		factory:      fs.factory,
+		listener:     fs.listener,
+		net:          fs.net,
+		runtimeCfg:   fs.runtimeCfg,
+		logger:       fs.logger,
+		logSink:      fs.logSink,
+		recording:    fs.recording,
+		recordPath:   fs.cfg.RecordPath,
+	}
+}
+
+func (fs *FactoryService) publishFactoryChangeEvent(
+	ctx context.Context,
+	currentRuntime *liveRuntimeHandle,
+	replacement *replacementFactoryRuntime,
+) {
+	if replacement == nil || replacement.eventHistory == nil {
+		return
+	}
+
+	payload, ok := replacementFactoryChangePayload(replacement.eventHistory.Events())
+	if !ok {
+		return
+	}
+
+	eventTime := factory.EnsureClock(fs.clock).Now()
+	replacement.eventHistory.RecordFactoryChange(1, payload, eventTime)
+
+	if currentRuntime == nil || currentRuntime.runtime == nil || currentRuntime.runtime.eventHistory == nil {
+		return
+	}
+
+	snapshot, err := currentRuntime.runtime.factory.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		fs.logger.Warn("read current runtime tick for factory-change event failed", zap.Error(err))
+		return
+	}
+	currentRuntime.runtime.eventHistory.RecordFactoryChange(snapshot.TickCount+1, payload, eventTime)
+}
+
+func replacementFactoryChangePayload(events []factoryapi.FactoryEvent) (factoryapi.FactoryChangeEventPayload, bool) {
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeInitialStructureRequest {
+			continue
+		}
+		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
+		if err != nil {
+			return factoryapi.FactoryChangeEventPayload{}, false
+		}
+		return factoryapi.FactoryChangeEventPayload{
+			Factory:         payload.Factory,
+			Metadata:        payload.Metadata,
+			SourceDirectory: payload.SourceDirectory,
+		}, true
+	}
+	return factoryapi.FactoryChangeEventPayload{}, false
+}
+
+func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *replacementFactoryRuntime) *liveRuntimeHandle {
+	if runtimeBundle == nil {
+		return nil
+	}
+	runCtx, runCancel := context.WithCancel(ctx)
+	handle := &liveRuntimeHandle{
+		runtime:   runtimeBundle,
+		runCancel: runCancel,
+		runDone:   make(chan struct{}),
+	}
+	if runtimeBundle.recording != nil {
+		runtimeBundle.recording.Start(runCtx)
+		if err := runtimeBundle.recording.Flush(); err != nil {
+			handle.setRunResult(err)
+			return handle
+		}
+	}
+	go func() {
+		handle.setRunResult(runtimeBundle.factory.Run(runCtx))
+	}()
+	return handle
+}
+
+func (fs *FactoryService) startLiveRuntimeSidecars(ctx context.Context, handle *liveRuntimeHandle) error {
+	if handle == nil || handle.runtime == nil {
+		return fmt.Errorf("runtime handle is required")
+	}
+
+	handle.sidecarMu.Lock()
+	defer handle.sidecarMu.Unlock()
+	if handle.sidecarCancel != nil {
+		return nil
+	}
+
+	sidecarCtx, sidecarCancel := context.WithCancel(ctx)
+	handle.sidecarCancel = sidecarCancel
+	if handle.runtime.listener != nil {
+		handle.sidecars.Add(1)
+		go func() {
+			defer handle.sidecars.Done()
+			if err := handle.runtime.listener.Watch(sidecarCtx); err != nil && !errors.Is(err, context.Canceled) {
+				handle.runtime.runtimeLogger().Error("file watcher error", zap.Error(err))
+			}
+		}()
+	}
+
+	fs.startCronWatchersForRuntime(
+		sidecarCtx,
+		&handle.sidecars,
+		handle.runtime.runtimeCfg.FactoryDir(),
+		handle.runtime.runtimeCfg.FactoryConfig(),
+		handle.runtime.runtimeCfg,
+		submitWorkRequestWithFactory(handle.runtime.factory),
+	)
+	if handle.runtime.listener != nil {
+		if err := handle.runtime.listener.PreseedInputs(sidecarCtx); err != nil {
+			sidecarCancel()
+			handle.sidecars.Wait()
+			handle.sidecarCancel = nil
+			return fmt.Errorf("preseed inputs: %w", err)
+		}
+	}
+	return nil
+}
+
+func submitWorkRequestWithFactory(activeFactory factory.Factory) workRequestSubmitter {
+	if activeFactory == nil {
+		return nil
+	}
+	return func(ctx context.Context, request interfaces.WorkRequest) error {
+		_, err := activeFactory.SubmitWorkRequest(ctx, request)
+		return err
+	}
+}
+
+func (fs *FactoryService) currentRuntimeSubmitter() workRequestSubmitter {
+	return submitWorkRequestWithFactory(fs.currentFactory())
+}
+
+func (fs *FactoryService) preseedCurrentRuntimeInputs(ctx context.Context) error {
+	runtimeBundle := fs.currentRuntimeBundle()
+	if runtimeBundle == nil || runtimeBundle.listener == nil {
+		return nil
+	}
+	if err := runtimeBundle.listener.PreseedInputs(ctx); err != nil {
+		return fmt.Errorf("preseed inputs: %w", err)
+	}
+	return nil
+}
+
+func (fs *FactoryService) stopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
+	if handle == nil {
+		return
+	}
+	handle.sidecarMu.Lock()
+	cancel := handle.sidecarCancel
+	handle.sidecarCancel = nil
+	handle.sidecarMu.Unlock()
+	if cancel == nil {
+		return
+	}
+	cancel()
+	handle.sidecars.Wait()
+}
+
+func (fs *FactoryService) restoreLiveRuntimeSidecars(runState *serviceRunState) {
+	if runState == nil || runState.ctx == nil || runState.runtime == nil {
+		return
+	}
+	if err := fs.startLiveRuntimeSidecars(runState.ctx, runState.runtime); err != nil {
+		fs.logger.Error("restore prior runtime sidecars failed", zap.Error(err))
+	}
+}
+
+func (fs *FactoryService) stopLiveRuntime(handle *liveRuntimeHandle) error {
+	if handle == nil {
+		return nil
+	}
+	fs.stopLiveRuntimeSidecars(handle)
+	if handle.runCancel != nil {
+		handle.runCancel()
+	}
+	return errors.Join(handle.wait(), fs.finalizeRuntimeArtifacts(handle.runtime))
+}
+
+func (fs *FactoryService) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {
+	if fs == nil || fs.sessions == nil {
+		return nil
+	}
+	var errs []error
+	for _, sessionID := range fs.sessions.ids() {
+		session := fs.sessionByID(sessionID)
+		if session == nil {
+			continue
+		}
+		if session.handle == except {
+			continue
+		}
+		if session.handle != nil {
+			if err := fs.stopLiveRuntime(session.handle); err != nil && !errors.Is(err, context.Canceled) {
+				errs = append(errs, err)
+			}
+		}
+		fs.unregisterLiveSession(sessionID)
+	}
+	return errors.Join(errs...)
+}
+
+func (fs *FactoryService) waitForLiveRuntimeStart(ctx context.Context, handle *liveRuntimeHandle) error {
+	if handle == nil || handle.runtime == nil {
+		return fmt.Errorf("runtime handle is required")
+	}
+
+	startCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-startCtx.Done():
+			if handle.completed() {
+				return handle.result()
+			}
+			return startCtx.Err()
+		case <-handle.runDone:
+			return handle.result()
+		case <-ticker.C:
+			snap, err := handle.runtime.factory.GetEngineStateSnapshot(context.Background())
+			if err != nil {
+				continue
+			}
+			if snap.FactoryState == string(interfaces.FactoryStateRunning) {
+				return nil
+			}
+		}
+	}
+}
+
+func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
+	for {
+		handle := fs.currentLiveRuntime()
+		if handle == nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(25 * time.Millisecond):
+				continue
+			}
+		}
+		select {
+		case <-ctx.Done():
+			_ = handle.wait()
+		case <-handle.runDone:
+		}
+		if fs.currentLiveRuntime() != handle {
+			continue
+		}
+		return handle.result()
+	}
+}
+
+func (fs *FactoryService) swapActiveRuntime(runtimeBundle *replacementFactoryRuntime) {
+	if runtimeBundle == nil {
+		fs.clearActiveRuntime()
+		return
+	}
+	fs.runtimeMu.Lock()
+	defer fs.runtimeMu.Unlock()
+	fs.eventHistory = runtimeBundle.eventHistory
+	fs.factory = runtimeBundle.factory
+	fs.listener = runtimeBundle.listener
+	fs.net = runtimeBundle.net
+	fs.runtimeCfg = runtimeBundle.runtimeCfg
+	fs.cfg.Dir = runtimeBundle.dir
+}
+
+func (fs *FactoryService) clearActiveRuntime() {
+	fs.runtimeMu.Lock()
+	defer fs.runtimeMu.Unlock()
+	fs.eventHistory = nil
+	fs.factory = nil
+	fs.listener = nil
+	fs.net = nil
+	fs.runtimeCfg = nil
+	if fs.cfg != nil && strings.TrimSpace(fs.factoryRootDir) != "" {
+		fs.cfg.Dir = fs.factoryRootDir
+	}
+}
+
+func (fs *FactoryService) currentRunState() *serviceRunState {
+	fs.runMu.RLock()
+	defer fs.runMu.RUnlock()
+	return fs.runState
+}
+
+func (fs *FactoryService) currentLiveRuntime() *liveRuntimeHandle {
+	fs.runMu.RLock()
+	defer fs.runMu.RUnlock()
+	if fs.runState == nil {
+		return nil
+	}
+	return fs.runState.runtime
+}
+
+func (fs *FactoryService) setRunState(ctx context.Context, sessionID string, runtime *liveRuntimeHandle) {
+	fs.runMu.Lock()
+	defer fs.runMu.Unlock()
+	if ctx == nil {
+		fs.runState = nil
+		return
+	}
+	fs.runState = &serviceRunState{
+		ctx:       ctx,
+		sessionID: sessionID,
+		runtime:   runtime,
+	}
+}
+
+func (fs *FactoryService) clearRunState() {
+	fs.runMu.Lock()
+	defer fs.runMu.Unlock()
+	fs.runState = nil
+}
+
+func (h *liveRuntimeHandle) completed() bool {
+	if h == nil {
+		return true
+	}
+	select {
+	case <-h.runDone:
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *liveRuntimeHandle) result() error {
+	if h == nil {
+		return nil
+	}
+	h.runErrMu.RLock()
+	defer h.runErrMu.RUnlock()
+	return h.runErr
+}
+
+func (h *liveRuntimeHandle) setRunResult(err error) {
+	h.runErrMu.Lock()
+	h.runErr = err
+	h.runErrMu.Unlock()
+	close(h.runDone)
+}
+
+func (h *liveRuntimeHandle) wait() error {
+	if h == nil {
+		return nil
+	}
+	<-h.runDone
+	return h.result()
+}
+
+func validateReplayModeConfig(cfg *FactoryServiceConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("factory service config is required")
+	}
+	if cfg.RecordPath != "" && cfg.ReplayPath != "" {
+		return fmt.Errorf("--record and --replay cannot be used together")
+	}
+	return nil
+}
+
+func loadFactoryConfigForMode(cfg *FactoryServiceConfig) (*factoryconfig.LoadedFactoryConfig, *interfaces.ReplayArtifact, error) {
+	if cfg.ReplayPath == "" {
+		loaded, err := factoryconfig.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
+		if loaded != nil {
+			loaded.SetRuntimeBaseDir(cfg.ExecutionBaseDir)
+		}
+		return loaded, nil, err
+	}
+	artifact, err := replay.Load(cfg.ReplayPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load replay artifact: %w", err)
+	}
+	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(artifact.Factory)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load embedded replay config: %w", err)
+	}
+	loaded, err := factoryconfig.NewLoadedFactoryConfig(runtimeCfg.FactoryDir(), runtimeCfg.Factory, runtimeCfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build embedded replay config: %w", err)
+	}
+	loaded.SetRuntimeBaseDir(cfg.ExecutionBaseDir)
+	return loaded, artifact, nil
+}
+
+func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interfaces.ReplayArtifact, logger *zap.Logger) {
+	if artifact == nil || cfg == nil || cfg.Dir == "" {
+		return
+	}
+	current, err := factoryconfig.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
+	if err != nil {
+		return
+	}
+	currentFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
+		current.FactoryDir(),
+		current.FactoryConfig(),
+		current,
+		replay.WithGeneratedFactorySourceDirectory(current.FactoryDir()),
+		replay.WithGeneratedFactoryWorkflowID(cfg.WorkflowID),
+	)
+	if err != nil {
+		return
+	}
+	for _, warning := range replay.FactoryMetadataWarnings(artifact.Factory, currentFactory) {
+		logger.Warn("replay artifact metadata differs from current checkout",
+			zap.String("category", replay.DivergenceCategoryConfigMismatch),
+			zap.String("metadata_key", warning.Key),
+			zap.String("artifact", warning.Artifact),
+			zap.String("current", warning.Current),
+		)
+	}
+}
+
+func warnPortableBundledReplacementReport(
+	logger *zap.Logger,
+	message string,
+	replacements []factoryconfig.PortableBundledFileReplacement,
+) {
+	if logger == nil || len(replacements) == 0 {
+		return
+	}
+	targets := make([]string, 0, len(replacements))
+	for _, replacement := range replacements {
+		targets = append(targets, replacement.TargetPath)
+	}
+	logger.Warn(message, zap.Strings("target_paths", targets))
+}
+
+func runtimeWorkflowContext(cfg *interfaces.FactoryConfig) *factory_context.FactoryContext {
+	projectID := factory_context.DefaultProjectID
+	if cfg != nil && cfg.Project != "" {
+		projectID = factory_context.ResolveProjectID(cfg.Project, nil, nil)
+	}
+	return &factory_context.FactoryContext{
+		ProjectID: projectID,
+		EnvVars:   make(map[string]string),
+	}
+}
+
+func newRecordingArtifact(
+	cfg *FactoryServiceConfig,
+	factoryDir string,
+	factoryCfg *interfaces.FactoryConfig,
+	runtimeCfg interfaces.RuntimeDefinitionLookup,
+	clock factory.Clock,
+) (*interfaces.ReplayArtifact, error) {
+	if cfg.RecordPath == "" {
+		return nil, nil
+	}
+	now := factory.EnsureClock(clock).Now().UTC()
+	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
+		factoryDir,
+		factoryCfg,
+		runtimeCfg,
+		replay.WithGeneratedFactorySourceDirectory(factoryDir),
+		replay.WithGeneratedFactoryWorkflowID(cfg.WorkflowID),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build replay artifact config: %w", err)
+	}
+	return replay.NewEventLogArtifactFromFactory(now, generatedFactory, &interfaces.ReplayWallClockMetadata{
+		StartedAt: now,
+	}, interfaces.ReplayDiagnostics{})
+}
+
+func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *replacementFactoryRuntime) error {
+	if runtimeBundle == nil {
+		return nil
+	}
+	var errs []error
+	if runtimeBundle.recording != nil {
+		runtimeBundle.recording.Finish(factory.EnsureClock(fs.clock).Now().UTC())
+		if err := runtimeBundle.recording.Flush(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := runtimeBundle.recording.Err(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if runtimeBundle.logSink != nil {
+		if err := runtimeBundle.logSink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func newSessionLogger(base *zap.Logger, sessionID string, folderPath string, factoryDir string) *zap.Logger {
+	if base == nil {
+		base = zap.NewNop()
+	}
+	return base.With(
+		zap.String("session_id", sessionID),
+		zap.String("folder_path", folderPath),
+		zap.String("factory_dir", factoryDir),
+	)
+}
+
+func sessionScopedRecordPath(basePath string, sessionID string) string {
+	if strings.TrimSpace(basePath) == "" || sessionID == defaultFactorySessionID {
+		return basePath
+	}
+	ext := filepath.Ext(basePath)
+	base := strings.TrimSuffix(basePath, ext)
+	return base + "." + sessionID + ext
+}
+
+func (r *replacementFactoryRuntime) runtimeLogger() *zap.Logger {
+	if r == nil || r.logger == nil {
+		return zap.NewNop()
+	}
+	return r.logger
+}
+
+func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
+	if mode == "" {
+		return interfaces.RuntimeModeBatch
+	}
+	return mode
+}
+
 // SubmitWorkRequest submits a canonical work request batch to the factory.
 func (fs *FactoryService) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
 	fs.activationMu.RLock()
@@ -223,6 +1414,381 @@ func (fs *FactoryService) SubscribeFactoryEvents(ctx context.Context) (*interfac
 		return nil, fmt.Errorf("subscribe factory events: %w", err)
 	}
 	return stream, nil
+}
+
+// CreateNamedFactory persists one named-factory payload under the canonical
+// layout and activates it through the idle-only runtime swap path.
+func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory factoryapi.Factory) (factoryapi.Factory, error) {
+	if fs == nil {
+		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
+	}
+	rootDir := fs.factoryRootDir
+	if rootDir == "" && fs.cfg != nil {
+		rootDir = fs.cfg.Dir
+	}
+	if err := apisurface.ValidateWritableNamedFactoryName(namedFactory.Name); err != nil {
+		return factoryapi.Factory{}, err
+	}
+
+	payload, err := json.Marshal(namedFactory)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("marshal factory payload: %w", err)
+	}
+
+	factoryDir, err := factoryconfig.PersistNamedFactory(rootDir, string(namedFactory.Name), payload)
+	if err != nil {
+		switch {
+		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
+			return factoryapi.Factory{}, factoryconfig.ErrNamedFactoryAlreadyExists
+		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
+			return factoryapi.Factory{}, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
+		default:
+			return factoryapi.Factory{}, err
+		}
+	}
+
+	if err := fs.ActivateNamedFactory(ctx, string(namedFactory.Name)); err != nil {
+		return factoryapi.Factory{}, err
+	}
+
+	var workstationLoader factoryconfig.WorkstationLoader
+	if fs.cfg != nil {
+		workstationLoader = fs.cfg.WorkstationLoader
+	}
+	created, err := factoryconfig.LoadRuntimeConfig(factoryDir, workstationLoader)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("load created named factory %q: %w", namedFactory.Name, err)
+	}
+	return fs.serializeNamedFactory(namedFactory.Name, created, false)
+}
+
+// GetEditableFactoryDefinition returns the complete current factory definition
+// with persisted version metadata for graph-editor draft saves.
+func (fs *FactoryService) GetEditableFactoryDefinition(ctx context.Context) (factoryapi.EditableFactoryDefinition, error) {
+	current, err := fs.GetCurrentNamedFactory(ctx)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	version, err := fs.currentFactoryDefinitionVersion(current.Name)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	return factoryapi.EditableFactoryDefinition{
+		FactoryDefinition: current,
+		Version:           version,
+	}, nil
+}
+
+// SaveEditableFactoryDefinition replaces the current named-factory definition
+// with a complete submitted Factory payload and activates the resulting runtime.
+func (fs *FactoryService) SaveEditableFactoryDefinition(ctx context.Context, request factoryapi.SaveEditableFactoryDefinitionRequest) (factoryapi.EditableFactoryDefinition, error) {
+	if fs == nil {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("factory service is required")
+	}
+
+	current, err := fs.GetCurrentNamedFactory(ctx)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	if current.Name == apisurface.DefaultCurrentFactoryName {
+		return factoryapi.EditableFactoryDefinition{}, ErrCurrentNamedFactoryNotFound
+	}
+	if request.FactoryDefinition.Name != current.Name {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
+	}
+	if err := apisurface.ValidateWritableNamedFactoryName(request.FactoryDefinition.Name); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	if err := validateEditableFactoryTopology(request.FactoryDefinition); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+
+	payload, err := json.Marshal(request.FactoryDefinition)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("marshal editable factory payload: %w", err)
+	}
+
+	fs.activationMu.Lock()
+	defer fs.activationMu.Unlock()
+
+	if err := fs.requireIdleRuntime(ctx); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	if err := fs.requireFreshEditableFactoryVersion(request.BaseVersion, current.Name); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+
+	rootDir := fs.factoryRootDir
+	if rootDir == "" && fs.cfg != nil {
+		rootDir = fs.cfg.Dir
+	}
+	factoryDir, err := factoryconfig.ReplaceNamedFactory(rootDir, string(request.FactoryDefinition.Name), payload)
+	if err != nil {
+		switch {
+		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
+			return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
+		default:
+			return factoryapi.EditableFactoryDefinition{}, err
+		}
+	}
+
+	sessionID := defaultFactorySessionID
+	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
+		sessionID = runState.sessionID
+	}
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, rootDir, factoryDir, sessionID)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, request.FactoryDefinition.Name, err)
+	}
+	if err := fs.requireIdleRuntime(ctx); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	if err := fs.activateReplacementRuntime(ctx, rootDir, string(request.FactoryDefinition.Name), replacement); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+
+	saved, err := fs.GetCurrentNamedFactory(ctx)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	version, err := fs.currentFactoryDefinitionVersion(saved.Name)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	return factoryapi.EditableFactoryDefinition{
+		FactoryDefinition: saved,
+		Version:           version,
+	}, nil
+}
+
+func (fs *FactoryService) requireFreshEditableFactoryVersion(baseVersion *factoryapi.HybridLogicalTimestamp, name factoryapi.FactoryName) error {
+	rootDir := fs.factoryRootDir
+	if rootDir == "" && fs.cfg != nil {
+		rootDir = fs.cfg.Dir
+	}
+	return fs.requireFreshEditableFactoryVersionAtRoot(baseVersion, rootDir, name)
+}
+
+func (fs *FactoryService) requireFreshEditableFactoryVersionAtRoot(baseVersion *factoryapi.HybridLogicalTimestamp, rootDir string, name factoryapi.FactoryName) error {
+	if baseVersion == nil {
+		return nil
+	}
+	currentVersion, err := fs.currentFactoryDefinitionVersionAtRoot(rootDir, name)
+	if err != nil {
+		return err
+	}
+	if compareEditableFactoryVersions(*baseVersion, currentVersion) < 0 {
+		return fmt.Errorf("%w: base version logical=%d physical=%s current logical=%d physical=%s",
+			apisurface.ErrEditableFactoryVersionStale,
+			baseVersion.Logical,
+			baseVersion.Physical.UTC().Format(time.RFC3339Nano),
+			currentVersion.Logical,
+			currentVersion.Physical.UTC().Format(time.RFC3339Nano),
+		)
+	}
+	return nil
+}
+
+func compareEditableFactoryVersions(left, right factoryapi.HybridLogicalTimestamp) int {
+	if left.Logical < right.Logical {
+		return -1
+	}
+	if left.Logical > right.Logical {
+		return 1
+	}
+	leftPhysical := left.Physical.UTC()
+	rightPhysical := right.Physical.UTC()
+	switch {
+	case leftPhysical.Before(rightPhysical):
+		return -1
+	case leftPhysical.After(rightPhysical):
+		return 1
+	default:
+		return 0
+	}
+}
+
+func validateEditableFactoryTopology(submitted factoryapi.Factory) error {
+	var targets []factoryapi.ErrorTarget
+	targets = append(targets, duplicateNameTargets("workTypes", workTypeNames(submitted.WorkTypes), "node")...)
+	targets = append(targets, duplicateNameTargets("workers", workerNames(submitted.Workers), "node")...)
+	targets = append(targets, duplicateNameTargets("resources", resourceNames(submitted.Resources), "node")...)
+	targets = append(targets, duplicateNameTargets("workstations", workstationNames(submitted.Workstations), "node")...)
+	targets = append(targets, duplicateWorkStateTargets(submitted.WorkTypes)...)
+	targets = append(targets, danglingFactoryReferenceTargets(submitted)...)
+	if len(targets) == 0 {
+		return nil
+	}
+	return apisurface.NewTopologyValidationError("Factory topology contains invalid graph references.", targets)
+}
+
+func duplicateNameTargets(collection string, names []string, kind string) []factoryapi.ErrorTarget {
+	seen := make(map[string]int, len(names))
+	var targets []factoryapi.ErrorTarget
+	for index, name := range names {
+		field := fmt.Sprintf("factoryDefinition.%s[%d].name", collection, index)
+		if strings.TrimSpace(name) == "" {
+			targets = append(targets, editableFactoryErrorTarget("field", "", field))
+			continue
+		}
+		if firstIndex, ok := seen[name]; ok {
+			targets = append(targets,
+				editableFactoryErrorTarget(kind, name, fmt.Sprintf("factoryDefinition.%s[%d].name", collection, firstIndex)),
+				editableFactoryErrorTarget(kind, name, field),
+			)
+			continue
+		}
+		seen[name] = index
+	}
+	return targets
+}
+
+func duplicateWorkStateTargets(workTypes *[]factoryapi.WorkType) []factoryapi.ErrorTarget {
+	if workTypes == nil {
+		return nil
+	}
+	var targets []factoryapi.ErrorTarget
+	for workTypeIndex, workType := range *workTypes {
+		seen := make(map[string]int, len(workType.States))
+		for stateIndex, state := range workType.States {
+			field := fmt.Sprintf("factoryDefinition.workTypes[%d].states[%d].name", workTypeIndex, stateIndex)
+			if strings.TrimSpace(state.Name) == "" {
+				targets = append(targets, editableFactoryErrorTarget("field", workType.Name, field))
+				continue
+			}
+			if firstIndex, ok := seen[state.Name]; ok {
+				id := workType.Name + ":" + state.Name
+				targets = append(targets,
+					editableFactoryErrorTarget("node", id, fmt.Sprintf("factoryDefinition.workTypes[%d].states[%d].name", workTypeIndex, firstIndex)),
+					editableFactoryErrorTarget("node", id, field),
+				)
+				continue
+			}
+			seen[state.Name] = stateIndex
+		}
+	}
+	return targets
+}
+
+func danglingFactoryReferenceTargets(factory factoryapi.Factory) []factoryapi.ErrorTarget {
+	workStates := workStateSet(factory.WorkTypes)
+	workers := stringSet(workerNames(factory.Workers))
+	resources := stringSet(resourceNames(factory.Resources))
+	var targets []factoryapi.ErrorTarget
+	if factory.Workstations == nil {
+		return targets
+	}
+	for workstationIndex, workstation := range *factory.Workstations {
+		if strings.TrimSpace(workstation.Worker) == "" || !workers[workstation.Worker] {
+			targets = append(targets, editableFactoryErrorTarget("field", workstation.Name, fmt.Sprintf("factoryDefinition.workstations[%d].worker", workstationIndex)))
+		}
+		targets = append(targets, danglingIOTargets(workstation.Name, workstation.Inputs, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].inputs", workstationIndex))...)
+		targets = append(targets, danglingIOTargets(workstation.Name, workstation.Outputs, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].outputs", workstationIndex))...)
+		if workstation.OnContinue != nil {
+			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnContinue, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].onContinue", workstationIndex))...)
+		}
+		if workstation.OnFailure != nil {
+			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnFailure, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].onFailure", workstationIndex))...)
+		}
+		if workstation.OnRejection != nil {
+			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnRejection, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].onRejection", workstationIndex))...)
+		}
+		if workstation.Resources != nil {
+			for resourceIndex, resource := range *workstation.Resources {
+				if strings.TrimSpace(resource.Name) == "" || !resources[resource.Name] {
+					targets = append(targets, editableFactoryErrorTarget("edge", workstation.Name+"->"+resource.Name, fmt.Sprintf("factoryDefinition.workstations[%d].resources[%d].name", workstationIndex, resourceIndex)))
+				}
+			}
+		}
+	}
+	return targets
+}
+
+func danglingIOTargets(workstation string, ios []factoryapi.WorkstationIO, workStates map[string]bool, fieldPrefix string) []factoryapi.ErrorTarget {
+	var targets []factoryapi.ErrorTarget
+	for index, io := range ios {
+		id := workstation + "->" + io.WorkType + ":" + io.State
+		if !workStates[io.WorkType+":"+io.State] {
+			targets = append(targets, editableFactoryErrorTarget("edge", id, fmt.Sprintf("%s[%d]", fieldPrefix, index)))
+		}
+	}
+	return targets
+}
+
+func workTypeNames(workTypes *[]factoryapi.WorkType) []string {
+	if workTypes == nil {
+		return nil
+	}
+	names := make([]string, 0, len(*workTypes))
+	for _, workType := range *workTypes {
+		names = append(names, workType.Name)
+	}
+	return names
+}
+
+func workerNames(workers *[]factoryapi.Worker) []string {
+	if workers == nil {
+		return nil
+	}
+	names := make([]string, 0, len(*workers))
+	for _, worker := range *workers {
+		names = append(names, worker.Name)
+	}
+	return names
+}
+
+func resourceNames(resources *[]factoryapi.Resource) []string {
+	if resources == nil {
+		return nil
+	}
+	names := make([]string, 0, len(*resources))
+	for _, resource := range *resources {
+		names = append(names, resource.Name)
+	}
+	return names
+}
+
+func workstationNames(workstations *[]factoryapi.Workstation) []string {
+	if workstations == nil {
+		return nil
+	}
+	names := make([]string, 0, len(*workstations))
+	for _, workstation := range *workstations {
+		names = append(names, workstation.Name)
+	}
+	return names
+}
+
+func workStateSet(workTypes *[]factoryapi.WorkType) map[string]bool {
+	states := make(map[string]bool)
+	if workTypes == nil {
+		return states
+	}
+	for _, workType := range *workTypes {
+		for _, state := range workType.States {
+			states[workType.Name+":"+state.Name] = true
+		}
+	}
+	return states
+}
+
+func stringSet(values []string) map[string]bool {
+	set := make(map[string]bool, len(values))
+	for _, value := range values {
+		set[value] = true
+	}
+	return set
+}
+
+func editableFactoryErrorTarget(kind, id, field string) factoryapi.ErrorTarget {
+	target := factoryapi.ErrorTarget{Kind: kind}
+	if id != "" {
+		target.Id = &id
+	}
+	if field != "" {
+		target.Field = &field
+	}
+	return target
 }
 
 // WaitToComplete returns a channel that is closed when all tokens reach
@@ -252,6 +1818,117 @@ func (fs *FactoryService) GetEngineStateSnapshot(ctx context.Context) (*interfac
 	return snap, nil
 }
 
+// GetCurrentNamedFactory returns the durable current named-factory read model
+// resolved entirely from the persisted pointer and canonical on-disk layout.
+func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.Factory, error) {
+	if fs == nil {
+		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
+	}
+
+	rootDir := fs.factoryRootDir
+	if rootDir == "" && fs.cfg != nil {
+		rootDir = fs.cfg.Dir
+	}
+	name, err := factoryconfig.ReadCurrentFactoryPointer(rootDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			currentRuntime := fs.currentRuntimeConfig()
+			if currentRuntime != nil && sameFactoryDir(currentRuntime.FactoryDir(), rootDir) {
+				return fs.serializeNamedFactory(apisurface.DefaultCurrentFactoryName, currentRuntime, true)
+			}
+			return factoryapi.Factory{}, ErrCurrentNamedFactoryNotFound
+		}
+		return factoryapi.Factory{}, fmt.Errorf("read current factory pointer: %w", err)
+	}
+	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(rootDir, name)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("resolve current named factory %q: %w", name, err)
+	}
+	var workstationLoader factoryconfig.WorkstationLoader
+	if fs.cfg != nil {
+		workstationLoader = fs.cfg.WorkstationLoader
+	}
+	current, err := factoryconfig.LoadRuntimeConfig(factoryDir, workstationLoader)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("load current named factory %q: %w", name, err)
+	}
+
+	return fs.serializeNamedFactory(factoryapi.FactoryName(name), current, true)
+}
+
+func (fs *FactoryService) currentFactoryDefinitionVersion(name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error) {
+	rootDir := fs.factoryRootDir
+	if rootDir == "" && fs.cfg != nil {
+		rootDir = fs.cfg.Dir
+	}
+	return fs.currentFactoryDefinitionVersionAtRoot(rootDir, name)
+}
+
+func (fs *FactoryService) currentFactoryDefinitionVersionAtRoot(rootDir string, name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error) {
+	factoryDir := rootDir
+	if name != apisurface.DefaultCurrentFactoryName {
+		resolved, err := factoryconfig.ResolveNamedFactoryDir(rootDir, string(name))
+		if err != nil {
+			return factoryapi.HybridLogicalTimestamp{}, err
+		}
+		factoryDir = resolved
+	}
+
+	info, err := os.Stat(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		return factoryapi.HybridLogicalTimestamp{}, fmt.Errorf("stat current factory definition: %w", err)
+	}
+	modified := info.ModTime().UTC()
+	logical := modified.UnixNano()
+	if logical < 0 {
+		logical = 0
+	}
+	return factoryapi.HybridLogicalTimestamp{
+		Logical:  logical,
+		Physical: modified,
+	}, nil
+}
+
+func (fs *FactoryService) serializeNamedFactory(
+	name factoryapi.FactoryName,
+	current *factoryconfig.LoadedFactoryConfig,
+	inlineBundledFiles bool,
+) (factoryapi.Factory, error) {
+	factoryCfg := current.FactoryConfig()
+	if inlineBundledFiles && factoryCfg != nil {
+		clonedFactoryCfg, err := factoryconfig.CloneFactoryConfig(factoryCfg)
+		if err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("clone named factory config: %w", err)
+		}
+		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, true); err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("inline named factory bundled files: %w", err)
+		}
+		if err := factoryconfig.ApplySharedFactoryStarterWork(current.FactoryDir(), clonedFactoryCfg); err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("inline shared factory starter work: %w", err)
+		}
+		factoryCfg = clonedFactoryCfg
+	}
+	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
+		current.FactoryDir(),
+		factoryCfg,
+		current,
+		replay.WithGeneratedFactorySourceDirectory(current.FactoryDir()),
+		replay.WithGeneratedFactoryWorkflowID(fs.workflowID()),
+	)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("serialize current named factory: %w", err)
+	}
+	generatedFactory.Name = factoryapi.FactoryName(name)
+	return generatedFactory, nil
+}
+
+func sameFactoryDir(left, right string) bool {
+	if strings.TrimSpace(left) == "" || strings.TrimSpace(right) == "" {
+		return false
+	}
+	return filepath.Clean(left) == filepath.Clean(right)
+}
+
 // Pause pauses the current runtime instance.
 func (fs *FactoryService) Pause(ctx context.Context) error {
 	activeFactory := fs.currentFactory()
@@ -277,9 +1954,32 @@ func (fs *FactoryService) GetFactoryEvents(ctx context.Context) ([]factoryapi.Fa
 	return events, nil
 }
 
+func (fs *FactoryService) submitWorkFile(ctx context.Context) error {
+	data, err := os.ReadFile(fs.cfg.WorkFile)
+	if err != nil {
+		return fmt.Errorf("read work file %s: %w", fs.cfg.WorkFile, err)
+	}
+	workRequest, err := factory.ParseCanonicalWorkRequestJSON(data)
+	if err != nil {
+		return fmt.Errorf("parse work file %s: %w", fs.cfg.WorkFile, err)
+	}
+	activeFactory := fs.currentFactory()
+	if activeFactory == nil {
+		return fmt.Errorf("factory service runtime is not available")
+	}
+	if _, err := activeFactory.SubmitWorkRequest(ctx, workRequest); err != nil {
+		return fmt.Errorf("submit initial work: %w", err)
+	}
+	fs.logger.Info("submitted initial work", zap.String("file", fs.cfg.WorkFile))
+	return nil
+}
+
 func (fs *FactoryService) currentFactory() factory.Factory {
 	if fs == nil {
 		return nil
+	}
+	if compatibilitySession := fs.compatibilitySession(); compatibilitySession != nil && compatibilitySession.handle != nil && compatibilitySession.handle.runtime != nil {
+		return compatibilitySession.handle.runtime.factory
 	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
@@ -290,9 +1990,22 @@ func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryCon
 	if fs == nil {
 		return nil
 	}
+	if compatibilitySession := fs.compatibilitySession(); compatibilitySession != nil && compatibilitySession.handle != nil && compatibilitySession.handle.runtime != nil {
+		return compatibilitySession.handle.runtime.runtimeCfg
+	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
 	return fs.runtimeCfg
+}
+
+func (fs *FactoryService) compatibilitySession() *liveFactorySession {
+	if fs == nil {
+		return nil
+	}
+	if defaultSession := fs.defaultSession(); defaultSession != nil {
+		return defaultSession
+	}
+	return fs.currentSession()
 }
 
 func (fs *FactoryService) workflowID() string {
@@ -302,4 +2015,238 @@ func (fs *FactoryService) workflowID() string {
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
 	return fs.cfg.WorkflowID
+}
+
+func (fs *FactoryService) dashboardLoop(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			fs.renderDashboard(ctx)
+		}
+	}
+}
+
+func (fs *FactoryService) renderDashboard(ctx context.Context) {
+	now := factory.EnsureClock(fs.clock).Now()
+	input, err := fs.buildSimpleDashboardRenderInput(ctx, now)
+	if err != nil {
+		if fs.logger != nil {
+			fs.logger.Error("simple dashboard render failed", zap.Error(err))
+		}
+		return
+	}
+	fs.cfg.SimpleDashboardRenderer(input)
+}
+
+func (fs *FactoryService) buildSimpleDashboardRenderInput(ctx context.Context, now time.Time) (SimpleDashboardRenderInput, error) {
+	es, err := fs.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return SimpleDashboardRenderInput{}, err
+	}
+	renderData, err := fs.simpleDashboardRenderData(ctx, es.TickCount, es.ActiveThrottlePauses)
+	if err != nil {
+		return SimpleDashboardRenderInput{}, err
+	}
+	return SimpleDashboardRenderInput{
+		EngineState: *es,
+		RenderData:  renderData,
+		Now:         now,
+	}, nil
+}
+
+func (fs *FactoryService) simpleDashboardRenderData(
+	ctx context.Context,
+	selectedTick int,
+	activeThrottlePauses []interfaces.ActiveThrottlePause,
+) (dashboardrender.SimpleDashboardRenderData, error) {
+	events, err := fs.GetFactoryEvents(ctx)
+	if err != nil {
+		return dashboardrender.SimpleDashboardRenderData{}, err
+	}
+	worldState, err := projections.ReconstructFactoryWorldState(events, selectedTick)
+	if err != nil {
+		return dashboardrender.SimpleDashboardRenderData{}, err
+	}
+	renderData := dashboardrender.SimpleDashboardRenderDataFromWorldState(worldState)
+	renderData.ActiveThrottlePauses = projections.ProjectActiveThrottlePauses(worldState.Topology, activeThrottlePauses)
+	return renderData, nil
+}
+
+// dirExists returns true if the path exists and is a directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
+	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
+		return runner
+	}
+	if factoryCfg == nil {
+		return ""
+	}
+	return interfaces.NormalizeRunnerID(factoryCfg.Runner)
+}
+
+// loadWorkersFromConfig instantiates worker executors from the loaded runtime config.
+// Workers missing AGENTS.md keep the existing noop behavior so topology-only tests continue to work.
+func loadWorkersFromConfig(
+	factoryDir string,
+	factoryCfg *interfaces.FactoryConfig,
+	factoryRunnerID string,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	logger logging.Logger,
+	skipBuiltInRunnerPrerequisiteValidation bool,
+	providerOverride workers.Provider,
+	providerCommandRunner workers.CommandRunner,
+	cmdRunner workers.CommandRunner,
+	scriptRecorder workers.ScriptEventRecorder,
+	inferenceRecorder workers.InferenceEventRecorder,
+	now func() time.Time,
+) ([]factory.FactoryOption, error) {
+	var opts []factory.FactoryOption
+	logger.Info("loading workers from runtime config", "working-directory", factoryDir)
+	if factoryCfg == nil {
+		return nil, fmt.Errorf("factory config is required")
+	}
+	preflight := runnerSelectionPreflight{
+		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil || skipBuiltInRunnerPrerequisiteValidation,
+	}
+	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
+		return nil, err
+	}
+	for _, workerCfg := range factoryCfg.Workers {
+		logger.Debug("loading worker", "worker", workerCfg.Name)
+		def, ok := runtimeCfg.Worker(workerCfg.Name)
+		if !ok || def == nil || def.Type == "" {
+			logger.Debug("no AGENTS.md for worker; using noop executor", "worker", workerCfg.Name)
+			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workers.NoopExecutor{}))
+			continue
+		}
+		executor := buildWorkerExecutor(runtimeCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, now)
+		if executor != nil {
+			logger.Info("loaded worker", "worker", workerCfg.Name)
+			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
+		} else {
+			logger.Error("failed to load worker", "worker", workerCfg.Name)
+			return nil, fmt.Errorf("unsupported worker type for worker %q: %s", workerCfg.Name, def.Type)
+		}
+	}
+	for _, workstationCfg := range factoryCfg.Workstations {
+		def, ok := runtimeCfg.Workstation(workstationCfg.Name)
+		if !ok || def == nil {
+			continue
+		}
+		if def.Type != interfaces.WorkstationTypeLogical || def.WorkerTypeName != "" {
+			continue
+		}
+		logger.Info("loading workerless logical workstation", "workstation", workstationCfg.Name)
+		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workers.WorkstationExecutor{
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
+		}))
+	}
+	return opts, nil
+}
+
+// buildWorkerExecutor creates a WorkstationExecutor wrapping the appropriate
+// inner executor for the configured worker type. Returns nil for unsupported types.
+func buildWorkerExecutor(
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	workerName string,
+	factoryRunnerID string,
+	logger logging.Logger,
+	providerOverride workers.Provider,
+	providerCommandRunner workers.CommandRunner,
+	cmdRunner workers.CommandRunner,
+	scriptRecorder workers.ScriptEventRecorder,
+	inferenceRecorder workers.InferenceEventRecorder,
+	now func() time.Time,
+) workers.WorkerExecutor {
+	def, ok := runtimeCfg.Worker(workerName)
+	if !ok {
+		return nil
+	}
+
+	switch def.Type {
+	case interfaces.WorkerTypeModel:
+		var runner workers.Runner
+		if providerOverride != nil {
+			runner = workers.RunnerFromProvider(providerOverride)
+		} else {
+			var providerOpts []workers.ScriptWrapProviderOption
+			providerOpts = append(providerOpts, workers.WithSkipPermissions(def.SkipPermissions))
+			providerOpts = append(providerOpts, workers.WithProviderLogger(logger))
+			if providerCommandRunner != nil {
+				providerOpts = append(providerOpts, workers.WithProviderCommandRunner(providerCommandRunner))
+			}
+			runner = workers.NewScriptWrapProvider(providerOpts...)
+		}
+		if inferenceRecorder != nil {
+			if providerOverride != nil {
+				provider := workers.NewRecordingProvider(
+					providerOverride,
+					inferenceRecorder,
+					workers.WithRecordingProviderClock(now),
+				)
+				runner = workers.RunnerFromProvider(provider)
+			} else if providerRunner, ok := runner.(*workers.ScriptWrapProvider); ok {
+				provider := workers.NewRecordingProvider(
+					providerRunner,
+					inferenceRecorder,
+					workers.WithRecordingProviderClock(now),
+				)
+				runner = workers.RunnerFromProvider(provider)
+			}
+		}
+
+		agentOpts := []workers.AgentExecutorOption{
+			workers.WithLogger(logger),
+		}
+		agentExec := workers.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
+		return &workers.WorkstationExecutor{
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Executor:        agentExec,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
+		}
+	case interfaces.WorkstationTypeLogical:
+		return &workers.WorkstationExecutor{
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
+		}
+	case interfaces.WorkerTypeScript:
+		var scriptOpts []workers.ScriptExecutorOption
+		if runtimeCfg != nil && runtimeCfg.FactoryDir() != "" {
+			scriptOpts = append(scriptOpts, workers.WithScriptFactoryDir(runtimeCfg.FactoryDir()))
+		}
+		if scriptRecorder != nil {
+			scriptOpts = append(scriptOpts, workers.WithScriptEventRecorder(scriptRecorder))
+		}
+		var scriptExec workers.WorkstationRequestExecutor
+		if cmdRunner != nil {
+			scriptExec = workers.NewScriptExecutorWithRunner(def, cmdRunner, logger, scriptOpts...)
+		} else {
+			scriptExec = workers.NewScriptExecutor(def, logger, scriptOpts...)
+		}
+		return &workers.WorkstationExecutor{
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Executor:        scriptExec,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
+		}
+	default:
+		return nil
+	}
 }

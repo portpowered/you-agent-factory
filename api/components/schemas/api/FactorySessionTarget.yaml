@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - ref
+  - label
+  - folderPath
+  - factoryDir
+  - project
+properties:
+  ref:
+    $ref: './FactorySessionTargetRef.yaml'
+  label:
+    type: string
+  folderPath:
+    type: string
+  factoryDir:
+    type: string
+  project:
+    type: string

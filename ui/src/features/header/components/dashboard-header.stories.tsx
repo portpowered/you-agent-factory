@@ -12,9 +12,31 @@ export default {
   tags: ["test"],
 };
 
+const defaultFactorySessionSummary = {
+  factoryDir: "/workspace/root",
+  folderPath: "/workspace/root",
+  id: "~default",
+  isDefault: true,
+  project: "root",
+  target: {
+    kind: "default" as const,
+  },
+};
+
 export const ResponsiveVerification = {
   parameters: {
     dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions",
+          response: {
+            body: {
+              sessions: [defaultFactorySessionSummary],
+            },
+          },
+        },
+      ],
       timelineSnapshots: [
         historicalWorkOutcomeSnapshot,
         liveWorkOutcomeSnapshot,

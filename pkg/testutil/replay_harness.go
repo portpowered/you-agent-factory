@@ -76,6 +76,9 @@ func (h *ReplayHarness) RunUntilComplete(timeout time.Duration) error {
 	defer cancel()
 
 	errCh := h.Service.RunInBackground(ctx)
+	if err := h.Service.waitForRuntimeAvailability(ctx, errCh); err != nil {
+		return err
+	}
 	select {
 	case err := <-errCh:
 		if errors.Is(err, context.Canceled) {

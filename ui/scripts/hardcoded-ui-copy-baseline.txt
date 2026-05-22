@@ -1,8 +1,8 @@
 # Baseline for the hardcoded UI copy check.
 # Entries are path|line|column|kind|text.
-src/api/current-factory-definition/api.ts|324|14|string-literal|INVALID_FACTORY_DEFINITION
-src/api/current-factory-definition/api.ts|326|14|string-literal|INTERNAL_ERROR
-src/api/named-factory/api.ts|193|14|string-literal|INTERNAL_ERROR
+src/api/current-factory-definition/api.ts|337|14|string-literal|INVALID_FACTORY_DEFINITION
+src/api/current-factory-definition/api.ts|339|14|string-literal|INTERNAL_ERROR
+src/api/named-factory/api.ts|203|14|string-literal|INTERNAL_ERROR
 src/api/provider-session-details/api.ts|179|14|string-literal|INTERNAL_ERROR
 src/components/ui/data-table.tsx|37|18|string-literal|No rows available.
 src/components/ui/dialog.tsx|29|16|string-literal|Close dialog

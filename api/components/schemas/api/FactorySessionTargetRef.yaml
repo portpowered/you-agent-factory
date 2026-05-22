@@ -1,0 +1,12 @@
+type: object
+additionalProperties: false
+required:
+  - kind
+properties:
+  kind:
+    type: string
+    enum:
+      - default
+      - named
+  name:
+    type: string

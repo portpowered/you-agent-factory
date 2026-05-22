@@ -1,0 +1,9 @@
+type: object
+additionalProperties: false
+required:
+  - folderPath
+properties:
+  folderPath:
+    type: string
+  target:
+    $ref: './FactorySessionTargetRef.yaml'

@@ -151,6 +151,25 @@ describe("DashboardScreen", () => {
     expect(screen.getByText("Dashboard export dialog zh-CN")).toBeTruthy();
   });
 
+  it("keeps the header visible and renders an empty workspace state when no live session remains", () => {
+    const messages = getHeaderControlsMessages("en");
+    dashboardSnapshotState = {
+      error: null,
+      isInitialLoading: false,
+      snapshot: null,
+    };
+
+    render(<DashboardScreen />);
+
+    expectDashboardShellContract();
+    expect(screen.getByText("Dashboard header en")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: messages.sessionsEmptyTitle }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Dashboard bento en")).toBeNull();
+    expect(screen.queryByText("Dashboard export dialog en")).toBeNull();
+  });
+
   it("keeps direct locale overrides available to the dashboard children", () => {
     dashboardSnapshotState = {
       error: null,

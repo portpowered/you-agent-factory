@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 import type {
   DashboardActiveExecution,
   DashboardPlaceRef,
@@ -76,40 +78,53 @@ function useCurrentSelectionStoreState() {
 }
 
 export function useCurrentSelection({
+  sessionID,
   snapshot,
   workstationRequestsByDispatchID,
 }: {
+  sessionID: string;
   snapshot: DashboardSnapshot | null | undefined;
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }): CurrentSelectionState {
   const store = useCurrentSelectionStoreState();
+  const previousSessionIDRef = useRef(sessionID);
+  const sessionChanged = previousSessionIDRef.current !== sessionID;
+  const selection = sessionChanged ? null : store.selection;
+  const terminalWorkDetail = sessionChanged ? null : store.terminalWorkDetail;
   const projectedWorkstationRequestsByDispatchID = resolveProjectedWorkstationRequestsByDispatchID(
     snapshot,
     workstationRequestsByDispatchID,
   );
 
+  useEffect(() => {
+    if (sessionChanged) {
+      store.resetSelectionHistory();
+      previousSessionIDRef.current = sessionID;
+    }
+  }, [sessionChanged, sessionID, store.resetSelectionHistory]);
+
   useSelectionSynchronization({
     projectedWorkstationRequestsByDispatchID,
     replacePresent: store.replacePresent,
     resetSelectionHistory: store.resetSelectionHistory,
-    selection: store.selection,
+    selection,
     snapshot,
-    terminalWorkDetail: store.terminalWorkDetail,
+    terminalWorkDetail,
   });
 
   const derived = useCurrentSelectionDerivedState({
     projectedWorkstationRequestsByDispatchID,
-    selection: store.selection,
+    selection,
     snapshot,
-    terminalWorkDetail: store.terminalWorkDetail,
+    terminalWorkDetail,
   });
 
   useTerminalWorkDetailCleanup({
     completedWorkLabels: derived.completedWorkLabels,
     failedWorkLabels: derived.failedWorkLabels,
     replacePresent: store.replacePresent,
-    selection: store.selection,
-    terminalWorkDetail: store.terminalWorkDetail,
+    selection,
+    terminalWorkDetail,
   });
 
   const actions = useCurrentSelectionActions({
@@ -117,9 +132,9 @@ export function useCurrentSelection({
     completedWorkItems: derived.completedWorkItems,
     failedWorkItems: derived.failedWorkItems,
     projectedWorkstationRequestsByDispatchID,
-    selection: store.selection,
+    selection,
     snapshot,
-    terminalWorkDetail: store.terminalWorkDetail,
+    terminalWorkDetail,
   });
 
   return {
@@ -143,14 +158,14 @@ export function useCurrentSelection({
     selectedWorkRequestHistory: derived.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: derived.selectedWorkWorkstationRequests,
     selectedWorkstationRequest: derived.selectedWorkstationRequest,
-    selection: store.selection,
+    selection,
     selectStateNode: actions.selectStateNode,
     selectStateWorkItem: actions.selectStateWorkItem,
     selectWorkByID: actions.selectWorkByID,
     selectWorkItem: actions.selectWorkItem,
     selectWorkstation: actions.selectWorkstation,
     selectWorkstationRequest: actions.selectWorkstationRequest,
-    terminalWorkDetail: store.terminalWorkDetail,
+    terminalWorkDetail,
     undoSelection: store.undoSelection,
   };
 }

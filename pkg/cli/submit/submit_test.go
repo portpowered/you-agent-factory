@@ -64,7 +64,9 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	// Start a mock server that validates the request and returns success.
 	var receivedReq factoryapi.SubmitWorkRequest
 	var rawReq map[string]json.RawMessage
+	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
 		if r.Method != http.MethodPost || r.URL.Path != "/work" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -115,6 +117,9 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	if receivedReq.WorkTypeName != "code-change" {
 		t.Errorf("WorkTypeName = %q, want %q", receivedReq.WorkTypeName, "code-change")
 	}
+	if gotPath != "/work" {
+		t.Fatalf("path = %q, want /work", gotPath)
+	}
 	if _, ok := rawReq["name"]; !ok {
 		t.Fatalf("request should include name, got keys %#v", rawReq)
 	}
@@ -131,6 +136,49 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	}
 	if string(payload) != `{"title":"test task"}` {
 		t.Errorf("Payload = %s, want %s", string(payload), `{"title":"test task"}`)
+	}
+}
+
+func TestSubmit_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "scoped-trace-1"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	parsedURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+	port, err := strconv.Atoi(parsedURL.Port())
+	if err != nil {
+		t.Fatalf("parse server port: %v", err)
+	}
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"scoped task"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = Submit(SubmitConfig{
+		Name:         "scoped-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Port:         port,
+		SessionID:    "session-beta",
+	})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	if gotPath != "/factories/session-beta/work" {
+		t.Fatalf("path = %q, want /factories/session-beta/work", gotPath)
 	}
 }
 

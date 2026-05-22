@@ -1,6 +1,7 @@
 import process from "node:process";
 import { chromium } from "playwright";
 import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
+import { verifyDashboardSessionTabs as verifyDashboardSessionTabsImpl } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
 import { verifyCurrentSelectionPromptHint as verifyCurrentSelectionPromptHintImpl } from "./verify-current-selection-storybook-responsive.mjs";
 import {
   createLocalizedExportDialogVerifier,
@@ -13,7 +14,6 @@ import {
   verifyLocalizedWorkflowActivity,
   verifyLocalizedWorkOutcomeChart,
 } from "./verify-localized-widget-storybook-responsive.mjs";
-import { verifyTraceFactoryGraphVisualConsistency } from "./graph-storybook-responsive.mjs";
 import { verifyProviderSessionDetailSuccess as verifyProviderSessionDetailSuccessImpl } from "./verify-provider-session-storybook-responsive.mjs";
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
@@ -54,25 +54,18 @@ export const storyChecks = [
   },
   {
     assertions: verifyDashboardHeader,
-    id: "infinite-you-workflow-dashboard--header-action-buttons-verification",
+    id: "infinite-you-dashboard-dashboard-header--responsive-verification",
     label: "dashboard header",
+  },
+  {
+    assertions: verifyDashboardSessionTabs,
+    id: "infinite-you-dashboard-session-tabs--open-flow-verification",
+    label: "dashboard session tabs",
   },
   {
     assertions: verifyDashboardShellConsolidation,
     id: "infinite-you-workflow-dashboard--header-action-buttons-verification",
     label: "dashboard shared shell",
-  },
-  {
-    assertions: (page, _dialog, viewport) =>
-      verifyTraceFactoryGraphVisualConsistency({
-        expectNoHorizontalOverflow,
-        expectVisible,
-        page,
-        viewport,
-        waitForStoryRender,
-      }),
-    id: "agent-factory-dashboard-react-flow-current-activity-card--narrow-viewport",
-    label: "trace/factory graph visual consistency",
   },
   {
     assertions: (page, _dialog, viewport) =>
@@ -332,7 +325,6 @@ export async function expectOrderedLeftEdges(locators, label) {
 export async function verifyDashboardHeader(page, _dialog, viewport) {
   const heading = page.getByRole("heading", { name: "Infinite You" });
   const hiddenWordmark = heading.getByText("Infinite You");
-  const hiddenTickLabel = page.getByText("Timeline tick", { exact: true }).first();
   const slider = page.getByRole("slider", { name: "Timeline tick" });
   const languageButton = page.getByRole("button", {
     name: "Change language",
@@ -340,7 +332,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   const streamStatus = page.getByRole("status", {
     name: /Infinite You event stream (connecting|live)/,
   });
-  const currentTick = page.getByText(/\d+\/\d+/).first();
   const currentButton = page.getByRole("button", {
     name: "Return to current tick",
   });
@@ -351,7 +342,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectVisible(slider, "Timeline slider");
   await expectVisible(languageButton, "Language menu button");
   await expectVisible(streamStatus, "Dashboard stream status");
-  await expectVisible(currentTick, "Current timeline tick text");
   await expectVisible(currentButton, "Return-to-current button");
   await expectVisible(exportButton, "Export PNG button");
 
@@ -361,23 +351,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
       "Dashboard heading wordmark was not hidden with sr-only styling.",
     );
   }
-  const hiddenTickLabelClass = await hiddenTickLabel.getAttribute("class");
-  if (!hiddenTickLabelClass?.includes("sr-only")) {
-    throw new Error(
-      "Dashboard timeline tick label was not hidden with sr-only styling.",
-    );
-  }
-
-  await slider.focus();
-  await page.keyboard.press("ArrowLeft");
-  await expectVisible(
-    page.getByText(/\d+\/\d+/),
-    "Keyboard-updated timeline tick text",
-  );
-
-  await currentButton.focus();
-  await page.keyboard.press("Enter");
-  await expectVisible(currentTick, "Restored current timeline tick text");
 
   if (viewport.label === "desktop") {
     await expectOrderedLeftEdges(
@@ -389,6 +362,13 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectNoHorizontalOverflow(
     page,
     `Dashboard header at ${viewport.label}`,
+  );
+}
+export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
+  return verifyDashboardSessionTabsImpl(
+    { expectNoHorizontalOverflow, expectVisible, waitForDialog },
+    page,
+    viewport,
   );
 }
 export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {

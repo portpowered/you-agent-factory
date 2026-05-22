@@ -1,0 +1,530 @@
+import {
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useId,
+  useRef,
+} from "react";
+
+import {
+  type FactorySessionSummary,
+  type FactorySessionTarget,
+  FactorySessionsAPIError,
+} from "../../api/factory-sessions";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
+import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input } from "../../components/ui";
+import { cn } from "../../lib/cn";
+import { DASHBOARD_BODY_TEXT_CLASS, DASHBOARD_SUPPORTING_LABELS_CLASS } from "../../components/ui/dashboard-typography";
+import { getHeaderControlsMessages } from "./messages/header-controls";
+import { useDashboardSessionTabsState } from "./use-dashboard-session-tabs-state";
+
+const SESSION_TABS_SHELL_CLASS = "mt-3 flex w-full flex-col gap-3 border-t border-af-overlay/10 pt-3";
+const SESSION_HEADER_ROW_CLASS = "flex items-center justify-between gap-3";
+const SESSION_SECTION_LABEL_CLASS = cn(
+  "text-xs uppercase tracking-[0.18em] text-af-ink/52",
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+);
+const SESSION_TAB_LIST_CLASS = "flex gap-2 overflow-x-auto pb-1";
+const SESSION_TAB_ITEM_CLASS =
+  "flex min-w-0 shrink-0 items-stretch rounded-2xl border transition-colors";
+const SESSION_TAB_BUTTON_CLASS =
+  "min-w-0 flex-1 rounded-l-2xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
+const SESSION_TAB_CLOSE_BUTTON_CLASS =
+  "rounded-r-2xl border-l border-current/10 px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
+const SESSION_TAB_ACTIVE_CLASS =
+  "border-af-accent/42 bg-af-accent/12 text-af-ink";
+const SESSION_TAB_INACTIVE_CLASS =
+  "border-af-overlay/12 bg-af-overlay/4 text-af-ink/76 hover:border-af-overlay/24 hover:bg-af-overlay/8 hover:text-af-ink";
+const SESSION_DIALOG_ERROR_CLASS =
+  "rounded-xl border border-af-danger/32 bg-af-danger/8 px-3 py-2 text-sm text-af-ink";
+const SESSION_TARGET_LIST_CLASS = "grid gap-2 sm:grid-cols-2";
+const SESSION_TARGET_BUTTON_CLASS =
+  "flex min-h-11 flex-col items-start justify-center rounded-xl border border-af-overlay/12 bg-af-overlay/4 px-3 py-2 text-left text-sm text-af-ink/82 transition-colors hover:border-af-accent/30 hover:bg-af-overlay/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
+
+export function DashboardSessionTabs({ locale }: { locale: string }) {
+  const messages = getHeaderControlsMessages(locale);
+  const {
+    activeSession,
+    activeSessionID,
+    closeError,
+    closeSessionMutation,
+    dialogError,
+    dialogOpen,
+    discoveredTargets,
+    folderPath,
+    handleCloseSession,
+    handleInspectFolder,
+    handleOpenTarget,
+    openSessionMutation,
+    resetDialogState,
+    sessions,
+    sessionsQuery,
+    setActiveSessionID,
+    setDialogOpen,
+    setFolderPath,
+  } = useDashboardSessionTabsState();
+
+  useEffect(() => {
+    if (sessions.length === 0) {
+      return;
+    }
+    if (
+      activeSessionID === "" ||
+      !sessions.some((session) => session.id === activeSessionID)
+    ) {
+      setActiveSessionID(sessions[0]?.id ?? DEFAULT_FACTORY_SESSION_ID);
+    }
+  }, [activeSessionID, sessions, setActiveSessionID]);
+
+  return (
+    <>
+      <div className={SESSION_TABS_SHELL_CLASS}>
+        <div className={SESSION_HEADER_ROW_CLASS}>
+          <p className={SESSION_SECTION_LABEL_CLASS}>{messages.sessionTabsLabel}</p>
+          <OpenSessionButton
+            label={messages.openSessionButtonLabel}
+            onClick={() => {
+              setDialogOpen(true);
+            }}
+          />
+        </div>
+        {closeError ? (
+          <p className={SESSION_DIALOG_ERROR_CLASS} role="alert">
+            {closeError.message}
+          </p>
+        ) : null}
+        <SessionTabsContent
+          activeSession={activeSession}
+          closingSessionID={
+            closeSessionMutation.isPending ? closeSessionMutation.variables : null
+          }
+          error={sessionsQuery.isError ? sessionsQuery.error : null}
+          isPending={sessionsQuery.isPending}
+          messages={messages}
+          onCloseSession={handleCloseSession}
+          onRetry={() => {
+            void sessionsQuery.refetch();
+          }}
+          onSelectSession={setActiveSessionID}
+          sessions={sessions}
+        />
+      </div>
+      <Dialog
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            resetDialogState();
+          }
+        }}
+        open={dialogOpen}
+      >
+        <OpenSessionDialog
+          dialogError={dialogError}
+          discoveredTargets={discoveredTargets}
+          folderPath={folderPath}
+          isPending={openSessionMutation.isPending}
+          messages={messages}
+          onChangeFolderPath={setFolderPath}
+          onInspectFolder={handleInspectFolder}
+          onOpenTarget={handleOpenTarget}
+        />
+      </Dialog>
+    </>
+  );
+}
+
+function OpenSessionButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button aria-haspopup="dialog" onClick={onClick} size="sm" tone="secondary">
+      <span aria-hidden="true">+</span>
+      <span>{label}</span>
+    </Button>
+  );
+}
+
+function SessionTabsContent({
+  activeSession,
+  closingSessionID,
+  error,
+  isPending,
+  messages,
+  onCloseSession,
+  onRetry,
+  onSelectSession,
+  sessions,
+}: {
+  activeSession: FactorySessionSummary | null;
+  closingSessionID: string | null;
+  error: unknown;
+  isPending: boolean;
+  messages: ReturnType<typeof getHeaderControlsMessages>;
+  onCloseSession: (sessionID: string) => void;
+  onRetry: () => void;
+  onSelectSession: (sessionID: string) => void;
+  sessions: FactorySessionSummary[];
+}) {
+  const sessionButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const sessionTabsID = useId();
+
+  if (isPending) {
+    return (
+      <p className={cn("text-sm text-af-ink/68", DASHBOARD_BODY_TEXT_CLASS)}>
+        {messages.loadingSessionsLabel}
+      </p>
+    );
+  }
+  if (error) {
+    const sessionError = normalizeFactorySessionsError(error);
+    return (
+      <SessionErrorState
+        label={
+          sessionError.code === "NETWORK_ERROR"
+            ? messages.sessionsOfflineTitle
+            : messages.sessionsErrorTitle
+        }
+        messages={messages}
+        onRetry={onRetry}
+      />
+    );
+  }
+  if (sessions.length === 0) {
+    return (
+      <p className={cn("text-sm text-af-ink/76", DASHBOARD_BODY_TEXT_CLASS)}>
+        {messages.sessionsEmptyTitle}
+      </p>
+    );
+  }
+
+  function focusSessionButton(index: number) {
+    sessionButtonRefs.current[index]?.focus();
+  }
+
+  function moveSessionFocus(currentIndex: number, offset: number) {
+    const nextIndex = (currentIndex + offset + sessions.length) % sessions.length;
+    const nextSession = sessions[nextIndex];
+    if (!nextSession) {
+      return;
+    }
+    onSelectSession(nextSession.id);
+    focusSessionButton(nextIndex);
+  }
+
+  return (
+    <>
+      <nav aria-label={messages.sessionTabsLabel}>
+        <div
+          aria-orientation="horizontal"
+          className={SESSION_TAB_LIST_CLASS}
+          role="tablist"
+        >
+          {sessions.map((session, index) => (
+            <SessionTabButton
+              active={session.id === activeSession?.id}
+              buttonRef={(element) => {
+                sessionButtonRefs.current[index] = element;
+              }}
+              controlsID={sessionPanelID(sessionTabsID, session.id)}
+              key={session.id}
+              onKeyDown={(event) => {
+                switch (event.key) {
+                  case "ArrowLeft":
+                  case "ArrowUp":
+                    event.preventDefault();
+                    moveSessionFocus(index, -1);
+                    return;
+                  case "ArrowRight":
+                  case "ArrowDown":
+                    event.preventDefault();
+                    moveSessionFocus(index, 1);
+                    return;
+                  case "Home":
+                    event.preventDefault();
+                    onSelectSession(sessions[0]?.id ?? session.id);
+                    focusSessionButton(0);
+                    return;
+                  case "End":
+                    event.preventDefault();
+                    onSelectSession(
+                      sessions[sessions.length - 1]?.id ?? session.id,
+                    );
+                    focusSessionButton(sessions.length - 1);
+                    return;
+                  default:
+                    return;
+                }
+              }}
+              onClick={() => {
+                onSelectSession(session.id);
+              }}
+              onClose={() => {
+                onCloseSession(session.id);
+              }}
+              closeDisabled={closingSessionID === session.id}
+              messages={messages}
+              session={session}
+              tabID={sessionTabID(sessionTabsID, session.id)}
+            />
+          ))}
+        </div>
+      </nav>
+      {activeSession ? (
+        <div
+          aria-labelledby={sessionTabID(sessionTabsID, activeSession.id)}
+          id={sessionPanelID(sessionTabsID, activeSession.id)}
+          role="tabpanel"
+        >
+          <p className={cn("text-xs text-af-ink/58", DASHBOARD_BODY_TEXT_CLASS)}>
+            {messages.activeSessionPathLabel}: {activeSession.folderPath}
+          </p>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function SessionErrorState({
+  label,
+  messages,
+  onRetry,
+}: {
+  label: string;
+  messages: ReturnType<typeof getHeaderControlsMessages>;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <p className={cn("text-sm text-af-ink/76", DASHBOARD_BODY_TEXT_CLASS)}>
+        {label}
+      </p>
+      <Button onClick={onRetry} size="sm" tone="outline">
+        {messages.retrySessionsLabel}
+      </Button>
+    </div>
+  );
+}
+
+function SessionTabButton({
+  active,
+  buttonRef,
+  controlsID,
+  closeDisabled,
+  messages,
+  onKeyDown,
+  onClick,
+  onClose,
+  session,
+  tabID,
+}: {
+  active: boolean;
+  buttonRef: (element: HTMLButtonElement | null) => void;
+  controlsID: string;
+  closeDisabled: boolean;
+  messages: ReturnType<typeof getHeaderControlsMessages>;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  onClick: () => void;
+  onClose: () => void;
+  session: FactorySessionSummary;
+  tabID: string;
+}) {
+  const label = sessionTabLabel(session);
+  return (
+    <div
+      className={cn(
+        SESSION_TAB_ITEM_CLASS,
+        active ? SESSION_TAB_ACTIVE_CLASS : SESSION_TAB_INACTIVE_CLASS,
+      )}
+      title={`${session.folderPath} (${session.id})`}
+    >
+      <button
+        aria-controls={controlsID}
+        aria-selected={active}
+        className={SESSION_TAB_BUTTON_CLASS}
+        id={tabID}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+        ref={buttonRef}
+        role="tab"
+        tabIndex={active ? 0 : -1}
+        type="button"
+      >
+        <span className="block truncate text-sm font-semibold">{label}</span>
+        <span className="block truncate text-xs text-af-ink/58">
+          {session.project || session.folderPath}
+        </span>
+      </button>
+      <button
+        aria-label={sessionCloseLabel(session, messages)}
+        className={SESSION_TAB_CLOSE_BUTTON_CLASS}
+        disabled={closeDisabled}
+        onClick={onClose}
+        type="button"
+      >
+        {closeDisabled ? messages.closingSessionButtonLabel : "×"}
+      </button>
+    </div>
+  );
+}
+
+function OpenSessionDialog({
+  dialogError,
+  discoveredTargets,
+  folderPath,
+  isPending,
+  messages,
+  onChangeFolderPath,
+  onInspectFolder,
+  onOpenTarget,
+}: {
+  dialogError: FactorySessionsAPIError | null;
+  discoveredTargets: FactorySessionTarget[];
+  folderPath: string;
+  isPending: boolean;
+  messages: ReturnType<typeof getHeaderControlsMessages>;
+  onChangeFolderPath: (value: string) => void;
+  onInspectFolder: (event: FormEvent<HTMLFormElement>) => void;
+  onOpenTarget: (target: FactorySessionTarget) => void;
+}) {
+  const folderFieldID = useId();
+
+  return (
+    <DialogContent closeDisabled={isPending}>
+      <DialogHeader>
+        <DialogTitle>{messages.openSessionDialogTitle}</DialogTitle>
+        <DialogDescription>
+          {messages.openSessionDialogDescription}
+        </DialogDescription>
+      </DialogHeader>
+      <form className="grid gap-4" onSubmit={onInspectFolder}>
+        <div className="grid gap-2">
+          <label className={SESSION_SECTION_LABEL_CLASS} htmlFor={folderFieldID}>
+            {messages.sessionFolderFieldLabel}
+          </label>
+          <Input
+            autoFocus
+            disabled={isPending}
+            id={folderFieldID}
+            onChange={(event) => {
+              onChangeFolderPath(event.target.value);
+            }}
+            placeholder={messages.sessionFolderFieldPlaceholder}
+            value={folderPath}
+          />
+        </div>
+        {dialogError ? (
+          <p className={SESSION_DIALOG_ERROR_CLASS} role="alert">
+            {dialogError.message}
+          </p>
+        ) : null}
+        <div className="flex justify-end">
+          <Button disabled={isPending} type="submit">
+            {isPending
+              ? messages.openSessionSubmitPendingLabel
+              : messages.openSessionSubmitLabel}
+          </Button>
+        </div>
+      </form>
+      {discoveredTargets.length > 0 ? (
+        <SessionTargetPicker
+          isPending={isPending}
+          messages={messages}
+          onOpenTarget={onOpenTarget}
+          targets={discoveredTargets}
+        />
+      ) : null}
+    </DialogContent>
+  );
+}
+
+function SessionTargetPicker({
+  isPending,
+  messages,
+  onOpenTarget,
+  targets,
+}: {
+  isPending: boolean;
+  messages: ReturnType<typeof getHeaderControlsMessages>;
+  onOpenTarget: (target: FactorySessionTarget) => void;
+  targets: FactorySessionTarget[];
+}) {
+  return (
+    <section aria-label={messages.targetPickerTitle} className="grid gap-3">
+      <div className="grid gap-1">
+        <p className={SESSION_SECTION_LABEL_CLASS}>{messages.targetPickerTitle}</p>
+        <p className={cn("text-sm text-af-ink/72", DASHBOARD_BODY_TEXT_CLASS)}>
+          {messages.targetPickerHint}
+        </p>
+      </div>
+      <div className={SESSION_TARGET_LIST_CLASS}>
+        {targets.map((target) => (
+          <button
+            className={SESSION_TARGET_BUTTON_CLASS}
+            disabled={isPending}
+            key={`${target.ref.kind}:${target.ref.name ?? ""}:${target.factoryDir}`}
+            onClick={() => {
+              onOpenTarget(target);
+            }}
+            type="button"
+          >
+            <span className="font-semibold text-af-ink">{target.label}</span>
+            <span className="truncate text-xs text-af-ink/58">
+              {target.project || target.factoryDir}
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function sessionTabLabel(session: FactorySessionSummary): string {
+  const folderName = basename(session.folderPath) || session.project || "factory";
+  const targetName =
+    session.target.kind === "default" ? "default" : session.target.name || "named";
+  return `${folderName} / ${targetName}`;
+}
+
+function sessionCloseLabel(
+  session: FactorySessionSummary,
+  messages: ReturnType<typeof getHeaderControlsMessages>,
+): string {
+  return messages.sessionTabCloseLabelTemplate.replace(
+    "{{sessionLabel}}",
+    sessionTabLabel(session),
+  );
+}
+
+function basename(path: string): string {
+  const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
+  return segments[segments.length - 1] ?? "";
+}
+
+function sessionTabID(sessionTabsID: string, sessionID: string): string {
+  return `${sessionTabsID}-tab-${sessionDOMIDFragment(sessionID)}`;
+}
+
+function sessionPanelID(sessionTabsID: string, sessionID: string): string {
+  return `${sessionTabsID}-panel-${sessionDOMIDFragment(sessionID)}`;
+}
+
+function sessionDOMIDFragment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, "-");
+}
+
+function normalizeFactorySessionsError(error: unknown): FactorySessionsAPIError {
+  if (error instanceof FactorySessionsAPIError) {
+    return error;
+  }
+  return new FactorySessionsAPIError(
+    "The dashboard could not complete the factory session request.",
+    {
+      code: "INTERNAL_ERROR",
+      responseBody: error,
+    },
+  );
+}

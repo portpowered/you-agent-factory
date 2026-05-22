@@ -95,4 +95,33 @@ describe("submitWork", () => {
       }),
     );
   });
+
+  it("posts to the session-scoped work route when a non-default session is selected", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ traceId: "trace-story" }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 201,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      submitWork(
+        {
+          name: "Session review",
+          payload: "Review the beta session queue.",
+          workTypeName: "story",
+        },
+        { sessionID: "session-beta" },
+      ),
+    ).resolves.toEqual({ traceId: "trace-story" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factories/session-beta/work",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+  });
 });

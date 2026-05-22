@@ -13,6 +13,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
 const listRequestTimeout = 10 * time.Second
@@ -20,6 +21,7 @@ const listRequestTimeout = 10 * time.Second
 // ListConfig holds parameters for the work list command.
 type ListConfig struct {
 	Port       int
+	SessionID  string
 	StateName  string
 	StateType  string
 	SortBy     string
@@ -44,7 +46,7 @@ func List(cfg ListConfig) error {
 	endpoint := url.URL{
 		Scheme: "http",
 		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
-		Path:   "/work",
+		Path:   sessionpath.ScopedPath("/work", cfg.SessionID),
 	}
 	query := endpoint.Query()
 	if cfg.StateName != "" {

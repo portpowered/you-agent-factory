@@ -136,6 +136,44 @@ describe("getCurrentEditableFactoryDefinition", () => {
     });
   });
 
+  it("uses the session-scoped editable-definition route for non-default sessions", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          factoryDefinition: {
+            name: "Scoped Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+          version: {
+            logical: 3,
+            physical: "2026-05-18T14:24:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await getCurrentEditableFactoryDefinitionDocument({
+      fetch,
+      sessionID: "session-2",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/factories/session-2/factory/~current/editable-definition",
+      {
+        method: "GET",
+      },
+    );
+  });
+
   it("surfaces current-factory transport failures with the original API error code", async () => {
     await expect(
       getCurrentEditableFactoryDefinition({
@@ -292,6 +330,54 @@ describe("getCurrentEditableFactoryDefinition", () => {
       }),
     );
     expect(document.version.logical).toBe(10);
+  });
+
+  it("saves through the session-scoped editable-definition route for non-default sessions", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          factoryDefinition: {
+            name: "Scoped Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+          version: {
+            logical: 11,
+            physical: "2026-05-18T14:41:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveCurrentEditableFactoryDefinitionDocument(
+      {
+        factoryDefinition: {
+          name: "Scoped Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+      },
+      {
+        fetch,
+        sessionID: "session-2",
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/factories/session-2/factory/~current/editable-definition",
+      expect.objectContaining({
+        method: "PUT",
+      }),
+    );
   });
 
   it("preserves structured save error targets when the API rejects a topology edit", async () => {

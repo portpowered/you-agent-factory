@@ -17,10 +17,19 @@ const DASHBOARD_STORYBOOK_BASE_PATH = "/dashboard/ui/";
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 interface DashboardApiMockParameters {
+  eventSourceMocks?: DashboardEventSourceMock[];
   fetchMocks?: DashboardFetchMock[];
   snapshot?: DashboardSnapshot;
   timelineSnapshots?: DashboardSnapshot[];
   timelineEvents?: FactoryEvent[];
+  tracesByWorkID?: Record<string, DashboardTrace>;
+  workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
+}
+
+interface DashboardEventSourceMock {
+  events?: FactoryEvent[];
+  path: string;
+  snapshot?: DashboardSnapshot;
   tracesByWorkID?: Record<string, DashboardTrace>;
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }
@@ -41,22 +50,49 @@ interface DashboardFetchMockResponse {
 }
 
 class DashboardStoryEventSource {
-  public onerror: ((event: Event) => void) | null = null;
-  public onopen: ((event: Event) => void) | null = null;
+  private readonly listeners = new Map<string, EventListener[]>();
 
-  public constructor() {
+  public constructor(url: string) {
     queueMicrotask(() => {
+      const matchedMock = findEventSourceMock(installedEventSourceMocks, url);
+      if (matchedMock?.snapshot) {
+        seedDashboardStorySnapshot(
+          matchedMock.snapshot,
+          matchedMock.tracesByWorkID ?? {},
+          matchedMock.workstationRequestsByDispatchID ?? {},
+        );
+      }
       this.onopen?.(new Event("open"));
+      for (const event of matchedMock?.events ?? []) {
+        this.emit("message", event);
+      }
     });
   }
 
-  public addEventListener(): void {}
+  public onerror: ((event: Event) => void) | null = null;
+  public onopen: ((event: Event) => void) | null = null;
+
+  public addEventListener(type: string, listener: EventListener): void {
+    const listeners = this.listeners.get(type) ?? [];
+    listeners.push(listener);
+    this.listeners.set(type, listeners);
+  }
 
   public close(): void {}
+
+  private emit(type: string, data: unknown): void {
+    const event = new MessageEvent(type, {
+      data: JSON.stringify(data),
+    });
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener(event);
+    }
+  }
 }
 
 let originalFetch: FetchLike | null = null;
 let originalEventSource: typeof EventSource | undefined;
+let installedEventSourceMocks: readonly DashboardEventSourceMock[] = [];
 
 function captureBrowserRuntime(): void {
   originalFetch ??= window.fetch.bind(window);
@@ -90,6 +126,14 @@ function requestMethod(init?: RequestInit): string {
   return (init?.method ?? "GET").toUpperCase();
 }
 
+function normalizeURLPath(url: string): string {
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return new URL(url).pathname;
+  }
+
+  return url;
+}
+
 function findFetchMock(
   fetchMocks: readonly DashboardFetchMock[],
   path: string,
@@ -100,6 +144,14 @@ function findFetchMock(
       fetchMock.path === path &&
       (fetchMock.method === undefined || fetchMock.method.toUpperCase() === method),
   );
+}
+
+function findEventSourceMock(
+  eventSourceMocks: readonly DashboardEventSourceMock[],
+  url: string,
+): DashboardEventSourceMock | undefined {
+  const path = normalizeURLPath(url);
+  return eventSourceMocks.find((eventSourceMock) => eventSourceMock.path === path);
 }
 
 function buildFetchMockResponse(mockResponse: DashboardFetchMockResponse): Response {
@@ -205,6 +257,7 @@ function resetDashboardStoryStores(): void {
 function installDashboardApiMock(parameters: DashboardApiMockParameters | undefined): void {
   captureBrowserRuntime();
   resetDashboardStoryStores();
+  installedEventSourceMocks = parameters?.eventSourceMocks ?? [];
 
   if (!parameters?.snapshot && !parameters?.timelineSnapshots && !parameters?.timelineEvents) {
     window.fetch = originalFetch ?? window.fetch;

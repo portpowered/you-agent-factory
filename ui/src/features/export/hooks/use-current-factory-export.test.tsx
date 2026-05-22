@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { getCurrentFactory, NamedFactoryAPIError, type FactoryValue } from "../../../api/named-factory";
+import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useCurrentFactoryExport } from "./use-current-factory-export";
 
 vi.mock("../../../api/named-factory", async () => {
@@ -25,6 +26,7 @@ const factory: FactoryValue = {
 describe("useCurrentFactoryExport", () => {
   beforeEach(() => {
     vi.mocked(getCurrentFactory).mockReset();
+    useDashboardSessionStore.setState({ selectedSessionID: "~default" });
   });
 
   it("does not fetch while the export workflow is disabled", () => {
@@ -76,6 +78,40 @@ describe("useCurrentFactoryExport", () => {
         },
         isPreparing: false,
       });
+    });
+  });
+
+  it("loads export data from the selected non-default session route", async () => {
+    useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
+    vi.mocked(getCurrentFactory).mockResolvedValue(factory);
+
+    renderHook(() => useCurrentFactoryExport(true), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(getCurrentFactory).toHaveBeenCalledWith({
+        sessionID: "session-2",
+      });
+    });
+  });
+
+  it("does not fetch export data when no session is selected", () => {
+    useDashboardSessionStore.setState({ selectedSessionID: null });
+
+    const { result } = renderHook(() => useCurrentFactoryExport(true), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    expect(getCurrentFactory).not.toHaveBeenCalled();
+    expect(result.current).toEqual({
+      currentFactoryExport: {
+        code: "FACTORY_DEFINITION_UNAVAILABLE",
+        message:
+          "The current factory definition is not available yet. Wait for the current-factory API to expose the authored definition before exporting.",
+        ok: false,
+      },
+      isPreparing: false,
     });
   });
 

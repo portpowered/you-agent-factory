@@ -119,6 +119,69 @@ func TestRunReportsFileAndFunctionViolationsWithPackageFileAndLimitDetails(t *te
 	}
 }
 
+func TestRunHonorsExplicitFileAndFunctionIgnoreDirectives(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoFile(t, repoRoot, "pkg/api/ignored_file.go", strings.Join([]string{
+		"// backendsizecheck:ignore-file legacy integration surface stays together until dedicated refactor work lands.",
+		"package api",
+		"",
+		"func IgnoredFile() {",
+		"\tprintln(\"line1\")",
+		"\tprintln(\"line2\")",
+		"\tprintln(\"line3\")",
+		"\tprintln(\"line4\")",
+		"\tprintln(\"line5\")",
+		"}",
+	}, "\n"))
+	writeGoFile(t, repoRoot, "pkg/service/ignored_function.go", strings.Join([]string{
+		"package service",
+		"",
+		"// backendsizecheck:ignore-function this long integration test remains inline until the legacy service builder is split.",
+		"func IgnoredFunction() {",
+		"\tprintln(\"line1\")",
+		"\tprintln(\"line2\")",
+		"\tprintln(\"line3\")",
+		"\tprintln(\"line4\")",
+		"\tprintln(\"line5\")",
+		"}",
+		"",
+		"func Reported() {",
+		"\tprintln(\"line1\")",
+		"\tprintln(\"line2\")",
+		"\tprintln(\"line3\")",
+		"\tprintln(\"line4\")",
+		"\tprintln(\"line5\")",
+		"}",
+	}, "\n"))
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{
+		root:          repoRoot,
+		fileLineLimit: 20,
+		funcLineLimit: 5,
+	}, stdout, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want one remaining function violation")
+	}
+
+	errOutput := stderr.String()
+	if strings.Contains(errOutput, "ignored_file.go") {
+		t.Fatalf("run() stderr = %q, want file directive to skip ignored_file.go", errOutput)
+	}
+	if strings.Contains(errOutput, "IgnoredFunction") {
+		t.Fatalf("run() stderr = %q, want function directive to skip IgnoredFunction", errOutput)
+	}
+	if !strings.Contains(errOutput, "pkg/service | function Reported in pkg/service/ignored_function.go has 7 lines (limit 5)") {
+		t.Fatalf("run() stderr = %q, want remaining function violation", errOutput)
+	}
+	if got := err.Error(); got != "[agent-factory:backend-size] found 1 size violation(s)" {
+		t.Fatalf("run() error = %q, want one violation count", got)
+	}
+}
+
 func TestRunRejectsNonPositiveLimits(t *testing.T) {
 	t.Parallel()
 

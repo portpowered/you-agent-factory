@@ -13,7 +13,9 @@ import (
 
 func TestList_SendsStateFilters(t *testing.T) {
 	var gotQuery string
+	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
 		gotQuery = r.URL.RawQuery
 		if r.URL.Query().Get("state.name") != "review" {
 			t.Fatalf("state.name query = %q, want review", r.URL.Query().Get("state.name"))
@@ -55,8 +57,40 @@ func TestList_SendsStateFilters(t *testing.T) {
 	if gotQuery == "" {
 		t.Fatal("expected request query")
 	}
+	if gotPath != "/work" {
+		t.Fatalf("path = %q, want /work", gotPath)
+	}
 	if got := out.String(); got != "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\nwork-1\tReview PRD\treview\tPROCESSING\tnone\n" {
 		t.Fatalf("output = %q", got)
+	}
+}
+
+func TestList_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:      serverPort(t, srv),
+		SessionID: "session-beta",
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	if gotPath != "/factories/session-beta/work" {
+		t.Fatalf("path = %q, want /factories/session-beta/work", gotPath)
+	}
+	if got := out.String(); got != "No work found.\n" {
+		t.Fatalf("output = %q, want empty-state output", got)
 	}
 }
 

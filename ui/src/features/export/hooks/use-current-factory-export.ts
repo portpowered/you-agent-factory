@@ -6,8 +6,9 @@ import {
   type FactoryValue,
   NamedFactoryAPIError,
 } from "../../../api/named-factory";
+import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 
-const CURRENT_FACTORY_EXPORT_QUERY_KEY = ["agent-factory-current-export"] as const;
+const CURRENT_FACTORY_EXPORT_QUERY_KEY = "agent-factory-current-export";
 const CURRENT_FACTORY_UNAVAILABLE_MESSAGE =
   "The current factory definition is not available yet. Wait for the current-factory API to expose the authored definition before exporting.";
 const CURRENT_FACTORY_LOAD_FAILED_MESSAGE =
@@ -34,17 +35,41 @@ export interface UseCurrentFactoryExportResult {
 }
 
 export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryExportResult {
+  const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
+  const isQueryEnabled = isEnabled && sessionID != null;
   const query = useQuery({
-    queryKey: CURRENT_FACTORY_EXPORT_QUERY_KEY,
-    queryFn: () => getCurrentFactory(),
-    enabled: isEnabled,
+    queryKey: [CURRENT_FACTORY_EXPORT_QUERY_KEY, sessionID],
+    queryFn: () => getCurrentFactory({ sessionID }),
+    enabled: isQueryEnabled,
     gcTime: 0,
     refetchOnWindowFocus: false,
     retry: false,
   });
 
   return useMemo<UseCurrentFactoryExportResult>(() => {
-    const isRefreshingCurrentFactory = isEnabled && query.isFetching;
+    if (!isEnabled) {
+      return {
+        currentFactoryExport: {
+          code: "FACTORY_DEFINITION_UNAVAILABLE",
+          message: CURRENT_FACTORY_UNAVAILABLE_MESSAGE,
+          ok: false,
+        },
+        isPreparing: true,
+      };
+    }
+
+    const isRefreshingCurrentFactory = isQueryEnabled && query.isFetching;
+
+    if (sessionID == null) {
+      return {
+        currentFactoryExport: {
+          code: "FACTORY_DEFINITION_UNAVAILABLE",
+          message: CURRENT_FACTORY_UNAVAILABLE_MESSAGE,
+          ok: false,
+        },
+        isPreparing: false,
+      };
+    }
 
     if (query.data && !isRefreshingCurrentFactory) {
       return {
@@ -56,7 +81,7 @@ export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryEx
       };
     }
 
-    if (query.isPending || isRefreshingCurrentFactory) {
+    if (isQueryEnabled && (query.isPending || isRefreshingCurrentFactory)) {
       return {
         currentFactoryExport: {
           code: "FACTORY_DEFINITION_UNAVAILABLE",
@@ -75,7 +100,15 @@ export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryEx
       },
       isPreparing: false,
     };
-  }, [isEnabled, query.data, query.error, query.isFetching, query.isPending]);
+  }, [
+    isEnabled,
+    isQueryEnabled,
+    query.data,
+    query.error,
+    query.isFetching,
+    query.isPending,
+    sessionID,
+  ]);
 }
 
 function currentFactoryExportFailureMessage(error: unknown): string {
@@ -89,4 +122,3 @@ function currentFactoryExportFailureMessage(error: unknown): string {
 
   return CURRENT_FACTORY_LOAD_FAILED_MESSAGE;
 }
-

@@ -385,6 +385,33 @@ async function startReplayServer(lines, options = {}) {
       return;
     }
 
+    if (request.url === "/factory-sessions" && request.method === "GET") {
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(
+        JSON.stringify({
+          sessions: [
+            {
+              factoryDir:
+                currentFactoryDefinition?.factoryDirectory ?? "/replay/factory",
+              folderPath:
+                currentFactoryDefinition?.sourceDirectory ?? "/replay/factory",
+              id: "~default",
+              isDefault: true,
+              project:
+                currentFactoryDefinition?.name ?? "replay",
+              target: {
+                kind: "default",
+              },
+            },
+          ],
+        }),
+      );
+      return;
+    }
+
     if (
       request.url?.match(
         /^\/factory\/~current\/workstations\/[^/]+\/prompt-template-contract$/,

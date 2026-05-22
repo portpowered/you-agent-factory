@@ -20,6 +20,7 @@ import (
 // Server is the REST API server for the agent-factory.
 type Server struct {
 	runtime           apisurface.APISurface
+	sessionRuntime    apisurface.SessionAPISurface
 	logger            *zap.Logger
 	router            *mux.Router
 	port              int
@@ -46,6 +47,9 @@ func NewServerWithOptions(runtime apisurface.APISurface, port int, logger *zap.L
 		logger:            logger,
 		port:              port,
 		codexSessionsRoot: normalizeCodexSessionsRoot(opts.CodexSessionsRoot),
+	}
+	if sessionRuntime, ok := runtime.(apisurface.SessionAPISurface); ok {
+		srv.sessionRuntime = sessionRuntime
 	}
 	srv.router = srv.buildRouter()
 	return srv

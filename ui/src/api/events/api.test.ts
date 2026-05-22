@@ -74,4 +74,15 @@ describe("factory events API", () => {
       "Factory event stream disconnected. Showing last event state.",
     );
   });
+
+  it("opens the session-scoped event stream when a non-default session is selected", () => {
+    const onEvent = vi.fn();
+    const onStatusChange = vi.fn();
+    vi.stubGlobal("EventSource", MockEventSource);
+
+    const stream = openFactoryEventStream(onEvent, onStatusChange, "session-beta");
+
+    expect(stream).toBeInstanceOf(MockEventSource);
+    expect(stream?.url).toBe("/factories/session-beta/events");
+  });
 });

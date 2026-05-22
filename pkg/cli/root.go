@@ -131,6 +131,9 @@ func newWorkListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List work from a running factory",
+		Long: "List work from a running infinite-you service.\n\n" +
+			"By default the command targets the default compatibility session. " +
+			"Use --session to route the request to one specific live factory session instead.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Output = cmd.OutOrStdout()
 			return listWork(cfg)
@@ -144,6 +147,7 @@ func newWorkListCommand() *cobra.Command {
 	cmd.Flags().IntVar(&cfg.MaxResults, "max-results", 0, "maximum work items to return")
 	cmd.Flags().StringVar(&cfg.NextToken, "next-token", "", "pagination cursor returned by a previous work list response")
 	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API list-work JSON response")
+	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
 	return cmd
 }
 
@@ -388,6 +392,9 @@ func newSubmitCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "submit",
 		Short: "Submit work to a running factory",
+		Long: "Submit work to a running infinite-you service.\n\n" +
+			"By default the command submits to the default compatibility session. " +
+			"Use --session to submit to one specific live factory session instead.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return submitWork(cfg)
 		},
@@ -397,5 +404,6 @@ func newSubmitCommand() *cobra.Command {
 	cmd.Flags().StringVar(&cfg.WorkTypeName, "work-type-name", "", "work type name to submit to (required)")
 	cmd.Flags().StringVar(&cfg.Payload, "payload", "", "path to payload file (.json or .md) (required)")
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
 	return cmd
 }
