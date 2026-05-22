@@ -1,167 +1,29 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type {
   DashboardSnapshot,
   DashboardTrace,
   DashboardWorkItemRef,
-  DashboardWorkstationRequest,
 } from "./api/dashboard";
 import {
-  buildDashboardSnapshotFixture,
   dashboardWorkstationRequestFixtures,
-  mediumBranchingDashboardTopology,
 } from "./components/dashboard/fixtures";
-import { installDashboardBrowserTestShims } from "./components/dashboard/test-browser-shims";
-import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
-import { reloadDashboardLayoutFromStorage } from "./features/bento";
-import { useDashboardBentoStore } from "./features/bento/state";
-import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
-import { resetSelectionHistoryStore } from "./features/current-selection/state";
 import {
-  useDashboardSessionStore,
-} from "./features/dashboard/state/dashboardSessionStore";
-import {
-  createDefaultDashboardStreamState,
-  useDashboardStreamStore,
-} from "./features/dashboard/state";
-import { useExportDialogStore } from "./features/export/state";
-import type { WorldState } from "./features/timeline/state";
-import { useFactoryTimelineStore } from "./features/timeline/state";
-
-vi.mock("./features/current-factory-definition", async () => {
-  const actual = await vi.importActual("./features/current-factory-definition");
-
-  return {
-    ...actual,
-    useCurrentEditableFactoryDefinition: vi.fn(),
-  };
-});
-
-class MockEventSource {
-  public static instances: MockEventSource[] = [];
-
-  public onerror: ((event: Event) => void) | null = null;
-  public onopen: ((event: Event) => void) | null = null;
-
-  private readonly listeners = new Map<string, EventListener[]>();
-
-  constructor(public readonly url: string) {
-    MockEventSource.instances.push(this);
-  }
-
-  public addEventListener(type: string, listener: EventListener): void {
-    const existing = this.listeners.get(type) ?? [];
-    existing.push(listener);
-    this.listeners.set(type, existing);
-  }
-
-  public close(): void {}
-
-  public emit(type: string, data: unknown): void {
-    if (type === "snapshot") {
-      const state = useFactoryTimelineStore.getState();
-      const tracesByWorkID =
-        state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {};
-      seedTimelineSnapshot(data as DashboardSnapshot, tracesByWorkID);
-    }
-
-    const event = new MessageEvent(type, {
-      data: JSON.stringify(data),
-    });
-
-    for (const listener of this.listeners.get(type) ?? []) {
-      listener(event);
-    }
-  }
-}
-
-interface RenderAppOptions {
-  snapshot: DashboardSnapshot;
-  timelineSnapshots?: DashboardSnapshot[];
-  traceFixtures?: Record<string, DashboardTrace>;
-  workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
-}
+  activeSnapshot,
+  baselineSnapshot,
+  mockCurrentEditableFactoryDefinition,
+  MockEventSource,
+  registerAppDashboardTestLifecycle,
+  renderApp,
+  terminalSnapshot,
+} from "./testing/app-shell-test-utils";
 
 const activeWorkID = "work-active-story";
 const completedWorkID = "work-complete";
 const failedWorkID = "work-failed-story";
 const activeWorkLabel = "Active Story";
 
-const baselineSnapshot = buildDashboardSnapshotFixture(
-  mediumBranchingDashboardTopology,
-);
-const activeSnapshot = semanticWorkflowDashboardSnapshot;
 const activeSnapshotWithoutTraceID = removeTraceIDsFromSnapshot(activeSnapshot);
-const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
-const terminalSnapshot = {
-  ...terminalBaseSnapshot,
-  tick_count: 4,
-  runtime: {
-    ...terminalBaseSnapshot.runtime,
-    place_occupancy_work_items_by_place_id: {
-      ...(terminalBaseSnapshot.runtime.place_occupancy_work_items_by_place_id ??
-        {}),
-      "story:blocked": [
-        {
-          display_name: "Failed Story",
-          trace_id: "trace-failed-story",
-          work_id: failedWorkID,
-          work_type_id: "story",
-        },
-      ],
-      "story:complete": [
-        {
-          display_name: "Done Story",
-          trace_id: "trace-done-story",
-          work_id: completedWorkID,
-          work_type_id: "story",
-        },
-      ],
-    },
-    place_token_counts: {
-      ...(terminalBaseSnapshot.runtime.place_token_counts ?? {}),
-      "story:blocked": 1,
-      "story:complete": 1,
-    },
-    session: {
-      ...terminalBaseSnapshot.runtime.session,
-      completed_count: 1,
-      completed_work_labels: ["Done Story"],
-      provider_sessions: [
-        ...(terminalBaseSnapshot.runtime.session.provider_sessions ?? []),
-        {
-          dispatch_id: "dispatch-complete",
-          outcome: "ACCEPTED",
-          provider_session: {
-            id: "sess-done-story",
-            kind: "session_id",
-            provider: "codex",
-          },
-          transition_id: "complete",
-          workstation_name: "Complete",
-          work_items: [
-            {
-              display_name: "Done Story",
-              trace_id: "trace-done-story",
-              work_id: completedWorkID,
-              work_type_id: "story",
-            },
-          ],
-        },
-      ],
-    },
-  },
-} satisfies DashboardSnapshot;
 const historicalTimelineSnapshot = {
   ...baselineSnapshot,
   tick_count: 1,
@@ -274,125 +136,6 @@ const failedTraceSnapshot: DashboardTrace = {
     },
   ],
 };
-
-const queryClients: QueryClient[] = [];
-let restoreBrowserTestShims: (() => void) | null = null;
-
-function timelineSnapshot(
-  snapshot: DashboardSnapshot,
-  tracesByWorkID: Record<string, DashboardTrace> = {},
-  workstationRequestsByDispatchID: Record<
-    string,
-    DashboardWorkstationRequest
-  > = {},
-): WorldState {
-  return {
-    ...snapshot,
-    relationsByWorkID: {},
-    tracesByWorkID,
-    workstationRequestsByDispatchID,
-    workRequestsByID: {},
-  };
-}
-
-function seedTimelineSnapshot(
-  snapshot: DashboardSnapshot,
-  tracesByWorkID: Record<string, DashboardTrace> = {},
-  workstationRequestsByDispatchID: Record<
-    string,
-    DashboardWorkstationRequest
-  > = {},
-): void {
-  useFactoryTimelineStore.setState({
-    events: [],
-    latestTick: snapshot.tick_count,
-    mode: "current",
-    receivedEventIDs: [],
-    selectedTick: snapshot.tick_count,
-    worldViewCache: {
-      [snapshot.tick_count]: timelineSnapshot(
-        snapshot,
-        tracesByWorkID,
-        workstationRequestsByDispatchID,
-      ),
-    },
-  });
-}
-
-function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
-  const worldViewCache = Object.fromEntries(
-    snapshots.map(
-      (snapshot) =>
-        [
-          snapshot.tick_count,
-          timelineSnapshot(snapshot) satisfies WorldState,
-        ] as const,
-    ),
-  );
-  const latestTick = Math.max(
-    ...snapshots.map((snapshot) => snapshot.tick_count),
-  );
-
-  useFactoryTimelineStore.setState({
-    events: [],
-    latestTick,
-    mode: "current",
-    receivedEventIDs: [],
-    selectedTick: latestTick,
-    worldViewCache,
-  });
-}
-
-function renderApp({
-  snapshot,
-  timelineSnapshots,
-  traceFixtures = {},
-  workstationRequestsByDispatchID = {},
-}: RenderAppOptions) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        gcTime: Infinity,
-        retry: false,
-      },
-    },
-  });
-  queryClients.push(queryClient);
-
-  const fetchMock = vi
-    .fn()
-    .mockImplementation(async (input: RequestInfo | URL) => {
-      const path =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? `${input.pathname}${input.search}`
-            : input.url;
-
-      throw new Error(`unexpected fetch for ${path}`);
-    });
-
-  vi.stubGlobal("fetch", fetchMock);
-  vi.stubGlobal("EventSource", MockEventSource);
-  reloadDashboardLayoutFromStorage();
-  if (timelineSnapshots) {
-    seedTimelineSnapshots(timelineSnapshots);
-  } else {
-    seedTimelineSnapshot(
-      snapshot,
-      traceFixtures,
-      workstationRequestsByDispatchID,
-    );
-  }
-
-  const result = render(
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>,
-  );
-
-  return { ...result, fetchMock };
-}
 
 function requireValue<T>(value: T | null | undefined, message: string): T {
   if (value === null || value === undefined) {
@@ -635,70 +378,8 @@ function buildEditableFactoryDefinitionForCurrentSelection() {
   };
 }
 
-function mockPendingEditableFactoryDefinition(): void {
-  vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
-    data: undefined,
-    error: null,
-    failureCount: 0,
-    failureReason: null,
-    fetchStatus: "idle",
-    isError: false,
-    isFetched: false,
-    isFetchedAfterMount: false,
-    isFetching: false,
-    isInitialLoading: false,
-    isLoading: false,
-    isLoadingError: false,
-    isPaused: false,
-    isPending: true,
-    isPlaceholderData: false,
-    isRefetchError: false,
-    isRefetching: false,
-    isStale: true,
-    isSuccess: false,
-    promise: Promise.resolve(undefined),
-    refetch: vi.fn(),
-    status: "pending",
-  } as never);
-}
-
 describe("App current selection", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-    MockEventSource.instances = [];
-    restoreBrowserTestShims = installDashboardBrowserTestShims();
-    resetSelectionHistoryStore();
-    useDashboardSessionStore.setState({
-      selectedSessionID: "~default",
-    });
-    mockPendingEditableFactoryDefinition();
-  });
-
-  afterEach(() => {
-    for (const queryClient of queryClients.splice(0)) {
-      queryClient.clear();
-    }
-    cleanup();
-    useDashboardBentoStore.setState({
-      refreshToken: 0,
-      selectedTraceID: null,
-    });
-    useExportDialogStore.setState({
-      isExportDialogOpen: false,
-    });
-    useDashboardStreamStore.setState({
-      streamState: createDefaultDashboardStreamState(),
-    });
-    useDashboardSessionStore.setState({
-      selectedSessionID: "~default",
-    });
-    useFactoryTimelineStore.getState().reset();
-    resetSelectionHistoryStore();
-    restoreBrowserTestShims?.();
-    restoreBrowserTestShims = null;
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
+  registerAppDashboardTestLifecycle();
 
   it("renders a trace drill-down for a selected work item", async () => {
     renderApp({
@@ -1311,7 +992,7 @@ describe("App current selection", () => {
   });
 
   it("keeps one editable configuration section bound to the latest workstation across repeated switches", async () => {
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+    mockCurrentEditableFactoryDefinition({
       data: buildEditableFactoryDefinitionForCurrentSelection(),
       error: null,
       failureCount: 0,
@@ -1494,41 +1175,7 @@ describe("App current selection", () => {
 });
 
 describe("App current selection layout", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-    MockEventSource.instances = [];
-    restoreBrowserTestShims = installDashboardBrowserTestShims();
-    resetSelectionHistoryStore();
-    useDashboardSessionStore.setState({
-      selectedSessionID: "~default",
-    });
-    mockPendingEditableFactoryDefinition();
-  });
-
-  afterEach(() => {
-    for (const queryClient of queryClients.splice(0)) {
-      queryClient.clear();
-    }
-    cleanup();
-    useDashboardBentoStore.setState({
-      refreshToken: 0,
-      selectedTraceID: null,
-    });
-    useExportDialogStore.setState({
-      isExportDialogOpen: false,
-    });
-    useDashboardStreamStore.setState({
-      streamState: createDefaultDashboardStreamState(),
-    });
-    useDashboardSessionStore.setState({
-      selectedSessionID: "~default",
-    });
-    useFactoryTimelineStore.getState().reset();
-    restoreBrowserTestShims?.();
-    restoreBrowserTestShims = null;
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
+  registerAppDashboardTestLifecycle();
 
   it("keeps selection detail out of the workflow graph inspector layer", async () => {
     renderApp({
@@ -2070,41 +1717,7 @@ describe("App current selection layout", () => {
 });
 
 describe("App current selection terminal states", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-    MockEventSource.instances = [];
-    restoreBrowserTestShims = installDashboardBrowserTestShims();
-    resetSelectionHistoryStore();
-    useDashboardSessionStore.setState({
-      selectedSessionID: "~default",
-    });
-    mockPendingEditableFactoryDefinition();
-  });
-
-  afterEach(() => {
-    for (const queryClient of queryClients.splice(0)) {
-      queryClient.clear();
-    }
-    cleanup();
-    useDashboardBentoStore.setState({
-      refreshToken: 0,
-      selectedTraceID: null,
-    });
-    useExportDialogStore.setState({
-      isExportDialogOpen: false,
-    });
-    useDashboardStreamStore.setState({
-      streamState: createDefaultDashboardStreamState(),
-    });
-    useDashboardSessionStore.setState({
-      selectedSessionID: "~default",
-    });
-    useFactoryTimelineStore.getState().reset();
-    restoreBrowserTestShims?.();
-    restoreBrowserTestShims = null;
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
+  registerAppDashboardTestLifecycle();
 
   it("opens completed and failed work summaries and updates the trace card", async () => {
     renderApp({
