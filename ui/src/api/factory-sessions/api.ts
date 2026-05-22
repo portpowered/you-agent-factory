@@ -1,9 +1,15 @@
 import { factoryAPIURL } from "../baseUrl";
 import type { components } from "../generated/openapi";
+import {
+  extractAPIErrorPayload,
+  isAPIRecord,
+  readAPIResponseBody,
+} from "../transport";
 
 export type FactorySessionSummary =
   components["schemas"]["FactorySessionSummary"];
-export type FactorySessionTarget = components["schemas"]["FactorySessionTarget"];
+export type FactorySessionTarget =
+  components["schemas"]["FactorySessionTarget"];
 export type FactorySessionTargetRef =
   components["schemas"]["FactorySessionTargetRef"];
 export type OpenFactorySessionResponse =
@@ -36,11 +42,6 @@ export interface OpenFactorySessionOptions {
 
 export interface CloseFactorySessionOptions {
   fetch?: typeof globalThis.fetch;
-}
-
-interface APIErrorResponse {
-  code?: string;
-  message?: string;
 }
 
 const FACTORY_SESSIONS_ENDPOINT = "/factory-sessions";
@@ -79,9 +80,12 @@ export async function listFactorySessions(
 
   let response: Response;
   try {
-    response = await fetchImplementation(factoryAPIURL(FACTORY_SESSIONS_ENDPOINT), {
-      method: "GET",
-    });
+    response = await fetchImplementation(
+      factoryAPIURL(FACTORY_SESSIONS_ENDPOINT),
+      {
+        method: "GET",
+      },
+    );
   } catch (error) {
     throw new FactorySessionsAPIError(
       "The dashboard could not reach the factory sessions API.",
@@ -92,7 +96,7 @@ export async function listFactorySessions(
     );
   }
 
-  const responseBody = await readResponseBody(response);
+  const responseBody = await readAPIResponseBody(response);
   if (!response.ok) {
     throw buildFactorySessionsAPIError(
       response,
@@ -132,13 +136,16 @@ export async function openFactorySession(
 
   let response: Response;
   try {
-    response = await fetchImplementation(factoryAPIURL(FACTORY_SESSIONS_ENDPOINT), {
-      body: JSON.stringify(input),
-      headers: {
-        "Content-Type": "application/json",
+    response = await fetchImplementation(
+      factoryAPIURL(FACTORY_SESSIONS_ENDPOINT),
+      {
+        body: JSON.stringify(input),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
       },
-      method: "POST",
-    });
+    );
   } catch (error) {
     throw new FactorySessionsAPIError(
       "The dashboard could not reach the factory sessions API.",
@@ -149,7 +156,7 @@ export async function openFactorySession(
     );
   }
 
-  const responseBody = await readResponseBody(response);
+  const responseBody = await readAPIResponseBody(response);
   if (!response.ok) {
     throw buildFactorySessionsAPIError(
       response,
@@ -190,7 +197,9 @@ export async function closeFactorySession(
   let response: Response;
   try {
     response = await fetchImplementation(
-      factoryAPIURL(`${FACTORY_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionID)}`),
+      factoryAPIURL(
+        `${FACTORY_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionID)}`,
+      ),
       {
         method: "DELETE",
       },
@@ -205,7 +214,7 @@ export async function closeFactorySession(
     );
   }
 
-  const responseBody = await readResponseBody(response);
+  const responseBody = await readAPIResponseBody(response);
   if (!response.ok) {
     throw buildFactorySessionsAPIError(
       response,
@@ -220,7 +229,7 @@ function buildFactorySessionsAPIError(
   responseBody: unknown,
   fallbackMessage: string,
 ): FactorySessionsAPIError {
-  const errorBody = asAPIErrorResponse(responseBody);
+  const errorBody = extractAPIErrorPayload(responseBody);
   return new FactorySessionsAPIError(errorBody?.message ?? fallbackMessage, {
     code: normalizeFactorySessionsAPIErrorCode(errorBody?.code),
     responseBody,
@@ -244,45 +253,18 @@ function normalizeFactorySessionsAPIErrorCode(
   }
 }
 
-async function readResponseBody(response: Response): Promise<unknown> {
-  const rawBody = await response.text();
-  if (rawBody.length === 0) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(rawBody) as unknown;
-  } catch {
-    return rawBody;
-  }
-}
-
 function isListFactorySessionsResponse(
   value: unknown,
 ): value is { sessions: FactorySessionSummary[] } {
-  return isRecord(value) && Array.isArray(value.sessions);
+  return isAPIRecord(value) && Array.isArray(value.sessions);
 }
 
 function isOpenFactorySessionResponse(
   value: unknown,
 ): value is OpenFactorySessionResponse {
   return (
-    isRecord(value) &&
-    (value.session === undefined || isRecord(value.session)) &&
+    isAPIRecord(value) &&
+    (value.session === undefined || isAPIRecord(value.session)) &&
     (value.targets === undefined || Array.isArray(value.targets))
   );
-}
-
-function asAPIErrorResponse(value: unknown): APIErrorResponse | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  return {
-    code: typeof value.code === "string" ? value.code : undefined,
-    message: typeof value.message === "string" ? value.message : undefined,
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
