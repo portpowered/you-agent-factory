@@ -5,6 +5,10 @@ export type CanonicalFactoryDefinition = components["schemas"]["Factory"];
 type FactorySchemas = components["schemas"];
 type FactoryRootGuard = FactorySchemas["FactoryGuard"];
 type FactoryGuard = FactorySchemas["Guard"];
+type FactoryHostedLinearWorkerClaim = FactorySchemas["HostedLinearWorkerClaim"];
+type FactoryHostedLinearWorkerConfig = FactorySchemas["HostedLinearWorkerConfig"];
+type FactoryHostedLinearWorkerMapping = FactorySchemas["HostedLinearWorkerMapping"];
+type FactoryHostedWorkerAuth = FactorySchemas["HostedWorkerAuth"];
 type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
 type FactoryResourceRequirement = FactorySchemas["ResourceRequirement"];
@@ -38,18 +42,31 @@ const WORK_STATE_KEYS = new Set(["name", "type"]);
 const RESOURCE_KEYS = new Set(["capacity", "name"]);
 const WORKER_KEYS = new Set([
   "args",
+  "auth",
   "body",
   "command",
   "executorProvider",
+  "linear",
   "model",
   "modelProvider",
   "name",
+  "provider",
   "resources",
   "skipPermissions",
   "stopToken",
   "timeout",
   "type",
 ]);
+const HOSTED_WORKER_AUTH_KEYS = new Set(["secretRef"]);
+const HOSTED_LINEAR_WORKER_KEYS = new Set([
+  "claim",
+  "mapping",
+  "pollInterval",
+  "stateIds",
+  "teamIds",
+]);
+const HOSTED_LINEAR_WORKER_MAPPING_KEYS = new Set(["state", "workType"]);
+const HOSTED_LINEAR_WORKER_CLAIM_KEYS = new Set(["assigneeField"]);
 const WORKSTATION_KEYS = new Set([
   "body",
   "copyReferencedScripts",
@@ -111,6 +128,9 @@ const WORKER_MODEL_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["modelPro
 ]);
 const WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["executorProvider"]>>([
   "SCRIPT_WRAP",
+]);
+const HOSTED_WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["provider"]>>([
+  "LINEAR",
 ]);
 const RUNNER_ID_VALUES = new Set<FactoryRunnerID>([
   "codex",
@@ -285,6 +305,7 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   const type = readOptionalEnum(record, "type", path, WORKER_TYPE_VALUES);
   const model = readOptionalString(record, "model", path);
   const modelProvider = readOptionalEnum(record, "modelProvider", path, WORKER_MODEL_PROVIDER_VALUES);
+  const provider = readOptionalEnum(record, "provider", path, HOSTED_WORKER_PROVIDER_VALUES);
   const executorProvider = readOptionalEnum(
     record,
     "executorProvider",
@@ -297,6 +318,8 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   const timeout = readOptionalString(record, "timeout", path);
   const stopToken = readOptionalString(record, "stopToken", path);
   const skipPermissions = readOptionalBoolean(record, "skipPermissions", path);
+  const auth = readOptionalObject(record, "auth", path, decodeHostedWorkerAuth);
+  const linear = readOptionalObject(record, "linear", path, decodeHostedLinearWorkerConfig);
   const body = readOptionalString(record, "body", path);
 
   if (type !== undefined) {
@@ -307,6 +330,9 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   }
   if (modelProvider !== undefined) {
     worker.modelProvider = modelProvider;
+  }
+  if (provider !== undefined) {
+    worker.provider = provider;
   }
   if (executorProvider !== undefined) {
     worker.executorProvider = executorProvider;
@@ -329,11 +355,95 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   if (skipPermissions !== undefined) {
     worker.skipPermissions = skipPermissions;
   }
+  if (auth !== undefined) {
+    worker.auth = auth;
+  }
+  if (linear !== undefined) {
+    worker.linear = linear;
+  }
   if (body !== undefined) {
     worker.body = body;
   }
 
   return worker;
+}
+
+function decodeHostedWorkerAuth(value: unknown, path: string): FactoryHostedWorkerAuth {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, HOSTED_WORKER_AUTH_KEYS, path);
+
+  const auth: FactoryHostedWorkerAuth = {};
+  const secretRef = readOptionalString(record, "secretRef", path);
+  if (secretRef !== undefined) {
+    auth.secretRef = secretRef;
+  }
+  return auth;
+}
+
+function decodeHostedLinearWorkerConfig(
+  value: unknown,
+  path: string,
+): FactoryHostedLinearWorkerConfig {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, HOSTED_LINEAR_WORKER_KEYS, path);
+
+  const config: FactoryHostedLinearWorkerConfig = {};
+  const pollInterval = readOptionalString(record, "pollInterval", path);
+  const teamIds = readOptionalStringArray(record, "teamIds", path);
+  const stateIds = readOptionalStringArray(record, "stateIds", path);
+  const mapping = readOptionalObject(record, "mapping", path, decodeHostedLinearWorkerMapping);
+  const claim = readOptionalObject(record, "claim", path, decodeHostedLinearWorkerClaim);
+
+  if (pollInterval !== undefined) {
+    config.pollInterval = pollInterval;
+  }
+  if (teamIds !== undefined) {
+    config.teamIds = teamIds;
+  }
+  if (stateIds !== undefined) {
+    config.stateIds = stateIds;
+  }
+  if (mapping !== undefined) {
+    config.mapping = mapping;
+  }
+  if (claim !== undefined) {
+    config.claim = claim;
+  }
+  return config;
+}
+
+function decodeHostedLinearWorkerMapping(
+  value: unknown,
+  path: string,
+): FactoryHostedLinearWorkerMapping {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, HOSTED_LINEAR_WORKER_MAPPING_KEYS, path);
+
+  const mapping: FactoryHostedLinearWorkerMapping = {};
+  const workType = readOptionalString(record, "workType", path);
+  const state = readOptionalString(record, "state", path);
+  if (workType !== undefined) {
+    mapping.workType = workType;
+  }
+  if (state !== undefined) {
+    mapping.state = state;
+  }
+  return mapping;
+}
+
+function decodeHostedLinearWorkerClaim(
+  value: unknown,
+  path: string,
+): FactoryHostedLinearWorkerClaim {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, HOSTED_LINEAR_WORKER_CLAIM_KEYS, path);
+
+  const claim: FactoryHostedLinearWorkerClaim = {};
+  const assigneeField = readOptionalString(record, "assigneeField", path);
+  if (assigneeField !== undefined) {
+    claim.assigneeField = assigneeField;
+  }
+  return claim;
 }
 
 function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {

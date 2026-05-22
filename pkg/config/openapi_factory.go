@@ -230,15 +230,43 @@ func normalizeFactoryWorkerEntries(root map[string]any) error {
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "type", fmt.Sprintf("workers[%d].type", i), interfaces.StrictPublicFactoryWorkerType); err != nil {
 			return err
 		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "provider", fmt.Sprintf("workers[%d].provider", i), interfaces.StrictPublicFactoryHostedWorkerProvider); err != nil {
+			return err
+		}
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "modelProvider", fmt.Sprintf("workers[%d].modelProvider", i), interfaces.StrictPublicFactoryWorkerModelProvider); err != nil {
 			return err
 		}
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "executorProvider", fmt.Sprintf("workers[%d].executorProvider", i), interfaces.StrictPublicFactoryWorkerProvider); err != nil {
 			return err
 		}
+		if err := rejectUnsupportedHostedWorkerBoundaryFields(worker, fmt.Sprintf("workers[%d]", i)); err != nil {
+			return err
+		}
 		normalizeRuntimeResourceRequirements(worker, "resources")
 	}
 	return nil
+}
+
+func rejectUnsupportedHostedWorkerBoundaryFields(worker map[string]any, path string) error {
+	auth, _ := worker["auth"].(map[string]any)
+	if len(auth) == 0 {
+		return nil
+	}
+	return rejectRetiredBoundaryFields(auth, path+".auth", []retiredBoundaryField{
+		{key: "apiKey", replacement: "v1 hosted workers accept only auth.secretRef"},
+		{key: "api_key", replacement: "v1 hosted workers accept only auth.secretRef"},
+		{key: "token", replacement: "v1 hosted workers accept only auth.secretRef"},
+		{key: "accessToken", replacement: "v1 hosted workers accept only auth.secretRef"},
+		{key: "access_token", replacement: "v1 hosted workers accept only auth.secretRef"},
+		{key: "clientId", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{key: "client_id", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{key: "clientSecret", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{key: "client_secret", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{key: "refreshToken", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{key: "refresh_token", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{key: "tokenUrl", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{key: "token_url", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+	})
 }
 
 func normalizeFactoryWorkstationEntries(root map[string]any) error {

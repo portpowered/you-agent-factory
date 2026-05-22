@@ -2845,6 +2845,9 @@ components:
         type:
           $ref: '#/components/schemas/WorkerType'
           description: Worker implementation family to instantiate for this definition.
+        provider:
+          $ref: '#/components/schemas/HostedWorkerProvider'
+          description: Built-in hosted provider identity when this worker uses repository-owned hosted execution.
         model:
           type: string
           description: Model identifier to request from the configured model provider when this worker uses model execution.
@@ -2876,6 +2879,12 @@ components:
         skipPermissions:
           type: boolean
           description: When true, bypasses permission checks for providers that support permission gating.
+        auth:
+          $ref: '#/components/schemas/HostedWorkerAuth'
+          description: Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef.
+        linear:
+          $ref: '#/components/schemas/HostedLinearWorkerConfig'
+          description: Provider-specific configuration for the built-in hosted LINEAR worker.
         body:
           type: string
           description: Inline worker instructions or script body when the worker is authored directly in factory config.
@@ -3563,3 +3572,63 @@ components:
         encrypted:
           type: boolean
           description: Whether the entry only exposed encrypted content instead of plaintext.
+    HostedWorkerProvider:
+      type: string
+      description: Built-in repository-owned hosted worker providers supported by the public factory-config contract.
+      x-enum-varnames:
+        - HostedWorkerProviderLinear
+      enum:
+        - LINEAR
+      x-enum-descriptions:
+        - Built-in hosted poller integration for the Linear GraphQL API.
+    HostedWorkerAuth:
+      description: Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields.
+      type: object
+      additionalProperties: false
+      properties:
+        secretRef:
+          type: string
+          description: Referenced secret name that resolves the hosted provider API key at runtime.
+    HostedLinearWorkerMapping:
+      description: Deterministic issue-to-work mapping fields owned by a hosted Linear worker.
+      type: object
+      additionalProperties: false
+      properties:
+        workType:
+          type: string
+          description: Canonical submitted work type emitted for matched Linear issues.
+        state:
+          type: string
+          description: Canonical submitted work state emitted for matched Linear issues.
+    HostedLinearWorkerClaim:
+      description: Optional claim-related configuration that v1 hosted Linear workers explicitly allow.
+      type: object
+      additionalProperties: false
+      properties:
+        assigneeField:
+          type: string
+          description: Linear issue field name to use when deriving optional assignee claim metadata.
+    HostedLinearWorkerConfig:
+      description: Provider-specific poller configuration for the built-in hosted Linear worker.
+      type: object
+      additionalProperties: false
+      properties:
+        pollInterval:
+          type: string
+          description: Optional Go duration that controls how often the hosted Linear worker polls for updates.
+        teamIds:
+          type: array
+          description: Optional Linear team identifiers that bound the poll source.
+          items:
+            type: string
+        stateIds:
+          type: array
+          description: Optional Linear issue-state identifiers that bound the poll source.
+          items:
+            type: string
+        mapping:
+          $ref: '#/components/schemas/HostedLinearWorkerMapping'
+          description: Deterministic mapping fields for canonical work submission generation.
+        claim:
+          $ref: '#/components/schemas/HostedLinearWorkerClaim'
+          description: Optional claim-related configuration that v1 hosted Linear polling allows.

@@ -48,6 +48,14 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 			strict:     StrictPublicFactoryWorkerProvider,
 		},
 		{
+			name:       "hosted worker provider",
+			alias:      "LINEAR",
+			unknown:    "custom-hosted-provider",
+			want:       HostedWorkerProviderLinear,
+			permissive: PermissivePublicFactoryHostedWorkerProvider,
+			strict:     StrictPublicFactoryHostedWorkerProvider,
+		},
+		{
 			name:       "workstation type",
 			alias:      "LOGICAL_MOVE",
 			unknown:    "CUSTOM_WORKSTATION",
@@ -109,6 +117,12 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	}
 	if got := GeneratedPublicFactoryWorkerProvider("  custom-executor  "); got != factoryapi.WorkerProvider("custom-executor") {
 		t.Fatalf("worker provider = %q, want trimmed unknown to round-trip", got)
+	}
+	if got := GeneratedPublicFactoryHostedWorkerProvider("  LINEAR  "); got != "LINEAR" {
+		t.Fatalf("hosted worker provider = %q, want LINEAR", got)
+	}
+	if got := GeneratedPublicFactoryHostedWorkerProvider("  custom-hosted-provider  "); got != "custom-hosted-provider" {
+		t.Fatalf("hosted worker provider = %q, want trimmed unknown to round-trip", got)
 	}
 	if got := GeneratedPublicFactoryWorkstationType("  CUSTOM_WORKSTATION  "); got != factoryapi.WorkstationType("CUSTOM_WORKSTATION") {
 		t.Fatalf("workstation type = %q, want trimmed unknown to round-trip", got)
@@ -195,6 +209,14 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 			ptr:           generatedPublicFactoryWorkerProviderStringPtr,
 		},
 		{
+			name:          "hosted worker provider",
+			supported:     "  LINEAR  ",
+			wantSupported: "LINEAR",
+			unknown:       "  custom-hosted-provider  ",
+			wantUnknown:   "custom-hosted-provider",
+			ptr:           generatedPublicFactoryHostedWorkerProviderStringPtr,
+		},
+		{
 			name:          "workstation type",
 			supported:     "  LOGICAL_MOVE  ",
 			wantSupported: "LOGICAL_MOVE",
@@ -231,6 +253,10 @@ func generatedPublicFactoryWorkerModelProviderStringPtr(value string) *string {
 
 func generatedPublicFactoryWorkerProviderStringPtr(value string) *string {
 	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryWorkerProviderPtr(value))
+}
+
+func generatedPublicFactoryHostedWorkerProviderStringPtr(value string) *string {
+	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryHostedWorkerProviderPtr(value))
 }
 
 func generatedPublicFactoryWorkstationTypeStringPtr(value string) *string {

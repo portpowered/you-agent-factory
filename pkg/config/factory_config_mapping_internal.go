@@ -150,6 +150,7 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
 	return interfaces.WorkerConfig{
 		Name:             worker.Name,
 		Type:             internalFactoryWorkerTypeFromPublic(valueOrEmpty(worker.Type)),
+		Provider:         internalFactoryHostedWorkerProviderFromPublic(string(valueOrEmpty(worker.Provider))),
 		Model:            stringValue(worker.Model),
 		ModelProvider:    internalFactoryWorkerModelProviderFromPublic(worker.ModelProvider),
 		ExecutorProvider: internalFactoryWorkerProviderFromPublic(worker.ExecutorProvider),
@@ -159,6 +160,8 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
 		Timeout:          stringValue(worker.Timeout),
 		StopToken:        stringValue(worker.StopToken),
 		SkipPermissions:  boolValue(worker.SkipPermissions),
+		Auth:             hostedWorkerAuthInternalFromAPI(worker.Auth),
+		Linear:           hostedLinearWorkerInternalFromAPI(worker.Linear),
 		Body:             stringValue(worker.Body),
 	}
 }
@@ -167,6 +170,40 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
 // internal runtime config representation.
 func WorkerConfigFromOpenAPI(worker factoryapi.Worker) (interfaces.WorkerConfig, error) {
 	return workerInternalFromAPI(worker), nil
+}
+
+func hostedWorkerAuthInternalFromAPI(auth *factoryapi.HostedWorkerAuth) *interfaces.HostedWorkerAuthConfig {
+	if auth == nil {
+		return nil
+	}
+	return &interfaces.HostedWorkerAuthConfig{
+		SecretRef: stringValue(auth.SecretRef),
+	}
+}
+
+func hostedLinearWorkerInternalFromAPI(cfg *factoryapi.HostedLinearWorkerConfig) *interfaces.HostedLinearWorkerConfig {
+	if cfg == nil {
+		return nil
+	}
+	return &interfaces.HostedLinearWorkerConfig{
+		PollInterval: stringValue(cfg.PollInterval),
+		TeamIDs:      stringSliceValue(cfg.TeamIds),
+		StateIDs:     stringSliceValue(cfg.StateIds),
+		Mapping: interfaces.HostedLinearWorkerMappingConfig{
+			WorkType: stringValue(cfg.Mapping.WorkType),
+			State:    stringValue(cfg.Mapping.State),
+		},
+		Claim: hostedLinearWorkerClaimInternalFromAPI(cfg.Claim),
+	}
+}
+
+func hostedLinearWorkerClaimInternalFromAPI(claim *factoryapi.HostedLinearWorkerClaim) *interfaces.HostedLinearWorkerClaimConfig {
+	if claim == nil {
+		return nil
+	}
+	return &interfaces.HostedLinearWorkerClaimConfig{
+		AssigneeField: stringValue(claim.AssigneeField),
+	}
 }
 
 func workstationsInternalFromAPI(workstations []factoryapi.Workstation) ([]interfaces.FactoryWorkstationConfig, error) {

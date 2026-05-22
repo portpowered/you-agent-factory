@@ -124,6 +124,58 @@ func TestRuleGuards_MatchesFieldsEmptyInputKey(t *testing.T) {
 	}
 }
 
+func TestRuleHostedWorkers_AcceptsHostedLinearWorker(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name:     "linear-poller",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &interfaces.HostedLinearWorkerConfig{
+			Mapping: interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		},
+	}}
+
+	findings := ruleHostedWorkers(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
+func TestRuleHostedWorkers_RejectsMissingSecretRefAndMapping(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name:     "linear-poller",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Auth:     &interfaces.HostedWorkerAuthConfig{},
+		Linear:   &interfaces.HostedLinearWorkerConfig{},
+	}}
+
+	findings := ruleHostedWorkers(cfg)
+	assertFindingMatch(t, findings, "hosted-worker-auth-secret-ref", "workers[0](linear-poller).auth.secretRef", "auth.secretRef")
+	assertFindingMatch(t, findings, "hosted-worker-linear-mapping-work-type", "workers[0](linear-poller).linear.mapping.workType", "mapping.workType")
+	assertFindingMatch(t, findings, "hosted-worker-linear-mapping-state", "workers[0](linear-poller).linear.mapping.state", "mapping.state")
+}
+
+func TestRuleHostedWorkers_RejectsHostedFieldsOnNonHostedWorker(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name:     "executor",
+		Type:     interfaces.WorkerTypeModel,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &interfaces.HostedLinearWorkerConfig{
+			Mapping: interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		},
+	}}
+
+	findings := ruleHostedWorkers(cfg)
+	assertFindingMatch(t, findings, "hosted-worker-provider-unsupported", "workers[0](executor).provider", "cannot declare hosted provider")
+	assertFindingMatch(t, findings, "hosted-worker-auth-unsupported", "workers[0](executor).auth", "cannot declare hosted auth")
+	assertFindingMatch(t, findings, "hosted-worker-linear-unsupported", "workers[0](executor).linear", "cannot declare hosted LINEAR")
+}
+
 func TestRuleGuards_ValidMatchesFieldsGuard(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{

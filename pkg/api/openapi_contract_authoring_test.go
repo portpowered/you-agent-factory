@@ -235,8 +235,8 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 	doc := loadBundledOpenAPIDocument(t)
 	workerSchema := schemaObject(t, componentSchemas(t, doc), "Worker")
 	workerProperties := schemaProperties(t, workerSchema, "Worker")
-	assertSchemaPropertiesPresent(t, workerProperties, "Worker", "name", "modelProvider", "executorProvider")
-	assertPropertiesAbsent(t, workerProperties, "Worker", "provider", "sessionId", "concurrency")
+	assertSchemaPropertiesPresent(t, workerProperties, "Worker", "name", "provider", "auth", "linear", "modelProvider", "executorProvider")
+	assertPropertiesAbsent(t, workerProperties, "Worker", "sessionId", "concurrency")
 
 	modelProviderProperty, ok := workerProperties["modelProvider"].(map[string]any)
 	if !ok {
@@ -256,12 +256,12 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 	}
 
 	workerType := reflect.TypeOf(generated.Worker{})
-	for _, field := range []string{"ExecutorProvider", "ModelProvider"} {
+	for _, field := range []string{"Provider", "Auth", "Linear", "ExecutorProvider", "ModelProvider"} {
 		if _, ok := workerType.FieldByName(field); !ok {
 			t.Fatalf("generated.Worker must expose %s", field)
 		}
 	}
-	for _, retired := range []string{"Provider", "SessionId", "Concurrency"} {
+	for _, retired := range []string{"SessionId", "Concurrency"} {
 		if _, ok := workerType.FieldByName(retired); ok {
 			t.Fatalf("generated.Worker must not expose %s", retired)
 		}
@@ -269,8 +269,10 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 
 	executorProvider := generated.WorkerProviderScriptWrap
 	modelProvider := generated.WorkerModelProviderClaude
+	hostedProvider := generated.HostedWorkerProviderLinear
 	payloadBytes, err := json.Marshal(generated.Worker{
 		Name:             "executor",
+		Provider:         &hostedProvider,
 		ExecutorProvider: &executorProvider,
 		ModelProvider:    &modelProvider,
 	})
@@ -282,10 +284,10 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
 		t.Fatalf("unmarshal generated.Worker payload: %v", err)
 	}
-	if payload["executorProvider"] != string(executorProvider) || payload["modelProvider"] != string(modelProvider) {
+	if payload["provider"] != string(hostedProvider) || payload["executorProvider"] != string(executorProvider) || payload["modelProvider"] != string(modelProvider) {
 		t.Fatalf("generated.Worker payload = %#v, want canonical provider fields", payload)
 	}
-	assertJSONKeysAbsent(t, payload, "generated.Worker payload", "provider", "sessionId", "concurrency")
+	assertJSONKeysAbsent(t, payload, "generated.Worker payload", "sessionId", "concurrency")
 }
 
 func loadAuthoredOpenAPIDoc(t *testing.T) map[string]any {

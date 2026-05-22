@@ -1,0 +1,23 @@
+description: Provider-specific poller configuration for the built-in hosted Linear worker.
+type: object
+additionalProperties: false
+properties:
+  pollInterval:
+    type: string
+    description: Optional Go duration that controls how often the hosted Linear worker polls for updates.
+  teamIds:
+    type: array
+    description: Optional Linear team identifiers that bound the poll source.
+    items:
+      type: string
+  stateIds:
+    type: array
+    description: Optional Linear issue-state identifiers that bound the poll source.
+    items:
+      type: string
+  mapping:
+    $ref: './HostedLinearWorkerMapping.yaml'
+    description: Deterministic mapping fields for canonical work submission generation.
+  claim:
+    $ref: './HostedLinearWorkerClaim.yaml'
+    description: Optional claim-related configuration that v1 hosted Linear polling allows.

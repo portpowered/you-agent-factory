@@ -159,6 +159,10 @@ func publicFactoryWorkerProviderFromInternal(value string) factoryapi.WorkerProv
 	return interfaces.GeneratedPublicFactoryWorkerProvider(value)
 }
 
+func publicFactoryHostedWorkerProviderFromInternal(value string) string {
+	return interfaces.GeneratedPublicFactoryHostedWorkerProvider(value)
+}
+
 func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) string {
 	if value == nil {
 		return ""
@@ -167,6 +171,13 @@ func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) s
 		return strings.ToLower(canonical)
 	}
 	return strings.TrimSpace(string(*value))
+}
+
+func internalFactoryHostedWorkerProviderFromPublic(value string) string {
+	if canonical := interfaces.StrictPublicFactoryHostedWorkerProvider(value); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(value)
 }
 
 func publicFactoryWorkstationKindFromInternal(kind interfaces.WorkstationKind) factoryapi.WorkstationKind {

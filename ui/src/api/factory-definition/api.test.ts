@@ -519,6 +519,66 @@ describe("normalizeFactoryDefinition", () => {
     });
   });
 
+  it("accepts hosted Linear worker configuration through the typed API boundary", () => {
+    expect(
+      normalizeFactoryDefinition({
+        name: "poller-factory",
+        workers: [
+          {
+            name: "linear",
+            type: "HOSTED_WORKER",
+            provider: "LINEAR",
+            auth: { secretRef: "secrets/linear-api-key" },
+            linear: {
+              pollInterval: "30s",
+              teamIds: ["team-a"],
+              stateIds: ["state-b"],
+              mapping: { workType: "story", state: "init" },
+              claim: { assigneeField: "assignee.email" },
+            },
+          },
+        ],
+      }),
+    ).toEqual({
+      name: "poller-factory",
+      workers: [
+        {
+          name: "linear",
+          type: "HOSTED_WORKER",
+          provider: "LINEAR",
+          auth: { secretRef: "secrets/linear-api-key" },
+          linear: {
+            pollInterval: "30s",
+            teamIds: ["team-a"],
+            stateIds: ["state-b"],
+            mapping: { workType: "story", state: "init" },
+            claim: { assigneeField: "assignee.email" },
+          },
+        },
+      ],
+    });
+  });
+
+  it("rejects unsupported hosted auth fields", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "poller-factory",
+        workers: [
+          {
+            name: "linear",
+            type: "HOSTED_WORKER",
+            provider: "LINEAR",
+            auth: { clientId: "abc", secretRef: "secrets/linear-api-key" },
+          },
+        ],
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.workers[0].auth.clientId is not allowed by the generated factory contract.",
+      ),
+    );
+  });
+
   it("rejects malformed factory-level throttle guards", () => {
     expect(() =>
       normalizeFactoryDefinition({
