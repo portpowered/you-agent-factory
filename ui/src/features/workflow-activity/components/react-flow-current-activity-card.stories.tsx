@@ -4,9 +4,7 @@ import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
 import type {
-  DashboardActiveExecution,
   DashboardSnapshot,
-  DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
 import type { FactoryValue } from "../../../api/named-factory";
 import {
@@ -197,6 +195,31 @@ function createFactoryImportValue(): FactoryPngImportValue {
   };
 }
 
+function resolveStorySelection(
+  snapshot: DashboardSnapshot,
+  workID: string,
+): CurrentActivitySelection {
+  for (const execution of Object.values(
+    snapshot.runtime.active_executions_by_dispatch_id ?? {},
+  )) {
+    if (execution.work_items?.some((workItem) => workItem.work_id === workID)) {
+      return {
+        dispatchId: execution.dispatch_id,
+        kind: "work-item",
+        nodeId: execution.workstation_node_id,
+        workID,
+      };
+    }
+  }
+
+  return {
+    dispatchId: "",
+    kind: "work-item",
+    nodeId: "",
+    workID,
+  };
+}
+
 function stateArticle(button: HTMLElement): HTMLElement {
   const article = button.closest("article");
 
@@ -365,25 +388,15 @@ function CurrentActivityStory({
       <ReactFlowCurrentActivityCard
         locale={locale}
         now={Date.parse("2026-04-08T12:00:04Z")}
-        selection={selection}
-        snapshot={snapshot}
-        onSelectWorkItem={(
-          dispatchId: string,
-          nodeId: string,
-          _execution: DashboardActiveExecution,
-          workItem: DashboardWorkItemRef,
-        ) =>
-          setSelection({
-            kind: "work-item",
-            dispatchId,
-            nodeId,
-            workID: workItem.work_id,
-          })
+        onSelectWorkID={(workID: string) =>
+          setSelection(resolveStorySelection(snapshot, workID))
         }
-        onSelectWorkstation={(nodeId) => setSelection({ kind: "node", nodeId })}
         onSelectStateNode={(placeId) =>
           setSelection({ kind: "state-node", placeId })
         }
+        onSelectWorkstation={(nodeId) => setSelection({ kind: "node", nodeId })}
+        selection={selection}
+        snapshot={snapshot}
       />
     </div>
   );
@@ -409,18 +422,8 @@ function CurrentActivityImportStory({ snapshot }: CurrentActivityStoryProps) {
               `Activated factory: ${importValue.factory.name}`,
             );
           }}
-          onSelectWorkItem={(
-            dispatchId: string,
-            nodeId: string,
-            _execution: DashboardActiveExecution,
-            workItem: DashboardWorkItemRef,
-          ) =>
-            setSelection({
-              kind: "work-item",
-              dispatchId,
-              nodeId,
-              workID: workItem.work_id,
-            })
+          onSelectWorkID={(workID: string) =>
+            setSelection(resolveStorySelection(snapshot, workID))
           }
           onSelectWorkstation={(nodeId) =>
             setSelection({ kind: "node", nodeId })

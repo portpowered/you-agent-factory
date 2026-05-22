@@ -198,7 +198,7 @@ function buildDashboardCards({
           locale={locale}
           now={now}
           onSelectStateNode={currentSelection.selectStateNode}
-          onSelectWorkItem={currentSelection.selectWorkItem}
+          onSelectWorkID={currentSelection.selectWorkByID}
           onSelectWorkstation={currentSelection.selectWorkstation}
           selection={currentSelection.selection}
           snapshot={snapshot}

@@ -13,7 +13,6 @@ import type {
   EditableFactoryDefinitionDocument,
 } from "../../../api/current-factory-definition";
 import type {
-  DashboardActiveExecution,
   DashboardPlaceRef,
   DashboardSnapshot,
   DashboardWorkItemRef,
@@ -376,15 +375,7 @@ function renderCurrentActivity({
   snapshot,
   selection = null,
 }: RenderCurrentActivityOptions) {
-  const onSelectWorkItem =
-    vi.fn<
-      (
-        dispatchId: string,
-        nodeId: string,
-        execution: DashboardActiveExecution,
-        workItem: DashboardWorkItemRef,
-      ) => void
-    >();
+  const onSelectWorkID = vi.fn<(workID: string) => void>();
   const onSelectStateNode = vi.fn<(placeId: string) => void>();
   const onSelectWorkstation = vi.fn<(nodeId: string) => void>();
 
@@ -396,8 +387,8 @@ function renderCurrentActivity({
       now={Date.parse("2026-04-08T12:00:04Z")}
       onFactoryActivated={onFactoryActivated}
       onFactoryImportReady={onFactoryImportReady}
+      onSelectWorkID={onSelectWorkID}
       onSelectStateNode={onSelectStateNode}
-      onSelectWorkItem={onSelectWorkItem}
       onSelectWorkstation={onSelectWorkstation}
       readFactoryImportFile={readFactoryImportFile}
       selection={selection}
@@ -405,7 +396,7 @@ function renderCurrentActivity({
     />,
   );
 
-  return { onSelectStateNode, onSelectWorkItem, onSelectWorkstation };
+  return { onSelectStateNode, onSelectWorkID, onSelectWorkstation };
 }
 
 function renderWithQueryClient(view: ReactElement) {
@@ -2796,7 +2787,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
   });
 
   it("selects workstation and work item context through the dashboard callbacks", async () => {
-    const { onSelectWorkItem, onSelectWorkstation } = renderCurrentActivity({
+    const { onSelectWorkID, onSelectWorkstation } = renderCurrentActivity({
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
@@ -2811,13 +2802,9 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     );
 
     await waitFor(() => {
-      expect(onSelectWorkItem).toHaveBeenCalled();
+      expect(onSelectWorkID).toHaveBeenCalled();
     });
-    expect(onSelectWorkItem.mock.calls[0]?.[0]).toBe("dispatch-review-active");
-    expect(onSelectWorkItem.mock.calls[0]?.[1]).toBe("review");
-    expect(onSelectWorkItem.mock.calls[0]?.[3].work_id).toBe(
-      "work-active-story",
-    );
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story");
   });
 
   it("caps workstation work item names at three and summarizes the rest", async () => {
@@ -2867,9 +2854,9 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     const { rerender } = renderWithQueryClient(
       <ReactFlowCurrentActivityCard
         now={Date.parse("2026-04-08T12:00:04Z")}
+        onSelectWorkID={vi.fn()}
         selection={null}
         snapshot={dashboardSnapshotWithActiveWorkItemCount(0)}
-        onSelectWorkItem={vi.fn()}
         onSelectStateNode={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />,
@@ -2889,9 +2876,9 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
         >
           <ReactFlowCurrentActivityCard
             now={Date.parse("2026-04-08T12:00:04Z")}
+            onSelectWorkID={vi.fn()}
             selection={null}
             snapshot={dashboardSnapshotWithActiveWorkItemCount(activeItemCount)}
-            onSelectWorkItem={vi.fn()}
             onSelectStateNode={vi.fn()}
             onSelectWorkstation={vi.fn()}
           />
@@ -2920,8 +2907,8 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
       .setNodePosition(graphKey, "workstation:review", { x: 321, y: 654 });
 
     const callbacks = {
+      onSelectWorkID: vi.fn(),
       onSelectStateNode: vi.fn(),
-      onSelectWorkItem: vi.fn(),
       onSelectWorkstation: vi.fn(),
     };
     const { rerender } = renderWithQueryClient(
@@ -3016,7 +3003,7 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
       "Active Story With A Medium Sized Label",
       "Active Story With A Deliberately Long Label That Must Stay Inside The Workstation Node",
     ];
-    const { onSelectWorkItem } = renderCurrentActivity({
+    const { onSelectWorkID } = renderCurrentActivity({
       snapshot: dashboardSnapshotWithLongWorkstationAndActiveWorkLabels(),
     });
     const longWorkstationButton = await screen.findByRole("button", {
@@ -3076,11 +3063,9 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     fireEvent.click(longWorkButton);
 
     await waitFor(() => {
-      expect(onSelectWorkItem).toHaveBeenCalled();
+      expect(onSelectWorkID).toHaveBeenCalled();
     });
-    expect(onSelectWorkItem.mock.calls[0]?.[3].display_name).toBe(
-      "Active Story With A Deliberately Long Label That Must Stay Inside The Workstation Node",
-    );
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story-3");
 
     cleanup();
     renderCurrentActivity({
