@@ -193,6 +193,38 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsNonClassifierWithoutOutputsDuringVa
 	}
 }
 
+func TestFactoryConfigFromOpenAPIJSON_RejectsNonClassifierClassificationRoutesDuringValidation(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"invalid-routes-factory",
+		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers": [{"name":"executor","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"name":"process-task",
+			"type":"MODEL_WORKSTATION",
+			"worker":"executor",
+			"inputs":[{"workType":"task","state":"init"}],
+			"outputs":[{"workType":"task","state":"done"}],
+			"classificationRoutes":[
+				{"label":"approved","outputs":[{"workType":"task","state":"done"}]}
+			],
+			"onFailure":[{"workType":"task","state":"failed"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	result := NewConfigValidator().Validate(cfg)
+	if !result.HasErrors() {
+		t.Fatalf("expected validator to reject non-classifier classificationRoutes, got %#v", result.Findings)
+	}
+	if !strings.Contains(result.Error(), "workstation-classification-routes") {
+		t.Fatalf("expected workstation-classification-routes finding, got %s", result.Error())
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"customer-facing-name",

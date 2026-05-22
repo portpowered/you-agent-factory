@@ -216,6 +216,40 @@ func TestConfigMapping_RejectsNonClassifierWithoutOutputs(t *testing.T) {
 	}
 }
 
+func TestConfigMapping_RejectsNonClassifierClassificationRoutes(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "done", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "process-task",
+			Type:           interfaces.WorkstationTypeModel,
+			WorkerTypeName: "executor",
+			Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			Outputs:        []interfaces.IOConfig{{StateName: "done", WorkTypeName: "task"}},
+			ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+				{Label: "approved", Outputs: []interfaces.IOConfig{{StateName: "done", WorkTypeName: "task"}}},
+			},
+			OnFailure: []interfaces.IOConfig{{StateName: "failed", WorkTypeName: "task"}},
+		}},
+	}
+
+	mapper := ConfigMapper{}
+	_, err := mapper.Map(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected mapper to reject non-classifier classificationRoutes")
+	}
+	if !strings.Contains(err.Error(), "workstation-classification-routes") {
+		t.Fatalf("expected workstation-classification-routes validation failure, got %v", err)
+	}
+}
+
 func TestConfigMapping_UsesEffectiveRuntimeConfigWorkstationKindsForNormalization(t *testing.T) {
 	factoryDir := t.TempDir()
 

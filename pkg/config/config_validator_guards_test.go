@@ -209,6 +209,23 @@ func TestRuleClassifierWorkstations_RejectsNonClassifierWithoutOutputs(t *testin
 	assertFindingExists(t, findings, "workstation-outputs")
 }
 
+func TestRuleClassifierWorkstations_RejectsNonClassifierClassificationRoutes(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "process-task",
+		Type:           interfaces.WorkstationTypeModel,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+		},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	assertFindingExists(t, findings, "workstation-classification-routes")
+}
+
 func TestRuleClassifierWorkstations_RejectsMissingRoutesAndLegacySuccessPaths(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{

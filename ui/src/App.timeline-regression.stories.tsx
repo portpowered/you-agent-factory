@@ -401,13 +401,18 @@ export const FailureAnalysisEventReplaySmoke = {
 
     const failedSelection = within(currentSelectionCard(canvasElement));
     await expect(
-      failedSelection.getByRole("heading", { name: "Error details" }),
+      failedSelection.getByRole("region", { name: "Failure details" }),
     ).toBeVisible();
     expect(
       failedSelection.getAllByText("provider_rate_limit").length,
     ).toBeGreaterThan(0);
+    await userEvent.click(
+      failedSelection.getByRole("button", { name: "Expand" }),
+    );
     await expect(
-      failedSelection.getByText("No inference events are available for this selected work item."),
+      failedSelection.getByText(
+        "No inference attempt details were recorded before this dispatch ended.",
+      ),
     ).toBeVisible();
     expect(
       failedSelection.getAllByText(
