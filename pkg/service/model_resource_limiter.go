@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -131,15 +132,19 @@ func (l *localModelResourceLimiter) acquire(ctx context.Context, reservations []
 		return nil
 	}
 
+	waitStartedAt := time.Now()
+	markModelExecutionResourceWaitStarted(ctx, waitStartedAt)
 	acquired := make([]localModelResourceReservation, 0, len(reservations))
 	for _, reservation := range reservations {
 		entry := l.entry(reservation.key, reservation.capacity)
 		if err := entry.acquire(ctx, reservation.count); err != nil {
+			markModelExecutionResourceWaitFinished(ctx, time.Now(), false)
 			l.release(acquired)
 			return err
 		}
 		acquired = append(acquired, reservation)
 	}
+	markModelExecutionResourceWaitFinished(ctx, time.Now(), true)
 	return nil
 }
 

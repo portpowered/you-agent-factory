@@ -380,8 +380,9 @@ func generatedFactoryWorkEvents(t *testing.T) []factoryapi.FactoryEvent {
 
 func generatedFactoryExecutionEvents(t *testing.T) []factoryapi.FactoryEvent {
 	t.Helper()
-	events := make([]factoryapi.FactoryEvent, 0, 6)
+	events := make([]factoryapi.FactoryEvent, 0, 8)
 	events = append(events, generatedFactoryDispatchEvents(t)...)
+	events = append(events, generatedFactoryModelEvents(t)...)
 	events = append(events, generatedFactoryInferenceEvents(t)...)
 	events = append(events, generatedFactoryScriptEvents(t)...)
 	return events
@@ -493,6 +494,85 @@ func generatedFactoryInferenceEvents(t *testing.T) []factoryapi.FactoryEvent {
 				Outcome:            factoryapi.InferenceOutcomeSucceeded,
 				Response:           stringPtr("Release notes drafted."),
 				DurationMillis:     124,
+			}),
+		},
+	}
+}
+
+func generatedFactoryModelEvents(t *testing.T) []factoryapi.FactoryEvent {
+	t.Helper()
+	eventTime := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	traceIDs := []string{"trace-1"}
+	workIDs := []string{"work-1"}
+	dispatchID := "dispatch-1"
+	resourceType := factoryapi.ResourceTypeModel
+	responseContent := factoryapi.WorkContent{
+		mustGeneratedModelAudioPart(t, "/tmp/factory/out.wav"),
+	}
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-model-request",
+			Type:          factoryapi.FactoryEventTypeModelRequest,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:   3,
+				Tick:       2,
+				EventTime:  eventTime,
+				TraceIds:   &traceIDs,
+				WorkIds:    &workIDs,
+				DispatchId: &dispatchID,
+			},
+			Payload: factoryEventPayload(t, factoryapi.ModelRequestEventPayload{
+				ModelRequestId:   "model-request-1",
+				Attempt:          1,
+				Operation:        "TTS",
+				Worker:           "tts-worker",
+				Model:            "OMNIVOICE_Q4_K_M",
+				ProviderLocality: "LOCAL",
+				Resources: &[]factoryapi.ModelResourceSummary{{
+					Name:       "omnivoice-cache",
+					Type:       resourceType,
+					Capacity:   1,
+					Model:      stringPtr("OMNIVOICE_Q4_K_M"),
+					Backend:    stringPtr("LLAMACPP"),
+					LoadPolicy: stringPtr("ON_DEMAND"),
+				}},
+				Bindings: &[]factoryapi.ResolvedModelOperationBinding{{
+					Slot:   "text",
+					Source: factoryapi.INPUT,
+				}},
+				WorkingDirectory: stringPtr("/tmp/factory/work"),
+				Worktree:         stringPtr("/tmp/factory/worktree"),
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-model-response",
+			Type:          factoryapi.FactoryEventTypeModelResponse,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:   4,
+				Tick:       2,
+				EventTime:  eventTime,
+				TraceIds:   &traceIDs,
+				WorkIds:    &workIDs,
+				DispatchId: &dispatchID,
+			},
+			Payload: factoryEventPayload(t, factoryapi.ModelResponseEventPayload{
+				ModelRequestId:   "model-request-1",
+				Attempt:          1,
+				Operation:        "TTS",
+				Worker:           "tts-worker",
+				Model:            "OMNIVOICE_Q4_K_M",
+				ProviderLocality: "LOCAL",
+				Outcome:          factoryapi.InferenceOutcomeSucceeded,
+				DurationMillis:   175,
+				ResourceAcquired: boolPtr(true),
+				LoadRequested:    boolPtr(true),
+				LoadDurationMillis: func() *int64 {
+					v := int64(40)
+					return &v
+				}(),
+				OutputContent: &responseContent,
 			}),
 		},
 	}
@@ -616,6 +696,18 @@ func assertGeneratedWorkRequestEventContext(t *testing.T, event factoryapi.Facto
 	if payload.Works == nil || len(*payload.Works) != 1 || (*payload.Works)[0].Name != "draft release notes" {
 		t.Fatalf("payload.works = %#v, want one preserved work item", payload.Works)
 	}
+}
+
+func mustGeneratedModelAudioPart(t *testing.T, file string) factoryapi.WorkContentPart {
+	t.Helper()
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkAudioContentPart(factoryapi.WorkAudioContentPart{
+		Type: factoryapi.WorkContentPartTypeAudio,
+		File: file,
+	}); err != nil {
+		t.Fatalf("build generated audio part: %v", err)
+	}
+	return part
 }
 
 func assertGeneratedWorkRequestEventRoundTrip(t *testing.T, event factoryapi.FactoryEvent) {

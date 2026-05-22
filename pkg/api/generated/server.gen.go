@@ -70,6 +70,8 @@ const (
 	FactoryEventTypeInferenceRequest          FactoryEventType = "INFERENCE_REQUEST"
 	FactoryEventTypeInferenceResponse         FactoryEventType = "INFERENCE_RESPONSE"
 	FactoryEventTypeInitialStructureRequest   FactoryEventType = "INITIAL_STRUCTURE_REQUEST"
+	FactoryEventTypeModelRequest              FactoryEventType = "MODEL_REQUEST"
+	FactoryEventTypeModelResponse             FactoryEventType = "MODEL_RESPONSE"
 	FactoryEventTypeRelationshipChangeRequest FactoryEventType = "RELATIONSHIP_CHANGE_REQUEST"
 	FactoryEventTypeRunRequest                FactoryEventType = "RUN_REQUEST"
 	FactoryEventTypeRunResponse               FactoryEventType = "RUN_RESPONSE"
@@ -1292,6 +1294,39 @@ type ModelPullResponse struct {
 	Revision string `json:"revision"`
 }
 
+// ModelRequestEventPayload Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier.
+type ModelRequestEventPayload struct {
+	// Attempt One-based model execution attempt number for this dispatch.
+	Attempt int `json:"attempt"`
+
+	// Bindings Deterministically resolved operation-slot bindings used for invocation.
+	Bindings *[]ResolvedModelOperationBinding `json:"bindings,omitempty"`
+
+	// Model Concrete model identity resolved for this invocation.
+	Model string `json:"model"`
+
+	// ModelRequestId Stable identifier correlating this model execution request with its response.
+	ModelRequestId string `json:"modelRequestId"`
+
+	// Operation Uppercase model operation requested by the workstation, such as TTS.
+	Operation string `json:"operation"`
+
+	// ProviderLocality Worker-declared model locality, such as LOCAL or CLOUD.
+	ProviderLocality string `json:"providerLocality"`
+
+	// Resources Concrete resources attached to the model worker execution path.
+	Resources *[]ModelResourceSummary `json:"resources,omitempty"`
+
+	// Worker Runtime worker name selected for the invocation.
+	Worker string `json:"worker"`
+
+	// WorkingDirectory Working directory resolved for the model execution when present.
+	WorkingDirectory *string `json:"workingDirectory,omitempty"`
+
+	// Worktree Worktree path resolved for the model execution when present.
+	Worktree *string `json:"worktree,omitempty"`
+}
+
 // ModelResourceSummary defines model for ModelResourceSummary.
 type ModelResourceSummary struct {
 	// Backend Local runtime backend identifier for model resources.
@@ -1314,6 +1349,66 @@ type ModelResourceSummary struct {
 
 	// Type Uppercase resource families supported by the public factory-config contract.
 	Type ResourceType `json:"type"`
+}
+
+// ModelResponseEventPayload Response details captured after a model-backed worker invocation returns, including resource wait, local load, binding-resolution, output, and failure evidence correlated to the matching model request event. Large binary audio must remain represented through content references or bounded previews instead of unbounded inline payloads.
+type ModelResponseEventPayload struct {
+	// Attempt One-based model execution attempt number for this dispatch.
+	Attempt int `json:"attempt"`
+
+	// Bindings Deterministically resolved operation-slot bindings used for invocation.
+	Bindings *[]ResolvedModelOperationBinding `json:"bindings,omitempty"`
+
+	// Diagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
+	Diagnostics *SafeWorkDiagnostics `json:"diagnostics,omitempty"`
+
+	// DurationMillis End-to-end model invocation duration in milliseconds.
+	DurationMillis int64 `json:"durationMillis"`
+
+	// ErrorClass Stable failure classification when available.
+	ErrorClass *string `json:"errorClass,omitempty"`
+
+	// LoadDurationMillis Duration of the managed local-model load call when one occurred.
+	LoadDurationMillis *int64 `json:"loadDurationMillis,omitempty"`
+
+	// LoadRequested Whether this invocation asked the managed local-model runtime to load a handle.
+	LoadRequested *bool `json:"loadRequested,omitempty"`
+
+	// LoadReused Whether an already-loaded local model handle was reused instead of loading again.
+	LoadReused *bool `json:"loadReused,omitempty"`
+
+	// Model Concrete model identity resolved for this invocation.
+	Model string `json:"model"`
+
+	// ModelRequestId Identifier from the matching model request event.
+	ModelRequestId string `json:"modelRequestId"`
+
+	// Operation Uppercase model operation requested by the workstation, such as TTS.
+	Operation string `json:"operation"`
+
+	// Outcome Result category returned by a provider inference attempt.
+	Outcome InferenceOutcome `json:"outcome"`
+
+	// OutputContent Ordered canonical content parts for one work item.
+	OutputContent *WorkContent `json:"outputContent,omitempty"`
+
+	// OutputPreview Bounded output preview for non-binary model responses when present.
+	OutputPreview *string `json:"outputPreview,omitempty"`
+
+	// ProviderLocality Worker-declared model locality, such as LOCAL or CLOUD.
+	ProviderLocality string `json:"providerLocality"`
+
+	// ResourceAcquired Whether the invocation acquired the required local model resources.
+	ResourceAcquired *bool `json:"resourceAcquired,omitempty"`
+
+	// ResourceWaitMillis Time spent waiting for local model resources before acquisition.
+	ResourceWaitMillis *int64 `json:"resourceWaitMillis,omitempty"`
+
+	// Resources Concrete resources attached to the model worker execution path.
+	Resources *[]ModelResourceSummary `json:"resources,omitempty"`
+
+	// Worker Runtime worker name selected for the invocation.
+	Worker string `json:"worker"`
 }
 
 // ModelStatus Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
@@ -2551,6 +2646,58 @@ func (t *FactoryEvent_Payload) FromDispatchRequestEventPayload(v DispatchRequest
 
 // MergeDispatchRequestEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided DispatchRequestEventPayload
 func (t *FactoryEvent_Payload) MergeDispatchRequestEventPayload(v DispatchRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsModelRequestEventPayload returns the union data inside the FactoryEvent_Payload as a ModelRequestEventPayload
+func (t FactoryEvent_Payload) AsModelRequestEventPayload() (ModelRequestEventPayload, error) {
+	var body ModelRequestEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromModelRequestEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided ModelRequestEventPayload
+func (t *FactoryEvent_Payload) FromModelRequestEventPayload(v ModelRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeModelRequestEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided ModelRequestEventPayload
+func (t *FactoryEvent_Payload) MergeModelRequestEventPayload(v ModelRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsModelResponseEventPayload returns the union data inside the FactoryEvent_Payload as a ModelResponseEventPayload
+func (t FactoryEvent_Payload) AsModelResponseEventPayload() (ModelResponseEventPayload, error) {
+	var body ModelResponseEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromModelResponseEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided ModelResponseEventPayload
+func (t *FactoryEvent_Payload) FromModelResponseEventPayload(v ModelResponseEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeModelResponseEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided ModelResponseEventPayload
+func (t *FactoryEvent_Payload) MergeModelResponseEventPayload(v ModelResponseEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

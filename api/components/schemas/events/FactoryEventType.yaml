@@ -10,6 +10,8 @@ x-enum-varnames:
   - FactoryEventTypeWorkRequest
   - FactoryEventTypeRelationshipChangeRequest
   - FactoryEventTypeDispatchRequest
+  - FactoryEventTypeModelRequest
+  - FactoryEventTypeModelResponse
   - FactoryEventTypeInferenceRequest
   - FactoryEventTypeInferenceResponse
   - FactoryEventTypeScriptRequest
@@ -24,6 +26,8 @@ enum:
   - WORK_REQUEST
   - RELATIONSHIP_CHANGE_REQUEST
   - DISPATCH_REQUEST
+  - MODEL_REQUEST
+  - MODEL_RESPONSE
   - INFERENCE_REQUEST
   - INFERENCE_RESPONSE
   - SCRIPT_REQUEST
@@ -38,6 +42,8 @@ x-enum-descriptions:
   - Work entered the factory as a normalized request.
   - A relationship-change request between work items was recorded.
   - A workstation request began processing a set of input work.
+  - A model-backed worker invocation request is about to enter resource, load, and execution boundaries.
+  - A model-backed worker invocation returned with resource, load, output, and failure evidence.
   - A model-worker provider attempt is about to send a prompt to the provider.
   - A model-worker provider attempt returned from the provider boundary.
   - A script-backed worker is about to invoke one concrete command attempt.

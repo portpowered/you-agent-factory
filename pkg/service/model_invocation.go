@@ -122,6 +122,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		fs.commandRunnerOverride(),
 		nil,
 		nil,
+		nil,
 		time.Now,
 		fs.modelResources,
 		fs.localModels,

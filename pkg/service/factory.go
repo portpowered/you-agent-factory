@@ -332,6 +332,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		commandRunnerOverrideForMode(cfg, loadedFactoryCfg, replaySideEffects),
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
+		eventHistory.RecordModelEvent,
 		clock.Now,
 		modelResources,
 		localModels,
@@ -520,6 +521,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 		commandRunnerOverrideForMode(fs.cfg, loadedFactoryCfg, nil),
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
+		eventHistory.RecordModelEvent,
 		clock.Now,
 		fs.modelResources,
 		fs.localModels,
@@ -2144,6 +2146,7 @@ func loadWorkersFromConfig(
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
+	modelRecorder modelEventRecorder,
 	now func() time.Time,
 	modelResources *localModelResourceLimiter,
 	localModels *managedLocalModelManager,
@@ -2167,7 +2170,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workers.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, now, modelResources, localModels)
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelResources, localModels)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -2208,6 +2211,7 @@ func buildWorkerExecutor(
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
+	modelRecorder modelEventRecorder,
 	now func() time.Time,
 	modelResources *localModelResourceLimiter,
 	localModels *managedLocalModelManager,
@@ -2252,8 +2256,9 @@ func buildWorkerExecutor(
 		agentOpts := []workers.AgentExecutorOption{
 			workers.WithLogger(logger),
 		}
-		runner = modelResources.wrapRunner(runner, factoryCfg, def)
 		runner = localModels.wrapRunner(runner, runtimeCfg, factoryCfg, def)
+		runner = modelResources.wrapRunner(runner, factoryCfg, def)
+		runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
 		agentExec := workers.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
 		return &workers.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,

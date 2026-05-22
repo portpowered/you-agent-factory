@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -154,6 +155,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 		nil,
 		nil,
 		nil,
+		nil,
 		newLocalModelResourceLimiter(),
 		newManagedLocalModelManager(staticModelAssetPuller{
 			cache: cache,
@@ -204,6 +206,135 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 	}
 	if calls := provider.Calls(); len(calls) != 0 {
 		t.Fatalf("provider calls = %#v, want local runtime to bypass provider path", calls)
+	}
+}
+
+func TestLoadWorkersFromConfig_LocalModelWorkerRecordsModelExecutionEvents(t *testing.T) {
+	eventTime := time.Date(2026, time.May, 22, 10, 0, 0, 0, time.UTC)
+	wsExec, history, audioPath := localModelExecutionRecorderFixture(t, eventTime)
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "dispatch-tts",
+		TransitionID:    "transition-tts",
+		WorkerType:      "tts-worker",
+		WorkstationName: "speak",
+		Execution: interfaces.ExecutionMetadata{
+			CurrentTick: 2,
+			RequestID:   "request-tts",
+			TraceID:     "trace-tts",
+			WorkIDs:     []string{"work-tts"},
+		},
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "token-tts",
+			Color: interfaces.TokenColor{
+				WorkID: "work-tts",
+				Content: []interfaces.WorkContentPart{{
+					Type:  interfaces.WorkContentPartTypeText,
+					Label: "utterance",
+					Text:  "hello world",
+				}},
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	assertRecordedLocalModelExecutionEvents(t, history.Events(), audioPath)
+}
+
+func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*workers.WorkstationExecutor, *factory.FactoryEventHistory, string) {
+	t.Helper()
+	audioPath := filepath.Join(t.TempDir(), "speech.wav")
+	runtime := &fakeLocalModelRuntime{
+		response: interfaces.InferenceResponse{
+			Content: `[{"type":"AUDIO","file":"` + audioPath + `","contentType":"audio/wav"}]`,
+		},
+	}
+	factoryCfg := localModelFactoryConfig()
+	cache := localModelTestCacheLayout(t)
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, localModelRuntimeWorkers(), map[string]*interfaces.FactoryWorkstationConfig{
+		"speak": {
+			Name:           "speak",
+			Type:           interfaces.WorkstationTypeInvoke,
+			WorkerTypeName: "tts-worker",
+			Operation:      "TTS",
+			OperationBindings: []interfaces.ModelOperationBinding{{
+				Slot: "text",
+				Selector: &interfaces.ModelOperationBindingSelector{
+					Label: "utterance",
+					Type:  interfaces.ModelOperationContentTypeText,
+				},
+			}},
+		},
+	})
+	history := factory.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
+	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, history.RecordModelEvent, func() time.Time { return eventTime }, newLocalModelResourceLimiter(), newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime))
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+	exec, ok := fc.WorkerExecutors["tts-worker"]
+	if !ok {
+		t.Fatal("expected tts-worker executor to be registered")
+	}
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+	return wsExec, history, audioPath
+}
+
+func assertRecordedLocalModelExecutionEvents(t *testing.T, events []factoryapi.FactoryEvent, audioPath string) {
+	t.Helper()
+	if len(events) != 2 {
+		t.Fatalf("recorded events = %d, want 2 model events", len(events))
+	}
+	if events[0].Type != factoryapi.FactoryEventTypeModelRequest {
+		t.Fatalf("first event type = %s, want %s", events[0].Type, factoryapi.FactoryEventTypeModelRequest)
+	}
+	if events[1].Type != factoryapi.FactoryEventTypeModelResponse {
+		t.Fatalf("second event type = %s, want %s", events[1].Type, factoryapi.FactoryEventTypeModelResponse)
+	}
+
+	requestPayload, err := events[0].Payload.AsModelRequestEventPayload()
+	if err != nil {
+		t.Fatalf("decode model request payload: %v", err)
+	}
+	if requestPayload.Operation != "TTS" || requestPayload.Worker != "tts-worker" || requestPayload.Model != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("request payload = %#v, want operation/worker/model evidence", requestPayload)
+	}
+	if requestPayload.Resources == nil || len(*requestPayload.Resources) != 1 || (*requestPayload.Resources)[0].Name != "omnivoice-cache" {
+		t.Fatalf("request resources = %#v, want omnivoice-cache", requestPayload.Resources)
+	}
+	if requestPayload.Bindings == nil || len(*requestPayload.Bindings) != 1 || (*requestPayload.Bindings)[0].Slot != "text" || (*requestPayload.Bindings)[0].Source != factoryapi.INPUT {
+		t.Fatalf("request bindings = %#v, want one resolved text input binding", requestPayload.Bindings)
+	}
+
+	responsePayload, err := events[1].Payload.AsModelResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode model response payload: %v", err)
+	}
+	if responsePayload.Outcome != factoryapi.InferenceOutcomeSucceeded {
+		t.Fatalf("response outcome = %s, want %s", responsePayload.Outcome, factoryapi.InferenceOutcomeSucceeded)
+	}
+	if responsePayload.ResourceAcquired == nil || !*responsePayload.ResourceAcquired {
+		t.Fatalf("response resourceAcquired = %#v, want true", responsePayload.ResourceAcquired)
+	}
+	if responsePayload.LoadRequested == nil || !*responsePayload.LoadRequested {
+		t.Fatalf("response loadRequested = %#v, want true", responsePayload.LoadRequested)
+	}
+	if responsePayload.OutputContent == nil || len(*responsePayload.OutputContent) != 1 {
+		t.Fatalf("response outputContent = %#v, want one audio content part", responsePayload.OutputContent)
+	}
+	audioPart, audioErr := (*responsePayload.OutputContent)[0].AsWorkAudioContentPart()
+	if audioErr != nil || audioPart.File != audioPath {
+		t.Fatalf("response output audio = %#v, %v, want file %q", responsePayload.OutputContent, audioErr, audioPath)
 	}
 }
 

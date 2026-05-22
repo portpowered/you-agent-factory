@@ -1083,13 +1083,13 @@ export interface components {
             id: string;
             type: components["schemas"]["FactoryEventType"];
             context: components["schemas"]["FactoryEventContext"];
-            payload: components["schemas"]["RunRequestEventPayload"] | components["schemas"]["InitialStructureRequestEventPayload"] | components["schemas"]["FactoryChangeEventPayload"] | components["schemas"]["WorkRequestEventPayload"] | components["schemas"]["RelationshipChangeRequestEventPayload"] | components["schemas"]["DispatchRequestEventPayload"] | components["schemas"]["InferenceRequestEventPayload"] | components["schemas"]["InferenceResponseEventPayload"] | components["schemas"]["ScriptRequestEventPayload"] | components["schemas"]["ScriptResponseEventPayload"] | components["schemas"]["DispatchResponseEventPayload"] | components["schemas"]["FactoryStateResponseEventPayload"] | components["schemas"]["RunResponseEventPayload"];
+            payload: components["schemas"]["RunRequestEventPayload"] | components["schemas"]["InitialStructureRequestEventPayload"] | components["schemas"]["FactoryChangeEventPayload"] | components["schemas"]["WorkRequestEventPayload"] | components["schemas"]["RelationshipChangeRequestEventPayload"] | components["schemas"]["DispatchRequestEventPayload"] | components["schemas"]["ModelRequestEventPayload"] | components["schemas"]["ModelResponseEventPayload"] | components["schemas"]["InferenceRequestEventPayload"] | components["schemas"]["InferenceResponseEventPayload"] | components["schemas"]["ScriptRequestEventPayload"] | components["schemas"]["ScriptResponseEventPayload"] | components["schemas"]["DispatchResponseEventPayload"] | components["schemas"]["FactoryStateResponseEventPayload"] | components["schemas"]["RunResponseEventPayload"];
         };
         /**
          * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
          * @enum {string}
          */
-        FactoryEventType: "RUN_REQUEST" | "INITIAL_STRUCTURE_REQUEST" | "FACTORY_CHANGE" | "WORK_REQUEST" | "RELATIONSHIP_CHANGE_REQUEST" | "DISPATCH_REQUEST" | "INFERENCE_REQUEST" | "INFERENCE_RESPONSE" | "SCRIPT_REQUEST" | "SCRIPT_RESPONSE" | "DISPATCH_RESPONSE" | "FACTORY_STATE_RESPONSE" | "RUN_RESPONSE";
+        FactoryEventType: "RUN_REQUEST" | "INITIAL_STRUCTURE_REQUEST" | "FACTORY_CHANGE" | "WORK_REQUEST" | "RELATIONSHIP_CHANGE_REQUEST" | "DISPATCH_REQUEST" | "MODEL_REQUEST" | "MODEL_RESPONSE" | "INFERENCE_REQUEST" | "INFERENCE_RESPONSE" | "SCRIPT_REQUEST" | "SCRIPT_RESPONSE" | "DISPATCH_RESPONSE" | "FACTORY_STATE_RESPONSE" | "RUN_RESPONSE";
         FactoryEventContext: {
             /** @description Append-only event-log sequence number. */
             sequence: number;
@@ -1173,6 +1173,76 @@ export interface components {
             inputs: components["schemas"]["DispatchConsumedWorkRef"][];
             resources?: components["schemas"]["Resource"][];
             metadata?: components["schemas"]["DispatchRequestEventMetadata"];
+        };
+        /** @description Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. */
+        ModelRequestEventPayload: {
+            /** @description Stable identifier correlating this model execution request with its response. */
+            modelRequestId: string;
+            /** @description One-based model execution attempt number for this dispatch. */
+            attempt: number;
+            /** @description Uppercase model operation requested by the workstation, such as TTS. */
+            operation: string;
+            /** @description Runtime worker name selected for the invocation. */
+            worker: string;
+            /** @description Concrete model identity resolved for this invocation. */
+            model: string;
+            /** @description Worker-declared model locality, such as LOCAL or CLOUD. */
+            providerLocality: string;
+            /** @description Concrete resources attached to the model worker execution path. */
+            resources?: components["schemas"]["ModelResourceSummary"][];
+            /** @description Deterministically resolved operation-slot bindings used for invocation. */
+            bindings?: components["schemas"]["ResolvedModelOperationBinding"][];
+            /** @description Working directory resolved for the model execution when present. */
+            workingDirectory?: string;
+            /** @description Worktree path resolved for the model execution when present. */
+            worktree?: string;
+        };
+        /** @description Response details captured after a model-backed worker invocation returns, including resource wait, local load, binding-resolution, output, and failure evidence correlated to the matching model request event. Large binary audio must remain represented through content references or bounded previews instead of unbounded inline payloads. */
+        ModelResponseEventPayload: {
+            /** @description Identifier from the matching model request event. */
+            modelRequestId: string;
+            /** @description One-based model execution attempt number for this dispatch. */
+            attempt: number;
+            /** @description Uppercase model operation requested by the workstation, such as TTS. */
+            operation: string;
+            /** @description Runtime worker name selected for the invocation. */
+            worker: string;
+            /** @description Concrete model identity resolved for this invocation. */
+            model: string;
+            /** @description Worker-declared model locality, such as LOCAL or CLOUD. */
+            providerLocality: string;
+            outcome: components["schemas"]["InferenceOutcome"];
+            /**
+             * Format: int64
+             * @description End-to-end model invocation duration in milliseconds.
+             */
+            durationMillis: number;
+            /** @description Concrete resources attached to the model worker execution path. */
+            resources?: components["schemas"]["ModelResourceSummary"][];
+            /** @description Deterministically resolved operation-slot bindings used for invocation. */
+            bindings?: components["schemas"]["ResolvedModelOperationBinding"][];
+            /**
+             * Format: int64
+             * @description Time spent waiting for local model resources before acquisition.
+             */
+            resourceWaitMillis?: number;
+            /** @description Whether the invocation acquired the required local model resources. */
+            resourceAcquired?: boolean;
+            /** @description Whether this invocation asked the managed local-model runtime to load a handle. */
+            loadRequested?: boolean;
+            /** @description Whether an already-loaded local model handle was reused instead of loading again. */
+            loadReused?: boolean;
+            /**
+             * Format: int64
+             * @description Duration of the managed local-model load call when one occurred.
+             */
+            loadDurationMillis?: number;
+            /** @description Bounded output preview for non-binary model responses when present. */
+            outputPreview?: string;
+            outputContent?: components["schemas"]["WorkContent"];
+            diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
+            /** @description Stable failure classification when available. */
+            errorClass?: string;
         };
         /** @description Request details captured immediately before a model-worker provider attempt is invoked. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. Prompt content is intentionally present and should be treated as sensitive in recordings and diagnostics. */
         InferenceRequestEventPayload: {

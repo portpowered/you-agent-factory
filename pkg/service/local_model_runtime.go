@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -157,12 +158,16 @@ func (m *managedLocalModelManager) loadHandle(ctx context.Context, key string, r
 	defer entry.mu.Unlock()
 
 	if entry.handle != nil {
+		markModelExecutionLoadReused(ctx)
 		return entry.handle, nil
 	}
+	markModelExecutionLoadRequested(ctx, time.Now())
 	handle, err := m.runtime.Load(ctx, request)
 	if err != nil {
+		markModelExecutionLoadFinished(ctx, time.Now())
 		return nil, err
 	}
+	markModelExecutionLoadFinished(ctx, time.Now())
 	entry.handle = handle
 	return handle, nil
 }

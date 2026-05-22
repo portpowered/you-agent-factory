@@ -119,10 +119,90 @@
   },
   {
     "schemaVersion": "agent-factory.event.v1",
+    "id": "event-model-request",
+    "type": "MODEL_REQUEST",
+    "context": {
+      "sequence": 5,
+      "tick": 2,
+      "eventTime": "2026-04-21T12:00:04.500Z",
+      "dispatchId": "dispatch-1",
+      "requestId": "request-1",
+      "traceIds": [
+        "trace-1"
+      ],
+      "workIds": [
+        "work-1"
+      ]
+    },
+    "payload": {
+      "modelRequestId": "model-request-1",
+      "attempt": 1,
+      "operation": "TTS",
+      "worker": "tts-worker",
+      "model": "OMNIVOICE_Q4_K_M",
+      "providerLocality": "LOCAL",
+      "resources": [
+        {
+          "name": "omnivoice-cache",
+          "type": "MODEL",
+          "capacity": 1,
+          "model": "OMNIVOICE_Q4_K_M",
+          "backend": "LLAMACPP",
+          "loadPolicy": "ON_DEMAND"
+        }
+      ],
+      "bindings": [
+        {
+          "slot": "text",
+          "source": "INPUT",
+          "content": []
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-model-response",
+    "type": "MODEL_RESPONSE",
+    "context": {
+      "sequence": 6,
+      "tick": 2,
+      "eventTime": "2026-04-21T12:00:04.750Z",
+      "dispatchId": "dispatch-1",
+      "requestId": "request-1",
+      "traceIds": [
+        "trace-1"
+      ],
+      "workIds": [
+        "work-1"
+      ]
+    },
+    "payload": {
+      "modelRequestId": "model-request-1",
+      "attempt": 1,
+      "operation": "TTS",
+      "worker": "tts-worker",
+      "model": "OMNIVOICE_Q4_K_M",
+      "providerLocality": "LOCAL",
+      "outcome": "SUCCEEDED",
+      "durationMillis": 175,
+      "resourceAcquired": true,
+      "loadRequested": true,
+      "loadDurationMillis": 40,
+      "outputContent": [
+        {
+          "type": "AUDIO",
+          "file": "/tmp/factory/out.wav"
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
     "id": "event-inference-request",
     "type": "INFERENCE_REQUEST",
     "context": {
-      "sequence": 5,
+      "sequence": 7,
       "tick": 2,
       "eventTime": "2026-04-21T12:00:05Z",
       "dispatchId": "dispatch-1",
@@ -147,7 +227,7 @@
     "id": "event-inference-response",
     "type": "INFERENCE_RESPONSE",
     "context": {
-      "sequence": 6,
+      "sequence": 8,
       "tick": 2,
       "eventTime": "2026-04-21T12:00:06Z",
       "dispatchId": "dispatch-1",
@@ -171,7 +251,7 @@
     "id": "event-script-request",
     "type": "SCRIPT_REQUEST",
     "context": {
-      "sequence": 7,
+      "sequence": 9,
       "tick": 2,
       "eventTime": "2026-04-21T12:00:06.500Z",
       "dispatchId": "dispatch-script-1",
@@ -201,7 +281,7 @@
     "id": "event-script-response",
     "type": "SCRIPT_RESPONSE",
     "context": {
-      "sequence": 8,
+      "sequence": 10,
       "tick": 2,
       "eventTime": "2026-04-21T12:00:06.750Z",
       "dispatchId": "dispatch-script-1",
@@ -226,7 +306,7 @@
     "id": "event-dispatch-response",
     "type": "DISPATCH_RESPONSE",
     "context": {
-      "sequence": 9,
+      "sequence": 11,
       "tick": 3,
       "eventTime": "2026-04-21T12:00:07Z",
       "dispatchId": "dispatch-script-1",
@@ -249,7 +329,7 @@
     "id": "event-factory-state-response",
     "type": "FACTORY_STATE_RESPONSE",
     "context": {
-      "sequence": 10,
+      "sequence": 12,
       "tick": 3,
       "eventTime": "2026-04-21T12:00:08Z"
     },
@@ -264,7 +344,7 @@
     "id": "event-run-response",
     "type": "RUN_RESPONSE",
     "context": {
-      "sequence": 11,
+      "sequence": 13,
       "tick": 4,
       "eventTime": "2026-04-21T12:00:09Z"
     },

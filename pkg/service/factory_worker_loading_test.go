@@ -800,5 +800,6 @@ func loadWorkersFromConfigForServiceTest(
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 }

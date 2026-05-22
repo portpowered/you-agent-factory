@@ -1,0 +1,50 @@
+type: object
+additionalProperties: false
+required:
+  - modelRequestId
+  - attempt
+  - operation
+  - worker
+  - model
+  - providerLocality
+description: >-
+  Request details captured immediately before a model-backed worker invocation
+  enters resource, load, and execution boundaries. FactoryEvent.context owns
+  dispatch, request, trace, and work identity, and the matching dispatch-request
+  event owns the transition identifier.
+properties:
+  modelRequestId:
+    type: string
+    description: Stable identifier correlating this model execution request with its response.
+  attempt:
+    type: integer
+    minimum: 1
+    description: One-based model execution attempt number for this dispatch.
+  operation:
+    type: string
+    description: Uppercase model operation requested by the workstation, such as TTS.
+  worker:
+    type: string
+    description: Runtime worker name selected for the invocation.
+  model:
+    type: string
+    description: Concrete model identity resolved for this invocation.
+  providerLocality:
+    type: string
+    description: Worker-declared model locality, such as LOCAL or CLOUD.
+  resources:
+    type: array
+    items:
+      $ref: '../../../../openapi-main.yaml#/components/schemas/ModelResourceSummary'
+    description: Concrete resources attached to the model worker execution path.
+  bindings:
+    type: array
+    items:
+      $ref: '../../../../openapi-main.yaml#/components/schemas/ResolvedModelOperationBinding'
+    description: Deterministically resolved operation-slot bindings used for invocation.
+  workingDirectory:
+    type: string
+    description: Working directory resolved for the model execution when present.
+  worktree:
+    type: string
+    description: Worktree path resolved for the model execution when present.

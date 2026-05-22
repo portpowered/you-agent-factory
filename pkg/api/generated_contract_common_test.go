@@ -15,6 +15,8 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeWorkRequest,
 	factoryapi.FactoryEventTypeRelationshipChangeRequest,
 	factoryapi.FactoryEventTypeDispatchRequest,
+	factoryapi.FactoryEventTypeModelRequest,
+	factoryapi.FactoryEventTypeModelResponse,
 	factoryapi.FactoryEventTypeInferenceRequest,
 	factoryapi.FactoryEventTypeInferenceResponse,
 	factoryapi.FactoryEventTypeScriptRequest,
@@ -101,6 +103,14 @@ func requireGeneratedFactoryEventPayloadRoundTrip(t *testing.T, event factoryapi
 		if _, err := event.Payload.AsDispatchRequestEventPayload(); err != nil {
 			t.Fatalf("decode %s dispatch-request payload: %v", event.Id, err)
 		}
+	case factoryapi.FactoryEventTypeModelRequest:
+		if _, err := event.Payload.AsModelRequestEventPayload(); err != nil {
+			t.Fatalf("decode %s model-request payload: %v", event.Id, err)
+		}
+	case factoryapi.FactoryEventTypeModelResponse:
+		if _, err := event.Payload.AsModelResponseEventPayload(); err != nil {
+			t.Fatalf("decode %s model-response payload: %v", event.Id, err)
+		}
 	case factoryapi.FactoryEventTypeInferenceRequest:
 		if _, err := event.Payload.AsInferenceRequestEventPayload(); err != nil {
 			t.Fatalf("decode %s inference-request payload: %v", event.Id, err)
@@ -164,6 +174,10 @@ func intPtr(value int) *int {
 	return &value
 }
 
+func boolPtr(value bool) *bool {
+	return &value
+}
+
 func factoryEventPayload(t *testing.T, payload any) factoryapi.FactoryEvent_Payload {
 	t.Helper()
 
@@ -182,6 +196,10 @@ func factoryEventPayload(t *testing.T, payload any) factoryapi.FactoryEvent_Payl
 		err = eventPayload.FromRelationshipChangeRequestEventPayload(typed)
 	case factoryapi.DispatchRequestEventPayload:
 		err = eventPayload.FromDispatchRequestEventPayload(typed)
+	case factoryapi.ModelRequestEventPayload:
+		err = eventPayload.FromModelRequestEventPayload(typed)
+	case factoryapi.ModelResponseEventPayload:
+		err = eventPayload.FromModelResponseEventPayload(typed)
 	case factoryapi.InferenceRequestEventPayload:
 		err = eventPayload.FromInferenceRequestEventPayload(typed)
 	case factoryapi.InferenceResponseEventPayload:

@@ -1104,6 +1104,10 @@ components:
       $ref: './components/schemas/events/payloads/RelationshipChangeRequestEventPayload.yaml'
     DispatchRequestEventPayload:
       $ref: './components/schemas/events/payloads/DispatchRequestEventPayload.yaml'
+    ModelRequestEventPayload:
+      $ref: './components/schemas/events/payloads/ModelRequestEventPayload.yaml'
+    ModelResponseEventPayload:
+      $ref: './components/schemas/events/payloads/ModelResponseEventPayload.yaml'
     InferenceRequestEventPayload:
       $ref: './components/schemas/events/payloads/InferenceRequestEventPayload.yaml'
     InferenceResponseEventPayload:

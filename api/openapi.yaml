@@ -2248,6 +2248,8 @@ components:
             - $ref: '#/components/schemas/WorkRequestEventPayload'
             - $ref: '#/components/schemas/RelationshipChangeRequestEventPayload'
             - $ref: '#/components/schemas/DispatchRequestEventPayload'
+            - $ref: '#/components/schemas/ModelRequestEventPayload'
+            - $ref: '#/components/schemas/ModelResponseEventPayload'
             - $ref: '#/components/schemas/InferenceRequestEventPayload'
             - $ref: '#/components/schemas/InferenceResponseEventPayload'
             - $ref: '#/components/schemas/ScriptRequestEventPayload'
@@ -2265,6 +2267,8 @@ components:
         - FactoryEventTypeWorkRequest
         - FactoryEventTypeRelationshipChangeRequest
         - FactoryEventTypeDispatchRequest
+        - FactoryEventTypeModelRequest
+        - FactoryEventTypeModelResponse
         - FactoryEventTypeInferenceRequest
         - FactoryEventTypeInferenceResponse
         - FactoryEventTypeScriptRequest
@@ -2279,6 +2283,8 @@ components:
         - WORK_REQUEST
         - RELATIONSHIP_CHANGE_REQUEST
         - DISPATCH_REQUEST
+        - MODEL_REQUEST
+        - MODEL_RESPONSE
         - INFERENCE_REQUEST
         - INFERENCE_RESPONSE
         - SCRIPT_REQUEST
@@ -2293,6 +2299,8 @@ components:
         - Work entered the factory as a normalized request.
         - A relationship-change request between work items was recorded.
         - A workstation request began processing a set of input work.
+        - A model-backed worker invocation request is about to enter resource, load, and execution boundaries.
+        - A model-backed worker invocation returned with resource, load, output, and failure evidence.
         - A model-worker provider attempt is about to send a prompt to the provider.
         - A model-worker provider attempt returned from the provider boundary.
         - A script-backed worker is about to invoke one concrete command attempt.
@@ -2472,6 +2480,132 @@ components:
             $ref: '#/components/schemas/Resource'
         metadata:
           $ref: '#/components/schemas/DispatchRequestEventMetadata'
+    ModelRequestEventPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - modelRequestId
+        - attempt
+        - operation
+        - worker
+        - model
+        - providerLocality
+      description: Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier.
+      properties:
+        modelRequestId:
+          type: string
+          description: Stable identifier correlating this model execution request with its response.
+        attempt:
+          type: integer
+          minimum: 1
+          description: One-based model execution attempt number for this dispatch.
+        operation:
+          type: string
+          description: Uppercase model operation requested by the workstation, such as TTS.
+        worker:
+          type: string
+          description: Runtime worker name selected for the invocation.
+        model:
+          type: string
+          description: Concrete model identity resolved for this invocation.
+        providerLocality:
+          type: string
+          description: Worker-declared model locality, such as LOCAL or CLOUD.
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelResourceSummary'
+          description: Concrete resources attached to the model worker execution path.
+        bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResolvedModelOperationBinding'
+          description: Deterministically resolved operation-slot bindings used for invocation.
+        workingDirectory:
+          type: string
+          description: Working directory resolved for the model execution when present.
+        worktree:
+          type: string
+          description: Worktree path resolved for the model execution when present.
+    ModelResponseEventPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - modelRequestId
+        - attempt
+        - operation
+        - worker
+        - model
+        - providerLocality
+        - outcome
+        - durationMillis
+      description: Response details captured after a model-backed worker invocation returns, including resource wait, local load, binding-resolution, output, and failure evidence correlated to the matching model request event. Large binary audio must remain represented through content references or bounded previews instead of unbounded inline payloads.
+      properties:
+        modelRequestId:
+          type: string
+          description: Identifier from the matching model request event.
+        attempt:
+          type: integer
+          minimum: 1
+          description: One-based model execution attempt number for this dispatch.
+        operation:
+          type: string
+          description: Uppercase model operation requested by the workstation, such as TTS.
+        worker:
+          type: string
+          description: Runtime worker name selected for the invocation.
+        model:
+          type: string
+          description: Concrete model identity resolved for this invocation.
+        providerLocality:
+          type: string
+          description: Worker-declared model locality, such as LOCAL or CLOUD.
+        outcome:
+          $ref: '#/components/schemas/InferenceOutcome'
+        durationMillis:
+          type: integer
+          format: int64
+          minimum: 0
+          description: End-to-end model invocation duration in milliseconds.
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelResourceSummary'
+          description: Concrete resources attached to the model worker execution path.
+        bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResolvedModelOperationBinding'
+          description: Deterministically resolved operation-slot bindings used for invocation.
+        resourceWaitMillis:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Time spent waiting for local model resources before acquisition.
+        resourceAcquired:
+          type: boolean
+          description: Whether the invocation acquired the required local model resources.
+        loadRequested:
+          type: boolean
+          description: Whether this invocation asked the managed local-model runtime to load a handle.
+        loadReused:
+          type: boolean
+          description: Whether an already-loaded local model handle was reused instead of loading again.
+        loadDurationMillis:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Duration of the managed local-model load call when one occurred.
+        outputPreview:
+          type: string
+          description: Bounded output preview for non-binary model responses when present.
+        outputContent:
+          $ref: '#/components/schemas/WorkContent'
+        diagnostics:
+          $ref: '#/components/schemas/SafeWorkDiagnostics'
+        errorClass:
+          type: string
+          description: Stable failure classification when available.
     InferenceRequestEventPayload:
       type: object
       additionalProperties: false
