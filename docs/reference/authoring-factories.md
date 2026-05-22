@@ -6,7 +6,7 @@ doc-id: agent-factory/authoring-factories
 
 # Authoring Factories
 
-Use this guide to create and run a current Agent Factory workflow with the
+Use this guide to create and run a current you-agent-factory workflow with the
 public `factory.json` contract. Keep topology in `factory.json`, worker runtime
 instructions in `workers/<name>/AGENTS.md`, and workstation prompts in
 `workstations/<name>/AGENTS.md`.

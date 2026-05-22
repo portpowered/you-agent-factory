@@ -15,10 +15,10 @@ describe("import/export responsive schedule", () => {
     );
 
     expect(importExportStories.map((storyCheck) => storyCheck.id)).toEqual([
-      "infinite-you-dashboard-export-factory-dialog--ready",
-      "infinite-you-dashboard-export-factory-dialog--localized-zh-cn",
-      "infinite-you-dashboard-import-preview-dialog--ready",
-      "infinite-you-dashboard-import-preview-dialog--localized-zh-cn",
+      "you-agent-factory-dashboard-export-factory-dialog--ready",
+      "you-agent-factory-dashboard-export-factory-dialog--localized-zh-cn",
+      "you-agent-factory-dashboard-import-preview-dialog--ready",
+      "you-agent-factory-dashboard-import-preview-dialog--localized-zh-cn",
     ]);
     expect(
       importExportStories.map((storyCheck) => storyCheck.dialogName),
@@ -101,7 +101,7 @@ describe("localized widget responsive schedule", () => {
       "agent-factory-dashboard-trace-grid-bento-card--localized-zh-cn",
       "agent-factory-dashboard-work-outcome-chart-card--localized-zh-cn",
       "agent-factory-dashboard-react-flow-current-activity-card--localized-zh-cn",
-      "infinite-you-workflow-dashboard--locale-propagation-verification",
+      "you-agent-factory-workflow-dashboard--locale-propagation-verification",
     ]);
     expect(
       localizedWidgetStories.map((storyCheck) => storyCheck.label),
@@ -127,7 +127,7 @@ describe("current-selection prompt hint responsive schedule", () => {
     );
 
     expect(promptHintStory?.id).toBe(
-      "infinite-you-workflow-dashboard--current-selection-prompt-hint-verification",
+      "you-agent-factory-workflow-dashboard--current-selection-prompt-hint-verification",
     );
     expect(promptHintStory?.dialogName).toBeUndefined();
     expect(viewportChecks).toEqual([
@@ -146,7 +146,7 @@ describe("provider-session detail responsive schedule", () => {
     );
 
     expect(providerSessionStory?.id).toBe(
-      "infinite-you-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
+      "you-agent-factory-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
     );
     expect(providerSessionStory?.dialogName).toBeUndefined();
     expect(viewportChecks).toEqual([

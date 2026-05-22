@@ -1346,7 +1346,7 @@ function nonPromptTemplateFetchPaths(fetchMock: ReturnType<typeof vi.fn>) {
 
 function submitWorkCardControls() {
   const dashboardGrid = screen.getByRole("region", {
-    name: "Infinite You bento board",
+    name: "you-agent-factory bento board",
   });
   const submitWorkCard = within(dashboardGrid).getByRole("article", {
     name: "Submit work",
@@ -1735,7 +1735,7 @@ describe("App shell import and export flows", () => {
     renderApp({ snapshot: baselineSnapshot });
 
     expect(
-      await screen.findByRole("heading", { name: "Infinite You" }),
+      await screen.findByRole("heading", { name: "you-agent-factory" }),
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();
@@ -2144,11 +2144,11 @@ describe("App shell import and export flows", () => {
     renderApp({ snapshot: baselineSnapshot });
 
     const heading = await screen.findByRole("heading", {
-      name: "Infinite You",
+      name: "you-agent-factory",
     });
     const toolbar = screen.getByRole("region", { name: "dashboard summary" });
     const streamStatus = screen.getByRole("status", {
-      name: "Infinite You event stream connecting",
+      name: "you-agent-factory event stream connecting",
     });
     const exportButton = screen.getByRole("button", { name: "Export PNG" });
 
@@ -2173,7 +2173,7 @@ describe("App shell import and export flows", () => {
 
     expect(
       within(toolbar).getByRole("status", {
-        name: "Infinite You event stream connecting",
+        name: "you-agent-factory event stream connecting",
       }),
     ).toBeTruthy();
     expect(within(toolbar).queryByText("Factory state")).toBeNull();
@@ -2193,7 +2193,7 @@ describe("App shell import and export flows", () => {
     await waitFor(() => {
       expect(
         within(toolbar).getByRole("status", {
-          name: "Infinite You event stream live",
+          name: "you-agent-factory event stream live",
         }),
       ).toBeTruthy();
     });
@@ -2214,7 +2214,7 @@ describe("App shell import and export flows", () => {
     await waitFor(() => {
       expect(
         within(toolbar).getByRole("status", {
-          name: "Infinite You event stream offline",
+          name: "you-agent-factory event stream offline",
         }),
       ).toBeTruthy();
     });
@@ -2789,7 +2789,7 @@ describe("App timeline reconstruction flows", () => {
       name: "Export PNG",
     });
     const streamStatus = within(toolbar).getByRole("status", {
-      name: "Infinite You event stream connecting",
+      name: "you-agent-factory event stream connecting",
     });
     const headerControls = Array.from(
       toolbar.querySelectorAll(
@@ -3444,7 +3444,7 @@ describe("App streamed replay smoke flows", () => {
       name: "Timeline tick",
     });
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
 
     await waitFor(() => {
@@ -3556,7 +3556,7 @@ describe("App dashboard layout and graph behavior", () => {
     });
 
     expect(
-      await screen.findByRole("heading", { name: "Infinite You" }),
+      await screen.findByRole("heading", { name: "you-agent-factory" }),
     ).toBeTruthy();
     expect(screen.queryByText("Loading dashboard")).toBeNull();
     expect(
@@ -3575,10 +3575,10 @@ describe("App dashboard layout and graph behavior", () => {
   it("starts with full-width totals above a full-width Factory graph card", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const workTotals = dashboardGrid.querySelector<HTMLElement>(
       '[data-bento-card-id="work-totals"]',
@@ -3628,10 +3628,10 @@ describe("App dashboard layout and graph behavior", () => {
 
     renderApp({ snapshot: activeSnapshot });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const workflowActivity = dashboardGrid.querySelector<HTMLElement>(
       '[data-bento-card-id="work-graph"]',
@@ -3664,10 +3664,10 @@ describe("App dashboard layout and graph behavior", () => {
 
     renderApp({ snapshot: activeSnapshot });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const currentSelection = dashboardGrid.querySelector<HTMLElement>(
       '[data-bento-card-id="current-selection"]',
@@ -3694,10 +3694,10 @@ describe("App dashboard layout and graph behavior", () => {
 
     renderApp({ snapshot: activeSnapshot });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const workOutcome = dashboardGrid.querySelector<HTMLElement>(
       '[data-bento-card-id="work-outcome-chart"]',
@@ -3735,7 +3735,7 @@ describe("App dashboard layout and graph behavior", () => {
     );
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const trace = await within(dashboardGrid).findByRole("article", {
       name: "Trace drill-down",
@@ -3803,7 +3803,7 @@ describe("App dashboard layout and graph behavior", () => {
     renderApp({ snapshot: singleNodeSnapshotWithoutEdges });
 
     expect(
-      await screen.findByRole("heading", { name: "Infinite You" }),
+      await screen.findByRole("heading", { name: "you-agent-factory" }),
     ).toBeTruthy();
     expect(
       await screen.findByRole("button", { name: "Select Intake workstation" }),
@@ -3825,7 +3825,7 @@ describe("App dashboard layout and graph behavior", () => {
   it("uses React Flow controls for work graph zoom interaction", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     const workGraphViewport = screen.getByRole("region", {
       name: "Work graph viewport",
@@ -3848,7 +3848,7 @@ describe("App dashboard layout and graph behavior", () => {
   it("renders and interacts with a 20-node workflow through React Flow", async () => {
     renderApp({ snapshot: twentyNodeSnapshot });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     await waitFor(() => {
       expect(
@@ -3882,10 +3882,10 @@ describe("App dashboard follow-up flows", () => {
   it("renders the submit-work card alongside the existing dashboard widgets", async () => {
     renderApp({ snapshot: terminalSnapshot });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
 
     expect(
@@ -3919,7 +3919,7 @@ describe("App dashboard follow-up flows", () => {
       ),
     );
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     expect(screen.getByRole("button", { name: "Export PNG" })).toBeTruthy();
 
@@ -3965,7 +3965,7 @@ describe("App dashboard follow-up flows", () => {
         ),
       );
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     const {
       requestName,
@@ -4069,10 +4069,10 @@ describe("App dashboard follow-up flows", () => {
         }),
     );
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const submitWorkCard = within(dashboardGrid).getByRole("article", {
       name: "Submit work",
@@ -4138,7 +4138,7 @@ describe("App dashboard follow-up flows", () => {
         }),
     );
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     const { requestName, submitButton, submitWorkScope, workType } =
       submitWorkCardControls();
@@ -4184,10 +4184,10 @@ describe("App dashboard follow-up flows", () => {
         ),
     );
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Infinite You bento board",
+      name: "you-agent-factory bento board",
     });
     const submitWorkCard = within(dashboardGrid).getByRole("article", {
       name: "Submit work",
@@ -4235,7 +4235,7 @@ describe("App dashboard follow-up flows", () => {
   it("shows workstation-scoped workstation runs on the free-floating cards", async () => {
     renderApp({ snapshot: activeSnapshot });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Select Review workstation" }),
@@ -4427,7 +4427,7 @@ describe("App dashboard follow-up flows", () => {
   it("updates completed and failed totals from the live stream", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "Infinite You" });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
 
     const stream = MockEventSource.instances[0];
     if (!stream) {
@@ -4468,7 +4468,7 @@ describe("App dashboard follow-up flows", () => {
         ).getByText("1"),
       ).toBeTruthy();
       expect(
-        screen.getByRole("status", { name: "Infinite You event stream live" }),
+        screen.getByRole("status", { name: "you-agent-factory event stream live" }),
       ).toBeTruthy();
     });
   });

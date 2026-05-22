@@ -448,6 +448,9 @@ func TestRunCommand_RuntimeLogFlags(t *testing.T) {
 			t.Fatalf("--%s usage = %q, want to contain %q", tc.name, flag.Usage, tc.usageIn)
 		}
 	}
+	if got := runCmd.Flags().Lookup("runtime-log-dir").Usage; !strings.Contains(got, "~/.you-agent-factory/logs") {
+		t.Fatalf("--runtime-log-dir usage = %q, want canonical default log path", got)
+	}
 	if !strings.Contains(runCmd.Long, "Runtime logs are structured JSON rolling files") {
 		t.Fatal("expected run command long help text to document runtime log behavior")
 	}

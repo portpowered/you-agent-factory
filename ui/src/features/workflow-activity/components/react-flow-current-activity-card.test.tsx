@@ -1702,7 +1702,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(screen.getByText("Import factory PNG")).toBeTruthy();
     expect(
       screen.getByText(
-        "Drop an Infinite You PNG onto this graph to start import.",
+        "Drop a you-agent-factory PNG onto this graph to start import.",
       ),
     ).toBeTruthy();
 
@@ -1859,7 +1859,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
         error: {
           code: "PNG_METADATA_MISSING",
           message:
-            "The selected PNG does not contain Infinite You factory metadata.",
+            "The selected PNG does not contain you-agent-factory factory metadata.",
         },
         ok: false,
       });
@@ -1881,7 +1881,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(alert.textContent).toContain("Factory import failed");
     expect(alert.textContent).toContain("invalid-factory.png");
     expect(alert.textContent).toContain(
-      "This PNG does not include the Infinite You factory metadata needed for import.",
+      "This PNG does not include the you-agent-factory factory metadata needed for import.",
     );
     expect(onFactoryImportReady).not.toHaveBeenCalled();
     expect(
@@ -3255,7 +3255,7 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
         error: {
           code: "PNG_METADATA_MISSING",
           message:
-            "The selected PNG does not contain Infinite You factory metadata.",
+            "The selected PNG does not contain you-agent-factory factory metadata.",
         },
         ok: false,
       });

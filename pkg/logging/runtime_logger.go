@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	defaultRuntimeLogDirName = ".agent-factory"
+	defaultRuntimeLogDirName = ".you-agent-factory"
+	legacyRuntimeLogDirName  = ".agent-factory"
 	runtimeLogSubdirName     = "logs"
 	runtimeLogExtension      = ".log"
 	defaultRuntimeLogMaxSize = 100
@@ -216,5 +217,34 @@ func defaultRuntimeLogDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve user home for runtime logs: %w", err)
 	}
-	return filepath.Join(home, defaultRuntimeLogDirName, runtimeLogSubdirName), nil
+	runtimeLogDir := filepath.Join(home, defaultRuntimeLogDirName, runtimeLogSubdirName)
+	if err := migrateLegacyRuntimeLogDir(home, runtimeLogDir); err != nil {
+		return "", err
+	}
+	return runtimeLogDir, nil
+}
+
+func migrateLegacyRuntimeLogDir(home, runtimeLogDir string) error {
+	legacyLogDir := filepath.Join(home, legacyRuntimeLogDirName, runtimeLogSubdirName)
+
+	if _, err := os.Stat(legacyLogDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat legacy runtime log dir %s: %w", legacyLogDir, err)
+	}
+
+	if _, err := os.Stat(runtimeLogDir); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stat runtime log dir %s: %w", runtimeLogDir, err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(runtimeLogDir), 0o755); err != nil {
+		return fmt.Errorf("create canonical runtime log parent %s: %w", filepath.Dir(runtimeLogDir), err)
+	}
+	if err := os.Rename(legacyLogDir, runtimeLogDir); err != nil {
+		return fmt.Errorf("migrate legacy runtime logs from %s to %s: %w", legacyLogDir, runtimeLogDir, err)
+	}
+	return nil
 }

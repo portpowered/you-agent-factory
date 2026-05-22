@@ -10,7 +10,7 @@ export async function expectCompactedTopDashboardSection(
     name: "dashboard summary",
   });
   const board = await canvas.findByRole("region", {
-    name: "Infinite You bento board",
+    name: "you-agent-factory bento board",
   });
   const workTotals = await canvas.findByRole("article", {
     name: "Work totals",
@@ -31,7 +31,7 @@ export async function expectCompactedTopDashboardSection(
     name: "Export PNG",
   });
   const streamStatus = within(toolbar).getByRole("status", {
-    name: /Infinite You event stream (connecting|live)/,
+    name: /you-agent-factory event stream (connecting|live)/,
   });
 
   await expect(toolbar).toBeVisible();

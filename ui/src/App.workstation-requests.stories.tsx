@@ -13,7 +13,7 @@ import {
 } from "./stories/dashboardStorySupport";
 
 export default {
-  title: "Infinite You/Workflow Dashboard",
+  title: "you-agent-factory/Workflow Dashboard",
   component: App,
 };
 

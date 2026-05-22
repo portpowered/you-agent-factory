@@ -195,13 +195,13 @@ src/features/import/factory-png-import.ts|109|18|string-literal|The browser coul
 src/features/import/factory-png-import.ts|137|18|string-literal|The selected image could not be read.
 src/features/import/factory-png-import.ts|147|18|string-literal|The selected file is not a PNG image.
 src/features/import/factory-png-import.ts|186|18|string-literal|The selected PNG image is invalid or truncated.
-src/features/import/factory-png-import.ts|195|16|string-literal|The selected PNG does not contain Infinite You factory metadata.
-src/features/import/factory-png-import.ts|210|18|string-literal|The Infinite You factory metadata is not valid JSON.
-src/features/import/factory-png-import.ts|220|18|string-literal|The Infinite You factory metadata must be an object.
-src/features/import/factory-png-import.ts|230|18|string-literal|The Infinite You factory metadata is missing the schema version.
-src/features/import/factory-png-import.ts|243|18|string-literal|The selected PNG uses an unsupported Infinite You factory metadata version.
-src/features/import/factory-png-import.ts|270|18|string-literal|The Infinite You factory metadata does not contain a valid factory payload.
-src/features/import/factory-png-import.ts|309|16|string-literal|The Infinite You factory metadata is missing the factory name.
+src/features/import/factory-png-import.ts|195|16|string-literal|The selected PNG does not contain you-agent-factory factory metadata.
+src/features/import/factory-png-import.ts|210|18|string-literal|The you-agent-factory factory metadata is not valid JSON.
+src/features/import/factory-png-import.ts|220|18|string-literal|The you-agent-factory factory metadata must be an object.
+src/features/import/factory-png-import.ts|230|18|string-literal|The you-agent-factory factory metadata is missing the schema version.
+src/features/import/factory-png-import.ts|243|18|string-literal|The selected PNG uses an unsupported you-agent-factory factory metadata version.
+src/features/import/factory-png-import.ts|270|18|string-literal|The you-agent-factory factory metadata does not contain a valid factory payload.
+src/features/import/factory-png-import.ts|309|16|string-literal|The you-agent-factory factory metadata is missing the factory name.
 src/features/timeline/state/timeline/replayGraphState.ts|220|10|string-literal|:resource:
 src/features/trace-drilldown/components/trace-workstation-path.tsx|280|67|string-literal|Unknown workstation
 src/features/trace-drilldown/components/trace-workstation-path.tsx|431|12|string-literal|border-af-overlay/10 bg-af-canvas

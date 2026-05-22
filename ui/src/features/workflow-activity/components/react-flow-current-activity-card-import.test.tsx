@@ -60,32 +60,32 @@ describe("react-flow-current-activity-card-import", () => {
     [
       "NOT_PNG_FILE",
       undefined,
-      "Drop a PNG image exported by Infinite You.",
+      "Drop a PNG image exported by you-agent-factory.",
     ],
     [
       "PNG_METADATA_MISSING",
       undefined,
-      "This PNG does not include the Infinite You factory metadata needed for import.",
+      "This PNG does not include the you-agent-factory factory metadata needed for import.",
     ],
     [
       "UNSUPPORTED_SCHEMA_VERSION",
       { schemaVersion: "portos.agent-factory.png.v9" },
-      "This PNG uses unsupported Infinite You factory metadata version portos.agent-factory.png.v9.",
+      "This PNG uses unsupported you-agent-factory factory metadata version portos.agent-factory.png.v9.",
     ],
     [
       "UNSUPPORTED_SCHEMA_VERSION",
       undefined,
-      "This PNG uses an unsupported Infinite You factory metadata version.",
+      "This PNG uses an unsupported you-agent-factory factory metadata version.",
     ],
     [
       "PNG_METADATA_INVALID",
       undefined,
-      "The embedded Infinite You factory metadata is invalid, so the current factory was left unchanged.",
+      "The embedded you-agent-factory factory metadata is invalid, so the current factory was left unchanged.",
     ],
     [
       "FACTORY_PAYLOAD_INVALID",
       undefined,
-      "The embedded Infinite You factory metadata is invalid, so the current factory was left unchanged.",
+      "The embedded you-agent-factory factory metadata is invalid, so the current factory was left unchanged.",
     ],
     [
       "IMAGE_DECODE_FAILED",

@@ -1,4 +1,4 @@
-const EXPORT_NAME_FALLBACK = "infinite-you";
+const EXPORT_NAME_FALLBACK = "you-agent-factory";
 
 export function buildFactoryExportFilename(factoryName: string): string {
   const slug = factoryName

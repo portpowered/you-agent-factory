@@ -12,7 +12,7 @@ for the maintained layout guide and
 [`docs/reference/work.md`](../../../docs/reference/work.md) for the broader
 factory and work contract.
 
-Use `factory.json` as the canonical topology file for an Agent Factory run.
+Use `factory.json` as the canonical topology file for a you-agent-factory run.
 It declares the work types, states, workers, workstations, resources, and
 routes that the runtime turns into a Petri-net execution graph.
 

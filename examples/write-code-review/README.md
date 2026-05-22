@@ -1,6 +1,6 @@
 # Example: Dispatcher Parity
 
-This example models the `scripts/agents/dispatcher.ps1` workflow as an agent factory configuration, demonstrating structured inputs, worktree execution, parameterized fields, and repeater workstations working together.
+This example models the `scripts/agents/dispatcher.ps1` workflow as a you-agent-factory configuration, demonstrating structured inputs, worktree execution, parameterized fields, and repeater workstations working together.
 
 ## Workflow
 

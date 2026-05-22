@@ -1,4 +1,4 @@
-# Agent Factory CLI Reference
+# you-agent-factory CLI Reference
 
 This directory is the package-owned reference surface for the customer docs and
 the future `you docs <topic>` command. Use the fixed CLI topic names for quick
