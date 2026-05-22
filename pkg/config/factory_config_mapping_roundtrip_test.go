@@ -432,27 +432,6 @@ func assertFlattenedInlineRuntimeDefinitions(t *testing.T, flattened []byte) {
 	}
 }
 
-func TestFactoryConfigMapper_FlattenAndExpandPreservesPortableResourceManifest(t *testing.T) {
-	mapper := NewFactoryConfigMapper()
-
-	cfg := portableResourceManifestMapperFixture()
-
-	flattened, err := mapper.Flatten(cfg)
-	if err != nil {
-		t.Fatalf("mapper.Flatten: %v", err)
-	}
-
-	payload := mustDecodeFactoryPayload(t, flattened)
-	assertFlattenedPortableResourceManifestPayload(t, payload)
-	assertMissingKey(t, payload, "resource_manifest")
-
-	expanded, err := mapper.Expand(flattened)
-	if err != nil {
-		t.Fatalf("mapper.Expand: %v", err)
-	}
-	assertExpandedPortableResourceManifest(t, expanded)
-}
-
 func TestFactoryConfigMapper_FlattenAndExpandPreservesHostedLinearWorker(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 

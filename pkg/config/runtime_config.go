@@ -238,22 +238,35 @@ func hasInlineRuntimeDefinitions(cfg *interfaces.FactoryConfig) bool {
 }
 
 func workerHasInlineRuntimeDefinitionFields(worker interfaces.WorkerConfig) bool {
-	return strings.TrimSpace(worker.Type) != "" ||
-		worker.Provider != "" ||
-		worker.Model != "" ||
-		worker.ModelProvider != "" ||
-		worker.ExecutorProvider != "" ||
-		worker.SessionID != "" ||
-		worker.Command != "" ||
-		len(worker.Args) > 0 ||
+	if hasNonEmptyWorkerRuntimeStrings(worker) {
+		return true
+	}
+	return len(worker.Args) > 0 ||
 		len(worker.Resources) > 0 ||
 		worker.Concurrency != 0 ||
-		worker.Timeout != "" ||
-		worker.StopToken != "" ||
 		worker.SkipPermissions ||
 		worker.Auth != nil ||
-		worker.Linear != nil ||
-		worker.Body != ""
+		worker.Linear != nil
+}
+
+func hasNonEmptyWorkerRuntimeStrings(worker interfaces.WorkerConfig) bool {
+	for _, value := range []string{
+		string(worker.Type),
+		worker.Provider,
+		worker.Model,
+		worker.ModelProvider,
+		worker.ExecutorProvider,
+		worker.SessionID,
+		worker.Command,
+		worker.Timeout,
+		worker.StopToken,
+		worker.Body,
+	} {
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func workerConfigFromInlineConfig(def *interfaces.WorkerConfig) (*interfaces.WorkerConfig, error) {

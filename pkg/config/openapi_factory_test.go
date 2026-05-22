@@ -818,6 +818,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsUnsupportedExecutorProviderAtBou
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity Generated/OpenAPI hosted worker assertions need to keep both boundary and runtime shape checks visible in one reviewer-readable seam.
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesHostedLinearWorker(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"hosted-linear-factory",
