@@ -121,24 +121,22 @@ describe("factory sessions API", () => {
   });
 
   it("maps validation failures into typed API errors", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            code: "BAD_REQUEST",
-            message: "factory session folder is required",
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 400,
-            statusText: "Bad Request",
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "BAD_REQUEST",
+          message: "factory session folder is required",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
           },
-        ),
+          status: 400,
+          statusText: "Bad Request",
+        },
       ),
     );
+    vi.stubGlobal("fetch", fetchMock);
 
     await expect(
       openFactorySession({
@@ -153,6 +151,18 @@ describe("factory sessions API", () => {
         },
         status: 400,
         statusText: "Bad Request",
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions",
+      expect.objectContaining({
+        body: JSON.stringify({
+          folderPath: "",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
       }),
     );
   });
