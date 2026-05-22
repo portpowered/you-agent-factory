@@ -59,7 +59,11 @@
     {
       "includes": [
         "src/App.current-selection.test.tsx",
+        "src/App.export-dialog.test.tsx",
+        "src/App.export-submit.test.tsx",
+        "src/App.import.test.tsx",
         "src/App.test.tsx",
+        "src/App.toolbar-locale.test.tsx",
         "src/api/current-factory-definition/api.test.ts",
         "src/api/current-factory-prompt-template/api.test.ts",
         "src/api/factory-definition/api.test.ts",
