@@ -285,9 +285,14 @@ describe("App graph behavior", () => {
   it("renders and interacts with a 20-node workflow through React Flow", async () => {
     renderApp({ snapshot: twentyNodeSnapshot });
 
-    await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: /Select .* workstation/ })).toHaveLength(20);
-    });
+    await screen.findByRole("heading", { name: "you-agent-factory" });
+    expect(
+      await screen.findAllByRole(
+        "button",
+        { name: /Select .* workstation/ },
+        { timeout: 5000 },
+      ),
+    ).toHaveLength(20);
     expect(screen.getAllByText("Station 20").length).toBeGreaterThanOrEqual(1);
     expect(getStateNodeByLabel("story:step-6")).toBeTruthy();
 
