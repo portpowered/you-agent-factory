@@ -1,0 +1,24 @@
+type: object
+required:
+  - worker
+  - providerLocality
+  - operations
+  - resourceNames
+properties:
+  worker:
+    type: string
+    description: Customer-authored worker name that exposes this capability declaration.
+  modelProvider:
+    $ref: '../data-models/WorkerModelProvider.yaml'
+  providerLocality:
+    $ref: '../data-models/WorkerModelLocality.yaml'
+  operations:
+    type: array
+    description: Operations declared by this worker for the selected model.
+    items:
+      $ref: '../data-models/ModelOperation.yaml'
+  resourceNames:
+    type: array
+    description: Factory resource names referenced by the worker declaration.
+    items:
+      type: string

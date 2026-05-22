@@ -253,6 +253,8 @@ func TestScriptWrapProvider_CommandEnvironmentPreventsGitMergeEditorPrompt(t *te
 	editorScript := writeEditorMarkerScript(t, editorMarker)
 
 	runGitSetup(t, repoDir, "init", "-b", "main")
+	runGitSetup(t, repoDir, "config", "gc.auto", "0")
+	runGitSetup(t, repoDir, "config", "maintenance.auto", "false")
 	runGitSetup(t, repoDir, "config", "user.email", "agent-factory-test@example.com")
 	runGitSetup(t, repoDir, "config", "user.name", "Agent Factory Test")
 	writeTestFile(t, repoDir, "base.txt", "base\n")

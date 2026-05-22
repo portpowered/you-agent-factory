@@ -5,6 +5,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig, error) {
@@ -78,8 +79,13 @@ func resourcesInternalFromAPI(resources []factoryapi.Resource) []interfaces.Reso
 	values := make([]interfaces.ResourceConfig, len(resources))
 	for i, resource := range resources {
 		values[i] = interfaces.ResourceConfig{
-			Name:     resource.Name,
-			Capacity: resource.Capacity,
+			Name:       resource.Name,
+			Type:       internalFactoryResourceTypeFromPublic(enumStringValue(resource.Type)),
+			Capacity:   resource.Capacity,
+			Model:      stringValue(resource.Model),
+			Backend:    stringValue(resource.Backend),
+			LoadPolicy: stringValue(resource.LoadPolicy),
+			Provider:   stringValue(resource.Provider),
 		}
 	}
 	return values
@@ -153,7 +159,9 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
 		Provider:         internalFactoryHostedWorkerProviderFromPublic(string(valueOrEmpty(worker.Provider))),
 		Model:            stringValue(worker.Model),
 		ModelProvider:    internalFactoryWorkerModelProviderFromPublic(worker.ModelProvider),
+		ModelLocality:    internalFactoryWorkerModelLocalityFromPublic(worker.ModelLocality),
 		ExecutorProvider: internalFactoryWorkerProviderFromPublic(worker.ExecutorProvider),
+		Operations:       modelOperationsInternalFromAPI(worker.Operations),
 		Command:          stringValue(worker.Command),
 		Args:             stringSliceValue(worker.Args),
 		Resources:        resourceRequirementsInternalFromAPI(worker.Resources),
@@ -164,6 +172,47 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
 		Linear:           hostedLinearWorkerInternalFromAPI(worker.Linear),
 		Body:             stringValue(worker.Body),
 	}
+}
+
+func modelOperationsInternalFromAPI(operations *[]factoryapi.ModelOperation) []interfaces.ModelOperation {
+	if operations == nil {
+		return nil
+	}
+	values := make([]interfaces.ModelOperation, len(*operations))
+	for i, operation := range *operations {
+		values[i] = interfaces.ModelOperation{
+			Name:    operation.Name,
+			Inputs:  modelOperationSlotsInternalFromAPI(operation.Inputs),
+			Outputs: modelOperationSlotsInternalFromAPI(operation.Outputs),
+		}
+	}
+	return values
+}
+
+func modelOperationSlotsInternalFromAPI(slots *[]factoryapi.ModelOperationSlot) []interfaces.ModelOperationSlot {
+	if slots == nil {
+		return nil
+	}
+	values := make([]interfaces.ModelOperationSlot, len(*slots))
+	for i, slot := range *slots {
+		values[i] = interfaces.ModelOperationSlot{
+			Name:         slot.Name,
+			ContentTypes: modelOperationContentTypesInternalFromAPI(slot.ContentTypes),
+			Required:     boolValue(slot.Required),
+		}
+	}
+	return values
+}
+
+func modelOperationContentTypesInternalFromAPI(contentTypes []factoryapi.ModelOperationContentType) []string {
+	if len(contentTypes) == 0 {
+		return nil
+	}
+	values := make([]string, len(contentTypes))
+	for i, contentType := range contentTypes {
+		values[i] = internalFactoryModelOperationContentTypeFromPublic(contentType)
+	}
+	return values
 }
 
 // WorkerConfigFromOpenAPI converts a generated OpenAPI worker model into the
@@ -254,6 +303,8 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		ID:                    stringValue(workstation.Id),
 		Name:                  workstation.Name,
 		WorkerTypeName:        workstation.Worker,
+		Operation:             stringValue(workstation.Operation),
+		OperationBindings:     workstationOperationBindingsInternalFromAPI(workstation.OperationBindings),
 		Type:                  internalFactoryWorkstationTypeFromPublic(workstation.Type),
 		PromptFile:            stringValue(workstation.PromptFile),
 		OutputSchema:          stringValue(workstation.OutputSchema),
@@ -297,6 +348,34 @@ func workstationLimitsInternalFromAPI(limits *factoryapi.WorkstationLimits) inte
 	return interfaces.WorkstationLimits{
 		MaxRetries:       intValue(limits.MaxRetries),
 		MaxExecutionTime: stringValue(limits.MaxExecutionTime),
+	}
+}
+
+func workstationOperationBindingsInternalFromAPI(bindings *[]factoryapi.WorkstationOperationBinding) []interfaces.ModelOperationBinding {
+	if bindings == nil {
+		return nil
+	}
+	values := make([]interfaces.ModelOperationBinding, len(*bindings))
+	for i, binding := range *bindings {
+		values[i] = interfaces.ModelOperationBinding{
+			Slot:           binding.Slot,
+			Selector:       workstationOperationBindingSelectorInternalFromAPI(binding.Selector),
+			Config:         workcontent.PartsFromGenerated(binding.Config),
+			DefaultContent: workcontent.PartsFromGenerated(binding.DefaultContent),
+		}
+	}
+	return values
+}
+
+func workstationOperationBindingSelectorInternalFromAPI(selector *factoryapi.WorkstationOperationBindingSelector) *interfaces.ModelOperationBindingSelector {
+	if selector == nil {
+		return nil
+	}
+	return &interfaces.ModelOperationBindingSelector{
+		Slot:  stringValue(selector.Slot),
+		Label: stringValue(selector.Label),
+		Type:  internalFactoryModelOperationContentTypeFromPublic(valueOrEmpty(selector.Type)),
+		Role:  stringValue(selector.Role),
 	}
 }
 
@@ -408,6 +487,13 @@ func resourceRequirementsInternalFromAPI(resources *[]factoryapi.ResourceRequire
 		}
 	}
 	return values
+}
+
+func enumStringValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
 
 func workstationGuardsInternalFromAPI(guards *[]factoryapi.Guard) []interfaces.GuardConfig {

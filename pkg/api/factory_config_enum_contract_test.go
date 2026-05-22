@@ -1,8 +1,10 @@
 package api
 
 import (
+	"encoding/json"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/api/generated"
@@ -28,9 +30,12 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 	assertSchemaPropertyRef(t, schemas, "WorkState", "type", "#/components/schemas/WorkStateType")
 	assertSchemaPropertyRef(t, schemas, "Worker", "type", "#/components/schemas/WorkerType")
 	assertSchemaPropertyRef(t, schemas, "Worker", "modelProvider", "#/components/schemas/WorkerModelProvider")
+	assertSchemaPropertyRef(t, schemas, "Worker", "modelLocality", "#/components/schemas/WorkerModelLocality")
 	assertSchemaPropertyRef(t, schemas, "Worker", "executorProvider", "#/components/schemas/WorkerProvider")
+	assertSchemaArrayItemRef(t, schemas, "Worker", "operations", "#/components/schemas/ModelOperation")
 	assertSchemaPropertyRef(t, schemas, "Factory", "runner", "#/components/schemas/RunnerID")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "behavior", "#/components/schemas/WorkstationKind")
+	assertSchemaPropertyRef(t, schemas, "Workstation", "operation", "#/components/schemas/ModelOperationName")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "runner", "#/components/schemas/RunnerID")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "type", "#/components/schemas/WorkstationType")
 	assertSchemaArrayItemRef(t, schemas, "Workstation", "classificationRoutes", "#/components/schemas/ClassificationRoute")
@@ -45,9 +50,12 @@ func TestFactoryConfigContract_GeneratedModelsUseEnumBackedFieldsForTightenedCon
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.WorkState{}), "Type", reflect.TypeOf(generated.WorkStateType("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "Type", reflect.TypeOf((*generated.WorkerType)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "ModelProvider", reflect.TypeOf((*generated.WorkerModelProvider)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "ModelLocality", reflect.TypeOf((*generated.WorkerModelLocality)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "ExecutorProvider", reflect.TypeOf((*generated.WorkerProvider)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "Operations", reflect.TypeOf((*[]generated.ModelOperation)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Factory{}), "Runner", reflect.TypeOf((*generated.RunnerID)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Behavior", reflect.TypeOf((*generated.WorkstationKind)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Operation", reflect.TypeOf((*string)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Runner", reflect.TypeOf((*generated.RunnerID)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Type", reflect.TypeOf((*generated.WorkstationType)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "ClassificationRoutes", reflect.TypeOf((*[]generated.ClassificationRoute)(nil)))
@@ -141,6 +149,13 @@ func assertCanonicalFactoryWorkstationEnums(t *testing.T, factory generated.Fact
 func assertCanonicalExecuteStoryWorkstationEnums(t *testing.T, executeStory generated.Workstation) {
 	t.Helper()
 
+	assertCanonicalExecuteStoryBoundaryFields(t, executeStory)
+	assertCanonicalExecuteStoryGuardFields(t, executeStory)
+	assertGeneratedModelInvokeWorkstationOperation(t)
+}
+
+func assertCanonicalExecuteStoryBoundaryFields(t *testing.T, executeStory generated.Workstation) {
+	t.Helper()
 	if executeStory.Behavior == nil || *executeStory.Behavior != generated.WorkstationKindCron {
 		t.Fatalf("canonical workstation behavior = %#v, want CRON", executeStory.Behavior)
 	}
@@ -150,11 +165,36 @@ func assertCanonicalExecuteStoryWorkstationEnums(t *testing.T, executeStory gene
 	if executeStory.Type == nil || *executeStory.Type != generated.WorkstationTypeModelWorkstation {
 		t.Fatalf("canonical workstation type = %#v, want MODEL_WORKSTATION", executeStory.Type)
 	}
+}
+
+func assertCanonicalExecuteStoryGuardFields(t *testing.T, executeStory generated.Workstation) {
+	t.Helper()
 	if executeStory.Guards == nil || len(*executeStory.Guards) != 1 || (*executeStory.Guards)[0].Type != generated.GuardTypeVisitCount {
 		t.Fatalf("canonical workstation guards = %#v, want one VISIT_COUNT guard", executeStory.Guards)
 	}
 	if len(executeStory.Inputs) < 2 || executeStory.Inputs[1].Guards == nil || len(*executeStory.Inputs[1].Guards) != 1 || (*executeStory.Inputs[1].Guards)[0].Type != generated.GuardTypeAllChildrenComplete {
 		t.Fatalf("canonical workstation input guards = %#v, want ALL_CHILDREN_COMPLETE", executeStory.Inputs)
+	}
+}
+
+func assertGeneratedModelInvokeWorkstationOperation(t *testing.T) {
+	t.Helper()
+	modelInvokeType := generated.WorkstationTypeModelInvoke
+	modelInvokeOperation := "TTS"
+	outputs := []generated.WorkstationIO{{WorkType: "story", State: "complete"}}
+	payloadBytes, err := json.Marshal(generated.Workstation{
+		Name:      "tts",
+		Worker:    "executor",
+		Type:      &modelInvokeType,
+		Operation: &modelInvokeOperation,
+		Inputs:    []generated.WorkstationIO{{WorkType: "story", State: "init"}},
+		Outputs:   &outputs,
+	})
+	if err != nil {
+		t.Fatalf("marshal generated MODEL_INVOKE workstation: %v", err)
+	}
+	if !strings.Contains(string(payloadBytes), `"operation":"TTS"`) {
+		t.Fatalf("expected MODEL_INVOKE workstation payload to include operation, got %s", string(payloadBytes))
 	}
 }
 

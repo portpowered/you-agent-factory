@@ -9,26 +9,37 @@ import (
 )
 
 const (
-	publicFactoryInputKindDefault             = "DEFAULT"
-	publicFactoryWorkerTypeModel              = "MODEL_WORKER"
-	publicFactoryWorkerTypeScript             = "SCRIPT_WORKER"
-	publicFactoryWorkerTypeHosted             = "HOSTED_WORKER"
-	publicFactoryWorkerModelProviderClaude    = "CLAUDE"
-	publicFactoryWorkerModelProviderCodex     = "CODEX"
-	publicFactoryWorkerProviderScriptWrap     = "SCRIPT_WRAP"
-	publicFactoryWorkstationKindStandard      = "STANDARD"
-	publicFactoryWorkstationKindRepeater      = "REPEATER"
-	publicFactoryWorkstationKindCron          = "CRON"
-	publicFactoryWorkstationKindPoller        = "POLLER"
-	publicFactoryWorkstationTypeModel         = "MODEL_WORKSTATION"
-	publicFactoryWorkstationTypeLogical       = "LOGICAL_MOVE"
-	publicFactoryGuardTypeVisitCount          = "VISIT_COUNT"
-	publicFactoryGuardTypeMatchesFields       = "MATCHES_FIELDS"
-	publicFactoryGuardTypeAllChildrenComplete = "ALL_CHILDREN_COMPLETE"
-	publicFactoryGuardTypeAnyChildFailed      = "ANY_CHILD_FAILED"
-	publicFactoryGuardTypeSameName            = "SAME_NAME"
-	publicFactoryGuardTypeSameTraceID         = "SAME_TRACE_ID"
-	publicFactoryGuardTypeInferenceThrottle   = "INFERENCE_THROTTLE_GUARD"
+	publicFactoryInputKindDefault                = "DEFAULT"
+	publicFactoryWorkerTypeModel                 = "MODEL_WORKER"
+	publicFactoryWorkerTypeScript                = "SCRIPT_WORKER"
+	publicFactoryWorkerTypeHosted                = "HOSTED_WORKER"
+	publicFactoryWorkerModelProviderClaude       = "CLAUDE"
+	publicFactoryWorkerModelProviderCodex        = "CODEX"
+	publicFactoryWorkerModelLocalityLocal        = "LOCAL"
+	publicFactoryWorkerModelLocalityCloud        = "CLOUD"
+	publicFactoryResourceTypeModel               = "MODEL"
+	publicFactoryResourceTypeProviderQuota       = "PROVIDER_QUOTA"
+	publicFactoryResourceTypeInvocationSlot      = "INVOCATION_SLOT"
+	publicFactoryModelOperationContentTypeText   = "TEXT"
+	publicFactoryModelOperationContentTypeImage  = "IMAGE"
+	publicFactoryModelOperationContentTypeAudio  = "AUDIO"
+	publicFactoryModelOperationContentTypeJSON   = "JSON"
+	publicFactoryModelOperationContentTypeBinary = "BINARY"
+	publicFactoryWorkerProviderScriptWrap        = "SCRIPT_WRAP"
+	publicFactoryWorkstationKindStandard         = "STANDARD"
+	publicFactoryWorkstationKindRepeater         = "REPEATER"
+	publicFactoryWorkstationKindCron             = "CRON"
+	publicFactoryWorkstationKindPoller           = "POLLER"
+	publicFactoryWorkstationTypeModel            = "MODEL_WORKSTATION"
+	publicFactoryWorkstationTypeInvoke           = "MODEL_INVOKE"
+	publicFactoryWorkstationTypeLogical          = "LOGICAL_MOVE"
+	publicFactoryGuardTypeVisitCount             = "VISIT_COUNT"
+	publicFactoryGuardTypeMatchesFields          = "MATCHES_FIELDS"
+	publicFactoryGuardTypeAllChildrenComplete    = "ALL_CHILDREN_COMPLETE"
+	publicFactoryGuardTypeAnyChildFailed         = "ANY_CHILD_FAILED"
+	publicFactoryGuardTypeSameName               = "SAME_NAME"
+	publicFactoryGuardTypeSameTraceID            = "SAME_TRACE_ID"
+	publicFactoryGuardTypeInferenceThrottle      = "INFERENCE_THROTTLE_GUARD"
 )
 
 var publicFactoryInputKindAliases = map[string]string{
@@ -43,6 +54,20 @@ var publicFactoryGuardTypeAliases = map[string]string{
 	publicFactoryGuardTypeSameName:            publicFactoryGuardTypeSameName,
 	publicFactoryGuardTypeSameTraceID:         publicFactoryGuardTypeSameTraceID,
 	publicFactoryGuardTypeInferenceThrottle:   publicFactoryGuardTypeInferenceThrottle,
+}
+
+var publicFactoryModelOperationContentTypeAliases = map[string]string{
+	publicFactoryModelOperationContentTypeText:   publicFactoryModelOperationContentTypeText,
+	publicFactoryModelOperationContentTypeImage:  publicFactoryModelOperationContentTypeImage,
+	publicFactoryModelOperationContentTypeAudio:  publicFactoryModelOperationContentTypeAudio,
+	publicFactoryModelOperationContentTypeJSON:   publicFactoryModelOperationContentTypeJSON,
+	publicFactoryModelOperationContentTypeBinary: publicFactoryModelOperationContentTypeBinary,
+}
+
+var publicFactoryResourceTypeAliases = map[string]string{
+	publicFactoryResourceTypeModel:          publicFactoryResourceTypeModel,
+	publicFactoryResourceTypeProviderQuota:  publicFactoryResourceTypeProviderQuota,
+	publicFactoryResourceTypeInvocationSlot: publicFactoryResourceTypeInvocationSlot,
 }
 
 var publicFactoryRootGuardTypeAliases = map[string]string{
@@ -141,6 +166,10 @@ func publicFactoryWorkerModelProviderFromInternal(value string) factoryapi.Worke
 	return interfaces.GeneratedPublicFactoryWorkerModelProvider(value)
 }
 
+func publicFactoryWorkerModelLocalityFromInternal(value string) factoryapi.WorkerModelLocality {
+	return interfaces.GeneratedPublicFactoryWorkerModelLocality(value)
+}
+
 func internalFactoryWorkerModelProviderFromPublic(value *factoryapi.WorkerModelProvider) string {
 	if value == nil {
 		return ""
@@ -155,12 +184,22 @@ func internalFactoryWorkerModelProviderFromPublic(value *factoryapi.WorkerModelP
 	}
 }
 
+func internalFactoryWorkerModelLocalityFromPublic(value *factoryapi.WorkerModelLocality) string {
+	if value == nil {
+		return ""
+	}
+	if canonical := interfaces.StrictPublicFactoryWorkerModelLocality(string(*value)); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(string(*value))
+}
+
 func publicFactoryWorkerProviderFromInternal(value string) factoryapi.WorkerProvider {
 	return interfaces.GeneratedPublicFactoryWorkerProvider(value)
 }
 
 func publicFactoryHostedWorkerProviderFromInternal(value string) string {
-	return interfaces.GeneratedPublicFactoryHostedWorkerProvider(value)
+	return string(interfaces.GeneratedPublicFactoryHostedWorkerProvider(value))
 }
 
 func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) string {
@@ -175,6 +214,31 @@ func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) s
 
 func internalFactoryHostedWorkerProviderFromPublic(value string) string {
 	if canonical := interfaces.StrictPublicFactoryHostedWorkerProvider(value); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(value)
+}
+
+func publicFactoryModelOperationContentTypeFromInternal(value string) factoryapi.ModelOperationContentType {
+	return interfaces.GeneratedPublicFactoryWorkerModelOperationContentType(value)
+}
+
+func internalFactoryModelOperationContentTypeFromPublic(value factoryapi.ModelOperationContentType) string {
+	if canonical := interfaces.StrictPublicFactoryWorkerModelOperationContentType(string(value)); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(string(value))
+}
+
+func publicFactoryResourceTypeFromInternal(value string) string {
+	if canonical := interfaces.PermissivePublicFactoryResourceType(value); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(value)
+}
+
+func internalFactoryResourceTypeFromPublic(value string) string {
+	if canonical := interfaces.StrictPublicFactoryResourceType(value); canonical != "" {
 		return canonical
 	}
 	return strings.TrimSpace(value)
@@ -195,8 +259,6 @@ func internalFactoryWorkstationKindFromPublic(kind *factoryapi.WorkstationKind) 
 		return interfaces.WorkstationKindRepeater
 	case publicFactoryWorkstationKindCron:
 		return interfaces.WorkstationKindCron
-	case publicFactoryWorkstationKindPoller:
-		return interfaces.WorkstationKindPoller
 	default:
 		return interfaces.WorkstationKind(strings.TrimSpace(string(*kind)))
 	}

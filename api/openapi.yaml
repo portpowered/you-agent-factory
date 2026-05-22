@@ -21,6 +21,8 @@ tags:
     description: Runtime state, event stream, and trace inspection.
   - name: Provider Sessions
     description: Provider-owned session diagnostics for dashboard inspection.
+  - name: Models
+    description: Model discovery and capability inspection for the current runtime.
   - name: Workflows
     description: Stored workflow inspection.
 paths:
@@ -302,6 +304,112 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models:
+    get:
+      tags:
+        - Models
+      operationId: listModels
+      summary: List discovered models
+      description: Lists the concrete model identifiers exposed by the currently loaded runtime configuration together with capability, readiness, locality, load-state, and resource summary data.
+      responses:
+        '200':
+          description: Discovered models for the current runtime.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListModelsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models/{model_name}:
+    get:
+      tags:
+        - Models
+      operationId: getModel
+      summary: Get one discovered model
+      description: Returns one discovered model's readiness, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Discovered model detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models/{model_name}/invocations:
+    post:
+      tags:
+        - Models
+      operationId: invokeModel
+      summary: Invoke one discovered model directly
+      description: Invokes one discovered model through its declared provider-agnostic operation contract using canonical `WorkContent` input and optional slot-binding overrides. Non-streaming clients receive JSON metadata, while audio-producing operations can return a streamed audio body when requested.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelInvocationRequest'
+      responses:
+        '200':
+          description: Successful model invocation result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelInvocationResponse'
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                description: Streamed audio body for audio-producing invocations when `options.responseMode` requests `AUDIO_STREAM`.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models/{model_name}/pull:
+    post:
+      tags:
+        - Models
+      operationId: pullModel
+      summary: Pull local model assets into the managed cache
+      description: Pulls the required local assets for one discovered model into the managed cache directory. Cloud-backed models and unsupported local targets return actionable errors instead of silently succeeding.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful local-model asset pull or confirmation that the managed cache already contained the required revision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelPullResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
   /factories/{factory_id}/status:
@@ -1033,6 +1141,297 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ResourceUsage'
+    ListModelsResponse:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          description: Discovered models exposed by the currently loaded runtime configuration.
+          items:
+            $ref: '#/components/schemas/ModelSummary'
+    ModelSummary:
+      type: object
+      required:
+        - name
+        - providerLocality
+        - status
+        - loadState
+        - operations
+        - modalities
+        - resources
+      properties:
+        name:
+          type: string
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+        providerLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+        status:
+          $ref: '#/components/schemas/ModelStatus'
+        loadState:
+          $ref: '#/components/schemas/ModelLoadState'
+        operations:
+          type: array
+          description: Provider-agnostic operations supported by the discovered model.
+          items:
+            $ref: '#/components/schemas/ModelOperation'
+        modalities:
+          type: array
+          description: Uppercase content modalities observed across the model's declared operation inputs and outputs.
+          items:
+            $ref: '#/components/schemas/ModelOperationContentType'
+        resources:
+          type: array
+          description: Factory resource summaries associated with this model's workers or explicit model metadata.
+          items:
+            $ref: '#/components/schemas/ModelResourceSummary'
+    ModelDetail:
+      type: object
+      required:
+        - name
+        - providerLocality
+        - status
+        - loadState
+        - operations
+        - modalities
+        - resources
+        - capabilities
+        - diagnostics
+      properties:
+        name:
+          type: string
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+        providerLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+        status:
+          $ref: '#/components/schemas/ModelStatus'
+        loadState:
+          $ref: '#/components/schemas/ModelLoadState'
+        operations:
+          type: array
+          description: Union of provider-agnostic operations supported by workers for this model.
+          items:
+            $ref: '#/components/schemas/ModelOperation'
+        modalities:
+          type: array
+          description: Uppercase content modalities observed across all declared operation inputs and outputs.
+          items:
+            $ref: '#/components/schemas/ModelOperationContentType'
+        resources:
+          type: array
+          description: Factory resource summaries associated with this model's workers or explicit model metadata.
+          items:
+            $ref: '#/components/schemas/ModelResourceSummary'
+        capabilities:
+          type: array
+          description: Worker-scoped capability declarations that contribute to this discovered model.
+          items:
+            $ref: '#/components/schemas/ModelCapability'
+        diagnostics:
+          $ref: '#/components/schemas/StringMap'
+    ModelInvocationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - operation
+      properties:
+        operation:
+          type: string
+          description: Uppercase provider-agnostic operation to invoke, such as `TTS`.
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Ordered invocation input content resolved through optional slot bindings.
+        bindings:
+          type: array
+          description: Optional per-request slot bindings that follow the same contract as `MODEL_INVOKE` workstation bindings.
+          items:
+            $ref: '#/components/schemas/WorkstationOperationBinding'
+        options:
+          $ref: '#/components/schemas/ModelInvocationOptions'
+    ModelInvocationOptions:
+      type: object
+      additionalProperties: false
+      description: Optional direct-invocation controls for response shaping and transport.
+      properties:
+        responseMode:
+          $ref: '#/components/schemas/ModelInvocationResponseMode'
+    ModelInvocationResponseMode:
+      type: string
+      description: Requested direct-invocation response mode.
+      enum:
+        - METADATA
+        - AUDIO_STREAM
+    ModelInvocationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - modelName
+        - worker
+        - operation
+        - providerLocality
+        - content
+        - bindings
+      properties:
+        modelName:
+          type: string
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+        worker:
+          type: string
+          description: Worker selected to satisfy this invocation.
+        operation:
+          type: string
+          description: Uppercase provider-agnostic operation that was invoked.
+        providerLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Returned model output as canonical `WorkContent`.
+        bindings:
+          type: array
+          description: Deterministically resolved slot bindings used for the invocation.
+          items:
+            $ref: '#/components/schemas/ResolvedModelOperationBinding'
+    ModelPullDownloadedFile:
+      type: object
+      required:
+        - path
+        - bytes
+      properties:
+        path:
+          type: string
+          description: Relative file path written under the managed model cache directory.
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Downloaded file size in bytes.
+        sha256:
+          type: string
+          description: Lowercase SHA-256 checksum for the cached file when known.
+    ModelPullOutcome:
+      type: string
+      description: Outcome of a managed local-model asset pull request.
+      enum:
+        - PULLED
+        - ALREADY_PRESENT
+    ModelPullResponse:
+      type: object
+      required:
+        - modelName
+        - providerLocality
+        - outcome
+        - cachePath
+        - revision
+        - downloadedFiles
+      properties:
+        modelName:
+          type: string
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+        providerLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+        outcome:
+          $ref: '#/components/schemas/ModelPullOutcome'
+        cachePath:
+          type: string
+          description: Final managed cache directory that now contains the pulled model assets.
+        revision:
+          type: string
+          description: Pulled source revision identifier, such as an upstream repository commit SHA.
+        downloadedFiles:
+          type: array
+          description: Files that were downloaded or verified as already present for the managed cache entry.
+          items:
+            $ref: '#/components/schemas/ModelPullDownloadedFile'
+    ResolvedModelOperationBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - slot
+        - source
+        - content
+      properties:
+        slot:
+          type: string
+          description: Stable input slot name declared by the worker capability.
+        source:
+          $ref: '#/components/schemas/ResolvedModelOperationBindingSource'
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Resolved content bound to the slot.
+    ResolvedModelOperationBindingSource:
+      type: string
+      description: Source used to resolve one invocation slot binding.
+      enum:
+        - INPUT
+        - CONFIG
+        - DEFAULT
+        - OMITTED
+    ModelCapability:
+      type: object
+      required:
+        - worker
+        - providerLocality
+        - operations
+        - resourceNames
+      properties:
+        worker:
+          type: string
+          description: Customer-authored worker name that exposes this capability declaration.
+        modelProvider:
+          $ref: '#/components/schemas/WorkerModelProvider'
+        providerLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+        operations:
+          type: array
+          description: Operations declared by this worker for the selected model.
+          items:
+            $ref: '#/components/schemas/ModelOperation'
+        resourceNames:
+          type: array
+          description: Factory resource names referenced by the worker declaration.
+          items:
+            type: string
+    ModelResourceSummary:
+      type: object
+      required:
+        - name
+        - type
+        - capacity
+      properties:
+        name:
+          type: string
+          description: Factory-authored resource name.
+        type:
+          $ref: '#/components/schemas/ResourceType'
+        capacity:
+          type: integer
+          minimum: 0
+          description: Declared factory capacity for this resource.
+        model:
+          type: string
+          description: Concrete model identifier when the resource is model-specific.
+        backend:
+          type: string
+          description: Local runtime backend identifier for model resources.
+        loadPolicy:
+          type: string
+          description: Local load-policy metadata for model resources.
+        provider:
+          type: string
+          description: Cloud provider identity when the resource models quota or routing.
+    ModelStatus:
+      type: string
+      description: Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+      enum:
+        - READY
+        - UNAVAILABLE
+    ModelLoadState:
+      type: string
+      description: Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+      enum:
+        - UNLOADED
+        - NOT_APPLICABLE
     ErrorFamily:
       type: string
       description: Stable machine-readable error family for broader client grouping.
@@ -1851,6 +2250,8 @@ components:
             - $ref: '#/components/schemas/WorkRequestEventPayload'
             - $ref: '#/components/schemas/RelationshipChangeRequestEventPayload'
             - $ref: '#/components/schemas/DispatchRequestEventPayload'
+            - $ref: '#/components/schemas/ModelRequestEventPayload'
+            - $ref: '#/components/schemas/ModelResponseEventPayload'
             - $ref: '#/components/schemas/InferenceRequestEventPayload'
             - $ref: '#/components/schemas/InferenceResponseEventPayload'
             - $ref: '#/components/schemas/ScriptRequestEventPayload'
@@ -1868,6 +2269,8 @@ components:
         - FactoryEventTypeWorkRequest
         - FactoryEventTypeRelationshipChangeRequest
         - FactoryEventTypeDispatchRequest
+        - FactoryEventTypeModelRequest
+        - FactoryEventTypeModelResponse
         - FactoryEventTypeInferenceRequest
         - FactoryEventTypeInferenceResponse
         - FactoryEventTypeScriptRequest
@@ -1882,6 +2285,8 @@ components:
         - WORK_REQUEST
         - RELATIONSHIP_CHANGE_REQUEST
         - DISPATCH_REQUEST
+        - MODEL_REQUEST
+        - MODEL_RESPONSE
         - INFERENCE_REQUEST
         - INFERENCE_RESPONSE
         - SCRIPT_REQUEST
@@ -1896,6 +2301,8 @@ components:
         - Work entered the factory as a normalized request.
         - A relationship-change request between work items was recorded.
         - A workstation request began processing a set of input work.
+        - A model-backed worker invocation request is about to enter resource, load, and execution boundaries.
+        - A model-backed worker invocation returned with resource, load, output, and failure evidence.
         - A model-worker provider attempt is about to send a prompt to the provider.
         - A model-worker provider attempt returned from the provider boundary.
         - A script-backed worker is about to invoke one concrete command attempt.
@@ -2075,6 +2482,132 @@ components:
             $ref: '#/components/schemas/Resource'
         metadata:
           $ref: '#/components/schemas/DispatchRequestEventMetadata'
+    ModelRequestEventPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - modelRequestId
+        - attempt
+        - operation
+        - worker
+        - model
+        - providerLocality
+      description: Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier.
+      properties:
+        modelRequestId:
+          type: string
+          description: Stable identifier correlating this model execution request with its response.
+        attempt:
+          type: integer
+          minimum: 1
+          description: One-based model execution attempt number for this dispatch.
+        operation:
+          type: string
+          description: Uppercase model operation requested by the workstation, such as TTS.
+        worker:
+          type: string
+          description: Runtime worker name selected for the invocation.
+        model:
+          type: string
+          description: Concrete model identity resolved for this invocation.
+        providerLocality:
+          type: string
+          description: Worker-declared model locality, such as LOCAL or CLOUD.
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelResourceSummary'
+          description: Concrete resources attached to the model worker execution path.
+        bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResolvedModelOperationBinding'
+          description: Deterministically resolved operation-slot bindings used for invocation.
+        workingDirectory:
+          type: string
+          description: Working directory resolved for the model execution when present.
+        worktree:
+          type: string
+          description: Worktree path resolved for the model execution when present.
+    ModelResponseEventPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - modelRequestId
+        - attempt
+        - operation
+        - worker
+        - model
+        - providerLocality
+        - outcome
+        - durationMillis
+      description: Response details captured after a model-backed worker invocation returns, including resource wait, local load, binding-resolution, output, and failure evidence correlated to the matching model request event. Large binary audio must remain represented through content references or bounded previews instead of unbounded inline payloads.
+      properties:
+        modelRequestId:
+          type: string
+          description: Identifier from the matching model request event.
+        attempt:
+          type: integer
+          minimum: 1
+          description: One-based model execution attempt number for this dispatch.
+        operation:
+          type: string
+          description: Uppercase model operation requested by the workstation, such as TTS.
+        worker:
+          type: string
+          description: Runtime worker name selected for the invocation.
+        model:
+          type: string
+          description: Concrete model identity resolved for this invocation.
+        providerLocality:
+          type: string
+          description: Worker-declared model locality, such as LOCAL or CLOUD.
+        outcome:
+          $ref: '#/components/schemas/InferenceOutcome'
+        durationMillis:
+          type: integer
+          format: int64
+          minimum: 0
+          description: End-to-end model invocation duration in milliseconds.
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelResourceSummary'
+          description: Concrete resources attached to the model worker execution path.
+        bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResolvedModelOperationBinding'
+          description: Deterministically resolved operation-slot bindings used for invocation.
+        resourceWaitMillis:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Time spent waiting for local model resources before acquisition.
+        resourceAcquired:
+          type: boolean
+          description: Whether the invocation acquired the required local model resources.
+        loadRequested:
+          type: boolean
+          description: Whether this invocation asked the managed local-model runtime to load a handle.
+        loadReused:
+          type: boolean
+          description: Whether an already-loaded local model handle was reused instead of loading again.
+        loadDurationMillis:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Duration of the managed local-model load call when one occurred.
+        outputPreview:
+          type: string
+          description: Bounded output preview for non-binary model responses when present.
+        outputContent:
+          $ref: '#/components/schemas/WorkContent'
+        diagnostics:
+          $ref: '#/components/schemas/SafeWorkDiagnostics'
+        errorClass:
+          type: string
+          description: Stable failure classification when available.
     InferenceRequestEventPayload:
       type: object
       additionalProperties: false
@@ -2832,10 +3365,40 @@ components:
         name:
           type: string
           description: Resource name referenced from worker requirements and workstation resourceUsage entries.
+        type:
+          $ref: '#/components/schemas/ResourceType'
+          description: Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`.
         capacity:
           type: integer
           minimum: 1
           description: Total units of this resource available to the factory at one time.
+        model:
+          type: string
+          description: Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`.
+        backend:
+          type: string
+          description: Backend identifier for local model resources, such as a managed runtime or embedded inference backend.
+        loadPolicy:
+          type: string
+          description: Load policy for local model resources, such as `ON_DEMAND` or `EAGER`.
+        provider:
+          type: string
+          description: Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources.
+    ResourceType:
+      type: string
+      description: Uppercase resource families supported by the public factory-config contract.
+      x-enum-varnames:
+        - ResourceTypeModel
+        - ResourceTypeProviderQuota
+        - ResourceTypeInvocationSlot
+      enum:
+        - MODEL
+        - PROVIDER_QUOTA
+        - INVOCATION_SLOT
+      x-enum-descriptions:
+        - Local or embedded model capacity resource.
+        - Cloud-provider quota resource for one provider or model lane.
+        - Generic invocation concurrency slot resource.
     Worker:
       description: A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
       type: object
@@ -2858,9 +3421,17 @@ components:
         modelProvider:
           $ref: '#/components/schemas/WorkerModelProvider'
           description: Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
+        modelLocality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+          description: Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
         executorProvider:
           $ref: '#/components/schemas/WorkerProvider'
           description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
+        operations:
+          type: array
+          description: Provider-agnostic model operations that this worker can execute, including named input and output slots.
+          items:
+            $ref: '#/components/schemas/ModelOperation'
         command:
           type: string
           description: Command to execute when this worker runs through a command or script provider.
@@ -2919,6 +3490,18 @@ components:
       x-enum-descriptions:
         - Claude model execution routed through the `claude` provider command.
         - Codex model execution routed through the `codex` provider command.
+    WorkerModelLocality:
+      type: string
+      description: Provider locality for a model worker capability declaration.
+      x-enum-varnames:
+        - WorkerModelLocalityLocal
+        - WorkerModelLocalityCloud
+      enum:
+        - LOCAL
+        - CLOUD
+      x-enum-descriptions:
+        - The model runs through local embedded or host-managed inference resources.
+        - The model runs through a remote cloud-backed provider.
     WorkerProvider:
       type: string
       description: Concrete worker-provider wrappers supported by the public factory-config contract.
@@ -2928,6 +3511,66 @@ components:
         - SCRIPT_WRAP
       x-enum-descriptions:
         - Public worker executor adapter that shells out through the configured worker command path.
+    ModelOperation:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      description: One provider-agnostic operation exposed by a model worker, such as `TTS`.
+      properties:
+        name:
+          $ref: '#/components/schemas/ModelOperationName'
+        inputs:
+          type: array
+          description: Named operation input slots this worker can consume.
+          items:
+            $ref: '#/components/schemas/ModelOperationSlot'
+        outputs:
+          type: array
+          description: Named operation output slots this worker can produce.
+          items:
+            $ref: '#/components/schemas/ModelOperationSlot'
+    ModelOperationSlot:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - contentTypes
+      description: One named capability slot declared by a model operation.
+      properties:
+        name:
+          type: string
+          description: Stable slot name used by workstation-side bindings and diagnostics.
+        contentTypes:
+          type: array
+          minItems: 1
+          description: Uppercase content types accepted or produced by this slot.
+          items:
+            $ref: '#/components/schemas/ModelOperationContentType'
+        required:
+          type: boolean
+          description: Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
+    ModelOperationContentType:
+      type: string
+      description: Uppercase content-part categories supported by worker model-operation capability slots.
+      x-enum-varnames:
+        - ModelOperationContentTypeText
+        - ModelOperationContentTypeImage
+        - ModelOperationContentTypeAudio
+        - ModelOperationContentTypeJSON
+        - ModelOperationContentTypeBinary
+      enum:
+        - TEXT
+        - IMAGE
+        - AUDIO
+        - JSON
+        - BINARY
+      x-enum-descriptions:
+        - Textual content.
+        - Image content.
+        - Audio content.
+        - Structured JSON content.
+        - Opaque binary content.
     RunnerID:
       type: string
       description: Stable built-in runner identifiers supported by factory and workstation runner selection.
@@ -2983,6 +3626,14 @@ components:
         type:
           $ref: '#/components/schemas/WorkstationType'
           description: Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type.
+        operation:
+          $ref: '#/components/schemas/ModelOperationName'
+          description: Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`.
+        operationBindings:
+          type: array
+          description: Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.
+          items:
+            $ref: '#/components/schemas/WorkstationOperationBinding'
         worker:
           type: string
           description: Name of a worker declared in the workers list.
@@ -3111,14 +3762,17 @@ components:
       description: Runtime workstation implementation types supported by the public factory-config contract.
       x-enum-varnames:
         - WorkstationTypeModelWorkstation
+        - WorkstationTypeModelInvoke
         - WorkstationTypeLogicalMove
         - WorkstationTypeClassifierWorkstation
       enum:
         - MODEL_WORKSTATION
+        - MODEL_INVOKE
         - LOGICAL_MOVE
         - CLASSIFIER_WORKSTATION
       x-enum-descriptions:
         - Model-backed workstation that renders prompts and dispatches work through the configured worker.
+        - Provider-agnostic model-operation workstation that selects a worker by declared capability and uppercase operation contract.
         - Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
         - Label-based classifier workstation that returns one plain string label and routes through classificationRoutes.
     WorkstationCron:
@@ -3458,51 +4112,154 @@ components:
       oneOf:
         - $ref: '#/components/schemas/WorkTextContentPart'
         - $ref: '#/components/schemas/WorkImageContentPart'
+        - $ref: '#/components/schemas/WorkAudioContentPart'
+        - $ref: '#/components/schemas/WorkJsonContentPart'
+        - $ref: '#/components/schemas/WorkBinaryContentPart'
     WorkContentPartType:
       type: string
-      description: Supported first-slice canonical work content part types.
+      description: Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
       x-enum-varnames:
         - WorkContentPartTypeText
         - WorkContentPartTypeImage
+        - WorkContentPartTypeTextUpper
+        - WorkContentPartTypeImageUpper
+        - WorkContentPartTypeAudio
+        - WorkContentPartTypeJSON
+        - WorkContentPartTypeBinary
       enum:
         - text
         - image
+        - TEXT
+        - IMAGE
+        - AUDIO
+        - JSON
+        - BINARY
       x-enum-descriptions:
-        - Inline text content.
-        - Image content referenced by file path.
+        - Legacy inline text content.
+        - Legacy image content referenced by file path.
+        - Canonical uppercase inline text content.
+        - Canonical uppercase image content referenced by file path.
+        - Audio content referenced by file path or artifact.
+        - JSON content preserved in canonical part order.
+        - Binary content referenced by file path or artifact.
+    WorkContentMetadata:
+      type: object
+      additionalProperties: true
+      description: Optional metadata attached to one work content part.
+    WorkContentCommonFields:
+      type: object
+      properties:
+        slot:
+          type: string
+          description: Optional slot name used by model-operation binding selectors and diagnostics.
+        label:
+          type: string
+          description: Optional caller-defined label for slot binding or diagnostics.
+        role:
+          type: string
+          description: Optional semantic role for model-operation authoring.
+        contentType:
+          type: string
+          description: Optional MIME content type for file-backed or structured parts.
+        artifactId:
+          type: string
+          description: Optional artifact identifier for externally materialized content.
+        metadata:
+          $ref: '#/components/schemas/WorkContentMetadata'
     WorkTextContentPart:
-      type: object
-      additionalProperties: false
       description: Ordered inline text content for one work item.
-      required:
-        - type
-        - text
-      properties:
-        type:
-          allOf:
-            - $ref: '#/components/schemas/WorkContentPartType'
-          enum:
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
             - text
-        text:
-          type: string
-          description: Inline text content preserved in canonical part order.
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - text
+                - TEXT
+            text:
+              type: string
+              description: Inline text content preserved in canonical part order.
     WorkImageContentPart:
-      type: object
-      additionalProperties: false
       description: Ordered image content for one work item.
-      required:
-        - type
-        - file
-      properties:
-        type:
-          allOf:
-            - $ref: '#/components/schemas/WorkContentPartType'
-          enum:
-            - image
-        file:
-          type: string
-          minLength: 1
-          description: Image file reference preserved for later runtime materialization.
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - file
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - image
+                - IMAGE
+            file:
+              type: string
+              minLength: 1
+              description: Image file reference preserved for later runtime materialization.
+    WorkAudioContentPart:
+      description: Ordered audio content for one work item.
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - file
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - AUDIO
+            file:
+              type: string
+              minLength: 1
+              description: Audio file or artifact reference preserved for later runtime materialization.
+    WorkJsonContentPart:
+      description: Ordered JSON content for one work item.
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - json
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - JSON
+            json:
+              description: Arbitrary JSON value preserved in canonical part order.
+    WorkBinaryContentPart:
+      description: Ordered binary content for one work item.
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - file
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - BINARY
+            file:
+              type: string
+              minLength: 1
+              description: Binary file or artifact reference preserved for later runtime materialization.
     Relation:
       type: object
       additionalProperties: false
@@ -3536,6 +4293,46 @@ components:
         - Source work cannot proceed until the target work reaches the required state.
         - Target work is a child of the source work.
         - Target work was generated by a workstation handling the source work.
+    ModelOperationName:
+      type: string
+      description: Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+      pattern: ^[A-Z][A-Z0-9_]*$
+    WorkstationOperationBindingSelector:
+      type: object
+      additionalProperties: false
+      description: Selector fields used to resolve one content part from ordered runtime input.
+      properties:
+        slot:
+          type: string
+          description: Match a content part by its authored slot field.
+        label:
+          type: string
+          description: Match a content part by its label field.
+        type:
+          $ref: '#/components/schemas/ModelOperationContentType'
+          description: Match a content part by its uppercase public type.
+        role:
+          type: string
+          description: Match a content part by its role field.
+    WorkstationOperationBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - slot
+      description: One workstation-authored binding for a provider-agnostic model-operation input slot.
+      properties:
+        slot:
+          type: string
+          description: Stable input slot name declared by the worker operation.
+        selector:
+          $ref: '#/components/schemas/WorkstationOperationBindingSelector'
+          description: Ordered runtime-input selector used before falling back to config or default content.
+        config:
+          $ref: '#/components/schemas/WorkContent'
+          description: Static authored content bound directly or used as the first fallback when runtime input does not match.
+        defaultContent:
+          $ref: '#/components/schemas/WorkContent'
+          description: Optional final fallback content when neither runtime input nor config content resolves the slot.
     CodexSessionTranscriptEntryType:
       type: string
       description: Canonical transcript entry type used by the dashboard transcript view.

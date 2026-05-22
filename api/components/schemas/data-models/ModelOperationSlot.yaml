@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - name
+  - contentTypes
+description: One named capability slot declared by a model operation.
+properties:
+  name:
+    type: string
+    description: Stable slot name used by workstation-side bindings and diagnostics.
+  contentTypes:
+    type: array
+    minItems: 1
+    description: Uppercase content types accepted or produced by this slot.
+    items:
+      $ref: './ModelOperationContentType.yaml'
+  required:
+    type: boolean
+    description: Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.

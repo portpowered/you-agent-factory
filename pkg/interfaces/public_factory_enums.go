@@ -25,9 +25,29 @@ var publicFactoryHostedWorkerProviderAliases = map[string]string{
 	HostedWorkerProviderLinear: HostedWorkerProviderLinear,
 }
 
+var publicFactoryWorkerModelLocalityAliases = map[string]string{
+	ModelLocalityLocal: ModelLocalityLocal,
+	ModelLocalityCloud: ModelLocalityCloud,
+}
+
+var publicFactoryWorkerModelOperationContentTypeAliases = map[string]string{
+	ModelOperationContentTypeText:   ModelOperationContentTypeText,
+	ModelOperationContentTypeImage:  ModelOperationContentTypeImage,
+	ModelOperationContentTypeAudio:  ModelOperationContentTypeAudio,
+	ModelOperationContentTypeJSON:   ModelOperationContentTypeJSON,
+	ModelOperationContentTypeBinary: ModelOperationContentTypeBinary,
+}
+
+var publicFactoryResourceTypeAliases = map[string]string{
+	ResourceTypeModel:          ResourceTypeModel,
+	ResourceTypeProviderQuota:  ResourceTypeProviderQuota,
+	ResourceTypeInvocationSlot: ResourceTypeInvocationSlot,
+}
+
 var publicFactoryWorkstationTypeAliases = map[string]string{
 	WorkstationTypeClassify: WorkstationTypeClassify,
 	WorkstationTypeLogical:  WorkstationTypeLogical,
+	WorkstationTypeInvoke:   WorkstationTypeInvoke,
 	WorkstationTypeModel:    WorkstationTypeModel,
 }
 
@@ -150,14 +170,34 @@ func StrictPublicFactoryHostedWorkerProvider(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryHostedWorkerProviderAliases, false)
 }
 
-// GeneratedPublicFactoryHostedWorkerProvider returns the generated hosted worker provider enum.
-func GeneratedPublicFactoryHostedWorkerProvider(value string) string {
-	return PermissivePublicFactoryHostedWorkerProvider(value)
+// PermissivePublicFactoryWorkerModelLocality canonicalizes supported public worker model localities and preserves unknown values.
+func PermissivePublicFactoryWorkerModelLocality(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelLocalityAliases, true)
 }
 
-// GeneratedPublicFactoryHostedWorkerProviderPtr returns the generated hosted worker provider enum when non-empty.
-func GeneratedPublicFactoryHostedWorkerProviderPtr(value string) *string {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryHostedWorkerProvider)
+// StrictPublicFactoryWorkerModelLocality canonicalizes supported public worker model localities and rejects unknown values.
+func StrictPublicFactoryWorkerModelLocality(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelLocalityAliases, false)
+}
+
+// PermissivePublicFactoryWorkerModelOperationContentType canonicalizes supported public capability content types and preserves unknown values.
+func PermissivePublicFactoryWorkerModelOperationContentType(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelOperationContentTypeAliases, true)
+}
+
+// StrictPublicFactoryWorkerModelOperationContentType canonicalizes supported public capability content types and rejects unknown values.
+func StrictPublicFactoryWorkerModelOperationContentType(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelOperationContentTypeAliases, false)
+}
+
+// PermissivePublicFactoryResourceType canonicalizes supported public resource types and preserves unknown values.
+func PermissivePublicFactoryResourceType(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryResourceTypeAliases, true)
+}
+
+// StrictPublicFactoryResourceType canonicalizes supported public resource types and rejects unknown values.
+func StrictPublicFactoryResourceType(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryResourceTypeAliases, false)
 }
 
 // PermissivePublicFactoryWorkstationType canonicalizes supported public workstation types and preserves unknown values.
@@ -218,6 +258,36 @@ func GeneratedPublicFactoryWorkerProvider(value string) factoryapi.WorkerProvide
 // GeneratedPublicFactoryWorkerProviderPtr returns the generated worker provider enum when non-empty.
 func GeneratedPublicFactoryWorkerProviderPtr(value string) *factoryapi.WorkerProvider {
 	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerProvider)
+}
+
+// GeneratedPublicFactoryHostedWorkerProvider returns the generated hosted worker provider enum.
+func GeneratedPublicFactoryHostedWorkerProvider(value string) factoryapi.HostedWorkerProvider {
+	return factoryapi.HostedWorkerProvider(PermissivePublicFactoryHostedWorkerProvider(value))
+}
+
+// GeneratedPublicFactoryHostedWorkerProviderPtr returns the generated hosted worker provider enum when non-empty.
+func GeneratedPublicFactoryHostedWorkerProviderPtr(value string) *factoryapi.HostedWorkerProvider {
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryHostedWorkerProvider)
+}
+
+// GeneratedPublicFactoryWorkerModelLocality returns the generated worker model locality enum.
+func GeneratedPublicFactoryWorkerModelLocality(value string) factoryapi.WorkerModelLocality {
+	return factoryapi.WorkerModelLocality(PermissivePublicFactoryWorkerModelLocality(value))
+}
+
+// GeneratedPublicFactoryWorkerModelLocalityPtr returns the generated worker model locality enum when non-empty.
+func GeneratedPublicFactoryWorkerModelLocalityPtr(value string) *factoryapi.WorkerModelLocality {
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerModelLocality)
+}
+
+// GeneratedPublicFactoryWorkerModelOperationContentType returns the generated worker capability content type enum.
+func GeneratedPublicFactoryWorkerModelOperationContentType(value string) factoryapi.ModelOperationContentType {
+	return factoryapi.ModelOperationContentType(PermissivePublicFactoryWorkerModelOperationContentType(value))
+}
+
+// GeneratedPublicFactoryWorkerModelOperationContentTypePtr returns the generated worker capability content type enum when non-empty.
+func GeneratedPublicFactoryWorkerModelOperationContentTypePtr(value string) *factoryapi.ModelOperationContentType {
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerModelOperationContentType)
 }
 
 // GeneratedPublicFactoryWorkstationType returns the generated workstation type enum.

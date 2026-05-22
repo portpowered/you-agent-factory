@@ -15,6 +15,7 @@ complete customer-facing contract.
 | `workstation` | Workstation quick reference | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Factory JSON and work configuration](work.md) |
+| `models` | Model discovery, invocation, and contract quick reference | [Models and model operations](models.md) |
 | `batch-work` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
 | `templates` | Template authoring guide | [Templates](templates.md) |
 
@@ -37,6 +38,9 @@ Use these canonical concept owners when you need the current contract.
   `factory.json`, `workers/`, `workstations/`, and `inputs/`.
 - [Resources](resources.md) explains top-level resource pools and the
   `{name, capacity}` requirements consumed by workers or workstations.
+- [Models and model operations](models.md) explains `MODEL_INVOKE`,
+  `MODEL_WORKER` capabilities, typed model resources, `/models`, and local or
+  cloud TTS authoring patterns.
 - [Batch inputs](batch-inputs.md) explains the `FACTORY_REQUEST_BATCH` request
   shape, watched-file placement, and supported relation types.
 - [Templates](templates.md) explains the supported Go-template surfaces, the
@@ -53,6 +57,7 @@ Use these canonical concept owners when you need the current contract.
 - [Workstations](workstations.md)
 - [Workers](workers.md)
 - [Resources](resources.md)
+- [Models and model operations](models.md)
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Batch inputs](batch-inputs.md)
 - [Templates](templates.md)

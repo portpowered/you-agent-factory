@@ -1,0 +1,27 @@
+type: object
+required:
+  - modelName
+  - providerLocality
+  - outcome
+  - cachePath
+  - revision
+  - downloadedFiles
+properties:
+  modelName:
+    type: string
+    description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+  providerLocality:
+    $ref: '../data-models/WorkerModelLocality.yaml'
+  outcome:
+    $ref: './ModelPullOutcome.yaml'
+  cachePath:
+    type: string
+    description: Final managed cache directory that now contains the pulled model assets.
+  revision:
+    type: string
+    description: Pulled source revision identifier, such as an upstream repository commit SHA.
+  downloadedFiles:
+    type: array
+    description: Files that were downloaded or verified as already present for the managed cache entry.
+    items:
+      $ref: './ModelPullDownloadedFile.yaml'

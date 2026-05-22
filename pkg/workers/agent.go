@@ -158,6 +158,8 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 		RunnerID:                     request.RunnerID,
 		ProjectID:                    request.ProjectID,
 		InputTokens:                  cloneRawInputTokens(request.InputTokens),
+		ModelOperation:               request.ModelOperation,
+		ModelBindings:                interfaces.CloneResolvedModelOperationBindings(request.ModelBindings),
 		SystemPrompt:                 request.SystemPrompt,
 		UserMessage:                  request.UserMessage,
 		OutputSchema:                 request.OutputSchema,
@@ -173,6 +175,7 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 			RunnerID: request.RunnerID,
 			Source:   request.RunnerSelectionSource,
 		})
+		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 		if workerDef.SessionID != "" {
 			req.RequiredOptionalCapabilities = append(req.RequiredOptionalCapabilities, interfaces.RunnerOptionalCapabilitySessionResume)

@@ -85,6 +85,67 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	}
 }
 
+func TestSubmitWork_AcceptsUppercaseAndExtendedCanonicalContent(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := submitWorkRequest(t, srv, `{
+		"name":"tts-request",
+		"workTypeName":"prd",
+		"content":[
+			{"type":"TEXT","text":"Synthesize this","label":"prompt"},
+			{"type":"AUDIO","file":"artifacts/output.wav","contentType":"audio/wav","artifactId":"artifact-audio-1","metadata":{"voice":"alloy"}},
+			{"type":"JSON","json":{"voice":"alloy","speed":1}}
+		]
+	}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	assertUppercaseExtendedCanonicalSubmission(t, mf)
+}
+
+func assertUppercaseExtendedCanonicalSubmission(t *testing.T, mf *testutil.MockFactory) {
+	t.Helper()
+	if len(mf.Submitted) != 1 || len(mf.Submitted[0].Content) != 3 {
+		t.Fatalf("submitted content = %#v, want 3 canonical parts", mf.Submitted)
+	}
+	assertUppercaseExtendedTextPart(t, mf.Submitted[0].Content[0])
+	assertUppercaseExtendedAudioPart(t, mf.Submitted[0].Content[1])
+	assertUppercaseExtendedJSONPart(t, mf.Submitted[0].Content[2])
+	if string(mf.Submitted[0].Payload) != "Synthesize this" {
+		t.Fatalf("payload = %q, want legacy text projection from uppercase TEXT part", mf.Submitted[0].Payload)
+	}
+}
+
+func assertUppercaseExtendedTextPart(t *testing.T, part interfaces.WorkContentPart) {
+	t.Helper()
+	if part.Type != interfaces.WorkContentPartTypeText || part.Label != "prompt" {
+		t.Fatalf("submitted content[0] = %#v, want normalized text part with label", part)
+	}
+}
+
+func assertUppercaseExtendedAudioPart(t *testing.T, part interfaces.WorkContentPart) {
+	t.Helper()
+	if part.Type != interfaces.WorkContentPartTypeAudio || part.File != "artifacts/output.wav" || part.ContentType != "audio/wav" || part.ArtifactID != "artifact-audio-1" {
+		t.Fatalf("submitted content[1] = %#v, want canonical audio content", part)
+	}
+	audioMetadata, _ := json.Marshal(part.Metadata)
+	if string(audioMetadata) != `{"voice":"alloy"}` {
+		t.Fatalf("audio metadata = %s, want voice metadata", audioMetadata)
+	}
+}
+
+func assertUppercaseExtendedJSONPart(t *testing.T, part interfaces.WorkContentPart) {
+	t.Helper()
+	jsonValue := map[string]any{}
+	if err := json.Unmarshal(part.JSON, &jsonValue); err != nil {
+		t.Fatalf("decode json content: %v", err)
+	}
+	if part.Type != interfaces.WorkContentPartTypeJSON || jsonValue["voice"] != "alloy" || jsonValue["speed"] != float64(1) {
+		t.Fatalf("submitted content[2] = %#v, want canonical json content", part)
+	}
+}
+
 func TestSubmitWork_RejectsConflictingContentAndPayload(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
 	rec := submitWorkRequest(t, srv, `{"name":"conflicting-content","workTypeName":"prd","content":[{"type":"text","text":"canonical"}],"payload":"different"}`)
@@ -96,6 +157,16 @@ func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
 	srv := newTestServer(mf)
 	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"image","text":"wrong-field"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].text is not supported")
+	if len(mf.Submitted) != 0 || len(mf.WorkRequests) != 0 {
+		t.Fatalf("submissions = workRequests:%d submitted:%d, want 0/0", len(mf.WorkRequests), len(mf.Submitted))
+	}
+}
+
+func TestSubmitWork_RejectsInvalidExtendedContentMetadata(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"AUDIO","file":"voice.wav","metadata":"wrong"}]}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].metadata must be an object")
 	if len(mf.Submitted) != 0 || len(mf.WorkRequests) != 0 {
 		t.Fatalf("submissions = workRequests:%d submitted:%d, want 0/0", len(mf.WorkRequests), len(mf.Submitted))
 	}

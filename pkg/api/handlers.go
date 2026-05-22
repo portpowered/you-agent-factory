@@ -304,6 +304,117 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) ListModels(w http.ResponseWriter, r *http.Request) {
+	response, err := s.runtime.ListModels(r.Context())
+	if err != nil {
+		s.logger.Error("list models failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to list models", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) GetModel(w http.ResponseWriter, r *http.Request, modelName string) {
+	model, err := s.runtime.GetModel(r.Context(), modelName)
+	if err != nil {
+		if errors.Is(err, apisurface.ErrModelNotFound) {
+			s.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
+			return
+		}
+		s.logger.Error("get model failed", zap.Error(err), zap.String("model_name", modelName))
+		s.writeError(w, http.StatusInternalServerError, "failed to load model", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, model)
+}
+
+func (s *Server) InvokeModel(w http.ResponseWriter, r *http.Request, modelName string) {
+	req, err := decodeModelInvocationRequestBody(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+	if strings.TrimSpace(req.Operation) == "" {
+		s.writeError(w, http.StatusBadRequest, "operation is required", "BAD_REQUEST")
+		return
+	}
+
+	result, err := s.runtime.InvokeModel(r.Context(), modelName, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, apisurface.ErrModelNotFound):
+			s.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
+		case errors.Is(err, apisurface.ErrModelNotAvailable):
+			s.writeError(w, http.StatusNotFound, err.Error(), "MODEL_NOT_AVAILABLE")
+		case errors.Is(err, apisurface.ErrModelInvocationUnsupportedOperation), errors.Is(err, apisurface.ErrModelInvocationUnsupportedMode):
+			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		default:
+			errText := strings.TrimSpace(err.Error())
+			if strings.HasPrefix(errText, "provider execution failed:") {
+				s.writeError(w, http.StatusInternalServerError, errText, "INTERNAL_ERROR")
+				return
+			}
+			s.writeError(w, http.StatusBadRequest, errText, "BAD_REQUEST")
+		}
+		return
+	}
+
+	if strings.TrimSpace(result.StreamFile) != "" {
+		if result.StreamContentType != "" {
+			w.Header().Set("Content-Type", result.StreamContentType)
+		}
+		http.ServeFile(w, r, result.StreamFile)
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, factoryapi.ModelInvocationResponse{
+		ModelName:        result.ModelName,
+		Worker:           result.Worker,
+		Operation:        result.Operation,
+		ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
+		Content:          derefGeneratedWorkContent(workcontent.GeneratedPtrFromParts(result.Content)),
+		Bindings:         generatedResolvedModelInvocationBindings(result.Bindings),
+	})
+}
+
+func (s *Server) PullModel(w http.ResponseWriter, r *http.Request, modelName string) {
+	result, err := s.runtime.PullModel(r.Context(), modelName)
+	if err != nil {
+		switch {
+		case errors.Is(err, apisurface.ErrModelNotFound):
+			s.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
+		case errors.Is(err, apisurface.ErrModelPullUnsupported):
+			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		default:
+			s.writeError(w, http.StatusInternalServerError, strings.TrimSpace(err.Error()), "INTERNAL_ERROR")
+		}
+		return
+	}
+	files := make([]factoryapi.ModelPullDownloadedFile, 0, len(result.DownloadedFiles))
+	for _, file := range result.DownloadedFiles {
+		current := factoryapi.ModelPullDownloadedFile{
+			Path:  file.Path,
+			Bytes: file.Bytes,
+		}
+		if sha := strings.TrimSpace(file.SHA256); sha != "" {
+			current.Sha256 = &sha
+		}
+		files = append(files, current)
+	}
+	s.writeJSON(w, http.StatusOK, factoryapi.ModelPullResponse{
+		ModelName:        result.ModelName,
+		ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
+		Outcome:          factoryapi.ModelPullOutcome(result.Outcome),
+		CachePath:        result.CachePath,
+		Revision:         result.Revision,
+		DownloadedFiles:  files,
+	})
+}
+
 func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
@@ -1343,36 +1454,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 }
 
 func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
-	if len(parts) == 0 {
-		return nil
-	}
-	content := make(factoryapi.WorkContent, 0, len(parts))
-	for _, part := range parts {
-		var generated factoryapi.WorkContentPart
-		switch part.Type {
-		case interfaces.WorkContentPartTypeText:
-			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-				Type: factoryapi.WorkContentPartTypeText,
-				Text: part.Text,
-			}); err != nil {
-				continue
-			}
-		case interfaces.WorkContentPartTypeImage:
-			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
-				Type: factoryapi.WorkContentPartTypeImage,
-				File: part.File,
-			}); err != nil {
-				continue
-			}
-		default:
-			continue
-		}
-		content = append(content, generated)
-	}
-	if len(content) == 0 {
-		return nil
-	}
-	return &content
+	return workcontent.GeneratedPtrFromParts(parts)
 }
 
 func validateGeneratedWorkContentAtPath(content *factoryapi.WorkContent, fieldPath string) error {
@@ -1382,17 +1464,11 @@ func validateGeneratedWorkContentAtPath(content *factoryapi.WorkContent, fieldPa
 
 	for i, part := range *content {
 		pathPrefix := fmt.Sprintf("%s[%d].", fieldPath, i)
-		textPart, textErr := part.AsWorkTextContentPart()
-		if textErr == nil && textPart.Type == factoryapi.WorkContentPartTypeText {
+		if _, ok := workcontent.PartFromGenerated(part); ok {
 			continue
 		}
 
-		imagePart, imageErr := part.AsWorkImageContentPart()
-		if imageErr == nil && imagePart.Type == factoryapi.WorkContentPartTypeImage {
-			continue
-		}
-
-		return requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", pathPrefix)}
+		return requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text, image, TEXT, IMAGE, AUDIO, JSON, or BINARY", pathPrefix)}
 	}
 	return nil
 }
@@ -1651,47 +1727,217 @@ func validateWorkContentField(fields map[string]json.RawMessage, prefix string) 
 	return nil
 }
 
+func decodeModelInvocationRequestBody(body io.Reader) (factoryapi.ModelInvocationRequest, error) {
+	var payload []byte
+	var err error
+	if body != nil {
+		payload, err = io.ReadAll(body)
+		if err != nil {
+			return factoryapi.ModelInvocationRequest{}, err
+		}
+	}
+	if len(bytes.TrimSpace(payload)) == 0 {
+		return factoryapi.ModelInvocationRequest{}, requestFieldValidationError{message: "request body is required"}
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return factoryapi.ModelInvocationRequest{}, err
+	}
+	if err := validateWorkContentField(fields, ""); err != nil {
+		return factoryapi.ModelInvocationRequest{}, err
+	}
+
+	var request factoryapi.ModelInvocationRequest
+	if err := json.Unmarshal(payload, &request); err != nil {
+		return factoryapi.ModelInvocationRequest{}, err
+	}
+	return request, nil
+}
+
 func validatedRawWorkContentPart(fields map[string]json.RawMessage, prefix string) (interfaces.WorkContentPart, error) {
+	partType, err := requiredWorkContentPartType(fields, prefix)
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+
+	switch partType {
+	case interfaces.WorkContentPartTypeText:
+		return validatedRawTextContentPart(fields, prefix)
+	case interfaces.WorkContentPartTypeImage:
+		return validatedRawFileContentPart(fields, prefix, interfaces.WorkContentPartTypeImage, "image content parts")
+	case interfaces.WorkContentPartTypeAudio:
+		return validatedRawFileContentPart(fields, prefix, interfaces.WorkContentPartTypeAudio, "audio content parts")
+	case interfaces.WorkContentPartTypeJSON:
+		return validatedRawJSONContentPart(fields, prefix)
+	case interfaces.WorkContentPartTypeBinary:
+		return validatedRawFileContentPart(fields, prefix, interfaces.WorkContentPartTypeBinary, "binary content parts")
+	default:
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text, image, TEXT, IMAGE, AUDIO, JSON, or BINARY", prefix)}
+	}
+}
+
+func requiredWorkContentPartType(fields map[string]json.RawMessage, prefix string) (interfaces.WorkContentPartType, error) {
 	typeRaw, ok := fields["type"]
 	if !ok {
-		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype is required", prefix)}
+		return "", requestFieldValidationError{message: fmt.Sprintf("%stype is required", prefix)}
 	}
 
 	var partType string
 	if err := json.Unmarshal(typeRaw, &partType); err != nil || partType == "" {
-		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be a non-empty string", prefix)}
+		return "", requestFieldValidationError{message: fmt.Sprintf("%stype must be a non-empty string", prefix)}
 	}
 
-	switch interfaces.WorkContentPartType(partType) {
-	case interfaces.WorkContentPartTypeText:
-		if err := requireOnlyFields(fields, prefix, "type", "text"); err != nil {
-			return interfaces.WorkContentPart{}, err
-		}
-		textRaw, ok := fields["text"]
-		if !ok {
-			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stext is required for text content parts", prefix)}
-		}
-		var text string
-		if err := json.Unmarshal(textRaw, &text); err != nil {
-			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stext must be a string", prefix)}
-		}
-		return interfaces.WorkContentPart{Type: interfaces.WorkContentPartTypeText, Text: text}, nil
-	case interfaces.WorkContentPartTypeImage:
-		if err := requireOnlyFields(fields, prefix, "type", "file"); err != nil {
-			return interfaces.WorkContentPart{}, err
-		}
-		fileRaw, ok := fields["file"]
-		if !ok {
-			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sfile is required for image content parts", prefix)}
-		}
-		var file string
-		if err := json.Unmarshal(fileRaw, &file); err != nil || file == "" {
-			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sfile must be a non-empty string", prefix)}
-		}
-		return interfaces.WorkContentPart{Type: interfaces.WorkContentPartTypeImage, File: file}, nil
-	default:
-		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", prefix)}
+	return interfaces.WorkContentPartType(partType).Normalized(), nil
+}
+
+func validatedRawTextContentPart(fields map[string]json.RawMessage, prefix string) (interfaces.WorkContentPart, error) {
+	if err := requireOnlyFields(fields, prefix, "type", "text", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
+		return interfaces.WorkContentPart{}, err
 	}
+	text, err := requiredStringField(fields, prefix, "text", "text content parts")
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	shared, err := validateSharedWorkContentFields(fields, prefix)
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	shared.Type = interfaces.WorkContentPartTypeText
+	shared.Text = text
+	return shared, nil
+}
+
+func validatedRawFileContentPart(fields map[string]json.RawMessage, prefix string, partType interfaces.WorkContentPartType, usage string) (interfaces.WorkContentPart, error) {
+	if err := requireOnlyFields(fields, prefix, "type", "file", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	file, err := requiredNonEmptyStringField(fields, prefix, "file", usage)
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	shared, err := validateSharedWorkContentFields(fields, prefix)
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	shared.Type = partType
+	shared.File = file
+	return shared, nil
+}
+
+func validatedRawJSONContentPart(fields map[string]json.RawMessage, prefix string) (interfaces.WorkContentPart, error) {
+	if err := requireOnlyFields(fields, prefix, "type", "json", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	jsonRaw, ok := fields["json"]
+	if !ok {
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sjson is required for JSON content parts", prefix)}
+	}
+	var value any
+	if err := json.Unmarshal(jsonRaw, &value); err != nil {
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sjson must be valid JSON", prefix)}
+	}
+	shared, err := validateSharedWorkContentFields(fields, prefix)
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	shared.Type = interfaces.WorkContentPartTypeJSON
+	shared.JSON = append(json.RawMessage(nil), jsonRaw...)
+	return shared, nil
+}
+
+func requiredStringField(fields map[string]json.RawMessage, prefix string, fieldName string, usage string) (string, error) {
+	raw, ok := fields[fieldName]
+	if !ok {
+		return "", requestFieldValidationError{message: fmt.Sprintf("%s%s is required for %s", prefix, fieldName, usage)}
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", requestFieldValidationError{message: fmt.Sprintf("%s%s must be a string", prefix, fieldName)}
+	}
+	return value, nil
+}
+
+func generatedResolvedModelInvocationBindings(values []interfaces.ResolvedModelOperationBinding) []factoryapi.ResolvedModelOperationBinding {
+	if len(values) == 0 {
+		return nil
+	}
+	bindings := make([]factoryapi.ResolvedModelOperationBinding, 0, len(values))
+	for _, binding := range values {
+		content := workcontent.GeneratedPtrFromParts(binding.Content)
+		bindings = append(bindings, factoryapi.ResolvedModelOperationBinding{
+			Slot:    binding.Slot,
+			Source:  factoryapi.ResolvedModelOperationBindingSource(binding.Source),
+			Content: derefGeneratedWorkContent(content),
+		})
+	}
+	return bindings
+}
+
+func derefGeneratedWorkContent(content *factoryapi.WorkContent) factoryapi.WorkContent {
+	if content == nil {
+		return nil
+	}
+	return *content
+}
+
+func validateSharedWorkContentFields(fields map[string]json.RawMessage, prefix string) (interfaces.WorkContentPart, error) {
+	part := interfaces.WorkContentPart{}
+
+	label, err := optionalStringField(fields, prefix, "label")
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	role, err := optionalStringField(fields, prefix, "role")
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	contentType, err := optionalStringField(fields, prefix, "contentType")
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	artifactID, err := optionalStringField(fields, prefix, "artifactId")
+	if err != nil {
+		return interfaces.WorkContentPart{}, err
+	}
+	part.Label = label
+	part.Role = role
+	part.ContentType = contentType
+	part.ArtifactID = artifactID
+
+	if metadataRaw, ok := fields["metadata"]; ok {
+		var metadata map[string]any
+		if err := json.Unmarshal(metadataRaw, &metadata); err != nil || metadata == nil {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%smetadata must be an object", prefix)}
+		}
+		part.Metadata = metadata
+	}
+
+	return part, nil
+}
+
+func requiredNonEmptyStringField(fields map[string]json.RawMessage, prefix string, field string, partLabel string) (string, error) {
+	fieldRaw, ok := fields[field]
+	if !ok {
+		return "", requestFieldValidationError{message: fmt.Sprintf("%s%s is required for %s", prefix, field, partLabel)}
+	}
+	var value string
+	if err := json.Unmarshal(fieldRaw, &value); err != nil || value == "" {
+		return "", requestFieldValidationError{message: fmt.Sprintf("%s%s must be a non-empty string", prefix, field)}
+	}
+	return value, nil
+}
+
+func optionalStringField(fields map[string]json.RawMessage, prefix string, field string) (string, error) {
+	fieldRaw, ok := fields[field]
+	if !ok {
+		return "", nil
+	}
+	var value string
+	if err := json.Unmarshal(fieldRaw, &value); err != nil {
+		return "", requestFieldValidationError{message: fmt.Sprintf("%s%s must be a string", prefix, field)}
+	}
+	return value, nil
 }
 
 func requireOnlyFields(fields map[string]json.RawMessage, prefix string, allowed ...string) error {

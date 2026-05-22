@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+required:
+  - slot
+  - source
+  - content
+properties:
+  slot:
+    type: string
+    description: Stable input slot name declared by the worker capability.
+  source:
+    $ref: './ResolvedModelOperationBindingSource.yaml'
+  content:
+    $ref: '../data-models/WorkContent.yaml'
+    description: Resolved content bound to the slot.

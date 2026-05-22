@@ -75,9 +75,6 @@ func defaultModelWorkerAgentsMD(executor starterExecutor) string {
 type: MODEL_WORKER
 modelProvider: %s
 executorProvider: SCRIPT_WRAP
-resources:
-  - name: agent-slot
-    capacity: 1
 timeout: 1h
 skipPermissions: true
 ---

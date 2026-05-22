@@ -21,9 +21,17 @@ properties:
   modelProvider:
     $ref: './WorkerModelProvider.yaml'
     description: Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
+  modelLocality:
+    $ref: './WorkerModelLocality.yaml'
+    description: Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
   executorProvider:
     $ref: './WorkerProvider.yaml'
     description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
+  operations:
+    type: array
+    description: Provider-agnostic model operations that this worker can execute, including named input and output slots.
+    items:
+      $ref: './ModelOperation.yaml'
   command:
     type: string
     description: Command to execute when this worker runs through a command or script provider.

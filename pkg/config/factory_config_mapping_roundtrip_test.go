@@ -532,7 +532,20 @@ func TestWorkstationConfigToOpenAPI_UsesBodyAsCanonicalExportPromptField(t *test
 	workstation := interfaces.FactoryWorkstationConfig{
 		Name:           "execute-story",
 		WorkerTypeName: "executor",
-		Type:           interfaces.WorkstationTypeModel,
+		Type:           interfaces.WorkstationTypeInvoke,
+		Operation:      "TTS",
+		OperationBindings: []interfaces.ModelOperationBinding{{
+			Slot: "text",
+			Selector: &interfaces.ModelOperationBindingSelector{
+				Label: "utterance",
+				Type:  interfaces.ModelOperationContentTypeText,
+			},
+			Config: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "fallback",
+				Slot: "text",
+			}},
+		}},
 		Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
 		Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "done"}},
 		Body:           "fallback body that should stay private to authored runtime config",
@@ -542,6 +555,22 @@ func TestWorkstationConfigToOpenAPI_UsesBodyAsCanonicalExportPromptField(t *test
 	got := WorkstationConfigToOpenAPI(workstation)
 	if got.Body == nil || *got.Body != "Implement {{ .WorkID }}." {
 		t.Fatalf("expected exported workstation body to carry prompt template, got %#v", got.Body)
+	}
+	if got.Operation == nil || *got.Operation != "TTS" {
+		t.Fatalf("expected exported workstation operation TTS, got %#v", got.Operation)
+	}
+	if got.OperationBindings == nil || len(*got.OperationBindings) != 1 {
+		t.Fatalf("expected one exported operation binding, got %#v", got.OperationBindings)
+	}
+	binding := (*got.OperationBindings)[0]
+	if binding.Slot != "text" {
+		t.Fatalf("expected exported binding slot text, got %#v", binding)
+	}
+	if binding.Selector == nil || binding.Selector.Label == nil || *binding.Selector.Label != "utterance" {
+		t.Fatalf("expected exported binding selector label utterance, got %#v", binding.Selector)
+	}
+	if binding.Config == nil || len(*binding.Config) != 1 {
+		t.Fatalf("expected exported config content, got %#v", binding.Config)
 	}
 }
 

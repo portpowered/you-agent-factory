@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - name
+description: One provider-agnostic operation exposed by a model worker, such as `TTS`.
+properties:
+  name:
+    $ref: './ModelOperationName.yaml'
+  inputs:
+    type: array
+    description: Named operation input slots this worker can consume.
+    items:
+      $ref: './ModelOperationSlot.yaml'
+  outputs:
+    type: array
+    description: Named operation output slots this worker can produce.
+    items:
+      $ref: './ModelOperationSlot.yaml'

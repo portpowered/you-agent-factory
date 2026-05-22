@@ -1,0 +1,5 @@
+type: string
+description: Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+enum:
+  - READY
+  - UNAVAILABLE

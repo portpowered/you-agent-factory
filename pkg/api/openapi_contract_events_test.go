@@ -22,6 +22,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	assertUnifiedFactorySchema(t, schemas)
 	assertUnifiedWorkRequestEvent(t, schemas)
 	assertUnifiedDispatchEvents(t, schemas)
+	assertUnifiedModelEvents(t, schemas)
 	assertUnifiedInferenceEvents(t, schemas)
 	assertUnifiedScriptEvents(t, schemas)
 	assertUnifiedStateEvent(t, schemas)
@@ -73,7 +74,7 @@ func assertUnifiedEventSchemasPresent(t *testing.T, schemas map[string]any) {
 	for _, schema := range []string{
 		"FactoryEvent", "FactoryEventContext", "FactoryEventType", "DispatchConsumedWorkRef", "DispatchRequestEventMetadata",
 		"RunRequestEventPayload", "InitialStructureRequestEventPayload", "FactoryChangeEventPayload", "WorkRequestEventPayload",
-		"RelationshipChangeRequestEventPayload", "DispatchRequestEventPayload", "InferenceRequestEventPayload", "InferenceResponseEventPayload",
+		"RelationshipChangeRequestEventPayload", "DispatchRequestEventPayload", "ModelRequestEventPayload", "ModelResponseEventPayload", "InferenceRequestEventPayload", "InferenceResponseEventPayload",
 		"ScriptRequestEventPayload", "ScriptResponseEventPayload", "InferenceOutcome", "ScriptExecutionOutcome", "ScriptFailureType",
 		"DispatchResponseEventPayload", "FactoryStateResponseEventPayload", "RunResponseEventPayload",
 	} {
@@ -203,6 +204,28 @@ func assertUnifiedInferenceEvents(t *testing.T, schemas map[string]any) {
 	assertSchemaPropertiesPresent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "inferenceRequestId", "attempt", "response", "durationMillis", "providerSession", "diagnostics", "exitCode", "errorClass")
 	assertPropertiesAbsent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "dispatchId", "transitionId")
 	assertEnumValues(t, schemaObject(t, schemas, "InferenceOutcome"), "InferenceOutcome", []string{"SUCCEEDED", "FAILED"})
+}
+
+func assertUnifiedModelEvents(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	modelRequest := schemaObject(t, schemas, "ModelRequestEventPayload")
+	assertRequiredFields(t, modelRequest, "modelRequestId", "attempt", "operation", "worker", "model", "providerLocality")
+	modelRequestProperties := schemaProperties(t, modelRequest, "ModelRequestEventPayload")
+	assertSchemaPropertiesPresent(t, modelRequestProperties, "ModelRequestEventPayload", "modelRequestId", "attempt", "operation", "worker", "model", "providerLocality", "resources", "bindings", "workingDirectory", "worktree")
+	assertArrayItemRef(t, modelRequestProperties, "resources", "#/components/schemas/ModelResourceSummary")
+	assertArrayItemRef(t, modelRequestProperties, "bindings", "#/components/schemas/ResolvedModelOperationBinding")
+	assertPropertiesAbsent(t, modelRequestProperties, "ModelRequestEventPayload", "dispatchId", "transitionId")
+
+	modelResponse := schemaObject(t, schemas, "ModelResponseEventPayload")
+	assertRequiredFields(t, modelResponse, "modelRequestId", "attempt", "operation", "worker", "model", "providerLocality", "outcome", "durationMillis")
+	modelResponseProperties := schemaProperties(t, modelResponse, "ModelResponseEventPayload")
+	assertSchemaPropertiesPresent(t, modelResponseProperties, "ModelResponseEventPayload", "modelRequestId", "attempt", "operation", "worker", "model", "providerLocality", "durationMillis", "resources", "bindings", "resourceWaitMillis", "resourceAcquired", "loadRequested", "loadReused", "loadDurationMillis", "outputPreview", "outputContent", "diagnostics", "errorClass")
+	assertArrayItemRef(t, modelResponseProperties, "resources", "#/components/schemas/ModelResourceSummary")
+	assertArrayItemRef(t, modelResponseProperties, "bindings", "#/components/schemas/ResolvedModelOperationBinding")
+	assertPropertyRef(t, modelResponseProperties, "outcome", "#/components/schemas/InferenceOutcome")
+	assertPropertyRef(t, modelResponseProperties, "outputContent", "#/components/schemas/WorkContent")
+	assertPropertyRef(t, modelResponseProperties, "diagnostics", "#/components/schemas/SafeWorkDiagnostics")
+	assertPropertiesAbsent(t, modelResponseProperties, "ModelResponseEventPayload", "dispatchId", "transitionId")
 }
 
 func assertUnifiedScriptEvents(t *testing.T, schemas map[string]any) {

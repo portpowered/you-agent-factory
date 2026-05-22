@@ -261,3 +261,49 @@ func TestConfigMapping_ValidationRejectsInvalidResourceCount(t *testing.T) {
 		t.Fatal("expected validation error for resource_usage with zero count")
 	}
 }
+
+func TestConfigMapping_WorkerResourcesBecomeEnforcedTransitionRequirements(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Resources: []interfaces.ResourceConfig{{Name: "local-model", Capacity: 2}},
+		Workers: []interfaces.WorkerConfig{{
+			Name:      "tts-worker",
+			Resources: []interfaces.ResourceConfig{{Name: "local-model", Capacity: 1}},
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "speak",
+			WorkerTypeName: "tts-worker",
+			Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+		}},
+	}
+
+	mapper := ConfigMapper{}
+	outputNet, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("failed to map config: %v", err)
+	}
+
+	tr := outputNet.Transitions["speak"]
+	if tr == nil {
+		t.Fatal("expected transition 'speak' to exist")
+	}
+	if len(tr.InputArcs) != 2 {
+		t.Fatalf("expected worker resource consume arc to be added, got %d input arcs", len(tr.InputArcs))
+	}
+	if len(tr.OutputArcs) != 2 {
+		t.Fatalf("expected worker resource release arc to be added, got %d output arcs", len(tr.OutputArcs))
+	}
+	if got := tr.InputArcs[1].PlaceID; got != "local-model:available" {
+		t.Fatalf("worker resource consume place = %q, want local-model:available", got)
+	}
+	if got := tr.InputArcs[1].Cardinality.Count; got != 1 {
+		t.Fatalf("worker resource consume count = %d, want 1", got)
+	}
+}

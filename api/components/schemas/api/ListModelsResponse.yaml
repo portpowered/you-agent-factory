@@ -1,0 +1,9 @@
+type: object
+required:
+  - results
+properties:
+  results:
+    type: array
+    description: Discovered models exposed by the currently loaded runtime configuration.
+    items:
+      $ref: './ModelSummary.yaml'

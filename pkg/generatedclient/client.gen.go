@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // Defines values for BundledFileType.
@@ -69,6 +71,22 @@ const (
 	InputKindDefault InputKind = "DEFAULT"
 )
 
+// Defines values for ModelOperationContentType.
+const (
+	ModelOperationContentTypeAudio  ModelOperationContentType = "AUDIO"
+	ModelOperationContentTypeBinary ModelOperationContentType = "BINARY"
+	ModelOperationContentTypeImage  ModelOperationContentType = "IMAGE"
+	ModelOperationContentTypeJSON   ModelOperationContentType = "JSON"
+	ModelOperationContentTypeText   ModelOperationContentType = "TEXT"
+)
+
+// Defines values for ResourceType.
+const (
+	ResourceTypeInvocationSlot ResourceType = "INVOCATION_SLOT"
+	ResourceTypeModel          ResourceType = "MODEL"
+	ResourceTypeProviderQuota  ResourceType = "PROVIDER_QUOTA"
+)
+
 // Defines values for RunnerID.
 const (
 	RunnerIDCodex     RunnerID = "codex"
@@ -78,12 +96,29 @@ const (
 	RunnerIDOpenCode  RunnerID = "opencode"
 )
 
+// Defines values for WorkContentPartType.
+const (
+	WorkContentPartTypeAudio      WorkContentPartType = "AUDIO"
+	WorkContentPartTypeBinary     WorkContentPartType = "BINARY"
+	WorkContentPartTypeImage      WorkContentPartType = "image"
+	WorkContentPartTypeImageUpper WorkContentPartType = "IMAGE"
+	WorkContentPartTypeJSON       WorkContentPartType = "JSON"
+	WorkContentPartTypeText       WorkContentPartType = "text"
+	WorkContentPartTypeTextUpper  WorkContentPartType = "TEXT"
+)
+
 // Defines values for WorkStateType.
 const (
 	WorkStateTypeFAILED     WorkStateType = "FAILED"
 	WorkStateTypeINITIAL    WorkStateType = "INITIAL"
 	WorkStateTypePROCESSING WorkStateType = "PROCESSING"
 	WorkStateTypeTERMINAL   WorkStateType = "TERMINAL"
+)
+
+// Defines values for WorkerModelLocality.
+const (
+	WorkerModelLocalityCloud WorkerModelLocality = "CLOUD"
+	WorkerModelLocalityLocal WorkerModelLocality = "LOCAL"
 )
 
 // Defines values for WorkerModelProvider.
@@ -116,6 +151,7 @@ const (
 const (
 	WorkstationTypeClassifierWorkstation WorkstationType = "CLASSIFIER_WORKSTATION"
 	WorkstationTypeLogicalMove           WorkstationType = "LOGICAL_MOVE"
+	WorkstationTypeModelInvoke           WorkstationType = "MODEL_INVOKE"
 	WorkstationTypeModelWorkstation      WorkstationType = "MODEL_WORKSTATION"
 )
 
@@ -347,6 +383,36 @@ type InputType struct {
 	Type InputKind `json:"type"`
 }
 
+// ModelOperation One provider-agnostic operation exposed by a model worker, such as `TTS`.
+type ModelOperation struct {
+	// Inputs Named operation input slots this worker can consume.
+	Inputs *[]ModelOperationSlot `json:"inputs,omitempty"`
+
+	// Name Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+	Name ModelOperationName `json:"name"`
+
+	// Outputs Named operation output slots this worker can produce.
+	Outputs *[]ModelOperationSlot `json:"outputs,omitempty"`
+}
+
+// ModelOperationContentType Uppercase content-part categories supported by worker model-operation capability slots.
+type ModelOperationContentType string
+
+// ModelOperationName Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+type ModelOperationName = string
+
+// ModelOperationSlot One named capability slot declared by a model operation.
+type ModelOperationSlot struct {
+	// ContentTypes Uppercase content types accepted or produced by this slot.
+	ContentTypes []ModelOperationContentType `json:"contentTypes"`
+
+	// Name Stable slot name used by workstation-side bindings and diagnostics.
+	Name string `json:"name"`
+
+	// Required Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
+	Required *bool `json:"required,omitempty"`
+}
+
 // RequiredTool One declarative external tool dependency for a portable factory.
 type RequiredTool struct {
 	// Command Executable lookup token that must resolve on PATH.
@@ -364,11 +430,26 @@ type RequiredTool struct {
 
 // Resource Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas.
 type Resource struct {
+	// Backend Backend identifier for local model resources, such as a managed runtime or embedded inference backend.
+	Backend *string `json:"backend,omitempty"`
+
 	// Capacity Total units of this resource available to the factory at one time.
 	Capacity int `json:"capacity"`
 
+	// LoadPolicy Load policy for local model resources, such as `ON_DEMAND` or `EAGER`.
+	LoadPolicy *string `json:"loadPolicy,omitempty"`
+
+	// Model Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`.
+	Model *string `json:"model,omitempty"`
+
 	// Name Resource name referenced from worker requirements and workstation resourceUsage entries.
 	Name string `json:"name"`
+
+	// Provider Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources.
+	Provider *string `json:"provider,omitempty"`
+
+	// Type Uppercase resource families supported by the public factory-config contract.
+	Type *ResourceType `json:"type,omitempty"`
 }
 
 // ResourceManifest Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
@@ -386,6 +467,9 @@ type ResourceRequirement struct {
 	Name     string `json:"name"`
 }
 
+// ResourceType Uppercase resource families supported by the public factory-config contract.
+type ResourceType string
+
 // RunnerID Stable built-in runner identifiers supported by factory and workstation runner selection.
 type RunnerID string
 
@@ -400,6 +484,141 @@ type SaveEditableFactoryDefinitionRequest struct {
 // StringMap defines model for StringMap.
 type StringMap map[string]string
 
+// WorkAudioContentPart defines model for WorkAudioContentPart.
+type WorkAudioContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// File Audio file or artifact reference preserved for later runtime materialization.
+	File string `json:"file"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
+	Type WorkContentPartType `json:"type"`
+}
+
+// WorkBinaryContentPart defines model for WorkBinaryContentPart.
+type WorkBinaryContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// File Binary file or artifact reference preserved for later runtime materialization.
+	File string `json:"file"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
+	Type WorkContentPartType `json:"type"`
+}
+
+// WorkContent Ordered canonical content parts for one work item.
+type WorkContent = []WorkContentPart
+
+// WorkContentCommonFields defines model for WorkContentCommonFields.
+type WorkContentCommonFields struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string `json:"slot,omitempty"`
+}
+
+// WorkContentMetadata Optional metadata attached to one work content part.
+type WorkContentMetadata map[string]interface{}
+
+// WorkContentPart One ordered canonical content part on a work item.
+type WorkContentPart struct {
+	union json.RawMessage
+}
+
+// WorkContentPartType Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
+type WorkContentPartType string
+
+// WorkImageContentPart defines model for WorkImageContentPart.
+type WorkImageContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// File Image file reference preserved for later runtime materialization.
+	File string `json:"file"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
+	Type WorkContentPartType `json:"type"`
+}
+
+// WorkJsonContentPart defines model for WorkJsonContentPart.
+type WorkJsonContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Json Arbitrary JSON value preserved in canonical part order.
+	Json interface{} `json:"json"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
+	Type WorkContentPartType `json:"type"`
+}
+
 // WorkState A lifecycle state that a work item can occupy inside one work type.
 type WorkState struct {
 	// Name Customer-authored state name referenced by workstation inputs and outputs.
@@ -411,6 +630,31 @@ type WorkState struct {
 
 // WorkStateType Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
 type WorkStateType string
+
+// WorkTextContentPart defines model for WorkTextContentPart.
+type WorkTextContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string `json:"slot,omitempty"`
+
+	// Text Inline text content preserved in canonical part order.
+	Text string              `json:"text"`
+	Type WorkContentPartType `json:"type"`
+}
 
 // WorkType A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy.
 type WorkType struct {
@@ -444,11 +688,17 @@ type Worker struct {
 	// Model Model identifier to request from the configured model provider when this worker uses model execution.
 	Model *string `json:"model,omitempty"`
 
+	// ModelLocality Provider locality for a model worker capability declaration.
+	ModelLocality *WorkerModelLocality `json:"modelLocality,omitempty"`
+
 	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
 	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
 	// Name Worker name referenced by Workstation.worker.
 	Name string `json:"name"`
+
+	// Operations Provider-agnostic model operations that this worker can execute, including named input and output slots.
+	Operations *[]ModelOperation `json:"operations,omitempty"`
 
 	// Provider Built-in repository-owned hosted worker providers supported by the public factory-config contract.
 	Provider *HostedWorkerProvider `json:"provider,omitempty"`
@@ -468,6 +718,9 @@ type Worker struct {
 	// Type Worker implementation families supported by the public factory-config contract.
 	Type *WorkerType `json:"type,omitempty"`
 }
+
+// WorkerModelLocality Provider locality for a model worker capability declaration.
+type WorkerModelLocality string
 
 // WorkerModelProvider Canonical model-provider identifiers supported by model workers in factory config.
 type WorkerModelProvider string
@@ -519,6 +772,12 @@ type Workstation struct {
 
 	// OnRejection Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection.
 	OnRejection *[]WorkstationIO `json:"onRejection,omitempty"`
+
+	// Operation Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+	Operation *ModelOperationName `json:"operation,omitempty"`
+
+	// OperationBindings Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.
+	OperationBindings *[]WorkstationOperationBinding `json:"operationBindings,omitempty"`
 
 	// OutputSchema JSON schema string used to validate or parse structured model output when configured.
 	OutputSchema *string `json:"outputSchema,omitempty"`
@@ -590,6 +849,36 @@ type WorkstationLimits struct {
 	MaxRetries *int `json:"maxRetries,omitempty"`
 }
 
+// WorkstationOperationBinding One workstation-authored binding for a provider-agnostic model-operation input slot.
+type WorkstationOperationBinding struct {
+	// Config Ordered canonical content parts for one work item.
+	Config *WorkContent `json:"config,omitempty"`
+
+	// DefaultContent Ordered canonical content parts for one work item.
+	DefaultContent *WorkContent `json:"defaultContent,omitempty"`
+
+	// Selector Selector fields used to resolve one content part from ordered runtime input.
+	Selector *WorkstationOperationBindingSelector `json:"selector,omitempty"`
+
+	// Slot Stable input slot name declared by the worker operation.
+	Slot string `json:"slot"`
+}
+
+// WorkstationOperationBindingSelector Selector fields used to resolve one content part from ordered runtime input.
+type WorkstationOperationBindingSelector struct {
+	// Label Match a content part by its label field.
+	Label *string `json:"label,omitempty"`
+
+	// Role Match a content part by its role field.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Match a content part by its authored slot field.
+	Slot *string `json:"slot,omitempty"`
+
+	// Type Uppercase content-part categories supported by worker model-operation capability slots.
+	Type *ModelOperationContentType `json:"type,omitempty"`
+}
+
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.
 type WorkstationType string
 
@@ -616,6 +905,146 @@ type CreateFactoryJSONRequestBody = Factory
 
 // SaveEditableCurrentFactoryDefinitionJSONRequestBody defines body for SaveEditableCurrentFactoryDefinition for application/json ContentType.
 type SaveEditableCurrentFactoryDefinitionJSONRequestBody = SaveEditableFactoryDefinitionRequest
+
+// AsWorkTextContentPart returns the union data inside the WorkContentPart as a WorkTextContentPart
+func (t WorkContentPart) AsWorkTextContentPart() (WorkTextContentPart, error) {
+	var body WorkTextContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkTextContentPart overwrites any union data inside the WorkContentPart as the provided WorkTextContentPart
+func (t *WorkContentPart) FromWorkTextContentPart(v WorkTextContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkTextContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkTextContentPart
+func (t *WorkContentPart) MergeWorkTextContentPart(v WorkTextContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkImageContentPart returns the union data inside the WorkContentPart as a WorkImageContentPart
+func (t WorkContentPart) AsWorkImageContentPart() (WorkImageContentPart, error) {
+	var body WorkImageContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkImageContentPart overwrites any union data inside the WorkContentPart as the provided WorkImageContentPart
+func (t *WorkContentPart) FromWorkImageContentPart(v WorkImageContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkImageContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkImageContentPart
+func (t *WorkContentPart) MergeWorkImageContentPart(v WorkImageContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkAudioContentPart returns the union data inside the WorkContentPart as a WorkAudioContentPart
+func (t WorkContentPart) AsWorkAudioContentPart() (WorkAudioContentPart, error) {
+	var body WorkAudioContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkAudioContentPart overwrites any union data inside the WorkContentPart as the provided WorkAudioContentPart
+func (t *WorkContentPart) FromWorkAudioContentPart(v WorkAudioContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkAudioContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkAudioContentPart
+func (t *WorkContentPart) MergeWorkAudioContentPart(v WorkAudioContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkJsonContentPart returns the union data inside the WorkContentPart as a WorkJsonContentPart
+func (t WorkContentPart) AsWorkJsonContentPart() (WorkJsonContentPart, error) {
+	var body WorkJsonContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkJsonContentPart overwrites any union data inside the WorkContentPart as the provided WorkJsonContentPart
+func (t *WorkContentPart) FromWorkJsonContentPart(v WorkJsonContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkJsonContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkJsonContentPart
+func (t *WorkContentPart) MergeWorkJsonContentPart(v WorkJsonContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkBinaryContentPart returns the union data inside the WorkContentPart as a WorkBinaryContentPart
+func (t WorkContentPart) AsWorkBinaryContentPart() (WorkBinaryContentPart, error) {
+	var body WorkBinaryContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkBinaryContentPart overwrites any union data inside the WorkContentPart as the provided WorkBinaryContentPart
+func (t *WorkContentPart) FromWorkBinaryContentPart(v WorkBinaryContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkBinaryContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkBinaryContentPart
+func (t *WorkContentPart) MergeWorkBinaryContentPart(v WorkBinaryContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t WorkContentPart) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *WorkContentPart) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error

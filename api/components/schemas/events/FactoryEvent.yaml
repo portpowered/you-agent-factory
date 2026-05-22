@@ -34,6 +34,8 @@ properties:
       - $ref: ./payloads/WorkRequestEventPayload.yaml
       - $ref: ./payloads/RelationshipChangeRequestEventPayload.yaml
       - $ref: ./payloads/DispatchRequestEventPayload.yaml
+      - $ref: ./payloads/ModelRequestEventPayload.yaml
+      - $ref: ./payloads/ModelResponseEventPayload.yaml
       - $ref: ./payloads/InferenceRequestEventPayload.yaml
       - $ref: ./payloads/InferenceResponseEventPayload.yaml
       - $ref: ./payloads/ScriptRequestEventPayload.yaml

@@ -1,0 +1,109 @@
+name: Long Local Inference
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: long-local-inference-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  long-local-inference:
+    name: Long Local Inference (${{ matrix.os_id }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os_id: linux
+            runner: ubuntu-latest
+            command_name: omnivoice-llamacpp
+            backend_url: ${{ vars.OMNIVOICE_COMMAND_URL_LINUX_AMD64 }}
+          - os_id: macos
+            runner: macos-15-intel
+            command_name: omnivoice-llamacpp
+            backend_url: ${{ vars.OMNIVOICE_COMMAND_URL_MACOS_AMD64 }}
+          - os_id: windows
+            runner: windows-latest
+            command_name: omnivoice-llamacpp.exe
+            backend_url: ${{ vars.OMNIVOICE_COMMAND_URL_WINDOWS_AMD64 }}
+    env:
+      INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS: "1"
+      INFINITE_YOU_OMNIVOICE_CACHE_DIR: ${{ github.workspace }}/.cache/managed-models
+      OMNIVOICE_COMMAND_INSTALL_DIR: ${{ github.workspace }}/.cache/omnivoice-command/bin
+      OMNIVOICE_COMMAND_EXTRACT_DIR: ${{ github.workspace }}/.cache/omnivoice-command/extract
+      OMNIVOICE_COMMAND_NAME: ${{ matrix.command_name }}
+      OMNIVOICE_COMMAND_URL: ${{ matrix.backend_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore managed model cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/managed-models
+            .cache/omnivoice-command
+          key: long-local-inference-${{ matrix.os_id }}-amd64-${{ matrix.backend_url }}-${{ hashFiles('.github/workflows/long-local-inference.yml', 'scripts/ci/install-omnivoice-command.sh', 'scripts/ci/install-omnivoice-command.ps1') }}
+
+      - name: Install make on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install make --no-progress -y
+
+      - name: Install OMNIVOICE runtime on Unix
+        if: runner.os != 'Windows'
+        id: install-unix
+        shell: bash
+        run: ./scripts/ci/install-omnivoice-command.sh
+
+      - name: Install OMNIVOICE runtime on Windows
+        if: runner.os == 'Windows'
+        id: install-windows
+        shell: pwsh
+        run: ./scripts/ci/install-omnivoice-command.ps1
+
+      - name: Run long local inference coverage
+        shell: bash
+        env:
+          INFINITE_YOU_OMNIVOICE_COMMAND: ${{ steps.install-unix.outputs.command_path || steps.install-windows.outputs.command_path }}
+        run: |
+          set -euo pipefail
+          if [ '${{ matrix.os_id }}' = 'macos' ]; then
+            export GGML_BACKEND=CPU
+          fi
+          printf 'platform=%s\nbackend=%s\ncache_path=%s\n' \
+            '${{ matrix.os_id }}' \
+            "$INFINITE_YOU_OMNIVOICE_COMMAND" \
+            "$INFINITE_YOU_OMNIVOICE_CACHE_DIR"
+          make long-tests
+
+      - name: Print long-test diagnostics on failure
+        if: failure()
+        shell: bash
+        env:
+          INFINITE_YOU_OMNIVOICE_COMMAND: ${{ steps.install-unix.outputs.command_path || steps.install-windows.outputs.command_path }}
+        run: |
+          set +e
+          printf 'platform=%s\nbackend=%s\ncache_path=%s\n' \
+            '${{ matrix.os_id }}' \
+            "${INFINITE_YOU_OMNIVOICE_COMMAND:-missing}" \
+            "$INFINITE_YOU_OMNIVOICE_CACHE_DIR"
+          if [ -d "$INFINITE_YOU_OMNIVOICE_CACHE_DIR" ]; then
+            find "$INFINITE_YOU_OMNIVOICE_CACHE_DIR" -maxdepth 3 -type f | sort
+          else
+            echo "managed model cache directory does not exist"
+          fi

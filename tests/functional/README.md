@@ -6,6 +6,25 @@
 
 - Default non-long lane: `make test-functional`
 - Opt-in long lane: `make test-functional-long`
+- Real local-inference lane: `make long-tests`
+
+`make long-tests` is the maintainer entrypoint for OMNIVOICE real local
+inference coverage. It first reruns the package-level managed-local-model
+integration tests in `pkg/service`, then runs the tagged runtime API long test
+that exercises `POST /models/{model_name}/pull`, direct
+`/models/{model_name}/invocations`, and a factory-level `MODEL_INVOKE` path.
+The real-runtime test is opt-in: set `INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1`
+and ensure the `omnivoice-llamacpp` command is available on `PATH`, or point
+`INFINITE_YOU_OMNIVOICE_COMMAND` at the executable explicitly. Set
+`INFINITE_YOU_OMNIVOICE_CACHE_DIR` to reuse an existing managed cache; when
+omitted, the long test pulls assets into a temporary managed cache directory.
+GitHub Actions automation for that lane lives in
+`.github/workflows/long-local-inference.yml`; it restores `.cache/managed-models`
+between runs, installs the runtime from per-platform
+`OMNIVOICE_COMMAND_URL_*` repository variables when available, and otherwise
+builds the real `ServeurpersoCom/omnivoice.cpp` `omnivoice-tts` backend from a
+pinned commit before building the repo-owned `cmd/omnivoice-llamacpp` adapter
+that speaks the shared subprocess contract used by the service and long tests.
 
 The default lane runs one repository-owned package-discovery command through
 `make test-functional`: `go run ./cmd/functionallane` uses

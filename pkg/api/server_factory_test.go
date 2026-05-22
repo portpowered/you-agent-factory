@@ -2,8 +2,11 @@ package api
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -79,6 +82,198 @@ func TestGetCurrentFactory_AllowsDefaultRuntimeIdentifier(t *testing.T) {
 	current := decodeJSONResponse[factoryapi.Factory](t, rec)
 	if current.Name != apisurface.DefaultCurrentFactoryName || current.Id == nil || *current.Id != "root-runtime" {
 		t.Fatalf("current factory = %#v, want default runtime identifier", current)
+	}
+}
+
+func TestListModels_ReturnsDiscoveredModelSummaries(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Models: factoryapi.ListModelsResponse{
+			Results: []factoryapi.ModelSummary{{
+				Name:             "OMNIVOICE_Q4_K_M",
+				ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+				Status:           factoryapi.READY,
+				LoadState:        factoryapi.UNLOADED,
+				Operations:       []factoryapi.ModelOperation{{Name: "TTS"}},
+				Modalities:       []factoryapi.ModelOperationContentType{factoryapi.ModelOperationContentTypeAudio, factoryapi.ModelOperationContentTypeText},
+				Resources:        []factoryapi.ModelResourceSummary{{Name: "omnivoice-cache", Type: factoryapi.ResourceTypeModel, Capacity: 1}},
+			}},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodGet, "/models", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	response := decodeJSONResponse[factoryapi.ListModelsResponse](t, rec)
+	if len(response.Results) != 1 || response.Results[0].Name != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("list models response = %#v, want OMNIVOICE model", response)
+	}
+}
+
+func TestGetModel_ReturnsDiscoveredModelDetail(t *testing.T) {
+	mf := &testutil.MockFactory{
+		ModelDetails: map[string]factoryapi.ModelDetail{
+			"OMNIVOICE_Q4_K_M": {
+				Name:             "OMNIVOICE_Q4_K_M",
+				ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+				Status:           factoryapi.READY,
+				LoadState:        factoryapi.UNLOADED,
+				Operations:       []factoryapi.ModelOperation{{Name: "TTS"}},
+				Modalities:       []factoryapi.ModelOperationContentType{factoryapi.ModelOperationContentTypeAudio, factoryapi.ModelOperationContentTypeText},
+				Resources:        []factoryapi.ModelResourceSummary{{Name: "omnivoice-cache", Type: factoryapi.ResourceTypeModel, Capacity: 1}},
+				Capabilities: []factoryapi.ModelCapability{{
+					Worker:           "voice-local",
+					ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+					Operations:       []factoryapi.ModelOperation{{Name: "TTS"}},
+					ResourceNames:    []string{"omnivoice-cache"},
+				}},
+				Diagnostics: factoryapi.StringMap{"workerCount": "1"},
+			},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodGet, "/models/OMNIVOICE_Q4_K_M", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	model := decodeJSONResponse[factoryapi.ModelDetail](t, rec)
+	if model.Name != "OMNIVOICE_Q4_K_M" || len(model.Capabilities) != 1 {
+		t.Fatalf("model detail = %#v, want OMNIVOICE model capability detail", model)
+	}
+}
+
+func TestGetModel_ReturnsNotFoundForUnknownDiscoveredModel(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+	req := httptest.NewRequest(http.MethodGet, "/models/MISSING", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "model not found")
+}
+
+func TestInvokeModel_ReturnsInvocationMetadata(t *testing.T) {
+	mf := &testutil.MockFactory{
+		InvokeModelResult: apisurface.ModelInvocationResult{
+			ModelName:        "OMNIVOICE_Q4_K_M",
+			Worker:           "tts-worker",
+			Operation:        "TTS",
+			ProviderLocality: interfaces.ModelLocalityLocal,
+			Content: []interfaces.WorkContentPart{{
+				Type:        interfaces.WorkContentPartTypeAudio,
+				File:        "artifacts/output.wav",
+				ContentType: "audio/wav",
+			}},
+			Bindings: []interfaces.ResolvedModelOperationBinding{{
+				Slot:   "text",
+				Source: interfaces.ModelOperationBindingSourceInput,
+				Content: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "hello world",
+				}},
+			}},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/invocations", bytes.NewBufferString(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello world"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.InvokedModelNames) != 1 || mf.InvokedModelNames[0] != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("invoked model names = %#v, want OMNIVOICE_Q4_K_M", mf.InvokedModelNames)
+	}
+
+	response := decodeJSONResponse[factoryapi.ModelInvocationResponse](t, rec)
+	if response.ModelName != "OMNIVOICE_Q4_K_M" || response.Worker != "tts-worker" || len(response.Bindings) != 1 || len(response.Content) != 1 {
+		t.Fatalf("invoke response = %#v, want invocation metadata", response)
+	}
+}
+
+func TestInvokeModel_StreamsAudioOutput(t *testing.T) {
+	audioPath := filepath.Join(t.TempDir(), "speech.wav")
+	audioBytes := []byte("RIFF....WAVE")
+	if err := os.WriteFile(audioPath, audioBytes, 0o644); err != nil {
+		t.Fatalf("write audio file: %v", err)
+	}
+	mf := &testutil.MockFactory{
+		InvokeModelResult: apisurface.ModelInvocationResult{
+			ModelName:         "OMNIVOICE_Q4_K_M",
+			Worker:            "tts-worker",
+			Operation:         "TTS",
+			ProviderLocality:  interfaces.ModelLocalityLocal,
+			StreamFile:        audioPath,
+			StreamContentType: "audio/wav",
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/invocations", bytes.NewBufferString(`{"operation":"TTS","options":{"responseMode":"AUDIO_STREAM"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "audio/wav" {
+		t.Fatalf("content-type = %q, want audio/wav", got)
+	}
+	if !bytes.Equal(rec.Body.Bytes(), audioBytes) {
+		t.Fatalf("streamed body = %q, want %q", rec.Body.Bytes(), audioBytes)
+	}
+}
+
+func TestInvokeModel_ReturnsModelNotAvailableWhenLocalAssetsAreMissing(t *testing.T) {
+	mf := &testutil.MockFactory{
+		InvokeModelErr: fmt.Errorf("%w: required assets missing", apisurface.ErrModelNotAvailable),
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/invocations", bytes.NewBufferString(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello world"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "MODEL_NOT_AVAILABLE", "model not available: required assets missing")
+}
+
+func TestPullModel_ReturnsManagedCachePullMetadata(t *testing.T) {
+	mf := &testutil.MockFactory{
+		PullModelResult: apisurface.ModelPullResult{
+			ModelName:        "OMNIVOICE_Q4_K_M",
+			ProviderLocality: interfaces.ModelLocalityLocal,
+			Outcome:          "PULLED",
+			CachePath:        "/tmp/models/OMNIVOICE_Q4_K_M/rev1",
+			Revision:         "rev1",
+			DownloadedFiles: []apisurface.ModelPullDownloadedFile{{
+				Path:   "omnivoice-base-Q4_K_M.gguf",
+				Bytes:  407,
+				SHA256: "abc123",
+			}},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/pull", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.PulledModelNames) != 1 || mf.PulledModelNames[0] != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("pulled model names = %#v, want OMNIVOICE_Q4_K_M", mf.PulledModelNames)
+	}
+	response := decodeJSONResponse[factoryapi.ModelPullResponse](t, rec)
+	if response.Outcome != factoryapi.ModelPullOutcome("PULLED") || response.CachePath == "" || len(response.DownloadedFiles) != 1 {
+		t.Fatalf("pull response = %#v, want pull metadata", response)
 	}
 }
 

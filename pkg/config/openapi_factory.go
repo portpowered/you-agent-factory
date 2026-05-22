@@ -156,6 +156,9 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 	if err := normalizeFactoryInputTypeEntries(root); err != nil {
 		return nil, err
 	}
+	if err := normalizeFactoryResourceEntries(root); err != nil {
+		return nil, err
+	}
 	if err := normalizeFactoryWorkerEntries(root); err != nil {
 		return nil, err
 	}
@@ -163,6 +166,23 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 		return nil, err
 	}
 	return v, nil
+}
+
+func normalizeFactoryResourceEntries(root map[string]any) error {
+	resources, ok := root["resources"].([]any)
+	if !ok {
+		return nil
+	}
+	for i, item := range resources {
+		resource, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(resource, "type", fmt.Sprintf("resources[%d].type", i), interfaces.StrictPublicFactoryResourceType); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func normalizeFactoryGuardEntries(root map[string]any) error {
@@ -230,13 +250,19 @@ func normalizeFactoryWorkerEntries(root map[string]any) error {
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "type", fmt.Sprintf("workers[%d].type", i), interfaces.StrictPublicFactoryWorkerType); err != nil {
 			return err
 		}
-		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "provider", fmt.Sprintf("workers[%d].provider", i), interfaces.StrictPublicFactoryHostedWorkerProvider); err != nil {
-			return err
-		}
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "modelProvider", fmt.Sprintf("workers[%d].modelProvider", i), interfaces.StrictPublicFactoryWorkerModelProvider); err != nil {
 			return err
 		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "provider", fmt.Sprintf("workers[%d].provider", i), interfaces.StrictPublicFactoryHostedWorkerProvider); err != nil {
+			return err
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "modelLocality", fmt.Sprintf("workers[%d].modelLocality", i), interfaces.StrictPublicFactoryWorkerModelLocality); err != nil {
+			return err
+		}
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "executorProvider", fmt.Sprintf("workers[%d].executorProvider", i), interfaces.StrictPublicFactoryWorkerProvider); err != nil {
+			return err
+		}
+		if err := normalizeFactoryWorkerOperationEntries(worker, i); err != nil {
 			return err
 		}
 		if err := rejectUnsupportedHostedWorkerBoundaryFields(worker, fmt.Sprintf("workers[%d]", i)); err != nil {
@@ -269,6 +295,96 @@ func rejectUnsupportedHostedWorkerBoundaryFields(worker map[string]any, path str
 	})
 }
 
+func normalizeFactoryWorkerOperationEntries(worker map[string]any, workerIndex int) error {
+	operations, ok := worker["operations"].([]any)
+	if !ok {
+		return nil
+	}
+	for operationIndex, operationAny := range operations {
+		operation, ok := operationAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryModelOperationName(operation, "name", fmt.Sprintf("workers[%d].operations[%d].name", workerIndex, operationIndex)); err != nil {
+			return err
+		}
+		if err := normalizeFactoryModelOperationSlots(operation, "inputs", fmt.Sprintf("workers[%d].operations[%d].inputs", workerIndex, operationIndex)); err != nil {
+			return err
+		}
+		if err := normalizeFactoryModelOperationSlots(operation, "outputs", fmt.Sprintf("workers[%d].operations[%d].outputs", workerIndex, operationIndex)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeFactoryModelOperationSlots(operation map[string]any, key string, fieldPath string) error {
+	slots, ok := operation[key].([]any)
+	if !ok {
+		return nil
+	}
+	for slotIndex, slotAny := range slots {
+		slot, ok := slotAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		contentTypes, ok := slot["contentTypes"].([]any)
+		if !ok {
+			continue
+		}
+		for contentTypeIndex, contentTypeAny := range contentTypes {
+			contentType, ok := contentTypeAny.(string)
+			if !ok {
+				continue
+			}
+			canonical := interfaces.StrictPublicFactoryWorkerModelOperationContentType(contentType)
+			if canonical == "" {
+				return fmt.Errorf("%s[%d].contentTypes[%d]: unsupported value %q", fieldPath, slotIndex, contentTypeIndex, contentType)
+			}
+			contentTypes[contentTypeIndex] = canonical
+		}
+		slot["contentTypes"] = contentTypes
+	}
+	return nil
+}
+
+func normalizeFactoryModelOperationName(container map[string]any, key string, fieldPath string) error {
+	raw, ok := container[key]
+	if !ok {
+		return nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return nil
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		container[key] = ""
+		return nil
+	}
+	if !isUppercaseOperationIdentifier(trimmed) {
+		return fmt.Errorf("%s: unsupported value %q", fieldPath, value)
+	}
+	container[key] = trimmed
+	return nil
+}
+
+func isUppercaseOperationIdentifier(value string) bool {
+	for i, r := range value {
+		if r >= 'A' && r <= 'Z' {
+			continue
+		}
+		if i > 0 && r >= '0' && r <= '9' {
+			continue
+		}
+		if i > 0 && r == '_' {
+			continue
+		}
+		return false
+	}
+	return value != ""
+}
+
 func normalizeFactoryWorkstationEntries(root map[string]any) error {
 	workstations, ok := root["workstations"].([]any)
 	if !ok {
@@ -291,6 +407,12 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {
 			return err
 		}
+		if err := normalizeFactoryModelOperationName(workstation, "operation", fmt.Sprintf("workstations[%d].operation", i)); err != nil {
+			return err
+		}
+		if err := normalizeFactoryWorkstationOperationBindings(workstation, i); err != nil {
+			return err
+		}
 		if err := normalizeFactoryWorkstationGuardEntries(workstation, i); err != nil {
 			return err
 		}
@@ -298,6 +420,32 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 			return err
 		}
 		normalizeRuntimeResourceRequirements(workstation, "resources")
+	}
+	return nil
+}
+
+func normalizeFactoryWorkstationOperationBindings(workstation map[string]any, workstationIndex int) error {
+	bindings, ok := workstation["operationBindings"].([]any)
+	if !ok {
+		return nil
+	}
+	for bindingIndex, bindingAny := range bindings {
+		binding, ok := bindingAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		selector, ok := binding["selector"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(
+			selector,
+			"type",
+			fmt.Sprintf("workstations[%d].operationBindings[%d].selector.type", workstationIndex, bindingIndex),
+			interfaces.StrictPublicFactoryWorkerModelOperationContentType,
+		); err != nil {
+			return err
+		}
 	}
 	return nil
 }

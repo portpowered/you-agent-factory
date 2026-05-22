@@ -10,6 +10,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 // FactoryConfigMapper maps between on-disk factory configuration payloads and
@@ -188,8 +189,13 @@ func resourcesAPIFromInternal(resources []interfaces.ResourceConfig) *[]factorya
 	result := make([]factoryapi.Resource, len(resources))
 	for i, resource := range resources {
 		result[i] = factoryapi.Resource{
-			Name:     resource.Name,
-			Capacity: resource.Capacity,
+			Name:       resource.Name,
+			Type:       resourceTypePtrIfNotEmpty(resource.Type),
+			Capacity:   resource.Capacity,
+			Model:      stringPtrIfNotEmpty(resource.Model),
+			Backend:    stringPtrIfNotEmpty(resource.Backend),
+			LoadPolicy: stringPtrIfNotEmpty(resource.LoadPolicy),
+			Provider:   stringPtrIfNotEmpty(resource.Provider),
 		}
 	}
 	return &result
@@ -259,6 +265,8 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 		Body:                  stringPtrIfNotEmpty(promptBody),
 		Limits:                workstationLimitsAPIFromInternal(normalized.Limits),
 		OutputSchema:          stringPtrIfNotEmpty(normalized.OutputSchema),
+		Operation:             stringPtrIfNotEmpty(normalized.Operation),
+		OperationBindings:     workstationOperationBindingsAPIFromInternal(normalized.OperationBindings),
 		PromptFile:            stringPtrIfNotEmpty(normalized.PromptFile),
 		Type:                  workstationTypePtrIfNotEmpty(normalized.Type),
 	}
@@ -415,18 +423,14 @@ func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.W
 		Linear:           hostedLinearWorkerAPIFromInternal(def.Linear),
 		Model:            stringPtrIfNotEmpty(def.Model),
 		ModelProvider:    workerModelProviderPtrIfNotEmpty(def.ModelProvider),
+		ModelLocality:    workerModelLocalityPtrIfNotEmpty(def.ModelLocality),
 		ExecutorProvider: workerProviderPtrIfNotEmpty(def.ExecutorProvider),
+		Operations:       modelOperationsAPIFromInternal(def.Operations),
 		Resources:        resourceRequirementsAPIFromInternal(def.Resources),
 		SkipPermissions:  boolPtrIfTrue(def.SkipPermissions),
 		StopToken:        stringPtrIfNotEmpty(def.StopToken),
 		Timeout:          stringPtrIfNotEmpty(def.Timeout),
 	}
-}
-
-// WorkerConfigToOpenAPI converts an internal worker config into the generated
-// OpenAPI worker model.
-func WorkerConfigToOpenAPI(worker interfaces.WorkerConfig) factoryapi.Worker {
-	return *workerDefinitionAPIFromInternal(&worker)
 }
 
 func hostedWorkerAuthAPIFromInternal(auth *interfaces.HostedWorkerAuthConfig) *factoryapi.HostedWorkerAuth {
@@ -467,6 +471,53 @@ func hostedLinearWorkerClaimAPIFromInternal(claim *interfaces.HostedLinearWorker
 	}
 }
 
+// WorkerConfigToOpenAPI converts an internal worker config into the generated
+// OpenAPI worker model.
+func WorkerConfigToOpenAPI(worker interfaces.WorkerConfig) factoryapi.Worker {
+	return *workerDefinitionAPIFromInternal(&worker)
+}
+
+func modelOperationsAPIFromInternal(operations []interfaces.ModelOperation) *[]factoryapi.ModelOperation {
+	if len(operations) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.ModelOperation, len(operations))
+	for i, operation := range operations {
+		values[i] = factoryapi.ModelOperation{
+			Name:    operation.Name,
+			Inputs:  modelOperationSlotsAPIFromInternal(operation.Inputs),
+			Outputs: modelOperationSlotsAPIFromInternal(operation.Outputs),
+		}
+	}
+	return &values
+}
+
+func modelOperationSlotsAPIFromInternal(slots []interfaces.ModelOperationSlot) *[]factoryapi.ModelOperationSlot {
+	if len(slots) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.ModelOperationSlot, len(slots))
+	for i, slot := range slots {
+		values[i] = factoryapi.ModelOperationSlot{
+			Name:         slot.Name,
+			ContentTypes: modelOperationContentTypesAPIFromInternal(slot.ContentTypes),
+			Required:     boolPtrIfTrue(slot.Required),
+		}
+	}
+	return &values
+}
+
+func modelOperationContentTypesAPIFromInternal(contentTypes []string) []factoryapi.ModelOperationContentType {
+	if len(contentTypes) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.ModelOperationContentType, len(contentTypes))
+	for i, contentType := range contentTypes {
+		values[i] = publicFactoryModelOperationContentTypeFromInternal(contentType)
+	}
+	return values
+}
+
 func mergeCanonicalStopWords(base []string, extra []string) []string {
 	if len(base) == 0 {
 		return append([]string(nil), extra...)
@@ -496,6 +547,34 @@ func workstationLimitsAPIFromInternal(limits interfaces.WorkstationLimits) *fact
 	return &factoryapi.WorkstationLimits{
 		MaxExecutionTime: stringPtrIfNotEmpty(limits.MaxExecutionTime),
 		MaxRetries:       intPtrIfNonZero(limits.MaxRetries),
+	}
+}
+
+func workstationOperationBindingsAPIFromInternal(bindings []interfaces.ModelOperationBinding) *[]factoryapi.WorkstationOperationBinding {
+	if len(bindings) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.WorkstationOperationBinding, len(bindings))
+	for i, binding := range bindings {
+		values[i] = factoryapi.WorkstationOperationBinding{
+			Slot:           binding.Slot,
+			Config:         workcontent.GeneratedPtrFromParts(binding.Config),
+			DefaultContent: workcontent.GeneratedPtrFromParts(binding.DefaultContent),
+			Selector:       workstationOperationBindingSelectorAPIFromInternal(binding.Selector),
+		}
+	}
+	return &values
+}
+
+func workstationOperationBindingSelectorAPIFromInternal(selector *interfaces.ModelOperationBindingSelector) *factoryapi.WorkstationOperationBindingSelector {
+	if selector == nil {
+		return nil
+	}
+	return &factoryapi.WorkstationOperationBindingSelector{
+		Slot:  stringPtrIfNotEmpty(selector.Slot),
+		Label: stringPtrIfNotEmpty(selector.Label),
+		Type:  modelOperationContentTypePtrIfNotEmpty(selector.Type),
+		Role:  stringPtrIfNotEmpty(selector.Role),
 	}
 }
 
@@ -569,6 +648,14 @@ func resourceRequirementsAPIFromInternal(resources []interfaces.ResourceConfig) 
 	return &values
 }
 
+func resourceTypePtrIfNotEmpty(value string) *factoryapi.ResourceType {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	canonical := factoryapi.ResourceType(publicFactoryResourceTypeFromInternal(value))
+	return &canonical
+}
+
 func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factoryapi.Guard {
 	if len(guards) == 0 {
 		return nil
@@ -626,6 +713,14 @@ func workerModelProviderPtrIfNotEmpty(value string) *factoryapi.WorkerModelProvi
 	return &enumValue
 }
 
+func workerModelLocalityPtrIfNotEmpty(value string) *factoryapi.WorkerModelLocality {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	enumValue := publicFactoryWorkerModelLocalityFromInternal(value)
+	return &enumValue
+}
+
 func workerProviderPtrIfNotEmpty(value string) *factoryapi.WorkerProvider {
 	if strings.TrimSpace(value) == "" {
 		return nil
@@ -635,11 +730,7 @@ func workerProviderPtrIfNotEmpty(value string) *factoryapi.WorkerProvider {
 }
 
 func hostedWorkerProviderPtrIfNotEmpty(value string) *factoryapi.HostedWorkerProvider {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	enumValue := factoryapi.HostedWorkerProvider(publicFactoryHostedWorkerProviderFromInternal(value))
-	return &enumValue
+	return interfaces.GeneratedPublicFactoryHostedWorkerProviderPtr(value)
 }
 
 func workstationTypePtrIfNotEmpty(value string) *factoryapi.WorkstationType {
@@ -647,6 +738,14 @@ func workstationTypePtrIfNotEmpty(value string) *factoryapi.WorkstationType {
 		return nil
 	}
 	enumValue := publicFactoryWorkstationTypeFromInternal(value)
+	return &enumValue
+}
+
+func modelOperationContentTypePtrIfNotEmpty(value string) *factoryapi.ModelOperationContentType {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	enumValue := publicFactoryModelOperationContentTypeFromInternal(value)
 	return &enumValue
 }
 

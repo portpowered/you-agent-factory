@@ -1,0 +1,27 @@
+type: object
+required:
+  - name
+  - type
+  - capacity
+properties:
+  name:
+    type: string
+    description: Factory-authored resource name.
+  type:
+    $ref: '../data-models/ResourceType.yaml'
+  capacity:
+    type: integer
+    minimum: 0
+    description: Declared factory capacity for this resource.
+  model:
+    type: string
+    description: Concrete model identifier when the resource is model-specific.
+  backend:
+    type: string
+    description: Local runtime backend identifier for model resources.
+  loadPolicy:
+    type: string
+    description: Local load-policy metadata for model resources.
+  provider:
+    type: string
+    description: Cloud provider identity when the resource models quota or routing.

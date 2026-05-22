@@ -52,9 +52,20 @@ const (
 )
 
 type ResourceConfig struct {
-	Name     string `json:"name"`
-	Capacity int    `json:"capacity"`
+	Name       string `json:"name"`
+	Type       string `json:"type,omitempty"`
+	Capacity   int    `json:"capacity"`
+	Model      string `json:"model,omitempty"`
+	Backend    string `json:"backend,omitempty"`
+	LoadPolicy string `json:"loadPolicy,omitempty"`
+	Provider   string `json:"provider,omitempty"`
 }
+
+const (
+	ResourceTypeModel          = "MODEL"
+	ResourceTypeProviderQuota  = "PROVIDER_QUOTA"
+	ResourceTypeInvocationSlot = "INVOCATION_SLOT"
+)
 
 // PortableResourceManifestConfig declares portability-only resources that are
 // distinct from runtime-capacity resources.
@@ -122,6 +133,8 @@ type FactoryWorkstationConfig struct {
 	Name                  string                      `json:"name" yaml:"name,omitempty"`
 	Kind                  WorkstationKind             `json:"behavior,omitempty" yaml:"behavior,omitempty"`
 	Type                  string                      `json:"type,omitempty" yaml:"type,omitempty"`
+	Operation             string                      `json:"operation,omitempty" yaml:"operation,omitempty"`
+	OperationBindings     []ModelOperationBinding     `json:"operationBindings,omitempty" yaml:"operationBindings,omitempty"`
 	WorkerTypeName        string                      `json:"worker" yaml:"worker,omitempty"`
 	Runner                string                      `json:"runner,omitempty" yaml:"runner,omitempty"`
 	PromptFile            string                      `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
@@ -264,4 +277,40 @@ type InputGuardConfig struct {
 type TransitionConfig struct {
 	FromWorkstationName string `json:"from"`
 	ToWorkstationName   string `json:"to"`
+}
+
+// ModelOperationBinding declares how one MODEL_INVOKE workstation input slot
+// resolves content from runtime input or authored workstation configuration.
+type ModelOperationBinding struct {
+	Slot           string                         `json:"slot" yaml:"slot"`
+	Selector       *ModelOperationBindingSelector `json:"selector,omitempty" yaml:"selector,omitempty"`
+	Config         []WorkContentPart              `json:"config,omitempty" yaml:"config,omitempty"`
+	DefaultContent []WorkContentPart              `json:"defaultContent,omitempty" yaml:"defaultContent,omitempty"`
+}
+
+// ModelOperationBindingSelector matches one input content part deterministically
+// against ordered runtime input content.
+type ModelOperationBindingSelector struct {
+	Slot  string `json:"slot,omitempty" yaml:"slot,omitempty"`
+	Label string `json:"label,omitempty" yaml:"label,omitempty"`
+	Type  string `json:"type,omitempty" yaml:"type,omitempty"`
+	Role  string `json:"role,omitempty" yaml:"role,omitempty"`
+}
+
+// ModelOperationBindingSource records where one slot binding was resolved from.
+type ModelOperationBindingSource string
+
+const (
+	ModelOperationBindingSourceInput   ModelOperationBindingSource = "INPUT"
+	ModelOperationBindingSourceConfig  ModelOperationBindingSource = "CONFIG"
+	ModelOperationBindingSourceDefault ModelOperationBindingSource = "DEFAULT"
+	ModelOperationBindingSourceOmitted ModelOperationBindingSource = "OMITTED"
+)
+
+// ResolvedModelOperationBinding stores one resolved slot binding before model
+// execution begins.
+type ResolvedModelOperationBinding struct {
+	Slot    string                      `json:"slot"`
+	Source  ModelOperationBindingSource `json:"source"`
+	Content []WorkContentPart           `json:"content,omitempty"`
 }

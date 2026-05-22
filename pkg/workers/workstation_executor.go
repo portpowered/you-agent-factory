@@ -230,6 +230,24 @@ func pathExists(value string) bool {
 }
 
 func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfaces.WorkDispatch, workerName string, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (interfaces.WorkstationExecutionRequest, *interfaces.WorkResult) {
+	modelBindings, err := resolveModelOperationBindings(workstationDef, workerDef, requestContext.InputTokens)
+	if err != nil {
+		logger.Error("model operation binding resolution failed",
+			WorkLogFields(dispatch.Execution,
+				"transition_id", dispatch.TransitionID,
+				"dispatch_id", dispatch.DispatchID,
+				"operation", workstationDef.Operation,
+				"error", err)...)
+		failed := interfaces.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+			Outcome:      interfaces.OutcomeFailed,
+			Error:        "model operation binding resolution failed: " + err.Error(),
+			Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+		}
+		return interfaces.WorkstationExecutionRequest{}, &failed
+	}
+
 	rendered, err := we.Renderer.Render(
 		workstationDef.PromptTemplate,
 		requestContext.InputTokens,
@@ -261,6 +279,8 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 		RunnerSelectionSource: selection.Source,
 		ProjectID:             requestContext.ProjectID,
 		InputTokens:           InputTokens(requestContext.InputTokens...),
+		ModelOperation:        workstationDef.Operation,
+		ModelBindings:         modelBindings,
 		SystemPrompt:          workerDef.Body,
 		UserMessage:           rendered,
 		OutputSchema:          workstationDef.OutputSchema,

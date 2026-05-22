@@ -19,6 +19,8 @@ var canonicalFactoryEventTypeValues = []string{
 	"WORK_REQUEST",
 	"RELATIONSHIP_CHANGE_REQUEST",
 	"DISPATCH_REQUEST",
+	"MODEL_REQUEST",
+	"MODEL_RESPONSE",
 	"INFERENCE_REQUEST",
 	"INFERENCE_RESPONSE",
 	"SCRIPT_REQUEST",
@@ -62,6 +64,8 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"WorkRequestEventPayload",
 	"RelationshipChangeRequestEventPayload",
 	"DispatchRequestEventPayload",
+	"ModelRequestEventPayload",
+	"ModelResponseEventPayload",
 	"InferenceRequestEventPayload",
 	"InferenceResponseEventPayload",
 	"ScriptRequestEventPayload",
@@ -80,6 +84,8 @@ var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/WorkRequestEventPayload",
 	"#/components/schemas/RelationshipChangeRequestEventPayload",
 	"#/components/schemas/DispatchRequestEventPayload",
+	"#/components/schemas/ModelRequestEventPayload",
+	"#/components/schemas/ModelResponseEventPayload",
 	"#/components/schemas/InferenceRequestEventPayload",
 	"#/components/schemas/InferenceResponseEventPayload",
 	"#/components/schemas/ScriptRequestEventPayload",
@@ -96,6 +102,8 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"WORK_REQUEST":                "WorkRequestEventPayload",
 	"RELATIONSHIP_CHANGE_REQUEST": "RelationshipChangeRequestEventPayload",
 	"DISPATCH_REQUEST":            "DispatchRequestEventPayload",
+	"MODEL_REQUEST":               "ModelRequestEventPayload",
+	"MODEL_RESPONSE":              "ModelResponseEventPayload",
 	"INFERENCE_REQUEST":           "InferenceRequestEventPayload",
 	"INFERENCE_RESPONSE":          "InferenceResponseEventPayload",
 	"SCRIPT_REQUEST":              "ScriptRequestEventPayload",
@@ -752,6 +760,29 @@ func assertResponseSchemaRef(t *testing.T, operation map[string]any, status stri
 	}
 	if got, ok := schema["$ref"].(string); !ok || got != wantRef {
 		t.Fatalf("operation.responses.%s.content.application/json.schema.$ref = %v, want %s", status, schema["$ref"], wantRef)
+	}
+}
+
+func assertRequestSchemaRef(t *testing.T, operation map[string]any, wantRef string) {
+	t.Helper()
+	requestBody, ok := operation["requestBody"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.requestBody is missing")
+	}
+	content, ok := requestBody["content"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.requestBody.content is missing")
+	}
+	applicationJSON, ok := content["application/json"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.requestBody.content.application/json is missing")
+	}
+	schema, ok := applicationJSON["schema"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.requestBody.content.application/json.schema is missing")
+	}
+	if got, ok := schema["$ref"].(string); !ok || got != wantRef {
+		t.Fatalf("operation.requestBody.content.application/json.schema.$ref = %v, want %s", schema["$ref"], wantRef)
 	}
 }
 

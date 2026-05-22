@@ -16,6 +16,8 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeWorkRequest,
 	factoryapi.FactoryEventTypeRelationshipChangeRequest,
 	factoryapi.FactoryEventTypeDispatchRequest,
+	factoryapi.FactoryEventTypeModelRequest,
+	factoryapi.FactoryEventTypeModelResponse,
 	factoryapi.FactoryEventTypeInferenceRequest,
 	factoryapi.FactoryEventTypeInferenceResponse,
 	factoryapi.FactoryEventTypeScriptRequest,
@@ -58,6 +60,14 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 	},
 	factoryapi.FactoryEventTypeDispatchRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsDispatchRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeModelRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsModelRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeModelResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsModelResponseEventPayload()
 		return err
 	},
 	factoryapi.FactoryEventTypeInferenceRequest: func(payload factoryapi.FactoryEvent_Payload) error {
@@ -108,6 +118,12 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	},
 	reflect.TypeOf(factoryapi.DispatchRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromDispatchRequestEventPayload(value.(factoryapi.DispatchRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.ModelRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromModelRequestEventPayload(value.(factoryapi.ModelRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.ModelResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromModelResponseEventPayload(value.(factoryapi.ModelResponseEventPayload))
 	},
 	reflect.TypeOf(factoryapi.InferenceRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromInferenceRequestEventPayload(value.(factoryapi.InferenceRequestEventPayload))
@@ -213,11 +229,14 @@ func intPtr(value int) *int {
 	return &value
 }
 
+func boolPtr(value bool) *bool {
+	return &value
+}
+
 func factoryEventPayload(t *testing.T, payload any) factoryapi.FactoryEvent_Payload {
 	t.Helper()
 
 	var eventPayload factoryapi.FactoryEvent_Payload
-
 	encode, ok := generatedFactoryEventPayloadEncoders[reflect.TypeOf(payload)]
 	if !ok {
 		t.Fatalf("unsupported event payload type %T", payload)

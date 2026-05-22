@@ -37,6 +37,17 @@ type MockFactory struct {
 	EditableFactoryErr       error
 	SavedEditableFactories   []factoryapi.SaveEditableFactoryDefinitionRequest
 	SaveEditableFactoryErr   error
+	Models                   factoryapi.ListModelsResponse
+	ListModelsErr            error
+	ModelDetails             map[string]factoryapi.ModelDetail
+	GetModelErr              error
+	InvokedModels            []factoryapi.ModelInvocationRequest
+	InvokedModelNames        []string
+	InvokeModelResult        apisurface.ModelInvocationResult
+	InvokeModelErr           error
+	PulledModelNames         []string
+	PullModelResult          apisurface.ModelPullResult
+	PullModelErr             error
 	SessionFactories         map[string]*MockFactory
 	FactorySessions          factoryapi.ListFactorySessionsResponse
 	ListFactorySessionsErr   error
@@ -192,6 +203,44 @@ func (m *MockFactory) SaveEditableFactoryDefinition(_ context.Context, request f
 		FactoryDefinition: request.FactoryDefinition,
 		Version:           version,
 	}, nil
+}
+
+func (m *MockFactory) ListModels(_ context.Context) (factoryapi.ListModelsResponse, error) {
+	if m.ListModelsErr != nil {
+		return factoryapi.ListModelsResponse{}, m.ListModelsErr
+	}
+	return m.Models, nil
+}
+
+func (m *MockFactory) GetModel(_ context.Context, modelName string) (factoryapi.ModelDetail, error) {
+	if m.GetModelErr != nil {
+		return factoryapi.ModelDetail{}, m.GetModelErr
+	}
+	if m.ModelDetails == nil {
+		return factoryapi.ModelDetail{}, apisurface.ErrModelNotFound
+	}
+	model, ok := m.ModelDetails[modelName]
+	if !ok {
+		return factoryapi.ModelDetail{}, apisurface.ErrModelNotFound
+	}
+	return model, nil
+}
+
+func (m *MockFactory) InvokeModel(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	if m.InvokeModelErr != nil {
+		return apisurface.ModelInvocationResult{}, m.InvokeModelErr
+	}
+	m.InvokedModelNames = append(m.InvokedModelNames, modelName)
+	m.InvokedModels = append(m.InvokedModels, request)
+	return m.InvokeModelResult, nil
+}
+
+func (m *MockFactory) PullModel(_ context.Context, modelName string) (apisurface.ModelPullResult, error) {
+	if m.PullModelErr != nil {
+		return apisurface.ModelPullResult{}, m.PullModelErr
+	}
+	m.PulledModelNames = append(m.PulledModelNames, modelName)
+	return m.PullModelResult, nil
 }
 
 func (m *MockFactory) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {

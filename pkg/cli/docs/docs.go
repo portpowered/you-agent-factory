@@ -16,6 +16,7 @@ const (
 	TopicWorkstation Topic = "workstation"
 	TopicWorkers     Topic = "workers"
 	TopicResources   Topic = "resources"
+	TopicModels      Topic = "models"
 	TopicBatchWork   Topic = "batch-work"
 	TopicTemplates   Topic = "templates"
 )
@@ -25,6 +26,7 @@ const (
 	referenceWorkstationPath = "reference/workstation.md"
 	referenceWorkersPath     = "reference/workers.md"
 	referenceResourcesPath   = "reference/resources.md"
+	referenceModelsPath      = "reference/models.md"
 	referenceBatchWorkPath   = "reference/batch-work.md"
 	referenceTemplatesPath   = "reference/templates.md"
 )
@@ -39,6 +41,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicWorkstation, path: referenceWorkstationPath},
 	{topic: TopicWorkers, path: referenceWorkersPath},
 	{topic: TopicResources, path: referenceResourcesPath},
+	{topic: TopicModels, path: referenceModelsPath},
 	{topic: TopicBatchWork, path: referenceBatchWorkPath},
 	{topic: TopicTemplates, path: referenceTemplatesPath},
 }
@@ -48,6 +51,7 @@ var topicPaths = map[string]string{
 	string(TopicWorkstation): referenceWorkstationPath,
 	string(TopicWorkers):     referenceWorkersPath,
 	string(TopicResources):   referenceResourcesPath,
+	string(TopicModels):      referenceModelsPath,
 	string(TopicBatchWork):   referenceBatchWorkPath,
 	string(TopicTemplates):   referenceTemplatesPath,
 }
@@ -57,6 +61,7 @@ var supportedTopics = []string{
 	string(TopicWorkstation),
 	string(TopicWorkers),
 	string(TopicResources),
+	string(TopicModels),
 	string(TopicBatchWork),
 	string(TopicTemplates),
 }

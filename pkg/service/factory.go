@@ -73,17 +73,20 @@ var ErrInvalidNamedFactory = apisurface.ErrInvalidNamedFactory
 var ErrCurrentNamedFactoryNotFound = apisurface.ErrCurrentNamedFactoryNotFound
 
 type replacementFactoryRuntime struct {
-	dir          string
-	folderPath   string
-	eventHistory *factory.FactoryEventHistory
-	factory      factory.Factory
-	listener     *listeners.FileWatcher
-	net          *state.Net
-	runtimeCfg   *factoryconfig.LoadedFactoryConfig
-	logger       *zap.Logger
-	logSink      *logging.RuntimeLogSink
-	recording    *replay.Recorder
-	recordPath   string
+	dir            string
+	folderPath     string
+	eventHistory   *factory.FactoryEventHistory
+	factory        factory.Factory
+	listener       *listeners.FileWatcher
+	net            *state.Net
+	runtimeCfg     *factoryconfig.LoadedFactoryConfig
+	modelResources *localModelResourceLimiter
+	modelAssets    modelAssetPuller
+	localModels    *managedLocalModelManager
+	logger         *zap.Logger
+	logSink        *logging.RuntimeLogSink
+	recording      *replay.Recorder
+	recordPath     string
 }
 
 type liveRuntimeHandle struct {
@@ -140,6 +143,9 @@ type FactoryService struct {
 	clock          factory.Clock
 	recording      *replay.Recorder
 	logSink        *logging.RuntimeLogSink
+	modelResources *localModelResourceLimiter
+	modelAssets    modelAssetPuller
+	localModels    *managedLocalModelManager
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)
@@ -170,7 +176,7 @@ type FactoryServiceConfig struct {
 	// RuntimeInstanceID identifies this runtime process for file-backed logs.
 	// Empty generates a UUID.
 	RuntimeInstanceID string
-	// RuntimeLogDir optionally overrides the default ~/.you-agent-factory/logs
+	// RuntimeLogDir optionally overrides the default ~/.agent-factory/logs
 	// directory. Tests use this to keep file-backed logs isolated.
 	RuntimeLogDir string
 	// RuntimeLogConfig controls bounded runtime file logging behavior.
@@ -247,6 +253,13 @@ type FactoryServiceConfig struct {
 	// HostedLinearEndpoint overrides the Linear GraphQL endpoint for tests.
 	// Empty uses the official default endpoint.
 	HostedLinearEndpoint string
+	// ModelCacheDir optionally overrides the default managed local-model cache
+	// directory under ~/.agent-factory/models.
+	ModelCacheDir string
+	// LocalModelRuntimeOverride injects a managed local-model runtime for
+	// supported LOCAL model workers. Package tests use this to exercise the
+	// load/invoke/reuse path without a live embedded backend.
+	LocalModelRuntimeOverride localModelRuntime
 }
 
 // BuildFactoryService loads factory.json from the config directory, constructs
@@ -312,6 +325,9 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		net:            runtimeBundle.net,
 		cfg:            cfg,
 		runtimeCfg:     runtimeBundle.runtimeCfg,
+		modelResources: runtimeBundle.modelResources,
+		modelAssets:    runtimeBundle.modelAssets,
+		localModels:    runtimeBundle.localModels,
 		baseLogger:     baseLogger,
 		logger:         logger,
 		clock:          clock,
@@ -402,6 +418,7 @@ func buildRuntimeBundle(
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
 	eventHistory := factory.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
+	modelResources, modelAssets, localModels := newRuntimeLocalModelDependencies(input.cfg)
 	workerOpts, err := loadWorkersFromConfig(
 		input.loadedFactoryCfg.FactoryDir(),
 		input.loadedFactoryCfg.FactoryConfig(),
@@ -414,7 +431,10 @@ func buildRuntimeBundle(
 		input.commandRunnerOverride,
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
+		eventHistory.RecordModelEvent,
 		input.clock.Now,
+		modelResources,
+		localModels,
 	)
 	if err != nil {
 		input.logger.Error("failed to load workers from config", zap.Error(err))
@@ -464,17 +484,30 @@ func buildRuntimeBundle(
 	}
 
 	return &replacementFactoryRuntime{
-		dir:          input.dir,
-		folderPath:   input.folderPath,
-		eventHistory: eventHistory,
-		factory:      activeFactory,
-		listener:     listener,
-		net:          net,
-		runtimeCfg:   input.loadedFactoryCfg,
-		logger:       input.logger,
-		recording:    recording,
-		recordPath:   input.recordPath,
+		dir:            input.dir,
+		folderPath:     input.folderPath,
+		eventHistory:   eventHistory,
+		factory:        activeFactory,
+		listener:       listener,
+		net:            net,
+		runtimeCfg:     input.loadedFactoryCfg,
+		modelResources: modelResources,
+		modelAssets:    modelAssets,
+		localModels:    localModels,
+		logger:         input.logger,
+		recording:      recording,
+		recordPath:     input.recordPath,
 	}, nil
+}
+
+func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) (*localModelResourceLimiter, modelAssetPuller, *managedLocalModelManager) {
+	modelResources := newLocalModelResourceLimiter()
+	modelAssets := newHuggingFaceModelAssetPuller(strings.TrimSpace(cfg.ModelCacheDir))
+	localModelRuntime := cfg.LocalModelRuntimeOverride
+	if localModelRuntime == nil {
+		localModelRuntime = newOmniVoiceLocalRuntime(nil)
+	}
+	return modelResources, modelAssets, newManagedLocalModelManager(modelAssets, localModelRuntime)
 }
 
 func buildRuntimeRecorder(
@@ -979,17 +1012,20 @@ func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
 		return nil
 	}
 	return &replacementFactoryRuntime{
-		dir:          fs.cfg.Dir,
-		folderPath:   fs.factoryRootDir,
-		eventHistory: fs.eventHistory,
-		factory:      fs.factory,
-		listener:     fs.listener,
-		net:          fs.net,
-		runtimeCfg:   fs.runtimeCfg,
-		logger:       fs.logger,
-		logSink:      fs.logSink,
-		recording:    fs.recording,
-		recordPath:   fs.cfg.RecordPath,
+		dir:            fs.cfg.Dir,
+		folderPath:     fs.factoryRootDir,
+		eventHistory:   fs.eventHistory,
+		factory:        fs.factory,
+		listener:       fs.listener,
+		net:            fs.net,
+		runtimeCfg:     fs.runtimeCfg,
+		modelResources: fs.modelResources,
+		modelAssets:    fs.modelAssets,
+		localModels:    fs.localModels,
+		logger:         fs.logger,
+		logSink:        fs.logSink,
+		recording:      fs.recording,
+		recordPath:     fs.cfg.RecordPath,
 	}
 }
 
@@ -1265,6 +1301,9 @@ func (fs *FactoryService) swapActiveRuntime(runtimeBundle *replacementFactoryRun
 	fs.listener = runtimeBundle.listener
 	fs.net = runtimeBundle.net
 	fs.runtimeCfg = runtimeBundle.runtimeCfg
+	fs.modelResources = runtimeBundle.modelResources
+	fs.modelAssets = runtimeBundle.modelAssets
+	fs.localModels = runtimeBundle.localModels
 	fs.cfg.Dir = runtimeBundle.dir
 }
 
@@ -1276,6 +1315,9 @@ func (fs *FactoryService) clearActiveRuntime() {
 	fs.listener = nil
 	fs.net = nil
 	fs.runtimeCfg = nil
+	fs.modelResources = nil
+	fs.modelAssets = nil
+	fs.localModels = nil
 	if fs.cfg != nil && strings.TrimSpace(fs.factoryRootDir) != "" {
 		fs.cfg.Dir = fs.factoryRootDir
 	}
@@ -2258,7 +2300,10 @@ func loadWorkersFromConfig(
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
+	modelRecorder modelEventRecorder,
 	now func() time.Time,
+	modelResources *localModelResourceLimiter,
+	localModels *managedLocalModelManager,
 ) ([]factory.FactoryOption, error) {
 	var opts []factory.FactoryOption
 	logger.Info("loading workers from runtime config", "working-directory", factoryDir)
@@ -2279,7 +2324,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workers.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, now)
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelResources, localModels)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -2311,6 +2356,7 @@ func loadWorkersFromConfig(
 // inner executor for the configured worker type. Returns nil for unsupported types.
 func buildWorkerExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
+	factoryCfg *interfaces.FactoryConfig,
 	workerName string,
 	factoryRunnerID string,
 	logger logging.Logger,
@@ -2319,7 +2365,10 @@ func buildWorkerExecutor(
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
+	modelRecorder modelEventRecorder,
 	now func() time.Time,
+	modelResources *localModelResourceLimiter,
+	localModels *managedLocalModelManager,
 ) workers.WorkerExecutor {
 	def, ok := runtimeCfg.Worker(workerName)
 	if !ok {
@@ -2361,6 +2410,9 @@ func buildWorkerExecutor(
 		agentOpts := []workers.AgentExecutorOption{
 			workers.WithLogger(logger),
 		}
+		runner = localModels.wrapRunner(runner, runtimeCfg, factoryCfg, def)
+		runner = modelResources.wrapRunner(runner, factoryCfg, def)
+		runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
 		agentExec := workers.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
 		return &workers.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,

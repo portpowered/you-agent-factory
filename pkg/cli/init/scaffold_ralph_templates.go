@@ -82,6 +82,9 @@ func ralphFactoryConfig() string {
       ]
     }
   ],
+  "resources": [
+    { "name": "agent-slot", "capacity": 1 }
+  ],
   "workers": [
     { "name": "planner" },
     { "name": "executor" }
@@ -174,7 +177,9 @@ type: MODEL_WORKER
 modelProvider: CODEX
 executorProvider: SCRIPT_WRAP
 stopToken: "<COMPLETE>"
-resources: ["agent-slot"]
+resources:
+  - name: agent-slot
+    capacity: 1
 timeout: 1h
 skipPermissions: true
 ---
@@ -190,7 +195,9 @@ type: MODEL_WORKER
 modelProvider: CODEX
 executorProvider: SCRIPT_WRAP
 stopToken: "<COMPLETE>"
-resources: ["agent-slot"]
+resources:
+  - name: agent-slot
+    capacity: 1
 timeout: 1h
 skipPermissions: true
 ---

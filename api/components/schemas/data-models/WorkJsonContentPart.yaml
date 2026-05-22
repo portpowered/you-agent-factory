@@ -1,0 +1,16 @@
+description: Ordered JSON content for one work item.
+allOf:
+  - $ref: './WorkContentCommonFields.yaml'
+  - type: object
+    additionalProperties: false
+    required:
+      - type
+      - json
+    properties:
+      type:
+        allOf:
+          - $ref: './WorkContentPartType.yaml'
+        enum:
+          - JSON
+      json:
+        description: Arbitrary JSON value preserved in canonical part order.

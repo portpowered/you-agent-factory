@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+description: Selector fields used to resolve one content part from ordered runtime input.
+properties:
+  slot:
+    type: string
+    description: Match a content part by its authored slot field.
+  label:
+    type: string
+    description: Match a content part by its label field.
+  type:
+    $ref: './ModelOperationContentType.yaml'
+    description: Match a content part by its uppercase public type.
+  role:
+    type: string
+    description: Match a content part by its role field.

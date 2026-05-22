@@ -43,6 +43,62 @@ func TestRuleResourceUsage_ValidConfig(t *testing.T) {
 	}
 }
 
+func TestRuleResourceUsage_ValidatesWorkerRequirements(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Resources = []interfaces.ResourceConfig{{Name: "gpu", Capacity: 4}}
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name:      "worker-a",
+		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 0}, {Name: "missing", Capacity: 1}},
+	}}
+
+	findings := ruleResourceUsage(cfg)
+	assertFindingExists(t, findings, "resource-usage-capacity")
+	assertFindingExists(t, findings, "resource-usage-ref")
+}
+
+func TestRuleResourceDefinitions_RequiresModelMetadata(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Resources = []interfaces.ResourceConfig{{
+		Name:     "omnivoice-cache",
+		Type:     interfaces.ResourceTypeModel,
+		Capacity: 1,
+	}}
+
+	findings := ruleResourceDefinitions(cfg)
+	assertFindingExists(t, findings, "resource-model-model")
+	assertFindingExists(t, findings, "resource-model-backend")
+	assertFindingExists(t, findings, "resource-model-load-policy")
+}
+
+func TestRuleResourceDefinitions_RequiresProviderQuotaMetadata(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Resources = []interfaces.ResourceConfig{{
+		Name:     "codex-tts-quota",
+		Type:     interfaces.ResourceTypeProviderQuota,
+		Capacity: 2,
+	}}
+
+	findings := ruleResourceDefinitions(cfg)
+	assertFindingExists(t, findings, "resource-provider-quota-provider")
+	assertFindingExists(t, findings, "resource-provider-quota-model")
+}
+
+func TestRuleResourceDefinitions_AcceptsModelResourceMetadata(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Resources = []interfaces.ResourceConfig{{
+		Name:       "omnivoice-cache",
+		Type:       interfaces.ResourceTypeModel,
+		Capacity:   1,
+		Model:      "OMNIVOICE_Q4_K_M",
+		Backend:    "LLAMACPP",
+		LoadPolicy: "ON_DEMAND",
+	}}
+
+	if findings := ruleResourceDefinitions(cfg); len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
 func TestRuleRequiredTools_MissingNameAndCommand(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{

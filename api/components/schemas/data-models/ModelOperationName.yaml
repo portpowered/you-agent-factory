@@ -1,0 +1,3 @@
+type: string
+description: Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+pattern: '^[A-Z][A-Z0-9_]*$'

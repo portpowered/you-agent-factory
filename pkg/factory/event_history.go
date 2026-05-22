@@ -364,6 +364,15 @@ func (h *FactoryEventHistory) RecordInferenceEvent(event factoryapi.FactoryEvent
 	h.appendGenerated(event)
 }
 
+// RecordModelEvent appends a model-execution boundary event to the same
+// canonical history used for dispatch and replay events.
+func (h *FactoryEventHistory) RecordModelEvent(event factoryapi.FactoryEvent) {
+	if h == nil || !isModelEventType(event.Type) {
+		return
+	}
+	h.appendGenerated(event)
+}
+
 // RecordScriptEvent appends a script-boundary event to the same canonical
 // history used for dispatch and replay events.
 func (h *FactoryEventHistory) RecordScriptEvent(event factoryapi.FactoryEvent) {
@@ -644,6 +653,15 @@ func slicePtr[T any](values []T) *[]T {
 func isInferenceEventType(eventType factoryapi.FactoryEventType) bool {
 	switch eventType {
 	case factoryapi.FactoryEventTypeInferenceRequest, factoryapi.FactoryEventTypeInferenceResponse:
+		return true
+	default:
+		return false
+	}
+}
+
+func isModelEventType(eventType factoryapi.FactoryEventType) bool {
+	switch eventType {
+	case factoryapi.FactoryEventTypeModelRequest, factoryapi.FactoryEventTypeModelResponse:
 		return true
 	default:
 		return false

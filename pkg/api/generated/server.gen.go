@@ -70,6 +70,8 @@ const (
 	FactoryEventTypeInferenceRequest          FactoryEventType = "INFERENCE_REQUEST"
 	FactoryEventTypeInferenceResponse         FactoryEventType = "INFERENCE_RESPONSE"
 	FactoryEventTypeInitialStructureRequest   FactoryEventType = "INITIAL_STRUCTURE_REQUEST"
+	FactoryEventTypeModelRequest              FactoryEventType = "MODEL_REQUEST"
+	FactoryEventTypeModelResponse             FactoryEventType = "MODEL_RESPONSE"
 	FactoryEventTypeRelationshipChangeRequest FactoryEventType = "RELATIONSHIP_CHANGE_REQUEST"
 	FactoryEventTypeRunRequest                FactoryEventType = "RUN_REQUEST"
 	FactoryEventTypeRunResponse               FactoryEventType = "RUN_RESPONSE"
@@ -151,6 +153,39 @@ const (
 	Codex LoadableProviderSessionProvider = "codex"
 )
 
+// Defines values for ModelInvocationResponseMode.
+const (
+	AUDIOSTREAM ModelInvocationResponseMode = "AUDIO_STREAM"
+	METADATA    ModelInvocationResponseMode = "METADATA"
+)
+
+// Defines values for ModelLoadState.
+const (
+	NOTAPPLICABLE ModelLoadState = "NOT_APPLICABLE"
+	UNLOADED      ModelLoadState = "UNLOADED"
+)
+
+// Defines values for ModelOperationContentType.
+const (
+	ModelOperationContentTypeAudio  ModelOperationContentType = "AUDIO"
+	ModelOperationContentTypeBinary ModelOperationContentType = "BINARY"
+	ModelOperationContentTypeImage  ModelOperationContentType = "IMAGE"
+	ModelOperationContentTypeJSON   ModelOperationContentType = "JSON"
+	ModelOperationContentTypeText   ModelOperationContentType = "TEXT"
+)
+
+// Defines values for ModelPullOutcome.
+const (
+	ALREADYPRESENT ModelPullOutcome = "ALREADY_PRESENT"
+	PULLED         ModelPullOutcome = "PULLED"
+)
+
+// Defines values for ModelStatus.
+const (
+	READY       ModelStatus = "READY"
+	UNAVAILABLE ModelStatus = "UNAVAILABLE"
+)
+
 // Defines values for PromptTemplateDiagnosticKind.
 const (
 	INVALIDVARIABLE     PromptTemplateDiagnosticKind = "INVALID_VARIABLE"
@@ -172,6 +207,21 @@ const (
 	RelationTypeDependsOn   RelationType = "DEPENDS_ON"
 	RelationTypeParentChild RelationType = "PARENT_CHILD"
 	RelationTypeSpawnedBy   RelationType = "SPAWNED_BY"
+)
+
+// Defines values for ResolvedModelOperationBindingSource.
+const (
+	CONFIG  ResolvedModelOperationBindingSource = "CONFIG"
+	DEFAULT ResolvedModelOperationBindingSource = "DEFAULT"
+	INPUT   ResolvedModelOperationBindingSource = "INPUT"
+	OMITTED ResolvedModelOperationBindingSource = "OMITTED"
+)
+
+// Defines values for ResourceType.
+const (
+	ResourceTypeInvocationSlot ResourceType = "INVOCATION_SLOT"
+	ResourceTypeModel          ResourceType = "MODEL"
+	ResourceTypeProviderQuota  ResourceType = "PROVIDER_QUOTA"
 )
 
 // Defines values for RunnerID.
@@ -207,8 +257,13 @@ const (
 
 // Defines values for WorkContentPartType.
 const (
-	WorkContentPartTypeImage WorkContentPartType = "image"
-	WorkContentPartTypeText  WorkContentPartType = "text"
+	WorkContentPartTypeAudio      WorkContentPartType = "AUDIO"
+	WorkContentPartTypeBinary     WorkContentPartType = "BINARY"
+	WorkContentPartTypeImage      WorkContentPartType = "image"
+	WorkContentPartTypeImageUpper WorkContentPartType = "IMAGE"
+	WorkContentPartTypeJSON       WorkContentPartType = "JSON"
+	WorkContentPartTypeText       WorkContentPartType = "text"
+	WorkContentPartTypeTextUpper  WorkContentPartType = "TEXT"
 )
 
 // Defines values for WorkOutcome.
@@ -230,6 +285,12 @@ const (
 	WorkStateTypeINITIAL    WorkStateType = "INITIAL"
 	WorkStateTypePROCESSING WorkStateType = "PROCESSING"
 	WorkStateTypeTERMINAL   WorkStateType = "TERMINAL"
+)
+
+// Defines values for WorkerModelLocality.
+const (
+	WorkerModelLocalityCloud WorkerModelLocality = "CLOUD"
+	WorkerModelLocalityLocal WorkerModelLocality = "LOCAL"
 )
 
 // Defines values for WorkerModelProvider.
@@ -262,6 +323,7 @@ const (
 const (
 	WorkstationTypeClassifierWorkstation WorkstationType = "CLASSIFIER_WORKSTATION"
 	WorkstationTypeLogicalMove           WorkstationType = "LOGICAL_MOVE"
+	WorkstationTypeModelInvoke           WorkstationType = "MODEL_INVOKE"
 	WorkstationTypeModelWorkstation      WorkstationType = "MODEL_WORKSTATION"
 )
 
@@ -1103,6 +1165,12 @@ type ListFactorySessionsResponse struct {
 	Sessions []FactorySessionSummary `json:"sessions"`
 }
 
+// ListModelsResponse defines model for ListModelsResponse.
+type ListModelsResponse struct {
+	// Results Discovered models exposed by the currently loaded runtime configuration.
+	Results []ModelSummary `json:"results"`
+}
+
 // ListWorkResponse defines model for ListWorkResponse.
 type ListWorkResponse struct {
 	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
@@ -1125,6 +1193,310 @@ type LoadableProviderSessionRef struct {
 
 	// Provider Canonical provider value for provider-session detail requests that can be loaded by the API.
 	Provider LoadableProviderSessionProvider `json:"provider"`
+}
+
+// ModelCapability defines model for ModelCapability.
+type ModelCapability struct {
+	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
+	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
+
+	// Operations Operations declared by this worker for the selected model.
+	Operations []ModelOperation `json:"operations"`
+
+	// ProviderLocality Provider locality for a model worker capability declaration.
+	ProviderLocality WorkerModelLocality `json:"providerLocality"`
+
+	// ResourceNames Factory resource names referenced by the worker declaration.
+	ResourceNames []string `json:"resourceNames"`
+
+	// Worker Customer-authored worker name that exposes this capability declaration.
+	Worker string `json:"worker"`
+}
+
+// ModelDetail defines model for ModelDetail.
+type ModelDetail struct {
+	// Capabilities Worker-scoped capability declarations that contribute to this discovered model.
+	Capabilities []ModelCapability `json:"capabilities"`
+	Diagnostics  StringMap         `json:"diagnostics"`
+
+	// LoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+	LoadState ModelLoadState `json:"loadState"`
+
+	// Modalities Uppercase content modalities observed across all declared operation inputs and outputs.
+	Modalities []ModelOperationContentType `json:"modalities"`
+
+	// Name Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	Name string `json:"name"`
+
+	// Operations Union of provider-agnostic operations supported by workers for this model.
+	Operations []ModelOperation `json:"operations"`
+
+	// ProviderLocality Provider locality for a model worker capability declaration.
+	ProviderLocality WorkerModelLocality `json:"providerLocality"`
+
+	// Resources Factory resource summaries associated with this model's workers or explicit model metadata.
+	Resources []ModelResourceSummary `json:"resources"`
+
+	// Status Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+	Status ModelStatus `json:"status"`
+}
+
+// ModelInvocationOptions Optional direct-invocation controls for response shaping and transport.
+type ModelInvocationOptions struct {
+	// ResponseMode Requested direct-invocation response mode.
+	ResponseMode *ModelInvocationResponseMode `json:"responseMode,omitempty"`
+}
+
+// ModelInvocationRequest defines model for ModelInvocationRequest.
+type ModelInvocationRequest struct {
+	// Bindings Optional per-request slot bindings that follow the same contract as `MODEL_INVOKE` workstation bindings.
+	Bindings *[]WorkstationOperationBinding `json:"bindings,omitempty"`
+
+	// Content Ordered canonical content parts for one work item.
+	Content *WorkContent `json:"content,omitempty"`
+
+	// Operation Uppercase provider-agnostic operation to invoke, such as `TTS`.
+	Operation string `json:"operation"`
+
+	// Options Optional direct-invocation controls for response shaping and transport.
+	Options *ModelInvocationOptions `json:"options,omitempty"`
+}
+
+// ModelInvocationResponse defines model for ModelInvocationResponse.
+type ModelInvocationResponse struct {
+	// Bindings Deterministically resolved slot bindings used for the invocation.
+	Bindings []ResolvedModelOperationBinding `json:"bindings"`
+
+	// Content Ordered canonical content parts for one work item.
+	Content WorkContent `json:"content"`
+
+	// ModelName Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	ModelName string `json:"modelName"`
+
+	// Operation Uppercase provider-agnostic operation that was invoked.
+	Operation string `json:"operation"`
+
+	// ProviderLocality Provider locality for a model worker capability declaration.
+	ProviderLocality WorkerModelLocality `json:"providerLocality"`
+
+	// Worker Worker selected to satisfy this invocation.
+	Worker string `json:"worker"`
+}
+
+// ModelInvocationResponseMode Requested direct-invocation response mode.
+type ModelInvocationResponseMode string
+
+// ModelLoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+type ModelLoadState string
+
+// ModelOperation One provider-agnostic operation exposed by a model worker, such as `TTS`.
+type ModelOperation struct {
+	// Inputs Named operation input slots this worker can consume.
+	Inputs *[]ModelOperationSlot `json:"inputs,omitempty"`
+
+	// Name Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+	Name ModelOperationName `json:"name"`
+
+	// Outputs Named operation output slots this worker can produce.
+	Outputs *[]ModelOperationSlot `json:"outputs,omitempty"`
+}
+
+// ModelOperationContentType Uppercase content-part categories supported by worker model-operation capability slots.
+type ModelOperationContentType string
+
+// ModelOperationName Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+type ModelOperationName = string
+
+// ModelOperationSlot One named capability slot declared by a model operation.
+type ModelOperationSlot struct {
+	// ContentTypes Uppercase content types accepted or produced by this slot.
+	ContentTypes []ModelOperationContentType `json:"contentTypes"`
+
+	// Name Stable slot name used by workstation-side bindings and diagnostics.
+	Name string `json:"name"`
+
+	// Required Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
+	Required *bool `json:"required,omitempty"`
+}
+
+// ModelPullDownloadedFile defines model for ModelPullDownloadedFile.
+type ModelPullDownloadedFile struct {
+	// Bytes Downloaded file size in bytes.
+	Bytes int64 `json:"bytes"`
+
+	// Path Relative file path written under the managed model cache directory.
+	Path string `json:"path"`
+
+	// Sha256 Lowercase SHA-256 checksum for the cached file when known.
+	Sha256 *string `json:"sha256,omitempty"`
+}
+
+// ModelPullOutcome Outcome of a managed local-model asset pull request.
+type ModelPullOutcome string
+
+// ModelPullResponse defines model for ModelPullResponse.
+type ModelPullResponse struct {
+	// CachePath Final managed cache directory that now contains the pulled model assets.
+	CachePath string `json:"cachePath"`
+
+	// DownloadedFiles Files that were downloaded or verified as already present for the managed cache entry.
+	DownloadedFiles []ModelPullDownloadedFile `json:"downloadedFiles"`
+
+	// ModelName Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	ModelName string `json:"modelName"`
+
+	// Outcome Outcome of a managed local-model asset pull request.
+	Outcome ModelPullOutcome `json:"outcome"`
+
+	// ProviderLocality Provider locality for a model worker capability declaration.
+	ProviderLocality WorkerModelLocality `json:"providerLocality"`
+
+	// Revision Pulled source revision identifier, such as an upstream repository commit SHA.
+	Revision string `json:"revision"`
+}
+
+// ModelRequestEventPayload Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier.
+type ModelRequestEventPayload struct {
+	// Attempt One-based model execution attempt number for this dispatch.
+	Attempt int `json:"attempt"`
+
+	// Bindings Deterministically resolved operation-slot bindings used for invocation.
+	Bindings *[]ResolvedModelOperationBinding `json:"bindings,omitempty"`
+
+	// Model Concrete model identity resolved for this invocation.
+	Model string `json:"model"`
+
+	// ModelRequestId Stable identifier correlating this model execution request with its response.
+	ModelRequestId string `json:"modelRequestId"`
+
+	// Operation Uppercase model operation requested by the workstation, such as TTS.
+	Operation string `json:"operation"`
+
+	// ProviderLocality Worker-declared model locality, such as LOCAL or CLOUD.
+	ProviderLocality string `json:"providerLocality"`
+
+	// Resources Concrete resources attached to the model worker execution path.
+	Resources *[]ModelResourceSummary `json:"resources,omitempty"`
+
+	// Worker Runtime worker name selected for the invocation.
+	Worker string `json:"worker"`
+
+	// WorkingDirectory Working directory resolved for the model execution when present.
+	WorkingDirectory *string `json:"workingDirectory,omitempty"`
+
+	// Worktree Worktree path resolved for the model execution when present.
+	Worktree *string `json:"worktree,omitempty"`
+}
+
+// ModelResourceSummary defines model for ModelResourceSummary.
+type ModelResourceSummary struct {
+	// Backend Local runtime backend identifier for model resources.
+	Backend *string `json:"backend,omitempty"`
+
+	// Capacity Declared factory capacity for this resource.
+	Capacity int `json:"capacity"`
+
+	// LoadPolicy Local load-policy metadata for model resources.
+	LoadPolicy *string `json:"loadPolicy,omitempty"`
+
+	// Model Concrete model identifier when the resource is model-specific.
+	Model *string `json:"model,omitempty"`
+
+	// Name Factory-authored resource name.
+	Name string `json:"name"`
+
+	// Provider Cloud provider identity when the resource models quota or routing.
+	Provider *string `json:"provider,omitempty"`
+
+	// Type Uppercase resource families supported by the public factory-config contract.
+	Type ResourceType `json:"type"`
+}
+
+// ModelResponseEventPayload Response details captured after a model-backed worker invocation returns, including resource wait, local load, binding-resolution, output, and failure evidence correlated to the matching model request event. Large binary audio must remain represented through content references or bounded previews instead of unbounded inline payloads.
+type ModelResponseEventPayload struct {
+	// Attempt One-based model execution attempt number for this dispatch.
+	Attempt int `json:"attempt"`
+
+	// Bindings Deterministically resolved operation-slot bindings used for invocation.
+	Bindings *[]ResolvedModelOperationBinding `json:"bindings,omitempty"`
+
+	// Diagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
+	Diagnostics *SafeWorkDiagnostics `json:"diagnostics,omitempty"`
+
+	// DurationMillis End-to-end model invocation duration in milliseconds.
+	DurationMillis int64 `json:"durationMillis"`
+
+	// ErrorClass Stable failure classification when available.
+	ErrorClass *string `json:"errorClass,omitempty"`
+
+	// LoadDurationMillis Duration of the managed local-model load call when one occurred.
+	LoadDurationMillis *int64 `json:"loadDurationMillis,omitempty"`
+
+	// LoadRequested Whether this invocation asked the managed local-model runtime to load a handle.
+	LoadRequested *bool `json:"loadRequested,omitempty"`
+
+	// LoadReused Whether an already-loaded local model handle was reused instead of loading again.
+	LoadReused *bool `json:"loadReused,omitempty"`
+
+	// Model Concrete model identity resolved for this invocation.
+	Model string `json:"model"`
+
+	// ModelRequestId Identifier from the matching model request event.
+	ModelRequestId string `json:"modelRequestId"`
+
+	// Operation Uppercase model operation requested by the workstation, such as TTS.
+	Operation string `json:"operation"`
+
+	// Outcome Result category returned by a provider inference attempt.
+	Outcome InferenceOutcome `json:"outcome"`
+
+	// OutputContent Ordered canonical content parts for one work item.
+	OutputContent *WorkContent `json:"outputContent,omitempty"`
+
+	// OutputPreview Bounded output preview for non-binary model responses when present.
+	OutputPreview *string `json:"outputPreview,omitempty"`
+
+	// ProviderLocality Worker-declared model locality, such as LOCAL or CLOUD.
+	ProviderLocality string `json:"providerLocality"`
+
+	// ResourceAcquired Whether the invocation acquired the required local model resources.
+	ResourceAcquired *bool `json:"resourceAcquired,omitempty"`
+
+	// ResourceWaitMillis Time spent waiting for local model resources before acquisition.
+	ResourceWaitMillis *int64 `json:"resourceWaitMillis,omitempty"`
+
+	// Resources Concrete resources attached to the model worker execution path.
+	Resources *[]ModelResourceSummary `json:"resources,omitempty"`
+
+	// Worker Runtime worker name selected for the invocation.
+	Worker string `json:"worker"`
+}
+
+// ModelStatus Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+type ModelStatus string
+
+// ModelSummary defines model for ModelSummary.
+type ModelSummary struct {
+	// LoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+	LoadState ModelLoadState `json:"loadState"`
+
+	// Modalities Uppercase content modalities observed across the model's declared operation inputs and outputs.
+	Modalities []ModelOperationContentType `json:"modalities"`
+
+	// Name Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	Name string `json:"name"`
+
+	// Operations Provider-agnostic operations supported by the discovered model.
+	Operations []ModelOperation `json:"operations"`
+
+	// ProviderLocality Provider locality for a model worker capability declaration.
+	ProviderLocality WorkerModelLocality `json:"providerLocality"`
+
+	// Resources Factory resource summaries associated with this model's workers or explicit model metadata.
+	Resources []ModelResourceSummary `json:"resources"`
+
+	// Status Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+	Status ModelStatus `json:"status"`
 }
 
 // OpenFactorySessionRequest defines model for OpenFactorySessionRequest.
@@ -1316,13 +1688,43 @@ type RequiredTool struct {
 	VersionArgs *[]string `json:"versionArgs,omitempty"`
 }
 
+// ResolvedModelOperationBinding defines model for ResolvedModelOperationBinding.
+type ResolvedModelOperationBinding struct {
+	// Content Ordered canonical content parts for one work item.
+	Content WorkContent `json:"content"`
+
+	// Slot Stable input slot name declared by the worker capability.
+	Slot string `json:"slot"`
+
+	// Source Source used to resolve one invocation slot binding.
+	Source ResolvedModelOperationBindingSource `json:"source"`
+}
+
+// ResolvedModelOperationBindingSource Source used to resolve one invocation slot binding.
+type ResolvedModelOperationBindingSource string
+
 // Resource Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas.
 type Resource struct {
+	// Backend Backend identifier for local model resources, such as a managed runtime or embedded inference backend.
+	Backend *string `json:"backend,omitempty"`
+
 	// Capacity Total units of this resource available to the factory at one time.
 	Capacity int `json:"capacity"`
 
+	// LoadPolicy Load policy for local model resources, such as `ON_DEMAND` or `EAGER`.
+	LoadPolicy *string `json:"loadPolicy,omitempty"`
+
+	// Model Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`.
+	Model *string `json:"model,omitempty"`
+
 	// Name Resource name referenced from worker requirements and workstation resourceUsage entries.
 	Name string `json:"name"`
+
+	// Provider Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources.
+	Provider *string `json:"provider,omitempty"`
+
+	// Type Uppercase resource families supported by the public factory-config contract.
+	Type *ResourceType `json:"type,omitempty"`
 }
 
 // ResourceManifest Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
@@ -1339,6 +1741,9 @@ type ResourceRequirement struct {
 	Capacity int    `json:"capacity"`
 	Name     string `json:"name"`
 }
+
+// ResourceType Uppercase resource families supported by the public factory-config contract.
+type ResourceType string
 
 // ResourceUsage defines model for ResourceUsage.
 type ResourceUsage struct {
@@ -1590,15 +1995,89 @@ type Work struct {
 	WorkTypeName *string `json:"workTypeName,omitempty"`
 }
 
+// WorkAudioContentPart defines model for WorkAudioContentPart.
+type WorkAudioContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// File Audio file or artifact reference preserved for later runtime materialization.
+	File string `json:"file"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
+	Type WorkContentPartType `json:"type"`
+}
+
+// WorkBinaryContentPart defines model for WorkBinaryContentPart.
+type WorkBinaryContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// File Binary file or artifact reference preserved for later runtime materialization.
+	File string `json:"file"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
+	Type WorkContentPartType `json:"type"`
+}
+
 // WorkContent Ordered canonical content parts for one work item.
 type WorkContent = []WorkContentPart
+
+// WorkContentCommonFields defines model for WorkContentCommonFields.
+type WorkContentCommonFields struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string `json:"slot,omitempty"`
+}
+
+// WorkContentMetadata Optional metadata attached to one work content part.
+type WorkContentMetadata map[string]interface{}
 
 // WorkContentPart One ordered canonical content part on a work item.
 type WorkContentPart struct {
 	union json.RawMessage
 }
 
-// WorkContentPartType Supported first-slice canonical work content part types.
+// WorkContentPartType Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
 type WorkContentPartType string
 
 // WorkDiagnostics defines model for WorkDiagnostics.
@@ -1610,10 +2089,53 @@ type WorkDiagnostics struct {
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
 
-// WorkImageContentPart Ordered image content for one work item.
+// WorkImageContentPart defines model for WorkImageContentPart.
 type WorkImageContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
 	// File Image file reference preserved for later runtime materialization.
-	File string              `json:"file"`
+	File string `json:"file"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
+	Type WorkContentPartType `json:"type"`
+}
+
+// WorkJsonContentPart defines model for WorkJsonContentPart.
+type WorkJsonContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Json Arbitrary JSON value preserved in canonical part order.
+	Json interface{} `json:"json"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
 }
 
@@ -1671,8 +2193,26 @@ type WorkState struct {
 // WorkStateType Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
 type WorkStateType string
 
-// WorkTextContentPart Ordered inline text content for one work item.
+// WorkTextContentPart defines model for WorkTextContentPart.
 type WorkTextContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string `json:"slot,omitempty"`
+
 	// Text Inline text content preserved in canonical part order.
 	Text string              `json:"text"`
 	Type WorkContentPartType `json:"type"`
@@ -1710,11 +2250,17 @@ type Worker struct {
 	// Model Model identifier to request from the configured model provider when this worker uses model execution.
 	Model *string `json:"model,omitempty"`
 
+	// ModelLocality Provider locality for a model worker capability declaration.
+	ModelLocality *WorkerModelLocality `json:"modelLocality,omitempty"`
+
 	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
 	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
 	// Name Worker name referenced by Workstation.worker.
 	Name string `json:"name"`
+
+	// Operations Provider-agnostic model operations that this worker can execute, including named input and output slots.
+	Operations *[]ModelOperation `json:"operations,omitempty"`
 
 	// Provider Built-in repository-owned hosted worker providers supported by the public factory-config contract.
 	Provider *HostedWorkerProvider `json:"provider,omitempty"`
@@ -1734,6 +2280,9 @@ type Worker struct {
 	// Type Worker implementation families supported by the public factory-config contract.
 	Type *WorkerType `json:"type,omitempty"`
 }
+
+// WorkerModelLocality Provider locality for a model worker capability declaration.
+type WorkerModelLocality string
 
 // WorkerModelProvider Canonical model-provider identifiers supported by model workers in factory config.
 type WorkerModelProvider string
@@ -1785,6 +2334,12 @@ type Workstation struct {
 
 	// OnRejection Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection.
 	OnRejection *[]WorkstationIO `json:"onRejection,omitempty"`
+
+	// Operation Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+	Operation *ModelOperationName `json:"operation,omitempty"`
+
+	// OperationBindings Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.
+	OperationBindings *[]WorkstationOperationBinding `json:"operationBindings,omitempty"`
 
 	// OutputSchema JSON schema string used to validate or parse structured model output when configured.
 	OutputSchema *string `json:"outputSchema,omitempty"`
@@ -1854,6 +2409,36 @@ type WorkstationLimits struct {
 
 	// MaxRetries Maximum number of retry attempts after a failed dispatch before the workstation gives up.
 	MaxRetries *int `json:"maxRetries,omitempty"`
+}
+
+// WorkstationOperationBinding One workstation-authored binding for a provider-agnostic model-operation input slot.
+type WorkstationOperationBinding struct {
+	// Config Ordered canonical content parts for one work item.
+	Config *WorkContent `json:"config,omitempty"`
+
+	// DefaultContent Ordered canonical content parts for one work item.
+	DefaultContent *WorkContent `json:"defaultContent,omitempty"`
+
+	// Selector Selector fields used to resolve one content part from ordered runtime input.
+	Selector *WorkstationOperationBindingSelector `json:"selector,omitempty"`
+
+	// Slot Stable input slot name declared by the worker operation.
+	Slot string `json:"slot"`
+}
+
+// WorkstationOperationBindingSelector Selector fields used to resolve one content part from ordered runtime input.
+type WorkstationOperationBindingSelector struct {
+	// Label Match a content part by its label field.
+	Label *string `json:"label,omitempty"`
+
+	// Role Match a content part by its role field.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Match a content part by its authored slot field.
+	Slot *string `json:"slot,omitempty"`
+
+	// Type Uppercase content-part categories supported by worker model-operation capability slots.
+	Type *ModelOperationContentType `json:"type,omitempty"`
 }
 
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.
@@ -1978,6 +2563,9 @@ type SaveEditableCurrentFactoryDefinitionJSONRequestBody = SaveEditableFactoryDe
 
 // ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplate for application/json ContentType.
 type ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody = PromptTemplateValidationRequest
+
+// InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
+type InvokeModelJSONRequestBody = ModelInvocationRequest
 
 // SubmitWorkJSONRequestBody defines body for SubmitWork for application/json ContentType.
 type SubmitWorkJSONRequestBody = SubmitWorkRequest
@@ -2131,6 +2719,58 @@ func (t *FactoryEvent_Payload) FromDispatchRequestEventPayload(v DispatchRequest
 
 // MergeDispatchRequestEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided DispatchRequestEventPayload
 func (t *FactoryEvent_Payload) MergeDispatchRequestEventPayload(v DispatchRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsModelRequestEventPayload returns the union data inside the FactoryEvent_Payload as a ModelRequestEventPayload
+func (t FactoryEvent_Payload) AsModelRequestEventPayload() (ModelRequestEventPayload, error) {
+	var body ModelRequestEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromModelRequestEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided ModelRequestEventPayload
+func (t *FactoryEvent_Payload) FromModelRequestEventPayload(v ModelRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeModelRequestEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided ModelRequestEventPayload
+func (t *FactoryEvent_Payload) MergeModelRequestEventPayload(v ModelRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsModelResponseEventPayload returns the union data inside the FactoryEvent_Payload as a ModelResponseEventPayload
+func (t FactoryEvent_Payload) AsModelResponseEventPayload() (ModelResponseEventPayload, error) {
+	var body ModelResponseEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromModelResponseEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided ModelResponseEventPayload
+func (t *FactoryEvent_Payload) FromModelResponseEventPayload(v ModelResponseEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeModelResponseEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided ModelResponseEventPayload
+func (t *FactoryEvent_Payload) MergeModelResponseEventPayload(v ModelResponseEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -2385,6 +3025,84 @@ func (t *WorkContentPart) MergeWorkImageContentPart(v WorkImageContentPart) erro
 	return err
 }
 
+// AsWorkAudioContentPart returns the union data inside the WorkContentPart as a WorkAudioContentPart
+func (t WorkContentPart) AsWorkAudioContentPart() (WorkAudioContentPart, error) {
+	var body WorkAudioContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkAudioContentPart overwrites any union data inside the WorkContentPart as the provided WorkAudioContentPart
+func (t *WorkContentPart) FromWorkAudioContentPart(v WorkAudioContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkAudioContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkAudioContentPart
+func (t *WorkContentPart) MergeWorkAudioContentPart(v WorkAudioContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkJsonContentPart returns the union data inside the WorkContentPart as a WorkJsonContentPart
+func (t WorkContentPart) AsWorkJsonContentPart() (WorkJsonContentPart, error) {
+	var body WorkJsonContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkJsonContentPart overwrites any union data inside the WorkContentPart as the provided WorkJsonContentPart
+func (t *WorkContentPart) FromWorkJsonContentPart(v WorkJsonContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkJsonContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkJsonContentPart
+func (t *WorkContentPart) MergeWorkJsonContentPart(v WorkJsonContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkBinaryContentPart returns the union data inside the WorkContentPart as a WorkBinaryContentPart
+func (t WorkContentPart) AsWorkBinaryContentPart() (WorkBinaryContentPart, error) {
+	var body WorkBinaryContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkBinaryContentPart overwrites any union data inside the WorkContentPart as the provided WorkBinaryContentPart
+func (t *WorkContentPart) FromWorkBinaryContentPart(v WorkBinaryContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkBinaryContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkBinaryContentPart
+func (t *WorkContentPart) MergeWorkBinaryContentPart(v WorkBinaryContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 func (t WorkContentPart) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
@@ -2454,6 +3172,18 @@ type ServerInterface interface {
 	// Validate workstation prompt template
 	// (POST /factory/~current/workstations/{workstation_name}/prompt-template-validation)
 	ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request, workstationName string)
+	// List discovered models
+	// (GET /models)
+	ListModels(w http.ResponseWriter, r *http.Request)
+	// Get one discovered model
+	// (GET /models/{model_name})
+	GetModel(w http.ResponseWriter, r *http.Request, modelName string)
+	// Invoke one discovered model directly
+	// (POST /models/{model_name}/invocations)
+	InvokeModel(w http.ResponseWriter, r *http.Request, modelName string)
+	// Pull local model assets into the managed cache
+	// (POST /models/{model_name}/pull)
+	PullModel(w http.ResponseWriter, r *http.Request, modelName string)
 	// Get provider session details
 	// (GET /provider-sessions/detail)
 	GetProviderSessionDetails(w http.ResponseWriter, r *http.Request, params GetProviderSessionDetailsParams)
@@ -2942,6 +3672,95 @@ func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTempla
 	handler.ServeHTTP(w, r)
 }
 
+// ListModels operation middleware
+func (siw *ServerInterfaceWrapper) ListModels(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListModels(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetModel operation middleware
+func (siw *ServerInterfaceWrapper) GetModel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "model_name" -------------
+	var modelName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "model_name", mux.Vars(r)["model_name"], &modelName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetModel(w, r, modelName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// InvokeModel operation middleware
+func (siw *ServerInterfaceWrapper) InvokeModel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "model_name" -------------
+	var modelName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "model_name", mux.Vars(r)["model_name"], &modelName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.InvokeModel(w, r, modelName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PullModel operation middleware
+func (siw *ServerInterfaceWrapper) PullModel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "model_name" -------------
+	var modelName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "model_name", mux.Vars(r)["model_name"], &modelName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PullModel(w, r, modelName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetProviderSessionDetails operation middleware
 func (siw *ServerInterfaceWrapper) GetProviderSessionDetails(w http.ResponseWriter, r *http.Request) {
 
@@ -3293,6 +4112,14 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-contract", wrapper.GetCurrentFactoryWorkstationPromptTemplateContract).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplate).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/models", wrapper.ListModels).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/models/{model_name}", wrapper.GetModel).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/models/{model_name}/invocations", wrapper.InvokeModel).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/models/{model_name}/pull", wrapper.PullModel).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 

@@ -1,0 +1,11 @@
+type: string
+description: Provider locality for a model worker capability declaration.
+x-enum-varnames:
+  - WorkerModelLocalityLocal
+  - WorkerModelLocalityCloud
+enum:
+  - LOCAL
+  - CLOUD
+x-enum-descriptions:
+  - The model runs through local embedded or host-managed inference resources.
+  - The model runs through a remote cloud-backed provider.

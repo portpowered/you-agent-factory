@@ -1,0 +1,5 @@
+type: string
+description: Outcome of a managed local-model asset pull request.
+enum:
+  - PULLED
+  - ALREADY_PRESENT

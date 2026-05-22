@@ -1,0 +1,18 @@
+description: Ordered binary content for one work item.
+allOf:
+  - $ref: './WorkContentCommonFields.yaml'
+  - type: object
+    additionalProperties: false
+    required:
+      - type
+      - file
+    properties:
+      type:
+        allOf:
+          - $ref: './WorkContentPartType.yaml'
+        enum:
+          - BINARY
+      file:
+        type: string
+        minLength: 1
+        description: Binary file or artifact reference preserved for later runtime materialization.

@@ -108,14 +108,6 @@ Use the default starter inbox for local task submissions:
 Seed your starter work by adding files to this inbox, then run the starter to process them.
 The file watcher monitors this directory tree and automatically watches new subdirectories.
 `,
-			factoryWorkersDirName + "/processor/" + factoryAgentsFileName: `---
-type: MODEL_WORKER
-modelProvider: CODEX
-executorProvider: SCRIPT_WRAP
-resources: ["agent-slot"]
-timeout: 1h
-skipPermissions: true
----`,
 			factoryWorkstationsDirName + "/process/" + factoryAgentsFileName: `---
 type: MODEL_WORKSTATION
 ---

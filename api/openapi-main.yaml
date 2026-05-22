@@ -21,6 +21,8 @@ tags:
     description: Runtime state, event stream, and trace inspection.
   - name: Provider Sessions
     description: Provider-owned session diagnostics for dashboard inspection.
+  - name: Models
+    description: Model discovery and capability inspection for the current runtime.
   - name: Workflows
     description: Stored workflow inspection.
 paths:
@@ -302,6 +304,112 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models:
+    get:
+      tags:
+        - Models
+      operationId: listModels
+      summary: List discovered models
+      description: Lists the concrete model identifiers exposed by the currently loaded runtime configuration together with capability, readiness, locality, load-state, and resource summary data.
+      responses:
+        '200':
+          description: Discovered models for the current runtime.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListModelsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models/{model_name}:
+    get:
+      tags:
+        - Models
+      operationId: getModel
+      summary: Get one discovered model
+      description: Returns one discovered model's readiness, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Discovered model detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models/{model_name}/invocations:
+    post:
+      tags:
+        - Models
+      operationId: invokeModel
+      summary: Invoke one discovered model directly
+      description: Invokes one discovered model through its declared provider-agnostic operation contract using canonical `WorkContent` input and optional slot-binding overrides. Non-streaming clients receive JSON metadata, while audio-producing operations can return a streamed audio body when requested.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelInvocationRequest'
+      responses:
+        '200':
+          description: Successful model invocation result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelInvocationResponse'
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                description: Streamed audio body for audio-producing invocations when `options.responseMode` requests `AUDIO_STREAM`.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /models/{model_name}/pull:
+    post:
+      tags:
+        - Models
+      operationId: pullModel
+      summary: Pull local model assets into the managed cache
+      description: Pulls the required local assets for one discovered model into the managed cache directory. Cloud-backed models and unsupported local targets return actionable errors instead of silently succeeding.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful local-model asset pull or confirmation that the managed cache already contained the required revision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelPullResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
   /factories/{factory_id}/status:
@@ -848,6 +956,38 @@ components:
       $ref: './components/schemas/api/StatusCategories.yaml'
     StatusResponse:
       $ref: './components/schemas/api/StatusResponse.yaml'
+    ListModelsResponse:
+      $ref: './components/schemas/api/ListModelsResponse.yaml'
+    ModelSummary:
+      $ref: './components/schemas/api/ModelSummary.yaml'
+    ModelDetail:
+      $ref: './components/schemas/api/ModelDetail.yaml'
+    ModelInvocationRequest:
+      $ref: './components/schemas/api/ModelInvocationRequest.yaml'
+    ModelInvocationOptions:
+      $ref: './components/schemas/api/ModelInvocationOptions.yaml'
+    ModelInvocationResponseMode:
+      $ref: './components/schemas/api/ModelInvocationResponseMode.yaml'
+    ModelInvocationResponse:
+      $ref: './components/schemas/api/ModelInvocationResponse.yaml'
+    ModelPullDownloadedFile:
+      $ref: './components/schemas/api/ModelPullDownloadedFile.yaml'
+    ModelPullOutcome:
+      $ref: './components/schemas/api/ModelPullOutcome.yaml'
+    ModelPullResponse:
+      $ref: './components/schemas/api/ModelPullResponse.yaml'
+    ResolvedModelOperationBinding:
+      $ref: './components/schemas/api/ResolvedModelOperationBinding.yaml'
+    ResolvedModelOperationBindingSource:
+      $ref: './components/schemas/api/ResolvedModelOperationBindingSource.yaml'
+    ModelCapability:
+      $ref: './components/schemas/api/ModelCapability.yaml'
+    ModelResourceSummary:
+      $ref: './components/schemas/api/ModelResourceSummary.yaml'
+    ModelStatus:
+      $ref: './components/schemas/api/ModelStatus.yaml'
+    ModelLoadState:
+      $ref: './components/schemas/api/ModelLoadState.yaml'
     ErrorFamily:
       $ref: './components/schemas/api/ErrorFamily.yaml'
     ErrorResponse:
@@ -964,6 +1104,10 @@ components:
       $ref: './components/schemas/events/payloads/RelationshipChangeRequestEventPayload.yaml'
     DispatchRequestEventPayload:
       $ref: './components/schemas/events/payloads/DispatchRequestEventPayload.yaml'
+    ModelRequestEventPayload:
+      $ref: './components/schemas/events/payloads/ModelRequestEventPayload.yaml'
+    ModelResponseEventPayload:
+      $ref: './components/schemas/events/payloads/ModelResponseEventPayload.yaml'
     InferenceRequestEventPayload:
       $ref: './components/schemas/events/payloads/InferenceRequestEventPayload.yaml'
     InferenceResponseEventPayload:
@@ -1036,14 +1180,24 @@ components:
       $ref: './components/schemas/data-models/WorkStateType.yaml'
     Resource:
       $ref: './components/schemas/data-models/Resource.yaml'
+    ResourceType:
+      $ref: './components/schemas/data-models/ResourceType.yaml'
     Worker:
       $ref: './components/schemas/data-models/Worker.yaml'
     WorkerType:
       $ref: './components/schemas/data-models/WorkerType.yaml'
     WorkerModelProvider:
       $ref: './components/schemas/data-models/WorkerModelProvider.yaml'
+    WorkerModelLocality:
+      $ref: './components/schemas/data-models/WorkerModelLocality.yaml'
     WorkerProvider:
       $ref: './components/schemas/data-models/WorkerProvider.yaml'
+    ModelOperation:
+      $ref: './components/schemas/data-models/ModelOperation.yaml'
+    ModelOperationSlot:
+      $ref: './components/schemas/data-models/ModelOperationSlot.yaml'
+    ModelOperationContentType:
+      $ref: './components/schemas/data-models/ModelOperationContentType.yaml'
     RunnerID:
       $ref: './components/schemas/data-models/RunnerID.yaml'
     RunnerSelectionSource:
@@ -1095,10 +1249,20 @@ components:
       $ref: './components/schemas/data-models/WorkContentPart.yaml'
     WorkContentPartType:
       $ref: './components/schemas/data-models/WorkContentPartType.yaml'
+    WorkContentMetadata:
+      $ref: './components/schemas/data-models/WorkContentMetadata.yaml'
+    WorkContentCommonFields:
+      $ref: './components/schemas/data-models/WorkContentCommonFields.yaml'
     WorkTextContentPart:
       $ref: './components/schemas/data-models/WorkTextContentPart.yaml'
     WorkImageContentPart:
       $ref: './components/schemas/data-models/WorkImageContentPart.yaml'
+    WorkAudioContentPart:
+      $ref: './components/schemas/data-models/WorkAudioContentPart.yaml'
+    WorkJsonContentPart:
+      $ref: './components/schemas/data-models/WorkJsonContentPart.yaml'
+    WorkBinaryContentPart:
+      $ref: './components/schemas/data-models/WorkBinaryContentPart.yaml'
     Relation:
       $ref: './components/schemas/data-models/Relation.yaml'
     RelationType:

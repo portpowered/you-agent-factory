@@ -1,16 +1,19 @@
-type: object
-additionalProperties: false
 description: Ordered image content for one work item.
-required:
-  - type
-  - file
-properties:
-  type:
-    allOf:
-      - $ref: './WorkContentPartType.yaml'
-    enum:
-      - image
-  file:
-    type: string
-    minLength: 1
-    description: Image file reference preserved for later runtime materialization.
+allOf:
+  - $ref: './WorkContentCommonFields.yaml'
+  - type: object
+    additionalProperties: false
+    required:
+      - type
+      - file
+    properties:
+      type:
+        allOf:
+          - $ref: './WorkContentPartType.yaml'
+        enum:
+          - image
+          - IMAGE
+      file:
+        type: string
+        minLength: 1
+        description: Image file reference preserved for later runtime materialization.

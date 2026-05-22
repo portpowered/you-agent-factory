@@ -10,7 +10,22 @@ properties:
   name:
     type: string
     description: Resource name referenced from worker requirements and workstation resourceUsage entries.
+  type:
+    $ref: './ResourceType.yaml'
+    description: Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`.
   capacity:
     type: integer
     minimum: 1
     description: Total units of this resource available to the factory at one time.
+  model:
+    type: string
+    description: Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`.
+  backend:
+    type: string
+    description: Backend identifier for local model resources, such as a managed runtime or embedded inference backend.
+  loadPolicy:
+    type: string
+    description: Load policy for local model resources, such as `ON_DEMAND` or `EAGER`.
+  provider:
+    type: string
+    description: Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources.

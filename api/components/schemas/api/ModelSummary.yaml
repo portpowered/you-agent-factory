@@ -1,0 +1,34 @@
+type: object
+required:
+  - name
+  - providerLocality
+  - status
+  - loadState
+  - operations
+  - modalities
+  - resources
+properties:
+  name:
+    type: string
+    description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+  providerLocality:
+    $ref: '../data-models/WorkerModelLocality.yaml'
+  status:
+    $ref: './ModelStatus.yaml'
+  loadState:
+    $ref: './ModelLoadState.yaml'
+  operations:
+    type: array
+    description: Provider-agnostic operations supported by the discovered model.
+    items:
+      $ref: '../data-models/ModelOperation.yaml'
+  modalities:
+    type: array
+    description: Uppercase content modalities observed across the model's declared operation inputs and outputs.
+    items:
+      $ref: '../data-models/ModelOperationContentType.yaml'
+  resources:
+    type: array
+    description: Factory resource summaries associated with this model's workers or explicit model metadata.
+    items:
+      $ref: './ModelResourceSummary.yaml'

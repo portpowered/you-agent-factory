@@ -38,19 +38,17 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesHostedLinearWorker(t *testing.T)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
 	}
-	assertGeneratedHostedLinearWorker(t, generated)
+	assertGeneratedHostedLinearWorker(t, (*generated.Workers)[0])
 
 	cfg, err := FactoryConfigFromOpenAPI(generated)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
 	}
-	assertRuntimeHostedLinearWorker(t, cfg)
+	assertRuntimeHostedLinearWorker(t, cfg.Workers[0])
 }
 
-func assertGeneratedHostedLinearWorker(t *testing.T, generated factoryapi.Factory) {
+func assertGeneratedHostedLinearWorker(t *testing.T, worker factoryapi.Worker) {
 	t.Helper()
-
-	worker := (*generated.Workers)[0]
 	if worker.Provider == nil || *worker.Provider != "LINEAR" {
 		t.Fatalf("expected generated worker provider LINEAR, got %#v", worker.Provider)
 	}
@@ -62,10 +60,8 @@ func assertGeneratedHostedLinearWorker(t *testing.T, generated factoryapi.Factor
 	}
 }
 
-func assertRuntimeHostedLinearWorker(t *testing.T, cfg interfaces.FactoryConfig) {
+func assertRuntimeHostedLinearWorker(t *testing.T, runtimeWorker interfaces.WorkerConfig) {
 	t.Helper()
-
-	runtimeWorker := cfg.Workers[0]
 	if runtimeWorker.Type != interfaces.WorkerTypeHosted || runtimeWorker.Provider != interfaces.HostedWorkerProviderLinear {
 		t.Fatalf("runtime hosted worker = %#v", runtimeWorker)
 	}

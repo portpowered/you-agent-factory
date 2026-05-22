@@ -174,14 +174,18 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 func assertPublishedOperations(t *testing.T, paths map[string]any) {
 	t.Helper()
 	requiredOperations := map[string][]string{
-		"/work":                       {"get", "post"},
-		"/work-requests/{request_id}": {"put"},
-		"/work/{id}":                  {"get"},
-		"/events":                     {"get"},
-		"/status":                     {"get"},
-		"/provider-sessions/detail":   {"get"},
-		"/factory":                    {"post"},
-		"/factory/~current":           {"get"},
+		"/work":                            {"get", "post"},
+		"/work-requests/{request_id}":      {"put"},
+		"/work/{id}":                       {"get"},
+		"/events":                          {"get"},
+		"/status":                          {"get"},
+		"/models":                          {"get"},
+		"/models/{model_name}":             {"get"},
+		"/models/{model_name}/invocations": {"post"},
+		"/models/{model_name}/pull":        {"post"},
+		"/provider-sessions/detail":        {"get"},
+		"/factory":                         {"post"},
+		"/factory/~current":                {"get"},
 	}
 	for path, methods := range requiredOperations {
 		pathItem, ok := paths[path].(map[string]any)
@@ -226,7 +230,7 @@ func assertPublishedSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	for _, schema := range []string{
 		"SubmitWorkRequest", "SubmitWorkResponse", "UpsertWorkRequestResponse", "WorkRequest", "Work", "WorkContent",
 		"WorkContentPart", "WorkContentPartType", "WorkTextContentPart", "WorkImageContentPart", "Relation", "ListWorkResponse",
-		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "Factory", "Workstation", "WorkstationKind",
+		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "Workstation", "WorkstationKind",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)
@@ -306,15 +310,38 @@ func assertWorkContentSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	assertSchemaOneOfRefs(t, workContentPartSchema, "WorkContentPart", []string{
 		"#/components/schemas/WorkTextContentPart",
 		"#/components/schemas/WorkImageContentPart",
+		"#/components/schemas/WorkAudioContentPart",
+		"#/components/schemas/WorkJsonContentPart",
+		"#/components/schemas/WorkBinaryContentPart",
 	})
-	assertEnumValues(t, schemaObject(t, schemas, "WorkContentPartType"), "WorkContentPartType", []string{"text", "image"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkContentPartType"), "WorkContentPartType", []string{"text", "image", "TEXT", "IMAGE", "AUDIO", "JSON", "BINARY"})
 
-	workTextPartSchema := schemaObject(t, schemas, "WorkTextContentPart")
-	assertRequiredFields(t, workTextPartSchema, "type", "text")
-	assertSchemaPropertiesPresent(t, schemaProperties(t, workTextPartSchema, "WorkTextContentPart"), "WorkTextContentPart", "type", "text")
-	workImagePartSchema := schemaObject(t, schemas, "WorkImageContentPart")
-	assertRequiredFields(t, workImagePartSchema, "type", "file")
-	assertSchemaPropertiesPresent(t, schemaProperties(t, workImagePartSchema, "WorkImageContentPart"), "WorkImageContentPart", "type", "file")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkTextContentPart", "type", "text")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkImageContentPart", "type", "file")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkAudioContentPart", "type", "file")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkJsonContentPart", "type", "json")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkBinaryContentPart", "type", "file")
+	assertSchemaPropertiesPresent(t, schemaProperties(t, schemaObject(t, schemas, "WorkContentCommonFields"), "WorkContentCommonFields"), "WorkContentCommonFields", "slot", "label", "role", "contentType", "artifactId", "metadata")
+}
+
+func assertWorkContentPartSchemaVariant(t *testing.T, schemas map[string]any, schemaName string, requiredFields ...string) {
+	t.Helper()
+
+	schema := schemaObject(t, schemas, schemaName)
+	allOf, ok := schema["allOf"].([]any)
+	if !ok || len(allOf) != 2 {
+		t.Fatalf("%s.allOf has %d entries, want 2", schemaName, len(allOf))
+	}
+	commonRef, ok := allOf[0].(map[string]any)
+	if !ok || commonRef["$ref"] != "#/components/schemas/WorkContentCommonFields" {
+		t.Fatalf("%s first allOf entry must reference WorkContentCommonFields", schemaName)
+	}
+	inlineSchema, ok := allOf[1].(map[string]any)
+	if !ok {
+		t.Fatalf("%s inline allOf schema is missing", schemaName)
+	}
+	assertRequiredFields(t, inlineSchema, requiredFields...)
+	assertSchemaPropertiesPresent(t, schemaProperties(t, inlineSchema, schemaName), schemaName, requiredFields...)
 }
 
 func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {
@@ -322,7 +349,9 @@ func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	workstationSchema := schemaObject(t, schemas, "Workstation")
 	workstationProperties := schemaProperties(t, workstationSchema, "Workstation")
 	assertPropertyRef(t, workstationProperties, "behavior", "#/components/schemas/WorkstationKind")
+	assertPropertyRef(t, workstationProperties, "operation", "#/components/schemas/ModelOperationName")
 	assertPropertyRef(t, workstationProperties, "type", "#/components/schemas/WorkstationType")
+	assertSchemaArrayItemRef(t, schemas, "Workstation", "operationBindings", "#/components/schemas/WorkstationOperationBinding")
 	classificationRoutesProperty, ok := workstationProperties["classificationRoutes"].(map[string]any)
 	if !ok {
 		t.Fatalf("components.schemas.Workstation.properties.classificationRoutes is missing")
@@ -333,7 +362,7 @@ func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	}
 	assertPropertiesAbsent(t, workstationProperties, "Workstation", "timeout", "runtime_type")
 	assertEnumValues(t, schemaObject(t, schemas, "WorkstationKind"), "WorkstationKind", []string{"STANDARD", "REPEATER", "CRON", "POLLER"})
-	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"MODEL_WORKSTATION", "LOGICAL_MOVE", "CLASSIFIER_WORKSTATION"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"MODEL_WORKSTATION", "MODEL_INVOKE", "LOGICAL_MOVE", "CLASSIFIER_WORKSTATION"})
 
 	classificationRouteSchema := schemaObject(t, schemas, "ClassificationRoute")
 	assertRequiredFields(t, classificationRouteSchema, "label", "outputs")
@@ -396,6 +425,7 @@ func assertFactorySchemaDescriptions(t *testing.T, workType, resource, worker, w
 
 	assertOpenAPI3Description(t, "Resource", resource.Description)
 	assertOpenAPI3PropertyDescription(t, resource, "Resource", "name")
+	assertOpenAPI3PropertyDescription(t, resource, "Resource", "type")
 	assertOpenAPI3PropertyDescription(t, resource, "Resource", "capacity")
 
 	assertOpenAPI3Description(t, "Worker", worker.Description)
@@ -404,7 +434,7 @@ func assertFactorySchemaDescriptions(t *testing.T, workType, resource, worker, w
 	}
 
 	assertOpenAPI3Description(t, "Workstation", workstation.Description)
-	for _, propertyName := range []string{"name", "behavior", "type", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "classificationRoutes", "guards"} {
+	for _, propertyName := range []string{"name", "behavior", "type", "operation", "operationBindings", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "classificationRoutes", "guards"} {
 		assertOpenAPI3PropertyDescription(t, workstation, "Workstation", propertyName)
 	}
 	workstationLimits := assertOpenAPI3RefPropertyDescription(t, workstation, "Workstation", "limits")
@@ -453,6 +483,19 @@ func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	assertResponseRef(t, saveEditableFactory, "400", "#/components/responses/SaveEditableFactoryDefinitionBadRequest")
 	assertResponseRef(t, saveEditableFactory, "409", "#/components/responses/SaveEditableFactoryDefinitionConflict")
 	assertResponseRef(t, saveEditableFactory, "404", "#/components/responses/CurrentFactoryNotFound")
+
+	listModels := pathOperation(t, paths, "/models", "get")
+	assertResponseSchemaRef(t, listModels, "200", "#/components/schemas/ListModelsResponse")
+
+	getModel := pathOperation(t, paths, "/models/{model_name}", "get")
+	assertResponseSchemaRef(t, getModel, "200", "#/components/schemas/ModelDetail")
+	assertResponseRef(t, getModel, "404", "#/components/responses/NotFound")
+
+	invokeModel := pathOperation(t, paths, "/models/{model_name}/invocations", "post")
+	assertRequestSchemaRef(t, invokeModel, "#/components/schemas/ModelInvocationRequest")
+	assertResponseSchemaRef(t, invokeModel, "200", "#/components/schemas/ModelInvocationResponse")
+	assertResponseRef(t, invokeModel, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, invokeModel, "404", "#/components/responses/NotFound")
 }
 
 func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {

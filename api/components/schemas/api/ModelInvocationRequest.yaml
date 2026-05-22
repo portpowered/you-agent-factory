@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - operation
+properties:
+  operation:
+    type: string
+    description: Uppercase provider-agnostic operation to invoke, such as `TTS`.
+  content:
+    $ref: '../data-models/WorkContent.yaml'
+    description: Ordered invocation input content resolved through optional slot bindings.
+  bindings:
+    type: array
+    description: Optional per-request slot bindings that follow the same contract as `MODEL_INVOKE` workstation bindings.
+    items:
+      $ref: '../data-models/WorkstationOperationBinding.yaml'
+  options:
+    $ref: './ModelInvocationOptions.yaml'

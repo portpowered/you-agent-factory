@@ -56,6 +56,8 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"WorkRequestEventPayload":               "./components/schemas/events/payloads/WorkRequestEventPayload.yaml",
 		"RelationshipChangeRequestEventPayload": "./components/schemas/events/payloads/RelationshipChangeRequestEventPayload.yaml",
 		"DispatchRequestEventPayload":           "./components/schemas/events/payloads/DispatchRequestEventPayload.yaml",
+		"ModelRequestEventPayload":              "./components/schemas/events/payloads/ModelRequestEventPayload.yaml",
+		"ModelResponseEventPayload":             "./components/schemas/events/payloads/ModelResponseEventPayload.yaml",
 		"InferenceRequestEventPayload":          "./components/schemas/events/payloads/InferenceRequestEventPayload.yaml",
 		"InferenceResponseEventPayload":         "./components/schemas/events/payloads/InferenceResponseEventPayload.yaml",
 		"ScriptRequestEventPayload":             "./components/schemas/events/payloads/ScriptRequestEventPayload.yaml",
@@ -119,20 +121,29 @@ func TestOpenAPIAuthoring_APISchemasUseDedicatedFragments(t *testing.T) {
 	doc := loadAuthoredOpenAPIDoc(t)
 	schemas := componentSchemas(t, doc)
 	expectedRefs := map[string]string{
-		"SubmitWorkRequest":         "./components/schemas/api/SubmitWorkRequest.yaml",
-		"SubmitRelation":            "./components/schemas/api/SubmitRelation.yaml",
-		"SubmitWorkResponse":        "./components/schemas/api/SubmitWorkResponse.yaml",
-		"UpsertWorkRequestResponse": "./components/schemas/api/UpsertWorkRequestResponse.yaml",
-		"ListWorkResponse":          "./components/schemas/api/ListWorkResponse.yaml",
-		"PaginationContext":         "./components/schemas/api/PaginationContext.yaml",
-		"TokenResponse":             "./components/schemas/api/TokenResponse.yaml",
-		"TokenHistory":              "./components/schemas/api/TokenHistory.yaml",
-		"StatusCategories":          "./components/schemas/api/StatusCategories.yaml",
-		"StatusResponse":            "./components/schemas/api/StatusResponse.yaml",
-		"ErrorFamily":               "./components/schemas/api/ErrorFamily.yaml",
-		"ErrorResponse":             "./components/schemas/api/ErrorResponse.yaml",
-		"WorkRequest":               "./components/schemas/api/WorkRequest.yaml",
-		"WorkRequestType":           "./components/schemas/api/WorkRequestType.yaml",
+		"SubmitWorkRequest":                   "./components/schemas/api/SubmitWorkRequest.yaml",
+		"SubmitRelation":                      "./components/schemas/api/SubmitRelation.yaml",
+		"SubmitWorkResponse":                  "./components/schemas/api/SubmitWorkResponse.yaml",
+		"UpsertWorkRequestResponse":           "./components/schemas/api/UpsertWorkRequestResponse.yaml",
+		"ListWorkResponse":                    "./components/schemas/api/ListWorkResponse.yaml",
+		"PaginationContext":                   "./components/schemas/api/PaginationContext.yaml",
+		"TokenResponse":                       "./components/schemas/api/TokenResponse.yaml",
+		"TokenHistory":                        "./components/schemas/api/TokenHistory.yaml",
+		"StatusCategories":                    "./components/schemas/api/StatusCategories.yaml",
+		"StatusResponse":                      "./components/schemas/api/StatusResponse.yaml",
+		"ListModelsResponse":                  "./components/schemas/api/ListModelsResponse.yaml",
+		"ModelSummary":                        "./components/schemas/api/ModelSummary.yaml",
+		"ModelDetail":                         "./components/schemas/api/ModelDetail.yaml",
+		"ModelInvocationRequest":              "./components/schemas/api/ModelInvocationRequest.yaml",
+		"ModelInvocationOptions":              "./components/schemas/api/ModelInvocationOptions.yaml",
+		"ModelInvocationResponseMode":         "./components/schemas/api/ModelInvocationResponseMode.yaml",
+		"ModelInvocationResponse":             "./components/schemas/api/ModelInvocationResponse.yaml",
+		"ResolvedModelOperationBinding":       "./components/schemas/api/ResolvedModelOperationBinding.yaml",
+		"ResolvedModelOperationBindingSource": "./components/schemas/api/ResolvedModelOperationBindingSource.yaml",
+		"ErrorFamily":                         "./components/schemas/api/ErrorFamily.yaml",
+		"ErrorResponse":                       "./components/schemas/api/ErrorResponse.yaml",
+		"WorkRequest":                         "./components/schemas/api/WorkRequest.yaml",
+		"WorkRequestType":                     "./components/schemas/api/WorkRequestType.yaml",
 	}
 	for schemaName, wantRef := range expectedRefs {
 		assertSchemaRef(t, schemas, schemaName, wantRef)
@@ -156,6 +167,7 @@ func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
 		"WorkState":           "./components/schemas/data-models/WorkState.yaml",
 		"WorkStateType":       "./components/schemas/data-models/WorkStateType.yaml",
 		"Resource":            "./components/schemas/data-models/Resource.yaml",
+		"ResourceType":        "./components/schemas/data-models/ResourceType.yaml",
 		"Worker":              "./components/schemas/data-models/Worker.yaml",
 		"WorkerType":          "./components/schemas/data-models/WorkerType.yaml",
 		"WorkerModelProvider": "./components/schemas/data-models/WorkerModelProvider.yaml",
@@ -235,7 +247,7 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 	doc := loadBundledOpenAPIDocument(t)
 	workerSchema := schemaObject(t, componentSchemas(t, doc), "Worker")
 	workerProperties := schemaProperties(t, workerSchema, "Worker")
-	assertSchemaPropertiesPresent(t, workerProperties, "Worker", "name", "provider", "auth", "linear", "modelProvider", "executorProvider")
+	assertSchemaPropertiesPresent(t, workerProperties, "Worker", "name", "provider", "modelProvider", "modelLocality", "executorProvider", "operations")
 	assertPropertiesAbsent(t, workerProperties, "Worker", "sessionId", "concurrency")
 
 	modelProviderProperty, ok := workerProperties["modelProvider"].(map[string]any)
@@ -256,7 +268,7 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 	}
 
 	workerType := reflect.TypeOf(generated.Worker{})
-	for _, field := range []string{"Provider", "Auth", "Linear", "ExecutorProvider", "ModelProvider"} {
+	for _, field := range []string{"Provider", "ExecutorProvider", "ModelProvider", "ModelLocality", "Operations"} {
 		if _, ok := workerType.FieldByName(field); !ok {
 			t.Fatalf("generated.Worker must expose %s", field)
 		}
@@ -269,11 +281,11 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 
 	executorProvider := generated.WorkerProviderScriptWrap
 	modelProvider := generated.WorkerModelProviderClaude
-	hostedProvider := generated.HostedWorkerProviderLinear
+	modelLocality := generated.WorkerModelLocalityLocal
 	payloadBytes, err := json.Marshal(generated.Worker{
 		Name:             "executor",
-		Provider:         &hostedProvider,
 		ExecutorProvider: &executorProvider,
+		ModelLocality:    &modelLocality,
 		ModelProvider:    &modelProvider,
 	})
 	if err != nil {
@@ -284,10 +296,10 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
 		t.Fatalf("unmarshal generated.Worker payload: %v", err)
 	}
-	if payload["provider"] != string(hostedProvider) || payload["executorProvider"] != string(executorProvider) || payload["modelProvider"] != string(modelProvider) {
+	if payload["executorProvider"] != string(executorProvider) || payload["modelProvider"] != string(modelProvider) || payload["modelLocality"] != string(modelLocality) {
 		t.Fatalf("generated.Worker payload = %#v, want canonical provider fields", payload)
 	}
-	assertJSONKeysAbsent(t, payload, "generated.Worker payload", "sessionId", "concurrency")
+	assertJSONKeysAbsent(t, payload, "generated.Worker payload", "provider", "sessionId", "concurrency")
 }
 
 func loadAuthoredOpenAPIDoc(t *testing.T) map[string]any {

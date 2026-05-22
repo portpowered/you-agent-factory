@@ -1,15 +1,18 @@
-type: object
-additionalProperties: false
 description: Ordered inline text content for one work item.
-required:
-  - type
-  - text
-properties:
-  type:
-    allOf:
-      - $ref: './WorkContentPartType.yaml'
-    enum:
+allOf:
+  - $ref: './WorkContentCommonFields.yaml'
+  - type: object
+    additionalProperties: false
+    required:
+      - type
       - text
-  text:
-    type: string
-    description: Inline text content preserved in canonical part order.
+    properties:
+      type:
+        allOf:
+          - $ref: './WorkContentPartType.yaml'
+        enum:
+          - text
+          - TEXT
+      text:
+        type: string
+        description: Inline text content preserved in canonical part order.

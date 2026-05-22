@@ -1,0 +1,6 @@
+type: object
+additionalProperties: false
+description: Optional direct-invocation controls for response shaping and transport.
+properties:
+  responseMode:
+    $ref: './ModelInvocationResponseMode.yaml'

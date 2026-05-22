@@ -2,32 +2,43 @@ package interfaces
 
 import (
 	"testing"
-
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 func TestPublicFactoryEnumNormalizers(t *testing.T) {
-	tests := []struct {
-		name       string
-		alias      string
-		unknown    string
-		want       string
-		permissive func(string) string
-		strict     func(string) string
-	}{
+	for _, tt := range publicFactoryEnumNormalizerCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.permissive("  " + tt.alias + "  "); got != tt.want {
+				t.Fatalf("permissive(%q) = %q, want %q", tt.alias, got, tt.want)
+			}
+			if got := tt.strict("  " + tt.alias + "  "); got != tt.want {
+				t.Fatalf("strict(%q) = %q, want %q", tt.alias, got, tt.want)
+			}
+			if got := tt.permissive("  " + tt.unknown + "  "); got != tt.unknown {
+				t.Fatalf("permissive(%q) = %q, want trimmed unknown %q", tt.unknown, got, tt.unknown)
+			}
+			if got := tt.strict("  " + tt.unknown + "  "); got != "" {
+				t.Fatalf("strict(%q) = %q, want rejection", tt.unknown, got)
+			}
+		})
+	}
+}
+
+type publicFactoryEnumNormalizerCase struct {
+	name       string
+	alias      string
+	unknown    string
+	want       string
+	permissive func(string) string
+	strict     func(string) string
+}
+
+func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
+	return []publicFactoryEnumNormalizerCase{
 		{
 			name:       "worker type",
 			alias:      "MODEL_WORKER",
 			unknown:    "CUSTOM_WORKER",
 			want:       WorkerTypeModel,
-			permissive: PermissivePublicFactoryWorkerType,
-			strict:     StrictPublicFactoryWorkerType,
-		},
-		{
-			name:       "hosted worker type",
-			alias:      "HOSTED_WORKER",
-			unknown:    "CUSTOM_HOSTED_WORKER",
-			want:       WorkerTypeHosted,
 			permissive: PermissivePublicFactoryWorkerType,
 			strict:     StrictPublicFactoryWorkerType,
 		},
@@ -50,16 +61,40 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 		{
 			name:       "hosted worker provider",
 			alias:      "LINEAR",
-			unknown:    "custom-hosted-provider",
+			unknown:    "custom-hosted",
 			want:       HostedWorkerProviderLinear,
 			permissive: PermissivePublicFactoryHostedWorkerProvider,
 			strict:     StrictPublicFactoryHostedWorkerProvider,
 		},
 		{
+			name:       "worker model locality",
+			alias:      "LOCAL",
+			unknown:    "edge",
+			want:       ModelLocalityLocal,
+			permissive: PermissivePublicFactoryWorkerModelLocality,
+			strict:     StrictPublicFactoryWorkerModelLocality,
+		},
+		{
+			name:       "worker operation content type",
+			alias:      "AUDIO",
+			unknown:    "sound",
+			want:       ModelOperationContentTypeAudio,
+			permissive: PermissivePublicFactoryWorkerModelOperationContentType,
+			strict:     StrictPublicFactoryWorkerModelOperationContentType,
+		},
+		{
+			name:       "resource type",
+			alias:      "MODEL",
+			unknown:    "custom-resource",
+			want:       ResourceTypeModel,
+			permissive: PermissivePublicFactoryResourceType,
+			strict:     StrictPublicFactoryResourceType,
+		},
+		{
 			name:       "workstation type",
-			alias:      "CLASSIFIER_WORKSTATION",
+			alias:      "MODEL_INVOKE",
 			unknown:    "CUSTOM_WORKSTATION",
-			want:       WorkstationTypeClassify,
+			want:       WorkstationTypeInvoke,
 			permissive: PermissivePublicFactoryWorkstationType,
 			strict:     StrictPublicFactoryWorkstationType,
 		},
@@ -80,65 +115,77 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 			strict:     StrictPublicFactoryRunnerSelectionSource,
 		},
 	}
+}
 
-	for _, tt := range tests {
+func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
+	for _, tt := range generatedPublicFactoryEnumPreservationCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.permissive("  " + tt.alias + "  "); got != tt.want {
-				t.Fatalf("permissive(%q) = %q, want %q", tt.alias, got, tt.want)
-			}
-			if got := tt.strict("  " + tt.alias + "  "); got != tt.want {
-				t.Fatalf("strict(%q) = %q, want %q", tt.alias, got, tt.want)
-			}
-			if got := tt.permissive("  " + tt.unknown + "  "); got != tt.unknown {
-				t.Fatalf("permissive(%q) = %q, want trimmed unknown %q", tt.unknown, got, tt.unknown)
-			}
-			if got := tt.strict("  " + tt.unknown + "  "); got != "" {
-				t.Fatalf("strict(%q) = %q, want rejection", tt.unknown, got)
+			if got := tt.fn(tt.input); got != tt.want {
+				t.Fatalf("%s = %q, want %q", tt.name, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
-	if got := GeneratedPublicFactoryWorkerType("  CUSTOM_WORKER  "); got != factoryapi.WorkerType("CUSTOM_WORKER") {
-		t.Fatalf("worker type = %q, want trimmed unknown to round-trip", got)
+type generatedPublicFactoryEnumPreservationCase struct {
+	name  string
+	input string
+	want  string
+	fn    func(string) string
+}
+
+func generatedPublicFactoryEnumPreservationCases() []generatedPublicFactoryEnumPreservationCase {
+	return []generatedPublicFactoryEnumPreservationCase{
+		{name: "worker type", input: "  CUSTOM_WORKER  ", want: "CUSTOM_WORKER", fn: generatedWorkerTypeString},
+		{name: "worker model provider alias", input: "  openai  ", want: "CODEX", fn: generatedWorkerModelProviderString},
+		{name: "worker provider alias", input: "  local-claude  ", want: "SCRIPT_WRAP", fn: generatedWorkerProviderString},
+		{name: "hosted worker provider", input: "  LINEAR  ", want: "LINEAR", fn: generatedHostedWorkerProviderString},
+		{name: "worker model locality", input: "  LOCAL  ", want: "LOCAL", fn: generatedWorkerModelLocalityString},
+		{name: "worker operation content type", input: "  AUDIO  ", want: "AUDIO", fn: generatedWorkerOperationContentTypeString},
+		{name: "resource type", input: "  MODEL  ", want: ResourceTypeModel, fn: permissiveResourceTypeString},
+		{name: "worker model provider unknown", input: "  mystery-provider  ", want: "mystery-provider", fn: generatedWorkerModelProviderString},
+		{name: "worker provider unknown", input: "  custom-executor  ", want: "custom-executor", fn: generatedWorkerProviderString},
+		{name: "hosted worker provider unknown", input: "  custom-hosted  ", want: "custom-hosted", fn: generatedHostedWorkerProviderString},
+		{name: "worker model locality unknown", input: "  edge  ", want: "edge", fn: generatedWorkerModelLocalityString},
+		{name: "worker operation content type unknown", input: "  sound  ", want: "sound", fn: generatedWorkerOperationContentTypeString},
+		{name: "resource type unknown", input: "  custom-resource  ", want: "custom-resource", fn: permissiveResourceTypeString},
+		{name: "workstation type", input: "  CUSTOM_WORKSTATION  ", want: "CUSTOM_WORKSTATION", fn: generatedWorkstationTypeString},
+		{name: "runner id", input: "  GEMINI  ", want: "gemini", fn: generatedRunnerIDString},
+		{name: "runner id unknown", input: "  custom-runner  ", want: "custom-runner", fn: generatedRunnerIDString},
+		{name: "runner selection source", input: "  default  ", want: "default", fn: generatedRunnerSelectionSourceString},
+		{name: "runner selection source unknown", input: "  custom-source  ", want: "custom-source", fn: generatedRunnerSelectionSourceString},
 	}
-	if got := GeneratedPublicFactoryWorkerType("  HOSTED_WORKER  "); got != factoryapi.WorkerType("HOSTED_WORKER") {
-		t.Fatalf("worker type = %q, want HOSTED_WORKER", got)
-	}
-	if got := GeneratedPublicFactoryWorkerModelProvider("  openai  "); got != factoryapi.WorkerModelProvider("CODEX") {
-		t.Fatalf("worker model provider = %q, want CODEX from internal openai alias", got)
-	}
-	if got := GeneratedPublicFactoryWorkerProvider("  local-claude  "); got != factoryapi.WorkerProvider("SCRIPT_WRAP") {
-		t.Fatalf("worker provider = %q, want SCRIPT_WRAP from internal local-claude alias", got)
-	}
-	if got := GeneratedPublicFactoryWorkerModelProvider("  mystery-provider  "); got != factoryapi.WorkerModelProvider("mystery-provider") {
-		t.Fatalf("worker model provider = %q, want trimmed unknown to round-trip", got)
-	}
-	if got := GeneratedPublicFactoryWorkerProvider("  custom-executor  "); got != factoryapi.WorkerProvider("custom-executor") {
-		t.Fatalf("worker provider = %q, want trimmed unknown to round-trip", got)
-	}
-	if got := GeneratedPublicFactoryHostedWorkerProvider("  LINEAR  "); got != "LINEAR" {
-		t.Fatalf("hosted worker provider = %q, want LINEAR", got)
-	}
-	if got := GeneratedPublicFactoryHostedWorkerProvider("  custom-hosted-provider  "); got != "custom-hosted-provider" {
-		t.Fatalf("hosted worker provider = %q, want trimmed unknown to round-trip", got)
-	}
-	if got := GeneratedPublicFactoryWorkstationType("  CUSTOM_WORKSTATION  "); got != factoryapi.WorkstationType("CUSTOM_WORKSTATION") {
-		t.Fatalf("workstation type = %q, want trimmed unknown to round-trip", got)
-	}
-	if got := GeneratedPublicFactoryRunnerID("  GEMINI  "); got != factoryapi.RunnerID("gemini") {
-		t.Fatalf("runner ID = %q, want gemini", got)
-	}
-	if got := GeneratedPublicFactoryRunnerID("  custom-runner  "); got != factoryapi.RunnerID("custom-runner") {
-		t.Fatalf("runner ID = %q, want trimmed unknown to round-trip", got)
-	}
-	if got := GeneratedPublicFactoryRunnerSelectionSource("  default  "); got != factoryapi.RunnerSelectionSource("default") {
-		t.Fatalf("runner selection source = %q, want default", got)
-	}
-	if got := GeneratedPublicFactoryRunnerSelectionSource("  custom-source  "); got != factoryapi.RunnerSelectionSource("custom-source") {
-		t.Fatalf("runner selection source = %q, want trimmed unknown to round-trip", got)
-	}
+}
+
+func generatedWorkerTypeString(value string) string {
+	return string(GeneratedPublicFactoryWorkerType(value))
+}
+func generatedWorkerModelProviderString(value string) string {
+	return string(GeneratedPublicFactoryWorkerModelProvider(value))
+}
+func generatedWorkerProviderString(value string) string {
+	return string(GeneratedPublicFactoryWorkerProvider(value))
+}
+func generatedHostedWorkerProviderString(value string) string {
+	return string(GeneratedPublicFactoryHostedWorkerProvider(value))
+}
+func generatedWorkerModelLocalityString(value string) string {
+	return string(GeneratedPublicFactoryWorkerModelLocality(value))
+}
+func generatedWorkerOperationContentTypeString(value string) string {
+	return string(GeneratedPublicFactoryWorkerModelOperationContentType(value))
+}
+func permissiveResourceTypeString(value string) string {
+	return PermissivePublicFactoryResourceType(value)
+}
+func generatedWorkstationTypeString(value string) string {
+	return string(GeneratedPublicFactoryWorkstationType(value))
+}
+func generatedRunnerIDString(value string) string {
+	return string(GeneratedPublicFactoryRunnerID(value))
+}
+func generatedRunnerSelectionSourceString(value string) string {
+	return string(GeneratedPublicFactoryRunnerSelectionSource(value))
 }
 
 func TestGeneratedPublicFactoryEnumPtrs(t *testing.T) {
@@ -185,14 +232,6 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 			ptr:           generatedPublicFactoryWorkerTypeStringPtr,
 		},
 		{
-			name:          "hosted worker type",
-			supported:     "  HOSTED_WORKER  ",
-			wantSupported: "HOSTED_WORKER",
-			unknown:       "  CUSTOM_HOSTED_WORKER  ",
-			wantUnknown:   "CUSTOM_HOSTED_WORKER",
-			ptr:           generatedPublicFactoryWorkerTypeStringPtr,
-		},
-		{
 			name:          "worker model provider",
 			supported:     "  openai  ",
 			wantSupported: "CODEX",
@@ -212,14 +251,30 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 			name:          "hosted worker provider",
 			supported:     "  LINEAR  ",
 			wantSupported: "LINEAR",
-			unknown:       "  custom-hosted-provider  ",
-			wantUnknown:   "custom-hosted-provider",
+			unknown:       "  custom-hosted  ",
+			wantUnknown:   "custom-hosted",
 			ptr:           generatedPublicFactoryHostedWorkerProviderStringPtr,
 		},
 		{
+			name:          "worker model locality",
+			supported:     "  LOCAL  ",
+			wantSupported: "LOCAL",
+			unknown:       "  edge  ",
+			wantUnknown:   "edge",
+			ptr:           generatedPublicFactoryWorkerModelLocalityStringPtr,
+		},
+		{
+			name:          "worker operation content type",
+			supported:     "  AUDIO  ",
+			wantSupported: "AUDIO",
+			unknown:       "  sound  ",
+			wantUnknown:   "sound",
+			ptr:           generatedPublicFactoryWorkerModelOperationContentTypeStringPtr,
+		},
+		{
 			name:          "workstation type",
-			supported:     "  CLASSIFIER_WORKSTATION  ",
-			wantSupported: "CLASSIFIER_WORKSTATION",
+			supported:     "  MODEL_INVOKE  ",
+			wantSupported: "MODEL_INVOKE",
 			unknown:       "  CUSTOM_WORKSTATION  ",
 			wantUnknown:   "CUSTOM_WORKSTATION",
 			ptr:           generatedPublicFactoryWorkstationTypeStringPtr,
@@ -257,6 +312,14 @@ func generatedPublicFactoryWorkerProviderStringPtr(value string) *string {
 
 func generatedPublicFactoryHostedWorkerProviderStringPtr(value string) *string {
 	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryHostedWorkerProviderPtr(value))
+}
+
+func generatedPublicFactoryWorkerModelLocalityStringPtr(value string) *string {
+	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryWorkerModelLocalityPtr(value))
+}
+
+func generatedPublicFactoryWorkerModelOperationContentTypeStringPtr(value string) *string {
+	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryWorkerModelOperationContentTypePtr(value))
 }
 
 func generatedPublicFactoryWorkstationTypeStringPtr(value string) *string {

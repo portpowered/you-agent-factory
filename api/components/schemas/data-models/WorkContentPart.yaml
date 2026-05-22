@@ -2,3 +2,6 @@ description: One ordered canonical content part on a work item.
 oneOf:
   - $ref: './WorkTextContentPart.yaml'
   - $ref: './WorkImageContentPart.yaml'
+  - $ref: './WorkAudioContentPart.yaml'
+  - $ref: './WorkJsonContentPart.yaml'
+  - $ref: './WorkBinaryContentPart.yaml'

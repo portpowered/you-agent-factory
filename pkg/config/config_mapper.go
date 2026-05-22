@@ -88,9 +88,40 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 
 		cm.addCronTimeInputArc(ws, t)
 
-		cm.appendResourceArcs(t, ws.Resources)
+		cm.appendResourceArcs(t, combinedTransitionResourceUsage(cfg, ws))
 	}
 	return transitions
+}
+
+func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interfaces.FactoryWorkstationConfig) []interfaces.ResourceConfig {
+	combined := make(map[string]interfaces.ResourceConfig, len(ws.Resources))
+	order := make([]string, 0, len(ws.Resources))
+
+	appendResources := func(resources []interfaces.ResourceConfig) {
+		for _, resource := range resources {
+			if existing, ok := combined[resource.Name]; ok {
+				existing.Capacity += resource.Capacity
+				combined[resource.Name] = existing
+				continue
+			}
+			combined[resource.Name] = resource
+			order = append(order, resource.Name)
+		}
+	}
+
+	if worker, ok := factoryConfigWorker(cfg, ws.WorkerTypeName); ok && worker != nil {
+		appendResources(worker.Resources)
+	}
+	appendResources(ws.Resources)
+
+	if len(order) == 0 {
+		return nil
+	}
+	out := make([]interfaces.ResourceConfig, 0, len(order))
+	for _, name := range order {
+		out = append(out, combined[name])
+	}
+	return out
 }
 
 func (cm *ConfigMapper) newTransition(ws interfaces.FactoryWorkstationConfig) *petri.Transition {

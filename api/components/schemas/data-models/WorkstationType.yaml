@@ -2,13 +2,16 @@ type: string
 description: Runtime workstation implementation types supported by the public factory-config contract.
 x-enum-varnames:
   - WorkstationTypeModelWorkstation
+  - WorkstationTypeModelInvoke
   - WorkstationTypeLogicalMove
   - WorkstationTypeClassifierWorkstation
 enum:
   - MODEL_WORKSTATION
+  - MODEL_INVOKE
   - LOGICAL_MOVE
   - CLASSIFIER_WORKSTATION
 x-enum-descriptions:
   - Model-backed workstation that renders prompts and dispatches work through the configured worker.
+  - Provider-agnostic model-operation workstation that selects a worker by declared capability and uppercase operation contract.
   - Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
   - Label-based classifier workstation that returns one plain string label and routes through classificationRoutes.
