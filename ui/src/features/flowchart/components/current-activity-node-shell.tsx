@@ -44,7 +44,7 @@ export function ActivityGraphNodeShell({
   return (
     <article
       className={cn(
-        "flex h-full min-w-0 w-full flex-col gap-1 overflow-visible rounded-lg border border-af-overlay/9 bg-af-canvas p-3 text-af-ink",
+        "flex h-full min-w-0 w-full flex-col gap-1 overflow-visible rounded-lg border border-af-border bg-af-surface p-3 text-af-text",
         className,
       )}
       data-current-activity-node-type={nodeType}
@@ -117,13 +117,13 @@ function NodeHandleBadge({
   const buttonClassName = cn(
     "nodrag nopan inline-flex min-h-6 items-center rounded-full border px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.08em] shadow-sm transition focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed",
     handle.variant === "selected" &&
-      "border-af-accent/40 bg-af-accent/14 text-af-accent",
+      "border-af-accent-border bg-af-accent-surface text-af-accent",
     handle.variant === "valid-target" &&
-      "border-af-success/35 bg-af-success/12 text-af-success-ink",
+      "border-af-success-border bg-af-success-surface text-af-success",
     handle.variant === "muted" &&
-      "border-af-overlay/10 bg-af-overlay/4 text-af-ink/54",
+      "border-af-border bg-af-surface-subtle text-af-text-subtle",
     (handle.variant === undefined || handle.variant === "default") &&
-      "border-af-overlay/16 bg-af-surface/94 text-af-ink/74 hover:border-af-accent/24 hover:text-af-ink",
+      "border-af-border-strong bg-af-surface-raised text-af-text-muted hover:border-af-accent-border hover:text-af-text",
   );
 
   return (
@@ -137,8 +137,8 @@ function NodeHandleBadge({
     >
       <Handle
         className={cn(
-          "pointer-events-auto !h-3.5 !w-3.5 !border-2 !border-af-surface !bg-af-overlay/35 transition",
-          handle.connectable && "!bg-af-accent/88",
+          "pointer-events-auto !h-3.5 !w-3.5 !border-2 !border-af-surface !bg-af-border-strong transition",
+          handle.connectable && "!bg-af-accent-border",
           handle.variant === "selected" && "!bg-af-accent",
           handle.variant === "valid-target" && "!bg-af-success",
         )}
