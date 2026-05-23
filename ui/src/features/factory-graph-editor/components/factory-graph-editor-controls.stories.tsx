@@ -230,8 +230,8 @@ export const EditorMode = {
     });
 
     await expect(
-      within(toolbar).getByRole("button", { name: "Add" }),
-    ).toHaveAttribute("aria-pressed", "false");
+      within(toolbar).getByRole("button", { name: "Open add entity menu" }),
+    ).toBeVisible();
     await expect(
       within(toolbar).getByRole("button", { name: "Connect" }),
     ).toHaveAttribute("aria-pressed", "true");
