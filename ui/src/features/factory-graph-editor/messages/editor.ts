@@ -2,9 +2,9 @@ import {
   type LocalizedMessageCatalog,
   resolveLocalizedMessages,
 } from "../../../i18n";
-import type { FactoryGraphAddEntityDraft } from "../factory-graph-editor-additions";
-import type { FactoryGraphNodeKind } from "../factory-graph-draft-types";
-import type { FactoryGraphWorkerRuntimeStatus } from "../factory-graph-editor-runtime";
+import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
+import type { FactoryGraphNodeKind } from "../lib/factory-graph-draft-types";
+import type { FactoryGraphWorkerRuntimeStatus } from "../lib/factory-graph-editor-runtime";
 
 export interface FactoryGraphEditorMessages {
   addDialogAddEntityAction: string;

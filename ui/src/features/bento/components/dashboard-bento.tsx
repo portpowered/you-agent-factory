@@ -15,13 +15,13 @@ import { SubmitWorkWidget } from "../../submit-work/public";
 import { TerminalWorkWidget } from "../../terminal-work/public";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
-import { TraceDrilldownWidget, useTraceDrilldown } from "../../trace-drilldown";
+import { TraceDrilldownWidget, useTraceDrilldown } from "../../trace-drilldown/public";
 import { useWorkOutcomeChart, WorkOutcomeWidget } from "../../work-outcome/public";
 import { WorkTotalsWidget } from "../../work-totals/public";
 import {
   useCurrentActivityImportController,
   WorkflowActivityWidget,
-} from "../../workflow-activity";
+} from "../../workflow-activity/public";
 import { AgentBentoLayout, type AgentBentoLayoutCard } from "./agent-bento";
 import { useDashboardBentoStore } from "../state/dashboardBentoStore";
 import { DASHBOARD_WIDGET_IDS, useDashboardLayout } from "../hooks/useDashboardLayout";

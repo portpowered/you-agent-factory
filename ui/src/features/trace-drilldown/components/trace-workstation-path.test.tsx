@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardTraceDispatch, DashboardWorkItemRef } from "../../../api/dashboard/types";
 import { TraceWorkstationPath } from "./trace-workstation-path";
 
-vi.mock("../trace-elk-layout", () => ({
+vi.mock("../lib/trace-elk-layout", () => ({
   getCachedTraceGraphLayout: () => null,
   async layoutTraceGraphWithElk<TNode>(nodes: TNode[]): Promise<TNode[]> {
     return nodes;

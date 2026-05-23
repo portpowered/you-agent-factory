@@ -1,12 +1,12 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { AgentBentoCard } from "../../../components/ui";
 import type { DashboardSelection } from "../../current-selection/public";
-import type { CurrentActivityImportController } from "../current-activity-import-controller";
+import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import {
   type CurrentActivitySelection,
   ReactFlowCurrentActivityCardView,
 } from "./react-flow-current-activity-card";
-import { useCurrentActivityGraphEditor } from "../react-flow-current-activity-card-editor";
+import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 

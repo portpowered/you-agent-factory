@@ -17,8 +17,8 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
-import type { GraphSemanticIconKind } from "../../flowchart/graph-semantic-icon";
-import { GraphSemanticIcon } from "../../flowchart/graph-semantic-icon";
+import type { GraphSemanticIconKind } from "../../flowchart/public";
+import { GraphSemanticIcon } from "../../flowchart/public";
 import { getTerminalWorkMessages } from "../messages";
 import type { TerminalWorkItem, TerminalWorkStatus } from "../lib/types";
 export type { TerminalWorkItem, TerminalWorkStatus } from "../lib/types";

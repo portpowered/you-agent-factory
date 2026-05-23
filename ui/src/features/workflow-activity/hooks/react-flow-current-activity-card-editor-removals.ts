@@ -5,10 +5,10 @@ import {
   applyFactoryGraphEntityRemoval,
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
-  type useFactoryGraphDraftState,
-} from "../../factory-graph-editor/factory-graph-draft";
-import { applyFactoryGraphEdgeRemoval } from "../../factory-graph-editor/factory-graph-editor-connections";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/factory-graph-editor-controls";
+} from "../../factory-graph-editor/lib/factory-graph-editor-removals";
+import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import { applyFactoryGraphEdgeRemoval } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 
 export function useFactoryGraphRemovalController({
   activeTool,

@@ -34,7 +34,7 @@ vi.mock("../../bento/public", () => ({
   },
 }));
 
-vi.mock("../../header", () => ({
+vi.mock("../../header/public", () => ({
   DashboardExportDialog: ({ locale }: { locale?: string }) => {
     const { locale: resolvedLocale } = useAppLocale(locale);
     return <div>Dashboard export dialog {resolvedLocale}</div>;

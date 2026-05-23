@@ -34,18 +34,18 @@ import {
   useCurrentEditableFactoryDefinitionDocument,
   useSaveCurrentEditableFactoryDefinition,
 } from "../../current-factory-definition/public";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
-} from "../../flowchart";
-import { buildGraphLayout } from "../../flowchart/layout";
+} from "../../flowchart/public";
+import { buildGraphLayout } from "../../flowchart/lib/layout";
 import type {
   FactoryPngImportValue,
   ReadFactoryImportFile,
 } from "../../import/public";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
-import type { CurrentActivityImportController } from "../current-activity-import-controller";
+import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
@@ -54,7 +54,7 @@ import {
   currentActivityTopologyKey,
   ReactFlowCurrentActivityCard,
 } from "./react-flow-current-activity-card";
-import { buildVisibleGraphEdges } from "../react-flow-current-activity-card-graph";
+import { buildVisibleGraphEdges } from "../lib/react-flow-current-activity-card-graph";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 
 vi.mock("../../current-factory-definition/public", async () => {
@@ -67,9 +67,9 @@ vi.mock("../../current-factory-definition/public", async () => {
   };
 });
 
-vi.mock("../../factory-graph-editor/factory-graph-draft", async () => {
+vi.mock("../../factory-graph-editor/public", async () => {
   const actual = await vi.importActual(
-    "../../factory-graph-editor/factory-graph-draft",
+    "../../factory-graph-editor/public",
   );
 
   return {

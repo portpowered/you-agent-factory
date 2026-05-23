@@ -5,7 +5,7 @@ import {
   DashboardExportDialog,
   DashboardHeader,
   DashboardStatusPanel,
-} from "../../header";
+} from "../../header/public";
 import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import { useDashboardSnapshot } from "../hooks/useDashboardSnapshot";
 

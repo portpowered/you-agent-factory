@@ -13,21 +13,21 @@ import {
 import {
   ActivityGraphNodeShell,
   type ActivityGraphNodeHandle,
-} from "../../flowchart/current-activity-node-shell";
+} from "../../flowchart/components/current-activity-node-shell";
 import { GraphSemanticIcon, type GraphSemanticIconKind } from "../../flowchart/components/graph-semantic-icon";
 import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "./factory-graph-editor-edge";
 import type {
   FactoryGraphNodeKind,
   FactoryGraphTopology,
-} from "../factory-graph-draft-types";
+} from "../lib/factory-graph-draft-types";
 import {
   getFactoryGraphConnectionAnchors,
   isValidFactoryGraphConnection,
   type FactoryGraphConnectionEndpoint,
-} from "../factory-graph-editor-connections";
+} from "../lib/factory-graph-editor-connections";
 import type {
   FactoryGraphWorkerRuntimeStatus,
-} from "../factory-graph-editor-runtime";
+} from "../lib/factory-graph-editor-runtime";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 type FactoryGraphEditorNode = Node<

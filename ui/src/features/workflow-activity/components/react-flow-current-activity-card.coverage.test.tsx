@@ -13,11 +13,11 @@ import {
   useCurrentEditableFactoryDefinitionDocument,
   useSaveCurrentEditableFactoryDefinition,
 } from "../../current-factory-definition/public";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
-import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/factory-graph-draft-types";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/public";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
-import { useFactoryGraphConnectionController } from "../react-flow-current-activity-card-editor-connections";
+import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 const { mockImportController, mockSetStoredNodePosition } = vi.hoisted(() => ({
@@ -164,7 +164,7 @@ vi.mock("@xyflow/react", async () => {
   };
 });
 
-vi.mock("../current-activity-import-controller", () => ({
+vi.mock("../hooks/current-activity-import-controller", () => ({
   useCurrentActivityImportController: () => mockImportController,
 }));
 
@@ -192,9 +192,9 @@ vi.mock("../../current-factory-definition/public", async () => {
   };
 });
 
-vi.mock("../../factory-graph-editor/factory-graph-draft", async () => {
+vi.mock("../../factory-graph-editor/public", async () => {
   const actual = await vi.importActual(
-    "../../factory-graph-editor/factory-graph-draft",
+    "../../factory-graph-editor/public",
   );
 
   return {

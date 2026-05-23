@@ -146,7 +146,7 @@ vi.mock("../../timeline/state/factoryTimelineStore", () => ({
     }),
 }));
 
-vi.mock("../../trace-drilldown", () => ({
+vi.mock("../../trace-drilldown/public", () => ({
   TraceDrilldownWidget: () => <section>Trace card</section>,
   useTraceDrilldown: () => ({
     selectedTrace: null,
@@ -163,7 +163,7 @@ vi.mock("../../work-totals/public", () => ({
   WorkTotalsWidget: () => <section>Work totals card</section>,
 }));
 
-vi.mock("../../workflow-activity", () => ({
+vi.mock("../../workflow-activity/public", () => ({
   WorkflowActivityWidget: () => <section>Workflow activity card</section>,
   useCurrentActivityImportController: () => ({
     activationState: { status: "idle" },

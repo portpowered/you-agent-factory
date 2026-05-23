@@ -2,7 +2,7 @@ import {
   type LocalizedMessages,
   resolveLocalizedMessages,
 } from "../../../i18n";
-import type { GraphSemanticIconKind } from "../../flowchart/graph-semantic-icon";
+import type { GraphSemanticIconKind } from "../../flowchart/public";
 
 export interface DashboardFlowAxisLegendMessages {
   collapseLabel: string;

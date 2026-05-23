@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import type { FactoryEvent } from "../api/events";
 import { FACTORY_EVENT_TYPES } from "../api/events";
-import { TraceDrilldownWidget, useTraceDrilldown } from "../features/trace-drilldown";
+import { TraceDrilldownWidget, useTraceDrilldown } from "../features/trace-drilldown/public";
 import { useFactoryTimelineStore } from "../features/timeline/state";
 
 export const activeWorkID = "work-active-story";
