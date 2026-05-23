@@ -21,15 +21,40 @@ const skippedPathFragments = [
 ];
 const semanticColorExceptionMarker =
   "semantic-color-exception: system-integration";
+const forbiddenFoundationTokenNames = [
+  "af-bg",
+  "af-bg-start",
+  "af-bg-mid",
+  "af-canvas",
+  "af-ink",
+  "af-danger-bright",
+  "af-danger-ink",
+  "af-info-ink",
+  "af-success-ink",
+  "af-warning-ink",
+] as const;
+const forbiddenFoundationTokenPattern = forbiddenFoundationTokenNames.join("|");
 const colorUtilityWithAlphaPattern =
   /(?:^|[\s"'`])((?:[a-z-]+:)*(?:bg|text|border|fill|stroke|decoration|outline|ring|ring-offset)-[^\s"'`]+\/\d{1,3}\b)/g;
 const opacityUtilityPattern =
   /(?:^|[\s"'`])((?:[a-z-]+:)*opacity-(\d{1,3})\b)/g;
 const rgbFromVarAlphaPattern = /rgb\(from[^\n]*?\/[^\n]*?\)/g;
+const forbiddenFoundationUtilityPattern = new RegExp(
+  `(?:^|[\\s"'\\\`])((?:[a-z-]+:)*(?:bg|text|border|fill|stroke|decoration|outline|ring|ring-offset)-(?:${forbiddenFoundationTokenPattern})\\b)`,
+  "g",
+);
+const forbiddenFoundationVarPattern = new RegExp(
+  String.raw`var\(--color-(?:${forbiddenFoundationTokenPattern})\b[^)]*\)`,
+  "g",
+);
 
 export interface SemanticColorTokenViolation {
   filePath: string;
-  kind: "alpha-color-utility" | "alpha-color-expression" | "opacity-utility";
+  kind:
+    | "alpha-color-utility"
+    | "alpha-color-expression"
+    | "foundation-color-token"
+    | "opacity-utility";
   message: string;
   position: {
     column: number;
@@ -181,6 +206,46 @@ function findViolationsInSource(
         filePath,
         "alpha-color-expression",
         "Component-local color alpha math is not allowed in ui/src code. Move the semantic or system-integration token definition into ui/src/styles.css and consume it through var(--color-...) instead.",
+        token,
+        tokenIndex,
+        sourceText,
+      ),
+    );
+  }
+
+  for (const match of sourceText.matchAll(forbiddenFoundationUtilityPattern)) {
+    const token = match[1];
+    const tokenIndex = (match.index ?? 0) + match[0].indexOf(token);
+    const position = indexToPosition(sourceText, tokenIndex);
+    if (hasExceptionMarker(sourceLines, position.line)) {
+      continue;
+    }
+
+    violations.push(
+      createViolation(
+        filePath,
+        "foundation-color-token",
+        "Foundation or alias color tokens are not allowed in component-facing ui/src code. Replace them with approved semantic roles such as af-text, af-surface, af-danger-text, af-success-text, af-warning-text, af-info-text, or another centrally defined semantic token.",
+        token,
+        tokenIndex,
+        sourceText,
+      ),
+    );
+  }
+
+  for (const match of sourceText.matchAll(forbiddenFoundationVarPattern)) {
+    const token = match[0];
+    const tokenIndex = match.index ?? 0;
+    const position = indexToPosition(sourceText, tokenIndex);
+    if (hasExceptionMarker(sourceLines, position.line)) {
+      continue;
+    }
+
+    violations.push(
+      createViolation(
+        filePath,
+        "foundation-color-token",
+        "Foundation or alias CSS color variables are not allowed in component-facing ui/src code. Move the semantic mapping into ui/src/styles.css and consume the approved semantic token instead.",
         token,
         tokenIndex,
         sourceText,

@@ -90,7 +90,7 @@ function EditableConfigurationPromptAutocompleteFeedback({
   if (state.promptHelpState.status === "error") {
     return (
       <p
-        className={cn("m-0 text-af-danger-ink", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+        className={cn("m-0 text-af-danger-text", DASHBOARD_SUPPORTING_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationPromptHelpErrorPrefix}{" "}
@@ -146,7 +146,7 @@ function EditableConfigurationPromptValidationFeedback({
     return (
       <p
         className={cn(
-          "m-0 text-af-danger-ink",
+          "m-0 text-af-danger-text",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
         role="alert"
@@ -167,7 +167,7 @@ function EditableConfigurationPromptValidationFeedback({
       id={diagnosticsId}
       role="alert"
     >
-      <p className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}>
         {messages.editableConfigurationPromptDiagnosticsSummary}
       </p>
       <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
@@ -191,7 +191,7 @@ function EditableConfigurationPromptValidationFeedback({
               ].join(":")}
             >
               <p
-                className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
+                className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
               >
                 {diagnosticLabel(diagnostic.kind, messages)}: {diagnostic.message}
               </p>

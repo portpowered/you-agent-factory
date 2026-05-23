@@ -181,7 +181,7 @@ export function FailureTrendCard({
           {model.groups.map((group) => (
             <li className={TREND_CAUSE_ITEM_CLASS} key={group.label}>
               <span className={TREND_CAUSE_LABEL_CLASS}>{group.label}</span>
-              <strong className="shrink-0 text-af-danger-bright">{group.count}</strong>
+              <strong className="shrink-0 text-af-danger-text">{group.count}</strong>
             </li>
           ))}
         </ul>

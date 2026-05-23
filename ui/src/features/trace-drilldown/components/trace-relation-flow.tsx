@@ -41,11 +41,11 @@ const RELATION_NODE_ACTIVE_CLASS =
 const RELATION_NODE_BADGE_CLASS =
   "inline-flex rounded-full border px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em]";
 const RELATION_STATE_BADGE_DANGER_CLASS =
-  "border-af-danger-border bg-af-danger-surface text-af-danger-ink";
+  "border-af-danger-border bg-af-danger-surface text-af-danger-text";
 const RELATION_STATE_BADGE_SUCCESS_CLASS =
-  "border-af-success-border bg-af-success-surface text-af-success-ink";
+  "border-af-success-border bg-af-success-surface text-af-success-text";
 const RELATION_STATE_BADGE_WARNING_CLASS =
-  "border-af-warning-border bg-af-warning-surface text-af-warning-ink";
+  "border-af-warning-border bg-af-warning-surface text-af-warning-text";
 const RELATION_NODE_TONE_DEFAULT_CLASS = "border-af-border bg-af-surface";
 const RELATION_NODE_TONE_DANGER_CLASS = "border-af-danger-border bg-af-danger-surface";
 const RELATION_NODE_TONE_SUCCESS_CLASS = "border-af-success-border bg-af-success-surface";
@@ -454,13 +454,13 @@ function relationEdgeStroke(relation: DashboardWorkRelation): string {
   if (relation.required_state) {
     const toneClassName = relationStateToneClassName(relation.required_state);
     if (toneClassName === RELATION_STATE_BADGE_DANGER_CLASS) {
-      return "var(--color-af-danger-ink)";
+      return "var(--color-af-danger-text)";
     }
     if (toneClassName === RELATION_STATE_BADGE_SUCCESS_CLASS) {
       return "var(--color-af-success)";
     }
 
-    return "var(--color-af-warning-ink)";
+    return "var(--color-af-warning-text)";
   }
 
   if (relation.type === "PARENT_CHILD") {

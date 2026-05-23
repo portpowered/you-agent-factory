@@ -275,7 +275,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
                   <TableHead className="align-top" scope="row">
                     <span
                       className={cn(
-                        "inline-flex rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info-ink",
+                        "inline-flex rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info-text",
                         DASHBOARD_SUPPORTING_CODE_CLASS,
                       )}
                     >

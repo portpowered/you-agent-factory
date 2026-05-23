@@ -35,7 +35,7 @@ const IMPORT_DIALOG_LABEL_CLASS = cn(
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const IMPORT_ERROR_PANEL_CLASS =
-  "border-af-danger-border bg-af-danger-surface text-af-danger-ink";
+  "border-af-danger-border bg-af-danger-surface text-af-danger-text";
 
 type ReadyFactoryImportPreviewState = Extract<FactoryImportPreviewState, { status: "ready" }>;
 
@@ -67,7 +67,7 @@ function renderImportPreviewDescription(template: string, factoryName: string) {
   return (
     <>
       {beforeFactoryName}
-      <span className="font-semibold text-af-ink">{factoryName}</span>
+      <span className="font-semibold text-af-text">{factoryName}</span>
       {afterFactoryName}
     </>
   );

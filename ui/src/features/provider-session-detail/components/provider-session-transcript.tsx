@@ -30,10 +30,10 @@ const TRANSCRIPT_ENTRY_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
 };
 const TRANSCRIPT_BADGE_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
   assistant_message: "border-af-border bg-af-surface-raised text-af-text-muted",
-  reasoning: "border-af-info-border bg-af-info-surface text-af-info-ink",
+  reasoning: "border-af-info-border bg-af-info-surface text-af-info-text",
   system_event: "border-af-border bg-af-surface-raised text-af-text-subtle",
-  tool_call: "border-af-warning-border bg-af-warning-surface text-af-warning-ink",
-  tool_output: "border-af-success-border bg-af-success-surface text-af-success-ink",
+  tool_call: "border-af-warning-border bg-af-warning-surface text-af-warning-text",
+  tool_output: "border-af-success-border bg-af-success-surface text-af-success-text",
   user_message: "border-af-accent-border bg-af-accent-surface text-af-text",
 };
 

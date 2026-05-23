@@ -93,7 +93,7 @@ export function FactoryGraphEditorStatus({
         className={cn(
           STATUS_PILL_CLASS,
           className,
-          "border-af-danger-border bg-af-danger-surface text-af-danger-ink",
+          "border-af-danger-border bg-af-danger-surface text-af-danger-text",
         )}
         role="status"
       >
@@ -138,7 +138,7 @@ export function FactoryGraphEditorStatus({
         className={cn(
           STATUS_PILL_CLASS,
           className,
-          "border-af-danger-border bg-af-danger-surface text-af-danger-ink",
+          "border-af-danger-border bg-af-danger-surface text-af-danger-text",
         )}
         role="status"
       >
@@ -154,7 +154,7 @@ export function FactoryGraphEditorStatus({
         STATUS_PILL_CLASS,
         className,
         hasChanges
-          ? "border-af-warning-border bg-af-warning-surface text-af-warning-ink"
+          ? "border-af-warning-border bg-af-warning-surface text-af-warning-text"
           : "border-af-accent-border bg-af-accent-surface text-af-text",
       )}
       role="status"

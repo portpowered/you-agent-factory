@@ -47,9 +47,9 @@ const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-text-muted";
 const VISIBILITY_PANEL_CLASS =
   "pointer-events-auto absolute right-7 top-7 z-20 flex flex-wrap items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-2 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4";
 const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
-  danger: "border-af-danger-border bg-af-danger-surface text-af-danger-ink",
+  danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
   neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
-  warning: "border-af-warning-border bg-af-warning-surface text-af-warning-ink",
+  warning: "border-af-warning-border bg-af-warning-surface text-af-warning-text",
 };
 
 const STATUS_PILL_CLASS =
@@ -121,7 +121,7 @@ export function FactoryGraphEditorToolbar({
         className={cn(
           STATUS_PILL_CLASS,
           hasPendingChanges
-            ? "border-af-warning-border bg-af-warning-surface text-af-warning-ink"
+            ? "border-af-warning-border bg-af-warning-surface text-af-warning-text"
             : "border-af-border bg-af-surface-subtle text-af-text-muted",
         )}
       >

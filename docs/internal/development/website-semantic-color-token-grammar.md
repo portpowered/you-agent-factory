@@ -90,10 +90,14 @@ family naming and be added centrally before routine component usage.
 Current centrally approved supporting status roles include:
 
 - accent: `af-accent-surface` and `af-accent-border`
-- success: `af-success-surface` and `af-success-border`
-- warning: `af-warning-surface` and `af-warning-border`
-- danger: `af-danger-surface` and `af-danger-border`
-- info: `af-info-surface` and `af-info-border`
+- success: `af-success-surface`, `af-success-border`, and `af-success-text`
+- warning: `af-warning-surface`, `af-warning-border`, and `af-warning-text`
+- danger: `af-danger-surface`, `af-danger-border`, and `af-danger-text`
+- info: `af-info-surface`, `af-info-border`, and `af-info-text`
+
+Use the `*-text` roles for readable status-colored text on neutral or subtle
+status surfaces. Reserve `af-on-*` for content that sits on a strong solid
+status fill.
 
 ## Naming Rules
 

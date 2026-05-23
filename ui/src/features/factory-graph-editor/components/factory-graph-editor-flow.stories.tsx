@@ -461,7 +461,7 @@ export const PendingRemoval = {
       throw new Error("Expected a React Flow edge path for pending removal.");
     }
     await expect(edgePath.getAttribute("style") ?? "").toContain(
-      "var(--color-af-danger-ink)",
+      "var(--color-af-danger-text)",
     );
     await expect(edgePath.getAttribute("style") ?? "").toContain(
       "stroke-dasharray: 7, 5",
@@ -511,13 +511,13 @@ export const PendingEdgeChanges = {
     await expect(successRoute).toBeVisible();
     await expect(edgePaths).toHaveLength(2);
     await expect(edgePaths[0]?.getAttribute("style") ?? "").toContain(
-      "var(--color-af-danger-ink)",
+      "var(--color-af-danger-text)",
     );
     await expect(edgePaths[0]?.getAttribute("style") ?? "").toContain(
       "stroke-dasharray: 7, 5",
     );
     await expect(edgePaths[1]?.getAttribute("style") ?? "").toContain(
-      "var(--color-af-warning-ink)",
+      "var(--color-af-warning-text)",
     );
     await expect(edgePaths[1]?.getAttribute("style") ?? "").toContain(
       "stroke-dasharray: 9, 4",

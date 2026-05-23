@@ -32,7 +32,7 @@ const DIALOG_CLOSE_BUTTON_CLASS =
 const DIALOG_FOOTER_CLASS = "flex flex-wrap justify-end gap-3";
 
 const MESSAGE_PANEL_TONE_CLASS = {
-  error: "border-af-danger-border bg-af-danger-surface text-af-danger-ink",
+  error: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
   neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
 } as const;
 

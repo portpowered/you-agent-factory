@@ -38,7 +38,7 @@ export function FactoryGraphEditorDraftActions({
         </p>
         <p className="m-0 text-sm leading-6 text-af-text-muted">{description}</p>
         {saveDisabledReason ? (
-          <p className="m-0 text-xs leading-5 text-af-warning-ink">
+          <p className="m-0 text-xs leading-5 text-af-warning-text">
             {saveDisabledReason}
           </p>
         ) : null}

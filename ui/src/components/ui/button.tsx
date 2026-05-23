@@ -13,7 +13,7 @@ const BUTTON_TONE_CLASS: Record<NonNullable<ButtonProps["tone"]>, string> = {
   default:
     "border-af-accent bg-af-accent text-af-on-accent hover:brightness-105",
   destructive:
-    "border-af-danger bg-af-danger text-af-on-danger hover:border-af-danger-bright hover:bg-af-danger-bright",
+    "border-af-danger bg-af-danger text-af-on-danger hover:brightness-110",
   ghost: "border-transparent bg-transparent text-af-text-muted hover:bg-af-overlay hover:text-af-text",
   outline:
     "border-af-border bg-af-surface-raised text-af-text hover:border-af-border-strong hover:bg-af-overlay",

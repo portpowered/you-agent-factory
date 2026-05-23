@@ -127,7 +127,7 @@ function WorkItemPayloadDetails({
       body = (
         <p
           className={cn(
-            "m-0 text-af-warning-ink",
+            "m-0 text-af-warning-text",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
         >
@@ -149,7 +149,7 @@ function WorkItemPayloadDetails({
       body = (
         <p
           className={cn(
-            "m-0 text-af-warning-ink",
+            "m-0 text-af-warning-text",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
         >

@@ -32,7 +32,7 @@ export function DashboardStatusPanel({
   const { locale: resolvedLocale } = useAppLocale(locale);
   const detailClassName =
     tone === "error"
-      ? cn(DETAIL_COPY_CLASS, "text-af-danger-ink")
+      ? cn(DETAIL_COPY_CLASS, "text-af-danger-text")
       : DETAIL_COPY_CLASS;
 
   return (

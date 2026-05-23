@@ -28,7 +28,7 @@ export const PROVIDER_SESSION_STATUS_NOTICE_CLASS = cn(
   DASHBOARD_BODY_TEXT_CLASS,
 );
 export const PROVIDER_SESSION_ERROR_NOTICE_CLASS = cn(
-  "m-0 rounded-lg border border-af-danger-border bg-af-danger-surface px-3 py-2.5 text-af-danger-ink",
+  "m-0 rounded-lg border border-af-danger-border bg-af-danger-surface px-3 py-2.5 text-af-danger-text",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 export const PROVIDER_SESSION_STATUS_PILL_CLASS = cn(

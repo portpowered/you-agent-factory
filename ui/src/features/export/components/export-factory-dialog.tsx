@@ -39,11 +39,11 @@ const DIALOG_FIELD_DESCRIPTION_CLASS = cn(
   "m-0",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
-const DIALOG_VALIDATION_CLASS = "m-0 text-sm font-medium text-af-danger-ink";
+const DIALOG_VALIDATION_CLASS = "m-0 text-sm font-medium text-af-danger-text";
 const DIALOG_ERROR_PANEL_CLASS =
-  "rounded-2xl border border-af-danger-border bg-af-danger-surface px-4 py-3 text-sm text-af-danger-ink";
+  "rounded-2xl border border-af-danger-border bg-af-danger-surface px-4 py-3 text-sm text-af-danger-text";
 const DIALOG_SUCCESS_PANEL_CLASS =
-  "rounded-2xl border border-af-success-border bg-af-success-surface px-4 py-3 text-sm text-af-success-ink";
+  "rounded-2xl border border-af-success-border bg-af-success-surface px-4 py-3 text-sm text-af-success-text";
 const DIALOG_CONTENT_CLASS = "w-full max-w-2xl gap-6";
 
 export interface ExportFactoryDialogProps {

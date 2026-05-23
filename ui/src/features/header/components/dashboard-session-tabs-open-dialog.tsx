@@ -31,13 +31,14 @@ import {
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
 const SESSION_SECTION_LABEL_CLASS =
-  "text-xs uppercase tracking-[0.18em] text-af-ink/52";
+  "text-xs uppercase tracking-[0.18em] text-af-text-subtle";
 const SESSION_DIALOG_ERROR_CLASS =
-  "rounded-xl border border-af-danger/32 bg-af-danger/8 px-3 py-2 text-sm text-af-ink";
+  "rounded-xl border border-af-danger-border bg-af-danger-surface px-3 py-2 text-sm text-af-danger-text";
 const SESSION_DIALOG_STATUS_CLASS =
-  "rounded-xl border border-af-accent/24 bg-af-accent/8 px-3 py-2 text-sm text-af-ink";
+  "rounded-xl border border-af-accent-border bg-af-accent-surface px-3 py-2 text-sm text-af-text";
+const SESSION_TARGET_LIST_CLASS = "grid gap-2 sm:grid-cols-2";
 const SESSION_TARGET_PICKER_CLASS =
-  "grid gap-3 rounded-2xl border border-af-overlay/12 bg-af-overlay/4 p-4";
+  "grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4";
 const SESSION_TARGET_BUTTON_CLASS =
   "flex min-h-11 flex-col items-start justify-center rounded-xl border border-af-overlay/12 bg-af-overlay/4 px-3 py-2 text-left text-sm text-af-ink/82 transition-colors hover:border-af-accent/30 hover:bg-af-overlay/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
 const SESSION_LAUNCH_SUMMARY_CLASS =

@@ -67,8 +67,8 @@ const EDGE_COLOR_BY_KIND = {
   "work-type-state": "var(--color-af-overlay)",
   "workstation-input": "var(--color-af-accent)",
   "workstation-on-continue": "var(--color-af-info)",
-  "workstation-on-failure": "var(--color-af-danger-ink)",
-  "workstation-on-rejection": "var(--color-af-warning-ink)",
+  "workstation-on-failure": "var(--color-af-danger-text)",
+  "workstation-on-rejection": "var(--color-af-warning-text)",
   "workstation-output": "var(--color-af-accent)",
   "workstation-resource": "var(--color-af-success)",
 } as const;
@@ -211,9 +211,9 @@ function buildFactoryGraphEditorEdge(
     interactionWidth: 24,
     markerEnd: {
       color: pendingRemoval
-        ? "var(--color-af-danger-ink)"
+        ? "var(--color-af-danger-text)"
         : pendingAddition
-          ? "var(--color-af-warning-ink)"
+          ? "var(--color-af-warning-text)"
           : color,
       type: MarkerType.ArrowClosed,
     },
@@ -222,9 +222,9 @@ function buildFactoryGraphEditorEdge(
     style: {
       opacity: pendingRemoval ? 0.48 : 1,
       stroke: pendingRemoval
-        ? "var(--color-af-danger-ink)"
+        ? "var(--color-af-danger-text)"
         : pendingAddition
-          ? "var(--color-af-warning-ink)"
+          ? "var(--color-af-warning-text)"
           : color,
       strokeDasharray: pendingRemoval
         ? "7 5"

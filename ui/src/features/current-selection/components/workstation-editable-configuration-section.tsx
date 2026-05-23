@@ -80,7 +80,7 @@ export function EditableConfigurationSection({
           ) : null}
           {state?.status === "error" ? (
             <p
-              className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
+              className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
               role="alert"
             >
               {messages.editableConfigurationErrorPrefix} {state.errorMessage}
@@ -177,7 +177,7 @@ function EditableConfigurationSaveFeedback({
   if (saveState?.status === "success") {
     return (
       <p
-        className={cn("m-0 text-af-success-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-af-success-text", DASHBOARD_BODY_TEXT_CLASS)}
         role="status"
       >
         {messages.editableConfigurationSaveSuccess}
@@ -188,7 +188,7 @@ function EditableConfigurationSaveFeedback({
   if (saveState?.status === "error") {
     return (
       <p
-        className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationSaveErrorPrefix} {saveState.errorMessage}
@@ -214,7 +214,7 @@ function EditableConfigurationDraftStatus({
       <p
         className={cn(
           "m-0",
-          state.hasValidationErrors ? "text-af-danger-ink" : "text-af-text-muted",
+          state.hasValidationErrors ? "text-af-danger-text" : "text-af-text-muted",
           DASHBOARD_BODY_TEXT_CLASS,
         )}
         role={state.hasValidationErrors ? "alert" : "status"}
@@ -251,7 +251,7 @@ function EditableConfigurationOverwriteWarning({
   return (
     <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
       <p
-        className={cn("m-0 text-af-warning-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
@@ -284,7 +284,7 @@ function EditableConfigurationWorkerInput({
   if (state.workerOptionsState.status === "error") {
     return (
       <p
-        className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationWorkerUnavailablePrefix}{" "}
@@ -417,7 +417,7 @@ function EditableConfigurationField({
       {errorMessage ? (
         <p
           className={cn(
-            "m-0 text-af-danger-ink",
+            "m-0 text-af-danger-text",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
           id={`${fieldId}-error`}
