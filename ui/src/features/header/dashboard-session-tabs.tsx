@@ -402,9 +402,6 @@ function SessionTabButton({
           <SessionTabStatusIndicator status={streamStatus} />
           <span className="truncate text-sm font-semibold">{label}</span>
         </span>
-        <span className="block truncate text-[11px] text-af-ink/54">
-          {session.project || session.folderPath}
-        </span>
       </button>
       <button
         aria-label={sessionCloseLabel(session, messages)}

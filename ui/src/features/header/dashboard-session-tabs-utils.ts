@@ -6,10 +6,14 @@ import {
 import type { getHeaderControlsMessages } from "./messages/header-controls";
 
 export function sessionTabLabel(session: FactorySessionSummary): string {
-  const folderName = basename(session.folderPath) || session.project || "factory";
-  const targetName =
-    session.target.kind === "default" ? "default" : session.target.name || "named";
-  return `${folderName} / ${targetName}`;
+  const namedTarget = session.target.kind === "named" ? session.target.name : "";
+  return (
+    normalizeSessionLabelPart(namedTarget) ||
+    normalizeSessionLabelPart(basename(session.factoryDir)) ||
+    normalizeSessionLabelPart(basename(session.folderPath)) ||
+    normalizeSessionLabelPart(session.project) ||
+    "factory"
+  );
 }
 
 export function sessionCloseLabel(
@@ -60,6 +64,10 @@ export function normalizeFactorySessionsError(error: unknown): FactorySessionsAP
 function basename(path: string): string {
   const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
   return segments[segments.length - 1] ?? "";
+}
+
+function normalizeSessionLabelPart(value: string | undefined): string {
+  return value?.trim() ?? "";
 }
 
 function sessionDOMIDFragment(value: string): string {

@@ -88,8 +88,8 @@ describe("DashboardSessionTabs", () => {
     });
 
     expect(screen.getByRole("tablist")).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /root \/ default/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /root \/ beta/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "beta" })).toBeTruthy();
     expect(screen.getByRole("tabpanel")).toBeTruthy();
   });
 
@@ -138,9 +138,9 @@ describe("DashboardSessionTabs", () => {
       ).toBeTruthy();
     });
 
-    const rootTab = screen.getByRole("tab", { name: /root \/ default/i });
-    const betaTab = screen.getByRole("tab", { name: /root \/ beta/i });
-    const gammaTab = screen.getByRole("tab", { name: /root \/ gamma/i });
+    const rootTab = screen.getByRole("tab", { name: "root" });
+    const betaTab = screen.getByRole("tab", { name: "beta" });
+    const gammaTab = screen.getByRole("tab", { name: "gamma" });
 
     expect(rootTab.getAttribute("aria-selected")).toBe("true");
     expect(rootTab.getAttribute("tabindex")).toBe("0");
@@ -269,7 +269,7 @@ describe("DashboardSessionTabs", () => {
       });
     });
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /other \/ default/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "other" })).toBeTruthy();
     });
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
       "session-other",
@@ -723,12 +723,12 @@ describe("DashboardSessionTabs", () => {
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);
 
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /root \/ default/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
     });
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Close root / default session",
+        name: "Close root session",
       }),
     );
 
@@ -737,7 +737,7 @@ describe("DashboardSessionTabs", () => {
     });
     await waitFor(() => {
       expect(
-        screen.getByRole("tab", { name: /root \/ beta/i }).getAttribute(
+        screen.getByRole("tab", { name: "beta" }).getAttribute(
           "aria-selected",
         ),
       ).toBe("true");
@@ -768,12 +768,12 @@ describe("DashboardSessionTabs", () => {
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);
 
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /root \/ default/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
     });
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Close root / default session",
+        name: "Close root session",
       }),
     );
 
@@ -784,6 +784,46 @@ describe("DashboardSessionTabs", () => {
     expect(
       screen.getByRole("button", { name: messages.openSessionButtonLabel }),
     ).toBeTruthy();
+  });
+
+  it("uses short factory-first labels without rendering redundant visible subtitle copy", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "workspace root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/catalog/review",
+        folderPath: "/workspace/catalog",
+        id: "session-review",
+        isDefault: false,
+        project: "catalog",
+        target: {
+          kind: "named",
+          name: "review",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
+    });
+
+    const rootTab = screen.getByRole("tab", { name: "root" });
+    const reviewTab = screen.getByRole("tab", { name: "review" });
+
+    expect(rootTab.textContent).toBe("root");
+    expect(reviewTab.textContent).toBe("review");
+    expect(screen.queryByText("workspace root")).toBeNull();
+    expect(screen.queryByText("catalog")).toBeNull();
   });
 });
 
