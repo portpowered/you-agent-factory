@@ -162,7 +162,13 @@ func newSessionLogger(base *zap.Logger, sessionID string, folderPath string, fac
 }
 
 func sessionScopedRecordPath(basePath string, sessionID string) string {
-	if strings.TrimSpace(basePath) == "" || sessionID == defaultFactorySessionID {
+	if strings.TrimSpace(basePath) == "" {
+		return basePath
+	}
+	if strings.Contains(basePath, "__factory_session_id__") {
+		return strings.ReplaceAll(basePath, "__factory_session_id__", sessionID)
+	}
+	if sessionID == defaultFactorySessionID {
 		return basePath
 	}
 	ext := filepath.Ext(basePath)

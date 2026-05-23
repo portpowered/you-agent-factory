@@ -3,6 +3,7 @@
 package replay_contracts
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -29,6 +30,15 @@ const recordReplayScriptSecretEnv = "SCRIPT_REPLAY_API_TOKEN"
 const recordReplayScriptSecretValue = "raw-script-replay-secret-value"
 const recordReplayProviderSecretEnv = "ANTHROPIC_API_KEY"
 const recordReplayProviderSecretValue = "raw-provider-replay-secret-value"
+
+func setRecordReplayHomeEnv(t *testing.T, homeDir string) {
+	t.Helper()
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("HOMEDRIVE", filepath.VolumeName(homeDir))
+	t.Setenv("HOMEPATH", string(os.PathSeparator))
+}
 
 func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *testing.T) {
 	support.SkipLongFunctional(t, "slow record/replay CLI end-to-end smoke")
@@ -67,6 +77,78 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 	}
 	assertReplayArtifactDoesNotContainRawValue(t, artifactPath, recordReplayScriptSecretValue)
 	assertReplayArtifactCommandEnvRedacted(t, artifact, recordReplayScriptSecretEnv)
+
+	if err := os.Unsetenv(recordReplayLiveScriptEnv); err != nil {
+		t.Fatalf("unset live script env: %v", err)
+	}
+	if err := os.Unsetenv(recordReplayScriptSecretEnv); err != nil {
+		t.Fatalf("unset script secret env: %v", err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatalf("remove original fixture dir: %v", err)
+	}
+
+	replayOutput, err := runRecordReplayCLIWithCapturedStdout(t, runcli.RunConfig{
+		Dir:                        t.TempDir(),
+		Port:                       0,
+		ReplayPath:                 artifactPath,
+		SuppressDashboardRendering: true,
+		Logger:                     zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("replay run failed: %v", err)
+	}
+	if replayOutput != "" {
+		t.Fatalf("replay run stdout = %q, want empty output with dashboard rendering suppressed", replayOutput)
+	}
+
+	h := testutil.AssertReplaySucceeds(t, artifactPath, 10*time.Second)
+	h.Service.Assert().
+		HasTokenInPlace("task:done").
+		HasNoTokenInPlace("task:init").
+		HasNoTokenInPlace("task:failed")
+}
+
+func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow(t *testing.T) {
+	support.SkipLongFunctional(t, "slow default record/replay CLI end-to-end smoke")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	helperPath := writeRecordReplayScriptHelper(t)
+	writeRecordReplayScriptWorker(t, dir, helperPath)
+
+	workFile := filepath.Join(t.TempDir(), "initial-work.json")
+	writeRecordReplayWorkFile(t, workFile)
+
+	homeDir := t.TempDir()
+	setRecordReplayHomeEnv(t, homeDir)
+	t.Setenv(recordReplayLiveScriptEnv, "1")
+	t.Setenv(recordReplayScriptSecretEnv, recordReplayScriptSecretValue)
+
+	var startup bytes.Buffer
+	if err := runcli.Run(context.Background(), runcli.RunConfig{
+		Dir:                        dir,
+		Port:                       0,
+		WorkFile:                   workFile,
+		SuppressDashboardRendering: true,
+		StartupOutput:              &startup,
+		Logger:                     zap.NewNop(),
+	}); err != nil {
+		t.Fatalf("default record run failed: %v", err)
+	}
+
+	artifactPath := recordedPathFromCLIOutput(t, startup.String())
+	wantRoot := filepath.Join(homeDir, ".you-agent-factory", "recordings")
+	if !strings.HasPrefix(artifactPath, wantRoot+string(os.PathSeparator)) {
+		t.Fatalf("artifact path = %q, want root under %q", artifactPath, wantRoot)
+	}
+
+	artifact := testutil.LoadReplayArtifact(t, artifactPath)
+	if replayEventCount(artifact, factoryapi.FactoryEventTypeDispatchRequest) == 0 {
+		t.Fatal("expected default-recorded artifact to contain at least one dispatch")
+	}
+	if replayEventCount(artifact, factoryapi.FactoryEventTypeDispatchResponse) == 0 {
+		t.Fatal("expected default-recorded artifact to contain at least one completion")
+	}
 
 	if err := os.Unsetenv(recordReplayLiveScriptEnv); err != nil {
 		t.Fatalf("unset live script env: %v", err)
@@ -477,6 +559,18 @@ func runRecordReplayCLIWithCapturedStdout(t *testing.T, cfg runcli.RunConfig) (s
 	}
 
 	return string(output), runErr
+}
+
+func recordedPathFromCLIOutput(t *testing.T, output string) string {
+	t.Helper()
+
+	for _, line := range strings.Split(output, "\n") {
+		if value, ok := strings.CutPrefix(line, "Recording saved: "); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	t.Fatalf("startup output = %q, want auto-generated recording path", output)
+	return ""
 }
 
 func assertReplayArtifactCommandEnvRedacted(t *testing.T, artifact *interfaces.ReplayArtifact, envKey string) {

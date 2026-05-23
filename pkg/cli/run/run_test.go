@@ -51,6 +51,15 @@ func preserveRunGlobals(t *testing.T) {
 	})
 }
 
+func setUserHomeForTest(t *testing.T, homeDir string) {
+	t.Helper()
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("HOMEDRIVE", filepath.VolumeName(homeDir))
+	t.Setenv("HOMEPATH", string(os.PathSeparator))
+}
+
 func TestCountTokenStates(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -303,14 +312,49 @@ func TestRun_DefaultModeUsesBatchRuntimeAndExitsWhenRunReturns(t *testing.T) {
 }
 
 func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
+	originalDefaultRecordPath := defaultLiveRunRecordPath
+	defer func() {
+		defaultLiveRunRecordPath = originalDefaultRecordPath
+	}()
+
 	tests := []struct {
-		name           string
-		cfg            RunConfig
-		wantRecordPath string
-		wantReplayPath string
+		name               string
+		cfg                RunConfig
+		defaultRecordPath  string
+		wantRecordPath     string
+		wantReplayPath     string
+		wantGeneratorCalls int
 	}{
-		{name: "record mode", cfg: RunConfig{RecordPath: "run.replay.json"}, wantRecordPath: "run.replay.json"},
-		{name: "replay mode", cfg: RunConfig{ReplayPath: "existing.replay.json"}, wantReplayPath: "existing.replay.json"},
+		{
+			name:               "default live mode",
+			cfg:                RunConfig{},
+			defaultRecordPath:  "auto-generated-recording.json",
+			wantRecordPath:     "auto-generated-recording.json",
+			wantGeneratorCalls: 1,
+		},
+		{
+			name:           "record mode",
+			cfg:            RunConfig{RecordPath: "run.replay.json"},
+			wantRecordPath: "run.replay.json",
+		},
+		{
+			name: "record mode with one-shot opt-out rejects conflicting flags",
+			cfg: RunConfig{
+				RecordPath:              "run.replay.json",
+				DisableDefaultRecording: true,
+			},
+		},
+		{
+			name:           "replay mode",
+			cfg:            RunConfig{ReplayPath: "existing.replay.json"},
+			wantReplayPath: "existing.replay.json",
+		},
+		{
+			name: "default recording disabled for one run",
+			cfg: RunConfig{
+				DisableDefaultRecording: true,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -320,6 +364,12 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 				buildFactoryService = originalBuilder
 			}()
 
+			generatorCalls := 0
+			defaultLiveRunRecordPath = func() (string, error) {
+				generatorCalls++
+				return tt.defaultRecordPath, nil
+			}
+
 			var capturedRecordPath string
 			var capturedReplayPath string
 			buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
@@ -328,7 +378,20 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 				return stubFactoryService{run: func(context.Context) error { return nil }}, nil
 			}
 
-			if err := Run(context.Background(), tt.cfg); err != nil {
+			err := Run(context.Background(), tt.cfg)
+			if tt.cfg.DisableDefaultRecording && tt.cfg.RecordPath != "" {
+				if err == nil {
+					t.Fatal("expected conflicting --record and --no-record settings to fail")
+				}
+				if !strings.Contains(err.Error(), "--no-record cannot be used with --record") {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if generatorCalls != 0 {
+					t.Fatalf("default record path generator calls = %d, want 0", generatorCalls)
+				}
+				return
+			}
+			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}
 			if capturedRecordPath != tt.wantRecordPath {
@@ -337,7 +400,115 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 			if capturedReplayPath != tt.wantReplayPath {
 				t.Fatalf("replay path = %q, want %q", capturedReplayPath, tt.wantReplayPath)
 			}
+			if generatorCalls != tt.wantGeneratorCalls {
+				t.Fatalf("default record path generator calls = %d, want %d", generatorCalls, tt.wantGeneratorCalls)
+			}
 		})
+	}
+}
+
+func TestRun_DefaultRecordPathResolutionErrorSkipsServiceStart(t *testing.T) {
+	originalBuilder := buildFactoryService
+	originalDefaultRecordPath := defaultLiveRunRecordPath
+	defer func() {
+		buildFactoryService = originalBuilder
+		defaultLiveRunRecordPath = originalDefaultRecordPath
+	}()
+
+	builderCalled := false
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		builderCalled = true
+		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
+	}
+	defaultLiveRunRecordPath = func() (string, error) {
+		return "", errors.New("home lookup failed")
+	}
+
+	err := Run(context.Background(), RunConfig{})
+	if err == nil {
+		t.Fatal("expected default record path resolution to fail")
+	}
+	if !strings.Contains(err.Error(), "resolve default replay record path") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if builderCalled {
+		t.Fatal("factory service builder should not run when default record path resolution fails")
+	}
+}
+
+func TestGenerateDefaultLiveRunRecordPath_UsesRecordingsHierarchyAndSessionTemplate(t *testing.T) {
+	originalTime := defaultLiveRunRecordTime
+	originalUUID := defaultLiveRunRecordUUID
+	defer func() {
+		defaultLiveRunRecordTime = originalTime
+		defaultLiveRunRecordUUID = originalUUID
+	}()
+
+	homeDir := t.TempDir()
+	setUserHomeForTest(t, homeDir)
+	defaultLiveRunRecordTime = func() time.Time {
+		return time.Date(2026, time.May, 23, 18, 45, 12, 0, time.FixedZone("ICT", 7*60*60))
+	}
+	defaultLiveRunRecordUUID = func() string {
+		return "uuid-1"
+	}
+
+	path, err := generateDefaultLiveRunRecordPath()
+	if err != nil {
+		t.Fatalf("generateDefaultLiveRunRecordPath: %v", err)
+	}
+
+	want := filepath.Join(
+		homeDir,
+		defaultRecordingsDir,
+		"2026-05",
+		"2026-05-23",
+		"factory-session-"+defaultRecordPathSessionToken+"-184512-uuid-1.json",
+	)
+	if path != want {
+		t.Fatalf("generated path = %q, want %q", path, want)
+	}
+	if got := resolveDefaultSessionRecordPath(path); got != filepath.Join(
+		homeDir,
+		defaultRecordingsDir,
+		"2026-05",
+		"2026-05-23",
+		"factory-session-"+defaultFactorySessionID+"-184512-uuid-1.json",
+	) {
+		t.Fatalf("resolved default-session path = %q", got)
+	}
+}
+
+func TestGenerateDefaultLiveRunRecordPath_UsesUniqueSuffixes(t *testing.T) {
+	originalTime := defaultLiveRunRecordTime
+	originalUUID := defaultLiveRunRecordUUID
+	defer func() {
+		defaultLiveRunRecordTime = originalTime
+		defaultLiveRunRecordUUID = originalUUID
+	}()
+
+	homeDir := t.TempDir()
+	setUserHomeForTest(t, homeDir)
+	defaultLiveRunRecordTime = func() time.Time {
+		return time.Date(2026, time.May, 23, 18, 45, 12, 0, time.FixedZone("ICT", 7*60*60))
+	}
+	nextUUID := []string{"uuid-1", "uuid-2"}
+	defaultLiveRunRecordUUID = func() string {
+		id := nextUUID[0]
+		nextUUID = nextUUID[1:]
+		return id
+	}
+
+	first, err := generateDefaultLiveRunRecordPath()
+	if err != nil {
+		t.Fatalf("generateDefaultLiveRunRecordPath(first): %v", err)
+	}
+	second, err := generateDefaultLiveRunRecordPath()
+	if err != nil {
+		t.Fatalf("generateDefaultLiveRunRecordPath(second): %v", err)
+	}
+	if first == second {
+		t.Fatalf("generated paths matched: %q", first)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,29 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+func TestSessionScopedRecordPath_ReplacesGeneratedSessionTokenPerSession(t *testing.T) {
+	basePath := filepath.Join(
+		t.TempDir(),
+		"recordings",
+		"2026-05",
+		"2026-05-23",
+		"factory-session-__factory_session_id__-184512-uuid-1.json",
+	)
+
+	defaultPath := sessionScopedRecordPath(basePath, defaultFactorySessionID)
+	if !strings.Contains(defaultPath, "factory-session-"+defaultFactorySessionID+"-184512-uuid-1.json") {
+		t.Fatalf("default session path = %q", defaultPath)
+	}
+
+	sessionPath := sessionScopedRecordPath(basePath, "session-123")
+	if !strings.Contains(sessionPath, "factory-session-session-123-184512-uuid-1.json") {
+		t.Fatalf("named session path = %q", sessionPath)
+	}
+	if defaultPath == sessionPath {
+		t.Fatalf("session-scoped paths matched: %q", defaultPath)
+	}
+}
 
 func TestFactoryService_OpenFactorySession_RunsConcurrentIsolatedSessions(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
@@ -111,6 +135,50 @@ func TestFactoryService_OpenFactorySession_IsolatesSessionLogsAndReplayArtifacts
 		assertSessionArtifactIsolation(t, session, workBySession[session.id], workBySession)
 		assertSessionRuntimeLogRecord(t, session)
 	}
+}
+
+func TestFactoryService_OpenFactorySession_ReopenedSessionGetsDistinctReplayArtifact(t *testing.T) {
+	recordPath := t.TempDir() + "/recording.json"
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+		recordPath:     recordPath,
+	})
+
+	firstBetaSessionID := harness.openFactorySession(t, "beta")
+	firstBeta := harness.requireSession(t, firstBetaSessionID)
+	submitSessionWork(t, firstBeta, "beta-session-one-work", "trace-beta-session-one")
+	waitForSessionEventsToContain(t, firstBeta, "beta-session-one-work", time.Second)
+
+	if err := harness.svc.stopFactorySession(firstBetaSessionID); err != nil {
+		t.Fatalf("stopFactorySession(first beta): %v", err)
+	}
+	select {
+	case <-firstBeta.handle.runDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for stopped beta session to exit")
+	}
+
+	secondBetaSessionID := harness.openFactorySession(t, "beta")
+	secondBeta := harness.requireSession(t, secondBetaSessionID)
+	if firstBetaSessionID == secondBetaSessionID {
+		t.Fatalf("reopened beta session id = %q, want a new session identity", secondBetaSessionID)
+	}
+	if firstBeta.handle.runtime.recordPath == secondBeta.handle.runtime.recordPath {
+		t.Fatalf("reopened beta sessions shared record path %q", secondBeta.handle.runtime.recordPath)
+	}
+
+	submitSessionWork(t, secondBeta, "beta-session-two-work", "trace-beta-session-two")
+	waitForSessionEventsToContain(t, secondBeta, "beta-session-two-work", time.Second)
+
+	harness.stop(t)
+
+	workBySession := map[string]string{
+		firstBetaSessionID:  "beta-session-one-work",
+		secondBetaSessionID: "beta-session-two-work",
+	}
+	assertSessionArtifactIsolation(t, firstBeta, workBySession[firstBetaSessionID], workBySession)
+	assertSessionArtifactIsolation(t, secondBeta, workBySession[secondBetaSessionID], workBySession)
 }
 
 func TestFactoryService_CloseFactorySession_ClosesDefaultAndPromotesRemainingSession(t *testing.T) {

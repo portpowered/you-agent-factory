@@ -64,7 +64,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		loadedFactoryCfg:      loadedFactoryCfg,
 		logger:                logger,
 		clock:                 clock,
-		recordPath:            cfg.RecordPath,
+		recordPath:            sessionScopedRecordPath(cfg.RecordPath, defaultFactorySessionID),
 		workflowID:            cfg.WorkflowID,
 		providerOverride:      providerOverrideForMode(cfg, replaySideEffects),
 		providerCommandRunner: providerCommandRunnerForMode(cfg, loadedFactoryCfg),

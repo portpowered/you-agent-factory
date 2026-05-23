@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-04-21
+last-modified: 2026-05-23
 doc-id: agent-factory/authoring-factories
 ---
 
@@ -229,6 +229,39 @@ you run --dir ./factory --with-mock-workers
 
 The command loads `factory.json`, resolves the split `AGENTS.md` files, starts
 continuous mode, and exposes the dashboard and API on the configured port.
+
+Normal live `you run` invocations record a replay-compatible artifact by
+default when you do not pass `--record` or `--replay`. The generated artifact
+root is:
+
+```text
+~/.you-agent-factory/recordings/YYYY-MM/YYYY-MM-DD/
+```
+
+The top-level session for a normal run writes a filename shaped like:
+
+```text
+factory-session-~default-HHMMSS-<unique-id>.json
+```
+
+Independent factory sessions opened later in the same service lifetime keep the
+same directory contract but replace `~default` with the owning session ID so
+their histories stay isolated in separate replay artifacts.
+
+Use these controls when you need to override the default behavior:
+
+- Pass `--no-record` to skip the default recording for one invocation.
+- Pass `--record <path>` to write the replay artifact to an explicit path you
+  own instead of the generated recordings directory.
+- Pass `--replay <path>` to replay an existing artifact instead of starting a
+  live run.
+
+The CLI reports the resolved generated path during shutdown with
+`Recording saved: ...` so the artifact is easy to find after a failure or an
+unexpected run. Replay artifacts are sensitive because they can contain
+prompts, payloads, stdout, stderr, and diagnostic metadata. The first version
+does not delete old artifacts automatically, so manage retention in your own
+home directory or CI workspace.
 
 ### 4. Submit work
 
