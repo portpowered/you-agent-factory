@@ -1,14 +1,14 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
-import type { DashboardStreamState } from "../../api/dashboard/types";
-import type { FactorySessionSummary } from "../../api/factory-sessions";
-import { cn } from "../../lib/cn";
+import type { DashboardStreamState } from "../../../api/dashboard/types";
+import type { FactorySessionSummary } from "../../../api/factory-sessions";
+import { cn } from "../../../lib/cn";
 import {
   sessionCloseLabel,
   sessionStreamToggleLabel,
   sessionTabLabel,
-} from "./lib/dashboard-session-tabs-utils";
-import type { getHeaderControlsMessages } from "./messages/header-controls";
+} from "../lib/dashboard-session-tabs-utils";
+import type { getHeaderControlsMessages } from "../messages/header-controls";
 
 const SESSION_TAB_ITEM_CLASS =
   "group relative flex min-w-0 shrink-0 items-stretch border border-b-0 transition-colors";

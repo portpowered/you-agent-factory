@@ -11,7 +11,7 @@ import { cn } from "../../../lib/cn";
 import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
-import { SessionTabButton } from "../dashboard-session-tab-button";
+import { SessionTabButton } from "./dashboard-session-tab-button";
 import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
 import {
   normalizeFactorySessionsError,
