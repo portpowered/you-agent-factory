@@ -82,6 +82,7 @@ export { FACTORY_GRAPH_EDITOR_EDGE_TYPES };
 
 export function buildFactoryGraphEditorFlowModel(input: {
   canEditConnections: boolean;
+  layoutPositionsByNodeId?: ReadonlyMap<string, { x: number; y: number }>;
   locale?: string;
   onConnectionAnchorClick?: (endpoint: FactoryGraphConnectionEndpoint) => void;
   pendingAdditionEdgeIds: ReadonlySet<string>;
@@ -149,10 +150,11 @@ export function buildFactoryGraphEditorFlowModel(input: {
         },
         draggable: true,
         id: node.id,
-        position: {
-          x: column * COLUMN_X,
-          y: row * ROW_Y,
-        },
+        position:
+          input.layoutPositionsByNodeId?.get(node.id) ?? {
+            x: column * COLUMN_X,
+            y: row * ROW_Y,
+          },
         type: "factoryEntity",
       } satisfies FactoryGraphEditorNode;
     });

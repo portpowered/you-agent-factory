@@ -23,6 +23,7 @@ import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messag
 import { buildFactoryGraphWorkerStatusMap } from "../../factory-graph-editor/factory-graph-editor-runtime";
 import type { FactoryGraphTopology } from "../../factory-graph-editor/factory-graph-draft-types";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
+import { useFactoryGraphEditorLayoutPositions } from "./react-flow-current-activity-card-editor-layout";
 import { EMPTY_NODE_POSITIONS } from "../react-flow-current-activity-card-graph";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 
@@ -40,11 +41,13 @@ export function useFactoryGraphEditorViewModel(
   const {
     visibilityPresetOptions,
     filteredTopology,
+    filteredTopologyKey,
     selectVisibilityPreset,
   } = useFactoryGraphEntityVisibilityState(displayTopology, locale);
   const editorGraph = useFactoryGraphEditorFlowGraph({
     editor,
     filteredTopology,
+    filteredTopologyKey,
     locale,
     pendingAdditionEdgeIds,
     pendingRemovalEdgeIds,
@@ -52,13 +55,8 @@ export function useFactoryGraphEditorViewModel(
     snapshot,
   });
   const graphKey = useMemo(
-    () =>
-      [
-        "factory-editor",
-        ...editorGraph.nodes.map((node) => node.id),
-        ...editorGraph.edges.map((edge) => edge.id),
-      ].join(":"),
-    [editorGraph.edges, editorGraph.nodes],
+    () => ["factory-editor", filteredTopologyKey].join(":"),
+    [filteredTopologyKey],
   );
   const storedNodePositions = useCurrentActivityGraphStore(
     (state) => state.positionsByGraphKey[graphKey] ?? EMPTY_NODE_POSITIONS,
@@ -139,6 +137,7 @@ function useFactoryGraphEntityVisibilityState(
   return {
     visibilityPresetOptions,
     filteredTopology,
+    filteredTopologyKey: graphTopologyKey(filteredTopology, selectedPreset),
     selectVisibilityPreset,
   };
 }
@@ -146,12 +145,17 @@ function useFactoryGraphEntityVisibilityState(
 function useFactoryGraphEditorFlowGraph(input: {
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
   filteredTopology: FactoryGraphTopology;
+  filteredTopologyKey: string;
   locale?: string;
   pendingAdditionEdgeIds: ReadonlySet<string>;
   pendingRemovalEdgeIds: ReadonlySet<string>;
   pendingRemovalNodeIds: ReadonlySet<string>;
   snapshot: DashboardSnapshot;
 }) {
+  const layoutPositionsByNodeId = useFactoryGraphEditorLayoutPositions(
+    input.filteredTopology,
+    input.filteredTopologyKey,
+  );
   const workerStatusByName = useMemo(
     () =>
       buildFactoryGraphWorkerStatusMap({
@@ -172,6 +176,7 @@ function useFactoryGraphEditorFlowGraph(input: {
     () =>
       buildFactoryGraphEditorFlowModel({
         canEditConnections: input.editor.activeTool === "connect",
+        layoutPositionsByNodeId,
         locale: input.locale,
         onConnectionAnchorClick: input.editor.handleConnectionAnchorClick,
         pendingAdditionEdgeIds: input.pendingAdditionEdgeIds,
@@ -184,6 +189,7 @@ function useFactoryGraphEditorFlowGraph(input: {
       }),
     [
       input.filteredTopology,
+      layoutPositionsByNodeId,
       input.locale,
       input.editor.activeTool,
       input.editor.draftState.draft,
@@ -305,6 +311,17 @@ function mergeById<T extends { id: string }>(baseItems: T[], nextItems: T[]) {
   return Array.from(itemsById.values()).sort((left, right) =>
     left.id.localeCompare(right.id),
   );
+}
+
+function graphTopologyKey(
+  topology: FactoryGraphTopology,
+  selectedPreset?: FactoryGraphEditorVisibilityPreset,
+) {
+  return [
+    selectedPreset ?? "all",
+    ...topology.nodes.map((node) => node.id),
+    ...topology.edges.map((edge) => edge.id),
+  ].join(":");
 }
 
 function collectPendingNodeIds(

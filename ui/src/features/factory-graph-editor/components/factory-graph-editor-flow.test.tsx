@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import "../../../styles.css";
 import type { FactoryGraphTopology } from "../factory-graph-draft-types";
+import { buildFactoryGraphEditorLayout } from "../factory-graph-editor-layout";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
@@ -83,6 +84,69 @@ const EDITOR_NODE_TOPOLOGY: FactoryGraphTopology = {
       key: { kind: "workstation", name: "review" },
       kind: "workstation",
       label: "review",
+    },
+  ],
+};
+
+const EDITOR_LAYOUT_TOPOLOGY: FactoryGraphTopology = {
+  edges: [
+    {
+      id: "worker-resource:resource:prompt-kit->worker:writer",
+      kind: "worker-resource",
+      source: { kind: "resource", name: "prompt-kit" },
+      sourceId: "resource:prompt-kit",
+      target: { kind: "worker", name: "writer" },
+      targetId: "worker:writer",
+    },
+    {
+      id: "worker-assignment:worker:writer->workstation:review",
+      kind: "worker-assignment",
+      source: { kind: "worker", name: "writer" },
+      sourceId: "worker:writer",
+      target: { kind: "workstation", name: "review" },
+      targetId: "workstation:review",
+    },
+    {
+      id: "workstation-output:review->story:done",
+      kind: "workstation-output",
+      source: { kind: "workstation", name: "review" },
+      sourceId: "workstation:review",
+      target: {
+        kind: "work-state",
+        stateName: "done",
+        workTypeName: "story",
+      },
+      targetId: "work-state:story:done",
+    },
+  ],
+  nodes: [
+    {
+      id: "resource:prompt-kit",
+      key: { kind: "resource", name: "prompt-kit" },
+      kind: "resource",
+      label: "prompt-kit",
+    },
+    {
+      id: "worker:writer",
+      key: { kind: "worker", name: "writer" },
+      kind: "worker",
+      label: "writer",
+    },
+    {
+      id: "workstation:review",
+      key: { kind: "workstation", name: "review" },
+      kind: "workstation",
+      label: "review",
+    },
+    {
+      id: "work-state:story:done",
+      key: {
+        kind: "work-state",
+        stateName: "done",
+        workTypeName: "story",
+      },
+      kind: "work-state",
+      label: "story:done",
     },
   ],
 };
@@ -200,6 +264,48 @@ describe("factory graph editor edge labels", () => {
         }),
       ]),
     );
+  });
+
+  it("uses observer-style layered positions from the editor layout adapter", async () => {
+    const layout = await buildFactoryGraphEditorLayout(EDITOR_LAYOUT_TOPOLOGY);
+    const positionsByNodeId = new Map(
+      layout.nodes.map((node) => [node.nodeId, { x: node.x, y: node.y }]),
+    );
+    const flow = buildFactoryGraphEditorFlowModel({
+      canEditConnections: false,
+      layoutPositionsByNodeId: positionsByNodeId,
+      pendingAdditionEdgeIds: new Set<string>(),
+      pendingAdditionNodeIds: new Set<string>(),
+      pendingConnectionSource: null,
+      pendingRemovalEdgeIds: new Set<string>(),
+      pendingRemovalNodeIds: new Set<string>(),
+      topology: EDITOR_LAYOUT_TOPOLOGY,
+    });
+    const position = (nodeId: string) =>
+      flow.nodes.find((node) => node.id === nodeId)?.position.x ?? -1;
+
+    expect(position("resource:prompt-kit")).toBeLessThan(position("worker:writer"));
+    expect(position("worker:writer")).toBeLessThan(position("workstation:review"));
+    expect(position("workstation:review")).toBeLessThan(
+      position("work-state:story:done"),
+    );
+    expect(flow.nodes.find((node) => node.id === "workstation:review")?.position).toEqual(
+      positionsByNodeId.get("workstation:review"),
+    );
+  });
+});
+
+describe("factory graph editor edge interaction states", () => {
+  let restoreBrowserTestShims: (() => void) | null = null;
+
+  beforeEach(() => {
+    restoreBrowserTestShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserTestShims?.();
+    restoreBrowserTestShims = null;
   });
 
   it("reveals an edge label on hover", async () => {

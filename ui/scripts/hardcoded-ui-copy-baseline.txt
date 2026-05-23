@@ -177,8 +177,8 @@ src/features/flowchart/components/graph-semantic-icon.tsx|130|12|string-literal|
 src/features/flowchart/components/graph-semantic-icon.tsx|141|12|string-literal|Resource
 src/features/flowchart/components/graph-semantic-icon.tsx|151|12|string-literal|Terminal state
 src/features/flowchart/components/graph-semantic-icon.tsx|160|12|string-literal|Workstation
-src/features/flowchart/layout.ts|114|10|string-literal|workstation:
-src/features/flowchart/layout.ts|118|10|string-literal|place:
+src/features/flowchart/layout.ts|100|10|string-literal|workstation:
+src/features/flowchart/layout.ts|104|10|string-literal|place:
 src/features/flowchart/workstation-icon-metadata.ts|33|12|string-literal|Cron workstation
 src/features/flowchart/workstation-icon-metadata.ts|39|12|string-literal|Poller workstation
 src/features/flowchart/workstation-icon-metadata.ts|45|12|string-literal|Exhaustion rule
