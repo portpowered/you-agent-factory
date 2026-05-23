@@ -304,42 +304,50 @@ describe("verifyDashboardSessionTabs", () => {
       name: "Close root session",
     });
     expect(page.getByRole).toHaveBeenCalledWith("button", {
+      name: "Open factory folder",
+    });
+    expect(page.getByRole).toHaveBeenCalledWith("button", {
       name: "Close beta session",
     });
   });
 });
 
 describe("verifyDashboardSessionSwitching", () => {
-  test("verifyDashboardSessionSwitching exercises tab switching without state leakage", async () => {
-    const betaStoryButton = {
+  test("verifies switching between multiple dashboard session tabs", async () => {
+    const rootTab = {
       isVisible: vi.fn().mockResolvedValue(true),
-    };
-    const activeStoryButton = {
-      count: vi.fn().mockResolvedValue(0),
+      click: vi.fn().mockResolvedValue(undefined),
     };
     const betaTab = {
+      isVisible: vi.fn().mockResolvedValue(true),
       click: vi.fn().mockResolvedValue(undefined),
-      getAttribute: vi.fn().mockResolvedValue("true"),
+    };
+    const rootPanel = {
+      isVisible: vi.fn().mockResolvedValue(true),
+    };
+    const betaPanel = {
+      isVisible: vi.fn().mockResolvedValue(true),
     };
     const page = {
-      evaluate: vi.fn().mockResolvedValue({ clientWidth: 1440, scrollWidth: 1440 }),
       getByRole: vi.fn((role, options) => {
+        if (role === "tab" && options?.name === "root") {
+          return rootTab;
+        }
         if (role === "tab" && options?.name === "beta") {
           return betaTab;
         }
-        if (role === "button" && String(options?.name) === String(/Active Story/)) {
-          return activeStoryButton;
+        if (role === "tabpanel" && options?.name === "root") {
+          return rootPanel;
         }
-        if (role === "button" && String(options?.name) === String(/Beta Story/)) {
-          return betaStoryButton;
+        if (role === "tabpanel" && options?.name === "beta") {
+          return betaPanel;
         }
-        throw new Error(`unexpected role ${role}`);
+        return createLocator();
       }),
     };
 
     await verifyDashboardSessionSwitching(
       {
-        expectNoHorizontalOverflow: async () => {},
         expectVisible: async (locator) => {
           if (!(await locator.isVisible())) {
             throw new Error("Locator was not visible.");
@@ -347,13 +355,9 @@ describe("verifyDashboardSessionSwitching", () => {
         },
       },
       page,
-      {
-        height: 900,
-        label: "desktop",
-        width: 1440,
-      },
     );
 
+    expect(rootTab.click).toHaveBeenCalledTimes(1);
     expect(betaTab.click).toHaveBeenCalledTimes(1);
   });
 });

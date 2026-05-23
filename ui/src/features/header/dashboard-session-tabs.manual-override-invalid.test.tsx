@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 import { FactorySessionsAPIError } from "../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
 import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
-import { DashboardSessionTabs } from "./dashboard-session-tabs";
+import { DashboardSessionTabs } from "./components/dashboard-session-tabs";
 import { getHeaderControlsMessages } from "./messages/header-controls";
 
 const listFactorySessions = vi.fn();

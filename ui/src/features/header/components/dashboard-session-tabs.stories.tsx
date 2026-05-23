@@ -10,7 +10,7 @@ import {
 } from "../../../stories/dashboardStorySupport";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
-import { getHeaderControlsMessages } from "./messages/header-controls";
+import { getHeaderControlsMessages } from "../messages/header-controls";
 
 const defaultSession = {
   factoryDir: "/workspace/root",
