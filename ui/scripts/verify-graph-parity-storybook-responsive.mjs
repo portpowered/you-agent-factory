@@ -29,10 +29,10 @@ export async function verifyEditorGraphParity(
   page,
   viewport,
 ) {
-  const reviewWorkstationNode = page.getByTestId("rf__node-workstation:review");
-  const visibilityPresets = page.getByRole("region", {
-    name: "Factory graph visibility presets",
-  });
+  const reviewWorkstationNode = page.getByTitle(/^review$/);
+  const visibilityPresets = page.locator(
+    '[aria-label="Factory graph visibility presets"]',
+  );
   const allPreset = visibilityPresets.getByRole("button", {
     name: /^All$/,
   });
