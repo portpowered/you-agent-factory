@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -343,59 +342,6 @@ func (fs *FactoryService) SaveEditableFactoryDefinitionForSession(
 	}
 
 	return fs.GetEditableFactoryDefinitionForSession(ctx, sessionID)
-}
-
-func (fs *FactoryService) prepareEditableFactoryDefinitionSave(
-	sessionRootDir string,
-	current factoryapi.Factory,
-	request factoryapi.SaveEditableFactoryDefinitionRequest,
-) (string, []byte, error) {
-	if current.Name == apisurface.DefaultCurrentFactoryName {
-		return "", nil, ErrCurrentNamedFactoryNotFound
-	}
-	if request.FactoryDefinition.Name != current.Name {
-		return "", nil, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
-	}
-	if err := apisurface.ValidateWritableNamedFactoryName(request.FactoryDefinition.Name); err != nil {
-		return "", nil, err
-	}
-	if err := validateEditableFactoryTopology(request.FactoryDefinition); err != nil {
-		return "", nil, err
-	}
-	payload, err := json.Marshal(request.FactoryDefinition)
-	if err != nil {
-		return "", nil, fmt.Errorf("marshal editable factory payload: %w", err)
-	}
-	return sessionRootDir, payload, nil
-}
-
-func (fs *FactoryService) replaceEditableFactoryDefinition(
-	sessionRootDir string,
-	name factoryapi.FactoryName,
-	payload []byte,
-) (string, error) {
-	factoryDir, err := factoryconfig.ReplaceNamedFactory(sessionRootDir, string(name), payload)
-	if err == nil {
-		return factoryDir, nil
-	}
-	if errors.Is(err, factoryconfig.ErrInvalidNamedFactory) {
-		return "", fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
-	}
-	return "", err
-}
-
-func (fs *FactoryService) buildSessionEditableFactoryReplacement(
-	ctx context.Context,
-	sessionRootDir string,
-	factoryDir string,
-	sessionID string,
-	name factoryapi.FactoryName,
-) (*replacementFactoryRuntime, error) {
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, sessionRootDir, factoryDir, sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
-	}
-	return replacement, nil
 }
 
 func (fs *FactoryService) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {
