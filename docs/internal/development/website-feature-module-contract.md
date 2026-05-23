@@ -62,4 +62,5 @@ Example import intent:
 - When a migration removes a feature-root `index.ts`, move its supported exports into `public/index.ts` in the same feature and update maintained consumers to import from that `public/` path instead of relying on the root barrel.
 - If a previous root `index.ts` mixed public and internal exports, keep only the supported consumer-facing API in `public/` and move internal-only helpers into the most descriptive non-public directory.
 - When a migration changes the location of a public module, update the owning `public/` entrypoint in the same change so downstream imports remain stable in behavior even if the import path changes.
-- Temporary exceptions should be explicit, centrally tracked, and removed as each migrated slice eliminates its feature-root files.
+- Temporary exceptions must be tracked in `ui/scripts/feature-root-file-allowlist.mjs`, enforced by `ui/scripts/check-feature-root-files.mjs`, and removed as each migrated slice eliminates its feature-root files.
+- The validator runs through the normal frontend quality workflow via `bun run lint` and `bun run check`, fails on any non-allowlisted file directly under `ui/src/features/<feature>/`, and reports both new hard failures and the remaining allowlisted debt.
