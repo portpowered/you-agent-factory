@@ -186,6 +186,7 @@ function buildFactoryGraphEditorEdge(
   const pendingAddition = input.pendingAdditionEdgeIds.has(edge.id);
   const pendingRemoval = input.pendingRemovalEdgeIds.has(edge.id);
   const edgeLabel = messages.edgeKindLabel(edge.kind);
+  const handleAssignment = getEdgeHandleAssignment(edge);
 
   return {
     animated:
@@ -215,6 +216,7 @@ function buildFactoryGraphEditorEdge(
       type: MarkerType.ArrowClosed,
     },
     source: edge.sourceId,
+    sourceHandle: handleAssignment?.sourceHandle,
     style: {
       opacity: pendingRemoval ? 0.48 : 1,
       stroke: pendingRemoval
@@ -232,12 +234,36 @@ function buildFactoryGraphEditorEdge(
       strokeWidth: pendingRemoval || pendingAddition ? 2 : 1.7,
     },
     target: edge.targetId,
+    targetHandle: handleAssignment?.targetHandle,
     type: "factoryEditorEdge",
   } satisfies Edge;
 }
 
 function describeNodeKey(key: FactoryGraphTopology["edges"][number]["source"]) {
   return key.kind === "work-state" ? `${key.workTypeName}:${key.stateName}` : key.name;
+}
+
+function getEdgeHandleAssignment(
+  edge: FactoryGraphTopology["edges"][number],
+): { sourceHandle: string; targetHandle: string } | null {
+  const sourceHandle = getNodeHandleId(edge.source.kind, edge.kind, "source");
+  const targetHandle = getNodeHandleId(edge.target.kind, edge.kind, "target");
+  if (!sourceHandle || !targetHandle) {
+    return null;
+  }
+  return { sourceHandle, targetHandle };
+}
+
+function getNodeHandleId(
+  nodeKind: FactoryGraphNodeKind,
+  edgeKind: FactoryGraphTopology["edges"][number]["kind"],
+  role: "source" | "target",
+) {
+  return (
+    getFactoryGraphConnectionAnchors(nodeKind).find(
+      (anchor) => anchor.role === role && anchor.edgeKind === edgeKind,
+    )?.id ?? null
+  );
 }
 
 function FactoryGraphEditorNodeView({

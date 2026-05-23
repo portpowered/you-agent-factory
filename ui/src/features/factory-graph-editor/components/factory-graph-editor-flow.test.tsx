@@ -26,6 +26,18 @@ const EDITOR_EDGE_TOPOLOGY: FactoryGraphTopology = {
       },
       targetId: "work-state:story:done",
     },
+    {
+      id: "workstation-on-failure:review->story:queued",
+      kind: "workstation-on-failure",
+      source: { kind: "workstation", name: "review" },
+      sourceId: "workstation:review",
+      target: {
+        kind: "work-state",
+        stateName: "queued",
+        workTypeName: "story",
+      },
+      targetId: "work-state:story:queued",
+    },
   ],
   nodes: [
     {
@@ -43,6 +55,16 @@ const EDITOR_EDGE_TOPOLOGY: FactoryGraphTopology = {
       },
       kind: "work-state",
       label: "story:done",
+    },
+    {
+      id: "work-state:story:queued",
+      key: {
+        kind: "work-state",
+        stateName: "queued",
+        workTypeName: "story",
+      },
+      kind: "work-state",
+      label: "story:queued",
     },
   ],
 };
@@ -151,6 +173,33 @@ describe("factory graph editor edge labels", () => {
 
     expect(edge.getAttribute("role")).toBe("button");
     expect(edgeShape?.getAttribute("data-label-visible")).toBe("false");
+  });
+
+  it("renders workstation outcome routes from their semantic source and target anchors", () => {
+    const flow = buildFactoryGraphEditorFlowModel({
+      canEditConnections: false,
+      pendingAdditionEdgeIds: new Set<string>(),
+      pendingAdditionNodeIds: new Set<string>(),
+      pendingConnectionSource: null,
+      pendingRemovalEdgeIds: new Set<string>(),
+      pendingRemovalNodeIds: new Set<string>(),
+      topology: EDITOR_EDGE_TOPOLOGY,
+    });
+
+    expect(flow.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-output:review->story:done",
+          sourceHandle: "workstation-output-source",
+          targetHandle: "workstation-output-target",
+        }),
+        expect.objectContaining({
+          id: "workstation-on-failure:review->story:queued",
+          sourceHandle: "workstation-on-failure-source",
+          targetHandle: "workstation-on-failure-target",
+        }),
+      ]),
+    );
   });
 
   it("reveals an edge label on hover", async () => {
