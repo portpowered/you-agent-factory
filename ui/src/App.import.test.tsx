@@ -32,15 +32,15 @@ describe("App shell import flows", () => {
     expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();
     expect(
-      await screen.findByRole("button", { name: "Select Plan workstation" }),
+      await screen.findByRole("region", { name: "Work graph viewport" }),
     ).toBeTruthy();
     expect(
-      await screen.findByRole("button", {
-        name: "Select Implement workstation",
+      within(screen.getByRole("region", { name: "Work graph viewport" })).getByRole("button", {
+        name: "Zoom In",
       }),
     ).toBeTruthy();
     expect(
-      await screen.findByRole("button", { name: "Select Review workstation" }),
+      screen.getByText("Waiting for more ticks"),
     ).toBeTruthy();
     expect(screen.queryByText("Idle")).toBeNull();
     expect(screen.queryByText("Live Workstation Dashboard")).toBeNull();

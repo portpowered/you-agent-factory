@@ -46,7 +46,9 @@ describe("App layout behavior", () => {
       await screen.findByRole("region", { name: "Work graph viewport" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Select story:new state" }),
+      within(screen.getByRole("region", { name: "Work graph viewport" })).getByRole("button", {
+        name: "Zoom In",
+      }),
     ).toBeTruthy();
     expect(
       (
