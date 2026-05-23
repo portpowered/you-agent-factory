@@ -303,14 +303,36 @@ func TestRun_DefaultModeUsesBatchRuntimeAndExitsWhenRunReturns(t *testing.T) {
 }
 
 func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
+	originalDefaultRecordPath := defaultLiveRunRecordPath
+	defer func() {
+		defaultLiveRunRecordPath = originalDefaultRecordPath
+	}()
+
 	tests := []struct {
-		name           string
-		cfg            RunConfig
-		wantRecordPath string
-		wantReplayPath string
+		name               string
+		cfg                RunConfig
+		defaultRecordPath  string
+		wantRecordPath     string
+		wantReplayPath     string
+		wantGeneratorCalls int
 	}{
-		{name: "record mode", cfg: RunConfig{RecordPath: "run.replay.json"}, wantRecordPath: "run.replay.json"},
-		{name: "replay mode", cfg: RunConfig{ReplayPath: "existing.replay.json"}, wantReplayPath: "existing.replay.json"},
+		{
+			name:               "default live mode",
+			cfg:                RunConfig{},
+			defaultRecordPath:  "auto-generated-recording.json",
+			wantRecordPath:     "auto-generated-recording.json",
+			wantGeneratorCalls: 1,
+		},
+		{
+			name:           "record mode",
+			cfg:            RunConfig{RecordPath: "run.replay.json"},
+			wantRecordPath: "run.replay.json",
+		},
+		{
+			name:           "replay mode",
+			cfg:            RunConfig{ReplayPath: "existing.replay.json"},
+			wantReplayPath: "existing.replay.json",
+		},
 	}
 
 	for _, tt := range tests {
@@ -319,6 +341,12 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 			defer func() {
 				buildFactoryService = originalBuilder
 			}()
+
+			generatorCalls := 0
+			defaultLiveRunRecordPath = func() (string, error) {
+				generatorCalls++
+				return tt.defaultRecordPath, nil
+			}
 
 			var capturedRecordPath string
 			var capturedReplayPath string
@@ -337,7 +365,39 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 			if capturedReplayPath != tt.wantReplayPath {
 				t.Fatalf("replay path = %q, want %q", capturedReplayPath, tt.wantReplayPath)
 			}
+			if generatorCalls != tt.wantGeneratorCalls {
+				t.Fatalf("default record path generator calls = %d, want %d", generatorCalls, tt.wantGeneratorCalls)
+			}
 		})
+	}
+}
+
+func TestRun_DefaultRecordPathResolutionErrorSkipsServiceStart(t *testing.T) {
+	originalBuilder := buildFactoryService
+	originalDefaultRecordPath := defaultLiveRunRecordPath
+	defer func() {
+		buildFactoryService = originalBuilder
+		defaultLiveRunRecordPath = originalDefaultRecordPath
+	}()
+
+	builderCalled := false
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		builderCalled = true
+		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
+	}
+	defaultLiveRunRecordPath = func() (string, error) {
+		return "", errors.New("home lookup failed")
+	}
+
+	err := Run(context.Background(), RunConfig{})
+	if err == nil {
+		t.Fatal("expected default record path resolution to fail")
+	}
+	if !strings.Contains(err.Error(), "resolve default replay record path") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if builderCalled {
+		t.Fatal("factory service builder should not run when default record path resolution fails")
 	}
 }
 

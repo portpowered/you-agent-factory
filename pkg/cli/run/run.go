@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/api"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
@@ -83,6 +84,7 @@ var buildFactoryService = func(
 const (
 	completedPlaceIDSuffix = "completed"
 	failedPlaceIDSuffix    = "failed"
+	defaultRecordingsDir   = ".you-agent-factory/recordings"
 )
 
 var bootstrapFactory = func(dir string) error {
@@ -101,6 +103,7 @@ var bootstrapFactory = func(dir string) error {
 var dashboardOpener = openURLInBrowser
 
 var interactiveOutput = isInteractiveOutput
+var defaultLiveRunRecordPath = generateDefaultLiveRunRecordPath
 
 const dashboardReadyTimeout = 5 * time.Second
 const maxAutoPortAttempts = 100
@@ -218,6 +221,12 @@ func Run(ctx context.Context, cfg RunConfig) error {
 		}
 	}
 
+	recordPath, err := resolveRecordPathForRun(cfg)
+	if err != nil {
+		return err
+	}
+	cfg.RecordPath = recordPath
+
 	var mockWorkersConfig *factoryconfig.MockWorkersConfig
 	if cfg.MockWorkersEnabled {
 		loadedMockWorkersConfig, err := factoryconfig.LoadMockWorkersConfig(cfg.MockWorkersConfigPath)
@@ -257,6 +266,33 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	defer waitForDashboardOpen()
 
 	return factorySvc.Run(ctx)
+}
+
+func resolveRecordPathForRun(cfg RunConfig) (string, error) {
+	if strings.TrimSpace(cfg.RecordPath) != "" {
+		return cfg.RecordPath, nil
+	}
+	if strings.TrimSpace(cfg.ReplayPath) != "" {
+		return "", nil
+	}
+	recordPath, err := defaultLiveRunRecordPath()
+	if err != nil {
+		return "", fmt.Errorf("resolve default replay record path: %w", err)
+	}
+	return recordPath, nil
+}
+
+func generateDefaultLiveRunRecordPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user home: %w", err)
+	}
+	recordingID := fmt.Sprintf(
+		"live-run-%s-%s.json",
+		time.Now().UTC().Format("20060102T150405Z"),
+		uuid.NewString(),
+	)
+	return filepath.Join(homeDir, defaultRecordingsDir, recordingID), nil
 }
 
 func runtimeModeForRun(cfg RunConfig) interfaces.RuntimeMode {
