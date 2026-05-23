@@ -167,6 +167,48 @@ func TestFactoryConfigMapper_FlattenOmitsEmptyOptionalCollectionsAndExpandsPopul
 	}
 }
 
+func TestFactoryConfigToOpenAPI_CopiesOptionalCollections(t *testing.T) {
+	stopWords := []string{"DONE"}
+	env := map[string]string{"MODE": "strict"}
+	cfg := &interfaces.FactoryConfig{
+		Name: "copy-safe-optionals",
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			ID:             "execute-story-id",
+			Name:           "execute-story",
+			WorkerTypeName: "executor",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+			StopWords:      stopWords,
+			Env:            env,
+		}},
+	}
+
+	generated := FactoryConfigToOpenAPI(cfg)
+	stopWords[0] = "MUTATED"
+	stopWords = append(stopWords, "LATE")
+	env["MODE"] = "mutated"
+	env["LATE"] = "value"
+
+	workstation := (*generated.Workstations)[0]
+	if workstation.StopWords == nil || len(*workstation.StopWords) != 1 || (*workstation.StopWords)[0] != "DONE" {
+		t.Fatalf("generated stopWords = %#v, want copied pre-mutation values", workstation.StopWords)
+	}
+	if workstation.Env == nil || (*workstation.Env)["MODE"] != "strict" {
+		t.Fatalf("generated env = %#v, want copied pre-mutation values", workstation.Env)
+	}
+	if _, ok := (*workstation.Env)["LATE"]; ok {
+		t.Fatalf("generated env = %#v, want copied map to omit post-mapping additions", workstation.Env)
+	}
+}
+
 func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 

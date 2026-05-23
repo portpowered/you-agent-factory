@@ -766,7 +766,7 @@ func generatedFactoryWorldScriptResponse(
 }
 
 func stringSlicePtr(values []string) *[]string {
-	return optional.ReferencedStringsPtr(values)
+	return optional.CopiedStringsPtr(values)
 }
 
 func workstationRequestStringMapPtr(values map[string]string) *factoryapi.StringMap {

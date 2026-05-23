@@ -248,6 +248,49 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_OmitsEmptyOptionalCo
 	}
 }
 
+func TestBuildFactoryWorldWorkstationRequestProjectionSlice_CopiesOptionalTraceSlices(t *testing.T) {
+	traceIDs := []string{"trace-stable"}
+	previousChainingTraceIDs := []string{"chain-parent"}
+	workItem := interfaces.FactoryWorkItem{
+		ID:          "work-copied-optionals",
+		WorkTypeID:  "task",
+		DisplayName: "Pending story",
+		TraceID:     "trace-stable",
+		PlaceID:     "task:init",
+	}
+	state := interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			workItem.ID: workItem,
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"dispatch-copied-optionals": {
+				DispatchID:               "dispatch-copied-optionals",
+				TransitionID:             "review",
+				Workstation:              interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
+				StartedAt:                time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC),
+				Inputs:                   []interfaces.WorkstationInput{{TokenID: "token-copied-optionals", PlaceID: workItem.PlaceID, WorkItem: &workItem}},
+				WorkItemIDs:              []string{workItem.ID},
+				PreviousChainingTraceIDs: previousChainingTraceIDs,
+				TraceIDs:                 traceIDs,
+			},
+		},
+	}
+
+	requests := requireWorkstationProjectionRequests(t, BuildFactoryWorldWorkstationRequestProjectionSlice(state), 1)
+	request := requests["dispatch-copied-optionals"].Request
+	traceIDs[0] = "trace-mutated"
+	traceIDs = append(traceIDs, "trace-late")
+	previousChainingTraceIDs[0] = "chain-mutated"
+	previousChainingTraceIDs = append(previousChainingTraceIDs, "chain-late")
+
+	if request.TraceIds == nil || len(*request.TraceIds) != 1 || (*request.TraceIds)[0] != "trace-stable" {
+		t.Fatalf("projection trace ids = %#v, want copied pre-mutation values", request.TraceIds)
+	}
+	if request.PreviousChainingTraceIds == nil || len(*request.PreviousChainingTraceIds) != 1 || (*request.PreviousChainingTraceIds)[0] != "chain-parent" {
+		t.Fatalf("projection previous chaining trace ids = %#v, want copied pre-mutation values", request.PreviousChainingTraceIds)
+	}
+}
+
 func TestBuildFactoryWorldWorkstationRequestProjectionSlice_UsesDispatchTimeConsumedPayloadSnapshot(t *testing.T) {
 	initial := interfaces.FactoryWorkItem{
 		ID:          "work-consumed-lineage",

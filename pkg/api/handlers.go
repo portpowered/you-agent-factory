@@ -1349,7 +1349,7 @@ func integerMapPtr(values map[string]int) *factoryapi.IntegerMap {
 }
 
 func stringMapPtr(values map[string]string) *factoryapi.StringMap {
-	return optional.ReferencedStringMapPtr(values)
+	return optional.CopiedStringMapPtr(values)
 }
 
 func intPtrIfPositive(value int) *int {

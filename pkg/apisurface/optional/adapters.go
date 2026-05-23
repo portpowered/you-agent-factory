@@ -59,13 +59,6 @@ func CopiedStringsPtr(values []string) *[]string {
 	return &copied
 }
 
-func ReferencedStringsPtr(values []string) *[]string {
-	if len(values) == 0 {
-		return nil
-	}
-	return &values
-}
-
 func CopiedStringMapPtr(values map[string]string) *factoryapi.StringMap {
 	if len(values) == 0 {
 		return nil
@@ -75,14 +68,6 @@ func CopiedStringMapPtr(values map[string]string) *factoryapi.StringMap {
 		copied[key] = value
 	}
 	return &copied
-}
-
-func ReferencedStringMapPtr(values map[string]string) *factoryapi.StringMap {
-	if len(values) == 0 {
-		return nil
-	}
-	converted := factoryapi.StringMap(values)
-	return &converted
 }
 
 func StringMapValue(values *factoryapi.StringMap) map[string]string {

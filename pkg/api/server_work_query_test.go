@@ -200,6 +200,32 @@ func TestGetWork_OmitsEmptyOptionalCollections(t *testing.T) {
 	}
 }
 
+func TestTokenToResponse_CopiesOptionalTagMap(t *testing.T) {
+	token := &interfaces.Token{
+		ID:      "tok-prd-copy",
+		PlaceID: "prd:init",
+		Color: interfaces.TokenColor{
+			WorkID:     "work-prd-copy",
+			WorkTypeID: "prd",
+			TraceID:    "trace-copy",
+			Tags: map[string]string{
+				"branch": "stable",
+			},
+		},
+	}
+
+	resp := tokenToResponse(token, false)
+	token.Color.Tags["branch"] = "mutated"
+	token.Color.Tags["new"] = "late-tag"
+
+	if resp.Tags == nil || (*resp.Tags)["branch"] != "stable" {
+		t.Fatalf("response tags = %#v, want copied pre-mutation values", resp.Tags)
+	}
+	if _, ok := (*resp.Tags)["new"]; ok {
+		t.Fatalf("response tags = %#v, want copied map to omit post-shaping additions", resp.Tags)
+	}
+}
+
 func TestGetWorkNotFound(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
 	req := httptest.NewRequest("GET", "/work/nonexistent", nil)
