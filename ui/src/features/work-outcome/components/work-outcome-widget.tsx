@@ -1,5 +1,5 @@
 import { WorkChartCard } from "./d3-information-card";
-import type { WorkChartModel } from "../trends";
+import type { WorkChartModel } from "../lib/trends";
 
 export interface WorkOutcomeWidgetProps {
   locale?: string;

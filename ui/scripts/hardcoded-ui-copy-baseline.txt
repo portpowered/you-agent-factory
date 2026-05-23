@@ -204,14 +204,14 @@ src/features/trace-drilldown/components/trace-workstation-path.tsx|438|10|string
 src/features/trace-drilldown/hooks/useTraceDrilldown.ts|22|20|string-literal|Select active, completed, or failed work to inspect retained trace history.
 src/features/trace-drilldown/hooks/useTraceDrilldown.ts|34|28|string-literal|Select active, completed, or failed work to inspect retained trace history.
 src/features/work-outcome/components/trend-cards.tsx|254|60|jsx-text|retry or rework events
-src/features/work-outcome/trends.ts|118|27|string-literal|Queued
-src/features/work-outcome/trends.ts|119|29|string-literal|In-flight
-src/features/work-outcome/trends.ts|120|30|string-literal|Completed
-src/features/work-outcome/trends.ts|121|27|string-literal|Failed/retried
-src/features/work-outcome/trends.ts|148|27|string-literal|Session
-src/features/work-outcome/trends.ts|212|12|string-literal|Tick
-src/features/work-outcome/trends.ts|254|33|string-literal|Session
-src/features/work-outcome/trends.ts|299|14|string-literal|Work type:
+src/features/work-outcome/lib/trends.ts|118|27|string-literal|Queued
+src/features/work-outcome/lib/trends.ts|119|29|string-literal|In-flight
+src/features/work-outcome/lib/trends.ts|120|30|string-literal|Completed
+src/features/work-outcome/lib/trends.ts|121|27|string-literal|Failed/retried
+src/features/work-outcome/lib/trends.ts|148|27|string-literal|Session
+src/features/work-outcome/lib/trends.ts|212|12|string-literal|Tick
+src/features/work-outcome/lib/trends.ts|254|33|string-literal|Session
+src/features/work-outcome/lib/trends.ts|299|14|string-literal|Work type:
 src/features/workflow-activity/components/mutation-dialog.tsx|75|22|string-literal|fixed inset-0 px-5 py-6
 src/features/workflow-activity/react-flow-current-activity-card-graph.ts|55|10|string-literal|workstation:
 src/features/workflow-activity/react-flow-current-activity-card-graph.ts|59|10|string-literal|place:

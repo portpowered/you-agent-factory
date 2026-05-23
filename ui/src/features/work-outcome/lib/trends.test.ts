@@ -8,7 +8,7 @@ import {
 import type {
   DashboardSessionRuntime,
   DashboardSnapshot,
-} from "../../api/dashboard/types";
+} from "../../../api/dashboard/types";
 
 function session(
   dispatchedCount: number,
@@ -147,4 +147,3 @@ describe("buildWorkChartModel", () => {
     expect(first).toEqual(second);
   });
 });
-

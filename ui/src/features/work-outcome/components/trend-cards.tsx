@@ -2,7 +2,7 @@ import {
   DASHBOARD_CHART_AXIS_CLASS,
   DASHBOARD_CHART_SURFACE_CLASS,
   getDashboardChartSemanticStyle,
-} from "../chart-contract";
+} from "../lib/chart-contract";
 import { cn } from "../../../lib/cn";
 import {
   formatDurationMillis,
@@ -19,7 +19,7 @@ import {
   type ReworkTrendModel,
   type ThroughputRangeID,
   type TimingTrendModel,
-} from "../trends";
+} from "../lib/trends";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import {
   DETAIL_CARD_WIDE_CLASS,

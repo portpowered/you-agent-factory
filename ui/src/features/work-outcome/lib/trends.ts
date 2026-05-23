@@ -1,6 +1,6 @@
 import type {
   DashboardSnapshot,
-} from "../../api/dashboard/types";
+} from "../../../api/dashboard/types";
 
 export type ThroughputRangeID = "5m" | "15m" | "session";
 

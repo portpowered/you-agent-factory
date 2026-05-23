@@ -1,6 +1,6 @@
-import { getDashboardWorkChartSeriesDefinitions } from "../chart-contract";
+import { getDashboardWorkChartSeriesDefinitions } from "../lib/chart-contract";
 import { cn } from "../../../lib/cn";
-import type { WorkChartModel } from "../trends";
+import type { WorkChartModel } from "../lib/trends";
 import { WorkChart } from "./work-chart";
 import type { WorkChartSeriesDefinition, WorkChartState } from "./work-chart";
 import { DASHBOARD_WIDGET_CLASS } from "../../../components/dashboard/widget-board";

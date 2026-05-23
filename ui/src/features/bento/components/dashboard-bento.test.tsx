@@ -154,7 +154,7 @@ vi.mock("../../trace-drilldown", () => ({
   }),
 }));
 
-vi.mock("../../work-outcome", () => ({
+vi.mock("../../work-outcome/public", () => ({
   WorkOutcomeWidget: () => <section>Work outcome card</section>,
   useWorkOutcomeChart: () => ({ status: "empty" }),
 }));

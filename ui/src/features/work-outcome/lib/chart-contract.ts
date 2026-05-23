@@ -1,5 +1,5 @@
-import { cn } from "../../lib/cn";
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/ui/dashboard-typography";
+import { cn } from "../../../lib/cn";
+import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../components/ui/dashboard-typography";
 
 export type DashboardChartSemanticRole =
   | "queued"

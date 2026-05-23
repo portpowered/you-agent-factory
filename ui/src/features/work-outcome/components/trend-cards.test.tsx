@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
-import { getDashboardChartSemanticStyle } from "../chart-contract";
+import { getDashboardChartSemanticStyle } from "../lib/chart-contract";
 import { FailureTrendCard, ReworkTrendCard, TimingTrendCard } from "./trend-cards";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
@@ -8,7 +8,7 @@ import {
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_WIDGET_SUBTITLE_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import type { FailureTrendModel, ReworkTrendModel, TimingTrendModel } from "../trends";
+import type { FailureTrendModel, ReworkTrendModel, TimingTrendModel } from "../lib/trends";
 import { describe, it, vi, expect } from "vitest";
 
 const failureTrend: FailureTrendModel = {

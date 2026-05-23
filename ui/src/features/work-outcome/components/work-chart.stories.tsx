@@ -1,8 +1,8 @@
 import type { ComponentProps } from "react";
 import { expect, fireEvent, userEvent, within } from "storybook/test";
 
-import { getDashboardWorkChartSeriesStyle } from "../chart-contract";
-import type { WorkChartModel } from "../trends";
+import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
+import type { WorkChartModel } from "../lib/trends";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 
 const populatedModel = {

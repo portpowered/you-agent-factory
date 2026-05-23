@@ -16,7 +16,7 @@ import { TerminalWorkWidget } from "../../terminal-work/public";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { TraceDrilldownWidget, useTraceDrilldown } from "../../trace-drilldown";
-import { useWorkOutcomeChart, WorkOutcomeWidget } from "../../work-outcome";
+import { useWorkOutcomeChart, WorkOutcomeWidget } from "../../work-outcome/public";
 import { WorkTotalsWidget } from "../../work-totals/public";
 import {
   useCurrentActivityImportController,
