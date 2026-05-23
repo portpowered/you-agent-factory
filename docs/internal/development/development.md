@@ -189,8 +189,8 @@ Review any generated diff together with the authored OpenAPI change. Do not hand
 ## Factory Sharing Contract
 
 The canonical export/import sharing boundary is the generated OpenAPI
-`NamedFactory` payload returned by `GET /factory-sessions/{session_id}/factory`
-and accepted by `POST /factory`. The active default runtime is addressed
+`Factory` payload returned by `GET /factory-sessions/{session_id}/factory`
+and accepted by `POST /factories`. The active default runtime is addressed
 through the default `session_id` route rather than a `~current` sentinel.
 PNG export
 and import reuse that exact payload through
@@ -272,12 +272,12 @@ behavior explicit inside the test that needs it.
 - Do not run `ui-build` in parallel with Go vet, build, or test commands; Vite rotates hashed files under `ui/dist/assets`.
 - Treat `factory.json` as a generated-schema boundary: normalize legacy key styles first, then decode through `pkg/api/generated.Factory` with unknown-field rejection enabled. Keep any compatibility exceptions explicit and narrow instead of falling back to permissive handwritten DTOs.
 - Apply that same generated-schema boundary to replay and event-carried factory config: when `RUN_REQUEST.payload.factory` is decoded back from JSON, route the nested factory payload through `config.GeneratedFactoryFromOpenAPIJSON(...)` instead of relying on permissive struct unmarshalling.
-- Browser-side PNG export should load the authored payload from `GET /factory-sessions/{session_id}/factory` and treat that canonical `NamedFactory` response as the only source of truth for embedded sharing metadata. The detailed boundary and wrapper shape are documented in [Named Factory API Contract Data Model](named-factory-api-contract-data-model.md).
-- Browser-side sharing roundtrip coverage should exercise `writeFactoryExportPng(...)`, `readFactoryImportPng(...)`, and `useFactoryImportActivation(...)` together so tests prove the same canonical `NamedFactory` reaches `POST /factory` without dashboard-only reshaping.
-- App-level browser sharing smokes should export through the real dashboard dialog, capture the downloaded PNG blob, drop that same file back through the graph viewport import entry, and assert the resulting `POST /factory` body matches the original `GET /factory-sessions/{session_id}/factory` `NamedFactory` payload exactly.
+- Browser-side PNG export should load the authored payload from `GET /factory-sessions/{session_id}/factory` and treat that canonical `Factory` response as the only source of truth for embedded sharing metadata. The detailed boundary and wrapper shape are documented in [Named Factory API Contract Data Model](named-factory-api-contract-data-model.md).
+- Browser-side sharing roundtrip coverage should exercise `writeFactoryExportPng(...)`, `readFactoryImportPng(...)`, and `useFactoryImportActivation(...)` together so tests prove the same canonical `Factory` reaches `POST /factories` without dashboard-only reshaping.
+- App-level browser sharing smokes should export through the real dashboard dialog, capture the downloaded PNG blob, drop that same file back through the graph viewport import entry, and assert the resulting `POST /factories` body matches the original `GET /factory-sessions/{session_id}/factory` `Factory` payload exactly.
 - Dashboard Storybook interaction tooling is package-local to `ui/`. Keep runner config, `storybook-static` serving assumptions, base-path behavior, and API mocks under `ui/` or `ui/.storybook` instead of importing website Storybook setup.
-- Browser-side factory export should serialize the authored `NamedFactory` payload returned by `GET /factory-sessions/{session_id}/factory` and write it into one PNG `iTXt` metadata chunk through the additive `PortOSFactoryPngEnvelope` wrapper; do not create a parallel export-only DTO or mixed event-derived payload.
-- Browser-side factory sharing metadata must reuse the public generated `NamedFactory` contract fields `name` and `factory`, with PNG-only concerns limited to additive wrapper fields such as `schemaVersion`; do not rename the canonical named-factory fields to export-only aliases like `factoryName`.
+- Browser-side factory export should serialize the authored `Factory` payload returned by `GET /factory-sessions/{session_id}/factory` and write it into one PNG `iTXt` metadata chunk through the additive `PortOSFactoryPngEnvelope` wrapper; do not create a parallel export-only DTO or mixed event-derived payload.
+- Browser-side factory sharing metadata must reuse the public generated `Factory` contract fields directly, with PNG-only concerns limited to additive wrapper fields such as `schemaVersion`; do not reintroduce retired wrapper keys such as nested `factory` or `factoryName`.
 - If browser-side PNG metadata has already shipped under a given `schemaVersion`, keep import compatibility for those required fields under that same version; for example, `v1` import still needs to accept legacy `factoryName` even though fresh exports now write canonical `name`.
 - Browser-side factory export canonicalization must normalize legacy guard enum spellings such as `visit_count`, `all_children_complete`, and `any_child_failed` to the public OpenAPI values before packaging metadata; key-only alias rewrites still leak non-canonical factory contracts into exported PNGs.
 - Browser-side export canonicalization must also preserve the full generated same-name input-guard contract: normalize `same_name` to `SAME_NAME` and `match_input` to `matchInput` instead of rejecting valid current-factory payloads during PNG export.
