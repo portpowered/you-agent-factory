@@ -8,6 +8,7 @@ export function currentFactorySessionPath(sessionID: string | null | undefined):
   const normalizedSessionID: string = isDefaultFactorySessionID(sessionID)
     ? DEFAULT_FACTORY_SESSION_ID
     : (sessionID ?? DEFAULT_FACTORY_SESSION_ID);
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `/factory-sessions/${encodeURIComponent(normalizedSessionID)}/factory`;
 }
 
@@ -16,6 +17,7 @@ export function currentFactoryWorkstationPath(
   sessionID: string | null | undefined,
   suffix: "prompt-template-contract" | "prompt-template-validation",
 ): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `${currentFactorySessionPath(sessionID)}/workstations/${encodeURIComponent(workstationName)}/${suffix}`;
 }
 

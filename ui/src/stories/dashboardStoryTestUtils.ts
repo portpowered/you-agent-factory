@@ -230,7 +230,6 @@ export async function expectTimelineToolbarAlignment(
   );
   const currentTickStatus = within(sliderMetaGroup).getByText("5/5");
   const headingRect = heading.getBoundingClientRect();
-  const sliderRect = sliderShell.getBoundingClientRect();
   const currentTickStatusRect = currentTickStatus.getBoundingClientRect();
   const currentButtonRect = currentButton.getBoundingClientRect();
   const languageButtonRect = languageButton.getBoundingClientRect();

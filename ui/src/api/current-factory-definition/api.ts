@@ -11,6 +11,7 @@ import {
   isAPIRecord,
   readAPIResponseBody,
 } from "../transport";
+import { currentFactoryDefinitionAPIErrorMessages } from "./messages";
 
 export type { CanonicalFactoryDefinition } from "../factory-definition";
 
@@ -105,7 +106,8 @@ export async function getCurrentFactoryDocument(
   return requestCurrentFactoryDocument({
     fetch: options.fetch,
     method: "GET",
-    rejectedMessage: "The current factory editing API rejected the request.",
+    rejectedMessage:
+      currentFactoryDefinitionAPIErrorMessages.rejectedRequest,
     sessionID: options.sessionID,
   });
 }
@@ -127,7 +129,7 @@ export async function saveCurrentFactoryDocument(
     },
     method: "PUT",
     rejectedMessage:
-      "The current factory editing API rejected the save request.",
+      currentFactoryDefinitionAPIErrorMessages.rejectedSaveRequest,
     sessionID: options.sessionID,
   });
 }
@@ -144,7 +146,7 @@ async function requestCurrentFactoryDocument({
 
   if (typeof fetchImplementation !== "function") {
     throw new CurrentFactoryDefinitionError(
-      "Current factory editing is unavailable in this environment.",
+      currentFactoryDefinitionAPIErrorMessages.unavailableInEnvironment,
       {
         code: "NETWORK_ERROR",
       },
@@ -163,7 +165,7 @@ async function requestCurrentFactoryDocument({
     );
   } catch (error) {
     throw new CurrentFactoryDefinitionError(
-      "The dashboard could not reach the current factory editing API.",
+      currentFactoryDefinitionAPIErrorMessages.network,
       {
         cause: error,
         code: "NETWORK_ERROR",
@@ -206,7 +208,7 @@ function normalizeCurrentFactoryDocument(
 ): CurrentFactoryDocument {
   if (!isEditableFactoryDefinitionValue(responseBody)) {
     throw new CurrentFactoryDefinitionError(
-      "The current factory editing API returned an invalid response.",
+      currentFactoryDefinitionAPIErrorMessages.invalidResponse,
       {
         code: "INTERNAL_ERROR",
         responseBody,
@@ -253,7 +255,7 @@ function normalizeCurrentFactoryVersion(
     typeof record.physical !== "string"
   ) {
     throw new CurrentFactoryDefinitionError(
-      "The current factory editing API returned an invalid response.",
+      currentFactoryDefinitionAPIErrorMessages.invalidResponse,
       {
         code: "INTERNAL_ERROR",
         responseBody: value,
@@ -280,8 +282,10 @@ function normalizeCurrentFactoryDefinitionErrorCode(
     case "STALE_FACTORY_VERSION":
       return code;
     case "INVALID_FACTORY":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INVALID_FACTORY_DEFINITION";
     default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INTERNAL_ERROR";
   }
 }

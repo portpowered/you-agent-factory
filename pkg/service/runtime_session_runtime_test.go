@@ -358,9 +358,7 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 	if err != nil {
 		t.Fatalf("GetCurrentFactoryForSession(beta): %v", err)
 	}
-	if current.Name != "beta" {
-		t.Fatalf("beta current factory name = %q, want beta", current.Name)
-	}
+	assertFactoryName(t, current.Name, "beta", "beta current factory name")
 	if current.Version == nil {
 		t.Fatal("expected beta current factory version metadata")
 	}
@@ -383,9 +381,7 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 	if err != nil {
 		t.Fatalf("GetCurrentFactoryForSession(default) after beta save: %v", err)
 	}
-	if defaultCurrent.Name != "alpha" {
-		t.Fatalf("default current factory name after beta save = %q, want alpha", defaultCurrent.Name)
-	}
+	assertFactoryName(t, defaultCurrent.Name, "alpha", "default current factory name after beta save")
 	assertFactoryWorkType(t, defaultCurrent.WorkTypes, "task", "default current work types after beta save")
 
 	assertCurrentFactoryPointer(t, harness.rootDir, "alpha", "default session pointer after beta current-factory save")
@@ -393,23 +389,17 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(beta) after save: %v", err)
 	}
-	if got := betaConfig.FactoryConfig().WorkTypes; len(got) != 1 || got[0].Name != "story" {
-		t.Fatalf("persisted beta work types after save = %#v, want story", got)
-	}
+	assertPersistedFactoryWorkType(t, betaConfig.FactoryConfig().WorkTypes, "story", "persisted beta work types after save")
 	if betaConfig.FactoryConfig().Version == nil || betaCurrent.Version == nil {
 		t.Fatal("expected persisted and returned beta version metadata")
 	}
-	if betaConfig.FactoryConfig().Version.Logical != betaCurrent.Version.Logical || !betaConfig.FactoryConfig().Version.Physical.Equal(betaCurrent.Version.Physical) {
-		t.Fatalf("persisted beta version after save = %#v, want %#v", betaConfig.FactoryConfig().Version, betaCurrent.Version)
-	}
+	assertPersistedFactoryVersionMatchesAPI(t, betaConfig.FactoryConfig().Version, betaCurrent.Version, "persisted beta version after save")
 
 	legacyCurrent, err := harness.svc.GetCurrentFactory(context.Background())
 	if err != nil {
 		t.Fatalf("GetCurrentFactory after beta save: %v", err)
 	}
-	if legacyCurrent.Name != "alpha" {
-		t.Fatalf("legacy current factory name after beta save = %q, want alpha", legacyCurrent.Name)
-	}
+	assertFactoryName(t, legacyCurrent.Name, "alpha", "legacy current factory name after beta save")
 	if _, err := harness.svc.GetCurrentFactoryForSession(context.Background(), "missing-session"); !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 		t.Fatalf("GetCurrentFactoryForSession(missing) error = %v, want factory session not found", err)
 	}

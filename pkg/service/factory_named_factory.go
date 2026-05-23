@@ -100,14 +100,6 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 	return fs.serializeNamedFactory(factoryapi.FactoryName(name), current, true)
 }
 
-func (fs *FactoryService) currentFactoryDefinitionVersion(name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error) {
-	rootDir := fs.factoryRootDir
-	if rootDir == "" && fs.cfg != nil {
-		rootDir = fs.cfg.Dir
-	}
-	return fs.currentFactoryDefinitionVersionAtRoot(rootDir, name)
-}
-
 func (fs *FactoryService) currentFactoryDefinitionVersionAtRoot(rootDir string, name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error) {
 	factoryDir := rootDir
 	if name != apisurface.DefaultCurrentFactoryName {

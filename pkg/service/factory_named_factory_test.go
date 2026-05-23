@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -648,30 +647,20 @@ func TestFactoryService_SaveCurrentFactory_ReplacesCurrentDefinition(t *testing.
 	if err != nil {
 		t.Fatalf("SaveCurrentFactory: %v", err)
 	}
-	if saved.WorkTypes == nil || len(*saved.WorkTypes) != 1 || (*saved.WorkTypes)[0].Name != "story" {
-		t.Fatalf("saved work types = %#v, want story", saved.WorkTypes)
-	}
-	if saved.Version == nil || saved.Version.Logical != initialVersion.Logical+1 || !saved.Version.Physical.After(initialVersion.Physical) {
-		t.Fatalf("saved version = %#v, want logical=%d physical after %s", saved.Version, initialVersion.Logical+1, initialVersion.Physical)
-	}
+	assertFactoryWorkType(t, saved.WorkTypes, "story", "saved work types")
+	assertFactoryVersionAdvanced(t, saved.Version, initialVersion)
 
 	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
 		t.Fatalf("GetCurrentFactory after save: %v", err)
 	}
-	if current.WorkTypes == nil || (*current.WorkTypes)[0].Name != "story" {
-		t.Fatalf("current work types after save = %#v, want story", current.WorkTypes)
-	}
-	if current.Version == nil || current.Version.Logical != saved.Version.Logical || !current.Version.Physical.Equal(saved.Version.Physical) {
-		t.Fatalf("current version after save = %#v, want %#v", current.Version, saved.Version)
-	}
+	assertFactoryWorkType(t, current.WorkTypes, "story", "current work types after save")
+	assertMatchingFactoryVersion(t, current.Version, saved.Version, "current version after save")
 	loaded, err := config.LoadRuntimeConfig(filepath.Join(rootDir, "alpha"), nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(alpha) after save: %v", err)
 	}
-	if loaded.FactoryConfig().Version == nil || loaded.FactoryConfig().Version.Logical != saved.Version.Logical || !loaded.FactoryConfig().Version.Physical.Equal(saved.Version.Physical) {
-		t.Fatalf("persisted version after save = %#v, want %#v", loaded.FactoryConfig().Version, saved.Version)
-	}
+	assertPersistedFactoryVersionMatchesAPI(t, loaded.FactoryConfig().Version, saved.Version, "persisted version after save")
 	restarted, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               rootDir,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
@@ -684,9 +673,7 @@ func TestFactoryService_SaveCurrentFactory_ReplacesCurrentDefinition(t *testing.
 	if err != nil {
 		t.Fatalf("GetCurrentFactory(restarted): %v", err)
 	}
-	if restartedCurrent.Version == nil || restartedCurrent.Version.Logical != saved.Version.Logical || !restartedCurrent.Version.Physical.Equal(saved.Version.Physical) {
-		t.Fatalf("restarted version = %#v, want %#v", restartedCurrent.Version, saved.Version)
-	}
+	assertMatchingFactoryVersion(t, restartedCurrent.Version, saved.Version, "restarted version")
 	assertCurrentFactoryPointer(t, rootDir, "alpha", "after current factory save")
 }
 
@@ -920,98 +907,5 @@ func TestFactoryService_GetCurrentFactory_WrapsMissingPersistedFactoryDir(t *tes
 	}
 	if !strings.Contains(err.Error(), `resolve current factory "missing"`) {
 		t.Fatalf("GetCurrentFactory resolve error = %v, want wrapped missing-factory context", err)
-	}
-}
-
-func TestFactoryService_WaitToComplete_ReturnsClosedChannelWithoutRuntime(t *testing.T) {
-	svc := &FactoryService{}
-
-	select {
-	case <-svc.WaitToComplete():
-	default:
-		t.Fatal("expected WaitToComplete without runtime to return a closed channel")
-	}
-}
-
-func TestFactoryService_WaitToComplete_DelegatesToActiveRuntime(t *testing.T) {
-	waitCh := make(chan struct{})
-	svc := &FactoryService{
-		factory: &aggregateSnapshotFactory{
-			waitToComplete: waitCh,
-		},
-	}
-
-	if got := svc.WaitToComplete(); got != waitCh {
-		t.Fatalf("WaitToComplete channel = %p, want %p", got, waitCh)
-	}
-	close(waitCh)
-}
-
-func TestFactoryService_Pause_RequiresActiveRuntimeAndWrapsPauseErrors(t *testing.T) {
-	svc := &FactoryService{}
-	if err := svc.Pause(context.Background()); err == nil || !strings.Contains(err.Error(), "runtime is not available") {
-		t.Fatalf("Pause without runtime error = %v, want runtime unavailable", err)
-	}
-
-	svc.factory = &aggregateSnapshotFactory{pauseErr: fmt.Errorf("pause failed")}
-	if err := svc.Pause(context.Background()); err == nil || !strings.Contains(err.Error(), "pause factory: pause failed") {
-		t.Fatalf("Pause wrapped error = %v, want wrapped pause failure", err)
-	}
-
-	svc.factory = &aggregateSnapshotFactory{}
-	if err := svc.Pause(context.Background()); err != nil {
-		t.Fatalf("Pause success error = %v", err)
-	}
-}
-
-func TestFactoryService_CurrentRuntimeBundleAndDirComparisonHelpers(t *testing.T) {
-	if bundle := (*FactoryService)(nil).currentRuntimeBundle(); bundle != nil {
-		t.Fatalf("nil service currentRuntimeBundle = %#v, want nil", bundle)
-	}
-
-	svc := &FactoryService{}
-	if bundle := svc.currentRuntimeBundle(); bundle != nil {
-		t.Fatalf("empty service currentRuntimeBundle = %#v, want nil", bundle)
-	}
-
-	svc.cfg = &FactoryServiceConfig{Dir: "C:/factory"}
-	svc.factory = &aggregateSnapshotFactory{}
-	svc.runtimeCfg = &config.LoadedFactoryConfig{}
-	bundle := svc.currentRuntimeBundle()
-	if bundle == nil {
-		t.Fatal("expected populated currentRuntimeBundle")
-	}
-	if bundle.dir != svc.cfg.Dir || bundle.factory != svc.factory || bundle.runtimeCfg != svc.runtimeCfg {
-		t.Fatalf("currentRuntimeBundle = %#v, want service fields copied through", bundle)
-	}
-
-	if sameFactoryDir("", svc.cfg.Dir) {
-		t.Fatal("sameFactoryDir should reject blank paths")
-	}
-	if !sameFactoryDir("C:/factory/./named", "C:/factory/named") {
-		t.Fatal("sameFactoryDir should normalize equivalent paths")
-	}
-}
-
-func TestLiveRuntimeHandle_CompletionHelpers(t *testing.T) {
-	if !(*liveRuntimeHandle)(nil).completed() {
-		t.Fatal("nil liveRuntimeHandle should report completed")
-	}
-	if err := (*liveRuntimeHandle)(nil).wait(); err != nil {
-		t.Fatalf("nil liveRuntimeHandle wait error = %v, want nil", err)
-	}
-
-	handle := &liveRuntimeHandle{
-		runDone: make(chan struct{}),
-	}
-	if handle.completed() {
-		t.Fatal("open runDone should report incomplete")
-	}
-	handle.setRunResult(fmt.Errorf("run failed"))
-	if !handle.completed() {
-		t.Fatal("closed runDone should report completed")
-	}
-	if err := handle.wait(); err == nil || err.Error() != "run failed" {
-		t.Fatalf("wait error = %v, want run failed", err)
 	}
 }

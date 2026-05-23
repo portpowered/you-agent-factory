@@ -96,6 +96,39 @@ describe("current-factory prompt-template API", () => {
     });
   });
 
+  it("uses the selected session for non-default prompt-template requests", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          availableVariables: [],
+          inputCount: 0,
+          unavailableAccessPatterns: [],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await getCurrentFactoryWorkstationPromptTemplateContract("Review", {
+      fetch,
+      sessionID: "session-beta",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/factory-sessions/session-beta/factory/workstations/Review/prompt-template-contract",
+      ),
+      expect.objectContaining({
+        method: "GET",
+      }),
+    );
+  });
+
   it("surfaces typed current-factory prompt-template API errors", async () => {
     let thrown: unknown;
 

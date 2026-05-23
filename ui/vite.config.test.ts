@@ -28,10 +28,8 @@ describe("dashboard Vite config", () => {
       "^/factory-sessions/[^/]+$",
       "/factory-sessions/~default/factory",
       "^/factory-sessions/[^/]+/factory$",
-      "^/factory-sessions/[^/]+/factory$",
-      "^/factory-sessions/~default/factory/workstations/[^/]+/prompt-template-contract$",
-      "/factory-sessions/~default/factory",
-      "^/factory-sessions/~default/factory/workstations/[^/]+/prompt-template-validation$",
+      "^/factory-sessions/[^/]+/factory/workstations/[^/]+/prompt-template-contract$",
+      "^/factory-sessions/[^/]+/factory/workstations/[^/]+/prompt-template-validation$",
     ] as const;
 
     expect(Object.keys(config.server?.proxy ?? {})).toEqual(expectedProxyPaths);

@@ -14,8 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 const servicePortableBundledScriptBody = "Write-Output 'portable script'\n"
@@ -224,28 +222,6 @@ func writeWorkRequestFile(t *testing.T, path string, req interfaces.SubmitReques
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write work request file: %v", err)
-	}
-}
-
-func writeWatchedInputRequest(t *testing.T, factoryDir, filename string, req interfaces.SubmitRequest) {
-	t.Helper()
-
-	inputDir := filepath.Join(factoryDir, interfaces.InputsDir, req.WorkTypeID, interfaces.DefaultChannelName)
-	if err := os.MkdirAll(inputDir, 0o755); err != nil {
-		t.Fatalf("create watched input dir: %v", err)
-	}
-	writeWorkRequestFile(t, filepath.Join(inputDir, filename), req)
-}
-
-func assertWatcherDidNotDetectWorkType(t *testing.T, logs *observer.ObservedLogs, workType string, wait time.Duration) {
-	t.Helper()
-
-	deadline := time.Now().Add(wait)
-	for time.Now().Before(deadline) {
-		if logs.FilterMessage("new input detected").FilterField(zap.String("work-type", workType)).Len() > 0 {
-			t.Fatalf("expected no watcher activity for work type %q after activation", workType)
-		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 

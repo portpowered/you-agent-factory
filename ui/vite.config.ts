@@ -22,6 +22,10 @@ const storybookInteropDeps = [
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
 ] as const;
+const currentFactoryPromptTemplateProxyPaths = [
+  "^/factory-sessions/[^/]+/factory/workstations/[^/]+/prompt-template-contract$",
+  "^/factory-sessions/[^/]+/factory/workstations/[^/]+/prompt-template-validation$",
+] as const;
 const proxiedAPIPaths = [
   "/work",
   "^/factory-sessions/[^/]+/work$",
@@ -39,10 +43,7 @@ const proxiedAPIPaths = [
   "^/factory-sessions/[^/]+$",
   "/factory-sessions/~default/factory",
   "^/factory-sessions/[^/]+/factory$",
-  "^/factory-sessions/[^/]+/factory$",
-  "^/factory-sessions/~default/factory/workstations/[^/]+/prompt-template-contract$",
-  "/factory-sessions/~default/factory",
-  "^/factory-sessions/~default/factory/workstations/[^/]+/prompt-template-validation$",
+  ...currentFactoryPromptTemplateProxyPaths,
 ] as const;
 const apiProxy = Object.fromEntries(
   proxiedAPIPaths.map((path) => [
