@@ -378,6 +378,45 @@ func TestResolveWorkResult_MissingRuntimeConfigPreservesOriginalOutcome(t *testi
 	}
 }
 
+func TestResolveWorkResult_DetachesRecordedOutputWorkFromSourceMutation(t *testing.T) {
+	transition := &petri.Transition{ID: "transition-id"}
+	result := &interfaces.WorkResult{
+		DispatchID:   "dispatch-1",
+		TransitionID: "transition-id",
+		Outcome:      interfaces.OutcomeAccepted,
+		RecordedOutputWork: []interfaces.FactoryWorkItem{{
+			ID:                       "work-1",
+			WorkTypeID:               "task",
+			DisplayName:              "draft",
+			PreviousChainingTraceIDs: []string{"chain-a"},
+			Content: []interfaces.WorkContentPart{{
+				Type: "text",
+				Text: "original content",
+			}},
+			Tags: map[string]string{"priority": "high"},
+		}},
+	}
+
+	resolved := resolveWorkResult(transition, result, nil)
+	result.RecordedOutputWork[0].PreviousChainingTraceIDs[0] = "chain-z"
+	result.RecordedOutputWork[0].Content[0].Text = "mutated content"
+	result.RecordedOutputWork[0].Tags["priority"] = "low"
+
+	if len(resolved.recordedOutputWork) != 1 {
+		t.Fatalf("recorded output work = %#v, want one item", resolved.recordedOutputWork)
+	}
+	recorded := resolved.recordedOutputWork[0]
+	if len(recorded.PreviousChainingTraceIDs) != 1 || recorded.PreviousChainingTraceIDs[0] != "chain-a" {
+		t.Fatalf("resolved previous chaining trace IDs = %#v, want [chain-a]", recorded.PreviousChainingTraceIDs)
+	}
+	if len(recorded.Content) != 1 || recorded.Content[0].Text != "original content" {
+		t.Fatalf("resolved content = %#v, want original content", recorded.Content)
+	}
+	if recorded.Tags["priority"] != "high" {
+		t.Fatalf("resolved tags = %#v, want priority high", recorded.Tags)
+	}
+}
+
 func TestResolveWorkResult_RuntimeConfigUsesTransitionName(t *testing.T) {
 	transition := &petri.Transition{
 		ID:   "runtime-station-id",

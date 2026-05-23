@@ -266,7 +266,7 @@ func (r *factoryWorldReducer) applyWorkRequest(context factoryapi.FactoryEventCo
 		TraceID:       traceID,
 		Source:        stringValue(payload.Source),
 		ParentLineage: cloneStringSlice(sliceValue(payload.ParentLineage)),
-		WorkItems:     cloneWorkItems(workItems),
+		WorkItems:     interfaces.CloneFactoryWorkItems(workItems),
 	}
 	for _, item := range workItems {
 		r.stateValue.PayloadLineage.RecordWorkRequestSnapshot(context.Tick, requestID, item)
@@ -716,24 +716,11 @@ func cloneStringMap(input map[string]string) map[string]string {
 	return clone
 }
 
-func cloneWorkItems(input []interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make([]interfaces.FactoryWorkItem, len(input))
-	for i, item := range input {
-		out[i] = item
-		out[i].Tags = cloneStringMap(item.Tags)
-		out[i].Content = append([]interfaces.WorkContentPart(nil), item.Content...)
-	}
-	return out
-}
-
 func sortedWorkItems(input []interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
 	if len(input) == 0 {
 		return nil
 	}
-	out := cloneWorkItems(input)
+	out := interfaces.CloneFactoryWorkItems(input)
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].WorkTypeID != out[j].WorkTypeID {
 			return out[i].WorkTypeID < out[j].WorkTypeID

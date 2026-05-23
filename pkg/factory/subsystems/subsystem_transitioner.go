@@ -349,27 +349,6 @@ func mutationRecordsForDispatch(
 	return records
 }
 
-func cloneFactoryWorkItems(items []interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
-	if len(items) == 0 {
-		return nil
-	}
-
-	clone := make([]interfaces.FactoryWorkItem, len(items))
-	for i := range items {
-		clone[i] = items[i]
-		if items[i].PreviousChainingTraceIDs != nil {
-			clone[i].PreviousChainingTraceIDs = append([]string(nil), items[i].PreviousChainingTraceIDs...)
-		}
-		if items[i].Content != nil {
-			clone[i].Content = append([]interfaces.WorkContentPart(nil), items[i].Content...)
-		}
-		if items[i].Tags != nil {
-			clone[i].Tags = cloneTags(items[i].Tags)
-		}
-	}
-	return clone
-}
-
 func cloneTags(tags map[string]string) map[string]string {
 	if tags == nil {
 		return nil
@@ -389,7 +368,7 @@ func resolveWorkResult(transition *petri.Transition, result *interfaces.WorkResu
 		outcome:            result.Outcome,
 		output:             result.Output,
 		spawnedWork:        result.SpawnedWork,
-		recordedOutputWork: cloneFactoryWorkItems(result.RecordedOutputWork),
+		recordedOutputWork: interfaces.CloneFactoryWorkItems(result.RecordedOutputWork),
 		err:                result.Error,
 		feedback:           result.Feedback,
 		providerFailure:    result.ProviderFailure,
