@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -187,5 +188,93 @@ func TestFactoryService_OpenFactorySessionFromFolder_ValidateOnlyReturnsTargetsW
 	assertSessionTargetMetadata(t, result.Targets[0], FactorySessionTargetKindNamed, "alpha", "alpha", harness.factoryDirs["alpha"], "alpha")
 	if got := harness.svc.sessions.count(); got != before {
 		t.Fatalf("validate-only mutated live sessions to %d, want %d", got, before)
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_ExpandsLeadingTildeForValidationAndLaunch(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	relativeToHome, err := filepath.Rel(homeDir, harness.rootDir)
+	if err != nil {
+		t.Fatalf("filepath.Rel(home, root): %v", err)
+	}
+	if relativeToHome == "." || strings.HasPrefix(relativeToHome, "..") {
+		t.Skipf("root dir %q is not under the user home %q", harness.rootDir, homeDir)
+	}
+
+	tildePath := "~"
+	if relativeToHome != "." {
+		tildePath = filepath.Join("~", relativeToHome)
+	}
+
+	validateResult, err := harness.svc.OpenFactorySessionFromFolder(
+		context.Background(),
+		tildePath,
+		nil,
+		true,
+	)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate tilde): %v", err)
+	}
+	if validateResult == nil || len(validateResult.Targets) != 1 {
+		t.Fatalf("validate-only tilde targets = %#v, want one target", validateResult)
+	}
+	assertSessionTargetMetadata(
+		t,
+		validateResult.Targets[0],
+		FactorySessionTargetKindNamed,
+		"alpha",
+		"alpha",
+		harness.factoryDirs["alpha"],
+		"alpha",
+	)
+	if validateResult.Targets[0].FolderPath != harness.rootDir {
+		t.Fatalf("validated tilde folder path = %q, want %q", validateResult.Targets[0].FolderPath, harness.rootDir)
+	}
+
+	openResult, err := harness.svc.OpenFactorySessionFromFolder(
+		context.Background(),
+		tildePath,
+		&FactorySessionTargetRef{
+			Kind: FactorySessionTargetKindNamed,
+			Name: "alpha",
+		},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(open tilde): %v", err)
+	}
+	session := harness.requireSession(t, openResult.SessionID)
+	if session.folderPath != harness.rootDir {
+		t.Fatalf("opened session folder path = %q, want %q", session.folderPath, harness.rootDir)
+	}
+	if session.handle.runtime.dir != harness.factoryDirs["alpha"] {
+		t.Fatalf("opened session runtime dir = %q, want %q", session.handle.runtime.dir, harness.factoryDirs["alpha"])
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_InvalidExpandedTildePathReturnsResolvedError(t *testing.T) {
+	missingPath := filepath.Join("~", ".infinite-you-missing-factory-folder")
+
+	_, err := resolveFactorySessionFolder(missingPath)
+	if err == nil {
+		t.Fatal("resolveFactorySessionFolder(~missing) error = nil, want failure")
+	}
+
+	homeDir, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		t.Fatalf("UserHomeDir: %v", homeErr)
+	}
+	wantResolvedPath := filepath.Join(homeDir, ".infinite-you-missing-factory-folder")
+	if !strings.Contains(err.Error(), wantResolvedPath) {
+		t.Fatalf("resolveFactorySessionFolder(~missing) error = %q, want resolved path %q", err, wantResolvedPath)
 	}
 }

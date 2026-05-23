@@ -743,7 +743,11 @@ func resolveFactorySessionFolder(folderPath string) (string, error) {
 	if trimmed == "" {
 		return "", fmt.Errorf("factory session folder is required")
 	}
-	resolved, err := filepath.Abs(trimmed)
+	expanded, err := expandFactorySessionFolderHome(trimmed)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.Abs(expanded)
 	if err != nil {
 		return "", fmt.Errorf("resolve factory session folder %q: %w", folderPath, err)
 	}
@@ -755,6 +759,23 @@ func resolveFactorySessionFolder(folderPath string) (string, error) {
 		return "", fmt.Errorf("factory session folder %q must be a directory", resolved)
 	}
 	return resolved, nil
+}
+
+func expandFactorySessionFolderHome(path string) (string, error) {
+	if path != "~" &&
+		!strings.HasPrefix(path, "~/") &&
+		!strings.HasPrefix(path, `~\`) {
+		return path, nil
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user home for factory session folder %q: %w", path, err)
+	}
+	if path == "~" {
+		return homeDir, nil
+	}
+	return filepath.Join(homeDir, path[2:]), nil
 }
 
 func selectFactorySessionTarget(

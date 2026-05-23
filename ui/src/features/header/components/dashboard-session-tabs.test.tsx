@@ -322,6 +322,116 @@ describe("DashboardSessionTabs", () => {
     );
   });
 
+  it("reuses the validated resolved folder path when the customer entered a tilde path", async () => {
+    listFactorySessions
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+        {
+          factoryDir: "/Users/tester/factory-root/alpha",
+          folderPath: "/Users/tester/factory-root",
+          id: "session-alpha",
+          isDefault: false,
+          project: "alpha",
+          target: {
+            kind: "named",
+            name: "alpha",
+          },
+        },
+      ]);
+    openFactorySession
+      .mockResolvedValueOnce({
+        targets: [
+          {
+            factoryDir: "/Users/tester/factory-root/alpha",
+            folderPath: "/Users/tester/factory-root",
+            label: "alpha",
+            project: "alpha",
+            ref: {
+              kind: "named",
+              name: "alpha",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        session: {
+          factoryDir: "/Users/tester/factory-root/alpha",
+          folderPath: "/Users/tester/factory-root",
+          id: "session-alpha",
+          isDefault: false,
+          project: "alpha",
+          target: {
+            kind: "named",
+            name: "alpha",
+          },
+        },
+      });
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: "~/factory-root" },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: messages.openSessionSubmitLabel })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+        folderPath: "~/factory-root",
+        validateOnly: true,
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /alpha/i }));
+
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+        folderPath: "/Users/tester/factory-root",
+        target: {
+          kind: "named",
+          name: "alpha",
+        },
+      });
+    });
+  });
+
   it("populates the folder field from the browser directory picker before opening a session", async () => {
     listFactorySessions
       .mockResolvedValueOnce([

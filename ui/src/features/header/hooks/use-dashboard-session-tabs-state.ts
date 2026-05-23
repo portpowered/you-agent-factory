@@ -104,6 +104,7 @@ function useOpenSessionDialogState({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogError, setDialogError] = useState<FactorySessionsAPIError | null>(null);
   const [folderPath, setFolderPath] = useState("");
+  const [validatedFolderPath, setValidatedFolderPath] = useState<string | null>(null);
   const [discoveredTargets, setDiscoveredTargets] = useState<FactorySessionTarget[]>([]);
   const [folderValidation, setFolderValidation] = useState<FolderValidationState>({
     status: "idle",
@@ -118,11 +119,14 @@ function useOpenSessionDialogState({
     try {
       const response = await validateFolderMutation.mutateAsync(folderPath);
       const targets = response.targets ?? [];
+      const resolvedFolderPath = targets[0]?.folderPath ?? folderPath;
       setDiscoveredTargets(targets);
+      setValidatedFolderPath(resolvedFolderPath);
       setFolderValidation({ status: "ready", targets });
     } catch (error) {
       const apiError = normalizeFactorySessionsError(error);
       setDialogError(apiError);
+      setValidatedFolderPath(null);
       setFolderValidation({
         status: "error",
         reason: classifyFactorySessionFolderValidationError(apiError),
@@ -134,7 +138,7 @@ function useOpenSessionDialogState({
     setDialogError(null);
     try {
       const response = await openSessionMutation.mutateAsync({
-        folderPath,
+        folderPath: validatedFolderPath ?? target.folderPath ?? folderPath,
         target: target.ref,
       });
       if (response.session) {
@@ -156,11 +160,13 @@ function useOpenSessionDialogState({
     setDiscoveredTargets([]);
     setFolderValidation({ status: "idle" });
     setFolderPath("");
+    setValidatedFolderPath(null);
   }
 
   function handleChangeFolderPath(value: string) {
     setFolderPath(value);
     setDialogError(null);
+    setValidatedFolderPath(null);
     setDiscoveredTargets([]);
     setFolderValidation({ status: "idle" });
   }
