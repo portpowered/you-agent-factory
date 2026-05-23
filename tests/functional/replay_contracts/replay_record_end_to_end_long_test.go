@@ -31,6 +31,15 @@ const recordReplayScriptSecretValue = "raw-script-replay-secret-value"
 const recordReplayProviderSecretEnv = "ANTHROPIC_API_KEY"
 const recordReplayProviderSecretValue = "raw-provider-replay-secret-value"
 
+func setRecordReplayHomeEnv(t *testing.T, homeDir string) {
+	t.Helper()
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("HOMEDRIVE", filepath.VolumeName(homeDir))
+	t.Setenv("HOMEPATH", string(os.PathSeparator))
+}
+
 func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *testing.T) {
 	support.SkipLongFunctional(t, "slow record/replay CLI end-to-end smoke")
 
@@ -111,7 +120,7 @@ func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow
 	writeRecordReplayWorkFile(t, workFile)
 
 	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
+	setRecordReplayHomeEnv(t, homeDir)
 	t.Setenv(recordReplayLiveScriptEnv, "1")
 	t.Setenv(recordReplayScriptSecretEnv, recordReplayScriptSecretValue)
 

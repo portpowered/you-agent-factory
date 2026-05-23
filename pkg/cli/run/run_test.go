@@ -51,6 +51,15 @@ func preserveRunGlobals(t *testing.T) {
 	})
 }
 
+func setUserHomeForTest(t *testing.T, homeDir string) {
+	t.Helper()
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("HOMEDRIVE", filepath.VolumeName(homeDir))
+	t.Setenv("HOMEPATH", string(os.PathSeparator))
+}
+
 func TestCountTokenStates(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -428,19 +437,15 @@ func TestRun_DefaultRecordPathResolutionErrorSkipsServiceStart(t *testing.T) {
 }
 
 func TestGenerateDefaultLiveRunRecordPath_UsesRecordingsHierarchyAndSessionTemplate(t *testing.T) {
-	originalHome := os.Getenv("HOME")
 	originalTime := defaultLiveRunRecordTime
 	originalUUID := defaultLiveRunRecordUUID
 	defer func() {
-		_ = os.Setenv("HOME", originalHome)
 		defaultLiveRunRecordTime = originalTime
 		defaultLiveRunRecordUUID = originalUUID
 	}()
 
 	homeDir := t.TempDir()
-	if err := os.Setenv("HOME", homeDir); err != nil {
-		t.Fatalf("Setenv(HOME): %v", err)
-	}
+	setUserHomeForTest(t, homeDir)
 	defaultLiveRunRecordTime = func() time.Time {
 		return time.Date(2026, time.May, 23, 18, 45, 12, 0, time.FixedZone("ICT", 7*60*60))
 	}
@@ -475,19 +480,15 @@ func TestGenerateDefaultLiveRunRecordPath_UsesRecordingsHierarchyAndSessionTempl
 }
 
 func TestGenerateDefaultLiveRunRecordPath_UsesUniqueSuffixes(t *testing.T) {
-	originalHome := os.Getenv("HOME")
 	originalTime := defaultLiveRunRecordTime
 	originalUUID := defaultLiveRunRecordUUID
 	defer func() {
-		_ = os.Setenv("HOME", originalHome)
 		defaultLiveRunRecordTime = originalTime
 		defaultLiveRunRecordUUID = originalUUID
 	}()
 
 	homeDir := t.TempDir()
-	if err := os.Setenv("HOME", homeDir); err != nil {
-		t.Fatalf("Setenv(HOME): %v", err)
-	}
+	setUserHomeForTest(t, homeDir)
 	defaultLiveRunRecordTime = func() time.Time {
 		return time.Date(2026, time.May, 23, 18, 45, 12, 0, time.FixedZone("ICT", 7*60*60))
 	}
