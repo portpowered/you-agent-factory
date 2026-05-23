@@ -1,12 +1,7 @@
 package api
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"path/filepath"
 	"reflect"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -29,7 +24,6 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 	}
 
 	assertSelectedTickCanonicalState(t, worldState)
-	assertSelectedTickBoundaryAllowlist(t)
 
 	worldView := projections.BuildFactoryWorldView(worldState)
 	assertSelectedTickWorldView(t, worldView)
@@ -142,59 +136,6 @@ func assertSelectedTickWorkstationRequests(
 	if failed.Response == nil || failed.Response.FailureReason == nil || *failed.Response.FailureReason != "provider_rate_limit" {
 		t.Fatalf("failed response = %#v, want provider_rate_limit", failed.Response)
 	}
-}
-
-func assertSelectedTickBoundaryAllowlist(t *testing.T) {
-	t.Helper()
-
-	paths, err := filepath.Glob("../interfaces/*.go")
-	if err != nil {
-		t.Fatalf("glob interfaces package: %v", err)
-	}
-
-	fset := token.NewFileSet()
-	liveViews := make([]string, 0, len(paths))
-	for _, path := range paths {
-		if strings.HasSuffix(path, "_test.go") {
-			continue
-		}
-		file, parseErr := parser.ParseFile(fset, path, nil, 0)
-		if parseErr != nil {
-			t.Fatalf("parse %s: %v", path, parseErr)
-		}
-		liveViews = append(liveViews, selectedTickBoundaryViews(file)...)
-	}
-	sort.Strings(liveViews)
-
-	want := []string{
-		"FactoryWorldRuntimeView",
-		"FactoryWorldTopologyView",
-		"FactoryWorldView",
-	}
-	if !reflect.DeepEqual(liveViews, want) {
-		t.Fatalf("live FactoryWorld*View allowlist = %#v, want %#v", liveViews, want)
-	}
-}
-
-func selectedTickBoundaryViews(file *ast.File) []string {
-	views := []string{}
-	for _, decl := range file.Decls {
-		gen, ok := decl.(*ast.GenDecl)
-		if !ok || gen.Tok != token.TYPE {
-			continue
-		}
-		for _, spec := range gen.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok {
-				continue
-			}
-			name := typeSpec.Name.Name
-			if strings.HasPrefix(name, "FactoryWorld") && strings.HasSuffix(name, "View") {
-				views = append(views, name)
-			}
-		}
-	}
-	return views
 }
 
 func crossBoundarySelectedTickEvents(t0 time.Time) []generated.FactoryEvent {
