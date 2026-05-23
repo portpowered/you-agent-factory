@@ -4,12 +4,19 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import { cn } from "../../../lib/cn";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import { PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
+import {
+  PROVIDER_SESSION_CARD_CLASS,
+  PROVIDER_SESSION_CODE_PANEL_CLASS,
+  PROVIDER_SESSION_ERROR_NOTICE_CLASS,
+  PROVIDER_SESSION_STATUS_NOTICE_CLASS,
+  PROVIDER_SESSION_STATUS_PILL_CLASS,
+  REQUEST_SELECTION_STATUS_CLASS,
+  RUNTIME_DETAILS_SECTION_CLASS,
+} from "./detail-card-shared";
 import { TranscriptSection } from "./provider-session-transcript";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
@@ -63,7 +70,7 @@ function LoadedProviderSessionDetailPanel({
   return (
     <section
       aria-label={messages.selectedSessionHeading}
-      className="mt-4 grid gap-3 border-t border-af-overlay/8 pt-4"
+      className={RUNTIME_DETAILS_SECTION_CLASS}
     >
       <div className="grid gap-3">
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
@@ -187,11 +194,9 @@ function StatusNotice({
   return (
     <p
       className={cn(
-        "m-0 rounded-lg border px-3 py-2.5",
         tone === "error"
-          ? "border-af-danger/25 bg-af-danger/8 text-af-danger-ink"
-          : "border-af-overlay/10 bg-af-overlay/4 text-af-ink/82",
-        DASHBOARD_BODY_TEXT_CLASS,
+          ? PROVIDER_SESSION_ERROR_NOTICE_CLASS
+          : PROVIDER_SESSION_STATUS_NOTICE_CLASS,
       )}
       role={tone === "error" ? "alert" : "status"}
     >
@@ -312,10 +317,7 @@ function TurnsSection({
               <div className="grid gap-1">
                 <strong>{messages.turnLabel({ index: turn.index })}</strong>
                 <p
-                  className={cn(
-                    "m-0 text-af-ink/62",
-                    DASHBOARD_SUPPORTING_TEXT_CLASS,
-                  )}
+                  className={REQUEST_SELECTION_STATUS_CLASS}
                 >
                   {turn.startedAt ?? messages.noTimestamp}
                 </p>
@@ -370,10 +372,7 @@ function FunctionCallsSection({
                 <div className="grid gap-1">
                   <strong>{call.name ?? call.type}</strong>
                   <p
-                    className={cn(
-                      "m-0 text-af-ink/62",
-                      DASHBOARD_SUPPORTING_TEXT_CLASS,
-                    )}
+                    className={REQUEST_SELECTION_STATUS_CLASS}
                   >
                     {messages.orderLabel({
                       order: call.order,
@@ -383,10 +382,7 @@ function FunctionCallsSection({
                 </div>
                 {call.status ? (
                   <span
-                    className={cn(
-                      "inline-flex w-fit rounded-full border border-af-overlay/12 bg-af-overlay/6 px-2 py-0.5",
-                      DASHBOARD_SUPPORTING_TEXT_CLASS,
-                    )}
+                    className={PROVIDER_SESSION_STATUS_PILL_CLASS}
                   >
                     {call.status}
                   </span>
@@ -439,10 +435,7 @@ function ReasoningSection({
               <div className="grid gap-1">
                 <strong>{entry.sourceType}</strong>
                 <p
-                  className={cn(
-                    "m-0 text-af-ink/62",
-                    DASHBOARD_SUPPORTING_TEXT_CLASS,
-                  )}
+                  className={REQUEST_SELECTION_STATUS_CLASS}
                 >
                   {messages.orderLabel({
                     order: entry.order,
@@ -457,21 +450,13 @@ function ReasoningSection({
               ) : null}
               {entry.text ? (
                 <pre
-                  className={cn(
-                    "m-0 mt-2 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere]",
-                    DASHBOARD_BODY_CODE_CLASS,
-                  )}
+                  className={cn("mt-2", PROVIDER_SESSION_CODE_PANEL_CLASS)}
                 >
                   {entry.text}
                 </pre>
               ) : null}
               {entry.encrypted ? (
-                <p
-                  className={cn(
-                    "m-0 mt-2 text-af-ink/62",
-                    DASHBOARD_SUPPORTING_TEXT_CLASS,
-                  )}
-                >
+                <p className={cn("mt-2", REQUEST_SELECTION_STATUS_CLASS)}>
                   {messages.encryptedReasoningOnly}
                 </p>
               ) : null}
@@ -527,10 +512,7 @@ function ParseDiagnosticsSection({
               {messages.unknownEventOnLineLabel({ lineNumber: event.lineNumber })}
             </strong>
             <p
-              className={cn(
-                "m-0 mt-1.5 text-af-ink/62",
-                DASHBOARD_SUPPORTING_TEXT_CLASS,
-              )}
+              className={cn("mt-1.5", REQUEST_SELECTION_STATUS_CLASS)}
             >
               {[
                 event.type ? `type=${event.type}` : null,
@@ -576,10 +558,7 @@ function CodeBlockMetric({
     <div className="grid gap-1">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       <pre
-        className={cn(
-          "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere]",
-          DASHBOARD_BODY_CODE_CLASS,
-        )}
+        className={PROVIDER_SESSION_CODE_PANEL_CLASS}
       >
         {value}
       </pre>

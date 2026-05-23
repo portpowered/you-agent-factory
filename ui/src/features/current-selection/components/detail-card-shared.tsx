@@ -23,6 +23,22 @@ export const EXECUTION_PILL_CLASS = cn(
   DASHBOARD_SUPPORTING_CODE_CLASS,
 );
 export const PROVIDER_SESSION_CARD_CLASS = "rounded-lg border border-af-border bg-af-surface-subtle p-3.5";
+export const PROVIDER_SESSION_STATUS_NOTICE_CLASS = cn(
+  "m-0 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2.5 text-af-text-muted",
+  DASHBOARD_BODY_TEXT_CLASS,
+);
+export const PROVIDER_SESSION_ERROR_NOTICE_CLASS = cn(
+  "m-0 rounded-lg border border-af-danger-border bg-af-danger-surface px-3 py-2.5 text-af-danger-ink",
+  DASHBOARD_BODY_TEXT_CLASS,
+);
+export const PROVIDER_SESSION_STATUS_PILL_CLASS = cn(
+  "inline-flex w-fit rounded-full border border-af-border bg-af-surface-raised px-2 py-0.5 text-af-text-muted",
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+);
+export const PROVIDER_SESSION_CODE_PANEL_CLASS = cn(
+  "m-0 whitespace-pre-wrap rounded-lg border border-af-border bg-af-surface-raised p-3 [overflow-wrap:anywhere]",
+  DASHBOARD_BODY_CODE_CLASS,
+);
 export const HISTORY_HEADER_CLASS =
   "flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2 [&_h4]:m-0";
 export const CURRENT_SELECTION_ACCENT_SURFACE_CLASS =
