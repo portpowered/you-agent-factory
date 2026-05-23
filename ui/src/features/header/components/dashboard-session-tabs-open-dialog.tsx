@@ -42,6 +42,7 @@ export function OpenSessionDialog({
   onOpenTarget: (target: FactorySessionTarget) => void;
 }) {
   const folderFieldID = useId();
+  const folderHelperTextID = useId();
   const folderPickerInputRef = useRef<HTMLInputElement | null>(null);
 
   async function handleOpenFolderPicker() {
@@ -84,6 +85,7 @@ export function OpenSessionDialog({
               className="flex-1"
               disabled={isPending}
               id={folderFieldID}
+              aria-describedby={folderHelperTextID}
               onChange={(event) => {
                 onChangeFolderPath(event.target.value);
               }}
@@ -100,8 +102,15 @@ export function OpenSessionDialog({
               {messages.browseSessionFolderButtonLabel}
             </Button>
           </div>
+          <p
+            className={cn("text-sm text-af-ink/68", DASHBOARD_BODY_TEXT_CLASS)}
+            id={folderHelperTextID}
+          >
+            {messages.sessionFolderHelperText}
+          </p>
           <input
             {...({ directory: "", webkitdirectory: "" } as Record<string, string>)}
+            aria-hidden="true"
             className="sr-only"
             disabled={isPending}
             onChange={handleSelectFolder}

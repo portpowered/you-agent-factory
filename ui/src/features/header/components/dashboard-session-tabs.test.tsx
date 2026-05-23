@@ -264,9 +264,18 @@ describe("DashboardSessionTabs", () => {
     fireEvent.click(
       screen.getByRole("button", { name: messages.openSessionButtonLabel }),
     );
-    fireEvent.change(screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder), {
-      target: { value: "/workspace/other" },
+    expect(screen.getByText(messages.openSessionDialogDescription)).toBeTruthy();
+    const folderField = screen.getByRole("textbox", {
+      name: messages.sessionFolderFieldLabel,
     });
+    expect(folderField.getAttribute("aria-describedby")).toBeTruthy();
+    expect(screen.getByText(messages.sessionFolderHelperText)).toBeTruthy();
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: "/workspace/other" },
+      },
+    );
     fireEvent.submit(
       screen
         .getByRole("button", { name: messages.openSessionSubmitLabel })

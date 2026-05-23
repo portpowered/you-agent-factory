@@ -26,6 +26,7 @@ export interface HeaderControlsMessages {
   retrySessionsLabel: string;
   selectSessionTargetLabel: string;
   sessionFolderFieldLabel: string;
+  sessionFolderHelperText: string;
   sessionFolderFieldPlaceholder: string;
   sessionTabCloseLabelTemplate: string;
   sessionTabsLabel: string;
@@ -48,7 +49,7 @@ export const HEADER_MAX_TICK_TOKEN = "{{maxTick}}";
 const headerControlsMessagesByLocale = {
   en: {
     brandWordmark: "you-agent-factory",
-    browseSessionFolderButtonLabel: "Browse folders",
+    browseSessionFolderButtonLabel: "Choose folder",
     closingSessionButtonLabel: "Closing session",
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "dashboard summary",
@@ -58,18 +59,20 @@ const headerControlsMessagesByLocale = {
     languageMenuButtonLabel: "Change language",
     loadingSessionsLabel: "Loading sessions...",
     loadingDashboardTitle: "Loading dashboard",
-    openSessionButtonLabel: "Open another session",
+    openSessionButtonLabel: "Open factory folder",
     openSessionDialogDescription:
-      "Open another live factory session from a folder path and, when needed, pick one runnable target.",
-    openSessionDialogTitle: "Open factory session",
-    openSessionSubmitLabel: "Inspect folder",
-    openSessionSubmitPendingLabel: "Inspecting folder...",
+      "Choose or enter a local factory folder. The folder must contain a runnable factory before you can open a session.",
+    openSessionDialogTitle: "Open a factory folder",
+    openSessionSubmitLabel: "Check folder",
+    openSessionSubmitPendingLabel: "Checking folder...",
     pauseSessionStreamLabelTemplate: "Pause {{sessionLabel}} updates",
     returnToCurrentTickLabel: "Return to current tick",
     resumeSessionStreamLabelTemplate: "Resume {{sessionLabel}} updates",
     retrySessionsLabel: "Retry sessions",
     selectSessionTargetLabel: "Open session target",
     sessionFolderFieldLabel: "Factory folder",
+    sessionFolderHelperText:
+      "Enter a local factory folder path or choose a folder from your machine. The folder must contain a runnable factory.",
     sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
     sessionTabCloseLabelTemplate: "Close {{sessionLabel}} session",
     sessionTabsLabel: "factory sessions",
@@ -87,7 +90,7 @@ const headerControlsMessagesByLocale = {
   },
   ja: {
     brandWordmark: "you-agent-factory",
-    browseSessionFolderButtonLabel: "フォルダーを選択",
+    browseSessionFolderButtonLabel: "フォルダーを選ぶ",
     closingSessionButtonLabel: "セッションを終了中",
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "ダッシュボードの概要",
@@ -97,18 +100,20 @@ const headerControlsMessagesByLocale = {
     languageMenuButtonLabel: "言語を変更",
     loadingSessionsLabel: "セッションを読み込み中...",
     loadingDashboardTitle: "ダッシュボードを読み込み中",
-    openSessionButtonLabel: "別のセッションを開く",
+    openSessionButtonLabel: "ファクトリーフォルダーを開く",
     openSessionDialogDescription:
-      "フォルダーのパスから別の実行中セッションを開き、必要な場合は実行可能なターゲットを選択します。",
-    openSessionDialogTitle: "ファクトリーセッションを開く",
-    openSessionSubmitLabel: "フォルダーを確認",
-    openSessionSubmitPendingLabel: "フォルダーを確認中...",
+      "ローカルのファクトリーフォルダーを選ぶか入力してください。セッションを開くには、そのフォルダーに実行可能なファクトリーが含まれている必要があります。",
+    openSessionDialogTitle: "ファクトリーフォルダーを開く",
+    openSessionSubmitLabel: "フォルダーを確認する",
+    openSessionSubmitPendingLabel: "フォルダーを確認しています...",
     pauseSessionStreamLabelTemplate: "{{sessionLabel}} の更新を一時停止",
     returnToCurrentTickLabel: "現在のティックに戻る",
     resumeSessionStreamLabelTemplate: "{{sessionLabel}} の更新を再開",
     retrySessionsLabel: "セッションを再試行",
     selectSessionTargetLabel: "セッションターゲットを開く",
     sessionFolderFieldLabel: "ファクトリーフォルダー",
+    sessionFolderHelperText:
+      "ローカルのファクトリーフォルダーのパスを入力するか、この端末からフォルダーを選んでください。フォルダーには実行可能なファクトリーが含まれている必要があります。",
     sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
     sessionTabCloseLabelTemplate: "{{sessionLabel}} セッションを閉じる",
     sessionTabsLabel: "ファクトリーセッション",
@@ -127,7 +132,7 @@ const headerControlsMessagesByLocale = {
   },
   ko: {
     brandWordmark: "you-agent-factory",
-    browseSessionFolderButtonLabel: "폴더 찾아보기",
+    browseSessionFolderButtonLabel: "폴더 선택",
     closingSessionButtonLabel: "세션 종료 중",
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "대시보드 요약",
@@ -137,18 +142,20 @@ const headerControlsMessagesByLocale = {
     languageMenuButtonLabel: "언어 변경",
     loadingSessionsLabel: "세션을 불러오는 중...",
     loadingDashboardTitle: "대시보드 로드 중",
-    openSessionButtonLabel: "다른 세션 열기",
+    openSessionButtonLabel: "팩토리 폴더 열기",
     openSessionDialogDescription:
-      "폴더 경로에서 다른 라이브 팩토리 세션을 열고, 필요하면 실행 가능한 대상을 선택합니다.",
-    openSessionDialogTitle: "팩토리 세션 열기",
+      "로컬 팩토리 폴더를 선택하거나 경로를 입력하세요. 세션을 열려면 해당 폴더에 실행 가능한 팩토리가 있어야 합니다.",
+    openSessionDialogTitle: "팩토리 폴더 열기",
     openSessionSubmitLabel: "폴더 확인",
-    openSessionSubmitPendingLabel: "폴더를 확인하는 중...",
+    openSessionSubmitPendingLabel: "폴더 확인 중...",
     pauseSessionStreamLabelTemplate: "{{sessionLabel}} 업데이트 일시중지",
     returnToCurrentTickLabel: "현재 틱으로 돌아가기",
     resumeSessionStreamLabelTemplate: "{{sessionLabel}} 업데이트 다시 시작",
     retrySessionsLabel: "세션 다시 시도",
     selectSessionTargetLabel: "세션 대상 열기",
     sessionFolderFieldLabel: "팩토리 폴더",
+    sessionFolderHelperText:
+      "로컬 팩토리 폴더 경로를 입력하거나 이 기기에서 폴더를 선택하세요. 폴더에는 실행 가능한 팩토리가 있어야 합니다.",
     sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
     sessionTabCloseLabelTemplate: "{{sessionLabel}} 세션 닫기",
     sessionTabsLabel: "팩토리 세션",
@@ -177,10 +184,10 @@ const headerControlsMessagesByLocale = {
     languageMenuButtonLabel: "切换语言",
     loadingSessionsLabel: "正在加载会话...",
     loadingDashboardTitle: "正在加载仪表板",
-    openSessionButtonLabel: "打开另一个会话",
+    openSessionButtonLabel: "打开工厂文件夹",
     openSessionDialogDescription:
-      "从文件夹路径打开另一个运行中的工厂会话，并在需要时选择可运行目标。",
-    openSessionDialogTitle: "打开工厂会话",
+      "请选择或输入本地工厂文件夹。只有文件夹中包含可运行的工厂时，才能打开会话。",
+    openSessionDialogTitle: "打开工厂文件夹",
     openSessionSubmitLabel: "检查文件夹",
     openSessionSubmitPendingLabel: "正在检查文件夹...",
     pauseSessionStreamLabelTemplate: "暂停 {{sessionLabel}} 更新",
@@ -189,6 +196,8 @@ const headerControlsMessagesByLocale = {
     retrySessionsLabel: "重试会话",
     selectSessionTargetLabel: "打开会话目标",
     sessionFolderFieldLabel: "工厂文件夹",
+    sessionFolderHelperText:
+      "请输入本地工厂文件夹路径，或从这台设备选择一个文件夹。该文件夹必须包含可运行的工厂。",
     sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
     sessionTabCloseLabelTemplate: "关闭 {{sessionLabel}} 会话",
     sessionTabsLabel: "工厂会话",
