@@ -70,6 +70,9 @@ export const OpenFlowVerification = {
       "aria-selected",
       "true",
     );
+    await expect(
+      canvas.getByRole("button", { name: "Pause root updates" }),
+    ).toBeVisible();
     await expect(canvas.getByRole("tab", { name: "beta" })).toBeVisible();
 
     await userEvent.click(openButton);

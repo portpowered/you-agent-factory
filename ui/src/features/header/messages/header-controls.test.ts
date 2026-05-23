@@ -67,6 +67,8 @@ describe("getHeaderControlsMessages", () => {
     expect(messages.streamStatusLiveLabel).toBeTruthy();
     expect(messages.streamStatusConnectingLabel).toBeTruthy();
     expect(messages.streamStatusOfflineLabel).toBeTruthy();
+    expect(messages.pauseSessionStreamLabelTemplate).toContain("{{sessionLabel}}");
+    expect(messages.resumeSessionStreamLabelTemplate).toContain("{{sessionLabel}}");
     expect(messages.returnToCurrentTickLabel).toBeTruthy();
     expect(messages.waitingForMoreTicks).toBeTruthy();
     expect(messages.languageLabel).toBeTruthy();

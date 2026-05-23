@@ -20,9 +20,22 @@ export function sessionCloseLabel(
   session: FactorySessionSummary,
   messages: ReturnType<typeof getHeaderControlsMessages>,
 ): string {
-  return messages.sessionTabCloseLabelTemplate.replace(
-    "{{sessionLabel}}",
-    sessionTabLabel(session),
+  return replaceSessionLabelToken(
+    messages.sessionTabCloseLabelTemplate,
+    session,
+  );
+}
+
+export function sessionStreamToggleLabel(
+  session: FactorySessionSummary,
+  paused: boolean,
+  messages: ReturnType<typeof getHeaderControlsMessages>,
+): string {
+  return replaceSessionLabelToken(
+    paused
+      ? messages.resumeSessionStreamLabelTemplate
+      : messages.pauseSessionStreamLabelTemplate,
+    session,
   );
 }
 
@@ -72,4 +85,11 @@ function normalizeSessionLabelPart(value: string | undefined): string {
 
 function sessionDOMIDFragment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, "-");
+}
+
+function replaceSessionLabelToken(
+  template: string,
+  session: FactorySessionSummary,
+): string {
+  return template.replace("{{sessionLabel}}", sessionTabLabel(session));
 }

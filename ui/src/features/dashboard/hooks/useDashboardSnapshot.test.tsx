@@ -255,6 +255,7 @@ describe("useDashboardSnapshot", () => {
       streamState: createDefaultDashboardStreamState(),
     });
     useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
       selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
     });
     useFactoryTimelineStore.setState({
@@ -278,6 +279,7 @@ describe("useDashboardSnapshot", () => {
       streamState: createDefaultDashboardStreamState(),
     });
     useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
       selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
     });
     useFactoryTimelineStore.getState().reset();
@@ -348,6 +350,56 @@ describe("useDashboardSnapshot", () => {
     );
     expect(useFactoryTimelineStore.getState().events).toEqual([]);
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+  });
+
+  it("pauses the selected session stream without clearing timeline state and resumes on demand", async () => {
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    expect(replayHarness.getStreams()).toHaveLength(1);
+
+    act(() => {
+      useFactoryTimelineStore.setState({
+        events: CANONICAL_SELECTED_TICK_EVENTS,
+        latestTick: 6,
+        mode: "current",
+        receivedEventIDs: CANONICAL_SELECTED_TICK_EVENTS.map((event) => event.id),
+        selectedTick: 6,
+        worldViewCache: {
+          6: timelineSnapshot(REFRESHED_SNAPSHOT),
+        },
+      });
+      useDashboardSessionStore.getState().setSessionPaused(
+        DEFAULT_FACTORY_SESSION_ID,
+        true,
+      );
+    });
+
+    await waitFor(() => {
+      expect(useDashboardStreamStore.getState().streamState.status).toBe("offline");
+    });
+    expect(useFactoryTimelineStore.getState().events).toEqual(
+      CANONICAL_SELECTED_TICK_EVENTS,
+    );
+    expect(replayHarness.getStreams()).toHaveLength(1);
+
+    act(() => {
+      useDashboardSessionStore.getState().setSessionPaused(
+        DEFAULT_FACTORY_SESSION_ID,
+        false,
+      );
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(2);
+    });
+    expect(replayHarness.getStreams()[1]?.url).toBe(
+      `/factories/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
+    expect(useFactoryTimelineStore.getState().events).toEqual(
+      CANONICAL_SELECTED_TICK_EVENTS,
+    );
   });
 
   it("clears timeline state and closes the stream when the last live session is deselected", async () => {

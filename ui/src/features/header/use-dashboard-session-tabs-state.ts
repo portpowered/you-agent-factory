@@ -37,7 +37,7 @@ export function useDashboardSessionTabsState() {
   const [discoveredTargets, setDiscoveredTargets] = useState<FactorySessionTarget[]>([]);
 
   const sessions = sessionsQuery.data ?? [];
-  const { activeSession, activeSessionID, setActiveSessionID } =
+  const { activeSession, activeSessionID, pausedSessionIDs, setActiveSessionID, setSessionPaused } =
     useActiveDashboardSession(sessions);
 
   async function handleInspectFolder(event: FormEvent<HTMLFormElement>) {
@@ -78,6 +78,7 @@ export function useDashboardSessionTabsState() {
     setCloseError(null);
     try {
       await closeSessionMutation.mutateAsync(sessionID);
+      setSessionPaused(sessionID, false);
       queryClient.setQueryData(
         FACTORY_SESSIONS_QUERY_KEY,
         (current: FactorySessionSummary[] | undefined) =>
@@ -122,6 +123,14 @@ export function useDashboardSessionTabsState() {
     setFolderPath("");
   }
 
+  function isSessionStreamPaused(sessionID: string): boolean {
+    return pausedSessionIDs.includes(sessionID);
+  }
+
+  function toggleSessionStreamPaused(sessionID: string) {
+    setSessionPaused(sessionID, !isSessionStreamPaused(sessionID));
+  }
+
   return {
     activeSession,
     activeSessionID,
@@ -134,6 +143,7 @@ export function useDashboardSessionTabsState() {
     handleCloseSession,
     handleInspectFolder,
     handleOpenTarget,
+    isSessionStreamPaused,
     openSessionMutation,
     resetDialogState,
     sessions,
@@ -141,6 +151,7 @@ export function useDashboardSessionTabsState() {
     setActiveSessionID,
     setDialogOpen,
     setFolderPath,
+    toggleSessionStreamPaused,
   };
 }
 
@@ -148,8 +159,14 @@ function useActiveDashboardSession(sessions: FactorySessionSummary[]) {
   const activeSessionID = useDashboardSessionStore(
     (state) => state.selectedSessionID,
   );
+  const pausedSessionIDs = useDashboardSessionStore(
+    (state) => state.pausedSessionIDs,
+  );
   const setActiveSessionID = useDashboardSessionStore(
     (state) => state.setSelectedSessionID,
+  );
+  const setSessionPaused = useDashboardSessionStore(
+    (state) => state.setSessionPaused,
   );
   const activeSession = useMemo(
     () =>
@@ -162,7 +179,9 @@ function useActiveDashboardSession(sessions: FactorySessionSummary[]) {
   return {
     activeSession,
     activeSessionID,
+    pausedSessionIDs,
     setActiveSessionID,
+    setSessionPaused,
   };
 }
 
