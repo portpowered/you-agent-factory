@@ -333,57 +333,6 @@ func (fs *FactoryService) SaveCurrentFactoryForSession(
 
 	return fs.GetCurrentFactoryForSession(ctx, sessionID)
 }
-
-func (fs *FactoryService) prepareEditableFactoryDefinitionSave(
-	sessionRootDir string,
-	current factoryapi.Factory,
-	request factoryapi.Factory,
-) (string, factoryapi.Factory, error) {
-	if current.Name == apisurface.DefaultCurrentFactoryName {
-		return "", factoryapi.Factory{}, ErrCurrentFactoryNotFound
-	}
-	if request.Name != current.Name {
-		return "", factoryapi.Factory{}, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
-	}
-	if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
-		return "", factoryapi.Factory{}, err
-	}
-	sanitized := request
-	sanitized.Version = nil
-	if err := validateEditableFactoryTopology(sanitized); err != nil {
-		return "", factoryapi.Factory{}, err
-	}
-	return sessionRootDir, sanitized, nil
-}
-
-func (fs *FactoryService) replaceEditableFactoryDefinition(
-	sessionRootDir string,
-	name factoryapi.FactoryName,
-	payload []byte,
-) (string, error) {
-	factoryDir, err := factoryconfig.ReplaceNamedFactory(sessionRootDir, string(name), payload)
-	if err == nil {
-		return factoryDir, nil
-	}
-	if errors.Is(err, factoryconfig.ErrInvalidNamedFactory) {
-		return "", fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
-	}
-	return "", err
-}
-
-func (fs *FactoryService) buildSessionEditableFactoryReplacement(
-	ctx context.Context,
-	sessionRootDir string,
-	factoryDir string,
-	sessionID string,
-	name factoryapi.FactoryName,
-) (*replacementFactoryRuntime, error) {
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, sessionRootDir, factoryDir, sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
-	}
-	return replacement, nil
-}
 func (fs *FactoryService) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {
 	if fs == nil || fs.sessions == nil {
 		return factoryapi.ListFactorySessionsResponse{}, nil

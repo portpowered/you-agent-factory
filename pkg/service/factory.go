@@ -59,9 +59,9 @@ var ErrInvalidNamedFactoryName = apisurface.ErrInvalidNamedFactoryName
 // not be persisted or validated as a runnable runtime config.
 var ErrInvalidNamedFactory = apisurface.ErrInvalidNamedFactory
 
-// ErrCurrentNamedFactoryNotFound reports that no durable current-factory
-// pointer could be resolved for named-factory readback.
-var ErrCurrentNamedFactoryNotFound = apisurface.ErrCurrentNamedFactoryNotFound
+// ErrCurrentFactoryNotFound reports that no durable current-factory pointer
+// could be resolved for canonical current-factory reads.
+var ErrCurrentFactoryNotFound = apisurface.ErrCurrentFactoryNotFound
 
 type replacementFactoryRuntime struct {
 	dir            string

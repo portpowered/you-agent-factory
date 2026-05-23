@@ -80,7 +80,7 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 			if currentRuntime != nil && sameFactoryDir(currentRuntime.FactoryDir(), rootDir) {
 				return fs.serializeNamedFactory(apisurface.DefaultCurrentFactoryName, currentRuntime, true)
 			}
-			return factoryapi.Factory{}, ErrCurrentNamedFactoryNotFound
+			return factoryapi.Factory{}, ErrCurrentFactoryNotFound
 		}
 		return factoryapi.Factory{}, fmt.Errorf("read current factory pointer: %w", err)
 	}
@@ -117,6 +117,21 @@ func (fs *FactoryService) currentFactoryDefinitionVersionAtRoot(rootDir string, 
 		}
 		factoryDir = resolved
 	}
+	var workstationLoader factoryconfig.WorkstationLoader
+	if fs.cfg != nil {
+		workstationLoader = fs.cfg.WorkstationLoader
+	}
+	current, err := factoryconfig.LoadRuntimeConfig(factoryDir, workstationLoader)
+	if err != nil {
+		return factoryapi.HybridLogicalTimestamp{}, fmt.Errorf("load current factory definition: %w", err)
+	}
+	if current.FactoryConfig().Version != nil {
+		version := current.FactoryConfig().Version
+		return factoryapi.HybridLogicalTimestamp{
+			Logical:  version.Logical,
+			Physical: version.Physical.UTC(),
+		}, nil
+	}
 
 	info, err := os.Stat(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
 	if err != nil {
@@ -131,6 +146,19 @@ func (fs *FactoryService) currentFactoryDefinitionVersionAtRoot(rootDir string, 
 		Logical:  logical,
 		Physical: modified,
 	}, nil
+}
+
+func (fs *FactoryService) withCurrentFactoryVersion(
+	rootDir string,
+	name factoryapi.FactoryName,
+	serialized factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	version, err := fs.currentFactoryDefinitionVersionAtRoot(rootDir, name)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	serialized.Version = &version
+	return serialized, nil
 }
 
 func (fs *FactoryService) serializeNamedFactory(

@@ -16,25 +16,23 @@ import (
 func (fs *FactoryService) prepareEditableFactoryDefinitionSave(
 	sessionRootDir string,
 	current factoryapi.Factory,
-	request factoryapi.SaveEditableFactoryDefinitionRequest,
-) (string, []byte, error) {
+	request factoryapi.Factory,
+) (string, factoryapi.Factory, error) {
 	if current.Name == apisurface.DefaultCurrentFactoryName {
-		return "", nil, ErrCurrentNamedFactoryNotFound
+		return "", factoryapi.Factory{}, ErrCurrentFactoryNotFound
 	}
-	if request.FactoryDefinition.Name != current.Name {
-		return "", nil, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
+	if request.Name != current.Name {
+		return "", factoryapi.Factory{}, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
 	}
-	if err := apisurface.ValidateWritableNamedFactoryName(request.FactoryDefinition.Name); err != nil {
-		return "", nil, err
+	if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
+		return "", factoryapi.Factory{}, err
 	}
-	if err := validateEditableFactoryTopology(request.FactoryDefinition); err != nil {
-		return "", nil, err
+	sanitized := request
+	sanitized.Version = nil
+	if err := validateEditableFactoryTopology(sanitized); err != nil {
+		return "", factoryapi.Factory{}, err
 	}
-	payload, err := json.Marshal(request.FactoryDefinition)
-	if err != nil {
-		return "", nil, fmt.Errorf("marshal editable factory payload: %w", err)
-	}
-	return sessionRootDir, payload, nil
+	return sessionRootDir, sanitized, nil
 }
 
 func (fs *FactoryService) replaceEditableFactoryDefinition(
@@ -84,7 +82,7 @@ func (fs *FactoryService) requireFreshEditableFactoryVersionAtRoot(baseVersion *
 	}
 	if compareEditableFactoryVersions(*baseVersion, currentVersion) < 0 {
 		return fmt.Errorf("%w: base version logical=%d physical=%s current logical=%d physical=%s",
-			apisurface.ErrEditableFactoryVersionStale,
+			apisurface.ErrFactoryVersionStale,
 			baseVersion.Logical,
 			baseVersion.Physical.UTC().Format(time.RFC3339Nano),
 			currentVersion.Logical,
@@ -92,6 +90,37 @@ func (fs *FactoryService) requireFreshEditableFactoryVersionAtRoot(baseVersion *
 		)
 	}
 	return nil
+}
+
+func nextEditableFactoryVersion(
+	current *factoryapi.HybridLogicalTimestamp,
+	now time.Time,
+) factoryapi.HybridLogicalTimestamp {
+	physical := now.UTC()
+	logical := int64(1)
+	if current != nil {
+		logical = current.Logical + 1
+		if !physical.After(current.Physical.UTC()) {
+			physical = current.Physical.UTC().Add(time.Nanosecond)
+		}
+	}
+	return factoryapi.HybridLogicalTimestamp{
+		Logical:  logical,
+		Physical: physical,
+	}
+}
+
+func marshalPersistedFactoryPayload(
+	sanitized factoryapi.Factory,
+	version factoryapi.HybridLogicalTimestamp,
+) ([]byte, error) {
+	persisted := sanitized
+	persisted.Version = &version
+	payload, err := json.Marshal(persisted)
+	if err != nil {
+		return nil, fmt.Errorf("marshal editable factory payload: %w", err)
+	}
+	return payload, nil
 }
 
 func compareEditableFactoryVersions(left, right factoryapi.HybridLogicalTimestamp) int {
