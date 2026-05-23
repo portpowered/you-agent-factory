@@ -360,19 +360,19 @@ func TestGetEditableCurrentFactoryDefinitionBySessionId_ReturnsSessionDefinition
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-2/factory/editable-definition", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-2/factory", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET editable-definition status = %d, want 200: %s", rec.Code, rec.Body.String())
+		t.Fatalf("GET factory status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	var response factoryapi.EditableFactoryDefinition
+	var response factoryapi.Factory
 	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
-		t.Fatalf("decode editable-definition response: %v", err)
+		t.Fatalf("decode factory response: %v", err)
 	}
-	if response.FactoryDefinition.Name != "beta" || response.Version != sessionVersion {
-		t.Fatalf("editable-definition response = %#v, want beta/%#v", response, sessionVersion)
+	if response.Name != "beta" || response.Version == nil || *response.Version != sessionVersion {
+		t.Fatalf("factory response = %#v, want beta/%#v", response, sessionVersion)
 	}
 }
 
@@ -394,14 +394,14 @@ func TestSaveEditableCurrentFactoryDefinitionBySessionId_SubmitsToTargetedSessio
 		},
 	})
 
-	body := `{"baseVersion":{"physical":"1970-01-01T00:00:00.000000002Z","logical":2},"factoryDefinition":{"name":"beta","workTypes":[],"workstations":[],"workers":[]}}`
-	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/session-2/factory/editable-definition", bytes.NewBufferString(body))
+	body := `{"name":"beta","version":{"physical":"1970-01-01T00:00:00.000000002Z","logical":2},"workTypes":[],"workstations":[],"workers":[]}`
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/session-2/factory", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("PUT editable-definition status = %d, want 200: %s", rec.Code, rec.Body.String())
+		t.Fatalf("PUT factory status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
 	if len(defaultFactory.SavedEditableFactories) != 0 {
 		t.Fatalf("default session save count = %d, want 0", len(defaultFactory.SavedEditableFactories))
@@ -409,7 +409,7 @@ func TestSaveEditableCurrentFactoryDefinitionBySessionId_SubmitsToTargetedSessio
 	if len(sessionFactory.SavedEditableFactories) != 1 {
 		t.Fatalf("session save count = %d, want 1", len(sessionFactory.SavedEditableFactories))
 	}
-	saved := sessionFactory.SavedEditableFactories[0].FactoryDefinition
+	saved := sessionFactory.SavedEditableFactories[0]
 	if saved.Name != "beta" {
 		t.Fatalf("saved factory = %#v, want beta definition", saved)
 	}
@@ -422,12 +422,12 @@ func TestEditableCurrentFactoryDefinitionBySessionId_UnknownSessionReturnsNotFou
 		},
 	})
 
-	getReq := httptest.NewRequest(http.MethodGet, "/factory-sessions/missing-session/factory/editable-definition", nil)
+	getReq := httptest.NewRequest(http.MethodGet, "/factory-sessions/missing-session/factory", nil)
 	getRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(getRec, getReq)
 	assertJSONError(t, getRec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
 
-	putReq := httptest.NewRequest(http.MethodPut, "/factory-sessions/missing-session/factory/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta"}}`))
+	putReq := httptest.NewRequest(http.MethodPut, "/factory-sessions/missing-session/factory", bytes.NewBufferString(`{"name":"beta"}`))
 	putReq.Header.Set("Content-Type", "application/json")
 	putRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(putRec, putReq)

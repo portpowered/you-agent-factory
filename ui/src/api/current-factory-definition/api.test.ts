@@ -100,7 +100,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
       workTypes: [],
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/factory-sessions/~default/factory/editable-definition",
+      "/factory-sessions/~default/factory",
       {
         method: "GET",
       },
@@ -179,7 +179,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "/factory-sessions/session-2/factory/editable-definition",
+      "/factory-sessions/session-2/factory",
       {
         method: "GET",
       },
@@ -583,18 +583,16 @@ describe("getCurrentEditableFactoryDefinition", () => {
     );
 
     expect(fetch).toHaveBeenCalledWith(
-      "/factory-sessions/~default/factory/editable-definition",
+      "/factory-sessions/~default/factory",
       expect.objectContaining({
         body: JSON.stringify({
-          baseVersion: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
             logical: 9,
             physical: "2026-05-18T14:25:00Z",
-          },
-          factoryDefinition: {
-            name: "Current Factory",
-            workers: [],
-            workstations: [],
-            workTypes: [],
           },
         }),
         headers: {
@@ -647,7 +645,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
     );
 
     expect(fetch).toHaveBeenCalledWith(
-      "/factory-sessions/session-2/factory/editable-definition",
+      "/factory-sessions/session-2/factory",
       expect.objectContaining({
         method: "PUT",
       }),

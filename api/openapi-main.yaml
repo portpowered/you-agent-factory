@@ -563,10 +563,10 @@ paths:
         - Factory
       operationId: getCurrentFactory
       summary: Get current factory
-      description: Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
+      description: Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Current-factory responses include server-managed version metadata for replacement saves. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
       responses:
         '200':
-          description: Current active factory or the active default root runtime when no current-factory pointer exists yet.
+          description: Current active factory and version metadata, or the active default root runtime when no current-factory pointer exists yet.
           content:
             application/json:
               schema:
@@ -604,18 +604,45 @@ paths:
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+    put:
+      tags:
+        - Factory
+      operationId: saveCurrentFactory
+      summary: Save current factory
+      description: Submits one complete replacement for the current factory definition. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Factory'
+      responses:
+        '200':
+          description: Saved current factory definition and new version metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Factory'
+        '400':
+          $ref: '#/components/responses/SaveCurrentFactoryBadRequest'
+        '409':
+          $ref: '#/components/responses/SaveCurrentFactoryConflict'
+        '404':
+          $ref: '#/components/responses/CurrentFactoryNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/factory:
     get:
       tags:
         - Factory
       operationId: getCurrentFactoryBySessionId
       summary: Get current factory for one session
-      description: Returns the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      description: Returns the current factory definition owned by the explicitly selected live session together with server-managed version metadata for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
-          description: Current active factory definition for the targeted session.
+          description: Current active factory definition and version metadata for the targeted session.
           content:
             application/json:
               schema:
@@ -624,32 +651,12 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factory-sessions/{session_id}/factory/editable-definition:
-    get:
-      tags:
-        - Factory
-      operationId: getEditableCurrentFactoryDefinitionBySessionId
-      summary: Get editable current factory definition for one session
-      description: Returns the complete current factory definition for graph editing together with version metadata for the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
-      parameters:
-        - $ref: '#/components/parameters/SessionID'
-      responses:
-        '200':
-          description: Editable current factory definition and version metadata for the targeted session.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EditableFactoryDefinition'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
     put:
       tags:
         - Factory
-      operationId: saveEditableCurrentFactoryDefinitionBySessionId
-      summary: Save editable current factory definition for one session
-      description: Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      operationId: saveCurrentFactoryBySessionId
+      summary: Save current factory for one session
+      description: Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -657,18 +664,18 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SaveEditableFactoryDefinitionRequest'
+              $ref: '#/components/schemas/Factory'
       responses:
         '200':
-          description: Saved editable factory definition and new version metadata for the targeted session.
+          description: Saved current factory definition and new version metadata for the targeted session.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EditableFactoryDefinition'
+                $ref: '#/components/schemas/Factory'
         '400':
-          $ref: '#/components/responses/SaveEditableFactoryDefinitionBadRequest'
+          $ref: '#/components/responses/SaveCurrentFactoryBadRequest'
         '409':
-          $ref: '#/components/responses/SaveEditableFactoryDefinitionConflict'
+          $ref: '#/components/responses/SaveCurrentFactoryConflict'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -694,51 +701,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PromptTemplateContract'
-        '404':
-          $ref: '#/components/responses/CurrentFactoryNotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-  /factory/~current/editable-definition:
-    get:
-      tags:
-        - Factory
-      operationId: getEditableCurrentFactoryDefinition
-      summary: Get editable current factory definition
-      description: Returns the complete current factory definition for graph editing together with hybrid logical timestamp metadata clients must carry into saves for stale-edit detection.
-      responses:
-        '200':
-          description: Editable current factory definition and version metadata.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EditableFactoryDefinition'
-        '404':
-          $ref: '#/components/responses/CurrentFactoryNotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-    put:
-      tags:
-        - Factory
-      operationId: saveEditableCurrentFactoryDefinition
-      summary: Save editable current factory definition
-      description: Submits one complete replacement for the current factory definition. The payload preserves all untouched fields because the full Factory contract is saved through the same canonical factory persistence path used by named-factory activation.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SaveEditableFactoryDefinitionRequest'
-      responses:
-        '200':
-          description: Saved editable factory definition and new version metadata.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EditableFactoryDefinition'
-        '400':
-          $ref: '#/components/responses/SaveEditableFactoryDefinitionBadRequest'
-        '409':
-          $ref: '#/components/responses/SaveEditableFactoryDefinitionConflict'
         '404':
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
@@ -893,8 +855,8 @@ components:
                 message: Current named factory not found.
                 family: NOT_FOUND
                 code: NOT_FOUND
-    SaveEditableFactoryDefinitionBadRequest:
-      description: Editable factory definition save request failed validation.
+    SaveCurrentFactoryBadRequest:
+      description: Current factory save request failed validation.
       content:
         application/json:
           schema:
@@ -908,14 +870,23 @@ components:
                 code: INVALID_FACTORY
                 targets:
                   - kind: form
-                    field: factoryDefinition
-    SaveEditableFactoryDefinitionConflict:
-      description: Editable factory definition could not be saved because the runtime or submitted version is not safe to replace.
+                    field: factory
+    SaveCurrentFactoryConflict:
+      description: Current factory could not be saved because the runtime or submitted version is not safe to replace.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           examples:
+            staleFactoryVersion:
+              summary: Submitted version is stale.
+              value:
+                message: Current factory definition is stale. Refresh the graph before saving.
+                family: CONFLICT
+                code: STALE_FACTORY_VERSION
+                targets:
+                  - kind: save
+                    id: stale-version
             factoryNotIdle:
               summary: Runtime is not idle.
               value:
@@ -996,10 +967,6 @@ components:
       $ref: './components/schemas/api/ErrorTarget.yaml'
     HybridLogicalTimestamp:
       $ref: './components/schemas/api/HybridLogicalTimestamp.yaml'
-    EditableFactoryDefinition:
-      $ref: './components/schemas/api/EditableFactoryDefinition.yaml'
-    SaveEditableFactoryDefinitionRequest:
-      $ref: './components/schemas/api/SaveEditableFactoryDefinitionRequest.yaml'
     ProviderSessionDetailResponse:
       $ref: './components/schemas/api/ProviderSessionDetailResponse.yaml'
     FactorySessionTargetRef:

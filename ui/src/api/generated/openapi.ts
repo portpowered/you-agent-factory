@@ -385,10 +385,14 @@ export interface paths {
         };
         /**
          * Get current factory
-         * @description Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
+         * @description Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Current-factory responses include server-managed version metadata for replacement saves. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
          */
         get: operations["getCurrentFactory"];
-        put?: never;
+        /**
+         * Save current factory
+         * @description Submits one complete replacement for the current factory definition. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection.
+         */
+        put: operations["saveCurrentFactory"];
         post?: never;
         delete?: never;
         options?: never;
@@ -405,34 +409,14 @@ export interface paths {
         };
         /**
          * Get current factory for one session
-         * @description Returns the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+         * @description Returns the current factory definition owned by the explicitly selected live session together with server-managed version metadata for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
          */
         get: operations["getCurrentFactoryBySessionId"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/factory-sessions/{session_id}/factory/editable-definition": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
         /**
-         * Get editable current factory definition for one session
-         * @description Returns the complete current factory definition for graph editing together with version metadata for the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+         * Save current factory for one session
+         * @description Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
          */
-        get: operations["getEditableCurrentFactoryDefinitionBySessionId"];
-        /**
-         * Save editable current factory definition for one session
-         * @description Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
-         */
-        put: operations["saveEditableCurrentFactoryDefinitionBySessionId"];
+        put: operations["saveCurrentFactoryBySessionId"];
         post?: never;
         delete?: never;
         options?: never;
@@ -453,30 +437,6 @@ export interface paths {
          */
         get: operations["getCurrentFactoryWorkstationPromptTemplateContract"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/factory/~current/editable-definition": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get editable current factory definition
-         * @description Returns the complete current factory definition for graph editing together with hybrid logical timestamp metadata clients must carry into saves for stale-edit detection.
-         */
-        get: operations["getEditableCurrentFactoryDefinition"];
-        /**
-         * Save editable current factory definition
-         * @description Submits one complete replacement for the current factory definition. The payload preserves all untouched fields because the full Factory contract is saved through the same canonical factory persistence path used by named-factory activation.
-         */
-        put: operations["saveEditableCurrentFactoryDefinition"];
         post?: never;
         delete?: never;
         options?: never;
@@ -768,14 +728,6 @@ export interface components {
              * @description UTC physical timestamp component for the persisted factory definition version.
              */
             physical: string;
-        };
-        EditableFactoryDefinition: {
-            factoryDefinition: components["schemas"]["Factory"];
-            version: components["schemas"]["HybridLogicalTimestamp"];
-        };
-        SaveEditableFactoryDefinitionRequest: {
-            factoryDefinition: components["schemas"]["Factory"];
-            baseVersion?: components["schemas"]["HybridLogicalTimestamp"];
         };
         ProviderSessionDetailResponse: {
             providerSession: components["schemas"]["LoadableProviderSessionRef"];
@@ -1618,6 +1570,8 @@ export interface components {
             factoryDirectory?: string;
             /** @description Original source directory for record/replay and drift diagnostics. */
             sourceDirectory?: string;
+            /** @description Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology. */
+            version?: components["schemas"]["HybridLogicalTimestamp"];
             /** @description Free-form factory-level metadata carried through runtime serialization and replay diagnostics. */
             metadata?: components["schemas"]["StringMap"];
             /** @description Named input kinds accepted by the factory. The default input type is implicit and must not be declared. */
@@ -2277,8 +2231,8 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Editable factory definition save request failed validation. */
-        SaveEditableFactoryDefinitionBadRequest: {
+        /** @description Current factory save request failed validation. */
+        SaveCurrentFactoryBadRequest: {
             headers: {
                 [name: string]: unknown;
             };
@@ -2286,8 +2240,8 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Editable factory definition could not be saved because the runtime or submitted version is not safe to replace. */
-        SaveEditableFactoryDefinitionConflict: {
+        /** @description Current factory could not be saved because the runtime or submitted version is not safe to replace. */
+        SaveCurrentFactoryConflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -2895,7 +2849,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current active factory or the active default root runtime when no current-factory pointer exists yet. */
+            /** @description Current active factory and version metadata, or the active default root runtime when no current-factory pointer exists yet. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2905,6 +2859,34 @@ export interface operations {
                 };
             };
             404: components["responses"]["CurrentFactoryNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    saveCurrentFactory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Factory"];
+            };
+        };
+        responses: {
+            /** @description Saved current factory definition and new version metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Factory"];
+                };
+            };
+            400: components["responses"]["SaveCurrentFactoryBadRequest"];
+            404: components["responses"]["CurrentFactoryNotFound"];
+            409: components["responses"]["SaveCurrentFactoryConflict"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -2920,7 +2902,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current active factory definition for the targeted session. */
+            /** @description Current active factory definition and version metadata for the targeted session. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2933,32 +2915,7 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    getEditableCurrentFactoryDefinitionBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Editable current factory definition and version metadata for the targeted session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EditableFactoryDefinition"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
-    };
-    saveEditableCurrentFactoryDefinitionBySessionId: {
+    saveCurrentFactoryBySessionId: {
         parameters: {
             query?: never;
             header?: never;
@@ -2970,22 +2927,22 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SaveEditableFactoryDefinitionRequest"];
+                "application/json": components["schemas"]["Factory"];
             };
         };
         responses: {
-            /** @description Saved editable factory definition and new version metadata for the targeted session. */
+            /** @description Saved current factory definition and new version metadata for the targeted session. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EditableFactoryDefinition"];
+                    "application/json": components["schemas"]["Factory"];
                 };
             };
-            400: components["responses"]["SaveEditableFactoryDefinitionBadRequest"];
+            400: components["responses"]["SaveCurrentFactoryBadRequest"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["SaveEditableFactoryDefinitionConflict"];
+            409: components["responses"]["SaveCurrentFactoryConflict"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -3011,56 +2968,6 @@ export interface operations {
                 };
             };
             404: components["responses"]["CurrentFactoryNotFound"];
-            500: components["responses"]["InternalError"];
-        };
-    };
-    getEditableCurrentFactoryDefinition: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Editable current factory definition and version metadata. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EditableFactoryDefinition"];
-                };
-            };
-            404: components["responses"]["CurrentFactoryNotFound"];
-            500: components["responses"]["InternalError"];
-        };
-    };
-    saveEditableCurrentFactoryDefinition: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SaveEditableFactoryDefinitionRequest"];
-            };
-        };
-        responses: {
-            /** @description Saved editable factory definition and new version metadata. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EditableFactoryDefinition"];
-                };
-            };
-            400: components["responses"]["SaveEditableFactoryDefinitionBadRequest"];
-            404: components["responses"]["CurrentFactoryNotFound"];
-            409: components["responses"]["SaveEditableFactoryDefinitionConflict"];
             500: components["responses"]["InternalError"];
         };
     };

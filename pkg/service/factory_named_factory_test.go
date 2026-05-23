@@ -585,7 +585,7 @@ func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPa
 	}
 }
 
-func TestFactoryService_GetEditableFactoryDefinition_IncludesVersionMetadata(t *testing.T) {
+func TestFactoryService_GetCurrentNamedFactory_IncludesVersionMetadata(t *testing.T) {
 	rootDir := t.TempDir()
 
 	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
@@ -604,19 +604,19 @@ func TestFactoryService_GetEditableFactoryDefinition_IncludesVersionMetadata(t *
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	editable, err := svc.GetEditableFactoryDefinition(context.Background())
+	current, err := svc.GetCurrentNamedFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetEditableFactoryDefinition: %v", err)
+		t.Fatalf("GetCurrentNamedFactory: %v", err)
 	}
-	if editable.FactoryDefinition.Name != factoryapi.FactoryName("alpha") {
-		t.Fatalf("editable factory name = %q, want alpha", editable.FactoryDefinition.Name)
+	if current.Name != factoryapi.FactoryName("alpha") {
+		t.Fatalf("current factory name = %q, want alpha", current.Name)
 	}
-	if editable.Version.Logical <= 0 || editable.Version.Physical.IsZero() {
-		t.Fatalf("editable version = %#v, want logical and physical components", editable.Version)
+	if current.Version == nil || current.Version.Logical <= 0 || current.Version.Physical.IsZero() {
+		t.Fatalf("current factory version = %#v, want logical and physical components", current.Version)
 	}
 }
 
-func TestFactoryService_SaveEditableFactoryDefinition_ReplacesCurrentDefinition(t *testing.T) {
+func TestFactoryService_SaveCurrentFactory_ReplacesCurrentDefinition(t *testing.T) {
 	rootDir := t.TempDir()
 
 	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
@@ -636,16 +636,14 @@ func TestFactoryService_SaveEditableFactoryDefinition_ReplacesCurrentDefinition(
 	}
 
 	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
-	saved, err := svc.SaveEditableFactoryDefinition(context.Background(), factoryapi.SaveEditableFactoryDefinitionRequest{
-		FactoryDefinition: replacement,
-	})
+	saved, err := svc.SaveCurrentFactory(context.Background(), replacement)
 	if err != nil {
-		t.Fatalf("SaveEditableFactoryDefinition: %v", err)
+		t.Fatalf("SaveCurrentFactory: %v", err)
 	}
-	if saved.FactoryDefinition.WorkTypes == nil || len(*saved.FactoryDefinition.WorkTypes) != 1 || (*saved.FactoryDefinition.WorkTypes)[0].Name != "story" {
-		t.Fatalf("saved work types = %#v, want story", saved.FactoryDefinition.WorkTypes)
+	if saved.WorkTypes == nil || len(*saved.WorkTypes) != 1 || (*saved.WorkTypes)[0].Name != "story" {
+		t.Fatalf("saved work types = %#v, want story", saved.WorkTypes)
 	}
-	if saved.Version.Logical <= 0 || saved.Version.Physical.IsZero() {
+	if saved.Version == nil || saved.Version.Logical <= 0 || saved.Version.Physical.IsZero() {
 		t.Fatalf("saved version = %#v, want logical and physical components", saved.Version)
 	}
 
@@ -656,10 +654,10 @@ func TestFactoryService_SaveEditableFactoryDefinition_ReplacesCurrentDefinition(
 	if current.WorkTypes == nil || (*current.WorkTypes)[0].Name != "story" {
 		t.Fatalf("current work types after save = %#v, want story", current.WorkTypes)
 	}
-	assertCurrentFactoryPointer(t, rootDir, "alpha", "after editable save")
+	assertCurrentFactoryPointer(t, rootDir, "alpha", "after current factory save")
 }
 
-func TestFactoryService_SaveEditableFactoryDefinition_RejectsStaleBaseVersion(t *testing.T) {
+func TestFactoryService_SaveCurrentFactory_RejectsStaleBaseVersion(t *testing.T) {
 	rootDir := t.TempDir()
 
 	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
@@ -678,36 +676,37 @@ func TestFactoryService_SaveEditableFactoryDefinition_RejectsStaleBaseVersion(t 
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	editable, err := svc.GetEditableFactoryDefinition(context.Background())
+	current, err := svc.GetCurrentNamedFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetEditableFactoryDefinition: %v", err)
+		t.Fatalf("GetCurrentNamedFactory: %v", err)
 	}
 
 	factoryJSON := filepath.Join(rootDir, "alpha", interfaces.FactoryConfigFile)
-	newer := editable.Version.Physical.Add(time.Second)
+	if current.Version == nil {
+		t.Fatal("expected current factory version metadata")
+	}
+	newer := current.Version.Physical.Add(time.Second)
 	if err := os.Chtimes(factoryJSON, newer, newer); err != nil {
 		t.Fatalf("advance factory version: %v", err)
 	}
 
 	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
-	_, err = svc.SaveEditableFactoryDefinition(context.Background(), factoryapi.SaveEditableFactoryDefinitionRequest{
-		FactoryDefinition: replacement,
-		BaseVersion:       &editable.Version,
-	})
+	replacement.Version = current.Version
+	_, err = svc.SaveCurrentFactory(context.Background(), replacement)
 	if !errors.Is(err, apisurface.ErrEditableFactoryVersionStale) {
-		t.Fatalf("SaveEditableFactoryDefinition error = %v, want stale version", err)
+		t.Fatalf("SaveCurrentFactory error = %v, want stale version", err)
 	}
 
-	current, err := svc.GetCurrentNamedFactory(context.Background())
+	currentAfterStaleSave, err := svc.GetCurrentNamedFactory(context.Background())
 	if err != nil {
 		t.Fatalf("GetCurrentNamedFactory after stale save: %v", err)
 	}
-	if current.WorkTypes == nil || (*current.WorkTypes)[0].Name != "task" {
-		t.Fatalf("current work types after stale save = %#v, want unchanged task", current.WorkTypes)
+	if currentAfterStaleSave.WorkTypes == nil || (*currentAfterStaleSave.WorkTypes)[0].Name != "task" {
+		t.Fatalf("current work types after stale save = %#v, want unchanged task", currentAfterStaleSave.WorkTypes)
 	}
 }
 
-func TestFactoryService_SaveEditableFactoryDefinition_RejectsDuplicateAndDanglingTopology(t *testing.T) {
+func TestFactoryService_SaveCurrentFactory_RejectsDuplicateAndDanglingTopology(t *testing.T) {
 	rootDir := t.TempDir()
 
 	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
@@ -734,12 +733,10 @@ func TestFactoryService_SaveEditableFactoryDefinition_RejectsDuplicateAndDanglin
 	(*replacement.Workstations)[0].Worker = "missing-worker"
 	(*replacement.Workstations)[0].Outputs = &[]factoryapi.WorkstationIO{{WorkType: "story", State: "missing-state"}}
 
-	_, err = svc.SaveEditableFactoryDefinition(context.Background(), factoryapi.SaveEditableFactoryDefinitionRequest{
-		FactoryDefinition: replacement,
-	})
+	_, err = svc.SaveCurrentFactory(context.Background(), replacement)
 	var topologyErr *apisurface.TopologyValidationError
 	if !errors.As(err, &topologyErr) {
-		t.Fatalf("SaveEditableFactoryDefinition error = %v, want topology validation error", err)
+		t.Fatalf("SaveCurrentFactory error = %v, want topology validation error", err)
 	}
 	if len(topologyErr.Targets) < 3 {
 		t.Fatalf("topology targets = %#v, want duplicate worker, missing worker, and dangling output targets", topologyErr.Targets)

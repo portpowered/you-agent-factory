@@ -15,8 +15,5 @@ export function factorySessionScopedPath(
   if (normalizedPath === "/factory/~current") {
     return `/factory-sessions/${encodeURIComponent(normalizedSessionID)}/factory`;
   }
-  if (normalizedPath === "/factory/~current/editable-definition") {
-    return `/factory-sessions/${encodeURIComponent(normalizedSessionID)}/factory/editable-definition`;
-  }
   return `/factory-sessions/${encodeURIComponent(normalizedSessionID)}${normalizedPath}`;
 }

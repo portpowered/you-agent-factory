@@ -640,13 +640,6 @@ type DispatchResponseEventPayload struct {
 	TransitionId                string                   `json:"transitionId"`
 }
 
-// EditableFactoryDefinition defines model for EditableFactoryDefinition.
-type EditableFactoryDefinition struct {
-	// FactoryDefinition Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	FactoryDefinition Factory                `json:"factoryDefinition"`
-	Version           HybridLogicalTimestamp `json:"version"`
-}
-
 // ErrorFamily Stable machine-readable error family for broader client grouping.
 type ErrorFamily string
 
@@ -706,7 +699,8 @@ type Factory struct {
 	SourceDirectory *string `json:"sourceDirectory,omitempty"`
 
 	// SupportingFiles Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
-	SupportingFiles *ResourceManifest `json:"supportingFiles,omitempty"`
+	SupportingFiles *ResourceManifest       `json:"supportingFiles,omitempty"`
+	Version         *HybridLogicalTimestamp `json:"version,omitempty"`
 
 	// WorkTypes Customer-authored work item categories and the lifecycle states each one can occupy.
 	WorkTypes *[]WorkType `json:"workTypes,omitempty"`
@@ -1784,14 +1778,6 @@ type SafeWorkDiagnostics struct {
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
 
-// SaveEditableFactoryDefinitionRequest defines model for SaveEditableFactoryDefinitionRequest.
-type SaveEditableFactoryDefinitionRequest struct {
-	BaseVersion *HybridLogicalTimestamp `json:"baseVersion,omitempty"`
-
-	// FactoryDefinition Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	FactoryDefinition Factory `json:"factoryDefinition"`
-}
-
 // ScriptExecutionOutcome Result category returned by one public script execution boundary.
 type ScriptExecutionOutcome string
 
@@ -2483,11 +2469,11 @@ type InternalError = ErrorResponse
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
 
-// SaveEditableFactoryDefinitionBadRequest defines model for SaveEditableFactoryDefinitionBadRequest.
-type SaveEditableFactoryDefinitionBadRequest = ErrorResponse
+// SaveCurrentFactoryBadRequest defines model for SaveCurrentFactoryBadRequest.
+type SaveCurrentFactoryBadRequest = ErrorResponse
 
-// SaveEditableFactoryDefinitionConflict defines model for SaveEditableFactoryDefinitionConflict.
-type SaveEditableFactoryDefinitionConflict = ErrorResponse
+// SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
+type SaveCurrentFactoryConflict = ErrorResponse
 
 // ListWorkBySessionIdParams defines parameters for ListWorkBySessionId.
 type ListWorkBySessionIdParams struct {
@@ -2549,8 +2535,8 @@ type CreateFactoryJSONRequestBody = Factory
 // OpenFactorySessionJSONRequestBody defines body for OpenFactorySession for application/json ContentType.
 type OpenFactorySessionJSONRequestBody = OpenFactorySessionRequest
 
-// SaveEditableCurrentFactoryDefinitionBySessionIdJSONRequestBody defines body for SaveEditableCurrentFactoryDefinitionBySessionId for application/json ContentType.
-type SaveEditableCurrentFactoryDefinitionBySessionIdJSONRequestBody = SaveEditableFactoryDefinitionRequest
+// SaveCurrentFactoryBySessionIdJSONRequestBody defines body for SaveCurrentFactoryBySessionId for application/json ContentType.
+type SaveCurrentFactoryBySessionIdJSONRequestBody = Factory
 
 // SubmitWorkBySessionIdJSONRequestBody defines body for SubmitWorkBySessionId for application/json ContentType.
 type SubmitWorkBySessionIdJSONRequestBody = SubmitWorkRequest
@@ -2558,8 +2544,8 @@ type SubmitWorkBySessionIdJSONRequestBody = SubmitWorkRequest
 // UpsertWorkRequestBySessionIdJSONRequestBody defines body for UpsertWorkRequestBySessionId for application/json ContentType.
 type UpsertWorkRequestBySessionIdJSONRequestBody = WorkRequest
 
-// SaveEditableCurrentFactoryDefinitionJSONRequestBody defines body for SaveEditableCurrentFactoryDefinition for application/json ContentType.
-type SaveEditableCurrentFactoryDefinitionJSONRequestBody = SaveEditableFactoryDefinitionRequest
+// SaveCurrentFactoryJSONRequestBody defines body for SaveCurrentFactory for application/json ContentType.
+type SaveCurrentFactoryJSONRequestBody = Factory
 
 // ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplate for application/json ContentType.
 type ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody = PromptTemplateValidationRequest
@@ -3136,12 +3122,9 @@ type ServerInterface interface {
 	// Get current factory for one session
 	// (GET /factory-sessions/{session_id}/factory)
 	GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
-	// Get editable current factory definition for one session
-	// (GET /factory-sessions/{session_id}/factory/editable-definition)
-	GetEditableCurrentFactoryDefinitionBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
-	// Save editable current factory definition for one session
-	// (PUT /factory-sessions/{session_id}/factory/editable-definition)
-	SaveEditableCurrentFactoryDefinitionBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Save current factory for one session
+	// (PUT /factory-sessions/{session_id}/factory)
+	SaveCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get runtime status for one session
 	// (GET /factory-sessions/{session_id}/status)
 	GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -3160,12 +3143,9 @@ type ServerInterface interface {
 	// Get current factory
 	// (GET /factory/~current)
 	GetCurrentFactory(w http.ResponseWriter, r *http.Request)
-	// Get editable current factory definition
-	// (GET /factory/~current/editable-definition)
-	GetEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request)
-	// Save editable current factory definition
-	// (PUT /factory/~current/editable-definition)
-	SaveEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request)
+	// Save current factory
+	// (PUT /factory/~current)
+	SaveCurrentFactory(w http.ResponseWriter, r *http.Request)
 	// Get workstation prompt-template contract
 	// (GET /factory/~current/workstations/{workstation_name}/prompt-template-contract)
 	GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request, workstationName string)
@@ -3344,8 +3324,8 @@ func (siw *ServerInterfaceWrapper) GetCurrentFactoryBySessionId(w http.ResponseW
 	handler.ServeHTTP(w, r)
 }
 
-// GetEditableCurrentFactoryDefinitionBySessionId operation middleware
-func (siw *ServerInterfaceWrapper) GetEditableCurrentFactoryDefinitionBySessionId(w http.ResponseWriter, r *http.Request) {
+// SaveCurrentFactoryBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) SaveCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
@@ -3359,32 +3339,7 @@ func (siw *ServerInterfaceWrapper) GetEditableCurrentFactoryDefinitionBySessionI
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEditableCurrentFactoryDefinitionBySessionId(w, r, sessionId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SaveEditableCurrentFactoryDefinitionBySessionId operation middleware
-func (siw *ServerInterfaceWrapper) SaveEditableCurrentFactoryDefinitionBySessionId(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "session_id" -------------
-	var sessionId SessionID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SaveEditableCurrentFactoryDefinitionBySessionId(w, r, sessionId)
+		siw.Handler.SaveCurrentFactoryBySessionId(w, r, sessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3594,25 +3549,11 @@ func (siw *ServerInterfaceWrapper) GetCurrentFactory(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
-// GetEditableCurrentFactoryDefinition operation middleware
-func (siw *ServerInterfaceWrapper) GetEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request) {
+// SaveCurrentFactory operation middleware
+func (siw *ServerInterfaceWrapper) SaveCurrentFactory(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEditableCurrentFactoryDefinition(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SaveEditableCurrentFactoryDefinition operation middleware
-func (siw *ServerInterfaceWrapper) SaveEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SaveEditableCurrentFactoryDefinition(w, r)
+		siw.Handler.SaveCurrentFactory(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4089,9 +4030,7 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory", wrapper.GetCurrentFactoryBySessionId).Methods("GET")
 
-	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/editable-definition", wrapper.GetEditableCurrentFactoryDefinitionBySessionId).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/editable-definition", wrapper.SaveEditableCurrentFactoryDefinitionBySessionId).Methods("PUT")
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory", wrapper.SaveCurrentFactoryBySessionId).Methods("PUT")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/status", wrapper.GetStatusBySessionId).Methods("GET")
 
@@ -4105,9 +4044,7 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory/~current", wrapper.GetCurrentFactory).Methods("GET")
 
-	r.HandleFunc(options.BaseURL+"/factory/~current/editable-definition", wrapper.GetEditableCurrentFactoryDefinition).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factory/~current/editable-definition", wrapper.SaveEditableCurrentFactoryDefinition).Methods("PUT")
+	r.HandleFunc(options.BaseURL+"/factory/~current", wrapper.SaveCurrentFactory).Methods("PUT")
 
 	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-contract", wrapper.GetCurrentFactoryWorkstationPromptTemplateContract).Methods("GET")
 

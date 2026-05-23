@@ -132,9 +132,9 @@ func TestNamedFactoryAPI_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFacto
 	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
 	_, initialStructure := requireFunctionalEventStreamPrelude(t, stream)
 
-	saved := saveEditableCurrentFactoryDefinition(t, server.URL(), `{"factoryDefinition":`+functionalNamedFactoryBody("alpha", "story")+`}`)
-	if saved.FactoryDefinition.WorkTypes == nil || len(*saved.FactoryDefinition.WorkTypes) != 1 || (*saved.FactoryDefinition.WorkTypes)[0].Name != "story" {
-		t.Fatalf("saved editable work types = %#v, want story", saved.FactoryDefinition.WorkTypes)
+	saved := saveCurrentFactoryDefinition(t, server.URL(), functionalNamedFactoryBody("alpha", "story"))
+	if saved.WorkTypes == nil || len(*saved.WorkTypes) != 1 || (*saved.WorkTypes)[0].Name != "story" {
+		t.Fatalf("saved current factory work types = %#v, want story", saved.WorkTypes)
 	}
 
 	change := factoryapi.FactoryEvent{}
@@ -207,26 +207,26 @@ func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.Factory {
 	return current
 }
 
-func saveEditableCurrentFactoryDefinition(t *testing.T, serverURL, body string) factoryapi.EditableFactoryDefinition {
+func saveCurrentFactoryDefinition(t *testing.T, serverURL, body string) factoryapi.Factory {
 	t.Helper()
 
-	req, err := http.NewRequest(http.MethodPut, serverURL+"/factory/~current/editable-definition", bytes.NewBufferString(body))
+	req, err := http.NewRequest(http.MethodPut, serverURL+"/factory/~current", bytes.NewBufferString(body))
 	if err != nil {
-		t.Fatalf("new editable-definition request: %v", err)
+		t.Fatalf("new current factory request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("PUT /factory/~current/editable-definition: %v", err)
+		t.Fatalf("PUT /factory/~current: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		t.Fatalf("PUT /factory/~current/editable-definition status = %d, want 200", resp.StatusCode)
+		t.Fatalf("PUT /factory/~current status = %d, want 200", resp.StatusCode)
 	}
 
-	var saved factoryapi.EditableFactoryDefinition
-	decodeNamedFactoryJSONResponse(t, resp, &saved, "decode editable-definition save response")
+	var saved factoryapi.Factory
+	decodeNamedFactoryJSONResponse(t, resp, &saved, "decode current factory save response")
 	return saved
 }
 

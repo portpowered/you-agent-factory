@@ -34,10 +34,4 @@ describe("factorySessionScopedPath", () => {
       "/factory-sessions/session-beta/factory",
     );
   });
-
-  it("maps editable current-factory requests under the canonical session factory root", () => {
-    expect(
-      factorySessionScopedPath("/factory/~current/editable-definition", "session-beta"),
-    ).toBe("/factory-sessions/session-beta/factory/editable-definition");
-  });
 });

@@ -288,16 +288,16 @@ func TestGetEditableCurrentFactoryDefinition_ReturnsDefinitionAndVersion(t *test
 	}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodGet, "/factory/~current/editable-definition", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory/~current", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	editable := decodeJSONResponse[factoryapi.EditableFactoryDefinition](t, rec)
-	if editable.FactoryDefinition.Name != factoryapi.FactoryName("beta") || editable.Version.Logical != 42 || !editable.Version.Physical.Equal(versionTime) {
-		t.Fatalf("editable response = %#v, want beta @ logical 42", editable)
+	current := decodeJSONResponse[factoryapi.Factory](t, rec)
+	if current.Name != factoryapi.FactoryName("beta") || current.Version == nil || current.Version.Logical != 42 || !current.Version.Physical.Equal(versionTime) {
+		t.Fatalf("current factory response = %#v, want beta @ logical 42", current)
 	}
 }
 
@@ -309,7 +309,7 @@ func TestSaveEditableCurrentFactoryDefinition_SubmitsCompleteDefinitionAndReturn
 	}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta","metadata":{"owner":"graph-editor"},"workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}]}}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current", bytes.NewBufferString(`{"name":"beta","metadata":{"owner":"graph-editor"},"workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}]}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -319,20 +319,20 @@ func TestSaveEditableCurrentFactoryDefinition_SubmitsCompleteDefinitionAndReturn
 	if len(mf.SavedEditableFactories) != 1 {
 		t.Fatalf("saved editable factories = %d, want 1", len(mf.SavedEditableFactories))
 	}
-	if saved := mf.SavedEditableFactories[0].FactoryDefinition; saved.Metadata == nil || (*saved.Metadata)["owner"] != "graph-editor" {
+	if saved := mf.SavedEditableFactories[0]; saved.Metadata == nil || (*saved.Metadata)["owner"] != "graph-editor" {
 		t.Fatalf("saved metadata = %#v, want owner graph-editor", saved.Metadata)
 	}
 
-	editable := decodeJSONResponse[factoryapi.EditableFactoryDefinition](t, rec)
-	if editable.Version.Logical != 44 || !editable.Version.Physical.Equal(versionTime) {
-		t.Fatalf("save editable version = %#v, want logical 44 physical %s", editable.Version, versionTime)
+	saved := decodeJSONResponse[factoryapi.Factory](t, rec)
+	if saved.Version == nil || saved.Version.Logical != 44 || !saved.Version.Physical.Equal(versionTime) {
+		t.Fatalf("save current factory version = %#v, want logical 44 physical %s", saved.Version, versionTime)
 	}
 }
 
 func TestSaveEditableCurrentFactoryDefinition_MapsValidationErrorsToTargets(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{SaveEditableFactoryErr: apisurface.ErrInvalidNamedFactory})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta"}}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current", bytes.NewBufferString(`{"name":"beta"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -341,18 +341,18 @@ func TestSaveEditableCurrentFactoryDefinition_MapsValidationErrorsToTargets(t *t
 	if rec.Code != http.StatusBadRequest || response.Code != factoryapi.ErrorResponseCode("INVALID_FACTORY") || response.Message != "Factory payload is not a valid Agent Factory definition." {
 		t.Fatalf("validation response = %#v status=%d", response, rec.Code)
 	}
-	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Kind != "form" || (*response.Targets)[0].Field == nil || *(*response.Targets)[0].Field != "factoryDefinition" {
-		t.Fatalf("error targets = %#v, want form factoryDefinition target", response.Targets)
+	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Kind != "form" || (*response.Targets)[0].Field == nil || *(*response.Targets)[0].Field != "factory" {
+		t.Fatalf("error targets = %#v, want form factory target", response.Targets)
 	}
 }
 
 func TestSaveEditableCurrentFactoryDefinition_MapsTopologyValidationTargets(t *testing.T) {
-	field := "factoryDefinition.workstations[0].outputs[0]"
+	field := "factory.workstations[0].outputs[0]"
 	targetID := "process->story:missing-state"
 	target := factoryapi.ErrorTarget{Kind: "edge", Id: &targetID, Field: &field}
 	srv := newTestServer(&testutil.MockFactory{SaveEditableFactoryErr: apisurface.NewTopologyValidationError("dangling output", []factoryapi.ErrorTarget{target})})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta"}}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current", bytes.NewBufferString(`{"name":"beta"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -370,7 +370,7 @@ func TestSaveEditableCurrentFactoryDefinition_MapsTopologyValidationTargets(t *t
 func TestSaveEditableCurrentFactoryDefinition_MapsStaleVersion(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{SaveEditableFactoryErr: apisurface.ErrEditableFactoryVersionStale})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta"}}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current", bytes.NewBufferString(`{"name":"beta"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)

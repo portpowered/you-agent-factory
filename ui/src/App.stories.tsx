@@ -90,7 +90,7 @@ function buildEditableConfigurationDocument(
   factoryDefinition: FactoryValue = editableConfigurationFactoryDefinition,
 ) {
   return {
-    factoryDefinition,
+    ...factoryDefinition,
     version: {
       logical: 7,
       physical: "2026-05-20T10:00:00Z",
@@ -106,17 +106,17 @@ function submittedFactoryDefinitionBody(init?: RequestInit): FactoryValue {
     });
   }
 
-  const requestBody = JSON.parse(init.body) as {
-    factoryDefinition?: FactoryValue;
-  };
+  const requestBody = JSON.parse(init.body) as Record<string, unknown>;
+  const { version: _ignoredVersion, ...factoryDefinition } = requestBody;
 
-  return (
-    requestBody.factoryDefinition ??
-    buildEditableConfigurationFactoryDefinition({
-      prompt: "Browser verified prompt update.",
-      workerName: "planner",
-    })
-  );
+  if (typeof factoryDefinition.name === "string") {
+    return factoryDefinition as FactoryValue;
+  }
+
+  return buildEditableConfigurationFactoryDefinition({
+    prompt: "Browser verified prompt update.",
+    workerName: "planner",
+  });
 }
 
 function promptTemplateValidationResponse(init?: RequestInit) {
@@ -773,7 +773,7 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factory-sessions/~default/factory/editable-definition",
+          path: "/factory-sessions/~default/factory",
           response: {
             body: editableConfigurationDocument,
           },
@@ -813,7 +813,7 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factory-sessions/~default/factory/editable-definition",
+          path: "/factory-sessions/~default/factory",
           response: {
             body: editableConfigurationDocument,
           },
@@ -854,7 +854,7 @@ export const CurrentSelectionPromptHintVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factory-sessions/~default/factory/editable-definition",
+          path: "/factory-sessions/~default/factory",
           response: {
             body: editableConfigurationDocument,
           },

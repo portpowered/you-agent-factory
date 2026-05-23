@@ -32,8 +32,6 @@ const defaultFactorySessionID = "~default";
 const defaultEventsPath = `/factory-sessions/${defaultFactorySessionID}/events`;
 const defaultCurrentFactoryPath =
   `/factory-sessions/${defaultFactorySessionID}/factory`;
-const defaultEditableDefinitionPath =
-  `${defaultCurrentFactoryPath}/editable-definition`;
 const promptTemplateContractPathPattern =
   /^\/(?:factories\/~default\/)?factory\/~current\/workstations\/[^/]+\/prompt-template-contract$/;
 const promptTemplateValidationPathPattern =
@@ -347,9 +345,9 @@ async function startReplayServer(lines, options = {}) {
   let currentEditableFactoryDefinitionVersion =
     initialEditableFactoryDefinitionVersion;
 
-  function buildEditableFactoryDefinitionDocument() {
+  function buildCurrentFactoryDocument() {
     return {
-      factoryDefinition: currentFactoryDefinition,
+      ...currentFactoryDefinition,
       version: currentEditableFactoryDefinitionVersion,
     };
   }
@@ -402,7 +400,7 @@ async function startReplayServer(lines, options = {}) {
         "Access-Control-Allow-Origin": "*",
         "Content-Type": "application/json",
       });
-      response.end(JSON.stringify(currentFactoryDefinition));
+      response.end(JSON.stringify(buildCurrentFactoryDocument()));
       return;
     }
 
@@ -457,36 +455,7 @@ async function startReplayServer(lines, options = {}) {
       return;
     }
 
-    if (
-      request.url === defaultEditableDefinitionPath &&
-      request.method === "GET"
-    ) {
-      if (currentFactoryDefinition === null) {
-        response.writeHead(404, {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json",
-        });
-        response.end(
-          JSON.stringify({
-            code: "NOT_FOUND",
-            message: "The current editable factory definition is not available.",
-          }),
-        );
-        return;
-      }
-
-      response.writeHead(200, {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json",
-      });
-      response.end(JSON.stringify(buildEditableFactoryDefinitionDocument()));
-      return;
-    }
-
-    if (
-      request.url === defaultEditableDefinitionPath &&
-      request.method === "PUT"
-    ) {
+    if (request.url === defaultCurrentFactoryPath && request.method === "PUT") {
       let requestBody = "";
       request.setEncoding("utf8");
       request.on("data", (chunk) => {
@@ -494,7 +463,7 @@ async function startReplayServer(lines, options = {}) {
       });
       request.on("end", () => {
         const body = requestBody.length === 0 ? null : JSON.parse(requestBody);
-        if (!body || typeof body !== "object" || body.factoryDefinition == null) {
+        if (!body || typeof body !== "object" || body.name == null) {
           response.writeHead(400, {
             "Access-Control-Allow-Origin": "*",
             "Content-Type": "application/json",
@@ -502,19 +471,19 @@ async function startReplayServer(lines, options = {}) {
           response.end(
             JSON.stringify({
               code: "BAD_REQUEST",
-              message: "The editable factory definition payload is required.",
+              message: "The current factory payload is required.",
             }),
           );
           return;
         }
 
-        currentFactoryDefinition = body.factoryDefinition;
+        currentFactoryDefinition = body;
         bumpEditableFactoryDefinitionVersion();
         response.writeHead(200, {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json",
         });
-        response.end(JSON.stringify(buildEditableFactoryDefinitionDocument()));
+        response.end(JSON.stringify(buildCurrentFactoryDocument()));
       });
       return;
     }

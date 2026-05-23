@@ -13,6 +13,7 @@ type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
 type FactoryResourceRequirement = FactorySchemas["ResourceRequirement"];
 type FactoryRunnerID = FactorySchemas["RunnerID"];
+type FactoryVersion = FactorySchemas["HybridLogicalTimestamp"];
 type FactoryWorker = FactorySchemas["Worker"];
 type FactoryWorkState = FactorySchemas["WorkState"];
 type FactoryClassificationRoute = FactorySchemas["ClassificationRoute"];
@@ -32,6 +33,7 @@ const FACTORY_KEYS = new Set([
   "runner",
   "sourceDirectory",
   "supportingFiles",
+  "version",
   "workers",
   "workTypes",
   "workstations",
@@ -216,6 +218,7 @@ function decodeFactoryDefinition(
   const resources = readOptionalArray(value, "resources", path, decodeResource);
   const runner = readOptionalEnum(value, "runner", path, RUNNER_ID_VALUES);
   const supportingFiles = readOptionalObject(value, "supportingFiles", path, expectObject);
+  const version = readOptionalFactoryVersion(value, "version", path);
   const workers = readOptionalArray(value, "workers", path, decodeWorker);
   const workstations = readOptionalArray(value, "workstations", path, decodeWorkstation);
 
@@ -230,6 +233,9 @@ function decodeFactoryDefinition(
   }
   if (supportingFiles !== undefined) {
     factory.supportingFiles = supportingFiles as CanonicalFactoryDefinition["supportingFiles"];
+  }
+  if (version !== undefined) {
+    factory.version = version;
   }
   if (metadata !== undefined) {
     factory.metadata = metadata;
@@ -860,6 +866,30 @@ function readOptionalEnum<T extends string>(
   return item as T;
 }
 
+function readOptionalFactoryVersion(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+): FactoryVersion | undefined {
+  const item = value[key];
+  if (item === undefined || item === null) {
+    return undefined;
+  }
+  const record = expectObject(item, `${path}.${key}`);
+  const logical = record.logical;
+  const physical = record.physical;
+  if (typeof logical !== "number" || !Number.isFinite(logical)) {
+    throw new FactoryDefinitionAPIError(`${path}.${key}.logical must be a number.`);
+  }
+  if (typeof physical !== "string") {
+    throw new FactoryDefinitionAPIError(`${path}.${key}.physical must be a string.`);
+  }
+  return {
+    logical,
+    physical,
+  };
+}
+
 function readRequiredEnum<T extends string>(
   value: Record<string, unknown>,
   key: string,
@@ -885,14 +915,12 @@ function rejectUnknownKeys(
   allowedKeys: Set<string>,
   path: string,
 ): void {
-  for (const key of Object.keys(value)) {
-    if (allowedKeys.has(key)) {
-      continue;
-    }
-    console.log(`linvalid key for object ${path}.${key}`);
-    
-    throw new FactoryDefinitionAPIError(
-      `${path}.${key} is not allowed by the generated factory contract.`,
-    );
-  }
+	for (const key of Object.keys(value)) {
+		if (allowedKeys.has(key)) {
+			continue;
+		}
+		throw new FactoryDefinitionAPIError(
+			`${path}.${key} is not allowed by the generated factory contract.`,
+		);
+	}
 }

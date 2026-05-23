@@ -19,8 +19,7 @@ type APISurface interface {
 	factory.APIFactory
 	CreateNamedFactory(ctx context.Context, namedFactory factoryapi.Factory) (factoryapi.Factory, error)
 	GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error)
-	GetEditableFactoryDefinition(ctx context.Context) (factoryapi.EditableFactoryDefinition, error)
-	SaveEditableFactoryDefinition(ctx context.Context, request factoryapi.SaveEditableFactoryDefinitionRequest) (factoryapi.EditableFactoryDefinition, error)
+	SaveCurrentFactory(ctx context.Context, request factoryapi.Factory) (factoryapi.Factory, error)
 	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
 	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
 	InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (ModelInvocationResult, error)
@@ -38,8 +37,7 @@ type SessionAPISurface interface {
 	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 	GetCurrentNamedFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
-	GetEditableFactoryDefinitionForSession(ctx context.Context, sessionID string) (factoryapi.EditableFactoryDefinition, error)
-	SaveEditableFactoryDefinitionForSession(ctx context.Context, sessionID string, request factoryapi.SaveEditableFactoryDefinitionRequest) (factoryapi.EditableFactoryDefinition, error)
+	SaveCurrentFactoryForSession(ctx context.Context, sessionID string, request factoryapi.Factory) (factoryapi.Factory, error)
 }
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
@@ -62,7 +60,7 @@ var ErrCurrentNamedFactoryNotFound = errors.New("current named factory not found
 // public session identifier.
 var ErrFactorySessionNotFound = errors.New("factory session not found")
 
-// ErrEditableFactoryVersionStale reports that a complete editable-definition
+// ErrEditableFactoryVersionStale reports that a complete current-factory
 // save was based on an older factory definition version than the current one.
 var ErrEditableFactoryVersionStale = errors.New("editable factory definition version is stale")
 

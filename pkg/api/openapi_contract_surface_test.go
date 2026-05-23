@@ -130,13 +130,12 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 	}
 
 	requiredOperations := map[string][]string{
-		"/factory-sessions/{session_id}/work":                        {"get", "post"},
-		"/factory-sessions/{session_id}/work-requests/{request_id}":  {"put"},
-		"/factory-sessions/{session_id}/work/{id}":                   {"get"},
-		"/factory-sessions/{session_id}/events":                      {"get"},
-		"/factory-sessions/{session_id}/status":                      {"get"},
-		"/factory-sessions/{session_id}/factory":                     {"get"},
-		"/factory-sessions/{session_id}/factory/editable-definition": {"get", "put"},
+		"/factory-sessions/{session_id}/work":                       {"get", "post"},
+		"/factory-sessions/{session_id}/work-requests/{request_id}": {"put"},
+		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
+		"/factory-sessions/{session_id}/events":                     {"get"},
+		"/factory-sessions/{session_id}/status":                     {"get"},
+		"/factory-sessions/{session_id}/factory":                    {"get", "put"},
 	}
 	for path, methods := range requiredOperations {
 		pathItem, ok := paths[path].(map[string]any)
@@ -158,6 +157,7 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 		"/factories/{factory_id}/status",
 		"/factories/{factory_id}/factory/~current",
 		"/factories/{factory_id}/factory/~current/editable-definition",
+		"/factory-sessions/{session_id}/factory/editable-definition",
 	} {
 		if _, ok := paths[retiredPath]; ok {
 			t.Fatalf("paths.%s must not be published for session-scoped routes", retiredPath)
@@ -540,15 +540,12 @@ func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	assertResponseSchemaRef(t, currentFactory, "200", "#/components/schemas/Factory")
 	assertResponseRef(t, currentFactory, "404", "#/components/responses/CurrentFactoryNotFound")
 
-	getEditableFactory := pathOperation(t, paths, "/factory/~current/editable-definition", "get")
-	assertResponseSchemaRef(t, getEditableFactory, "200", "#/components/schemas/EditableFactoryDefinition")
-	assertResponseRef(t, getEditableFactory, "404", "#/components/responses/CurrentFactoryNotFound")
-
-	saveEditableFactory := pathOperation(t, paths, "/factory/~current/editable-definition", "put")
-	assertResponseSchemaRef(t, saveEditableFactory, "200", "#/components/schemas/EditableFactoryDefinition")
-	assertResponseRef(t, saveEditableFactory, "400", "#/components/responses/SaveEditableFactoryDefinitionBadRequest")
-	assertResponseRef(t, saveEditableFactory, "409", "#/components/responses/SaveEditableFactoryDefinitionConflict")
-	assertResponseRef(t, saveEditableFactory, "404", "#/components/responses/CurrentFactoryNotFound")
+	saveCurrentFactory := pathOperation(t, paths, "/factory/~current", "put")
+	assertRequestSchemaRef(t, saveCurrentFactory, "#/components/schemas/Factory")
+	assertResponseSchemaRef(t, saveCurrentFactory, "200", "#/components/schemas/Factory")
+	assertResponseRef(t, saveCurrentFactory, "400", "#/components/responses/SaveCurrentFactoryBadRequest")
+	assertResponseRef(t, saveCurrentFactory, "409", "#/components/responses/SaveCurrentFactoryConflict")
+	assertResponseRef(t, saveCurrentFactory, "404", "#/components/responses/CurrentFactoryNotFound")
 
 	listModels := pathOperation(t, paths, "/models", "get")
 	assertResponseSchemaRef(t, listModels, "200", "#/components/schemas/ListModelsResponse")
@@ -577,10 +574,11 @@ func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {
 	assertResponseExampleCodeFamilies(t, responses, "CurrentFactoryNotFound", map[string]string{
 		"NOT_FOUND": "NOT_FOUND",
 	})
-	assertResponseExampleCodeFamilies(t, responses, "SaveEditableFactoryDefinitionBadRequest", map[string]string{
+	assertResponseExampleCodeFamilies(t, responses, "SaveCurrentFactoryBadRequest", map[string]string{
 		"INVALID_FACTORY": "BAD_REQUEST",
 	})
-	assertResponseExampleCodeFamilies(t, responses, "SaveEditableFactoryDefinitionConflict", map[string]string{
-		"FACTORY_NOT_IDLE": "CONFLICT",
+	assertResponseExampleCodeFamilies(t, responses, "SaveCurrentFactoryConflict", map[string]string{
+		"FACTORY_NOT_IDLE":      "CONFLICT",
+		"STALE_FACTORY_VERSION": "CONFLICT",
 	})
 }

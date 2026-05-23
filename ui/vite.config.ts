@@ -39,9 +39,9 @@ const proxiedAPIPaths = [
   "^/factory-sessions/[^/]+$",
   "/factory/~current",
   "^/factory-sessions/[^/]+/factory$",
-  "^/factory-sessions/[^/]+/factory/editable-definition$",
+  "^/factory-sessions/[^/]+/factory$",
   "^/factory/~current/workstations/[^/]+/prompt-template-contract$",
-  "/factory/~current/editable-definition",
+  "/factory/~current",
   "^/factory/~current/workstations/[^/]+/prompt-template-validation$",
 ] as const;
 const apiProxy = Object.fromEntries(
