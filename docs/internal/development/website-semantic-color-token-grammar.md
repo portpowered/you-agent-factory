@@ -87,6 +87,14 @@ Status families may later grow supporting semantic roles such as borders,
 subtle fills, or emphasis text, but those additions must stay within the same
 family naming and be added centrally before routine component usage.
 
+Current centrally approved supporting status roles include:
+
+- accent: `af-accent-surface` and `af-accent-border`
+- success: `af-success-surface` and `af-success-border`
+- warning: `af-warning-surface` and `af-warning-border`
+- danger: `af-danger-surface` and `af-danger-border`
+- info: `af-info-surface` and `af-info-border`
+
 ## Naming Rules
 
 - Prefer roles that describe UI meaning, not rendering math.
