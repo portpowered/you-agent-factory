@@ -9,10 +9,19 @@ import type {
   FactorySessionTarget,
   FactorySessionsAPIError,
 } from "../../../api/factory-sessions";
-import { Button, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input } from "../../../components/ui";
-import { cn } from "../../../lib/cn";
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import {
+  Button,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Select,
+} from "../../../components/ui";
+import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
+import { cn } from "../../../lib/cn";
+import {
+  factorySessionTargetOptionValue,
   type FolderValidationState,
   folderValidationStatusMessage,
 } from "../lib/dashboard-session-tabs-utils";
@@ -26,7 +35,6 @@ const SESSION_DIALOG_ERROR_CLASS =
   "rounded-xl border border-af-danger/32 bg-af-danger/8 px-3 py-2 text-sm text-af-ink";
 const SESSION_DIALOG_STATUS_CLASS =
   "rounded-xl border border-af-accent/24 bg-af-accent/8 px-3 py-2 text-sm text-af-ink";
-const SESSION_TARGET_LIST_CLASS = "grid gap-2 sm:grid-cols-2";
 const SESSION_TARGET_BUTTON_CLASS =
   "flex min-h-11 flex-col items-start justify-center rounded-xl border border-af-overlay/12 bg-af-overlay/4 px-3 py-2 text-left text-sm text-af-ink/82 transition-colors hover:border-af-accent/30 hover:bg-af-overlay/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
 
@@ -40,6 +48,8 @@ export function OpenSessionDialog({
   onChangeFolderPath,
   onInspectFolder,
   onOpenTarget,
+  onSelectTarget,
+  selectedTargetValue,
 }: {
   dialogError: FactorySessionsAPIError | null;
   discoveredTargets: FactorySessionTarget[];
@@ -49,7 +59,9 @@ export function OpenSessionDialog({
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onChangeFolderPath: (value: string) => void;
   onInspectFolder: (event: FormEvent<HTMLFormElement>) => void;
-  onOpenTarget: (target: FactorySessionTarget) => void;
+  onOpenTarget: () => void;
+  onSelectTarget: (value: string) => void;
+  selectedTargetValue: string;
 }) {
   const folderFieldID = useId();
   const folderHelperTextID = useId();
@@ -163,6 +175,8 @@ export function OpenSessionDialog({
           isPending={isPending}
           messages={messages}
           onOpenTarget={onOpenTarget}
+          onSelectTarget={onSelectTarget}
+          selectedTargetValue={selectedTargetValue}
           targets={discoveredTargets}
         />
       ) : null}
@@ -174,13 +188,23 @@ function SessionTargetPicker({
   isPending,
   messages,
   onOpenTarget,
+  onSelectTarget,
+  selectedTargetValue,
   targets,
 }: {
   isPending: boolean;
   messages: ReturnType<typeof getHeaderControlsMessages>;
-  onOpenTarget: (target: FactorySessionTarget) => void;
+  onOpenTarget: () => void;
+  onSelectTarget: (value: string) => void;
+  selectedTargetValue: string;
   targets: FactorySessionTarget[];
 }) {
+  const targetSelectID = useId();
+  const selectedTarget =
+    targets.find(
+      (target) => factorySessionTargetOptionValue(target) === selectedTargetValue,
+    ) ?? null;
+
   return (
     <section aria-label={messages.targetPickerTitle} className="grid gap-3">
       <div className="grid gap-1">
@@ -189,23 +213,53 @@ function SessionTargetPicker({
           {messages.targetPickerHint}
         </p>
       </div>
-      <div className={SESSION_TARGET_LIST_CLASS}>
-        {targets.map((target) => (
-          <button
-            className={SESSION_TARGET_BUTTON_CLASS}
+      {targets.length > 1 ? (
+        <div className="grid gap-2">
+          <label className={SESSION_SECTION_LABEL_CLASS} htmlFor={targetSelectID}>
+            {messages.selectSessionTargetLabel}
+          </label>
+          <Select
             disabled={isPending}
-            key={`${target.ref.kind}:${target.ref.name ?? ""}:${target.factoryDir}`}
-            onClick={() => {
-              onOpenTarget(target);
+            id={targetSelectID}
+            onChange={(event) => {
+              onSelectTarget(event.target.value);
             }}
-            type="button"
+            value={selectedTargetValue}
           >
-            <span className="font-semibold text-af-ink">{target.label}</span>
-            <span className="truncate text-xs text-af-ink/58">
-              {target.project || target.factoryDir}
-            </span>
-          </button>
-        ))}
+            <option value="">{messages.selectSessionTargetPlaceholder}</option>
+            {targets.map((target) => (
+              <option
+                key={`${target.ref.kind}:${target.ref.name ?? ""}:${target.factoryDir}`}
+                value={factorySessionTargetOptionValue(target)}
+              >
+                {target.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      ) : null}
+      {selectedTarget ? (
+        <div className={SESSION_TARGET_BUTTON_CLASS}>
+          <span className="font-semibold text-af-ink">{selectedTarget.label}</span>
+          <span className="truncate text-xs text-af-ink/58">
+            {selectedTarget.project || selectedTarget.factoryDir}
+          </span>
+        </div>
+      ) : (
+        <p className={SESSION_DIALOG_STATUS_CLASS} role="status">
+          {messages.selectSessionTargetPrompt}
+        </p>
+      )}
+      <div className="flex justify-end">
+        <Button
+          disabled={isPending || selectedTarget == null}
+          onClick={onOpenTarget}
+          type="button"
+        >
+          {isPending
+            ? messages.openSessionTargetPendingLabel
+            : messages.openSessionTargetLabel}
+        </Button>
       </div>
     </section>
   );

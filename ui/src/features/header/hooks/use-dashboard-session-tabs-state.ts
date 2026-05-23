@@ -12,6 +12,7 @@ import {
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
   classifyFactorySessionFolderValidationError,
+  factorySessionTargetOptionValue,
   type FolderValidationState,
   normalizeFactorySessionsError,
 } from "../lib/dashboard-session-tabs-utils";
@@ -106,6 +107,7 @@ function useOpenSessionDialogState({
   const [folderPath, setFolderPath] = useState("");
   const [validatedFolderPath, setValidatedFolderPath] = useState<string | null>(null);
   const [discoveredTargets, setDiscoveredTargets] = useState<FactorySessionTarget[]>([]);
+  const [selectedTargetValue, setSelectedTargetValue] = useState<string>("");
   const [folderValidation, setFolderValidation] = useState<FolderValidationState>({
     status: "idle",
   });
@@ -121,6 +123,9 @@ function useOpenSessionDialogState({
       const targets = response.targets ?? [];
       const resolvedFolderPath = targets[0]?.folderPath ?? folderPath;
       setDiscoveredTargets(targets);
+      setSelectedTargetValue(
+        targets.length === 1 ? factorySessionTargetOptionValue(targets[0]) : "",
+      );
       setValidatedFolderPath(resolvedFolderPath);
       setFolderValidation({ status: "ready", targets });
     } catch (error) {
@@ -134,12 +139,20 @@ function useOpenSessionDialogState({
     }
   }
 
-  async function handleOpenTarget(target: FactorySessionTarget) {
+  async function handleOpenTarget() {
+    const selectedTarget = discoveredTargets.find(
+      (target) => factorySessionTargetOptionValue(target) === selectedTargetValue,
+    );
+    if (!selectedTarget) {
+      return;
+    }
+
     setDialogError(null);
     try {
       const response = await openSessionMutation.mutateAsync({
-        folderPath: validatedFolderPath ?? target.folderPath ?? folderPath,
-        target: target.ref,
+        folderPath:
+          validatedFolderPath ?? selectedTarget.folderPath ?? folderPath,
+        target: selectedTarget.ref,
       });
       if (response.session) {
         await finishOpeningSession(
@@ -160,6 +173,7 @@ function useOpenSessionDialogState({
     setDiscoveredTargets([]);
     setFolderValidation({ status: "idle" });
     setFolderPath("");
+    setSelectedTargetValue("");
     setValidatedFolderPath(null);
   }
 
@@ -167,6 +181,7 @@ function useOpenSessionDialogState({
     setFolderPath(value);
     setDialogError(null);
     setValidatedFolderPath(null);
+    setSelectedTargetValue("");
     setDiscoveredTargets([]);
     setFolderValidation({ status: "idle" });
   }
@@ -177,9 +192,11 @@ function useOpenSessionDialogState({
     discoveredTargets,
     folderValidation,
     folderPath,
+    selectedTargetValue,
     handleChangeFolderPath,
     handleInspectFolder,
     handleOpenTarget,
+    setSelectedTargetValue,
     openSessionMutation,
     resetDialogState,
     setDialogOpen,

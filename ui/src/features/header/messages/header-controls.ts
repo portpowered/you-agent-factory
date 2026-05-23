@@ -29,11 +29,15 @@ export interface HeaderControlsMessages {
   openSessionSubmitLabel: string;
   openSessionSubmitPendingLabel: string;
   pauseSessionStreamLabelTemplate: string;
+  openSessionTargetLabel: string;
+  openSessionTargetPendingLabel: string;
   openSessionValidationPendingLabel: string;
   returnToCurrentTickLabel: string;
   resumeSessionStreamLabelTemplate: string;
   retrySessionsLabel: string;
   selectSessionTargetLabel: string;
+  selectSessionTargetPlaceholder: string;
+  selectSessionTargetPrompt: string;
   sessionFolderFieldLabel: string;
   sessionFolderHelperText: string;
   sessionFolderFieldPlaceholder: string;
@@ -90,14 +94,18 @@ const headerControlsMessagesByLocale = {
     openSessionDialogTitle: "Open a factory folder",
     openSessionSubmitLabel: "Check folder",
     openSessionSubmitPendingLabel: "Checking folder...",
-    pauseSessionStreamLabelTemplate: "Pause {{sessionLabel}} updates",
+    openSessionTargetLabel: "Open selected target",
+    openSessionTargetPendingLabel: "Opening target...",
     openSessionValidationPendingLabel:
       "Checking whether this folder contains a runnable factory...",
     pauseSessionStreamLabelTemplate: "Pause {{sessionLabel}} updates",
     returnToCurrentTickLabel: "Return to current tick",
     resumeSessionStreamLabelTemplate: "Resume {{sessionLabel}} updates",
     retrySessionsLabel: "Retry sessions",
-    selectSessionTargetLabel: "Open session target",
+    selectSessionTargetLabel: "Runnable target",
+    selectSessionTargetPlaceholder: "Choose a runnable target",
+    selectSessionTargetPrompt:
+      "Choose a runnable target before opening a session from this folder.",
     sessionFolderFieldLabel: "Factory folder",
     sessionFolderHelperText:
       "Enter a local factory folder path or choose a folder from your machine. The folder must contain a runnable factory.",
@@ -150,14 +158,18 @@ const headerControlsMessagesByLocale = {
     openSessionDialogTitle: "ファクトリーフォルダーを開く",
     openSessionSubmitLabel: "フォルダーを確認する",
     openSessionSubmitPendingLabel: "フォルダーを確認しています...",
-    pauseSessionStreamLabelTemplate: "{{sessionLabel}} の更新を一時停止",
+    openSessionTargetLabel: "選択したターゲットを開く",
+    openSessionTargetPendingLabel: "ターゲットを開いています...",
     openSessionValidationPendingLabel:
       "このフォルダーに実行可能なファクトリーがあるか確認しています...",
     pauseSessionStreamLabelTemplate: "{{sessionLabel}} の更新を一時停止",
     returnToCurrentTickLabel: "現在のティックに戻る",
     resumeSessionStreamLabelTemplate: "{{sessionLabel}} の更新を再開",
     retrySessionsLabel: "セッションを再試行",
-    selectSessionTargetLabel: "セッションターゲットを開く",
+    selectSessionTargetLabel: "実行可能なターゲット",
+    selectSessionTargetPlaceholder: "実行可能なターゲットを選択",
+    selectSessionTargetPrompt:
+      "このフォルダーからセッションを開く前に、実行可能なターゲットを選択してください。",
     sessionFolderFieldLabel: "ファクトリーフォルダー",
     sessionFolderHelperText:
       "ローカルのファクトリーフォルダーのパスを入力するか、この端末からフォルダーを選んでください。フォルダーには実行可能なファクトリーが含まれている必要があります。",
@@ -211,14 +223,18 @@ const headerControlsMessagesByLocale = {
     openSessionDialogTitle: "팩토리 폴더 열기",
     openSessionSubmitLabel: "폴더 확인",
     openSessionSubmitPendingLabel: "폴더 확인 중...",
-    pauseSessionStreamLabelTemplate: "{{sessionLabel}} 업데이트 일시중지",
+    openSessionTargetLabel: "선택한 대상 열기",
+    openSessionTargetPendingLabel: "대상을 여는 중...",
     openSessionValidationPendingLabel:
       "이 폴더에 실행 가능한 팩토리가 있는지 확인하는 중...",
     pauseSessionStreamLabelTemplate: "{{sessionLabel}} 업데이트 일시중지",
     returnToCurrentTickLabel: "현재 틱으로 돌아가기",
     resumeSessionStreamLabelTemplate: "{{sessionLabel}} 업데이트 다시 시작",
     retrySessionsLabel: "세션 다시 시도",
-    selectSessionTargetLabel: "세션 대상 열기",
+    selectSessionTargetLabel: "실행 가능한 대상",
+    selectSessionTargetPlaceholder: "실행 가능한 대상 선택",
+    selectSessionTargetPrompt:
+      "이 폴더에서 세션을 열기 전에 실행 가능한 대상을 선택하세요.",
     sessionFolderFieldLabel: "팩토리 폴더",
     sessionFolderHelperText:
       "로컬 팩토리 폴더 경로를 입력하거나 이 기기에서 폴더를 선택하세요. 폴더에는 실행 가능한 팩토리가 있어야 합니다.",
@@ -272,14 +288,17 @@ const headerControlsMessagesByLocale = {
     openSessionDialogTitle: "打开工厂文件夹",
     openSessionSubmitLabel: "检查文件夹",
     openSessionSubmitPendingLabel: "正在检查文件夹...",
-    pauseSessionStreamLabelTemplate: "暂停 {{sessionLabel}} 更新",
+    openSessionTargetLabel: "打开所选目标",
+    openSessionTargetPendingLabel: "正在打开目标...",
     openSessionValidationPendingLabel:
       "正在检查此文件夹是否包含可运行的工厂...",
     pauseSessionStreamLabelTemplate: "暂停 {{sessionLabel}} 更新",
     returnToCurrentTickLabel: "返回当前刻度",
     resumeSessionStreamLabelTemplate: "恢复 {{sessionLabel}} 更新",
     retrySessionsLabel: "重试会话",
-    selectSessionTargetLabel: "打开会话目标",
+    selectSessionTargetLabel: "可运行目标",
+    selectSessionTargetPlaceholder: "选择可运行目标",
+    selectSessionTargetPrompt: "从此文件夹打开会话前，请先选择一个可运行目标。",
     sessionFolderFieldLabel: "工厂文件夹",
     sessionFolderHelperText:
       "请输入本地工厂文件夹路径，或从这台设备选择一个文件夹。该文件夹必须包含可运行的工厂。",

@@ -123,6 +123,14 @@ export function classifyFactorySessionFolderValidationError(
   return "unknown";
 }
 
+export function factorySessionTargetOptionValue(
+  target: Pick<FactorySessionTarget, "ref">,
+): string {
+  return target.ref.kind === "default"
+    ? "default"
+    : `named:${target.ref.name ?? ""}`;
+}
+
 function folderValidationErrorMessage(
   reason: FolderValidationErrorReason,
   messages: ReturnType<typeof getHeaderControlsMessages>,

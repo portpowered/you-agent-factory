@@ -305,7 +305,19 @@ describe("DashboardSessionTabs", () => {
     expect(
       screen.getByText(messages.openSessionLaunchReadySingleTarget),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /default/i }));
+    expect(
+      screen.queryByRole("combobox", {
+        name: messages.selectSessionTargetLabel,
+      }),
+    ).toBeNull();
+    expect(
+      within(
+        screen.getByRole("region", { name: messages.targetPickerTitle }),
+      ).getByText("default"),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
+    );
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
         folderPath: "/workspace/other",
@@ -419,7 +431,9 @@ describe("DashboardSessionTabs", () => {
       });
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /alpha/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
+    );
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
@@ -834,8 +848,20 @@ describe("DashboardSessionTabs", () => {
       name: messages.targetPickerTitle,
     });
     const picker = within(targetPicker);
+    const targetSelect = picker.getByRole("combobox", {
+      name: messages.selectSessionTargetLabel,
+    });
 
-    fireEvent.click(picker.getByRole("button", { name: /beta/i }));
+    expect(
+      picker
+        .getByRole("button", { name: messages.openSessionTargetLabel })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
+
+    fireEvent.change(targetSelect, { target: { value: "named:beta" } });
+    fireEvent.click(
+      picker.getByRole("button", { name: messages.openSessionTargetLabel }),
+    );
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
