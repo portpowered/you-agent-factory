@@ -57,7 +57,10 @@ describe("factory graph editor toolbar controls", () => {
     expect(
       within(menu).getByRole("button", { name: "Workstation" }),
     ).toBeTruthy();
-    expect(screen.getByText("Draft changes pending")).toBeTruthy();
+    const pendingPill = screen.getByText("Draft changes pending");
+    expect(pendingPill).toBeTruthy();
+    expect(pendingPill.className).toContain("border-af-warning-border");
+    expect(pendingPill.className).toContain("bg-af-warning-surface");
     expect(
       screen.queryByRole("button", {
         name: "Add",

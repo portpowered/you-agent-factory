@@ -55,11 +55,11 @@ const COLUMN_BY_KIND: Record<FactoryGraphNodeKind, number> = {
   "work-state": 4,
 };
 const KIND_CLASS: Record<FactoryGraphNodeKind, string> = {
-  resource: "border-af-overlay/22 bg-af-canvas",
-  worker: "border-af-info/24 bg-af-surface/88",
-  workstation: "border-2 border-af-info/28 bg-af-surface/88",
-  "work-type": "border-af-overlay/18 bg-af-overlay/4",
-  "work-state": "border-af-overlay/22 bg-af-canvas",
+  resource: "border-af-success-border bg-af-success-surface",
+  worker: "border-af-info-border bg-af-info-surface",
+  workstation: "border-af-accent-border bg-af-accent-surface",
+  "work-type": "border-af-border bg-af-surface-subtle",
+  "work-state": "border-af-border-strong bg-af-surface-raised",
 };
 const EDGE_COLOR_BY_KIND = {
   "worker-assignment": "var(--color-af-info)",
@@ -283,9 +283,9 @@ function FactoryGraphEditorNodeView({
       className={cn(
         "min-w-0 w-full justify-start overflow-hidden text-left shadow-none",
         KIND_CLASS[data.kind],
-        data.draftStatus === "addition" && "ring-2 ring-af-warning/34",
+        data.draftStatus === "addition" && "ring-2 ring-af-warning-border",
         data.draftStatus === "removal" &&
-          "border-af-danger/28 bg-af-danger/8 opacity-70 ring-2 ring-af-danger/24",
+          "border-af-danger-border bg-af-danger-surface opacity-70 ring-2 ring-af-danger-border",
       )}
       handles={data.connectionAnchors}
       incomingHandleCount={data.incomingHandleCount}
@@ -356,7 +356,7 @@ function FactoryGraphEditorNodeView({
           {data.label}
         </p>
         {data.canEditConnections ? (
-          <p className="m-0 text-[0.68rem] leading-5 text-af-ink/60">
+          <p className="m-0 text-[0.65rem] leading-5 text-af-text-subtle">
             {data.connectionHint}
           </p>
         ) : null}

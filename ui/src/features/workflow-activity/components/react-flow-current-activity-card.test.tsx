@@ -1157,6 +1157,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(stalledLabel.closest("article")?.textContent).toContain(
       "Unavailable",
     );
+    expect(writerLabel.closest("article")?.className).toContain(
+      "border-af-info-border",
+    );
+    expect(stalledLabel.closest("article")?.className).toContain(
+      "border-af-info-border",
+    );
   });
 
   it("lets operators collapse worker and resource lanes without leaving editor mode", async () => {

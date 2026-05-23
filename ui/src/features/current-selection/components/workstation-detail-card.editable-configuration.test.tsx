@@ -954,6 +954,13 @@ describe("WorkstationDetailCard editable configuration", () => {
         "Loading the current factory definition for this workstation.",
       ),
     ).toBeTruthy();
+    expect(
+      screen
+        .getByText(
+          "Loading the current factory definition for this workstation.",
+        )
+        .className,
+    ).toContain("text-af-text-muted");
 
     rerender(
       <WorkstationDetailCard
@@ -974,6 +981,13 @@ describe("WorkstationDetailCard editable configuration", () => {
         "Editable configuration unavailable. The current factory API rejected the request.",
       ),
     ).toBeTruthy();
+    expect(
+      screen
+        .getByText(
+          "Editable configuration unavailable. The current factory API rejected the request.",
+        )
+        .className,
+    ).toContain("text-af-danger-ink");
 
     rerender(
       <WorkstationDetailCard
@@ -994,5 +1008,61 @@ describe("WorkstationDetailCard editable configuration", () => {
         "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
       ),
     ).toBeTruthy();
+    expect(
+      screen
+        .getByText(
+          "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
+        )
+        .className,
+    ).toContain("text-af-text-muted");
+  });
+
+  it("uses semantic panels for autocomplete and diagnostics feedback", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt: "Use {{ (index .Inputs 1).Payload }} now.",
+          promptDiagnostics: [
+            {
+              endOffset: 33,
+              kind: "UNAVAILABLE_VARIABLE",
+              message: "Only input 0 is available.",
+              path: ".Inputs[1]",
+              sourceText: "(index .Inputs 1)",
+              startOffset: 7,
+            },
+          ],
+          validationErrors: {
+            prompt:
+              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(
+      screen
+        .getByText("Autocomplete is ready with 2 variables for 1 authored input.")
+        .closest("div")?.className,
+    ).toContain("border-af-border");
+    expect(
+      screen.getByText("Prompt diagnostics").closest("[role='alert']")?.className,
+    ).toContain("border-af-danger-border");
+    expect(screen.getByText(".Inputs[1]").className).toContain(
+      "text-af-text-muted",
+    );
   });
 });
