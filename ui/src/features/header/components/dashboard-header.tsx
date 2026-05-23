@@ -11,6 +11,8 @@ import { cn } from "../../../lib/cn";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import {
   DASHBOARD_PAGE_HEADING_CLASS,
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import {
   getNativeLanguageLabel,
@@ -18,6 +20,7 @@ import {
   type SupportedLocale,
   useAppLocale,
 } from "../../../i18n";
+import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import { useExportDialogStore } from "../../export/state/exportDialogStore";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
@@ -60,6 +63,7 @@ export interface DashboardHeaderProps {
 export function DashboardHeader({ locale }: DashboardHeaderProps) {
   const { locale: resolvedLocale, setLocale } = useAppLocale(locale);
   const sessionTabsState = useDashboardSessionTabsState();
+  const streamStatus = useDashboardStreamStore((state) => state.streamState.status);
   const isExportDialogOpen = useExportDialogStore(
     (state) => state.isExportDialogOpen,
   );
@@ -86,6 +90,17 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
           locale={resolvedLocale}
           state={sessionTabsState}
         />
+        <p
+          aria-label={streamStatusLabel(streamStatus, headerMessages)}
+          className={cn(
+            "sr-only",
+            DASHBOARD_BODY_TEXT_CLASS,
+            DASHBOARD_SUPPORTING_LABELS_CLASS,
+          )}
+          role="status"
+        >
+          {streamStatusLabel(streamStatus, headerMessages)}
+        </p>
         <div className={DASHBOARD_CONTROLS_CLASS}>
           <DashboardHeaderActionButton
             aria-haspopup="dialog"
@@ -131,6 +146,20 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
       </div>
     </section>
   );
+}
+
+function streamStatusLabel(
+  status: ReturnType<typeof useDashboardStreamStore.getState>["streamState"]["status"],
+  messages: ReturnType<typeof getHeaderControlsMessages>,
+) {
+  if (status === "live") {
+    return messages.streamStatusLiveLabel;
+  }
+  if (status === "offline") {
+    return messages.streamStatusOfflineLabel;
+  }
+
+  return messages.streamStatusConnectingLabel;
 }
 
 function resolveLanguageSwitcherValue(locale: string): SupportedLocale {

@@ -2151,10 +2151,7 @@ func (fs *FactoryService) compatibilitySession() *liveFactorySession {
 	if fs == nil {
 		return nil
 	}
-	if defaultSession := fs.defaultSession(); defaultSession != nil {
-		return defaultSession
-	}
-	return fs.currentSession()
+	return fs.defaultSession()
 }
 
 func (fs *FactoryService) workflowID() string {

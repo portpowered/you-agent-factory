@@ -62,7 +62,7 @@ vi.mock("@monaco-editor/react", () => ({
             disposeListeners.push(listener);
             return { dispose() {} };
           },
-          onDidType: () => ({ dispose() {} }),
+          onDidChangeModelContent: () => ({ dispose() {} }),
           onDidScrollChange: (
             listener: (event: { scrollLeft: number; scrollTop: number }) => void,
           ) => {

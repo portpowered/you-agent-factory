@@ -180,10 +180,11 @@ export function WorkstationPromptEditor({
         editorInstance.addCommand(monaco.KeyCode.Space, () => {
           editorInstance.trigger("workstation-prompt-space", "type", { text: " " });
         });
-        const typeListener = editorInstance.onDidType((text) => {
+        const typeListener = editorInstance.onDidChangeModelContent((event) => {
+          const insertedText = event.changes.map((change) => change.text).join("");
           const model = editorInstance.getModel();
           const position = editorInstance.getPosition();
-          if (!model || !position) {
+          if (!model || !position || insertedText.length === 0) {
             return;
           }
 
@@ -195,11 +196,11 @@ export function WorkstationPromptEditor({
           }
 
           const typedTrigger =
-            text.includes("{") ||
-            text.includes(".") ||
-            text.includes("$") ||
-            text.includes("(");
-          const typedIdentifierText = text.trim().length > 0;
+            insertedText.includes("{") ||
+            insertedText.includes(".") ||
+            insertedText.includes("$") ||
+            insertedText.includes("(");
+          const typedIdentifierText = insertedText.trim().length > 0;
           if (!typedTrigger && !typedIdentifierText) {
             return;
           }
