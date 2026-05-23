@@ -32,31 +32,31 @@ src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-attribute|Describe the w
 src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-prop|Describe the work to run
 src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-attribute|Primitive chart showcase
 src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-prop|Primitive chart showcase
-src/components/ui/ui-foundation-showcase.tsx|150|27|jsx-text|Primitive table foundation for trace and detail surfaces.
-src/components/ui/ui-foundation-showcase.tsx|153|28|jsx-text|Dispatch
-src/components/ui/ui-foundation-showcase.tsx|154|28|jsx-text|Status
-src/components/ui/ui-foundation-showcase.tsx|155|28|jsx-text|Duration
-src/components/ui/ui-foundation-showcase.tsx|160|28|jsx-text|dispatch-review-1
-src/components/ui/ui-foundation-showcase.tsx|161|28|jsx-text|ACCEPTED
-src/components/ui/ui-foundation-showcase.tsx|162|28|jsx-text|420ms
-src/components/ui/ui-foundation-showcase.tsx|165|28|jsx-text|dispatch-review-2
-src/components/ui/ui-foundation-showcase.tsx|166|28|jsx-text|FAILED
-src/components/ui/ui-foundation-showcase.tsx|167|28|jsx-text|1.2s
-src/components/ui/ui-foundation-showcase.tsx|173|23|jsx-prop|Primitive data table showcase
-src/components/ui/ui-foundation-showcase.tsx|190|17|jsx-text|Loading
-src/components/ui/ui-foundation-showcase.tsx|198|58|jsx-text|Collapsible section
-src/components/ui/ui-foundation-showcase.tsx|207|19|jsx-text|Shared disclosure state is ready for section toggles and drill-down controls.
-src/components/ui/ui-foundation-showcase.tsx|214|17|jsx-text|Open dialog
-src/components/ui/ui-foundation-showcase.tsx|219|34|jsx-text|Export factory
-src/components/ui/ui-foundation-showcase.tsx|221|23|jsx-text|Shared dialog chrome for export and confirmation flows.
-src/components/ui/ui-foundation-showcase.tsx|225|39|jsx-attribute|Factory name
-src/components/ui/ui-foundation-showcase.tsx|226|42|jsx-attribute|Export notes
-src/components/ui/ui-foundation-showcase.tsx|230|23|jsx-text|Cancel
-src/components/ui/ui-foundation-showcase.tsx|232|29|jsx-text|Confirm export
-src/components/ui/ui-foundation-showcase.tsx|240|24|jsx-attribute|Primitive calendar showcase
-src/components/ui/ui-foundation-showcase.tsx|251|13|jsx-text|Resizable panels
-src/components/ui/ui-foundation-showcase.tsx|257|19|jsx-text|Sidebar panel
-src/components/ui/ui-foundation-showcase.tsx|263|19|jsx-text|Detail panel
+src/components/ui/ui-foundation-showcase.tsx|155|27|jsx-text|Primitive table foundation for trace and detail surfaces.
+src/components/ui/ui-foundation-showcase.tsx|158|28|jsx-text|Dispatch
+src/components/ui/ui-foundation-showcase.tsx|159|28|jsx-text|Status
+src/components/ui/ui-foundation-showcase.tsx|160|28|jsx-text|Duration
+src/components/ui/ui-foundation-showcase.tsx|165|28|jsx-text|dispatch-review-1
+src/components/ui/ui-foundation-showcase.tsx|166|28|jsx-text|ACCEPTED
+src/components/ui/ui-foundation-showcase.tsx|167|28|jsx-text|420ms
+src/components/ui/ui-foundation-showcase.tsx|170|28|jsx-text|dispatch-review-2
+src/components/ui/ui-foundation-showcase.tsx|171|28|jsx-text|FAILED
+src/components/ui/ui-foundation-showcase.tsx|172|28|jsx-text|1.2s
+src/components/ui/ui-foundation-showcase.tsx|178|23|jsx-prop|Primitive data table showcase
+src/components/ui/ui-foundation-showcase.tsx|195|17|jsx-text|Loading
+src/components/ui/ui-foundation-showcase.tsx|203|58|jsx-text|Collapsible section
+src/components/ui/ui-foundation-showcase.tsx|212|19|jsx-text|Shared disclosure state is ready for section toggles and drill-down controls.
+src/components/ui/ui-foundation-showcase.tsx|219|17|jsx-text|Open dialog
+src/components/ui/ui-foundation-showcase.tsx|224|34|jsx-text|Export factory
+src/components/ui/ui-foundation-showcase.tsx|226|23|jsx-text|Shared dialog chrome for export and confirmation flows.
+src/components/ui/ui-foundation-showcase.tsx|230|39|jsx-attribute|Factory name
+src/components/ui/ui-foundation-showcase.tsx|231|42|jsx-attribute|Export notes
+src/components/ui/ui-foundation-showcase.tsx|235|23|jsx-text|Cancel
+src/components/ui/ui-foundation-showcase.tsx|237|29|jsx-text|Confirm export
+src/components/ui/ui-foundation-showcase.tsx|245|24|jsx-attribute|Primitive calendar showcase
+src/components/ui/ui-foundation-showcase.tsx|256|13|jsx-text|Resizable panels
+src/components/ui/ui-foundation-showcase.tsx|262|19|jsx-text|Sidebar panel
+src/components/ui/ui-foundation-showcase.tsx|268|19|jsx-text|Detail panel
 src/features/current-selection/state/selectionHistoryStore.ts|36|14|string-literal|node:
 src/features/current-selection/state/selectionHistoryStore.ts|38|14|string-literal|state:
 src/features/current-selection/state/selectionHistoryStore.ts|40|14|string-literal|work: : :

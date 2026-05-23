@@ -8,17 +8,17 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const BUTTON_BASE_CLASS =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-af-accent/25 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:border-af-overlay/12 disabled:bg-af-overlay/6 disabled:text-af-ink/48";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-af-focus-ring focus-visible:ring-offset-0 disabled:pointer-events-none disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
 const BUTTON_TONE_CLASS: Record<NonNullable<ButtonProps["tone"]>, string> = {
   default:
-    "border-af-accent/45 bg-af-accent text-af-canvas hover:border-af-accent hover:bg-af-accent-glow",
+    "border-af-accent bg-af-accent text-af-on-accent hover:brightness-105",
   destructive:
-    "border-af-danger/45 bg-af-danger text-af-ink hover:border-af-danger-bright hover:bg-af-danger-bright",
-  ghost: "border-transparent bg-transparent text-af-ink/76 hover:bg-af-overlay/8 hover:text-af-ink",
+    "border-af-danger bg-af-danger text-af-on-danger hover:border-af-danger-bright hover:bg-af-danger-bright",
+  ghost: "border-transparent bg-transparent text-af-text-muted hover:bg-af-overlay hover:text-af-text",
   outline:
-    "border-af-overlay/14 bg-af-surface/78 text-af-ink/82 hover:border-af-accent/35 hover:bg-af-overlay/8",
+    "border-af-border bg-af-surface-raised text-af-text hover:border-af-border-strong hover:bg-af-overlay",
   secondary:
-    "border-af-accent/24 bg-af-accent/10 text-af-accent hover:bg-af-accent/16 hover:text-af-accent-glow",
+    "border-af-border-strong bg-af-surface-subtle text-af-accent hover:border-af-accent hover:bg-af-overlay",
 };
 const BUTTON_SIZE_CLASS: Record<NonNullable<ButtonProps["size"]>, string> = {
   default: "px-4 py-2.5 text-sm",
