@@ -26,6 +26,7 @@ vi.mock("../../../api/factory-sessions", () => ({
     public readonly responseBody?: unknown;
     public readonly status?: number;
     public readonly statusText?: string;
+    public readonly targets?: unknown[];
 
     public constructor(
       message: string,
@@ -34,6 +35,7 @@ vi.mock("../../../api/factory-sessions", () => ({
         responseBody?: unknown;
         status?: number;
         statusText?: string;
+        targets?: unknown[];
       },
     ) {
       super(message);
@@ -42,6 +44,7 @@ vi.mock("../../../api/factory-sessions", () => ({
       this.responseBody = details.responseBody;
       this.status = details.status;
       this.statusText = details.statusText;
+      this.targets = details.targets;
     }
   },
   listFactorySessions: (...args: unknown[]) => listFactorySessions(...args),
@@ -903,28 +906,52 @@ describe("DashboardSessionTabs", () => {
     ]);
     openFactorySession
       .mockRejectedValueOnce(
-        new FactorySessionsAPIError(
-          'stat factory session folder "/workspace/missing": stat /workspace/missing: no such file or directory',
-          { code: "BAD_REQUEST" },
-        ),
+        new FactorySessionsAPIError("folder validation failed", {
+          code: "BAD_REQUEST",
+          targets: [
+            {
+              field: "folderPath",
+              id: "missing",
+              kind: "factory-session-validation",
+            },
+          ],
+        }),
       )
       .mockRejectedValueOnce(
-        new FactorySessionsAPIError(
-          'factory session folder "/workspace/factory.yaml" must be a directory',
-          { code: "BAD_REQUEST" },
-        ),
+        new FactorySessionsAPIError("folder validation failed", {
+          code: "BAD_REQUEST",
+          targets: [
+            {
+              field: "folderPath",
+              id: "not_directory",
+              kind: "factory-session-validation",
+            },
+          ],
+        }),
       )
       .mockRejectedValueOnce(
-        new FactorySessionsAPIError(
-          "read factory session folder /workspace/private: open /workspace/private: permission denied",
-          { code: "BAD_REQUEST" },
-        ),
+        new FactorySessionsAPIError("folder validation failed", {
+          code: "BAD_REQUEST",
+          targets: [
+            {
+              field: "folderPath",
+              id: "unreadable",
+              kind: "factory-session-validation",
+            },
+          ],
+        }),
       )
       .mockRejectedValueOnce(
-        new FactorySessionsAPIError(
-          'folder "/workspace/empty" does not expose any runnable factory targets',
-          { code: "BAD_REQUEST" },
-        ),
+        new FactorySessionsAPIError("folder validation failed", {
+          code: "BAD_REQUEST",
+          targets: [
+            {
+              field: "folderPath",
+              id: "not_runnable",
+              kind: "factory-session-validation",
+            },
+          ],
+        }),
       );
 
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);

@@ -14,11 +14,16 @@ const closeFactorySession = vi.fn();
 vi.mock("../../api/factory-sessions", () => ({
   FactorySessionsAPIError: class FactorySessionsAPIError extends Error {
     public readonly code: string;
+    public readonly targets?: unknown[];
 
-    public constructor(message: string, details: { code: string }) {
+    public constructor(
+      message: string,
+      details: { code: string; targets?: unknown[] },
+    ) {
       super(message);
       this.name = "FactorySessionsAPIError";
       this.code = details.code;
+      this.targets = details.targets;
     }
   },
   listFactorySessions: (...args: unknown[]) => listFactorySessions(...args),

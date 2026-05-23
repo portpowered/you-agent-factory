@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 func TestFactoryService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T) {
@@ -119,6 +121,8 @@ func TestFactoryService_OpenFactorySessionFromFolder_RejectsInvalidFolderAndTarg
 	before := harness.svc.sessions.count()
 	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), filepath.Join(harness.rootDir, "missing"), nil, false); err == nil || !strings.Contains(err.Error(), "stat factory session folder") {
 		t.Fatalf("OpenFactorySessionFromFolder(missing folder) error = %v, want folder stat failure", err)
+	} else {
+		assertFactorySessionValidationTarget(t, err, "missing", "folderPath")
 	}
 	if got := harness.svc.sessions.count(); got != before {
 		t.Fatalf("missing-folder open mutated live sessions to %d, want %d", got, before)
@@ -129,6 +133,8 @@ func TestFactoryService_OpenFactorySessionFromFolder_RejectsInvalidFolderAndTarg
 		Name: "missing",
 	}, false); err == nil || !strings.Contains(err.Error(), `factory session target "missing" was not found`) {
 		t.Fatalf("OpenFactorySessionFromFolder(missing target) error = %v, want missing-target failure", err)
+	} else {
+		assertFactorySessionValidationTarget(t, err, "target_not_found", "target.name")
 	}
 	if got := harness.svc.sessions.count(); got != before {
 		t.Fatalf("missing-target open mutated live sessions to %d, want %d", got, before)
@@ -149,6 +155,8 @@ func TestFactoryService_OpenFactorySessionFromFolder_RejectsReadableFolderWithou
 
 	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, false); err == nil || !strings.Contains(err.Error(), `does not expose any runnable factory targets`) {
 		t.Fatalf("OpenFactorySessionFromFolder(empty runnable folder) error = %v, want no-runnable-targets failure", err)
+	} else {
+		assertFactorySessionValidationTarget(t, err, "not_runnable", "folderPath")
 	}
 	if got := harness.svc.sessions.count(); got != before {
 		t.Fatalf("empty-folder open mutated live sessions to %d, want %d", got, before)
@@ -296,5 +304,32 @@ func TestFactoryService_OpenFactorySessionFromFolder_InvalidExpandedTildePathRet
 	wantResolvedPath := filepath.Join(homeDir, ".infinite-you-missing-factory-folder")
 	if !strings.Contains(err.Error(), wantResolvedPath) {
 		t.Fatalf("resolveFactorySessionFolder(~missing) error = %q, want resolved path %q", err, wantResolvedPath)
+	}
+	assertFactorySessionValidationTarget(t, err, "missing", "folderPath")
+}
+
+func assertFactorySessionValidationTarget(t *testing.T, err error, wantReason string, wantField string) {
+	t.Helper()
+
+	var targetedErr interface {
+		ErrorTargets() []factoryapi.ErrorTarget
+	}
+	if !errors.As(err, &targetedErr) {
+		t.Fatalf("validation error %v did not expose structured targets", err)
+	}
+
+	targets := targetedErr.ErrorTargets()
+	if len(targets) != 1 {
+		t.Fatalf("validation error targets = %#v, want one target", targets)
+	}
+	target := targets[0]
+	if target.Kind != factorySessionValidationTargetKind {
+		t.Fatalf("validation target kind = %q, want %q", target.Kind, factorySessionValidationTargetKind)
+	}
+	if target.Id == nil || *target.Id != wantReason {
+		t.Fatalf("validation target id = %#v, want %q", target.Id, wantReason)
+	}
+	if target.Field == nil || *target.Field != wantField {
+		t.Fatalf("validation target field = %#v, want %q", target.Field, wantField)
 	}
 }

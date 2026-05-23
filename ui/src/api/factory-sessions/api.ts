@@ -12,6 +12,7 @@ export type FactorySessionTarget =
   components["schemas"]["FactorySessionTarget"];
 export type FactorySessionTargetRef =
   components["schemas"]["FactorySessionTargetRef"];
+export type FactorySessionsAPIErrorTarget = components["schemas"]["ErrorTarget"];
 export type OpenFactorySessionResponse =
   components["schemas"]["OpenFactorySessionResponse"];
 
@@ -25,6 +26,7 @@ export interface FactorySessionsAPIErrorDetails {
   responseBody?: unknown;
   status?: number;
   statusText?: string;
+  targets?: FactorySessionsAPIErrorTarget[];
 }
 
 export interface ListFactorySessionsOptions {
@@ -52,10 +54,11 @@ export class FactorySessionsAPIError extends Error {
   public readonly responseBody?: unknown;
   public readonly status?: number;
   public readonly statusText?: string;
+  public readonly targets?: FactorySessionsAPIErrorTarget[];
 
   public constructor(
     message: string,
-    { code, responseBody, status, statusText }: FactorySessionsAPIErrorDetails,
+    { code, responseBody, status, statusText, targets }: FactorySessionsAPIErrorDetails,
   ) {
     super(message);
     this.name = "FactorySessionsAPIError";
@@ -63,6 +66,7 @@ export class FactorySessionsAPIError extends Error {
     this.responseBody = responseBody;
     this.status = status;
     this.statusText = statusText;
+    this.targets = targets;
   }
 }
 
@@ -236,6 +240,7 @@ function buildFactorySessionsAPIError(
     responseBody,
     status: response.status,
     statusText: response.statusText,
+    targets: readFactorySessionsAPIErrorTargets(errorBody?.targets),
   });
 }
 
@@ -252,6 +257,35 @@ function normalizeFactorySessionsAPIErrorCode(
       // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INTERNAL_ERROR";
   }
+}
+
+function readFactorySessionsAPIErrorTargets(
+  value: unknown,
+): FactorySessionsAPIErrorTarget[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const targets = value.filter(isFactorySessionsAPIErrorTarget);
+  return targets.length > 0 ? targets : undefined;
+}
+
+function isFactorySessionsAPIErrorTarget(
+  value: unknown,
+): value is FactorySessionsAPIErrorTarget {
+  if (!isAPIRecord(value) || typeof value.kind !== "string") {
+    return false;
+  }
+  if ("id" in value && value.id !== undefined && typeof value.id !== "string") {
+    return false;
+  }
+  if (
+    "field" in value &&
+    value.field !== undefined &&
+    typeof value.field !== "string"
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function isListFactorySessionsResponse(

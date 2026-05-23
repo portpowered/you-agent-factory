@@ -244,6 +244,63 @@ describe("factory sessions API", () => {
     );
   });
 
+  it("preserves structured validation targets on typed API errors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "BAD_REQUEST",
+          message: "folder validation failed",
+          targets: [
+            {
+              kind: "factory-session-validation",
+              id: "missing",
+              field: "folderPath",
+            },
+          ],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 400,
+          statusText: "Bad Request",
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      openFactorySession({
+        folderPath: "/workspace/missing",
+        validateOnly: true,
+      }),
+    ).rejects.toEqual(
+      new FactorySessionsAPIError("folder validation failed", {
+        code: "BAD_REQUEST",
+        responseBody: {
+          code: "BAD_REQUEST",
+          message: "folder validation failed",
+          targets: [
+            {
+              kind: "factory-session-validation",
+              id: "missing",
+              field: "folderPath",
+            },
+          ],
+        },
+        status: 400,
+        statusText: "Bad Request",
+        targets: [
+          {
+            kind: "factory-session-validation",
+            id: "missing",
+            field: "folderPath",
+          },
+        ],
+      }),
+    );
+  });
+
   it("keeps the list fallback error for empty error bodies", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(null, {

@@ -1,5 +1,6 @@
 import {
   type FactorySessionTarget,
+  type FactorySessionsAPIErrorTarget,
   type FactorySessionTargetRef,
   type FactorySessionSummary,
   FactorySessionsAPIError,
@@ -97,6 +98,11 @@ export function folderValidationStatusMessage(
 export function classifyFactorySessionFolderValidationError(
   error: FactorySessionsAPIError,
 ): FolderValidationErrorReason {
+  const targetedReason = classifyFactorySessionFolderValidationTarget(error.targets);
+  if (targetedReason !== null) {
+    return targetedReason;
+  }
+
   const message = error.message.trim();
 
   if (message === "folderPath is required" || message === "factory session folder is required") {
@@ -129,6 +135,29 @@ export function classifyFactorySessionFolderValidationError(
   }
 
   return "unknown";
+}
+
+function classifyFactorySessionFolderValidationTarget(
+  targets: FactorySessionsAPIErrorTarget[] | undefined,
+): FolderValidationErrorReason | null {
+  const validationTarget = targets?.find(
+    (target) => target.kind === "factory-session-validation" && typeof target.id === "string",
+  );
+  if (!validationTarget?.id) {
+    return null;
+  }
+
+  switch (validationTarget.id) {
+    case "required":
+    case "missing":
+    case "not_directory":
+    case "not_runnable":
+    case "target_not_found":
+    case "unreadable":
+      return validationTarget.id;
+    default:
+      return "unknown";
+  }
 }
 
 export function factorySessionTargetOptionValue(
