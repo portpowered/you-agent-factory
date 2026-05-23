@@ -1,13 +1,9 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { normalizeFactoryDefinition } from "../../../api/factory-definition";
+import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import {
-  createFactory,
-  type FactoryValue,
-  NamedFactoryAPIError,
-} from "../../../api/named-factory";
-import { CURRENT_FACTORY_DEFINITION_QUERY_KEY } from "../../current-factory-definition";
+  useSaveCurrentFactory,
+} from "../../current-factory-definition";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationSaveState,
@@ -31,7 +27,7 @@ interface UseSaveEditableWorkstationConfigurationResult {
 interface EditableWorkstationSaveRequest {
   markChangesSaved?: () => void;
   scopeKey: string;
-  value: FactoryValue;
+  value: CanonicalFactoryDefinition;
 }
 
 interface EditableWorkstationErrorState {
@@ -44,7 +40,6 @@ export function useSaveEditableWorkstationConfiguration({
   locale,
   scopeKey,
 }: UseSaveEditableWorkstationConfigurationOptions): UseSaveEditableWorkstationConfigurationResult {
-  const queryClient = useQueryClient();
   const messages = getWorkstationDetailMessages(locale);
   const [isConfirming, setIsConfirming] = useState(false);
   const [lastErroredScope, setLastErroredScope] =
@@ -55,35 +50,7 @@ export function useSaveEditableWorkstationConfiguration({
   const [submittingScopeKey, setSubmittingScopeKey] = useState<string | null>(
     null,
   );
-  const mutation = useMutation({
-    mutationFn: ({ value }: EditableWorkstationSaveRequest) =>
-      createFactory(value),
-    onError: (error, variables) => {
-      setIsConfirming(false);
-      setSubmittingScopeKey(null);
-      setLastSuccessfulScopeKey(null);
-      setLastErroredScope({
-        message: normalizeSaveError(
-          error,
-          messages.editableConfigurationSaveFallbackError,
-        ),
-        scopeKey: variables.scopeKey,
-      });
-    },
-    onSuccess: (value, variables) => {
-      const normalizedFactory = normalizeFactoryDefinition(value);
-
-      queryClient.setQueryData(
-        CURRENT_FACTORY_DEFINITION_QUERY_KEY,
-        normalizedFactory,
-      );
-      variables.markChangesSaved?.();
-      setIsConfirming(false);
-      setSubmittingScopeKey(null);
-      setLastErroredScope(null);
-      setLastSuccessfulScopeKey(variables.scopeKey);
-    },
-  });
+  const mutation = useSaveCurrentFactory();
 
   useResetExitedSaveScope({
     scopeKey,
@@ -153,15 +120,31 @@ export function useSaveEditableWorkstationConfiguration({
       setLastErroredScope(null);
       setLastSuccessfulScopeKey(null);
       setSubmittingScopeKey(scopeKey);
+      const request: EditableWorkstationSaveRequest = {
+        markChangesSaved: editableConfigurationState.markChangesSaved,
+        scopeKey,
+        value: editableConfigurationState.pendingFactoryDefinition,
+      };
       try {
-        await mutation.mutateAsync(
-          {
-            markChangesSaved: editableConfigurationState.markChangesSaved,
-            scopeKey,
-            value: editableConfigurationState.pendingFactoryDefinition,
-          },
-        );
-      } catch {
+        await mutation.mutateAsync({
+          factoryDefinition: request.value,
+        });
+        request.markChangesSaved?.();
+        setIsConfirming(false);
+        setSubmittingScopeKey(null);
+        setLastErroredScope(null);
+        setLastSuccessfulScopeKey(request.scopeKey);
+      } catch (error) {
+        setIsConfirming(false);
+        setSubmittingScopeKey(null);
+        setLastSuccessfulScopeKey(null);
+        setLastErroredScope({
+          message: normalizeSaveError(
+            error,
+            messages.editableConfigurationSaveFallbackError,
+          ),
+          scopeKey: request.scopeKey,
+        });
         return;
       }
     },
@@ -262,9 +245,6 @@ function useResetSuccessfulSaveStateOnDraftChange({
 }
 
 function normalizeSaveError(error: unknown, fallbackMessage: string): string {
-  if (error instanceof NamedFactoryAPIError) {
-    return error.message;
-  }
   if (error instanceof Error) {
     return error.message;
   }
