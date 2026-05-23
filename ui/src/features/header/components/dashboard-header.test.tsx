@@ -207,6 +207,37 @@ describe("DashboardHeader", () => {
     ).toBeTruthy();
   });
 
+  it("keeps global header controls icon-only while preserving localized accessible names", () => {
+    seedDashboardHeaderSnapshot();
+
+    const headerMessages = getHeaderControlsMessages("ko");
+    const exportMessages = getExportDialogMessages("ko");
+
+    renderWithQueryClient(<DashboardHeader locale="ko" />);
+
+    expect(
+      screen.getByRole("button", {
+        name: headerMessages.openSessionButtonLabel,
+      }).textContent,
+    ).toBe("+");
+    expect(
+      screen.getByRole("button", {
+        name: exportMessages.triggerLabel,
+      }).textContent,
+    ).toBe("");
+    expect(
+      screen.getByRole("button", {
+        name: headerMessages.languageMenuButtonLabel,
+      }).textContent,
+    ).toBe("");
+    expect(screen.queryByText(headerMessages.openSessionButtonLabel)).toBeNull();
+    expect(screen.queryByText(exportMessages.triggerLabel)).toBeNull();
+    expect(screen.queryByText(headerMessages.languageMenuButtonLabel)).toBeNull();
+    expect(screen.queryByText(headerMessages.sliderLabel)?.className).toContain(
+      "sr-only",
+    );
+  });
+
   it("resolves the header summary, brand, slider, and session-status labels from the requested locale catalog", () => {
     seedDashboardHeaderSnapshot();
     act(() => {

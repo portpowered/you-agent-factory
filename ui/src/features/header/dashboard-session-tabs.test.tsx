@@ -11,6 +11,7 @@ import { FactorySessionsAPIError } from "../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
 import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
+import { sessionCloseLabel } from "./dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "./messages/header-controls";
 
 const listFactorySessions = vi.fn();
@@ -971,6 +972,57 @@ describe("DashboardSessionTabs", () => {
     expect(
       screen.getByRole("button", { name: messages.openSessionButtonLabel }),
     ).toBeTruthy();
+  });
+
+  it("keeps close actions icon-only while a session close request is pending", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+    ]);
+    closeFactorySession.mockImplementation(
+      () => new Promise<void>(() => undefined),
+    );
+
+    renderWithQueryClient(<DashboardSessionTabs locale="ja" />);
+    const messages = getHeaderControlsMessages("ja");
+    const rootSession = {
+      factoryDir: "/workspace/root",
+      folderPath: "/workspace/root",
+      id: "~default",
+      isDefault: true,
+      project: "root",
+      target: {
+        kind: "default" as const,
+      },
+    };
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: sessionCloseLabel(rootSession, messages),
+      }),
+    );
+
+    const pendingCloseButton = await screen.findByRole("button", {
+      name: messages.closingSessionButtonLabel,
+    });
+
+    expect(
+      (pendingCloseButton as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(pendingCloseButton.textContent?.trim()).toBe("");
+    expect(screen.queryByText(messages.closingSessionButtonLabel)).toBeNull();
   });
 
   it("uses short factory-first labels without rendering redundant visible subtitle copy", async () => {

@@ -67,6 +67,9 @@ export function SessionTabButton({
   tabID: string;
 }) {
   const label = sessionTabLabel(session);
+  const closeButtonLabel = closeDisabled
+    ? messages.closingSessionButtonLabel
+    : sessionCloseLabel(session, messages);
   return (
     <div
       className={cn(
@@ -111,7 +114,7 @@ export function SessionTabButton({
             <SessionStreamToggleIcon paused={isStreamPaused} />
           </button>
           <button
-            aria-label={sessionCloseLabel(session, messages)}
+            aria-label={closeButtonLabel}
             className={cn(
               SESSION_TAB_CLOSE_BUTTON_CLASS,
               SESSION_TAB_ACTIVE_CONTROL_BUTTON_CLASS,
@@ -120,12 +123,12 @@ export function SessionTabButton({
             onClick={onClose}
             type="button"
           >
-            {closeDisabled ? messages.closingSessionButtonLabel : "×"}
+            <SessionTabCloseIcon pending={closeDisabled} />
           </button>
         </div>
       ) : (
         <button
-          aria-label={sessionCloseLabel(session, messages)}
+          aria-label={closeButtonLabel}
           className={cn(
             SESSION_TAB_CLOSE_BUTTON_CLASS,
             SESSION_TAB_INACTIVE_CLOSE_BUTTON_CLASS,
@@ -134,10 +137,38 @@ export function SessionTabButton({
           onClick={onClose}
           type="button"
         >
-          {closeDisabled ? messages.closingSessionButtonLabel : "×"}
+          <SessionTabCloseIcon pending={closeDisabled} />
         </button>
       )}
     </div>
+  );
+}
+
+function SessionTabCloseIcon({
+  pending,
+}: {
+  pending: boolean;
+}) {
+  if (!pending) {
+    return <span aria-hidden="true">×</span>;
+  }
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="animate-spin"
+      fill="none"
+      height="14"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="14"
+    >
+      <circle cx="12" cy="12" opacity="0.25" r="8" />
+      <path d="M12 4a8 8 0 0 1 8 8" />
+    </svg>
   );
 }
 
