@@ -234,6 +234,50 @@ func TestBuildFactoryService_RecordModeWritesInitialArtifact(t *testing.T) {
 	}
 }
 
+func TestBuildFactoryService_RecordModeResolvesGeneratedDefaultSessionPathAndCreatesParents(t *testing.T) {
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	recordTemplate := filepath.Join(
+		t.TempDir(),
+		"recordings",
+		"2026-05",
+		"2026-05-23",
+		"factory-session-__factory_session_id__-184512-uuid-1.json",
+	)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		RecordPath:        recordTemplate,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := svc.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	resolvedPath := sessionScopedRecordPath(recordTemplate, defaultFactorySessionID)
+	if _, err := os.Stat(filepath.Dir(resolvedPath)); err != nil {
+		t.Fatalf("Stat(recording dir): %v", err)
+	}
+	artifact, err := replay.Load(resolvedPath)
+	if err != nil {
+		t.Fatalf("Load(recording): %v", err)
+	}
+	if artifact.Factory.FactoryDirectory == nil || *artifact.Factory.FactoryDirectory != dir {
+		t.Fatalf("factory directory = %#v, want %q", artifact.Factory.FactoryDirectory, dir)
+	}
+}
+
 // portos:func-length-exception owner=agent-factory reason=legacy-runtime-log-fixture review=2026-07-18 removal=split-runtime-log-fixture-before-next-runtime-logging-change
 func TestBuildFactoryService_RecordModeRecordsSubmittedWorkAtEngineTick(t *testing.T) {
 	dir := t.TempDir()

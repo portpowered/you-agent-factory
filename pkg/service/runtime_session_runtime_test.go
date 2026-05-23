@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,29 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+func TestSessionScopedRecordPath_ReplacesGeneratedSessionTokenPerSession(t *testing.T) {
+	basePath := filepath.Join(
+		t.TempDir(),
+		"recordings",
+		"2026-05",
+		"2026-05-23",
+		"factory-session-__factory_session_id__-184512-uuid-1.json",
+	)
+
+	defaultPath := sessionScopedRecordPath(basePath, defaultFactorySessionID)
+	if !strings.Contains(defaultPath, "factory-session-"+defaultFactorySessionID+"-184512-uuid-1.json") {
+		t.Fatalf("default session path = %q", defaultPath)
+	}
+
+	sessionPath := sessionScopedRecordPath(basePath, "session-123")
+	if !strings.Contains(sessionPath, "factory-session-session-123-184512-uuid-1.json") {
+		t.Fatalf("named session path = %q", sessionPath)
+	}
+	if defaultPath == sessionPath {
+		t.Fatalf("session-scoped paths matched: %q", defaultPath)
+	}
+}
 
 func TestFactoryService_OpenFactorySession_RunsConcurrentIsolatedSessions(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{

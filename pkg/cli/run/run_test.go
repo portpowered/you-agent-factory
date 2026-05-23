@@ -427,6 +427,90 @@ func TestRun_DefaultRecordPathResolutionErrorSkipsServiceStart(t *testing.T) {
 	}
 }
 
+func TestGenerateDefaultLiveRunRecordPath_UsesRecordingsHierarchyAndSessionTemplate(t *testing.T) {
+	originalHome := os.Getenv("HOME")
+	originalTime := defaultLiveRunRecordTime
+	originalUUID := defaultLiveRunRecordUUID
+	defer func() {
+		_ = os.Setenv("HOME", originalHome)
+		defaultLiveRunRecordTime = originalTime
+		defaultLiveRunRecordUUID = originalUUID
+	}()
+
+	homeDir := t.TempDir()
+	if err := os.Setenv("HOME", homeDir); err != nil {
+		t.Fatalf("Setenv(HOME): %v", err)
+	}
+	defaultLiveRunRecordTime = func() time.Time {
+		return time.Date(2026, time.May, 23, 18, 45, 12, 0, time.FixedZone("ICT", 7*60*60))
+	}
+	defaultLiveRunRecordUUID = func() string {
+		return "uuid-1"
+	}
+
+	path, err := generateDefaultLiveRunRecordPath()
+	if err != nil {
+		t.Fatalf("generateDefaultLiveRunRecordPath: %v", err)
+	}
+
+	want := filepath.Join(
+		homeDir,
+		defaultRecordingsDir,
+		"2026-05",
+		"2026-05-23",
+		"factory-session-"+defaultRecordPathSessionToken+"-184512-uuid-1.json",
+	)
+	if path != want {
+		t.Fatalf("generated path = %q, want %q", path, want)
+	}
+	if got := resolveDefaultSessionRecordPath(path); got != filepath.Join(
+		homeDir,
+		defaultRecordingsDir,
+		"2026-05",
+		"2026-05-23",
+		"factory-session-"+defaultFactorySessionID+"-184512-uuid-1.json",
+	) {
+		t.Fatalf("resolved default-session path = %q", got)
+	}
+}
+
+func TestGenerateDefaultLiveRunRecordPath_UsesUniqueSuffixes(t *testing.T) {
+	originalHome := os.Getenv("HOME")
+	originalTime := defaultLiveRunRecordTime
+	originalUUID := defaultLiveRunRecordUUID
+	defer func() {
+		_ = os.Setenv("HOME", originalHome)
+		defaultLiveRunRecordTime = originalTime
+		defaultLiveRunRecordUUID = originalUUID
+	}()
+
+	homeDir := t.TempDir()
+	if err := os.Setenv("HOME", homeDir); err != nil {
+		t.Fatalf("Setenv(HOME): %v", err)
+	}
+	defaultLiveRunRecordTime = func() time.Time {
+		return time.Date(2026, time.May, 23, 18, 45, 12, 0, time.FixedZone("ICT", 7*60*60))
+	}
+	nextUUID := []string{"uuid-1", "uuid-2"}
+	defaultLiveRunRecordUUID = func() string {
+		id := nextUUID[0]
+		nextUUID = nextUUID[1:]
+		return id
+	}
+
+	first, err := generateDefaultLiveRunRecordPath()
+	if err != nil {
+		t.Fatalf("generateDefaultLiveRunRecordPath(first): %v", err)
+	}
+	second, err := generateDefaultLiveRunRecordPath()
+	if err != nil {
+		t.Fatalf("generateDefaultLiveRunRecordPath(second): %v", err)
+	}
+	if first == second {
+		t.Fatalf("generated paths matched: %q", first)
+	}
+}
+
 func TestRun_WithBootstrapCallsBootstrapFactory(t *testing.T) {
 	originalBuilder := buildFactoryService
 	originalBootstrap := bootstrapFactory
