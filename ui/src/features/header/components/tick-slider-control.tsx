@@ -1,4 +1,4 @@
-import { type ChangeEvent, useMemo } from "react";
+import { type ChangeEvent, useId, useMemo } from "react";
 import { cn } from "../../../lib/cn";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import {
@@ -14,7 +14,7 @@ const TICK_SLIDER_SHELL_CLASS = cn(
 const TICK_SLIDER_LABEL_CLASS =
   "flex min-w-36 flex-1 flex-col gap-0.5 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-ink/62 md:min-w-52";
 const TICK_SLIDER_INPUT_CLASS =
-  "h-1.5 min-w-32 flex-1 cursor-pointer accent-af-accent disabled:cursor-not-allowed disabled:opacity-45";
+  "h-1.5 min-w-32 flex-1 cursor-pointer accent-af-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25 disabled:cursor-not-allowed disabled:opacity-45";
 const TICK_SLIDER_META_CLASS =
   "ml-auto flex items-center";
 const TICK_SLIDER_STATUS_CLASS =
@@ -72,6 +72,7 @@ function formatCurrentTickStatus(
 }
 
 export function TickSliderControl({ locale }: TickSliderControlProps) {
+  const tickStatusID = useId();
   const eventTicks = useFactoryTimelineStore((state) =>
     state.events.map((event) => event.context.tick),
   );
@@ -96,6 +97,13 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
     bounds.maxTick,
   );
   const messages = getHeaderControlsMessages(locale);
+  const sliderValueText = isDisabled
+    ? messages.waitingForMoreTicks
+    : formatCurrentTickStatus(
+        messages.currentTickStatusTemplate,
+        displayedTick,
+        bounds.maxTick,
+      );
 
   const handleTickChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextTick = Number(event.target.value);
@@ -111,7 +119,9 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
       <label className={TICK_SLIDER_LABEL_CLASS}>
         <span className="sr-only">{messages.sliderLabel}</span>
         <input
+          aria-describedby={tickStatusID}
           aria-label={messages.sliderAriaLabel}
+          aria-valuetext={sliderValueText}
           className={TICK_SLIDER_INPUT_CLASS}
           disabled={isDisabled}
           max={bounds.maxTick}
@@ -123,15 +133,9 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
       </label>
 
       <div className={TICK_SLIDER_META_CLASS}>
-        <span className={TICK_SLIDER_STATUS_CLASS}>
-          {isDisabled
-            ? messages.waitingForMoreTicks
-            : formatCurrentTickStatus(
-                messages.currentTickStatusTemplate,
-                displayedTick,
-                bounds.maxTick,
-              )}
-        </span>
+        <output className={TICK_SLIDER_STATUS_CLASS} id={tickStatusID}>
+          {sliderValueText}
+        </output>
       </div>
     </div>
   );

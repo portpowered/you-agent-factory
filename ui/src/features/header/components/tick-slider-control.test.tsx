@@ -104,9 +104,12 @@ describe("TickSliderControl", () => {
     });
     const sliderShell = slider.closest("div");
     const metaGroup = screen.getByText("9/9").parentElement;
+    const statusText = screen.getByText("9/9");
 
     expect(slider.value).toBe("9");
-    expect(screen.getByText("9/9")).toBeTruthy();
+    expect(statusText).toBeTruthy();
+    expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
+    expect(slider.getAttribute("aria-valuetext")).toBe("9/9");
     expect(sliderShell?.className).toContain("gap-1.5");
     expect(sliderShell?.className).toContain("px-2.5");
     expect(screen.queryByText("Current")).toBeNull();
@@ -122,6 +125,7 @@ describe("TickSliderControl", () => {
     await waitFor(() => {
       expect(screen.getByText("2/9")).toBeTruthy();
     });
+    expect(slider.getAttribute("aria-valuetext")).toBe("2/9");
     expect(useFactoryTimelineStore.getState().mode).toBe("fixed");
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(2);
 
@@ -156,6 +160,9 @@ describe("TickSliderControl", () => {
     expect(slider.min).toBe("0");
     expect(slider.max).toBe("0");
     expect(slider.value).toBe("0");
+    expect(slider.getAttribute("aria-valuetext")).toBe(
+      messages.waitingForMoreTicks,
+    );
     expect(screen.getByText(messages.waitingForMoreTicks)).toBeTruthy();
     expect(
       screen.queryByRole("button", {
@@ -235,6 +242,29 @@ describe("TickSliderControl", () => {
     expect(screen.getByText(messages.sliderLabel).className).toContain(
       "sr-only",
     );
+  });
+
+  it("keeps the slider status semantically attached and focus-visible without extra visible copy", () => {
+    act(() => {
+      useFactoryTimelineStore
+        .getState()
+        .replaceEvents(graphStateSmokeTimelineEvents);
+    });
+
+    const messages = getHeaderControlsMessages("en");
+
+    render(<TickSliderControl />);
+
+    const slider = screen.getByRole<HTMLInputElement>("slider", {
+      name: messages.sliderAriaLabel,
+    });
+    const statusText = screen.getByText("9/9");
+
+    expect(slider.className).toContain("focus-visible:ring-2");
+    expect(slider.className).toContain("focus-visible:ring-af-accent/25");
+    expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
+    expect(statusText.tagName).toBe("OUTPUT");
+    expect(screen.queryByText("Current")).toBeNull();
   });
 
   it("keeps the tick status in one compact cluster beside the scrubber", () => {

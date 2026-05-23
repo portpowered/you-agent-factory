@@ -143,6 +143,8 @@ describe("DashboardHeader", () => {
     expect(toolbar.className).toContain("mb-3");
     expect(toolbar.className).toContain("gap-2");
     expect(toolbar.className).toContain("p-2");
+    expect(toolbar.firstElementChild?.className).toContain("flex-wrap");
+    expect(toolbar.firstElementChild?.className).toContain("max-md:items-stretch");
     expect(heading.textContent).toContain("∞");
     expect(heading.textContent).toContain("U");
     expect(toolbar.firstElementChild?.firstElementChild).toBe(heading);
@@ -150,10 +152,14 @@ describe("DashboardHeader", () => {
     expect(globalActions.className).toContain("rounded-2xl");
     expect(globalActions.className).toContain("border");
     expect(globalActions.className).toContain("bg-af-overlay/6");
+    expect(globalActions.className).toContain("max-md:w-full");
+    expect(globalActions.className).toContain("max-md:justify-end");
     expect(
       heading.querySelector('[aria-hidden="true"]')?.className,
     ).toContain("h-12");
     expect(slider.closest("div")?.parentElement?.className).toContain("border-t");
+    expect(slider.closest("div")?.className).toContain("md:flex-nowrap");
+    expect(slider.closest("div")?.className).toContain("md:min-w-72");
     const controls = Array.from(
       toolbar.querySelectorAll(
         `[aria-label="${headerMessages.sliderAriaLabel}"], [aria-label="${headerMessages.openSessionButtonLabel}"], [aria-label="${headerMessages.languageMenuButtonLabel}"], [aria-label="${messages.triggerLabel}"]`,
