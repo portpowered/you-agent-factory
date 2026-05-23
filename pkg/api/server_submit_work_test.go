@@ -414,7 +414,7 @@ func newSubmitSurfaceSmokeFactory(t *testing.T, eventTime time.Time, liveEvents 
 			},
 			Events: liveEvents,
 		},
-		CurrentNamedFactory: &factoryapi.Factory{Name: "beta", Id: &currentFactoryID},
+		CurrentFactory: &factoryapi.Factory{Name: "beta", Id: &currentFactoryID},
 	}
 }
 

@@ -90,7 +90,7 @@ func TestFactoryService_NamedFactoryPersistenceActivationAndRestartSmoke(t *test
 		t.Fatalf("created factory name = %q, want beta", created.Name)
 	}
 	assertCurrentFactoryPointer(t, rootDir, "beta", "after create")
-	assertServiceCurrentNamedFactory(t, svc, "beta", "after create")
+	assertServiceCurrentFactory(t, svc, "beta", "after create")
 
 	if _, err := config.PersistNamedFactory(rootDir, "gamma", serviceNamedFactoryPayload(t, "gamma")); err != nil {
 		t.Fatalf("PersistNamedFactory(gamma): %v", err)
@@ -101,13 +101,13 @@ func TestFactoryService_NamedFactoryPersistenceActivationAndRestartSmoke(t *test
 		t.Fatal("expected gamma activation to fail")
 	}
 	assertCurrentFactoryPointer(t, rootDir, "beta", "after failed activation")
-	assertServiceCurrentNamedFactory(t, svc, "beta", "after failed activation")
+	assertServiceCurrentFactory(t, svc, "beta", "after failed activation")
 
 	restarted := buildNamedFactoryServiceForTest(t, rootDir)
 	if restarted.cfg.Dir != filepath.Join(rootDir, "beta") {
 		t.Fatalf("restarted service dir = %q, want %q", restarted.cfg.Dir, filepath.Join(rootDir, "beta"))
 	}
-	assertServiceCurrentNamedFactory(t, restarted, "beta", "after restart")
+	assertServiceCurrentFactory(t, restarted, "beta", "after restart")
 }
 
 func TestFactoryService_ActivateNamedFactory_LiveServiceModeStartsReplacementRuntime(t *testing.T) {
@@ -144,7 +144,7 @@ func TestFactoryService_ActivateNamedFactory_LiveServiceModeStartsReplacementRun
 	}
 
 	assertCurrentFactoryPointer(t, rootDir, "beta", "after live activation")
-	assertServiceCurrentNamedFactory(t, svc, "beta", "after live activation")
+	assertServiceCurrentFactory(t, svc, "beta", "after live activation")
 	waitForRuntimeStatus(t, svc, interfaces.RuntimeStatusIdle, time.Second, "activated beta runtime")
 	writeWatchedInputRequest(t, filepath.Join(rootDir, "alpha"), "stale-alpha.json", interfaces.SubmitRequest{
 		WorkID:     "trace-alpha-stale-input",
@@ -283,12 +283,12 @@ func assertCurrentFactoryPointerMissing(t *testing.T, rootDir, contextLabel stri
 	}
 }
 
-func assertServiceCurrentNamedFactory(t *testing.T, svc *FactoryService, want, contextLabel string) {
+func assertServiceCurrentFactory(t *testing.T, svc *FactoryService, want, contextLabel string) {
 	t.Helper()
 
-	current, err := svc.GetCurrentNamedFactory(context.Background())
+	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory %s: %v", contextLabel, err)
+		t.Fatalf("GetCurrentFactory %s: %v", contextLabel, err)
 	}
 	if current.Name != factoryapi.FactoryName(want) {
 		t.Fatalf("current factory %s = %q, want %q", contextLabel, current.Name, want)

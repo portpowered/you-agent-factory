@@ -298,17 +298,17 @@ func TestFactoryService_SessionRuntimeSurfaceTargetsExplicitSessionID(t *testing
 	waitForSessionEventsToContain(t, harness.requireSession(t, betaSessionID), "beta-session-targeted-work", time.Second)
 	assertSessionEventsDoNotContain(t, harness.requireSession(t, defaultFactorySessionID), "beta-session-targeted-work")
 
-	betaCurrent, err := harness.svc.GetCurrentNamedFactoryForSession(context.Background(), betaSessionID)
+	betaCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), betaSessionID)
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactoryForSession(beta): %v", err)
+		t.Fatalf("GetCurrentFactoryForSession(beta): %v", err)
 	}
 	if betaCurrent.Name != "beta" {
 		t.Fatalf("beta current factory name = %q, want beta", betaCurrent.Name)
 	}
 
-	defaultCurrent, err := harness.svc.GetCurrentNamedFactoryForSession(context.Background(), defaultFactorySessionID)
+	defaultCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), defaultFactorySessionID)
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactoryForSession(default): %v", err)
+		t.Fatalf("GetCurrentFactoryForSession(default): %v", err)
 	}
 	if defaultCurrent.Name != "alpha" {
 		t.Fatalf("default current factory name = %q, want alpha", defaultCurrent.Name)
@@ -354,9 +354,9 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 	betaSessionID := harness.openFactorySession(t, "beta")
 	harness.waitIdle(t, betaSessionID, "beta runtime")
 
-	current, err := harness.svc.GetCurrentNamedFactoryForSession(context.Background(), betaSessionID)
+	current, err := harness.svc.GetCurrentFactoryForSession(context.Background(), betaSessionID)
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactoryForSession(beta): %v", err)
+		t.Fatalf("GetCurrentFactoryForSession(beta): %v", err)
 	}
 	if current.Name != "beta" {
 		t.Fatalf("beta current factory name = %q, want beta", current.Name)
@@ -373,15 +373,15 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 	}
 	assertFactoryWorkType(t, saved.WorkTypes, "story", "saved beta work types")
 
-	betaCurrent, err := harness.svc.GetCurrentNamedFactoryForSession(context.Background(), betaSessionID)
+	betaCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), betaSessionID)
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactoryForSession(beta) after save: %v", err)
+		t.Fatalf("GetCurrentFactoryForSession(beta) after save: %v", err)
 	}
 	assertFactoryWorkType(t, betaCurrent.WorkTypes, "story", "beta current work types after save")
 
-	defaultCurrent, err := harness.svc.GetCurrentNamedFactoryForSession(context.Background(), defaultFactorySessionID)
+	defaultCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), defaultFactorySessionID)
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactoryForSession(default) after beta save: %v", err)
+		t.Fatalf("GetCurrentFactoryForSession(default) after beta save: %v", err)
 	}
 	if defaultCurrent.Name != "alpha" {
 		t.Fatalf("default current factory name after beta save = %q, want alpha", defaultCurrent.Name)
@@ -403,15 +403,15 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 		t.Fatalf("persisted beta version after save = %#v, want %#v", betaConfig.FactoryConfig().Version, betaCurrent.Version)
 	}
 
-	legacyCurrent, err := harness.svc.GetCurrentNamedFactory(context.Background())
+	legacyCurrent, err := harness.svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory after beta save: %v", err)
+		t.Fatalf("GetCurrentFactory after beta save: %v", err)
 	}
 	if legacyCurrent.Name != "alpha" {
 		t.Fatalf("legacy current factory name after beta save = %q, want alpha", legacyCurrent.Name)
 	}
-	if _, err := harness.svc.GetCurrentNamedFactoryForSession(context.Background(), "missing-session"); !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-		t.Fatalf("GetCurrentNamedFactoryForSession(missing) error = %v, want factory session not found", err)
+	if _, err := harness.svc.GetCurrentFactoryForSession(context.Background(), "missing-session"); !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("GetCurrentFactoryForSession(missing) error = %v, want factory session not found", err)
 	}
 }
 

@@ -271,7 +271,7 @@ func TestFactoryService_CreateNamedFactory_ActivatesPersistedFactoryFromDefaultR
 		t.Fatalf("created factory name = %q, want beta", created.Name)
 	}
 	assertCurrentFactoryPointer(t, rootDir, "beta", "after create from default runtime")
-	assertServiceCurrentNamedFactory(t, svc, "beta", "after create from default runtime")
+	assertServiceCurrentFactory(t, svc, "beta", "after create from default runtime")
 	if svc.runtimeCfg == nil || svc.runtimeCfg.FactoryDir() != filepath.Join(rootDir, "beta") {
 		t.Fatalf("service runtime dir after create = %q, want %q", svc.runtimeCfg.FactoryDir(), filepath.Join(rootDir, "beta"))
 	}
@@ -530,9 +530,9 @@ func TestFactoryService_ActivateNamedFactory_FromDefaultRuntimeLeavesRootReadabl
 	}
 
 	assertCurrentFactoryPointerMissing(t, rootDir, "after failed activation from default runtime")
-	current, err := svc.GetCurrentNamedFactory(context.Background())
+	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory after failed activation from default runtime: %v", err)
+		t.Fatalf("GetCurrentFactory after failed activation from default runtime: %v", err)
 	}
 	if current.Name != apisurface.DefaultCurrentFactoryName {
 		t.Fatalf("current factory name after failed activation = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
@@ -545,7 +545,7 @@ func TestFactoryService_ActivateNamedFactory_FromDefaultRuntimeLeavesRootReadabl
 	}
 }
 
-func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPayload(t *testing.T) {
+func TestFactoryService_GetCurrentFactory_ReadsDurablePointerAndCanonicalPayload(t *testing.T) {
 	rootDir := t.TempDir()
 
 	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
@@ -570,9 +570,9 @@ func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPa
 		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
 
-	current, err := svc.GetCurrentNamedFactory(context.Background())
+	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory: %v", err)
+		t.Fatalf("GetCurrentFactory: %v", err)
 	}
 	if current.Name != factoryapi.FactoryName("alpha") {
 		t.Fatalf("current factory name = %q, want alpha", current.Name)
@@ -585,7 +585,7 @@ func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPa
 	}
 }
 
-func TestFactoryService_GetCurrentNamedFactory_IncludesVersionMetadata(t *testing.T) {
+func TestFactoryService_GetCurrentFactory_IncludesVersionMetadata(t *testing.T) {
 	rootDir := t.TempDir()
 	versionTime := time.Date(2026, 5, 23, 12, 30, 0, 0, time.UTC)
 
@@ -608,9 +608,9 @@ func TestFactoryService_GetCurrentNamedFactory_IncludesVersionMetadata(t *testin
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	current, err := svc.GetCurrentNamedFactory(context.Background())
+	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory: %v", err)
+		t.Fatalf("GetCurrentFactory: %v", err)
 	}
 	if current.Name != factoryapi.FactoryName("alpha") {
 		t.Fatalf("current factory name = %q, want alpha", current.Name)
@@ -655,9 +655,9 @@ func TestFactoryService_SaveCurrentFactory_ReplacesCurrentDefinition(t *testing.
 		t.Fatalf("saved version = %#v, want logical=%d physical after %s", saved.Version, initialVersion.Logical+1, initialVersion.Physical)
 	}
 
-	current, err := svc.GetCurrentNamedFactory(context.Background())
+	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory after save: %v", err)
+		t.Fatalf("GetCurrentFactory after save: %v", err)
 	}
 	if current.WorkTypes == nil || (*current.WorkTypes)[0].Name != "story" {
 		t.Fatalf("current work types after save = %#v, want story", current.WorkTypes)
@@ -680,9 +680,9 @@ func TestFactoryService_SaveCurrentFactory_ReplacesCurrentDefinition(t *testing.
 	if err != nil {
 		t.Fatalf("BuildFactoryService(restarted): %v", err)
 	}
-	restartedCurrent, err := restarted.GetCurrentNamedFactory(context.Background())
+	restartedCurrent, err := restarted.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory(restarted): %v", err)
+		t.Fatalf("GetCurrentFactory(restarted): %v", err)
 	}
 	if restartedCurrent.Version == nil || restartedCurrent.Version.Logical != saved.Version.Logical || !restartedCurrent.Version.Physical.Equal(saved.Version.Physical) {
 		t.Fatalf("restarted version = %#v, want %#v", restartedCurrent.Version, saved.Version)
@@ -717,9 +717,9 @@ func TestFactoryService_SaveCurrentFactory_RejectsStaleBaseVersion(t *testing.T)
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	current, err := svc.GetCurrentNamedFactory(context.Background())
+	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory: %v", err)
+		t.Fatalf("GetCurrentFactory: %v", err)
 	}
 
 	if current.Version == nil {
@@ -732,13 +732,13 @@ func TestFactoryService_SaveCurrentFactory_RejectsStaleBaseVersion(t *testing.T)
 	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
 	replacement.Version = current.Version
 	_, err = svc.SaveCurrentFactory(context.Background(), replacement)
-	if !errors.Is(err, apisurface.ErrEditableFactoryVersionStale) {
+	if !errors.Is(err, apisurface.ErrFactoryVersionStale) {
 		t.Fatalf("SaveCurrentFactory error = %v, want stale version", err)
 	}
 
-	currentAfterStaleSave, err := svc.GetCurrentNamedFactory(context.Background())
+	currentAfterStaleSave, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory after stale save: %v", err)
+		t.Fatalf("GetCurrentFactory after stale save: %v", err)
 	}
 	if currentAfterStaleSave.WorkTypes == nil || (*currentAfterStaleSave.WorkTypes)[0].Name != "task" {
 		t.Fatalf("current work types after stale save = %#v, want unchanged task", currentAfterStaleSave.WorkTypes)
@@ -793,9 +793,9 @@ func TestFactoryService_SaveCurrentFactory_RejectsDuplicateAndDanglingTopology(t
 		t.Fatalf("topology targets = %#v, want dangling output edge target", topologyErr.Targets)
 	}
 
-	current, err := svc.GetCurrentNamedFactory(context.Background())
+	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory after rejected save: %v", err)
+		t.Fatalf("GetCurrentFactory after rejected save: %v", err)
 	}
 	if current.WorkTypes == nil || (*current.WorkTypes)[0].Name != "task" {
 		t.Fatalf("current work types after rejected topology = %#v, want unchanged task", current.WorkTypes)
@@ -811,7 +811,7 @@ func hasServiceErrorTarget(targets []factoryapi.ErrorTarget, kind, id string) bo
 	return false
 }
 
-func TestFactoryService_GetCurrentNamedFactory_CollectsSupportedPortableBundledFilesFromDisk(t *testing.T) {
+func TestFactoryService_GetCurrentFactory_CollectsSupportedPortableBundledFilesFromDisk(t *testing.T) {
 	rootDir := t.TempDir()
 
 	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
@@ -836,9 +836,9 @@ func TestFactoryService_GetCurrentNamedFactory_CollectsSupportedPortableBundledF
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	current, err := svc.GetCurrentNamedFactory(context.Background())
+	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory: %v", err)
+		t.Fatalf("GetCurrentFactory: %v", err)
 	}
 	if current.SupportingFiles == nil {
 		t.Fatal("expected current factory to include supportingFiles")
@@ -852,7 +852,7 @@ func TestFactoryService_GetCurrentNamedFactory_CollectsSupportedPortableBundledF
 	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
 }
 
-func TestFactoryService_GetCurrentNamedFactory_FallsBackToRootRuntimeWhenPointerMissing(t *testing.T) {
+func TestFactoryService_GetCurrentFactory_FallsBackToRootRuntimeWhenPointerMissing(t *testing.T) {
 	rootDir := t.TempDir()
 	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
 	if err := os.WriteFile(factoryPath, serviceNamedFactoryPayload(t, "root-runtime"), 0o644); err != nil {
@@ -868,9 +868,9 @@ func TestFactoryService_GetCurrentNamedFactory_FallsBackToRootRuntimeWhenPointer
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	current, err := svc.GetCurrentNamedFactory(context.Background())
+	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory: %v", err)
+		t.Fatalf("GetCurrentFactory: %v", err)
 	}
 	if current.Name != apisurface.DefaultCurrentFactoryName {
 		t.Fatalf("current factory name = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
@@ -883,7 +883,7 @@ func TestFactoryService_GetCurrentNamedFactory_FallsBackToRootRuntimeWhenPointer
 	}
 }
 
-func TestFactoryService_GetCurrentNamedFactory_ReturnsNotFoundWhenPointerMissingWithoutRuntimeFallback(t *testing.T) {
+func TestFactoryService_GetCurrentFactory_ReturnsNotFoundWhenPointerMissingWithoutRuntimeFallback(t *testing.T) {
 	rootDir := t.TempDir()
 	svc := &FactoryService{
 		cfg: &FactoryServiceConfig{
@@ -891,13 +891,13 @@ func TestFactoryService_GetCurrentNamedFactory_ReturnsNotFoundWhenPointerMissing
 		},
 	}
 
-	_, err := svc.GetCurrentNamedFactory(context.Background())
-	if !errors.Is(err, ErrCurrentNamedFactoryNotFound) {
-		t.Fatalf("GetCurrentNamedFactory missing pointer error = %v, want %v", err, ErrCurrentNamedFactoryNotFound)
+	_, err := svc.GetCurrentFactory(context.Background())
+	if !errors.Is(err, ErrCurrentFactoryNotFound) {
+		t.Fatalf("GetCurrentFactory missing pointer error = %v, want %v", err, ErrCurrentFactoryNotFound)
 	}
 }
 
-func TestFactoryService_GetCurrentNamedFactory_WrapsMissingPersistedFactoryDir(t *testing.T) {
+func TestFactoryService_GetCurrentFactory_WrapsMissingPersistedFactoryDir(t *testing.T) {
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile),
@@ -914,12 +914,12 @@ func TestFactoryService_GetCurrentNamedFactory_WrapsMissingPersistedFactoryDir(t
 		factoryRootDir: rootDir,
 	}
 
-	_, err := svc.GetCurrentNamedFactory(context.Background())
+	_, err := svc.GetCurrentFactory(context.Background())
 	if err == nil {
 		t.Fatal("expected missing persisted factory dir error")
 	}
-	if !strings.Contains(err.Error(), `resolve current named factory "missing"`) {
-		t.Fatalf("GetCurrentNamedFactory resolve error = %v, want wrapped missing-factory context", err)
+	if !strings.Contains(err.Error(), `resolve current factory "missing"`) {
+		t.Fatalf("GetCurrentFactory resolve error = %v, want wrapped missing-factory context", err)
 	}
 }
 

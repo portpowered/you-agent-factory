@@ -74,12 +74,12 @@ func (h exportImportSmokeHarness) Run(t *testing.T) exportImportSmokeHarnessResu
 	})
 	waitForCurrentFactoryRuntimeIdle(t, server.service, 5*time.Second)
 
-	exported := getCurrentNamedFactory(t, server.URL())
+	exported := getCurrentFactory(t, server.URL())
 	importRequest := exported
 	importRequest.Name = factoryapi.FactoryName(h.options.importFactoryName)
 
 	imported := createNamedFactory(t, server.URL(), importRequest)
-	current := getCurrentNamedFactory(t, server.URL())
+	current := getCurrentFactory(t, server.URL())
 	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
 
 	importedDir, err := config.ResolveCurrentFactoryDir(rootDir)
@@ -192,7 +192,7 @@ func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.
 	return created
 }
 
-func getCurrentNamedFactory(t *testing.T, serverURL string) factoryapi.Factory {
+func getCurrentFactory(t *testing.T, serverURL string) factoryapi.Factory {
 	t.Helper()
 
 	resp, err := http.Get(serverURL + "/factory/~current")

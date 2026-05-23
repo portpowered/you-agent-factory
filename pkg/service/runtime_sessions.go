@@ -263,7 +263,7 @@ func (fs *FactoryService) GetEngineStateSnapshotForSession(ctx context.Context, 
 	return snapshot, nil
 }
 
-func (fs *FactoryService) GetCurrentNamedFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
+func (fs *FactoryService) GetCurrentFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return factoryapi.Factory{}, err
@@ -292,7 +292,7 @@ func (fs *FactoryService) SaveCurrentFactoryForSession(
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	current, err := fs.GetCurrentNamedFactoryForSession(ctx, sessionID)
+	current, err := fs.GetCurrentFactoryForSession(ctx, sessionID)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
@@ -331,7 +331,7 @@ func (fs *FactoryService) SaveCurrentFactoryForSession(
 		return factoryapi.Factory{}, err
 	}
 
-	return fs.GetCurrentNamedFactoryForSession(ctx, sessionID)
+	return fs.GetCurrentFactoryForSession(ctx, sessionID)
 }
 
 func (fs *FactoryService) prepareEditableFactoryDefinitionSave(
@@ -340,7 +340,7 @@ func (fs *FactoryService) prepareEditableFactoryDefinitionSave(
 	request factoryapi.Factory,
 ) (string, factoryapi.Factory, error) {
 	if current.Name == apisurface.DefaultCurrentFactoryName {
-		return "", factoryapi.Factory{}, ErrCurrentNamedFactoryNotFound
+		return "", factoryapi.Factory{}, ErrCurrentFactoryNotFound
 	}
 	if request.Name != current.Name {
 		return "", factoryapi.Factory{}, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)

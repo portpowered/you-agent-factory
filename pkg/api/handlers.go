@@ -472,7 +472,7 @@ func (s *Server) GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	namedFactory, err := sessionRuntime.GetCurrentNamedFactoryForSession(r.Context(), string(sessionID))
+	namedFactory, err := sessionRuntime.GetCurrentFactoryForSession(r.Context(), string(sessionID))
 	if err != nil {
 		switch {
 		case errors.Is(err, apisurface.ErrFactorySessionNotFound):
@@ -494,7 +494,7 @@ func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContract(w http.Respo
 	}
 	workstation, ok := currentFactoryWorkstation(namedFactory, workstationName)
 	if !ok {
-		s.writeError(w, http.StatusNotFound, "Current named factory workstation not found.", "NOT_FOUND")
+		s.writeError(w, http.StatusNotFound, "Current factory workstation not found.", "NOT_FOUND")
 		return
 	}
 
@@ -509,7 +509,7 @@ func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplate(w http.Response
 	}
 	workstation, ok := currentFactoryWorkstation(namedFactory, workstationName)
 	if !ok {
-		s.writeError(w, http.StatusNotFound, "Current named factory workstation not found.", "NOT_FOUND")
+		s.writeError(w, http.StatusNotFound, "Current factory workstation not found.", "NOT_FOUND")
 		return
 	}
 	req, err := decodePromptTemplateValidationRequestBody(r.Body)
@@ -527,15 +527,15 @@ func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplate(w http.Response
 }
 
 func (s *Server) loadCurrentFactory(w http.ResponseWriter, r *http.Request) (factoryapi.Factory, bool) {
-	namedFactory, err := s.runtime.GetCurrentNamedFactory(r.Context())
+	namedFactory, err := s.runtime.GetCurrentFactory(r.Context())
 	if err != nil {
 		switch {
-		case errors.Is(err, apisurface.ErrCurrentNamedFactoryNotFound):
-			s.writeError(w, http.StatusNotFound, "Current named factory not found.", "NOT_FOUND")
+		case errors.Is(err, apisurface.ErrCurrentFactoryNotFound):
+			s.writeError(w, http.StatusNotFound, "Current factory not found.", "NOT_FOUND")
 			return factoryapi.Factory{}, false
 		default:
 			s.logger.Error("get current factory failed", zap.Error(err))
-			s.writeError(w, http.StatusInternalServerError, "failed to load current named factory", "INTERNAL_ERROR")
+			s.writeError(w, http.StatusInternalServerError, "failed to load current factory", "INTERNAL_ERROR")
 			return factoryapi.Factory{}, false
 		}
 	}
@@ -555,7 +555,7 @@ func (s *Server) SaveCurrentFactory(w http.ResponseWriter, r *http.Request) {
 
 	saved, err := s.runtime.SaveCurrentFactory(r.Context(), req)
 	if err != nil {
-		s.writeEditableCurrentFactoryDefinitionError(w, err, "save")
+		s.writeCurrentFactoryError(w, err, "save")
 		return
 	}
 
@@ -583,13 +583,13 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 
 	saved, err := sessionRuntime.SaveCurrentFactoryForSession(r.Context(), string(sessionID), req)
 	if err != nil {
-		s.writeEditableCurrentFactoryDefinitionError(w, err, "save", zap.String("session_id", string(sessionID)))
+		s.writeCurrentFactoryError(w, err, "save", zap.String("session_id", string(sessionID)))
 		return
 	}
 	s.writeJSON(w, http.StatusOK, saved)
 }
 
-func (s *Server) writeEditableCurrentFactoryDefinitionError(
+func (s *Server) writeCurrentFactoryError(
 	w http.ResponseWriter,
 	err error,
 	action string,
@@ -600,13 +600,13 @@ func (s *Server) writeEditableCurrentFactoryDefinitionError(
 	case errors.Is(err, apisurface.ErrFactorySessionNotFound):
 		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 		return
-	case errors.Is(err, apisurface.ErrCurrentNamedFactoryNotFound):
-		s.writeError(w, http.StatusNotFound, "Current named factory not found.", "NOT_FOUND")
+	case errors.Is(err, apisurface.ErrCurrentFactoryNotFound):
+		s.writeError(w, http.StatusNotFound, "Current factory not found.", "NOT_FOUND")
 		return
 	case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
 		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.ErrorTarget{errorTarget("field", "", "factory.name")})
 		return
-	case errors.Is(err, apisurface.ErrEditableFactoryVersionStale):
+	case errors.Is(err, apisurface.ErrFactoryVersionStale):
 		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory definition is stale. Refresh the graph before saving.", "STALE_FACTORY_VERSION", []factoryapi.ErrorTarget{errorTarget("save", "stale-version", "")})
 		return
 	case errors.As(err, &topologyErr):
@@ -624,12 +624,12 @@ func (s *Server) writeEditableCurrentFactoryDefinitionError(
 		return
 	default:
 		logFields := append([]zap.Field{zap.String("action", action)}, fields...)
-		s.logger.Error("editable current factory definition request failed", append(logFields, zap.Error(err))...)
+		s.logger.Error("current factory request failed", append(logFields, zap.Error(err))...)
 		if action == "get" {
-			s.writeError(w, http.StatusInternalServerError, "failed to load editable current factory definition", "INTERNAL_ERROR")
+			s.writeError(w, http.StatusInternalServerError, "failed to load current factory", "INTERNAL_ERROR")
 			return
 		}
-		s.writeError(w, http.StatusInternalServerError, "failed to save editable current factory definition", "INTERNAL_ERROR")
+		s.writeError(w, http.StatusInternalServerError, "failed to save current factory", "INTERNAL_ERROR")
 		return
 	}
 }

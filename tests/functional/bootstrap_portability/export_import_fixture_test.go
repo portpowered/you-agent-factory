@@ -183,9 +183,9 @@ func (fixture exportImportFixture) assertCurrentFactorySignals(
 		t.Fatalf("resolved current factory dir = %q, want %q", got, wantDir)
 	}
 
-	current, err := svc.GetCurrentNamedFactory(context.Background())
+	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory(%s): %v", wantName, err)
+		t.Fatalf("GetCurrentFactory(%s): %v", wantName, err)
 	}
 	if current.Name != factoryapi.FactoryName(wantName) {
 		t.Fatalf("current factory name = %q, want %q", current.Name, wantName)
@@ -196,7 +196,7 @@ func (fixture exportImportFixture) assertCurrentFactorySignals(
 		comparableExportImportFactory(fixture.GeneratedExportFactor),
 	) {
 		t.Fatalf(
-			"current named factory readback diverged from fixture export contract\ngot:  %#v\nwant: %#v",
+			"current factory readback diverged from fixture export contract\ngot:  %#v\nwant: %#v",
 			comparableExportImportFactory(current),
 			comparableExportImportFactory(fixture.GeneratedExportFactor),
 		)
@@ -218,6 +218,7 @@ func comparableExportImportFactory(factory factoryapi.Factory) factoryapi.Factor
 	comparable.FactoryDirectory = nil
 	comparable.SourceDirectory = nil
 	comparable.Metadata = nil
+	comparable.Version = nil
 	return comparable
 }
 
@@ -229,7 +230,7 @@ func valueOrEmpty[T any](value *[]T) []T {
 }
 
 type namedFactoryReadback interface {
-	GetCurrentNamedFactory(context.Context) (factoryapi.Factory, error)
+	GetCurrentFactory(context.Context) (factoryapi.Factory, error)
 }
 
 func buildExportImportFixtureService(t *testing.T, rootDir string) namedFactoryReadback {

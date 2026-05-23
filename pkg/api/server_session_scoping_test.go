@@ -26,7 +26,7 @@ func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing
 	defaultSession := newSessionScopedMockFactory(now, &defaultFactoryID, apisurface.DefaultCurrentFactoryName, "tok-default-1", "default-work-1", "factory-event/work-request/default-history")
 	betaSession := newSessionScopedMockFactory(now, &betaFactoryID, "beta", "tok-beta-1", "beta-work-1", "factory-event/work-request/beta-history")
 	srv := newTestServer(&testutil.MockFactory{
-		CurrentNamedFactory: &factoryapi.Factory{Name: apisurface.DefaultCurrentFactoryName, Id: &defaultFactoryID},
+		CurrentFactory: &factoryapi.Factory{Name: apisurface.DefaultCurrentFactoryName, Id: &defaultFactoryID},
 		SessionFactories: map[string]*testutil.MockFactory{
 			"~default":     defaultSession,
 			"session-beta": betaSession,
@@ -62,7 +62,7 @@ func newSessionScopedMockFactory(
 			History: []factoryapi.FactoryEvent{{Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest}},
 			Events:  make(chan factoryapi.FactoryEvent),
 		},
-		CurrentNamedFactory: &factoryapi.Factory{Name: factoryName, Id: factoryID},
+		CurrentFactory: &factoryapi.Factory{Name: factoryName, Id: factoryID},
 	}
 }
 
@@ -344,18 +344,18 @@ func TestFactorySessionsAPI_CloseFactorySession_NotFound(t *testing.T) {
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
 }
 
-func TestGetEditableCurrentFactoryDefinitionBySessionId_ReturnsSessionDefinitionAndVersion(t *testing.T) {
+func TestGetCurrentFactoryBySessionId_ReturnsSessionDefinitionAndVersion(t *testing.T) {
 	defaultVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 1).UTC(), Logical: 1}
 	sessionVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 2).UTC(), Logical: 2}
 	srv := newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
 			"~default": {
-				CurrentNamedFactory:    &factoryapi.Factory{Name: "alpha"},
-				EditableFactoryVersion: defaultVersion,
+				CurrentFactory: &factoryapi.Factory{Name: "alpha"},
+				FactoryVersion: defaultVersion,
 			},
 			"session-2": {
-				CurrentNamedFactory:    &factoryapi.Factory{Name: "beta"},
-				EditableFactoryVersion: sessionVersion,
+				CurrentFactory: &factoryapi.Factory{Name: "beta"},
+				FactoryVersion: sessionVersion,
 			},
 		},
 	})
@@ -376,16 +376,16 @@ func TestGetEditableCurrentFactoryDefinitionBySessionId_ReturnsSessionDefinition
 	}
 }
 
-func TestSaveEditableCurrentFactoryDefinitionBySessionId_SubmitsToTargetedSessionOnly(t *testing.T) {
+func TestSaveCurrentFactoryBySessionId_SubmitsToTargetedSessionOnly(t *testing.T) {
 	defaultVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 1).UTC(), Logical: 1}
 	sessionVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 2).UTC(), Logical: 2}
 	defaultFactory := &testutil.MockFactory{
-		CurrentNamedFactory:    &factoryapi.Factory{Name: "alpha"},
-		EditableFactoryVersion: defaultVersion,
+		CurrentFactory: &factoryapi.Factory{Name: "alpha"},
+		FactoryVersion: defaultVersion,
 	}
 	sessionFactory := &testutil.MockFactory{
-		CurrentNamedFactory:    &factoryapi.Factory{Name: "beta"},
-		EditableFactoryVersion: sessionVersion,
+		CurrentFactory: &factoryapi.Factory{Name: "beta"},
+		FactoryVersion: sessionVersion,
 	}
 	srv := newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
@@ -403,19 +403,19 @@ func TestSaveEditableCurrentFactoryDefinitionBySessionId_SubmitsToTargetedSessio
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PUT factory status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	if len(defaultFactory.SavedEditableFactories) != 0 {
-		t.Fatalf("default session save count = %d, want 0", len(defaultFactory.SavedEditableFactories))
+	if len(defaultFactory.SavedCurrentFactories) != 0 {
+		t.Fatalf("default session save count = %d, want 0", len(defaultFactory.SavedCurrentFactories))
 	}
-	if len(sessionFactory.SavedEditableFactories) != 1 {
-		t.Fatalf("session save count = %d, want 1", len(sessionFactory.SavedEditableFactories))
+	if len(sessionFactory.SavedCurrentFactories) != 1 {
+		t.Fatalf("session save count = %d, want 1", len(sessionFactory.SavedCurrentFactories))
 	}
-	saved := sessionFactory.SavedEditableFactories[0]
+	saved := sessionFactory.SavedCurrentFactories[0]
 	if saved.Name != "beta" {
 		t.Fatalf("saved factory = %#v, want beta definition", saved)
 	}
 }
 
-func TestEditableCurrentFactoryDefinitionBySessionId_UnknownSessionReturnsNotFound(t *testing.T) {
+func TestCurrentFactoryBySessionId_UnknownSessionReturnsNotFound(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
 			"~default": {},

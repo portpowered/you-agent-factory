@@ -18,7 +18,7 @@ import (
 type APISurface interface {
 	factory.APIFactory
 	CreateNamedFactory(ctx context.Context, namedFactory factoryapi.Factory) (factoryapi.Factory, error)
-	GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error)
+	GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error)
 	SaveCurrentFactory(ctx context.Context, request factoryapi.Factory) (factoryapi.Factory, error)
 	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
 	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
@@ -36,7 +36,7 @@ type SessionAPISurface interface {
 	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
 	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
-	GetCurrentNamedFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
+	GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
 	SaveCurrentFactoryForSession(ctx context.Context, sessionID string, request factoryapi.Factory) (factoryapi.Factory, error)
 }
 
@@ -52,17 +52,17 @@ var ErrInvalidNamedFactoryName = errors.New("invalid named factory name")
 // not be persisted or validated as a runnable runtime config.
 var ErrInvalidNamedFactory = errors.New("invalid named factory")
 
-// ErrCurrentNamedFactoryNotFound reports that no durable current-factory
+// ErrCurrentFactoryNotFound reports that no durable current-factory
 // pointer could be resolved for named-factory readback.
-var ErrCurrentNamedFactoryNotFound = errors.New("current named factory not found")
+var ErrCurrentFactoryNotFound = errors.New("current factory not found")
 
 // ErrFactorySessionNotFound reports that no live session matched the requested
 // public session identifier.
 var ErrFactorySessionNotFound = errors.New("factory session not found")
 
-// ErrEditableFactoryVersionStale reports that a complete current-factory
+// ErrFactoryVersionStale reports that a complete current-factory
 // save was based on an older factory definition version than the current one.
-var ErrEditableFactoryVersionStale = errors.New("editable factory definition version is stale")
+var ErrFactoryVersionStale = errors.New("factory version is stale")
 
 // ErrModelNotFound reports that the requested discovered model identifier is
 // not present in the current runtime configuration.

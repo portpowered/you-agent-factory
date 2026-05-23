@@ -122,7 +122,7 @@ func TestQuery_ReturnsActionableCurrentFactoryNotFoundError(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
 			Code:    factoryapi.NOTFOUND,
-			Message: "Current named factory not found.",
+			Message: "Current factory not found.",
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -137,7 +137,7 @@ func TestQuery_ReturnsActionableCurrentFactoryNotFoundError(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("json mode should not print success output on error: %q", out.String())
 	}
-	want := "running service has no active current factory; start a factory or activate a named factory: current factory not found: Current named factory not found."
+	want := "running service has no active current factory; start a factory or activate a named factory: current factory not found: Current factory not found."
 	if err.Error() != want {
 		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
@@ -208,7 +208,7 @@ func TestQueryCurrent_ReturnsInspectableNotFoundError(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
 			Code:    "NOT_FOUND",
-			Message: "Current named factory not found.",
+			Message: "Current factory not found.",
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -219,7 +219,7 @@ func TestQueryCurrent_ReturnsInspectableNotFoundError(t *testing.T) {
 	if !errors.Is(err, ErrCurrentFactoryNotFound) {
 		t.Fatalf("QueryCurrent error = %v, want ErrCurrentFactoryNotFound", err)
 	}
-	if got := err.Error(); got != "current factory not found: Current named factory not found." {
+	if got := err.Error(); got != "current factory not found: Current factory not found." {
 		t.Fatalf("error = %q", got)
 	}
 }

@@ -133,7 +133,7 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 			observation.submitResult, observation.submitErr = runtime.SubmitWorkRequest(ctx, workRequest)
 			observation.stream, observation.streamErr = runtime.SubscribeFactoryEvents(ctx)
 			observation.snapshot, observation.snapshotErr = runtime.GetEngineStateSnapshot(ctx)
-			observation.current, observation.currentErr = runtime.GetCurrentNamedFactory(ctx)
+			observation.current, observation.currentErr = runtime.GetCurrentFactory(ctx)
 			observedCh <- observation
 			return nil
 		},
@@ -173,7 +173,7 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 		t.Fatalf("APIServerStarter snapshot work types = %#v, want task", observation.snapshot.Topology.WorkTypes)
 	}
 	if observation.currentErr != nil {
-		t.Fatalf("APIServerStarter runtime.GetCurrentNamedFactory: %v", observation.currentErr)
+		t.Fatalf("APIServerStarter runtime.GetCurrentFactory: %v", observation.currentErr)
 	}
 	if observation.current.Name != apisurface.DefaultCurrentFactoryName {
 		t.Fatalf("APIServerStarter current factory name = %q, want %q", observation.current.Name, apisurface.DefaultCurrentFactoryName)
