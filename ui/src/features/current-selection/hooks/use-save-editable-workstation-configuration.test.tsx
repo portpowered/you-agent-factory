@@ -45,6 +45,10 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       });
     });
     expect(mutateAsync).toHaveBeenCalledWith({
+      baseVersion: {
+        logical: 7,
+        physical: "2026-05-23T15:52:00Z",
+      },
       factoryDefinition: {
         name: "Current Factory",
         workers: [],
@@ -121,6 +125,10 @@ describe("useSaveEditableWorkstationConfiguration", () => {
             name: "Current Factory",
             workers: [],
             workstations: [],
+            version: {
+              logical: 7,
+              physical: "2026-05-23T15:52:00Z",
+            },
           }),
           headers: {
             "content-type": "application/json",
@@ -175,6 +183,10 @@ function buildReadyEditableConfigurationState(overrides?: {
     },
     isDirty: true,
     markChangesSaved: overrides?.markChangesSaved ?? vi.fn(),
+    baseVersion: {
+      logical: 7,
+      physical: "2026-05-23T15:52:00Z",
+    },
     onBehaviorChange: vi.fn(),
     onPromptChange: vi.fn(),
     onRunnerChange: vi.fn(),

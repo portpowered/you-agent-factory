@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
-import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
+import type {
+  CanonicalFactoryDefinition,
+  CurrentFactoryVersion,
+} from "../../api/current-factory-definition";
 import type {
   PromptTemplateContract,
   PromptTemplateValidationResult,
@@ -190,6 +193,7 @@ export type EditableWorkstationConfigurationState =
       initialValues: EditableWorkstationValues;
       isDirty: boolean;
       markChangesSaved: () => void;
+      baseVersion: CurrentFactoryVersion;
       onBehaviorChange: (value: EditableWorkstationBehavior) => void;
       onPromptChange: (value: string) => void;
       onRunnerChange: (value: RunnerID | null) => void;

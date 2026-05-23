@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import type {
+  CanonicalFactoryDefinition,
+  CurrentFactoryVersion,
+} from "../../../api/current-factory-definition";
 import {
   useSaveCurrentFactory,
 } from "../../current-factory-definition";
@@ -25,6 +28,7 @@ interface UseSaveEditableWorkstationConfigurationResult {
 }
 
 interface EditableWorkstationSaveRequest {
+  baseVersion: CurrentFactoryVersion;
   markChangesSaved?: () => void;
   scopeKey: string;
   value: CanonicalFactoryDefinition;
@@ -121,12 +125,14 @@ export function useSaveEditableWorkstationConfiguration({
       setLastSuccessfulScopeKey(null);
       setSubmittingScopeKey(scopeKey);
       const request: EditableWorkstationSaveRequest = {
+        baseVersion: editableConfigurationState.baseVersion,
         markChangesSaved: editableConfigurationState.markChangesSaved,
         scopeKey,
         value: editableConfigurationState.pendingFactoryDefinition,
       };
       try {
         await mutation.mutateAsync({
+          baseVersion: request.baseVersion,
           factoryDefinition: request.value,
         });
         request.markChangesSaved?.();

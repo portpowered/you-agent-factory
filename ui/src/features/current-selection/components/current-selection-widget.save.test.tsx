@@ -2,11 +2,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import type { CanonicalFactoryDefinition } from "../../current-factory-definition";
 import {
-  useCurrentFactoryDefinition,
+  CurrentFactoryDefinitionError,
+  type CurrentFactoryDocument,
+} from "../../../api/current-factory-definition";
+import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import {
+  useCurrentFactoryDocument,
   useSaveCurrentFactory,
 } from "../../current-factory-definition";
 import { CurrentSelectionWidget } from "./current-selection-widget";
@@ -21,7 +23,7 @@ vi.mock("../../current-factory-definition", async () => {
 
   return {
     ...actual,
-    useCurrentFactoryDefinition: vi.fn(),
+    useCurrentFactoryDocument: vi.fn(),
     useSaveCurrentFactory: vi.fn(),
   };
 });
@@ -36,7 +38,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     saveCurrentFactoryMutation.mockReset();
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
     vi.mocked(useSaveCurrentFactory).mockReturnValue({
@@ -171,15 +173,25 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
-      expect(saveCurrentFactoryMutation).toHaveBeenCalledWith({
-        factoryDefinition: expect.objectContaining({
-          workstations: [
-            expect.objectContaining({
-              body: "Review the diff and verify browser behavior.",
-            }),
-          ],
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseVersion: {
+            logical: 7,
+            physical: "2026-05-23T15:52:00Z",
+          },
+          factoryDefinition: expect.objectContaining({
+            version: {
+              logical: 7,
+              physical: "2026-05-23T15:52:00Z",
+            },
+            workstations: [
+              expect.objectContaining({
+                body: "Review the diff and verify browser behavior.",
+              }),
+            ],
+          }),
         }),
-      });
+      );
     });
     await waitFor(() => {
       expect(
@@ -301,16 +313,26 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
-      expect(saveCurrentFactoryMutation).toHaveBeenCalledWith({
-        factoryDefinition: expect.objectContaining({
-          workstations: [
-            expect.objectContaining({
-              name: "Review",
-              worker: "planner",
-            }),
-          ],
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseVersion: {
+            logical: 7,
+            physical: "2026-05-23T15:52:00Z",
+          },
+          factoryDefinition: expect.objectContaining({
+            version: {
+              logical: 7,
+              physical: "2026-05-23T15:52:00Z",
+            },
+            workstations: [
+              expect.objectContaining({
+                name: "Review",
+                worker: "planner",
+              }),
+            ],
+          }),
         }),
-      });
+      );
     });
   });
 
@@ -348,7 +370,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "reviewer" },
     });
 
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(refreshedFactory),
     );
 
@@ -375,7 +397,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("preserves worker models while saving workstation prompt changes against a shared-worker definition", async () => {
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildSharedWorkerFactoryDefinition()),
     );
     saveCurrentFactoryMutation.mockResolvedValue(
@@ -394,11 +416,20 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
-      expect(saveCurrentFactoryMutation).toHaveBeenCalledWith({
-        factoryDefinition: expect.objectContaining({
-          workers: [
-            expect.objectContaining({
-              model: "gpt-5.5",
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseVersion: {
+            logical: 7,
+            physical: "2026-05-23T15:52:00Z",
+          },
+          factoryDefinition: expect.objectContaining({
+            version: {
+              logical: 7,
+              physical: "2026-05-23T15:52:00Z",
+            },
+            workers: [
+              expect.objectContaining({
+                model: "gpt-5.5",
               name: "processor",
             }),
           ],
@@ -410,15 +441,16 @@ describe("CurrentSelectionWidget workstation save flow", () => {
             expect.objectContaining({
               body: "Plan the implementation.",
               name: "Plan",
-            }),
-          ],
+              }),
+            ],
+          }),
         }),
-      });
+      );
     });
   });
 
   it("keeps save feedback scoped to the workstation that started the save after switching selections", async () => {
-    const deferredSave = createDeferredPromise<CanonicalFactoryDefinition>();
+    const deferredSave = createDeferredPromise<CurrentFactoryDocument>();
     const queryClient = new QueryClient({
       defaultOptions: {
         mutations: { retry: false },
@@ -429,7 +461,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
@@ -520,7 +552,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
@@ -552,7 +584,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ).toBeTruthy();
     });
 
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(savedFactory),
     );
 
@@ -617,7 +649,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
@@ -649,7 +681,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ).toBeTruthy();
     });
 
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(savedFactory),
     );
 
@@ -706,7 +738,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("does not leak a failed save message into a different workstation after switching selections", async () => {
-    const deferredSave = createDeferredPromise<CanonicalFactoryDefinition>();
+    const deferredSave = createDeferredPromise<CurrentFactoryDocument>();
     const queryClient = new QueryClient({
       defaultOptions: {
         mutations: { retry: false },
@@ -717,7 +749,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
@@ -797,7 +829,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     saveCurrentFactoryMutation.mockRejectedValue(
@@ -890,7 +922,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     saveCurrentFactoryMutation.mockRejectedValue(
@@ -1048,7 +1080,7 @@ function buildCurrentSelection(
 }
 
 function buildEditableDefinitionResult(
-  data: CanonicalFactoryDefinition | undefined,
+  data: CurrentFactoryDocument | undefined,
 ) {
   return {
     data,
@@ -1080,9 +1112,13 @@ function buildEditableFactoryDefinition(overrides?: {
   prompt?: string;
   workerName?: string;
   workerOptions?: string[];
-}): CanonicalFactoryDefinition {
+}): CurrentFactoryDocument {
   return {
     name: "Current Factory",
+    version: {
+      logical: 7,
+      physical: "2026-05-23T15:52:00Z",
+    },
     workers: (overrides?.workerOptions ?? ["reviewer", "planner"]).map(
       (name, index) => ({
         model: `gpt-5.${index + 5}`,
@@ -1110,9 +1146,13 @@ function buildEditableFactoryDefinition(overrides?: {
 function buildMultiWorkstationEditableFactoryDefinition(overrides?: {
   planPrompt?: string;
   reviewPrompt?: string;
-}): CanonicalFactoryDefinition {
+}): CurrentFactoryDocument {
   return {
     name: "Current Factory",
+    version: {
+      logical: 7,
+      physical: "2026-05-23T15:52:00Z",
+    },
     workers: [
       {
         model: "gpt-5.5",
@@ -1153,9 +1193,13 @@ function buildMultiWorkstationEditableFactoryDefinition(overrides?: {
 
 function buildSharedWorkerFactoryDefinition(
   overrides?: { prompt?: string },
-): CanonicalFactoryDefinition {
+): CurrentFactoryDocument {
   return {
     name: "Current Factory",
+    version: {
+      logical: 7,
+      physical: "2026-05-23T15:52:00Z",
+    },
     workers: [
       {
         model: "gpt-5.5",
