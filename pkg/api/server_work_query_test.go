@@ -40,6 +40,30 @@ func assertSubmitThenListWorkRequest(t *testing.T, srv *Server, mf *testutil.Moc
 	return submitted
 }
 
+func TestSubmitWork_OmitsUnsetOptionalBoundaryFields(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := submitWorkRequest(t, srv, `{"name":"Inventory story","workTypeName":"task","payload":{"title":"Document current API"}}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST /work status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted requests = %d, want 1", len(mf.Submitted))
+	}
+
+	submitted := mf.Submitted[0]
+	if submitted.Name != "Inventory story" || submitted.WorkTypeID != "task" {
+		t.Fatalf("submitted request = %#v, want canonical required fields", submitted)
+	}
+	if submitted.TraceID == "" || submitted.CurrentChainingTraceID == "" {
+		t.Fatalf("submitted chaining identifiers = %#v, want server-owned defaults when optionals are omitted", submitted)
+	}
+	if submitted.Relations != nil {
+		t.Fatalf("submitted relations = %#v, want nil when omitted", submitted.Relations)
+	}
+}
+
 func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.MockFactory, submitted interfaces.SubmitRequest, now time.Time) {
 	t.Helper()
 
@@ -139,6 +163,40 @@ func TestGetWork(t *testing.T) {
 	})
 	if resp.History == nil || resp.History.TotalVisits == nil || (*resp.History.TotalVisits)["execute"] != 1 {
 		t.Error("expected history in single token response")
+	}
+}
+
+func TestGetWork_OmitsEmptyOptionalCollections(t *testing.T) {
+	now := time.Now()
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+			"tok-prd-2": {
+				ID:      "tok-prd-2",
+				PlaceID: "prd:init",
+				Color: interfaces.TokenColor{
+					WorkID:     "work-prd-2",
+					WorkTypeID: "prd",
+					TraceID:    "trace-2",
+				},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+		}},
+	})
+
+	req := httptest.NewRequest("GET", "/work/tok-prd-2", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.TokenResponse](t, rec)
+	if resp.CurrentChainingTraceId == nil || *resp.CurrentChainingTraceId != "trace-2" {
+		t.Fatalf("current chaining trace ID = %#v, want trace fallback", resp.CurrentChainingTraceId)
+	}
+	if resp.PreviousChainingTraceIds != nil || resp.Tags != nil {
+		t.Fatalf("optional collections = %#v, want omitted empty fields", resp)
 	}
 }
 

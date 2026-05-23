@@ -213,6 +213,41 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesScriptBacke
 	assertCompletedScriptProjection(t, requests[scriptProjectionCompletedDispatchID])
 }
 
+func TestBuildFactoryWorldWorkstationRequestProjectionSlice_OmitsEmptyOptionalCollections(t *testing.T) {
+	workItem := interfaces.FactoryWorkItem{
+		ID:          "work-empty-optionals",
+		WorkTypeID:  "task",
+		DisplayName: "Pending story",
+		TraceID:     "trace-empty",
+		PlaceID:     "task:init",
+	}
+	slice := BuildFactoryWorldWorkstationRequestProjectionSlice(interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			workItem.ID: workItem,
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"dispatch-empty-optionals": {
+				DispatchID:   "dispatch-empty-optionals",
+				TransitionID: "review",
+				Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
+				StartedAt:    time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC),
+				Inputs: []interfaces.WorkstationInput{{
+					TokenID:  "token-empty-optionals",
+					PlaceID:  workItem.PlaceID,
+					WorkItem: &workItem,
+				}},
+				WorkItemIDs: []string{workItem.ID},
+			},
+		},
+	})
+
+	requests := requireWorkstationProjectionRequests(t, slice, 1)
+	request := requests["dispatch-empty-optionals"].Request
+	if request.PreviousChainingTraceIds != nil || request.TraceIds != nil {
+		t.Fatalf("projection request optionals = %#v, want omitted empty slice-backed fields", request)
+	}
+}
+
 func TestBuildFactoryWorldWorkstationRequestProjectionSlice_UsesDispatchTimeConsumedPayloadSnapshot(t *testing.T) {
 	initial := interfaces.FactoryWorkItem{
 		ID:          "work-consumed-lineage",

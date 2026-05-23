@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
@@ -761,43 +762,23 @@ func stringPtr(value string) *string {
 }
 
 func stringPtrIfNotEmpty(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return stringPtr(value)
+	return optional.NonEmptyStringPtr(value)
 }
 
 func stringSlicePtr(values []string) *[]string {
-	if len(values) == 0 {
-		return nil
-	}
-	copied := append([]string(nil), values...)
-	return &copied
+	return optional.CopiedStringsPtr(values)
 }
 
 func stringMapPtr(values map[string]string) *factoryapi.StringMap {
-	if len(values) == 0 {
-		return nil
-	}
-	copied := make(factoryapi.StringMap, len(values))
-	for key, value := range values {
-		copied[key] = value
-	}
-	return &copied
+	return optional.CopiedStringMapPtr(values)
 }
 
 func intPtrIfNonZero(value int) *int {
-	if value == 0 {
-		return nil
-	}
-	return &value
+	return optional.NonZeroIntPtr(value)
 }
 
 func boolPtrIfTrue(value bool) *bool {
-	if !value {
-		return nil
-	}
-	return &value
+	return optional.TrueBoolPtr(value)
 }
 
 func stringValue(value *string) string {
@@ -808,21 +789,11 @@ func stringValue(value *string) string {
 }
 
 func stringSliceValue(values *[]string) []string {
-	if values == nil {
-		return nil
-	}
-	return append([]string(nil), (*values)...)
+	return optional.StringsValue(values)
 }
 
 func stringMapValue(values *factoryapi.StringMap) map[string]string {
-	if values == nil {
-		return nil
-	}
-	out := make(map[string]string, len(*values))
-	for key, value := range *values {
-		out[key] = value
-	}
-	return out
+	return optional.StringMapValue(values)
 }
 
 func intValue(value *int) int {

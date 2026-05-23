@@ -97,6 +97,76 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 	}
 }
 
+func TestFactoryConfigMapper_FlattenOmitsEmptyOptionalCollectionsAndExpandsPopulatedOptionals(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	flattened, err := mapper.Flatten(&interfaces.FactoryConfig{
+		Name: "optional-boundary-fields",
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			ID:               "execute-story-id",
+			Name:             "execute-story",
+			WorkerTypeName:   "executor",
+			Inputs:           []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:          []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+			WorkingDirectory: "/tmp/story",
+			StopWords:        []string{},
+			Env:              map[string]string{},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+
+	payload := mustDecodeFactoryPayload(t, flattened)
+	workstationPayload := payload["workstations"].([]any)[0].(map[string]any)
+	assertMissingKey(t, workstationPayload, "stopWords")
+	assertMissingKey(t, workstationPayload, "env")
+	if got := workstationPayload["id"]; got != "execute-story-id" {
+		t.Fatalf("flattened workstation id = %#v, want %q", got, "execute-story-id")
+	}
+	if got := workstationPayload["workingDirectory"]; got != "/tmp/story" {
+		t.Fatalf("flattened workingDirectory = %#v, want %q", got, "/tmp/story")
+	}
+
+	expanded, err := mapper.Expand([]byte(`{
+		"name": "optional-boundary-fields",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"id":"execute-story-id",
+			"name":"execute-story",
+			"worker":"executor",
+			"workingDirectory":"/tmp/story",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}],
+			"stopWords":["DONE"],
+			"env":{"MODE":"strict"}
+		}]
+	}`))
+	if err != nil {
+		t.Fatalf("mapper.Expand populated optionals: %v", err)
+	}
+
+	workstation := expanded.Workstations[0]
+	if workstation.WorkingDirectory != "/tmp/story" {
+		t.Fatalf("expanded workingDirectory = %q, want /tmp/story", workstation.WorkingDirectory)
+	}
+	if len(workstation.StopWords) != 1 || workstation.StopWords[0] != "DONE" {
+		t.Fatalf("expanded stopWords = %#v, want [DONE]", workstation.StopWords)
+	}
+	if workstation.Env["MODE"] != "strict" {
+		t.Fatalf("expanded env = %#v, want MODE=strict", workstation.Env)
+	}
+}
+
 func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 
