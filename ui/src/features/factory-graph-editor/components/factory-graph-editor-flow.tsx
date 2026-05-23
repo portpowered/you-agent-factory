@@ -9,7 +9,7 @@ import { cn } from "../../../lib/cn";
 import {
   ActivityGraphNodeBadge,
   activityGraphNodeTitleClassName,
-} from "../../flowchart/current-activity-node-chrome";
+} from "../../flowchart/components/current-activity-node-chrome";
 import {
   ActivityGraphNodeShell,
   type ActivityGraphNodeHandle,

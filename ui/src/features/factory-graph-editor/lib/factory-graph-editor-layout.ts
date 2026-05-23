@@ -1,7 +1,7 @@
 import {
   buildLayeredGraphLayout,
   type LayeredGraphLayoutNode,
-} from "../flowchart/layered-layout";
+} from "../../flowchart/lib/layered-layout";
 import type {
   FactoryGraphNodeKind,
   FactoryGraphTopology,
