@@ -115,8 +115,8 @@ func TestQuery_WritesJSONNamedFactory(t *testing.T) {
 
 func TestQuery_ReturnsActionableCurrentFactoryNotFoundError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/factory/~current" {
-			t.Fatalf("path = %q, want /factory/~current", r.URL.Path)
+		if r.URL.Path != "/factory-sessions/~default/factory" {
+			t.Fatalf("path = %q, want /factory-sessions/~default/factory", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -152,7 +152,7 @@ func TestQuery_ReturnsReachableServerError(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("human mode should not print success output on error: %q", out.String())
 	}
-	if !strings.Contains(err.Error(), "factory not reachable at http://localhost:1/factory/~current") {
+	if !strings.Contains(err.Error(), "factory not reachable at http://localhost:1/factory-sessions/~default/factory") {
 		t.Fatalf("error = %q, want reachability context", err.Error())
 	}
 }
@@ -201,8 +201,8 @@ func TestQueryCurrent_ReturnsNamedFactory(t *testing.T) {
 
 func TestQueryCurrent_ReturnsInspectableNotFoundError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/factory/~current" {
-			t.Fatalf("path = %q, want /factory/~current", r.URL.Path)
+		if r.URL.Path != "/factory-sessions/~default/factory" {
+			t.Fatalf("path = %q, want /factory-sessions/~default/factory", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -226,8 +226,8 @@ func TestQueryCurrent_ReturnsInspectableNotFoundError(t *testing.T) {
 
 func TestQueryCurrent_PreservesUnexpectedResponseBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/factory/~current" {
-			t.Fatalf("path = %q, want /factory/~current", r.URL.Path)
+		if r.URL.Path != "/factory-sessions/~default/factory" {
+			t.Fatalf("path = %q, want /factory-sessions/~default/factory", r.URL.Path)
 		}
 		http.Error(w, "backend exploded", http.StatusInternalServerError)
 	}))
@@ -246,8 +246,8 @@ func currentFactoryServer(t *testing.T, current factoryapi.Factory) *httptest.Se
 	t.Helper()
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/factory/~current" {
-			t.Fatalf("path = %q, want /factory/~current", r.URL.Path)
+		if r.URL.Path != "/factory-sessions/~default/factory" {
+			t.Fatalf("path = %q, want /factory-sessions/~default/factory", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(current); err != nil {

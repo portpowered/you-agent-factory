@@ -7,12 +7,13 @@ import (
 
 const DefaultFactorySessionID = "~default"
 
+func CurrentFactoryPath(sessionID string) string {
+	return fmt.Sprintf("/factory-sessions/%s/factory", escapedSessionID(sessionID))
+}
+
 func ScopedPath(legacyPath string, sessionID string) string {
 	if legacyPath == "/factory/~current" {
-		return fmt.Sprintf("/factory-sessions/%s/factory", escapedSessionID(sessionID))
-	}
-	if legacyPath == "/factory/~current/editable-definition" {
-		return fmt.Sprintf("/factory-sessions/%s/factory/editable-definition", escapedSessionID(sessionID))
+		return CurrentFactoryPath(sessionID)
 	}
 	return fmt.Sprintf("/factory-sessions/%s%s", escapedSessionID(sessionID), legacyPath)
 }

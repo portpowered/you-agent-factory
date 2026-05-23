@@ -40,12 +40,6 @@ func TestScopedPath(t *testing.T) {
 			sessionID: "session-beta",
 			want:      "/factory-sessions/session-beta/factory",
 		},
-		{
-			name:      "editable factory path keeps session root and editing suffix",
-			legacy:    "/factory/~current/editable-definition",
-			sessionID: "session-beta",
-			want:      "/factory-sessions/session-beta/factory/editable-definition",
-		},
 	}
 
 	for _, tt := range tests {
@@ -55,5 +49,17 @@ func TestScopedPath(t *testing.T) {
 				t.Fatalf("ScopedPath(%q, %q) = %q, want %q", tt.legacy, tt.sessionID, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCurrentFactoryPath(t *testing.T) {
+	t.Parallel()
+
+	if got := CurrentFactoryPath(""); got != "/factory-sessions/~default/factory" {
+		t.Fatalf("CurrentFactoryPath(\"\") = %q, want /factory-sessions/~default/factory", got)
+	}
+
+	if got := CurrentFactoryPath("session/beta"); got != "/factory-sessions/session%2Fbeta/factory" {
+		t.Fatalf("CurrentFactoryPath(\"session/beta\") = %q, want /factory-sessions/session%%2Fbeta/factory", got)
 	}
 }

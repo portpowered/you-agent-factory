@@ -14,6 +14,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
 const queryCurrentRequestTimeout = 10 * time.Second
@@ -57,7 +58,7 @@ func QueryCurrent(cfg QueryCurrentConfig) (factoryapi.Factory, error) {
 	endpoint := url.URL{
 		Scheme: "http",
 		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
-		Path:   "/factory/~current",
+		Path:   sessionpath.CurrentFactoryPath(""),
 	}
 
 	client := &http.Client{Timeout: queryCurrentRequestTimeout}

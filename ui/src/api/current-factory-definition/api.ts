@@ -5,7 +5,7 @@ import {
   normalizeFactoryDefinition,
   type CanonicalFactoryDefinition,
 } from "../factory-definition";
-import { factorySessionScopedPath } from "../session-routing";
+import { currentFactorySessionPath } from "../session-routing";
 import {
   extractAPIErrorPayload,
   isAPIRecord,
@@ -67,13 +67,9 @@ interface RequestEditableFactoryDefinitionDocumentOptions {
 }
 
 type FactoryDocumentRecord = Record<string, unknown> & {
-  factoryDefinition?: unknown;
   name?: unknown;
   version: unknown;
 };
-
-const GET_CURRENT_EDITABLE_FACTORY_DEFINITION_ENDPOINT =
-  "/factory/~current";
 
 export class CurrentEditableFactoryDefinitionError extends Error {
   public readonly cause?: unknown;
@@ -160,12 +156,7 @@ async function requestEditableFactoryDefinitionDocument({
   let response: Response;
   try {
     response = await fetchImplementation(
-      factoryAPIURL(
-        factorySessionScopedPath(
-          GET_CURRENT_EDITABLE_FACTORY_DEFINITION_ENDPOINT,
-          sessionID,
-        ),
-      ),
+      factoryAPIURL(currentFactorySessionPath(sessionID)),
       {
         body,
         headers,
@@ -304,7 +295,7 @@ function isEditableFactoryDefinitionValue(
   if (!isAPIRecord(value) || !isAPIRecord(value.version)) {
     return false;
   }
-  return value.name !== undefined || isAPIRecord(value.factoryDefinition);
+  return value.name !== undefined;
 }
 
 function isErrorTarget(value: unknown): value is ErrorTarget {
@@ -323,13 +314,6 @@ function extractFactoryDocumentPayload(responseBody: unknown): {
         responseBody,
       },
     );
-  }
-
-  if (isAPIRecord(responseBody.factoryDefinition)) {
-    return {
-      factoryPayload: responseBody.factoryDefinition,
-      versionPayload: responseBody.version,
-    };
   }
 
   return {

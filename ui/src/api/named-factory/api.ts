@@ -1,6 +1,6 @@
 import type { components } from "../generated/openapi";
 import { factoryAPIURL } from "../baseUrl";
-import { factorySessionScopedPath } from "../session-routing";
+import { currentFactorySessionPath } from "../session-routing";
 import {
   extractAPIErrorPayload,
   isAPIRecord,
@@ -36,7 +36,6 @@ export interface GetCurrentFactoryOptions {
 }
 
 const CREATE_NAMED_FACTORY_ENDPOINT = "/factories";
-const GET_CURRENT_NAMED_FACTORY_ENDPOINT = "/factory/~current";
 
 export class NamedFactoryAPIError extends Error {
   public readonly code: NamedFactoryAPIErrorCode;
@@ -122,12 +121,7 @@ export async function getCurrentFactory(
   let response: Response;
   try {
     response = await fetchImplementation(
-      factoryAPIURL(
-        factorySessionScopedPath(
-          GET_CURRENT_NAMED_FACTORY_ENDPOINT,
-          options.sessionID,
-        ),
-      ),
+      factoryAPIURL(currentFactorySessionPath(options.sessionID)),
       {
         method: "GET",
       },

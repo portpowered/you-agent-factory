@@ -14,39 +14,37 @@ describe("getCurrentEditableFactoryDefinition", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          factoryDefinition: {
-            id: "factory-current",
-            name: "Current Factory",
-            workers: [
-              {
-                model: "gpt-5",
-                name: "writer",
-                type: "MODEL_WORKER",
-              },
-            ],
-            workstations: [
-              {
-                body: "Summarize the work item before review.",
-                inputs: [
-                  {
-                    state: "queued",
-                    workType: "task",
-                  },
-                ],
-                name: "Draft",
-                outputs: [
-                  {
-                    state: "reviewed",
-                    workType: "task",
-                  },
-                ],
-                promptFile: "prompts/draft.md",
-                type: "MODEL_WORKSTATION",
-                worker: "writer",
-              },
-            ],
-            workTypes: [],
-          },
+          id: "factory-current",
+          name: "Current Factory",
+          workers: [
+            {
+              model: "gpt-5",
+              name: "writer",
+              type: "MODEL_WORKER",
+            },
+          ],
+          workstations: [
+            {
+              body: "Summarize the work item before review.",
+              inputs: [
+                {
+                  state: "queued",
+                  workType: "task",
+                },
+              ],
+              name: "Draft",
+              outputs: [
+                {
+                  state: "reviewed",
+                  workType: "task",
+                },
+              ],
+              promptFile: "prompts/draft.md",
+              type: "MODEL_WORKSTATION",
+              worker: "writer",
+            },
+          ],
+          workTypes: [],
           version: {
             logical: 7,
             physical: "2026-05-18T14:22:00Z",
@@ -112,12 +110,10 @@ describe("getCurrentEditableFactoryDefinition", () => {
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
-            factoryDefinition: {
-              name: "Current Factory",
-              workers: [],
-              workstations: [],
-              workTypes: [],
-            },
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
             version: {
               logical: 9,
               physical: "2026-05-18T14:25:00Z",
@@ -152,12 +148,10 @@ describe("getCurrentEditableFactoryDefinition", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          factoryDefinition: {
-            name: "Scoped Factory",
-            workers: [],
-            workstations: [],
-            workTypes: [],
-          },
+          name: "Scoped Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
           version: {
             logical: 3,
             physical: "2026-05-18T14:24:00Z",
@@ -336,18 +330,16 @@ describe("getCurrentEditableFactoryDefinition", () => {
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
-              factoryDefinition: {
-                name: "Current Factory",
-                workers: [
-                  {
-                    model: 42,
-                    name: "writer",
-                    type: "MODEL_WORKER",
-                  },
-                ],
-                workstations: [],
-                workTypes: [],
-              },
+              name: "Current Factory",
+              workers: [
+                {
+                  model: 42,
+                  name: "writer",
+                  type: "MODEL_WORKER",
+                },
+              ],
+              workstations: [],
+              workTypes: [],
               version: {
                 logical: 12,
                 physical: "2026-05-18T14:30:00Z",
@@ -373,18 +365,16 @@ describe("getCurrentEditableFactoryDefinition", () => {
       message:
         "The current factory editing API returned a factory definition the dashboard cannot edit. factory.workers[0].model must be a string.",
       responseBody: {
-        factoryDefinition: {
-          name: "Current Factory",
-          workers: [
-            {
-              model: 42,
-              name: "writer",
-              type: "MODEL_WORKER",
-            },
-          ],
-          workstations: [],
-          workTypes: [],
-        },
+        name: "Current Factory",
+        workers: [
+          {
+            model: 42,
+            name: "writer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [],
+        workTypes: [],
         version: {
           logical: 12,
           physical: "2026-05-18T14:30:00Z",
@@ -398,35 +388,33 @@ describe("getCurrentEditableFactoryDefinition", () => {
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
-            factoryDefinition: {
-              name: "Current Factory",
-              workers: [{ name: "classifier" }],
-              workTypes: [
-                {
-                  name: "story",
-                  states: [
-                    { name: "new", type: "INITIAL" },
-                    { name: "approved", type: "TERMINAL" },
-                    { name: "failed", type: "FAILED" },
-                  ],
-                },
-              ],
-              workstations: [
-                {
-                  classificationRoutes: [
-                    {
-                      label: "approved",
-                      outputs: [{ state: "approved", workType: "story" }],
-                    },
-                  ],
-                  inputs: [{ state: "new", workType: "story" }],
-                  name: "Classify",
-                  onFailure: [{ state: "failed", workType: "story" }],
-                  type: "CLASSIFIER_WORKSTATION",
-                  worker: "classifier",
-                },
-              ],
-            },
+            name: "Current Factory",
+            workers: [{ name: "classifier" }],
+            workTypes: [
+              {
+                name: "story",
+                states: [
+                  { name: "new", type: "INITIAL" },
+                  { name: "approved", type: "TERMINAL" },
+                  { name: "failed", type: "FAILED" },
+                ],
+              },
+            ],
+            workstations: [
+              {
+                classificationRoutes: [
+                  {
+                    label: "approved",
+                    outputs: [{ state: "approved", workType: "story" }],
+                  },
+                ],
+                inputs: [{ state: "new", workType: "story" }],
+                name: "Classify",
+                onFailure: [{ state: "failed", workType: "story" }],
+                type: "CLASSIFIER_WORKSTATION",
+                worker: "classifier",
+              },
+            ],
             version: {
               logical: 12,
               physical: "2026-05-18T14:30:00Z",
@@ -486,36 +474,34 @@ describe("getCurrentEditableFactoryDefinition", () => {
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
-              factoryDefinition: {
-                name: "Current Factory",
-                workers: [{ name: "classifier" }],
-                workTypes: [
-                  {
-                    name: "story",
-                    states: [
-                      { name: "new", type: "INITIAL" },
-                      { name: "approved", type: "TERMINAL" },
-                      { name: "failed", type: "FAILED" },
-                    ],
-                  },
-                ],
-                workstations: [
-                  {
-                    classificationRoutes: [
-                      {
-                        label: "approved",
-                        outputs: [{ state: "approved", workType: "story" }],
-                        unexpected: "x",
-                      },
-                    ],
-                    inputs: [{ state: "new", workType: "story" }],
-                    name: "Classify",
-                    onFailure: [{ state: "failed", workType: "story" }],
-                    type: "CLASSIFIER_WORKSTATION",
-                    worker: "classifier",
-                  },
-                ],
-              },
+              name: "Current Factory",
+              workers: [{ name: "classifier" }],
+              workTypes: [
+                {
+                  name: "story",
+                  states: [
+                    { name: "new", type: "INITIAL" },
+                    { name: "approved", type: "TERMINAL" },
+                    { name: "failed", type: "FAILED" },
+                  ],
+                },
+              ],
+              workstations: [
+                {
+                  classificationRoutes: [
+                    {
+                      label: "approved",
+                      outputs: [{ state: "approved", workType: "story" }],
+                      unexpected: "x",
+                    },
+                  ],
+                  inputs: [{ state: "new", workType: "story" }],
+                  name: "Classify",
+                  onFailure: [{ state: "failed", workType: "story" }],
+                  type: "CLASSIFIER_WORKSTATION",
+                  worker: "classifier",
+                },
+              ],
               version: {
                 logical: 12,
                 physical: "2026-05-18T14:30:00Z",
@@ -545,12 +531,10 @@ describe("getCurrentEditableFactoryDefinition", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          factoryDefinition: {
-            name: "Current Factory",
-            workers: [],
-            workstations: [],
-            workTypes: [],
-          },
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
           version: {
             logical: 10,
             physical: "2026-05-18T14:40:00Z",
@@ -608,12 +592,10 @@ describe("getCurrentEditableFactoryDefinition", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          factoryDefinition: {
-            name: "Scoped Factory",
-            workers: [],
-            workstations: [],
-            workTypes: [],
-          },
+          name: "Scoped Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
           version: {
             logical: 11,
             physical: "2026-05-18T14:41:00Z",
@@ -875,18 +857,16 @@ describe("getCurrentEditableFactoryDefinition", () => {
           fetch: vi.fn().mockResolvedValue(
             new Response(
               JSON.stringify({
-                factoryDefinition: {
-                  name: "Current Factory",
-                  workers: [
-                    {
-                      model: 42,
-                      name: "writer",
-                      type: "MODEL_WORKER",
-                    },
-                  ],
-                  workstations: [],
-                  workTypes: [],
-                },
+                name: "Current Factory",
+                workers: [
+                  {
+                    model: 42,
+                    name: "writer",
+                    type: "MODEL_WORKER",
+                  },
+                ],
+                workstations: [],
+                workTypes: [],
                 version: {
                   logical: 12,
                   physical: "2026-05-18T14:30:00Z",
@@ -909,18 +889,16 @@ describe("getCurrentEditableFactoryDefinition", () => {
         "The current factory editing API returned a factory definition the dashboard cannot edit. factory.workers[0].model must be a string.",
       name: "CurrentEditableFactoryDefinitionError",
       responseBody: {
-        factoryDefinition: {
-          name: "Current Factory",
-          workers: [
-            {
-              model: 42,
-              name: "writer",
-              type: "MODEL_WORKER",
-            },
-          ],
-          workstations: [],
-          workTypes: [],
-        },
+        name: "Current Factory",
+        workers: [
+          {
+            model: 42,
+            name: "writer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [],
+        workTypes: [],
         version: {
           logical: 12,
           physical: "2026-05-18T14:30:00Z",
