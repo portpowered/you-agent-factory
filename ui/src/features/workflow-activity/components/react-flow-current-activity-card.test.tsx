@@ -1162,7 +1162,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
   });
 
-  it("lets operators collapse worker and resource lanes without leaving editor mode", async () => {
+  it("lets operators switch visibility presets without leaving editor mode or losing editor nodes", async () => {
     vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
       error: null,
@@ -1185,20 +1185,35 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
     expect(await screen.findByText("writer")).toBeTruthy();
     expect(screen.getByText("gpu")).toBeTruthy();
+    expect(screen.getByText("draft")).toBeTruthy();
+    expect(screen.getByText("story:review")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide workers lane" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Hide resources lane" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Infrastructure" }));
 
     await waitFor(() => {
-      expect(screen.queryByText("writer")).toBeNull();
-      expect(screen.queryByText("reviewer")).toBeNull();
-      expect(screen.queryByText("gpu")).toBeNull();
+      expect(screen.getByText("writer")).toBeTruthy();
+      expect(screen.getByText("gpu")).toBeTruthy();
+      expect(screen.queryByText("story:review")).toBeNull();
     });
     expect(screen.getByText("draft")).toBeTruthy();
     expect(screen.getByText("review")).toBeTruthy();
-    expect(screen.getByText("story:queued")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Workflow" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("writer")).toBeNull();
+      expect(screen.queryByText("gpu")).toBeNull();
+      expect(screen.getByText("story:queued")).toBeTruthy();
+      expect(screen.getByText("story:review")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("writer")).toBeTruthy();
+      expect(screen.getByText("gpu")).toBeTruthy();
+      expect(screen.getByText("story:review")).toBeTruthy();
+    });
   });
 
   it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {

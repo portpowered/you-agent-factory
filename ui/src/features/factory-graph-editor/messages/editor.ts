@@ -7,7 +7,6 @@ import type { FactoryGraphNodeKind } from "../factory-graph-draft-types";
 import type { FactoryGraphWorkerRuntimeStatus } from "../factory-graph-editor-runtime";
 
 export interface FactoryGraphEditorMessages {
-  denseGraphTitle: string;
   addDialogAddEntityAction: string;
   addDialogAssignedWorkerLabel: string;
   addDialogAssignedWorkerPlaceholder: string;
@@ -75,17 +74,14 @@ export interface FactoryGraphEditorMessages {
   toolbarOpenAddMenuLabel: string;
   toolbarPendingChanges: string;
   toolbarNoPendingChanges: string;
-  toolbarVisibilityAriaLabel: string;
-  toolbarVisibilityDescription: string;
   toolbarVisibilityMenuAriaLabel: string;
   toolbarVisibilityMenuDescription: string;
   toolbarVisibilityMenuTitle: string;
-  toolbarVisibilityResourcesLabel: string;
-  toolbarVisibilityToggleLabel: (
-    visible: boolean,
-    optionLabel: string,
-  ) => string;
-  toolbarVisibilityWorkersLabel: string;
+  visibilityPresetAllLabel: string;
+  visibilityPresetExecutionLabel: string;
+  visibilityPresetInfrastructureLabel: string;
+  visibilityPresetWorkflowLabel: string;
+  visibilityPresetsAriaLabel: string;
   viewportLabel: string;
   workerStatusLabel: (status: FactoryGraphWorkerRuntimeStatus) => string;
 }
@@ -146,7 +142,6 @@ function describeEnglishWorkerStatus(status: FactoryGraphWorkerRuntimeStatus) {
 const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEditorMessages> =
   {
     en: {
-      denseGraphTitle: "Dense graph",
       addDialogAddEntityAction: "Add entity",
       addDialogAssignedWorkerLabel: "Assigned worker",
       addDialogAssignedWorkerPlaceholder: "Select a worker",
@@ -225,22 +220,19 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarOpenAddMenuLabel: "Open add entity menu",
       toolbarPendingChanges: "Draft changes pending",
       toolbarNoPendingChanges: "No draft changes",
-      toolbarVisibilityAriaLabel: "Factory graph density controls",
-      toolbarVisibilityDescription:
-        "Collapse worker or resource lanes to focus on the rest of the topology while editing.",
       toolbarVisibilityMenuAriaLabel: "Add graph entity menu",
       toolbarVisibilityMenuDescription:
         "Choose a supported entity to add to the current draft.",
       toolbarVisibilityMenuTitle: "Add graph entity",
-      toolbarVisibilityResourcesLabel: "Resources",
-      toolbarVisibilityToggleLabel: (visible, optionLabel) =>
-        `${visible ? "Hide" : "Show"} ${optionLabel.toLowerCase()} lane`,
-      toolbarVisibilityWorkersLabel: "Workers",
+      visibilityPresetAllLabel: "All",
+      visibilityPresetExecutionLabel: "Execution",
+      visibilityPresetInfrastructureLabel: "Infrastructure",
+      visibilityPresetWorkflowLabel: "Workflow",
+      visibilityPresetsAriaLabel: "Factory graph visibility presets",
       viewportLabel: "Work graph viewport",
       workerStatusLabel: describeEnglishWorkerStatus,
     },
     "zh-CN": {
-      denseGraphTitle: "密集图",
       addDialogAddEntityAction: "添加实体",
       addDialogAssignedWorkerLabel: "分配的工作者",
       addDialogAssignedWorkerPlaceholder: "选择一个工作者",
@@ -345,16 +337,14 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarOpenAddMenuLabel: "打开添加实体菜单",
       toolbarPendingChanges: "草稿更改待处理",
       toolbarNoPendingChanges: "没有草稿更改",
-      toolbarVisibilityAriaLabel: "工厂图密度控制",
-      toolbarVisibilityDescription:
-        "折叠工作者或资源泳道，以便在编辑时聚焦其余拓扑。",
       toolbarVisibilityMenuAriaLabel: "添加图实体菜单",
       toolbarVisibilityMenuDescription: "选择要添加到当前草稿的受支持实体。",
       toolbarVisibilityMenuTitle: "添加图实体",
-      toolbarVisibilityResourcesLabel: "资源",
-      toolbarVisibilityToggleLabel: (visible, optionLabel) =>
-        `${visible ? "隐藏" : "显示"}${optionLabel}泳道`,
-      toolbarVisibilityWorkersLabel: "工作者",
+      visibilityPresetAllLabel: "全部",
+      visibilityPresetExecutionLabel: "执行",
+      visibilityPresetInfrastructureLabel: "基础设施",
+      visibilityPresetWorkflowLabel: "工作流",
+      visibilityPresetsAriaLabel: "工厂图可见性预设",
       viewportLabel: "工作图视口",
       workerStatusLabel: (status) => {
         switch (status) {

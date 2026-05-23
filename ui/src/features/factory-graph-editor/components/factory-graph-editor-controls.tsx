@@ -18,6 +18,11 @@ import { FactoryGraphEditorTooltipButton } from "./factory-graph-editor-tooltip-
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
 export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
+export type FactoryGraphEditorVisibilityPreset =
+  | "all"
+  | "workflow"
+  | "execution"
+  | "infrastructure";
 
 export interface FactoryGraphEditorMenuAction {
   description?: string;
@@ -26,11 +31,10 @@ export interface FactoryGraphEditorMenuAction {
   label: string;
 }
 
-export interface FactoryGraphEditorVisibilityOption {
-  count: number;
-  key: "resources" | "workers";
+export interface FactoryGraphEditorVisibilityPresetOption {
+  key: FactoryGraphEditorVisibilityPreset;
   label: string;
-  visible: boolean;
+  selected: boolean;
 }
 
 const TOOLBAR_SHELL_CLASS =
@@ -41,7 +45,7 @@ const MENU_ACTION_CLASS =
 const MENU_ACTION_LABEL_CLASS = "text-sm font-semibold text-af-ink";
 const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-ink/68";
 const VISIBILITY_PANEL_CLASS =
-  "pointer-events-auto absolute right-7 top-24 z-20 grid gap-3 rounded-2xl border border-af-overlay/12 bg-af-surface/94 p-3 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-20";
+  "pointer-events-auto absolute right-7 top-7 z-20 flex flex-wrap items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-2 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4";
 const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
   danger: "border-af-danger/28 bg-af-danger/8 text-af-danger-ink",
   neutral: "border-af-overlay/14 bg-af-overlay/6 text-af-ink/82",
@@ -131,13 +135,13 @@ export function FactoryGraphEditorToolbar({
 
 export function FactoryGraphEditorVisibilityPanel({
   locale,
-  onToggle,
+  onSelectPreset,
   options,
   visible,
 }: {
   locale?: string;
-  onToggle: (key: FactoryGraphEditorVisibilityOption["key"]) => void;
-  options: FactoryGraphEditorVisibilityOption[];
+  onSelectPreset: (preset: FactoryGraphEditorVisibilityPreset) => void;
+  options: FactoryGraphEditorVisibilityPresetOption[];
   visible: boolean;
 }) {
   if (!visible || options.length === 0) {
@@ -147,49 +151,22 @@ export function FactoryGraphEditorVisibilityPanel({
 
   return (
     <section
-      aria-label={messages.toolbarVisibilityAriaLabel}
+      aria-label={messages.visibilityPresetsAriaLabel}
       className={VISIBILITY_PANEL_CLASS}
     >
-      <div className="grid gap-1">
-        <p className="m-0 text-sm font-semibold text-af-ink">
-          {messages.denseGraphTitle}
-        </p>
-        <p className="m-0 text-xs leading-5 text-af-ink/68">
-          {messages.toolbarVisibilityDescription}
-        </p>
-      </div>
-      <div className="grid gap-2">
-        {options.map((option) => (
-          <button
-            aria-label={messages.toolbarVisibilityToggleLabel(
-              option.visible,
-              option.label,
-            )}
-            aria-pressed={option.visible}
-            className={cn(
-              "flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-af-accent",
-              option.visible
-                ? "border-af-accent/20 bg-af-accent/8 text-af-ink"
-                : "border-af-overlay/12 bg-af-overlay/4 text-af-ink/72",
-            )}
-            key={option.key}
-            onClick={() => onToggle(option.key)}
-            type="button"
-          >
-            <span className="grid gap-0.5">
-              <span className="text-sm font-semibold">{option.label}</span>
-              <span className="text-xs opacity-80">
-                {option.visible
-                  ? messages.stateVisible
-                  : messages.stateCollapsed}
-              </span>
-            </span>
-            <span className="rounded-full border border-current/15 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]">
-              {option.count}
-            </span>
-          </button>
-        ))}
-      </div>
+      {options.map((option) => (
+        <Button
+          aria-pressed={option.selected}
+          className="min-w-20"
+          key={option.key}
+          onClick={() => onSelectPreset(option.key)}
+          size="sm"
+          tone={option.selected ? "secondary" : "outline"}
+          type="button"
+        >
+          {option.label}
+        </Button>
+      ))}
     </section>
   );
 }

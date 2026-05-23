@@ -89,8 +89,8 @@ export function CurrentActivityGraphSurface({
       ) : null}
       <FactoryGraphEditorVisibilityPanel
         locale={locale}
-        onToggle={editorGraph.toggleEntityVisibility}
-        options={editorGraph.entityVisibilityOptions}
+        onSelectPreset={editorGraph.selectVisibilityPreset}
+        options={editorGraph.visibilityPresetOptions}
         visible={editor.editorMode}
       />
       <CurrentActivityGraphViewport
