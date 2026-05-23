@@ -55,6 +55,37 @@ describe("scanSemanticColorTokens", () => {
     ]);
   });
 
+  it("reports forbidden helper-layer foundation tokens and opacity utilities in ui/src/styles.css", async () => {
+    const rootDir = await mkdtemp(
+      path.join(os.tmpdir(), "semantic-color-token-guard-"),
+    );
+    tempRoots.push(rootDir);
+    await writeSourceFile(
+      rootDir,
+      "styles.css",
+      [
+        ".example-active {",
+        "  @apply fill-af-success-ink;",
+        "}",
+        ".example-semantic {",
+        "  @apply fill-af-danger-ink;",
+        "}",
+        ".example-muted {",
+        "  @apply opacity-50;",
+        "}",
+      ].join("\n"),
+    );
+
+    const violations = await scanSemanticColorTokens(rootDir);
+
+    expect(violations).toHaveLength(3);
+    expect(violations.map((violation) => violation.kind)).toEqual([
+      "foundation-color-token",
+      "foundation-color-token",
+      "opacity-utility",
+    ]);
+  });
+
   it("ignores allowed files, full-opacity visibility utilities, and documented exceptions", async () => {
     const rootDir = await mkdtemp(
       path.join(os.tmpdir(), "semantic-color-token-guard-"),

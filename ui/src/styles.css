@@ -247,15 +247,15 @@
   }
 
   [data-current-activity-flow] .react-flow__edge.agent-flow-edge--active .react-flow__edge-text {
-    @apply fill-af-success-ink font-bold;
+    @apply fill-af-success-text font-bold;
   }
 
   [data-current-activity-flow] .react-flow__edge.agent-flow-edge--semantic .react-flow__edge-text {
-    @apply fill-af-danger-ink font-bold;
+    @apply fill-af-danger-text font-bold;
   }
 
   [data-current-activity-flow] .react-flow__edge.agent-flow-edge--muted .react-flow__edge-text {
-    @apply opacity-50;
+    @apply fill-af-text-disabled;
   }
 
   [data-current-activity-flow] .agent-factory-editor-edge:focus-visible .react-flow__edge-path,

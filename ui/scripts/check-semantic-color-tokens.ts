@@ -65,7 +65,7 @@ export interface SemanticColorTokenViolation {
 
 function shouldSkipFile(filePath: string) {
   if (!sourceExtensions.has(path.extname(filePath))) {
-    return true;
+    return path.basename(filePath) !== "styles.css";
   }
 
   if (skippedFileSuffixes.some((suffix) => filePath.endsWith(suffix))) {
@@ -141,6 +141,7 @@ function findViolationsInSource(
   sourceText: string,
   filePath: string,
 ): SemanticColorTokenViolation[] {
+  const scanSharedStyleFileOnly = path.basename(filePath) === "styles.css";
   const sourceLines = sourceText.split("\n");
   const violations: SemanticColorTokenViolation[] = [];
 
@@ -189,30 +190,6 @@ function findViolationsInSource(
     );
   }
 
-  for (const match of sourceText.matchAll(rgbFromVarAlphaPattern)) {
-    const token = match[0];
-    if (!token.includes("--color-")) {
-      continue;
-    }
-
-    const tokenIndex = match.index ?? 0;
-    const position = indexToPosition(sourceText, tokenIndex);
-    if (hasExceptionMarker(sourceLines, position.line)) {
-      continue;
-    }
-
-    violations.push(
-      createViolation(
-        filePath,
-        "alpha-color-expression",
-        "Component-local color alpha math is not allowed in ui/src code. Move the semantic or system-integration token definition into ui/src/styles.css and consume it through var(--color-...) instead.",
-        token,
-        tokenIndex,
-        sourceText,
-      ),
-    );
-  }
-
   for (const match of sourceText.matchAll(forbiddenFoundationUtilityPattern)) {
     const token = match[1];
     const tokenIndex = (match.index ?? 0) + match[0].indexOf(token);
@@ -233,24 +210,50 @@ function findViolationsInSource(
     );
   }
 
-  for (const match of sourceText.matchAll(forbiddenFoundationVarPattern)) {
-    const token = match[0];
-    const tokenIndex = match.index ?? 0;
-    const position = indexToPosition(sourceText, tokenIndex);
-    if (hasExceptionMarker(sourceLines, position.line)) {
-      continue;
+  if (!scanSharedStyleFileOnly) {
+    for (const match of sourceText.matchAll(rgbFromVarAlphaPattern)) {
+      const token = match[0];
+      if (!token.includes("--color-")) {
+        continue;
+      }
+
+      const tokenIndex = match.index ?? 0;
+      const position = indexToPosition(sourceText, tokenIndex);
+      if (hasExceptionMarker(sourceLines, position.line)) {
+        continue;
+      }
+
+      violations.push(
+        createViolation(
+          filePath,
+          "alpha-color-expression",
+          "Component-local color alpha math is not allowed in ui/src code. Move the semantic or system-integration token definition into ui/src/styles.css and consume it through var(--color-...) instead.",
+          token,
+          tokenIndex,
+          sourceText,
+        ),
+      );
     }
 
-    violations.push(
-      createViolation(
-        filePath,
-        "foundation-color-token",
-        "Foundation or alias CSS color variables are not allowed in component-facing ui/src code. Move the semantic mapping into ui/src/styles.css and consume the approved semantic token instead.",
-        token,
-        tokenIndex,
-        sourceText,
-      ),
-    );
+    for (const match of sourceText.matchAll(forbiddenFoundationVarPattern)) {
+      const token = match[0];
+      const tokenIndex = match.index ?? 0;
+      const position = indexToPosition(sourceText, tokenIndex);
+      if (hasExceptionMarker(sourceLines, position.line)) {
+        continue;
+      }
+
+      violations.push(
+        createViolation(
+          filePath,
+          "foundation-color-token",
+          "Foundation or alias CSS color variables are not allowed in component-facing ui/src code. Move the semantic mapping into ui/src/styles.css and consume the approved semantic token instead.",
+          token,
+          tokenIndex,
+          sourceText,
+        ),
+      );
+    }
   }
 
   return violations;
