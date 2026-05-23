@@ -226,6 +226,28 @@ func TestTokenToResponse_CopiesOptionalTagMap(t *testing.T) {
 	}
 }
 
+func TestTokenToResponse_CopiesOptionalPreviousChainingTraceIDs(t *testing.T) {
+	token := &interfaces.Token{
+		ID:      "tok-prd-copy-slice",
+		PlaceID: "prd:init",
+		Color: interfaces.TokenColor{
+			WorkID:                   "work-prd-copy-slice",
+			WorkTypeID:               "prd",
+			TraceID:                  "trace-copy-slice",
+			CurrentChainingTraceID:   "chain-current",
+			PreviousChainingTraceIDs: []string{"chain-parent"},
+		},
+	}
+
+	resp := tokenToResponse(token, false)
+	token.Color.PreviousChainingTraceIDs[0] = "chain-mutated"
+	token.Color.PreviousChainingTraceIDs = append(token.Color.PreviousChainingTraceIDs, "chain-late")
+
+	if resp.PreviousChainingTraceIds == nil || len(*resp.PreviousChainingTraceIds) != 1 || (*resp.PreviousChainingTraceIds)[0] != "chain-parent" {
+		t.Fatalf("response previous chaining trace IDs = %#v, want copied pre-mutation values", resp.PreviousChainingTraceIds)
+	}
+}
+
 func TestGetWorkNotFound(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
 	req := httptest.NewRequest("GET", "/work/nonexistent", nil)

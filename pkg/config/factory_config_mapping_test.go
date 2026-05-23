@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -206,6 +207,52 @@ func TestFactoryConfigToOpenAPI_CopiesOptionalCollections(t *testing.T) {
 	}
 	if _, ok := (*workstation.Env)["LATE"]; ok {
 		t.Fatalf("generated env = %#v, want copied map to omit post-mapping additions", workstation.Env)
+	}
+}
+
+func TestFactoryConfigFromOpenAPI_CopiesOptionalCollections(t *testing.T) {
+	stopWords := []string{"DONE"}
+	env := factoryapi.StringMap{"MODE": "strict"}
+	apiCfg := factoryapi.Factory{
+		Name: "copy-safe-openapi-optionals",
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "story",
+			States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+			},
+		}},
+		Workers: &[]factoryapi.Worker{{Name: "executor"}},
+		Workstations: &[]factoryapi.Workstation{{
+			Id:        stringPtr("execute-story-id"),
+			Name:      "execute-story",
+			Worker:    "executor",
+			Inputs:    []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
+			Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}},
+			StopWords: &stopWords,
+			Env:       &env,
+		}},
+	}
+
+	cfg, err := FactoryConfigFromOpenAPI(apiCfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+
+	stopWords[0] = "MUTATED"
+	stopWords = append(stopWords, "LATE")
+	env["MODE"] = "mutated"
+	env["LATE"] = "value"
+
+	workstation := cfg.Workstations[0]
+	if len(workstation.StopWords) != 1 || workstation.StopWords[0] != "DONE" {
+		t.Fatalf("expanded stopWords = %#v, want copied pre-mutation values", workstation.StopWords)
+	}
+	if workstation.Env["MODE"] != "strict" {
+		t.Fatalf("expanded env = %#v, want copied pre-mutation values", workstation.Env)
+	}
+	if _, ok := workstation.Env["LATE"]; ok {
+		t.Fatalf("expanded env = %#v, want copied map to omit post-mapping additions", workstation.Env)
 	}
 }
 
