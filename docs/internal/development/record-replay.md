@@ -1,6 +1,6 @@
 ---
 author: ralph agent
-last modified: 2026, april, 21
+last modified: 2026, may, 23
 doc-id: AGF-DOC-002
 ---
 
@@ -14,7 +14,8 @@ Record/replay captures factory-level runtime behavior so maintainers can reprodu
 
 Use this guide when you need to:
 
-- collect a replay artifact from `agent-factory run`
+- collect a replay artifact from a normal `you run` invocation or an explicit
+  `--record` run
 - replay an artifact from embedded configuration
 - interpret replay success, metadata warnings, and divergence failures
 - promote a recording into a durable test through `pkg/testutil`
@@ -60,18 +61,59 @@ Recordings are not fully redacted. Treat replay artifacts as sensitive because t
 
 ## Record A Run
 
-1. Choose an artifact path outside any directory that the factory watches for inputs.
+Normal live `you run` invocations record by default when neither `--record` nor
+`--replay` is present. The CLI generates a replay artifact path under:
 
-   ```bash
-   cd libraries/agent-factory
-   agent-factory run --dir ./factory --record ./tmp/customer-run.replay.json
-   ```
+```text
+~/.you-agent-factory/recordings/YYYY-MM/YYYY-MM-DD/
+```
 
-2. Let the run reach the failure or terminal behavior you need to preserve.
+The generated filename includes the owning factory session ID plus a
+collision-resistant suffix. The default top-level session reports as
+`factory-session-~default-HHMMSS-<unique-id>.json`, and independent sessions
+replace `~default` with their own session ID so histories stay isolated.
 
-3. Keep the final artifact and any temporary artifact left beside it if the process was interrupted during a write. Record mode streams dirty artifacts during execution and performs a final flush on normal shutdown.
+Use the default-on flow when you want the runtime to choose a user-owned path
+automatically:
+
+```bash
+cd libraries/agent-factory
+you run --dir ./factory
+```
+
+Use `--record <path>` when you need a specific artifact location instead:
+
+```bash
+cd libraries/agent-factory
+you run --dir ./factory --record ./tmp/customer-run.replay.json
+```
+
+Use `--no-record` only when you intentionally want one live invocation without
+the default replay artifact:
+
+```bash
+cd libraries/agent-factory
+you run --dir ./factory --no-record
+```
+
+Do not pass `--no-record` with `--record`; the CLI rejects that combination
+before service startup.
+
+1. Let the run reach the failure or terminal behavior you need to preserve.
+
+2. Keep the final artifact and any temporary artifact left beside it if the
+   process was interrupted during a write. Record mode streams dirty artifacts
+   during execution and performs a final flush on normal shutdown.
+
+3. If the run used an auto-generated path, note the shutdown line
+   `Recording saved: ...` and collect that artifact for support or regression
+   work.
 
 The default streaming flush interval is `250ms` inside the service recorder. The CLI currently uses that default.
+
+There is no automatic retention cleanup in the first version. Operators should
+prune old artifacts from `~/.you-agent-factory/recordings/` according to their
+own local or CI retention policy.
 
 ## Replay A Recording
 
@@ -79,7 +121,7 @@ The default streaming flush interval is `250ms` inside the service recorder. The
 
    ```bash
    cd libraries/agent-factory
-   agent-factory run --replay ./tmp/customer-run.replay.json
+   you run --replay ./tmp/customer-run.replay.json
    ```
 
 2. Do not pass `--record` with `--replay`. The service rejects that combination before runtime startup.
