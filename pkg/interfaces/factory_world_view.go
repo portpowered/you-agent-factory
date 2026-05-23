@@ -105,13 +105,21 @@ type FactoryWorldActivity struct {
 }
 
 type FactoryWorldWorkItemRef struct {
-	WorkID                   string   `json:"work_id"`
-	WorkTypeID               string   `json:"work_type_id,omitempty"`
-	DisplayName              string   `json:"display_name,omitempty"`
-	ChainingTraceDepth       int      `json:"chaining_trace_depth,omitempty"`
-	CurrentChainingTraceID   string   `json:"current_chaining_trace_id,omitempty"`
-	PreviousChainingTraceIDs []string `json:"previous_chaining_trace_ids,omitempty"`
-	TraceID                  string   `json:"trace_id,omitempty"`
+	WorkID                   string            `json:"work_id"`
+	WorkTypeID               string            `json:"work_type_id,omitempty"`
+	State                    string            `json:"state,omitempty"`
+	DisplayName              string            `json:"display_name,omitempty"`
+	ChainingTraceDepth       int               `json:"chaining_trace_depth,omitempty"`
+	CurrentChainingTraceID   string            `json:"current_chaining_trace_id,omitempty"`
+	PreviousChainingTraceIDs []string          `json:"previous_chaining_trace_ids,omitempty"`
+	TraceID                  string            `json:"trace_id,omitempty"`
+	Content                  []WorkContentPart `json:"content,omitempty"`
+	PayloadStatus            string            `json:"payload_status,omitempty"`
+	PayloadUnavailableReason string            `json:"payload_unavailable_reason,omitempty"`
+	LineageLogicalWorkID     string            `json:"lineage_logical_work_id,omitempty"`
+	LineageSourceKind        string            `json:"lineage_source_kind,omitempty"`
+	LineageContinuity        string            `json:"lineage_continuity,omitempty"`
+	LineageParentWorkIDs     []string          `json:"lineage_parent_work_ids,omitempty"`
 }
 
 type FactoryWorldSessionRuntime struct {

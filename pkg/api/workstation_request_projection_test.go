@@ -1,11 +1,16 @@
 package api
 
 import (
+	"bufio"
 	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -208,6 +213,110 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesScriptBacke
 	assertCompletedScriptProjection(t, requests[scriptProjectionCompletedDispatchID])
 }
 
+func TestBuildFactoryWorldWorkstationRequestProjectionSlice_UsesDispatchTimeConsumedPayloadSnapshot(t *testing.T) {
+	initial := interfaces.FactoryWorkItem{
+		ID:          "work-consumed-lineage",
+		WorkTypeID:  "task",
+		State:       "draft",
+		DisplayName: "Consumed lineage story",
+		TraceID:     "trace-consumed-lineage",
+		PlaceID:     "task:review",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "dispatch-time payload",
+		}},
+	}
+	latest := initial
+	latest.State = "done"
+	latest.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "latest payload after downstream update",
+	}}
+
+	var lineage interfaces.WorkPayloadLineageProjection
+	lineage.RecordWorkRequestSnapshot(1, "request-consumed-lineage", initial)
+	lineage.RecordConsumedInputSnapshot("dispatch-consumed-lineage", initial)
+	lineage.RecordWorkRequestSnapshot(3, "request-consumed-lineage-follow-up", latest)
+
+	slice := BuildFactoryWorldWorkstationRequestProjectionSlice(interfaces.FactoryWorldState{
+		PayloadLineage: lineage,
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			latest.ID: latest,
+		},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+			DispatchID:   "dispatch-consumed-lineage",
+			TransitionID: "review",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
+			StartedAt:    time.Date(2026, 4, 22, 18, 0, 0, 0, time.UTC),
+			CompletedAt:  time.Date(2026, 4, 22, 18, 0, 1, 0, time.UTC),
+			Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+			WorkItemIDs:  []string{latest.ID},
+			ConsumedInputs: []interfaces.WorkstationInput{{
+				TokenID:  "token-consumed-lineage",
+				PlaceID:  initial.PlaceID,
+				WorkItem: &latest,
+			}},
+			InputWorkItems: []interfaces.FactoryWorkItem{latest},
+		}},
+	})
+
+	requests := requireWorkstationProjectionRequests(t, slice, 1)
+	workItems := requests["dispatch-consumed-lineage"].Request.InputWorkItems
+	if workItems == nil || len(*workItems) != 1 {
+		t.Fatalf("consumed payload input work items = %#v, want one", workItems)
+	}
+	resolved := (*workItems)[0]
+	if resolved.State == nil || *resolved.State != "draft" {
+		t.Fatalf("resolved consumed payload state = %#v, want draft snapshot", resolved.State)
+	}
+	if resolved.PayloadStatus == nil || *resolved.PayloadStatus != factoryapi.FactoryWorldWorkItemRefPayloadStatusRESOLVED {
+		t.Fatalf("resolved consumed payload status = %#v, want RESOLVED", resolved.PayloadStatus)
+	}
+	assertGeneratedWorkContentParts(t, resolved.Content, []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "dispatch-time payload",
+	}})
+}
+
+func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ReplayFixtureProjectsHistoricalConsumedPayloads(t *testing.T) {
+	events := loadWorkstationProjectionReplayFixtureEvents(t, "pkg", "factory", "projections", "testdata", "work-payload-lineage-replay.jsonl")
+	state, err := projections.ReconstructFactoryWorldState(events, lastWorkstationProjectionFixtureTick(events))
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+
+	slice := BuildFactoryWorldWorkstationRequestProjectionSlice(state)
+	requests := requireWorkstationProjectionRequests(t, slice, 3)
+
+	followUpItems := requests["dispatch-follow-up"].Request.InputWorkItems
+	if followUpItems == nil || len(*followUpItems) != 1 {
+		t.Fatalf("dispatch-follow-up input work items = %#v, want one replay-backed input", followUpItems)
+	}
+	followUp := (*followUpItems)[0]
+	if followUp.PayloadStatus == nil || *followUp.PayloadStatus != factoryapi.FactoryWorldWorkItemRefPayloadStatusRESOLVED {
+		t.Fatalf("dispatch-follow-up payload status = %#v, want RESOLVED", followUp.PayloadStatus)
+	}
+	if followUp.State == nil || *followUp.State != "review" {
+		t.Fatalf("dispatch-follow-up state = %#v, want review dispatch-time snapshot", followUp.State)
+	}
+	assertGeneratedWorkContentParts(t, followUp.Content, []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "child-v1",
+	}})
+
+	missingItems := requests["dispatch-missing"].Request.InputWorkItems
+	if missingItems == nil || len(*missingItems) != 1 {
+		t.Fatalf("dispatch-missing input work items = %#v, want one replay-backed input", missingItems)
+	}
+	missing := (*missingItems)[0]
+	if missing.PayloadStatus == nil || *missing.PayloadStatus != factoryapi.FactoryWorldWorkItemRefPayloadStatusUNAVAILABLE {
+		t.Fatalf("dispatch-missing payload status = %#v, want UNAVAILABLE", missing.PayloadStatus)
+	}
+	if missing.PayloadUnavailableReason == nil || *missing.PayloadUnavailableReason == "" {
+		t.Fatalf("dispatch-missing payload unavailable reason = %#v, want explicit reason", missing.PayloadUnavailableReason)
+	}
+}
+
 func requireWorkstationProjectionRequests(t *testing.T, slice factoryapi.FactoryWorldWorkstationRequestProjectionSlice, want int) map[string]factoryapi.FactoryWorldWorkstationRequestView {
 	t.Helper()
 	if slice.WorkstationRequestsByDispatchId == nil {
@@ -220,12 +329,84 @@ func requireWorkstationProjectionRequests(t *testing.T, slice factoryapi.Factory
 	return requests
 }
 
+func loadWorkstationProjectionReplayFixtureEvents(t *testing.T, rel ...string) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	path := testpath.MustRepoPathFromCaller(t, 0, rel...)
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open replay fixture %s: %v", path, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	events := make([]factoryapi.FactoryEvent, 0)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var event factoryapi.FactoryEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("parse replay fixture line %q: %v", line, err)
+		}
+		events = append(events, event)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan replay fixture %s: %v", path, err)
+	}
+	return events
+}
+
+func lastWorkstationProjectionFixtureTick(events []factoryapi.FactoryEvent) int {
+	tick := 0
+	for _, event := range events {
+		if event.Context.Tick > tick {
+			tick = event.Context.Tick
+		}
+	}
+	return tick
+}
+
 func workstationRequestProjectionStateFixture() interfaces.FactoryWorldState {
 	t0 := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
-	activeWork := interfaces.FactoryWorkItem{ID: "work-active", WorkTypeID: "task", DisplayName: "Active story", ChainingTraceDepth: 2, CurrentChainingTraceID: "chain-active", TraceID: "chain-active", PlaceID: "task:init"}
-	completedInput := interfaces.FactoryWorkItem{ID: "work-completed-input", WorkTypeID: "task", DisplayName: "Completed story", ChainingTraceDepth: 3, CurrentChainingTraceID: "chain-parent-a", TraceID: "chain-parent-a", PlaceID: "task:init"}
+	activeWork := interfaces.FactoryWorkItem{
+		ID:                     "work-active",
+		WorkTypeID:             "task",
+		State:                  "queued",
+		DisplayName:            "Active story",
+		ChainingTraceDepth:     2,
+		CurrentChainingTraceID: "chain-active",
+		TraceID:                "chain-active",
+		PlaceID:                "task:init",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "Active dispatch payload",
+		}},
+	}
+	completedInput := interfaces.FactoryWorkItem{
+		ID:                     "work-completed-input",
+		WorkTypeID:             "task",
+		State:                  "review",
+		DisplayName:            "Completed story",
+		ChainingTraceDepth:     3,
+		CurrentChainingTraceID: "chain-parent-a",
+		TraceID:                "chain-parent-a",
+		PlaceID:                "task:init",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "Completed dispatch payload",
+		}},
+	}
 	completedOutput := interfaces.FactoryWorkItem{ID: "work-completed-output", WorkTypeID: "task", DisplayName: "Completed story", ChainingTraceDepth: 4, CurrentChainingTraceID: "chain-completed", PreviousChainingTraceIDs: []string{"chain-parent-a", "chain-parent-z"}, TraceID: "chain-completed", PlaceID: "task:done"}
+	var lineage interfaces.WorkPayloadLineageProjection
+	lineage.RecordWorkRequestSnapshot(1, "request-active", activeWork)
+	lineage.RecordConsumedInputSnapshot("dispatch-active", activeWork)
+	lineage.RecordWorkRequestSnapshot(2, "request-completed", completedInput)
+	lineage.RecordConsumedInputSnapshot("dispatch-completed", completedInput)
+	lineage.RecordDispatchOutputSnapshot(4, "dispatch-completed", []interfaces.FactoryWorkItem{completedInput}, completedOutput, 0)
 	return interfaces.FactoryWorldState{
+		PayloadLineage: lineage,
 		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
 			activeWork.ID:      activeWork,
 			completedInput.ID:  completedInput,
@@ -278,6 +459,13 @@ func assertActiveProjectionRequest(t *testing.T, active factoryapi.FactoryWorldW
 	if active.Request.CurrentChainingTraceId == nil || *active.Request.CurrentChainingTraceId != "chain-active" {
 		t.Fatalf("active current chaining trace ID = %#v, want chain-active", active.Request.CurrentChainingTraceId)
 	}
+	if active.Request.InputWorkItems == nil || (*active.Request.InputWorkItems)[0].PayloadStatus == nil || *(*active.Request.InputWorkItems)[0].PayloadStatus != factoryapi.FactoryWorldWorkItemRefPayloadStatusRESOLVED {
+		t.Fatalf("active consumed payload status = %#v, want resolved lineage payload", active.Request.InputWorkItems)
+	}
+	assertGeneratedWorkContentParts(t, (*active.Request.InputWorkItems)[0].Content, []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "Active dispatch payload",
+	}})
 	if active.Response != nil {
 		t.Fatalf("active request response = %#v, want nil", active.Response)
 	}
@@ -307,11 +495,27 @@ func assertCompletedProjectionRequest(t *testing.T, completed factoryapi.Factory
 	if completed.Request.InputWorkItems == nil || (*completed.Request.InputWorkItems)[0].ChainingTraceDepth == nil || *(*completed.Request.InputWorkItems)[0].ChainingTraceDepth != 3 {
 		t.Fatalf("completed input work item depth = %#v, want 3", completed.Request.InputWorkItems)
 	}
+	if (*completed.Request.InputWorkItems)[0].PayloadStatus == nil || *(*completed.Request.InputWorkItems)[0].PayloadStatus != factoryapi.FactoryWorldWorkItemRefPayloadStatusRESOLVED {
+		t.Fatalf("completed consumed payload status = %#v, want resolved lineage payload", completed.Request.InputWorkItems)
+	}
+	assertGeneratedWorkContentParts(t, (*completed.Request.InputWorkItems)[0].Content, []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "Completed dispatch payload",
+	}})
 	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].PreviousChainingTraceIds == nil || len(*outputItems[0].PreviousChainingTraceIds) != 2 {
 		t.Fatalf("completed output work item chaining lineage = %#v, want explicit previous chaining trace IDs", outputItems)
 	}
 	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].ChainingTraceDepth == nil || *outputItems[0].ChainingTraceDepth != 4 {
 		t.Fatalf("completed output work item depth = %#v, want 4", outputItems)
+	}
+	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].LineageContinuity == nil || *outputItems[0].LineageContinuity != factoryapi.NEWDOWNSTREAMWORK {
+		t.Fatalf("completed output work item lineage continuity = %#v, want NEW_DOWNSTREAM_WORK", outputItems)
+	}
+	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].LineageLogicalWorkId == nil || *outputItems[0].LineageLogicalWorkId != "work-completed-output" {
+		t.Fatalf("completed output work item logical lineage ID = %#v, want work-completed-output", outputItems)
+	}
+	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].LineageParentWorkIds == nil || len(*outputItems[0].LineageParentWorkIds) != 1 || (*outputItems[0].LineageParentWorkIds)[0] != "work-completed-input" {
+		t.Fatalf("completed output work item lineage parents = %#v, want [work-completed-input]", outputItems)
 	}
 }
 

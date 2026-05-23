@@ -41,6 +41,7 @@ func (r *factoryWorldReducer) applyDispatchCreated(event factoryapi.FactoryEvent
 		traceIDs = appendUnique(traceIDs, item.TraceID)
 		r.addTraceWork(item.TraceID, item.ID)
 		inputWorkItems = append(inputWorkItems, item)
+		r.stateValue.PayloadLineage.RecordConsumedInputSnapshot(dispatchID, item)
 		inputs = append(inputs, interfaces.WorkstationInput{
 			TokenID:  item.ID,
 			PlaceID:  placeID,
@@ -202,7 +203,7 @@ func (r *factoryWorldReducer) applyDispatchCompleted(event factoryapi.FactoryEve
 
 	workIDs := append([]string(nil), dispatch.WorkItemIDs...)
 	traceIDs := dispatchCompletionTraceIDs(dispatch, event.Context.TraceIds)
-	outputWorkItems, workIDs, traceIDs := r.applyDispatchOutputWork(dispatch, payload, workIDs, traceIDs)
+	outputWorkItems, workIDs, traceIDs := r.applyDispatchOutputWork(event.Context.Tick, dispatch, payload, workIDs, traceIDs)
 	r.releaseResourceUnits(dispatch.Resources, payload.OutputResources)
 	completion := r.dispatchCompletionFromResponse(event, payload, dispatchID, dispatch, workIDs, traceIDs, outputWorkItems)
 	r.recordDispatchCompletionState(dispatchID, dispatch, payload, completion)
@@ -217,17 +218,26 @@ func dispatchCompletionTraceIDs(dispatch interfaces.FactoryWorldDispatch, eventT
 }
 
 func (r *factoryWorldReducer) applyDispatchOutputWork(
+	observedTick int,
 	dispatch interfaces.FactoryWorldDispatch,
 	payload factoryapi.DispatchResponseEventPayload,
 	workIDs []string,
 	traceIDs []string,
 ) ([]interfaces.FactoryWorkItem, []string, []string) {
 	outputWorkItems := make([]interfaces.FactoryWorkItem, 0, len(sliceValue(payload.OutputWork)))
-	for _, work := range sliceValue(payload.OutputWork) {
+	inputWorkItems := dispatchInputWorkItems(dispatch)
+	for index, work := range sliceValue(payload.OutputWork) {
 		item := r.dispatchOutputWorkItem(dispatch, payload, work)
 		if item.ID == "" {
 			continue
 		}
+		r.stateValue.PayloadLineage.RecordDispatchOutputSnapshot(
+			observedTick,
+			dispatch.DispatchID,
+			inputWorkItems,
+			item,
+			index,
+		)
 		r.stateValue.WorkItemsByID[item.ID] = item
 		workIDs = appendUnique(workIDs, item.ID)
 		traceIDs = appendUnique(traceIDs, item.TraceID)

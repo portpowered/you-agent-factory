@@ -8,6 +8,7 @@ type FactoryWorldState struct {
 	Tick                          int                                                `json:"tick"`
 	EventTime                     time.Time                                          `json:"event_time,omitempty"`
 	Topology                      InitialStructurePayload                            `json:"topology"`
+	PayloadLineage                WorkPayloadLineageProjection                       `json:"payload_lineage,omitempty"`
 	WorkRequestsByID              map[string]WorkRequestPayload                      `json:"work_requests_by_id,omitempty"`
 	RelationsByWorkID             map[string][]FactoryRelation                       `json:"relations_by_work_id,omitempty"`
 	WorkItemsByID                 map[string]FactoryWorkItem                         `json:"work_items_by_id,omitempty"`
