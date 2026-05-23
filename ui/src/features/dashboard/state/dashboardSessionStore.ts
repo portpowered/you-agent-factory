@@ -9,8 +9,13 @@ interface DashboardSessionStoreState {
   setSelectedSessionID: (sessionID: string | null) => void;
 }
 
-export const useDashboardSessionStore = create<DashboardSessionStoreState>((set) => ({
+const DASHBOARD_SESSION_STORE_DEFAULTS = {
   pausedSessionIDs: [],
+  selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+} satisfies Pick<DashboardSessionStoreState, "pausedSessionIDs" | "selectedSessionID">;
+
+export const useDashboardSessionStore = create<DashboardSessionStoreState>((set) => ({
+  ...DASHBOARD_SESSION_STORE_DEFAULTS,
   setSessionPaused: (sessionID, paused) => {
     const normalizedSessionID = sessionID.trim();
     if (normalizedSessionID.length === 0) {
@@ -27,7 +32,6 @@ export const useDashboardSessionStore = create<DashboardSessionStoreState>((set)
           ),
     }));
   },
-  selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
   setSelectedSessionID: (sessionID) => {
     set({
       selectedSessionID:
@@ -39,3 +43,7 @@ export const useDashboardSessionStore = create<DashboardSessionStoreState>((set)
     });
   },
 }));
+
+export function resetDashboardSessionStore(): void {
+  useDashboardSessionStore.setState(DASHBOARD_SESSION_STORE_DEFAULTS);
+}
