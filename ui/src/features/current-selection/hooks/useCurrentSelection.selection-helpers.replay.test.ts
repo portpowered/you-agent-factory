@@ -1,7 +1,7 @@
-import terminalSummaryRegressionReplayFixtureText from "../../../integration/fixtures/terminal-summary-regression-replay.jsonl?raw";
+import terminalSummaryRegressionReplayFixtureText from "../../../../integration/fixtures/terminal-summary-regression-replay.jsonl?raw";
 
-import { buildFactoryTimelineSnapshot } from "../timeline/state/factoryTimelineStore";
-import { parseReplayFixtureEvents } from "../../testing/replay-fixtures";
+import { buildFactoryTimelineSnapshot } from "../../timeline/state/factoryTimelineStore";
+import { parseReplayFixtureEvents } from "../../../testing/replay-fixtures";
 import { buildTerminalWorkItems } from "./useCurrentSelection.selection-helpers";
 import { resolveProjectedWorkstationRequestsByDispatchID } from "./useCurrentSelection.request-helpers";
 import { resolveWorkItemSelectionByWorkID } from "./useCurrentSelection.selection-helpers";
