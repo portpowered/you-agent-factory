@@ -23,6 +23,30 @@ const defaultFactorySessionSummary = {
   },
 };
 
+const namedFactorySessionSummary = {
+  factoryDir: "/workspace/customer-factory",
+  folderPath: "/workspace/customer-factory",
+  id: "customer-factory::dashboard",
+  isDefault: false,
+  project: "customer-factory",
+  target: {
+    kind: "named" as const,
+    name: "dashboard",
+  },
+};
+
+const analyticsFactorySessionSummary = {
+  factoryDir: "/workspace/analytics-suite",
+  folderPath: "/workspace/analytics-suite",
+  id: "analytics-suite::planner",
+  isDefault: false,
+  project: "analytics-suite",
+  target: {
+    kind: "named" as const,
+    name: "planner",
+  },
+};
+
 export const ResponsiveVerification = {
   parameters: {
     dashboardApi: {
@@ -32,7 +56,11 @@ export const ResponsiveVerification = {
           path: "/factory-sessions",
           response: {
             body: {
-              sessions: [defaultFactorySessionSummary],
+              sessions: [
+                defaultFactorySessionSummary,
+                namedFactorySessionSummary,
+                analyticsFactorySessionSummary,
+              ],
             },
           },
         },

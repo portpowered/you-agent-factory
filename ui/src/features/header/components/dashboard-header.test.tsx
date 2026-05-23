@@ -127,6 +127,9 @@ describe("DashboardHeader", () => {
     const openSessionButton = screen.getByRole<HTMLButtonElement>("button", {
       name: headerMessages.openSessionButtonLabel,
     });
+    const globalActions = screen.getByRole("group", {
+      name: headerMessages.globalHeaderActionsLabel,
+    });
 
     const exportButton = screen.getByRole<HTMLButtonElement>("button", {
       name: messages.triggerLabel,
@@ -148,6 +151,9 @@ describe("DashboardHeader", () => {
     expect(heading.textContent).toContain("U");
     expect(toolbar.firstElementChild?.firstElementChild).toBe(heading);
     expect(heading.firstElementChild?.className).toContain("gap-3");
+    expect(globalActions.className).toContain("rounded-2xl");
+    expect(globalActions.className).toContain("border");
+    expect(globalActions.className).toContain("bg-af-overlay/6");
     expect(
       heading.querySelector('[aria-hidden="true"]')?.className,
     ).toContain("h-12");
@@ -162,6 +168,12 @@ describe("DashboardHeader", () => {
     expect(controls[1]).toBe(exportButton);
     expect(controls[2]).toBe(languageButton);
     expect(controls[3]).toBe(slider);
+    expect(globalActions.contains(openSessionButton)).toBe(true);
+    expect(globalActions.contains(exportButton)).toBe(true);
+    expect(globalActions.contains(languageButton)).toBe(true);
+    expect(globalActions.contains(currentButton)).toBe(false);
+    expect(openSessionButton.closest('[role="group"]')).toBe(globalActions);
+    expect(globalActions.compareDocumentPosition(slider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");
     expect(languageButton.getAttribute("aria-expanded")).toBe("false");

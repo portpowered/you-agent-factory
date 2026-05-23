@@ -10,6 +10,7 @@ export interface HeaderControlsMessages {
   currentTickStatusTemplate: string;
   dashboardSummaryLabel: string;
   dashboardUnavailableTitle: string;
+  globalHeaderActionsLabel: string;
   languageLabel: string;
   languageMenuButtonLabel: string;
   loadingSessionsLabel: string;
@@ -52,6 +53,7 @@ const headerControlsMessagesByLocale = {
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "dashboard summary",
     dashboardUnavailableTitle: "Dashboard unavailable",
+    globalHeaderActionsLabel: "Dashboard actions",
     languageLabel: "Language",
     languageMenuButtonLabel: "Change language",
     loadingSessionsLabel: "Loading sessions...",
@@ -90,6 +92,7 @@ const headerControlsMessagesByLocale = {
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "ダッシュボードの概要",
     dashboardUnavailableTitle: "ダッシュボードを利用できません",
+    globalHeaderActionsLabel: "ダッシュボードの操作",
     languageLabel: "言語",
     languageMenuButtonLabel: "言語を変更",
     loadingSessionsLabel: "セッションを読み込み中...",
@@ -129,6 +132,7 @@ const headerControlsMessagesByLocale = {
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "대시보드 요약",
     dashboardUnavailableTitle: "대시보드를 사용할 수 없음",
+    globalHeaderActionsLabel: "대시보드 작업",
     languageLabel: "언어",
     languageMenuButtonLabel: "언어 변경",
     loadingSessionsLabel: "세션을 불러오는 중...",
@@ -168,6 +172,7 @@ const headerControlsMessagesByLocale = {
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "仪表板概览",
     dashboardUnavailableTitle: "仪表板不可用",
+    globalHeaderActionsLabel: "仪表板操作",
     languageLabel: "语言",
     languageMenuButtonLabel: "切换语言",
     loadingSessionsLabel: "正在加载会话...",

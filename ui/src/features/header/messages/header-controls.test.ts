@@ -71,6 +71,7 @@ describe("getHeaderControlsMessages", () => {
     expect(messages.resumeSessionStreamLabelTemplate).toContain("{{sessionLabel}}");
     expect(messages.returnToCurrentTickLabel).toBeTruthy();
     expect(messages.waitingForMoreTicks).toBeTruthy();
+    expect(messages.globalHeaderActionsLabel).toBeTruthy();
     expect(messages.languageLabel).toBeTruthy();
     expect(messages.languageMenuButtonLabel).toBeTruthy();
     },
