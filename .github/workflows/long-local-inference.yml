@@ -31,7 +31,7 @@ jobs:
             command_name: omnivoice-llamacpp
             backend_url: ${{ vars.OMNIVOICE_COMMAND_URL_MACOS_AMD64 }}
           - os_id: windows
-            runner: windows-latest
+            runner: windows-2022
             command_name: omnivoice-llamacpp.exe
             backend_url: ${{ vars.OMNIVOICE_COMMAND_URL_WINDOWS_AMD64 }}
     env:
