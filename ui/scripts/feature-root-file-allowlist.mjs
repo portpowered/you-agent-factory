@@ -1,7 +1,6 @@
 // Temporary feature-root debt inventory.
 // Remove each entry in the same change that deletes or relocates the root-level file.
 export const allowlistedFeatureRootFiles = [
-  "src/features/bento/index.ts",
   "src/features/current-factory-definition/index.ts",
   "src/features/current-factory-definition/workstation-behavior.ts",
   "src/features/current-factory-definition/workstation-editable-values.test.ts",
@@ -25,7 +24,6 @@ export const allowlistedFeatureRootFiles = [
   "src/features/current-selection/useCurrentSelection.selection-helpers.test.ts",
   "src/features/current-selection/useCurrentSelection.selection-helpers.ts",
   "src/features/current-selection/workstation-runner-field.tsx",
-  "src/features/dashboard/index.ts",
   "src/features/export/browser-download.node.test.ts",
   "src/features/export/browser-download.test.ts",
   "src/features/export/browser-download.ts",
@@ -79,7 +77,6 @@ export const allowlistedFeatureRootFiles = [
   "src/features/import/factory-png-import.test.ts",
   "src/features/import/factory-png-import.ts",
   "src/features/import/index.ts",
-  "src/features/submit-work/index.ts",
   "src/features/terminal-work/index.ts",
   "src/features/terminal-work/types.ts",
   "src/features/trace-drilldown/index.ts",
@@ -94,7 +91,6 @@ export const allowlistedFeatureRootFiles = [
   "src/features/work-outcome/trends.test.ts",
   "src/features/work-outcome/trends.ts",
   "src/features/work-outcome/work-chart-data.ts",
-  "src/features/work-totals/index.ts",
   "src/features/workflow-activity/current-activity-import-controller.ts",
   "src/features/workflow-activity/index.ts",
   "src/features/workflow-activity/mutation-dialog.tsx",

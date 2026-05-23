@@ -1,5 +1,5 @@
 import { useAppLocale } from "../../../i18n";
-import { DashboardBento } from "../../bento";
+import { DashboardBento } from "../../bento/public";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
 import {
   DashboardExportDialog,

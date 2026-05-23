@@ -11,13 +11,13 @@ import {
   useSelectedProviderSessionState,
 } from "../../current-selection";
 import { DashboardImportPreviewDialog } from "../../import";
-import { SubmitWorkWidget } from "../../submit-work";
+import { SubmitWorkWidget } from "../../submit-work/public";
 import { TerminalWorkWidget } from "../../terminal-work";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { TraceDrilldownWidget, useTraceDrilldown } from "../../trace-drilldown";
 import { useWorkOutcomeChart, WorkOutcomeWidget } from "../../work-outcome";
-import { WorkTotalsWidget } from "../../work-totals";
+import { WorkTotalsWidget } from "../../work-totals/public";
 import {
   useCurrentActivityImportController,
   WorkflowActivityWidget,

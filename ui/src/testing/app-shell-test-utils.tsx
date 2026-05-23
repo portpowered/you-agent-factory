@@ -15,7 +15,7 @@ import {
 } from "../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
-import { reloadDashboardLayoutFromStorage } from "../features/bento";
+import { reloadDashboardLayoutFromStorage } from "../features/bento/public";
 import { useDashboardBentoStore } from "../features/bento/state";
 import { useCurrentEditableFactoryDefinition } from "../features/current-factory-definition";
 import { resetSelectionHistoryStore } from "../features/current-selection/state";

@@ -92,7 +92,7 @@ vi.mock("../../import", () => ({
   DashboardImportPreviewDialog: () => null,
 }));
 
-vi.mock("../../submit-work", () => ({
+vi.mock("../../submit-work/public", () => ({
   SubmitWorkWidget: () => <section>Submit work card</section>,
 }));
 
@@ -156,7 +156,7 @@ vi.mock("../../work-outcome", () => ({
   useWorkOutcomeChart: () => ({ status: "empty" }),
 }));
 
-vi.mock("../../work-totals", () => ({
+vi.mock("../../work-totals/public", () => ({
   WorkTotalsWidget: () => <section>Work totals card</section>,
 }));
 
