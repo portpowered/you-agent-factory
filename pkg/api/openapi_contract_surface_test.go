@@ -99,6 +99,29 @@ func TestOpenAPIContract_FactoryOperationsPublishMachineReadableErrors(t *testin
 	assertFactoryResponseExamples(t, responses)
 }
 
+func TestOpenAPIContract_PersistedFactoryRoutesUseCanonicalPluralVocabulary(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("paths object is missing")
+	}
+
+	pathItem, ok := paths["/factories"].(map[string]any)
+	if !ok {
+		t.Fatal("paths./factories is missing")
+	}
+	postOperation, ok := pathItem["post"].(map[string]any)
+	if !ok {
+		t.Fatal("paths./factories.post is missing")
+	}
+	if got, _ := postOperation["operationId"].(string); got != "createFactory" {
+		t.Fatalf("paths./factories.post.operationId = %q, want %q", got, "createFactory")
+	}
+	if _, ok := paths["/factory"]; ok {
+		t.Fatal("paths./factory must not be published for persisted factory definitions")
+	}
+}
+
 func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) {
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 	assertWorkstationRequestProjectionSchemasPresent(t, schemas)
@@ -184,7 +207,7 @@ func assertPublishedOperations(t *testing.T, paths map[string]any) {
 		"/models/{model_name}/invocations": {"post"},
 		"/models/{model_name}/pull":        {"post"},
 		"/provider-sessions/detail":        {"get"},
-		"/factory":                         {"post"},
+		"/factories":                       {"post"},
 		"/factory/~current":                {"get"},
 	}
 	for path, methods := range requiredOperations {
@@ -465,7 +488,7 @@ func assertFactorySchemaDescriptions(t *testing.T, workType, resource, worker, w
 
 func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	t.Helper()
-	createFactory := pathOperation(t, paths, "/factory", "post")
+	createFactory := pathOperation(t, paths, "/factories", "post")
 	assertResponseSchemaRef(t, createFactory, "201", "#/components/schemas/Factory")
 	assertResponseRef(t, createFactory, "400", "#/components/responses/CreateFactoryBadRequest")
 	assertResponseRef(t, createFactory, "409", "#/components/responses/CreateFactoryConflict")

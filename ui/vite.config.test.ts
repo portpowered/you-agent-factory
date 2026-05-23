@@ -23,7 +23,7 @@ describe("dashboard Vite config", () => {
       "/status",
       "^/factories/[^/]+/status$",
       "/provider-sessions/detail",
-      "/factory",
+      "/factories",
       "/factory-sessions",
       "^/factory-sessions/[^/]+$",
       "/factory/~current",

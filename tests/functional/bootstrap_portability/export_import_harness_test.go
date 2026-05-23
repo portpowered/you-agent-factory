@@ -177,14 +177,14 @@ func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.
 		t.Fatalf("marshal create factory request: %v", err)
 	}
 
-	resp, err := http.Post(serverURL+"/factory", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(serverURL+"/factories", "application/json", bytes.NewReader(body))
 	if err != nil {
-		t.Fatalf("POST /factory: %v", err)
+		t.Fatalf("POST /factories: %v", err)
 	}
 	if resp.StatusCode != http.StatusCreated {
 		data, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		t.Fatalf("POST /factory status = %d, want 201: %s", resp.StatusCode, string(data))
+		t.Fatalf("POST /factories status = %d, want 201: %s", resp.StatusCode, string(data))
 	}
 
 	var created factoryapi.Factory

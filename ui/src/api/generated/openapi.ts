@@ -312,7 +312,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factory": {
+    "/factories": {
         parameters: {
             query?: never;
             header?: never;

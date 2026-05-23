@@ -1228,7 +1228,7 @@ func NewCreateFactoryRequestWithBody(server string, contentType string, body io.
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/factory")
+	operationPath := fmt.Sprintf("/factories")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}

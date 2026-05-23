@@ -21,7 +21,7 @@ func TestCreateFactory_ReturnsCreatedFactoryShape(t *testing.T) {
 	mf := &testutil.MockFactory{}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -436,7 +436,7 @@ func TestValidateCurrentFactoryWorkstationPromptTemplate_UnknownWorkstation(t *t
 
 func TestCreateFactory_RejectsDuplicateFactoryName(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{CreateNamedFactoryErr: factoryconfig.ErrNamedFactoryAlreadyExists})
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -445,7 +445,7 @@ func TestCreateFactory_RejectsDuplicateFactoryName(t *testing.T) {
 
 func TestCreateFactory_RejectsInvalidFactoryName(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody("nested/name", "task")))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("nested/name", "task")))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -454,7 +454,7 @@ func TestCreateFactory_RejectsInvalidFactoryName(t *testing.T) {
 
 func TestCreateFactory_RejectsReservedCurrentFactoryName(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody(string(apisurface.DefaultCurrentFactoryName), "task")))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody(string(apisurface.DefaultCurrentFactoryName), "task")))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -464,7 +464,7 @@ func TestCreateFactory_RejectsReservedCurrentFactoryName(t *testing.T) {
 func TestCreateFactory_RejectsInvalidFactoryPayload(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{CreateNamedFactoryErr: apisurface.ErrInvalidNamedFactory})
 	body := `{"name":"beta","workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}],"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"missing-worker","inputs":[{"workType":"beta-task","state":"init"}],"outputs":[{"workType":"beta-task","state":"done"}]}]}`
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -478,7 +478,7 @@ func TestCreateFactory_RejectsNonIdleRuntime(t *testing.T) {
 		CurrentNamedFactoryErr: apisurface.ErrCurrentNamedFactoryNotFound,
 	}
 	srv := newTestServer(mf)
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -493,13 +493,13 @@ func TestGetCurrentFactory_ReturnsNotFoundWithoutStoredNamedFactory(t *testing.T
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "Current named factory not found.")
 }
 
-func TestCreateFactoryRoute_RemovedFromRouter(t *testing.T) {
+func TestLegacyCreateFactoryRoute_RemovedFromRouter(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(`{}`))
+	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("POST /factories status = %d, want route removed", rec.Code)
+		t.Fatalf("POST /factory status = %d, want route removed", rec.Code)
 	}
 }

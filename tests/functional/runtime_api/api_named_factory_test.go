@@ -179,13 +179,13 @@ func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
 
 func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType, body string) factoryapi.Factory {
 	t.Helper()
-	resp, err := http.Post(serverURL+"/factory", "application/json", bytes.NewBufferString(body))
+	resp, err := http.Post(serverURL+"/factories", "application/json", bytes.NewBufferString(body))
 	if err != nil {
-		t.Fatalf("POST /factory: %v", err)
+		t.Fatalf("POST /factories: %v", err)
 	}
 	if resp.StatusCode != http.StatusCreated {
 		resp.Body.Close()
-		t.Fatalf("POST /factory status = %d, want 201", resp.StatusCode)
+		t.Fatalf("POST /factories status = %d, want 201", resp.StatusCode)
 	}
 	var created factoryapi.Factory
 	decodeNamedFactoryJSONResponse(t, resp, &created, "decode create factory response")

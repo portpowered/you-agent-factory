@@ -35,7 +35,7 @@ export interface GetCurrentFactoryOptions {
   sessionID?: string | null;
 }
 
-const CREATE_NAMED_FACTORY_ENDPOINT = "/factory";
+const CREATE_NAMED_FACTORY_ENDPOINT = "/factories";
 const GET_CURRENT_NAMED_FACTORY_ENDPOINT = "/factory/~current";
 
 export class NamedFactoryAPIError extends Error {

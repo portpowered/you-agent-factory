@@ -34,7 +34,7 @@ const proxiedAPIPaths = [
   "/status",
   "^/factories/[^/]+/status$",
   "/provider-sessions/detail",
-  "/factory",
+  "/factories",
   "/factory-sessions",
   "^/factory-sessions/[^/]+$",
   "/factory/~current",

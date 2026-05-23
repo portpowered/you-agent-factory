@@ -5,7 +5,7 @@ import {
 } from "./api";
 
 describe("factory API", () => {
-  it("posts the direct canonical factory payload to /factory and returns the canonical response", async () => {
+  it("posts the direct canonical factory payload to /factories and returns the canonical response", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -37,7 +37,7 @@ describe("factory API", () => {
       workstations: [],
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/factory",
+      "/factories",
       expect.objectContaining({
         body: JSON.stringify({
           name: "Dropped Factory",

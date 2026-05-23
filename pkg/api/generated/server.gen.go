@@ -2543,6 +2543,9 @@ type ListWorkParams struct {
 // ListWorkParamsSortBy defines parameters for ListWork.
 type ListWorkParamsSortBy string
 
+// CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
+type CreateFactoryJSONRequestBody = Factory
+
 // SaveEditableCurrentFactoryDefinitionByFactoryIdJSONRequestBody defines body for SaveEditableCurrentFactoryDefinitionByFactoryId for application/json ContentType.
 type SaveEditableCurrentFactoryDefinitionByFactoryIdJSONRequestBody = SaveEditableFactoryDefinitionRequest
 
@@ -2551,9 +2554,6 @@ type SubmitWorkByFactoryIdJSONRequestBody = SubmitWorkRequest
 
 // UpsertWorkRequestByFactoryIdJSONRequestBody defines body for UpsertWorkRequestByFactoryId for application/json ContentType.
 type UpsertWorkRequestByFactoryIdJSONRequestBody = WorkRequest
-
-// CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
-type CreateFactoryJSONRequestBody = Factory
 
 // OpenFactorySessionJSONRequestBody defines body for OpenFactorySession for application/json ContentType.
 type OpenFactorySessionJSONRequestBody = OpenFactorySessionRequest
@@ -3118,6 +3118,9 @@ type ServerInterface interface {
 	// Stream factory events
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
+	// Create factory
+	// (POST /factories)
+	CreateFactory(w http.ResponseWriter, r *http.Request)
 	// Stream factory events for one session
 	// (GET /factories/{factory_id}/events)
 	GetEventsByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID)
@@ -3145,9 +3148,6 @@ type ServerInterface interface {
 	// Get work token for one session
 	// (GET /factories/{factory_id}/work/{id})
 	GetWorkByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID, id WorkOrTokenID)
-	// Create factory
-	// (POST /factory)
-	CreateFactory(w http.ResponseWriter, r *http.Request)
 	// List live factory sessions
 	// (GET /factory-sessions)
 	ListFactorySessions(w http.ResponseWriter, r *http.Request)
@@ -3218,6 +3218,20 @@ func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetEvents(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateFactory operation middleware
+func (siw *ServerInterfaceWrapper) CreateFactory(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateFactory(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3504,20 +3518,6 @@ func (siw *ServerInterfaceWrapper) GetWorkByFactoryId(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetWorkByFactoryId(w, r, factoryId, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateFactory operation middleware
-func (siw *ServerInterfaceWrapper) CreateFactory(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateFactory(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4077,6 +4077,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/events", wrapper.GetEvents).Methods("GET")
 
+	r.HandleFunc(options.BaseURL+"/factories", wrapper.CreateFactory).Methods("POST")
+
 	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/events", wrapper.GetEventsByFactoryId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/factory/~current", wrapper.GetCurrentFactoryByFactoryId).Methods("GET")
@@ -4094,8 +4096,6 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/work-requests/{request_id}", wrapper.UpsertWorkRequestByFactoryId).Methods("PUT")
 
 	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/work/{id}", wrapper.GetWorkByFactoryId).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factory", wrapper.CreateFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.ListFactorySessions).Methods("GET")
 

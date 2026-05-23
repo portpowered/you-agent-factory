@@ -785,7 +785,7 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
         },
         {
           method: "POST",
-          path: "/factory",
+          path: "/factories",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
             body: submittedFactoryDefinitionBody(init),
             status: 201,
@@ -825,7 +825,7 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
         },
         {
           method: "POST",
-          path: "/factory",
+          path: "/factories",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
             body: submittedFactoryDefinitionBody(init),
             status: 201,
@@ -876,7 +876,7 @@ export const CurrentSelectionPromptHintVerification = {
         },
         {
           method: "POST",
-          path: "/factory",
+          path: "/factories",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
             body: submittedFactoryDefinitionBody(init),
             status: 201,

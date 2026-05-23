@@ -519,7 +519,7 @@ async function startReplayServer(lines, options = {}) {
       return;
     }
 
-    if (request.url === "/factory" && request.method === "POST") {
+    if (request.url === "/factories" && request.method === "POST") {
       let requestBody = "";
       request.setEncoding("utf8");
       request.on("data", (chunk) => {

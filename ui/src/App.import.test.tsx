@@ -54,7 +54,7 @@ describe("App shell import flows", () => {
     ).toBeNull();
   });
 
-  it("posts the dropped factory import as a direct canonical /factory activation payload", async () => {
+  it("posts the dropped factory import as a direct canonical /factories activation payload", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     vi.spyOn(factoryPngImportModule, "readFactoryImportPng").mockResolvedValue({
@@ -74,7 +74,7 @@ describe("App shell import flows", () => {
               ? `${input.pathname}${input.search}`
               : input.url;
 
-        if (path === "/factory") {
+        if (path === "/factories") {
           return new Response(JSON.stringify(importValue.factory), {
             headers: {
               "Content-Type": "application/json",
@@ -107,7 +107,7 @@ describe("App shell import flows", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/factory",
+        "/factories",
         expect.objectContaining({
           body: JSON.stringify(importValue.factory),
           headers: {
@@ -155,7 +155,7 @@ describe("App shell import flows", () => {
           return jsonResponse(currentNamedFactoryExportResponse);
         }
 
-        if (path === "/factory") {
+        if (path === "/factories") {
           return jsonResponse(JSON.parse(String(init?.body)));
         }
 
@@ -248,7 +248,7 @@ describe("App shell import flows", () => {
 
       await waitFor(() => {
         const activationCall = fetchMock.mock.calls.find(
-          ([url]) => url === "/factory",
+          ([url]) => url === "/factories",
         );
         expect(activationCall).toBeDefined();
         expect(activationCall?.[1]).toEqual(
