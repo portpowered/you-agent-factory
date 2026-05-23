@@ -55,6 +55,25 @@ Example import intent:
 - Code used by multiple features should be promoted into an appropriate shared UI module instead of being copied between feature directories.
 - When one feature starts collecting multiple distinct user-facing responsibilities, default toward splitting it into sibling features when that creates clearer behavior ownership than adding more internal buckets.
 
+## Split Versus Bucket Guidance
+
+When a feature grows, choose the smallest structure that keeps ownership obvious:
+
+- Keep one feature and add named internal subdirectories when the code still serves one user-facing responsibility, shares one selection or loading lifecycle, and would become harder to understand if the files were split across multiple feature roots.
+- Split into sibling features when the existing root is carrying multiple distinct user-facing responsibilities, separate loading or error lifecycles, separate dashboard cards or panels, or different maintained public seams that reviewers should reason about independently.
+- Prefer behavior-owned splits over technical taxonomy. Do not split only because one folder has many helpers; split when the user-visible responsibility is genuinely different.
+- Prefer a specific domain directory inside one feature when the code is still in service of the same behavior. For example, `editing/` is better than a generic `lib/` bucket if the code remains workstation-editing-only.
+- Promote truly shared logic into shared UI modules only when it is consumed across multiple features. Do not create a sibling feature just to hold generic utilities.
+
+Representative decision path for `ui/src/features/current-selection/`:
+
+- Keep shared selection state together when it defines the cross-card selection contract, such as `state/dashboardSelection.ts`, `state/selectionHistoryStore.ts`, and the `hooks/useCurrentSelection*` family.
+- Keep workstation editing behavior together when it remains one owned dashboard responsibility, using a domain directory such as `editing/` for modules that currently include `components/workstation-prompt-editor.tsx`, `components/workstation-save-controls.tsx`, `hooks/use-save-editable-workstation-configuration.ts`, and related prompt-template validation or editable-state helpers.
+- Keep provider-session detail together when the transcript, detail panel, and selection hook are one coherent behavior, using a dedicated domain directory or a sibling feature if that card continues to grow independently. The current examples are `components/provider-session-widget.tsx`, `components/provider-session-detail-panel.tsx`, `components/provider-session-transcript.tsx`, and `hooks/use-provider-session-detail.ts`.
+- Keep dispatch-history behavior together when the request, response, and nested attempt diagnostics still form one user-visible inspection flow, such as `components/selected-work-dispatch-history.tsx`, `components/selected-work-dispatch-history-card.tsx`, and `selected-work-dispatch-history-helpers.ts`.
+- Keep terminal-work detail together when the summary and detail presentation remain one narrow behavior, such as `components/terminal-work-summary-detail.tsx`.
+- Split into sibling features when those responsibilities need to evolve, load, or review separately. A representative future outcome could leave shared selection state in `current-selection` while extracting sibling features such as `current-selection-provider-session/`, `current-selection-dispatch-history/`, or `current-selection-workstation-editing/` once those surfaces have meaningfully separate behavior ownership.
+
 ## Migration Notes
 
 - This governance initiative standardizes structure only; it does not change backend contracts, generated API artifacts, or intended customer-visible behavior.
