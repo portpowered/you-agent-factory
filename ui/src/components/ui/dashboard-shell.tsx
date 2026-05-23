@@ -3,7 +3,7 @@ import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
 export const DASHBOARD_PANEL_SHELL_CLASS =
-  "rounded-lg border border-af-overlay/10 bg-af-surface/72 text-af-ink shadow-af-card";
+  "rounded-lg border border-af-border bg-af-surface-raised text-af-text shadow-af-card";
 
 type DashboardPanelShellElement = "article" | "section";
 
