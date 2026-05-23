@@ -33,9 +33,9 @@ const defaultEventsPath = `/factory-sessions/${defaultFactorySessionID}/events`;
 const defaultCurrentFactoryPath =
   `/factory-sessions/${defaultFactorySessionID}/factory`;
 const promptTemplateContractPathPattern =
-  /^\/(?:factories\/~default\/)?factory\/~current\/workstations\/[^/]+\/prompt-template-contract$/;
+  /^\/factory-sessions\/[^/]+\/factory\/workstations\/[^/]+\/prompt-template-contract$/;
 const promptTemplateValidationPathPattern =
-  /^\/(?:factories\/~default\/)?factory\/~current\/workstations\/[^/]+\/prompt-template-validation$/;
+  /^\/factory-sessions\/[^/]+\/factory\/workstations\/[^/]+\/prompt-template-validation$/;
 
 let apiServer = null;
 let apiOrigin = "";
@@ -1073,6 +1073,7 @@ async function assertFactoryExportRoundTrip() {
       {
         ...exportFactoryDefinition,
         name: exportName,
+        version: initialEditableFactoryDefinitionVersion,
       },
     ]);
     expect(pageErrors).toEqual([]);
