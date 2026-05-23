@@ -4,6 +4,7 @@ import {
   assertPortAvailable,
   spawnBun,
   stopServer,
+  verifyStorybookIndex,
   waitForStorybookReady,
 } from "./run-storybook-ci.mjs";
 import { main as verifyResponsiveStories } from "./verify-import-export-storybook-responsive.mjs";
@@ -34,9 +35,21 @@ export async function ensureStorybookServer({
   host = HOST,
   port = PORT,
   spawnProcess = spawnBun,
+  verifyIndex = verifyStorybookIndex,
   waitReady = waitForStorybookReady,
 } = {}) {
-  await assertAvailable(host, port);
+  try {
+    await verifyIndex({
+      url: `http://${host}:${port}/index.json`,
+    });
+
+    return {
+      startedServer: false,
+      stop: async () => {},
+    };
+  } catch {
+    await assertAvailable(host, port);
+  }
 
   const server = spawnProcess([
     "x",
