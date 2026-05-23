@@ -1,8 +1,8 @@
-import { formatWorkItemLabel } from "../../../components/ui/formatters";
 import { formatDurationMillis } from "../../../components/ui/formatters";
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
+import {
+  DASHBOARD_SECTION_HEADING_CLASS,
+} from "../../../components/ui/dashboard-typography";
 import { WIDGET_SUBTITLE_CLASS } from "../../../components/dashboard/widget-board";
-import { cn } from "../../../lib/cn";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
@@ -10,7 +10,6 @@ import {
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
-  WORK_SELECTION_BUTTON_CLASS,
 } from "./detail-card-shared";
 import type { WorkstationRequestDetailCardProps } from "../detail-card-types";
 import { InferenceAttemptsSection } from "./execution-details";
@@ -23,6 +22,7 @@ import {
   type WorkstationRequestDetailView,
 } from "./workstation-request-detail-view";
 import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
+import { WorkItemPayloadList } from "./work-item-payload-details";
 import {
   getRunnerDisplayName,
   resolveSelectedRunnerMetadata,
@@ -83,7 +83,9 @@ function WorkstationRequestSummary({
   view: WorkstationRequestDetailView;
 }) {
   const messages = useCurrentSelectionDetailMessages();
-  const requestRunnerMetadata = resolveSelectedRunnerMetadata(view.requestRunner);
+  const requestRunnerMetadata = resolveSelectedRunnerMetadata(
+    view.requestRunner,
+  );
 
   return (
     <>
@@ -121,7 +123,8 @@ function WorkstationRequestSummary({
                 <span>{view.outcome}</span>
                 {view.hasFailedOutcome && view.normalizedFailureReason ? (
                   <span>
-                    {messages.failureReasonLabel}: {view.normalizedFailureReason}
+                    {messages.failureReasonLabel}:{" "}
+                    {view.normalizedFailureReason}
                   </span>
                 ) : null}
                 {view.hasFailedOutcome && view.normalizedFailureMessage ? (
@@ -177,7 +180,10 @@ function WorkstationRequestSummary({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm text-af-ink">
-                      {labelForRunnerCapability(messages, capability.capability)}
+                      {labelForRunnerCapability(
+                        messages,
+                        capability.capability,
+                      )}
                     </span>
                     <span
                       className={
@@ -244,7 +250,9 @@ function RequestDetailsSection({
         aria-label={messages.requestDetailsTitle}
         className={RUNTIME_DETAILS_SECTION_CLASS}
       >
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.requestDetailsTitle}</h4>
+        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+          {messages.requestDetailsTitle}
+        </h4>
         <ConsumedWorkItemsSection
           onSelectWorkID={onSelectWorkID}
           selectedWorkID={selectedWorkID}
@@ -259,7 +267,9 @@ function RequestDetailsSection({
       aria-label={messages.requestDetailsTitle}
       className={RUNTIME_DETAILS_SECTION_CLASS}
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.requestDetailsTitle}</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.requestDetailsTitle}
+      </h4>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <ScriptRequestFields request={request} />
       </dl>
@@ -292,31 +302,12 @@ function ConsumedWorkItemsSection({
   }
 
   return (
-    <div className="grid gap-1">
-      <span>{messages.consumedWorkItemsLabel}</span>
-      <div className="flex flex-wrap gap-2">
-        {workItems.map((workItem) => {
-          const workLabel = formatWorkItemLabel(workItem);
-          const isSelected = selectedWorkID === workItem.work_id;
-
-          return (
-            <button
-              aria-label={messages.selectWorkItemLabel(workLabel)}
-              aria-pressed={isSelected}
-              className={cn(
-                WORK_SELECTION_BUTTON_CLASS,
-                isSelected && "border-af-accent/35 bg-af-accent/10 text-af-accent",
-              )}
-              key={workItem.work_id}
-              onClick={() => onSelectWorkID?.(workItem.work_id)}
-              type="button"
-            >
-              {workLabel}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <WorkItemPayloadList
+      messages={messages}
+      onSelectWorkID={onSelectWorkID}
+      selectedWorkID={selectedWorkID}
+      workItems={workItems}
+    />
   );
 }
 

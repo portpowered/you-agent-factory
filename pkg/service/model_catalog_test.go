@@ -54,7 +54,7 @@ func TestFactoryService_ListModels_SummarizesConfiguredModelCapabilities(t *test
 	if model.Name != "OMNIVOICE_Q4_K_M" || model.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
 		t.Fatalf("model summary = %#v, want OMNIVOICE local model", model)
 	}
-	if model.Status != factoryapi.READY || model.LoadState != factoryapi.UNLOADED {
+	if model.Status != factoryapi.ModelStatusREADY || model.LoadState != factoryapi.UNLOADED {
 		t.Fatalf("model readiness = (%s, %s), want (READY, UNLOADED)", model.Status, model.LoadState)
 	}
 	if len(model.Operations) != 1 || model.Operations[0].Name != "TTS" {
@@ -84,7 +84,7 @@ func TestFactoryService_GetModel_ReturnsUnavailableWithoutMatchingLocalModelReso
 	if err != nil {
 		t.Fatalf("GetModel: %v", err)
 	}
-	if model.Status != factoryapi.UNAVAILABLE {
+	if model.Status != factoryapi.ModelStatusUNAVAILABLE {
 		t.Fatalf("status = %s, want UNAVAILABLE", model.Status)
 	}
 	if model.Diagnostics["statusReason"] == "" {

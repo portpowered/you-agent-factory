@@ -207,17 +207,16 @@ export async function expectTimelineToolbarAlignment(
     name: "dashboard summary",
   });
   const heading = within(toolbar).getByRole("heading", { name: "you-agent-factory" });
+  const activeTab = within(toolbar).getByRole("tab", { name: "root" });
   const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
     name: "Timeline tick",
   });
-  const currentButton = within(toolbar).getByRole("button", {
-    name: "Return to current tick",
-  });
+  const progressText = within(toolbar).getByText("5/5");
   const languageButton = within(toolbar).getByRole("button", {
     name: "Change language",
   });
-  const streamStatus = within(toolbar).getByRole("status", {
-    name: /you-agent-factory event stream (connecting|live)/,
+  const actionsGroup = within(toolbar).getByRole("group", {
+    name: "Dashboard actions",
   });
   const exportButton = within(toolbar).getByRole("button", { name: "Export PNG" });
   const sliderShell = requireValue(
@@ -225,26 +224,30 @@ export async function expectTimelineToolbarAlignment(
     "expected slider shell in dashboard toolbar",
   );
   const sliderMetaGroup = requireValue(
-    currentButton.parentElement,
+    progressText.parentElement,
     "expected timeline meta group in dashboard toolbar",
   );
   const headingRect = heading.getBoundingClientRect();
+  const activeTabRect = activeTab.getBoundingClientRect();
+  const actionsGroupRect = actionsGroup.getBoundingClientRect();
   const sliderRect = sliderShell.getBoundingClientRect();
-  const currentButtonRect = currentButton.getBoundingClientRect();
+  const sliderInputRect = slider.getBoundingClientRect();
+  const progressTextRect = progressText.getBoundingClientRect();
   const languageButtonRect = languageButton.getBoundingClientRect();
-  const streamStatusRect = streamStatus.getBoundingClientRect();
   const exportButtonRect = exportButton.getBoundingClientRect();
 
   expect(sliderShell.className).toContain("gap-1.5");
   expect(sliderShell.className).toContain("px-2.5");
-  expect(sliderMetaGroup.contains(within(sliderMetaGroup).getByText("5/5"))).toBe(
-    true,
-  );
-  expect(sliderRect.left).toBeGreaterThanOrEqual(headingRect.right - 1);
-  expect(currentButtonRect.left).toBeGreaterThanOrEqual(sliderRect.left);
-  expect(streamStatusRect.left).toBeGreaterThanOrEqual(sliderRect.right - 1);
+  expect(sliderMetaGroup.contains(progressText)).toBe(true);
+  expect(
+    within(toolbar).queryByRole("button", { name: "Return to current tick" }),
+  ).toBeNull();
+  expect(sliderRect.top).toBeGreaterThanOrEqual(headingRect.bottom - 1);
+  expect(sliderRect.top).toBeGreaterThanOrEqual(activeTabRect.bottom - 1);
+  expect(sliderRect.top).toBeGreaterThanOrEqual(actionsGroupRect.bottom - 1);
+  expect(progressTextRect.left).toBeGreaterThanOrEqual(sliderInputRect.right - 1);
   expect(exportButtonRect.left).toBeGreaterThanOrEqual(
-    streamStatusRect.right - 1,
+    actionsGroupRect.left - 1,
   );
   expect(languageButtonRect.left).toBeGreaterThanOrEqual(
     exportButtonRect.right - 1,

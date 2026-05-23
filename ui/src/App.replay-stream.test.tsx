@@ -123,7 +123,10 @@ describe("App streamed replay rendering flows", () => {
       expect(slider.value).toBe("4");
       expect(screen.getByText("4/4")).toBeTruthy();
       expect(
-        screen.getByRole("button", { name: "Select Review workstation" }),
+        screen.getByRole("article", { name: "Current selection" }),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("article", { name: "Trace drill-down" }),
       ).toBeTruthy();
     });
     expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);

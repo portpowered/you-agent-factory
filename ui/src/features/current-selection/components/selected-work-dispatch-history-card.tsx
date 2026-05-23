@@ -26,6 +26,7 @@ import {
   TraceActionGroup,
   WorkItemActionGroup,
 } from "./selected-work-dispatch-history-card-shared";
+import { WorkItemPayloadList } from "./work-item-payload-details";
 import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
 import type { CurrentSelectionDispatchHistoryMessages } from "../messages/current-selection-dispatch-history";
 import {
@@ -275,14 +276,21 @@ function DispatchRequestSection({
           {messages.promptDetailsNotApplicable}
         </p>
       ) : null}
-      <WorkItemActionGroup
-        items={view.inputWorkItems}
-        label={messages.inputWorkLabel}
+      <WorkItemPayloadList
+        messages={{
+          consumedPayloadEmpty: messages.consumedPayloadEmpty,
+          consumedPayloadError: messages.consumedPayloadError,
+          consumedPayloadHeading: messages.consumedPayloadHeading,
+          consumedPayloadLoading: messages.consumedPayloadLoading,
+          consumedPayloadUnavailable: messages.consumedPayloadUnavailable,
+          consumedWorkItemsLabel: messages.consumedWorkItemsLabel,
+          selectWorkItemLabel: messages.selectWorkItemAccessibleLabel,
+          stateLabel: messages.stateLabel,
+          workTypeLabel: messages.workTypeLabel,
+        }}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
-        selectWorkItemAccessibleLabel={
-          messages.selectWorkItemAccessibleLabel
-        }
+        workItems={view.inputWorkItems}
       />
     </DispatchDetailSection>
   );

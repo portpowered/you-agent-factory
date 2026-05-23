@@ -8,6 +8,12 @@ export interface CurrentSelectionDispatchHistoryMessages {
   dispatchHistoryCountLabel: (count: number) => string;
   dispatchHistoryEmpty: string;
   dispatchHistoryHeading: string;
+  consumedPayloadEmpty: string;
+  consumedPayloadError: string;
+  consumedPayloadHeading: string;
+  consumedPayloadLoading: string;
+  consumedPayloadUnavailable: string;
+  consumedWorkItemsLabel: string;
   inferenceAttemptAccessibleLabel: (attemptNumber: number) => string;
   awaitingProviderResponse: string;
   collapseAction: string;
@@ -73,6 +79,7 @@ export interface CurrentSelectionDispatchHistoryMessages {
   scriptRequestIdLabel: string;
   scriptRequestPlaceholderId: string;
   scriptResponsePlaceholderId: string;
+  stateLabel: string;
   startedAtLabel: string;
   stderrLabel: string;
   stdoutLabel: string;
@@ -104,6 +111,16 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     dispatchHistoryEmpty:
       "No workstation dispatch has been recorded yet for this work item.",
     dispatchHistoryHeading: "Workstation dispatches",
+    consumedPayloadEmpty:
+      "No consumed payload content was recorded for this work item.",
+    consumedPayloadError:
+      "Consumed payload details could not be loaded for this work item.",
+    consumedPayloadHeading: "Consumed payload",
+    consumedPayloadLoading:
+      "Consumed payload details are still loading for this work item.",
+    consumedPayloadUnavailable:
+      "Consumed payload details are unavailable for this work item.",
+    consumedWorkItemsLabel: "Consumed work items",
     inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
       `Inference attempt ${attemptNumber}`,
     awaitingProviderResponse: "Awaiting provider response.",
@@ -184,6 +201,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     scriptRequestIdLabel: "Script request ID",
     scriptRequestPlaceholderId: "script-request",
     scriptResponsePlaceholderId: "script-response",
+    stateLabel: "State",
     startedAtLabel: "Started at",
     stderrLabel: "Stderr",
     stdoutLabel: "Stdout",
@@ -210,6 +228,16 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     dispatchHistoryEmpty:
       "この作業項目ではまだワークステーションのディスパッチが記録されていません。",
     dispatchHistoryHeading: "ワークステーションのディスパッチ",
+    consumedPayloadEmpty:
+      "この作業項目には消費済みペイロード内容が記録されていません。",
+    consumedPayloadError:
+      "この作業項目の消費済みペイロード詳細を読み込めませんでした。",
+    consumedPayloadHeading: "消費済みペイロード",
+    consumedPayloadLoading:
+      "この作業項目の消費済みペイロード詳細を読み込み中です。",
+    consumedPayloadUnavailable:
+      "この作業項目では消費済みペイロード詳細を利用できません。",
+    consumedWorkItemsLabel: "消費済み作業項目",
     inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
       `推論試行 ${attemptNumber}`,
     awaitingProviderResponse: "プロバイダー応答を待機しています。",
@@ -289,6 +317,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     scriptRequestIdLabel: "スクリプトリクエスト ID",
     scriptRequestPlaceholderId: "script-request",
     scriptResponsePlaceholderId: "script-response",
+    stateLabel: "状態",
     startedAtLabel: "開始時刻",
     stderrLabel: "標準エラー",
     stdoutLabel: "標準出力",
@@ -315,6 +344,16 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     dispatchHistoryEmpty:
       "이 작업 항목에는 아직 워크스테이션 디스패치가 기록되지 않았습니다.",
     dispatchHistoryHeading: "워크스테이션 디스패치",
+    consumedPayloadEmpty:
+      "이 작업 항목에는 소비된 페이로드 내용이 기록되지 않았습니다.",
+    consumedPayloadError:
+      "이 작업 항목의 소비된 페이로드 세부 정보를 불러올 수 없습니다.",
+    consumedPayloadHeading: "소비된 페이로드",
+    consumedPayloadLoading:
+      "이 작업 항목의 소비된 페이로드 세부 정보를 불러오는 중입니다.",
+    consumedPayloadUnavailable:
+      "이 작업 항목의 소비된 페이로드 세부 정보를 사용할 수 없습니다.",
+    consumedWorkItemsLabel: "소비된 작업 항목",
     inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
       `추론 시도 ${attemptNumber}`,
     awaitingProviderResponse: "공급자 응답을 기다리는 중입니다.",
@@ -393,6 +432,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     scriptRequestIdLabel: "스크립트 요청 ID",
     scriptRequestPlaceholderId: "script-request",
     scriptResponsePlaceholderId: "script-response",
+    stateLabel: "상태",
     startedAtLabel: "시작 시각",
     stderrLabel: "표준 오류",
     stdoutLabel: "표준 출력",
@@ -418,6 +458,12 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     dispatchHistoryCountLabel: (count: number) => `${count} 次分派`,
     dispatchHistoryEmpty: "这个工作项暂时还没有记录任何工作站分派。",
     dispatchHistoryHeading: "工作站分派",
+    consumedPayloadEmpty: "这个工作项没有记录任何已消费的载荷内容。",
+    consumedPayloadError: "无法加载这个工作项的已消费载荷详情。",
+    consumedPayloadHeading: "已消费载荷",
+    consumedPayloadLoading: "正在加载这个工作项的已消费载荷详情。",
+    consumedPayloadUnavailable: "这个工作项的已消费载荷详情不可用。",
+    consumedWorkItemsLabel: "已消费工作项",
     inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
       `推理尝试 ${attemptNumber}`,
     awaitingProviderResponse: "正在等待提供方响应。",
@@ -489,6 +535,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     scriptRequestIdLabel: "脚本请求 ID",
     scriptRequestPlaceholderId: "script-request",
     scriptResponsePlaceholderId: "script-response",
+    stateLabel: "状态",
     startedAtLabel: "开始时间",
     stderrLabel: "标准错误",
     stdoutLabel: "标准输出",

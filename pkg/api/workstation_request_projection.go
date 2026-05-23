@@ -6,6 +6,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 // BuildFactoryWorldWorkstationRequestProjectionSlice keeps the additive
@@ -87,7 +88,7 @@ func workstationDispatchViewFromActiveDispatch(
 	latestScriptRequest *interfaces.FactoryWorldScriptRequest,
 	latestScriptResponse *interfaces.FactoryWorldScriptResponse,
 ) factoryapi.FactoryWorldWorkstationRequestView {
-	inputWorkItems := generatedWorkItemRefs(workItemRefsForInputs(dispatch.Inputs))
+	inputWorkItems := generatedWorkItemRefs(consumedInputWorkItemRefsForActiveDispatch(dispatch, state))
 	if len(inputWorkItems) == 0 {
 		inputWorkItems = generatedWorkItemRefs(workItemRefsForIDs(dispatch.WorkItemIDs, state.WorkItemsByID))
 	}
@@ -129,14 +130,14 @@ func workstationDispatchViewFromCompletion(
 	latestScriptRequest *interfaces.FactoryWorldScriptRequest,
 	latestScriptResponse *interfaces.FactoryWorldScriptResponse,
 ) factoryapi.FactoryWorldWorkstationRequestView {
-	inputWorkItems := generatedWorkItemRefs(workItemRefsForItems(completion.InputWorkItems))
+	inputWorkItems := generatedWorkItemRefs(consumedInputWorkItemRefsForCompletion(completion, state))
 	if len(inputWorkItems) == 0 {
 		inputWorkItems = generatedWorkItemRefs(workItemRefsForInputs(completion.ConsumedInputs))
 	}
 	if len(inputWorkItems) == 0 {
 		inputWorkItems = generatedWorkItemRefs(workItemRefsForIDs(completion.WorkItemIDs, state.WorkItemsByID))
 	}
-	outputWorkItems := generatedWorkItemRefs(workItemRefsForItems(completion.OutputWorkItems))
+	outputWorkItems := generatedWorkItemRefs(outputWorkItemRefsForCompletion(completion, state))
 	if len(outputWorkItems) == 0 && completion.TerminalWork != nil && !interfaces.IsSystemTimeWorkType(completion.TerminalWork.WorkItem.WorkTypeID) {
 		outputWorkItems = generatedWorkItemRefs([]interfaces.FactoryWorldWorkItemRef{
 			workItemRef(completion.TerminalWork.WorkItem),
@@ -355,14 +356,196 @@ func generatedWorkItemRefs(refs []interfaces.FactoryWorldWorkItemRef) []factorya
 		out = append(out, factoryapi.FactoryWorldWorkItemRef{
 			WorkId:                   ref.WorkID,
 			WorkTypeId:               workstationRequestStringPtr(ref.WorkTypeID),
+			State:                    workstationRequestStringPtr(ref.State),
 			DisplayName:              workstationRequestStringPtr(ref.DisplayName),
 			ChainingTraceDepth:       intPtr(ref.ChainingTraceDepth),
 			CurrentChainingTraceId:   workstationRequestStringPtr(ref.CurrentChainingTraceID),
 			PreviousChainingTraceIds: stringSlicePtr(sortedStrings(ref.PreviousChainingTraceIDs)),
 			TraceId:                  workstationRequestStringPtr(ref.TraceID),
+			Content:                  workcontent.GeneratedPtrFromParts(ref.Content),
+			PayloadStatus:            generatedWorkItemPayloadStatusPtr(ref.PayloadStatus),
+			PayloadUnavailableReason: workstationRequestStringPtr(ref.PayloadUnavailableReason),
+			LineageLogicalWorkId:     workstationRequestStringPtr(ref.LineageLogicalWorkID),
+			LineageSourceKind:        generatedWorkItemLineageSourceKindPtr(ref.LineageSourceKind),
+			LineageContinuity:        generatedWorkItemLineageContinuityPtr(ref.LineageContinuity),
+			LineageParentWorkIds:     stringSlicePtr(sortedStrings(ref.LineageParentWorkIDs)),
 		})
 	}
 	return out
+}
+
+func generatedWorkItemPayloadStatusPtr(value string) *factoryapi.FactoryWorldWorkItemRefPayloadStatus {
+	if value == "" {
+		return nil
+	}
+	status := factoryapi.FactoryWorldWorkItemRefPayloadStatus(value)
+	return &status
+}
+
+func generatedWorkItemLineageSourceKindPtr(value string) *factoryapi.FactoryWorldWorkItemRefLineageSourceKind {
+	if value == "" {
+		return nil
+	}
+	sourceKind := factoryapi.FactoryWorldWorkItemRefLineageSourceKind(value)
+	return &sourceKind
+}
+
+func generatedWorkItemLineageContinuityPtr(value string) *factoryapi.FactoryWorldWorkItemRefLineageContinuity {
+	if value == "" {
+		return nil
+	}
+	continuity := factoryapi.FactoryWorldWorkItemRefLineageContinuity(value)
+	return &continuity
+}
+
+func consumedInputWorkItemRefsForActiveDispatch(
+	dispatch interfaces.FactoryWorldDispatch,
+	state interfaces.FactoryWorldState,
+) []interfaces.FactoryWorldWorkItemRef {
+	return consumedInputWorkItemRefs(
+		dispatch.DispatchID,
+		dispatch.Inputs,
+		nil,
+		dispatch.WorkItemIDs,
+		state,
+	)
+}
+
+func consumedInputWorkItemRefsForCompletion(
+	completion interfaces.FactoryWorldDispatchCompletion,
+	state interfaces.FactoryWorldState,
+) []interfaces.FactoryWorldWorkItemRef {
+	return consumedInputWorkItemRefs(
+		completion.DispatchID,
+		completion.ConsumedInputs,
+		completion.InputWorkItems,
+		completion.WorkItemIDs,
+		state,
+	)
+}
+
+func consumedInputWorkItemRefs(
+	dispatchID string,
+	inputs []interfaces.WorkstationInput,
+	fallbackItems []interfaces.FactoryWorkItem,
+	fallbackIDs []string,
+	state interfaces.FactoryWorldState,
+) []interfaces.FactoryWorldWorkItemRef {
+	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(inputs)+len(fallbackItems)+len(fallbackIDs))
+	seen := make(map[string]struct{}, len(inputs)+len(fallbackItems)+len(fallbackIDs))
+
+	appendConsumedRef := func(workID string, fallback *interfaces.FactoryWorkItem) {
+		if workID == "" {
+			return
+		}
+		if _, exists := seen[workID]; exists {
+			return
+		}
+		resolution := state.PayloadLineage.ResolveConsumedInputSnapshot(dispatchID, workID)
+		refs = append(refs, consumedInputWorkItemRef(workID, fallback, resolution))
+		seen[workID] = struct{}{}
+	}
+
+	for _, input := range inputs {
+		if input.WorkItem == nil || input.WorkItem.ID == "" || interfaces.IsSystemTimeWorkType(input.WorkItem.WorkTypeID) {
+			continue
+		}
+		workItem := *input.WorkItem
+		appendConsumedRef(workItem.ID, &workItem)
+	}
+	for _, item := range fallbackItems {
+		if item.ID == "" || interfaces.IsSystemTimeWorkType(item.WorkTypeID) {
+			continue
+		}
+		itemCopy := item
+		appendConsumedRef(item.ID, &itemCopy)
+	}
+	for _, workID := range sortedStrings(fallbackIDs) {
+		item, ok := state.WorkItemsByID[workID]
+		if !ok || item.ID == "" || interfaces.IsSystemTimeWorkType(item.WorkTypeID) {
+			continue
+		}
+		itemCopy := item
+		appendConsumedRef(workID, &itemCopy)
+	}
+	return refs
+}
+
+func consumedInputWorkItemRef(
+	workID string,
+	fallback *interfaces.FactoryWorkItem,
+	resolution interfaces.WorkPayloadResolution,
+) interfaces.FactoryWorldWorkItemRef {
+	if resolution.Status == interfaces.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
+		return lineageResolvedWorkItemRef(resolution.Snapshot, string(resolution.Status))
+	}
+
+	item := interfaces.FactoryWorkItem{ID: workID}
+	if fallback != nil {
+		item = *fallback
+	}
+	ref := workItemRef(item)
+	if ref.WorkID == "" {
+		ref.WorkID = workID
+	}
+	ref.State = item.State
+	ref.PayloadStatus = string(resolution.Status)
+	ref.PayloadUnavailableReason = resolution.Reason
+	return ref
+}
+
+func outputWorkItemRefsForCompletion(
+	completion interfaces.FactoryWorldDispatchCompletion,
+	state interfaces.FactoryWorldState,
+) []interfaces.FactoryWorldWorkItemRef {
+	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(completion.OutputWorkItems))
+	seen := make(map[string]struct{}, len(completion.OutputWorkItems))
+	for _, item := range completion.OutputWorkItems {
+		if item.ID == "" || interfaces.IsSystemTimeWorkType(item.WorkTypeID) {
+			continue
+		}
+		if _, exists := seen[item.ID]; exists {
+			continue
+		}
+		resolution := state.PayloadLineage.ResolveOutputWorkSnapshot(completion.DispatchID, item.ID)
+		if resolution.Status == interfaces.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
+			refs = append(refs, lineageResolvedWorkItemRef(resolution.Snapshot, string(resolution.Status)))
+		} else {
+			ref := workItemRef(item)
+			ref.PayloadStatus = string(resolution.Status)
+			ref.PayloadUnavailableReason = resolution.Reason
+			refs = append(refs, ref)
+		}
+		seen[item.ID] = struct{}{}
+	}
+	if len(refs) > 0 {
+		return refs
+	}
+	return workItemRefsForItems(completion.OutputWorkItems)
+}
+
+func lineageResolvedWorkItemRef(
+	snapshot *interfaces.WorkPayloadSnapshot,
+	payloadStatus string,
+) interfaces.FactoryWorldWorkItemRef {
+	ref := workItemRef(snapshot.WorkItem)
+	ref.State = snapshot.WorkItem.State
+	ref.Content = cloneWorkContentParts(snapshot.WorkItem.Content)
+	ref.PayloadStatus = payloadStatus
+	ref.LineageLogicalWorkID = snapshot.LogicalWorkID
+	ref.LineageSourceKind = string(snapshot.SourceKind)
+	ref.LineageContinuity = string(snapshot.Continuity)
+	ref.LineageParentWorkIDs = cloneStringSlice(snapshot.ParentWorkIDs)
+	return ref
+}
+
+func cloneWorkContentParts(parts []interfaces.WorkContentPart) []interfaces.WorkContentPart {
+	if len(parts) == 0 {
+		return nil
+	}
+	cloned := make([]interfaces.WorkContentPart, len(parts))
+	copy(cloned, parts)
+	return cloned
 }
 
 func workItemRefsForIDs(

@@ -73,11 +73,31 @@ export interface DashboardTopology {
 export interface DashboardWorkItemRef {
   current_chaining_trace_id?: string;
   chaining_trace_depth?: number;
+  content?: components["schemas"]["WorkContent"];
+  currentChainingTraceId?: string;
+  chainingTraceDepth?: number;
+  lineageLogicalWorkId?: string;
+  lineageContinuity?: string;
+  lineageSourceKind?: string;
+  lineageParentWorkIds?: string[];
+  lineage_logical_work_id?: string;
+  lineage_continuity?: string;
+  lineage_source_kind?: string;
+  lineage_parent_work_ids?: string[];
+  payloadStatus?: string;
+  payloadUnavailableReason?: string;
+  payload_status?: string;
+  payload_unavailable_reason?: string;
+  state?: string;
   work_id: string;
   work_type_id?: string;
   display_name?: string;
   previous_chaining_trace_ids?: string[];
+  previousChainingTraceIds?: string[];
   trace_id?: string;
+  traceId?: string;
+  workTypeId?: string;
+  displayName?: string;
 }
 
 export interface DashboardProviderSession {

@@ -1058,8 +1058,8 @@ export const HeaderLocalizationVerification = {
       }),
     ).toBeVisible();
     await expect(
-      within(localizedToolbar).getByRole("button", { name: "返回当前刻度" }),
-    ).toBeVisible();
+      within(localizedToolbar).queryByRole("button", { name: "返回当前刻度" }),
+    ).toBeNull();
     await expect(
       within(localizedToolbar).getByRole("button", { name: "导出 PNG" }),
     ).toBeVisible();
@@ -1118,8 +1118,13 @@ export const LocalePropagationVerification = {
       within(controls).getByText("Current locale: en"),
     ).toBeVisible();
     await expect(
-      within(englishToolbar).getByRole("button", {
+      within(englishToolbar).queryByRole("button", {
         name: "Return to current tick",
+      }),
+    ).toBeNull();
+    await expect(
+      within(englishToolbar).getByRole("slider", {
+        name: "Timeline tick",
       }),
     ).toBeVisible();
     await expect(await canvas.findByText("5/5")).toBeVisible();
@@ -1137,8 +1142,13 @@ export const LocalePropagationVerification = {
       within(controls).getByText("Current locale: zh-CN"),
     ).toBeVisible();
     await expect(
-      within(mandarinToolbar).getByRole("button", {
+      within(mandarinToolbar).queryByRole("button", {
         name: "返回当前刻度",
+      }),
+    ).toBeNull();
+    await expect(
+      within(mandarinToolbar).getByRole("slider", {
+        name: "时间线刻度",
       }),
     ).toBeVisible();
     await expect(await canvas.findByText("5/5")).toBeVisible();
