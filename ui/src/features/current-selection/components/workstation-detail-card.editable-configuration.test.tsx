@@ -987,7 +987,7 @@ describe("WorkstationDetailCard editable configuration", () => {
           "Editable configuration unavailable. The current factory API rejected the request.",
         )
         .className,
-    ).toContain("text-af-danger-ink");
+    ).toContain("text-af-danger-text");
 
     rerender(
       <WorkstationDetailCard
