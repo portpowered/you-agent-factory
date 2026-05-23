@@ -1,5 +1,6 @@
 import Editor, { loader } from "@monaco-editor/react";
 import { useEffect, useMemo, useRef } from "react";
+import type { RefObject } from "react";
 import "monaco-editor/esm/vs/editor/editor.all.js";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
@@ -121,7 +122,7 @@ export function WorkstationPromptEditor({
     return () => {
       onReadyChange?.(false);
     };
-  }, [onReadyChange, startupState]);
+  }, [onReadyChange]);
 
   const options = useMemo(() => PROMPT_EDITOR_OPTIONS, []);
 
@@ -170,66 +171,13 @@ export function WorkstationPromptEditor({
       height="13.5rem"
       language={WORKSTATION_PROMPT_LANGUAGE_ID}
       onChange={(nextValue) => onChange(nextValue ?? "")}
-      onMount={(editorInstance, monaco) => {
-        editorRef.current = editorInstance;
-        monacoRef.current = monaco;
-        const completionProvider = registerWorkstationPromptCompletionProvider(
-          monaco,
-          () => autocompleteStateRef.current,
-        );
-        editorInstance.addCommand(monaco.KeyCode.Space, () => {
-          editorInstance.trigger("workstation-prompt-space", "type", { text: " " });
-        });
-        const typeListener = editorInstance.onDidChangeModelContent((event) => {
-          const insertedText = event.changes.map((change) => change.text).join("");
-          const model = editorInstance.getModel();
-          const position = editorInstance.getPosition();
-          if (!model || !position || insertedText.length === 0) {
-            return;
-          }
-
-          const prompt = model.getValue();
-          const cursorOffset = model.getOffsetAt(position);
-          const insideTemplateExpression = isInsideTemplate(prompt, cursorOffset);
-          if (!insideTemplateExpression) {
-            return;
-          }
-
-          const typedTrigger =
-            insertedText.includes("{") ||
-            insertedText.includes(".") ||
-            insertedText.includes("$") ||
-            insertedText.includes("(");
-          const typedIdentifierText = insertedText.trim().length > 0;
-          if (!typedTrigger && !typedIdentifierText) {
-            return;
-          }
-
-          editorInstance.trigger(
-            "workstation-prompt-autocomplete",
-            "editor.action.triggerSuggest",
-            {},
-          );
-        });
-
-        editorInstance.onDidDispose(() => {
-          editorRef.current = null;
-          monacoRef.current = null;
-          completionProvider.dispose();
-          typeListener.dispose();
-        });
-        onMount?.(editorInstance);
-        onScrollChange?.({
-          scrollLeft: editorInstance.getScrollLeft(),
-          scrollTop: editorInstance.getScrollTop(),
-        });
-        editorInstance.onDidScrollChange((event) => {
-          onScrollChange?.({
-            scrollLeft: event.scrollLeft,
-            scrollTop: event.scrollTop,
-          });
-        });
-      }}
+      onMount={createPromptEditorMountHandler({
+        autocompleteStateRef,
+        editorRef,
+        monacoRef,
+        onMount,
+        onScrollChange,
+      })}
       options={{ ...options, ariaLabel }}
       path="inmemory://model/current-selection/workstation-prompt"
       theme={WORKSTATION_PROMPT_THEME_ID}
@@ -242,6 +190,84 @@ export function WorkstationPromptEditor({
       }}
     />
   );
+}
+
+function createPromptEditorMountHandler({
+  autocompleteStateRef,
+  editorRef,
+  monacoRef,
+  onMount,
+  onScrollChange,
+}: {
+  autocompleteStateRef: RefObject<EditableWorkstationPromptHelpState>;
+  editorRef: RefObject<MonacoEditorAPI.IStandaloneCodeEditor | null>;
+  monacoRef: RefObject<typeof import("monaco-editor") | null>;
+  onMount?: (editorInstance: MonacoEditorAPI.IStandaloneCodeEditor) => void;
+  onScrollChange?: (scrollPosition: { scrollLeft: number; scrollTop: number }) => void;
+}) {
+  return (
+    editorInstance: MonacoEditorAPI.IStandaloneCodeEditor,
+    monacoInstance: typeof import("monaco-editor"),
+  ) => {
+    editorRef.current = editorInstance;
+    monacoRef.current = monacoInstance;
+
+    const completionProvider = registerWorkstationPromptCompletionProvider(
+      monacoInstance,
+      () => autocompleteStateRef.current,
+    );
+    editorInstance.addCommand(monacoInstance.KeyCode.Space, () => {
+      editorInstance.trigger("workstation-prompt-space", "type", { text: " " });
+    });
+    const typeListener = editorInstance.onDidChangeModelContent((event) => {
+      const insertedText = event.changes.map((change) => change.text).join("");
+      const model = editorInstance.getModel();
+      const position = editorInstance.getPosition();
+      if (!model || !position || insertedText.length === 0) {
+        return;
+      }
+
+      const prompt = model.getValue();
+      const cursorOffset = model.getOffsetAt(position);
+      if (!isInsideTemplate(prompt, cursorOffset)) {
+        return;
+      }
+
+      const typedTrigger =
+        insertedText.includes("{") ||
+        insertedText.includes(".") ||
+        insertedText.includes("$") ||
+        insertedText.includes("(");
+      const typedIdentifierText = insertedText.trim().length > 0;
+      if (!typedTrigger && !typedIdentifierText) {
+        return;
+      }
+
+      editorInstance.trigger(
+        "workstation-prompt-autocomplete",
+        "editor.action.triggerSuggest",
+        {},
+      );
+    });
+
+    editorInstance.onDidDispose(() => {
+      editorRef.current = null;
+      monacoRef.current = null;
+      completionProvider.dispose();
+      typeListener.dispose();
+    });
+    onMount?.(editorInstance);
+    onScrollChange?.({
+      scrollLeft: editorInstance.getScrollLeft(),
+      scrollTop: editorInstance.getScrollTop(),
+    });
+    editorInstance.onDidScrollChange((event) => {
+      onScrollChange?.({
+        scrollLeft: event.scrollLeft,
+        scrollTop: event.scrollTop,
+      });
+    });
+  };
 }
 
 function PromptEditorFallbackState({
