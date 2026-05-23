@@ -30,20 +30,20 @@ const DIALOG_HINT_CLASS = cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
 const DIALOG_FORM_CLASS = "space-y-5";
 const DIALOG_FIELD_GROUP_CLASS = "space-y-2";
 const DIALOG_FIELD_LABEL_CLASS = cn(
-  "block text-sm font-semibold text-af-ink",
+  "block text-sm font-semibold text-af-text",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const DIALOG_FILE_INPUT_CLASS =
-  "block w-full rounded-xl border border-dashed border-af-overlay/18 bg-af-overlay/4 px-3 py-3 text-sm text-af-ink/80 file:mr-3 file:rounded-lg file:border-0 file:bg-af-accent/12 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-af-accent hover:bg-af-overlay/6";
+  "block w-full rounded-xl border border-dashed border-af-border-strong bg-af-surface-subtle px-3 py-3 text-sm text-af-text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-af-accent-surface file:px-3 file:py-2 file:text-sm file:font-semibold file:text-af-accent hover:bg-af-overlay";
 const DIALOG_FIELD_DESCRIPTION_CLASS = cn(
   "m-0",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 const DIALOG_VALIDATION_CLASS = "m-0 text-sm font-medium text-af-danger-ink";
 const DIALOG_ERROR_PANEL_CLASS =
-  "rounded-2xl border border-af-danger/30 bg-af-danger/10 px-4 py-3 text-sm text-af-danger-ink";
+  "rounded-2xl border border-af-danger-border bg-af-danger-surface px-4 py-3 text-sm text-af-danger-ink";
 const DIALOG_SUCCESS_PANEL_CLASS =
-  "rounded-2xl border border-af-success/30 bg-af-success/12 px-4 py-3 text-sm text-af-success-ink";
+  "rounded-2xl border border-af-success-border bg-af-success-surface px-4 py-3 text-sm text-af-success-ink";
 const DIALOG_CONTENT_CLASS = "w-full max-w-2xl gap-6";
 
 export interface ExportFactoryDialogProps {

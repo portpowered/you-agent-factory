@@ -35,7 +35,7 @@ const IMPORT_DIALOG_LABEL_CLASS = cn(
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const IMPORT_ERROR_PANEL_CLASS =
-  "border-af-danger/30 bg-af-danger/8 text-af-danger-ink";
+  "border-af-danger-border bg-af-danger-surface text-af-danger-ink";
 
 type ReadyFactoryImportPreviewState = Extract<FactoryImportPreviewState, { status: "ready" }>;
 
@@ -152,7 +152,7 @@ export function FactoryImportPreviewDialog({
           }
         }}
       >
-        <div className="overflow-hidden rounded-3xl border border-af-overlay/10 bg-af-overlay/4 p-3">
+        <div className="overflow-hidden rounded-3xl border border-af-border bg-af-surface-subtle p-3">
           <img
             alt={messages.previewImageAlt(previewState.value.factory.name)}
             className="block h-full max-h-96 w-full rounded-2xl object-contain"
@@ -175,18 +175,18 @@ export function FactoryImportPreviewDialog({
             </div>
           </DialogHeader>
 
-          <p className="m-0 text-base font-semibold text-af-ink">
+          <p className="m-0 text-base font-semibold text-af-text">
             {previewState.value.factory.name}
           </p>
 
-          <dl className="grid gap-3 rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-4 text-sm text-af-ink/80">
+          <dl className="grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-sm text-af-text-muted">
             <div className="grid gap-1">
               <dt className={IMPORT_DIALOG_LABEL_CLASS}>{messages.droppedFileLabel}</dt>
-              <dd className="m-0 font-semibold text-af-ink">{previewState.file.name}</dd>
+              <dd className="m-0 font-semibold text-af-text">{previewState.file.name}</dd>
             </div>
             <div className="grid gap-1">
               <dt className={IMPORT_DIALOG_LABEL_CLASS}>{messages.embeddedFactoryLabel}</dt>
-              <dd className="m-0 font-semibold text-af-ink">
+              <dd className="m-0 font-semibold text-af-text">
                 {previewState.value.factory.name}
               </dd>
             </div>

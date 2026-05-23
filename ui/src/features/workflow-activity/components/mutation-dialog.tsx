@@ -13,9 +13,9 @@ import { cn } from "../../../lib/cn";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 
 const DIALOG_OVERLAY_CLASS =
-  "z-50 flex items-center justify-center bg-af-canvas/78 p-4 backdrop-blur-sm";
+  "z-50 flex items-center justify-center bg-af-overlay-strong p-4 backdrop-blur-sm";
 const DIALOG_PANEL_CLASS =
-  "pointer-events-auto relative z-10 w-full overflow-hidden rounded-3xl border border-af-overlay/12 bg-af-surface/96 shadow-af-panel";
+  "pointer-events-auto relative z-10 w-full overflow-hidden rounded-3xl border border-af-border bg-af-surface-raised shadow-af-panel";
 const DIALOG_HEADER_CLASS = "flex items-start justify-between gap-4";
 const DIALOG_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 const DIALOG_DESCRIPTION_CLASS = cn("m-0", DASHBOARD_BODY_TEXT_CLASS);
@@ -28,12 +28,12 @@ const DIALOG_CONTENT_WITH_MEDIA_CLASS =
   "lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]";
 const DIALOG_MAIN_CLASS = "grid content-start gap-4";
 const DIALOG_CLOSE_BUTTON_CLASS =
-  "inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-overlay/12 bg-af-overlay/4 text-af-ink/72 outline-af-accent transition hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-border bg-af-surface-subtle text-af-text-muted outline-af-focus-ring transition hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 const DIALOG_FOOTER_CLASS = "flex flex-wrap justify-end gap-3";
 
 const MESSAGE_PANEL_TONE_CLASS = {
-  error: "border-af-danger/30 bg-af-danger/8 text-af-danger-ink",
-  neutral: "border-af-overlay/10 bg-af-overlay/4 text-af-ink/82",
+  error: "border-af-danger-border bg-af-danger-surface text-af-danger-ink",
+  neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
 } as const;
 
 export interface DashboardMutationDialogProps {

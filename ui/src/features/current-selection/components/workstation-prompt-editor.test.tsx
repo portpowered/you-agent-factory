@@ -66,6 +66,7 @@ describe("WorkstationPromptEditor", () => {
     expect(wrapper?.getAttribute("data-monaco-marker-messages")).toContain(
       "Work ID is invalid.",
     );
+    expect(wrapper?.className).toContain("border-af-danger-border");
     expect(onMount).toHaveBeenCalledTimes(1);
     expect(onReadyChange).toHaveBeenCalledWith(true);
     expect(onScrollChange).toHaveBeenCalledWith({
