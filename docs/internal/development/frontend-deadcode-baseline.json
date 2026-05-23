@@ -1,12 +1,1 @@
-[
-  {
-    "file": "src/testing/vitest.setup.ts",
-    "kind": "file",
-    "name": "src/testing/vitest.setup.ts"
-  },
-  {
-    "file": "src/vite-env.d.ts",
-    "kind": "file",
-    "name": "src/vite-env.d.ts"
-  }
-]
+[]
