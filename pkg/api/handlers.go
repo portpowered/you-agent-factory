@@ -1366,10 +1366,7 @@ func firstNonEmptyString(values ...string) string {
 }
 
 func generatedStringMap(values *factoryapi.StringMap) map[string]string {
-	if values == nil {
-		return nil
-	}
-	return map[string]string(*values)
+	return optional.StringMapValue(values)
 }
 
 func generatedSubmitRelations(values *[]factoryapi.SubmitRelation) []interfaces.Relation {

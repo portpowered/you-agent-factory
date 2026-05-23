@@ -206,6 +206,39 @@ func TestUpsertWorkRequest_AcceptsParentChildRelationsByWorkName(t *testing.T) {
 	assertSubmittedChildRelations(t, child.Relations)
 }
 
+func TestUpsertWorkRequest_CopiesWorkTagMapBeforeRuntimeSubmission(t *testing.T) {
+	workTags := factoryapi.StringMap{"priority": "high"}
+	req := factoryapi.WorkRequest{
+		RequestId: "request-tag-copy",
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{
+			{
+				Name:         "draft",
+				WorkTypeName: stringPointerForAPITest("task"),
+				Payload:      map[string]any{"title": "Draft"},
+				Tags:         &workTags,
+			},
+		},
+	}
+	domain, err := generatedWorkRequestToDomain(req)
+	if err != nil {
+		t.Fatalf("generatedWorkRequestToDomain error = %v", err)
+	}
+	if len(domain.Works) != 1 {
+		t.Fatalf("domain works = %#v, want one work", domain.Works)
+	}
+
+	workTags["priority"] = "mutated"
+	workTags["post"] = "added"
+
+	if domain.Works[0].Tags["priority"] != "high" {
+		t.Fatalf("domain work tags = %#v, want pre-mutation values", domain.Works[0].Tags)
+	}
+	if _, ok := domain.Works[0].Tags["post"]; ok {
+		t.Fatalf("domain work tags = %#v, want copied map to omit post-decode additions", domain.Works[0].Tags)
+	}
+}
+
 func TestUpsertWorkRequest_WorkTypeIDReturnsBadRequest(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
