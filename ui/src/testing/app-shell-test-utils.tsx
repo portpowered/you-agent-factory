@@ -17,7 +17,7 @@ import { installDashboardBrowserTestShims } from "../components/dashboard/test-b
 import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { reloadDashboardLayoutFromStorage } from "../features/bento";
 import { useDashboardBentoStore } from "../features/bento/state";
-import { useCurrentEditableFactoryDefinition } from "../features/current-factory-definition";
+import { useCurrentFactoryDefinition } from "../features/current-factory-definition";
 import { resetSelectionHistoryStore } from "../features/current-selection/state";
 import {
   createDefaultDashboardStreamState,
@@ -36,7 +36,7 @@ vi.mock("../features/current-factory-definition", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDefinition: vi.fn(),
   };
 });
 
@@ -378,7 +378,7 @@ export function registerAppDashboardTestLifecycle(): void {
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
       data: undefined,
       error: null,
       failureCount: 0,

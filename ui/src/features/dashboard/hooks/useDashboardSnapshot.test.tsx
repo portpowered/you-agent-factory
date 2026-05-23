@@ -8,7 +8,7 @@ import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { createReplayHarness } from "../../../testing/replay-harness";
 import {
   CURRENT_FACTORY_DOCUMENT_QUERY_KEY,
-  CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
+  CURRENT_FACTORY_DEFINITION_QUERY_KEY,
 } from "../../current-factory-definition";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import { FACTORY_TIMELINE_DEBUG_STORAGE_KEY } from "../../timeline/state/factoryTimelineDebug";
@@ -624,7 +624,7 @@ describe("useDashboardSnapshot", () => {
     });
 
     await waitFor(() => {
-      expect(queryClient.getQueryData(CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY)).toMatchObject(
+      expect(queryClient.getQueryData(CURRENT_FACTORY_DEFINITION_QUERY_KEY)).toMatchObject(
         {
           workers: [expect.objectContaining({ model: "gpt-5.6" })],
           workstations: [

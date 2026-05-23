@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../current-factory-definition";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition";
+import { useCurrentFactoryDefinition } from "../../current-factory-definition";
 import type { DashboardSelection } from "../types";
 import {
   useEditableWorkstationConfigurationState,
@@ -16,7 +16,7 @@ vi.mock("../../current-factory-definition", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDefinition: vi.fn(),
   };
 });
 
@@ -43,7 +43,7 @@ const planSelection: DashboardSelection = {
 
 describe("useEditableWorkstationConfigurationState", () => {
   beforeEach(() => {
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
     vi.mocked(useCurrentWorkstationPromptTemplateContract).mockReturnValue(
@@ -125,7 +125,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       },
     });
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(undefined),
     );
     rerender({ locale: "zh-CN" });
@@ -140,7 +140,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("surfaces editable-definition load failures directly in the form state", async () => {
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
       data: undefined,
       error: { message: "Current factory definition failed to load." },
       isError: true,
@@ -170,7 +170,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       expect(result.current?.status).toBe("ready");
     });
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           prompt: "Server refreshed prompt before local edits.",
@@ -194,7 +194,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("resets the editable draft when the selected workstation changes", async () => {
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(
         buildMultiWorkstationEditableFactoryDefinition(),
       ),
@@ -265,7 +265,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("surfaces an unavailable worker selection when the selected worker falls out of the current worker list", async () => {
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           workerName: "missing-worker",
@@ -301,7 +301,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("surfaces an empty worker-options state when the workstation currently exposes no workers", async () => {
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           workerName: "reviewer",
@@ -502,7 +502,7 @@ describe("useEditableWorkstationConfigurationState", () => {
   });
 
   it("keeps empty-body pollers saveable in the current-selection editor", async () => {
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           behavior: "POLLER",

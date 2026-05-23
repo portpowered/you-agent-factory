@@ -59,6 +59,13 @@ function createPage({
     isVisible: vi.fn().mockResolvedValue(true),
   };
   const currentButton = {
+    ...(isDesktop
+      ? {
+          boundingBox: vi
+            .fn()
+            .mockResolvedValue({ height: 20, width: 120, x: 380, y: 40 }),
+        }
+      : {}),
     focus: vi.fn().mockResolvedValue(undefined),
     isVisible: vi.fn().mockResolvedValue(true),
   };

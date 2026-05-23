@@ -7,7 +7,7 @@ import {
   buildDashboardWorkstationRequestFixture,
 } from "../../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition";
+import { useCurrentFactoryDefinition } from "../../current-factory-definition";
 import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
@@ -22,7 +22,7 @@ vi.mock("../../current-factory-definition", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDefinition: vi.fn(),
   };
 });
 
@@ -119,7 +119,7 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       isSuccess: true,
       status: "success",
     } as never);
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
       data: undefined,
       error: null,
       failureCount: 0,

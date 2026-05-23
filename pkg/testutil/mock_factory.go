@@ -303,7 +303,19 @@ func (m *MockFactory) SaveCurrentFactoryForSession(
 }
 
 func (m *MockFactory) sessionFactory(sessionID string) (*MockFactory, error) {
-	if m == nil || m.SessionFactories == nil {
+	if m == nil {
+		return nil, apisurface.ErrFactorySessionNotFound
+	}
+	if sessionID == "" || sessionID == "~default" {
+		if m.SessionFactories == nil {
+			return m, nil
+		}
+		if session, ok := m.SessionFactories["~default"]; ok && session != nil {
+			return session, nil
+		}
+		return m, nil
+	}
+	if m.SessionFactories == nil {
 		return nil, apisurface.ErrFactorySessionNotFound
 	}
 	session, ok := m.SessionFactories[sessionID]

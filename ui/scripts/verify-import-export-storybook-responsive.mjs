@@ -366,6 +366,16 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
     );
   }
 
+  if (viewport.label === "desktop") {
+    await expectOrderedLeftEdges(
+      [heading, exportButton, languageButton],
+      "Dashboard header desktop primary-row controls",
+    );
+    await expectOrderedLeftEdges(
+      [slider, currentButton],
+      "Dashboard header desktop timeline controls",
+    );
+  }
   await expectNoHorizontalOverflow(
     page,
     `Dashboard header at ${viewport.label}`,

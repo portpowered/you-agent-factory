@@ -1,5 +1,6 @@
 import { factoryAPIURL } from "../baseUrl";
 import type { components } from "../generated/openapi";
+import { currentFactoryWorkstationPath } from "../session-routing";
 import {
   extractAPIErrorPayload,
   isAPIRecord,
@@ -27,6 +28,7 @@ export interface CurrentFactoryPromptTemplateAPIErrorDetails {
 
 export interface CurrentFactoryPromptTemplateOptions {
   fetch?: typeof globalThis.fetch;
+  sessionID?: string | null;
 }
 
 export class CurrentFactoryPromptTemplateAPIError extends Error {
@@ -53,7 +55,11 @@ export async function getCurrentFactoryWorkstationPromptTemplateContract(
   options: CurrentFactoryPromptTemplateOptions = {},
 ): Promise<PromptTemplateContract> {
   return fetchPromptTemplateJSON(
-    `/factory/~current/workstations/${encodeURIComponent(workstationName)}/prompt-template-contract`,
+    currentFactoryWorkstationPath(
+      workstationName,
+      options.sessionID,
+      "prompt-template-contract",
+    ),
     {
       emptyEnvironmentMessage:
         promptTemplateAPIErrorMessages.contractEmptyEnvironment,
@@ -71,7 +77,11 @@ export async function validateCurrentFactoryWorkstationPromptTemplate(
   options: CurrentFactoryPromptTemplateOptions = {},
 ): Promise<PromptTemplateValidationResult> {
   return fetchPromptTemplateJSON(
-    `/factory/~current/workstations/${encodeURIComponent(workstationName)}/prompt-template-validation`,
+    currentFactoryWorkstationPath(
+      workstationName,
+      options.sessionID,
+      "prompt-template-validation",
+    ),
     {
       body: JSON.stringify({ prompt }),
       emptyEnvironmentMessage:

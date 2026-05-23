@@ -237,7 +237,7 @@ type Factory struct {
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
 	Metadata   *StringMap   `json:"metadata,omitempty"`
 
-	// Name Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+	// Name Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 	Name FactoryName `json:"name"`
 
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
@@ -278,7 +278,7 @@ type FactoryGuard struct {
 	Type GuardType `json:"type"`
 }
 
-// FactoryName Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+// FactoryName Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string
 
 // Guard Shared guard attached either to a workstation as a whole or to one specific workstation input.
@@ -874,9 +874,6 @@ type CreateFactoryBadRequest = ErrorResponse
 // CreateFactoryConflict defines model for CreateFactoryConflict.
 type CreateFactoryConflict = ErrorResponse
 
-// CurrentFactoryNotFound defines model for CurrentFactoryNotFound.
-type CurrentFactoryNotFound = ErrorResponse
-
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
 
@@ -1100,9 +1097,6 @@ type ClientInterface interface {
 	CreateFactoryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	CreateFactory(ctx context.Context, body CreateFactoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetCurrentFactory request
-	GetCurrentFactory(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) CreateFactoryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1119,18 +1113,6 @@ func (c *Client) CreateFactoryWithBody(ctx context.Context, contentType string, 
 
 func (c *Client) CreateFactory(ctx context.Context, body CreateFactoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateFactoryRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetCurrentFactory(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetCurrentFactoryRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -1177,33 +1159,6 @@ func NewCreateFactoryRequestWithBody(server string, contentType string, body io.
 	}
 
 	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewGetCurrentFactoryRequest generates requests for GetCurrentFactory
-func NewGetCurrentFactoryRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/factory/~current")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
 
 	return req, nil
 }
@@ -1255,9 +1210,6 @@ type ClientWithResponsesInterface interface {
 	CreateFactoryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateFactoryClientResponse, error)
 
 	CreateFactoryWithResponse(ctx context.Context, body CreateFactoryJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateFactoryClientResponse, error)
-
-	// GetCurrentFactoryWithResponse request
-	GetCurrentFactoryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCurrentFactoryClientResponse, error)
 }
 
 type CreateFactoryClientResponse struct {
@@ -1285,30 +1237,6 @@ func (r CreateFactoryClientResponse) StatusCode() int {
 	return 0
 }
 
-type GetCurrentFactoryClientResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *Factory
-	JSON404      *CurrentFactoryNotFound
-	JSON500      *InternalError
-}
-
-// Status returns HTTPResponse.Status
-func (r GetCurrentFactoryClientResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetCurrentFactoryClientResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 // CreateFactoryWithBodyWithResponse request with arbitrary body returning *CreateFactoryClientResponse
 func (c *ClientWithResponses) CreateFactoryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateFactoryClientResponse, error) {
 	rsp, err := c.CreateFactoryWithBody(ctx, contentType, body, reqEditors...)
@@ -1324,15 +1252,6 @@ func (c *ClientWithResponses) CreateFactoryWithResponse(ctx context.Context, bod
 		return nil, err
 	}
 	return ParseCreateFactoryClientResponse(rsp)
-}
-
-// GetCurrentFactoryWithResponse request returning *GetCurrentFactoryClientResponse
-func (c *ClientWithResponses) GetCurrentFactoryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCurrentFactoryClientResponse, error) {
-	rsp, err := c.GetCurrentFactory(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetCurrentFactoryClientResponse(rsp)
 }
 
 // ParseCreateFactoryClientResponse parses an HTTP response from a CreateFactoryWithResponse call
@@ -1369,46 +1288,6 @@ func ParseCreateFactoryClientResponse(rsp *http.Response) (*CreateFactoryClientR
 			return nil, err
 		}
 		response.JSON409 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetCurrentFactoryClientResponse parses an HTTP response from a GetCurrentFactoryWithResponse call
-func ParseGetCurrentFactoryClientResponse(rsp *http.Response) (*GetCurrentFactoryClientResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetCurrentFactoryClientResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Factory
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest CurrentFactoryNotFound
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest InternalError

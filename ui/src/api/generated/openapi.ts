@@ -323,7 +323,7 @@ export interface paths {
         put?: never;
         /**
          * Create factory
-         * @description Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory/~current` readback only and cannot be activated as a customer-named factory.
+         * @description Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory-sessions/~default/factory` readback only and cannot be activated as a customer-named factory.
          */
         post: operations["createFactory"];
         delete?: never;
@@ -376,30 +376,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factory/~current": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get current factory
-         * @description Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Current-factory responses include server-managed version metadata for replacement saves. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
-         */
-        get: operations["getCurrentFactory"];
-        /**
-         * Save current factory
-         * @description Submits one complete replacement for the current factory definition. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection.
-         */
-        put: operations["saveCurrentFactory"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/factory-sessions/{session_id}/factory": {
         parameters: {
             query?: never;
@@ -424,7 +400,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factory/~current/workstations/{workstation_name}/prompt-template-contract": {
+    "/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract": {
         parameters: {
             query?: never;
             header?: never;
@@ -435,7 +411,7 @@ export interface paths {
          * Get workstation prompt-template contract
          * @description Returns the authoritative prompt-variable reference and unavailable-access patterns for the selected current-factory workstation editing context.
          */
-        get: operations["getCurrentFactoryWorkstationPromptTemplateContract"];
+        get: operations["getCurrentFactoryWorkstationPromptTemplateContractBySessionId"];
         put?: never;
         post?: never;
         delete?: never;
@@ -444,7 +420,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factory/~current/workstations/{workstation_name}/prompt-template-validation": {
+    "/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation": {
         parameters: {
             query?: never;
             header?: never;
@@ -457,7 +433,7 @@ export interface paths {
          * Validate workstation prompt template
          * @description Validates a prompt draft against the authoritative current-factory workstation prompt contract and returns typed syntax or variable diagnostics.
          */
-        post: operations["validateCurrentFactoryWorkstationPromptTemplate"];
+        post: operations["validateCurrentFactoryWorkstationPromptTemplateBySessionId"];
         delete?: never;
         options?: never;
         head?: never;
@@ -895,7 +871,7 @@ export interface components {
             [key: string]: number;
         };
         /**
-         * @description Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+         * @description Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
          * @example customer-support-triage
          */
         FactoryName: string;
@@ -2840,56 +2816,6 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    getCurrentFactory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current active factory and version metadata, or the active default root runtime when no current-factory pointer exists yet. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Factory"];
-                };
-            };
-            404: components["responses"]["CurrentFactoryNotFound"];
-            500: components["responses"]["InternalError"];
-        };
-    };
-    saveCurrentFactory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Factory"];
-            };
-        };
-        responses: {
-            /** @description Saved current factory definition and new version metadata. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Factory"];
-                };
-            };
-            400: components["responses"]["SaveCurrentFactoryBadRequest"];
-            404: components["responses"]["CurrentFactoryNotFound"];
-            409: components["responses"]["SaveCurrentFactoryConflict"];
-            500: components["responses"]["InternalError"];
-        };
-    };
     getCurrentFactoryBySessionId: {
         parameters: {
             query?: never;
@@ -2902,7 +2828,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current active factory definition and version metadata for the targeted session. */
+            /** @description Current active factory definition and version metadata for the targeted session, or the active default root runtime when the default session has no durable current-factory pointer yet. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2946,11 +2872,13 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    getCurrentFactoryWorkstationPromptTemplateContract: {
+    getCurrentFactoryWorkstationPromptTemplateContractBySessionId: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+                session_id: components["parameters"]["SessionID"];
                 /** @description Customer-authored workstation name to inspect in the current factory. */
                 workstation_name: string;
             };
@@ -2971,11 +2899,13 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    validateCurrentFactoryWorkstationPromptTemplate: {
+    validateCurrentFactoryWorkstationPromptTemplateBySessionId: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+                session_id: components["parameters"]["SessionID"];
                 /** @description Customer-authored workstation name to validate against in the current factory. */
                 workstation_name: string;
             };

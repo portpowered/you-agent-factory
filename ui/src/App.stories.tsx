@@ -780,7 +780,7 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
         },
         {
           method: "POST",
-          path: "/factory/~current/workstations/Review/prompt-template-validation",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
           response: delayedValidPromptTemplateValidationMock,
         },
         {
@@ -820,7 +820,7 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
         },
         {
           method: "POST",
-          path: "/factory/~current/workstations/Review/prompt-template-validation",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
           response: delayedValidPromptTemplateValidationMock,
         },
         {
@@ -861,14 +861,14 @@ export const CurrentSelectionPromptHintVerification = {
         },
         {
           method: "GET",
-          path: "/factory/~current/workstations/Review/prompt-template-contract",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-contract",
           response: {
             body: promptTemplateContractResponse,
           },
         },
         {
           method: "POST",
-          path: "/factory/~current/workstations/Review/prompt-template-validation",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
             body: promptTemplateValidationResponse(init),
             status: 200,

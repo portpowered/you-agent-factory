@@ -194,13 +194,13 @@ func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType, body st
 
 func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.Factory {
 	t.Helper()
-	resp, err := http.Get(serverURL + "/factory/~current")
+	resp, err := http.Get(serverURL + "/factory-sessions/~default/factory")
 	if err != nil {
-		t.Fatalf("GET /factory/~current: %v", err)
+		t.Fatalf("GET /factory-sessions/~default/factory: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		t.Fatalf("GET /factory/~current status = %d, want 200", resp.StatusCode)
+		t.Fatalf("GET /factory-sessions/~default/factory status = %d, want 200", resp.StatusCode)
 	}
 	var current factoryapi.Factory
 	decodeNamedFactoryJSONResponse(t, resp, &current, "decode current factory response")
@@ -210,7 +210,7 @@ func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.Factory {
 func saveCurrentFactoryDefinition(t *testing.T, serverURL, body string) factoryapi.Factory {
 	t.Helper()
 
-	req, err := http.NewRequest(http.MethodPut, serverURL+"/factory/~current", bytes.NewBufferString(body))
+	req, err := http.NewRequest(http.MethodPut, serverURL+"/factory-sessions/~default/factory", bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatalf("new current factory request: %v", err)
 	}
@@ -218,11 +218,11 @@ func saveCurrentFactoryDefinition(t *testing.T, serverURL, body string) factorya
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("PUT /factory/~current: %v", err)
+		t.Fatalf("PUT /factory-sessions/~default/factory: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		t.Fatalf("PUT /factory/~current status = %d, want 200", resp.StatusCode)
+		t.Fatalf("PUT /factory-sessions/~default/factory status = %d, want 200", resp.StatusCode)
 	}
 
 	var saved factoryapi.Factory

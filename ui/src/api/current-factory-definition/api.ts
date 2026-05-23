@@ -15,15 +15,15 @@ import {
 export type { CanonicalFactoryDefinition } from "../factory-definition";
 
 type CanonicalFactory = components["schemas"]["Factory"];
-export type EditableFactoryDefinitionVersion =
+export type CurrentFactoryVersion =
   components["schemas"]["HybridLogicalTimestamp"];
 type ErrorTarget = components["schemas"]["ErrorTarget"];
 
 export type CurrentFactoryDocument = CanonicalFactoryDefinition & {
-  version: EditableFactoryDefinitionVersion;
+  version: CurrentFactoryVersion;
 };
 
-export type CurrentEditableFactoryDefinitionErrorCode =
+export type CurrentFactoryDefinitionErrorCode =
   | "BAD_REQUEST"
   | "FACTORY_NOT_IDLE"
   | "INTERNAL_ERROR"
@@ -32,27 +32,27 @@ export type CurrentEditableFactoryDefinitionErrorCode =
   | "NOT_FOUND"
   | "STALE_FACTORY_VERSION";
 
-export interface CurrentEditableFactoryDefinitionErrorDetails {
+export interface CurrentFactoryDefinitionErrorDetails {
   cause?: unknown;
-  code: CurrentEditableFactoryDefinitionErrorCode;
+  code: CurrentFactoryDefinitionErrorCode;
   responseBody?: unknown;
   status?: number;
   statusText?: string;
   targets?: ErrorTarget[];
 }
 
-export interface GetCurrentEditableFactoryDefinitionOptions {
+export interface GetCurrentFactoryDefinitionOptions {
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
 }
 
-export interface SaveCurrentEditableFactoryDefinitionOptions {
+export interface SaveCurrentFactoryOptions {
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
 }
 
-export interface SaveCurrentEditableFactoryDefinitionInput {
-  baseVersion?: EditableFactoryDefinitionVersion;
+export interface SaveCurrentFactoryInput {
+  baseVersion?: CurrentFactoryVersion;
   factoryDefinition: CanonicalFactoryDefinition;
 }
 
@@ -70,9 +70,9 @@ type FactoryDocumentRecord = Record<string, unknown> & {
   version: unknown;
 };
 
-export class CurrentEditableFactoryDefinitionError extends Error {
+export class CurrentFactoryDefinitionError extends Error {
   public readonly cause?: unknown;
-  public readonly code: CurrentEditableFactoryDefinitionErrorCode;
+  public readonly code: CurrentFactoryDefinitionErrorCode;
   public readonly responseBody?: unknown;
   public readonly status?: number;
   public readonly statusText?: string;
@@ -80,10 +80,10 @@ export class CurrentEditableFactoryDefinitionError extends Error {
 
   public constructor(
     message: string,
-    details: CurrentEditableFactoryDefinitionErrorDetails,
+    details: CurrentFactoryDefinitionErrorDetails,
   ) {
     super(message);
-    this.name = "CurrentEditableFactoryDefinitionError";
+    this.name = "CurrentFactoryDefinitionError";
     this.cause = details.cause;
     this.code = details.code;
     this.responseBody = details.responseBody;
@@ -93,14 +93,14 @@ export class CurrentEditableFactoryDefinitionError extends Error {
   }
 }
 
-export async function getCurrentEditableFactoryDefinition(
-  options: GetCurrentEditableFactoryDefinitionOptions = {},
+export async function getCurrentFactoryDefinition(
+  options: GetCurrentFactoryDefinitionOptions = {},
 ): Promise<CanonicalFactoryDefinition> {
   return getCurrentFactoryDocument(options);
 }
 
 export async function getCurrentFactoryDocument(
-  options: GetCurrentEditableFactoryDefinitionOptions = {},
+  options: GetCurrentFactoryDefinitionOptions = {},
 ): Promise<CurrentFactoryDocument> {
   return requestCurrentFactoryDocument({
     fetch: options.fetch,
@@ -111,8 +111,8 @@ export async function getCurrentFactoryDocument(
 }
 
 export async function saveCurrentFactoryDocument(
-  input: SaveCurrentEditableFactoryDefinitionInput,
-  options: SaveCurrentEditableFactoryDefinitionOptions = {},
+  input: SaveCurrentFactoryInput,
+  options: SaveCurrentFactoryOptions = {},
 ): Promise<CurrentFactoryDocument> {
   const requestBody: CanonicalFactory = {
     ...input.factoryDefinition,
@@ -143,7 +143,7 @@ async function requestCurrentFactoryDocument({
   const fetchImplementation = fetch ?? globalThis.fetch;
 
   if (typeof fetchImplementation !== "function") {
-    throw new CurrentEditableFactoryDefinitionError(
+    throw new CurrentFactoryDefinitionError(
       "Current factory editing is unavailable in this environment.",
       {
         code: "NETWORK_ERROR",
@@ -162,7 +162,7 @@ async function requestCurrentFactoryDocument({
       },
     );
   } catch (error) {
-    throw new CurrentEditableFactoryDefinitionError(
+    throw new CurrentFactoryDefinitionError(
       "The dashboard could not reach the current factory editing API.",
       {
         cause: error,
@@ -177,10 +177,10 @@ async function requestCurrentFactoryDocument({
     const errorBody = extractAPIErrorPayload(responseBody, {
       isTarget: isErrorTarget,
     });
-    throw new CurrentEditableFactoryDefinitionError(
+    throw new CurrentFactoryDefinitionError(
       errorBody?.message ?? rejectedMessage,
       {
-        code: normalizeCurrentEditableFactoryDefinitionErrorCode(
+        code: normalizeCurrentFactoryDefinitionErrorCode(
           errorBody?.code,
         ),
         responseBody,
@@ -200,12 +200,12 @@ async function requestCurrentFactoryDocument({
 function normalizeCurrentFactoryDocument(
   responseBody: unknown,
   responseDetails: Pick<
-    CurrentEditableFactoryDefinitionErrorDetails,
+    CurrentFactoryDefinitionErrorDetails,
     "status" | "statusText"
   >,
 ): CurrentFactoryDocument {
   if (!isEditableFactoryDefinitionValue(responseBody)) {
-    throw new CurrentEditableFactoryDefinitionError(
+    throw new CurrentFactoryDefinitionError(
       "The current factory editing API returned an invalid response.",
       {
         code: "INTERNAL_ERROR",
@@ -217,7 +217,7 @@ function normalizeCurrentFactoryDocument(
 
   try {
     const normalizedFactory = normalizeFactoryDefinition(responseBody);
-    const version = normalizeEditableFactoryDefinitionVersion(
+    const version = normalizeCurrentFactoryVersion(
       normalizedFactory.version,
     );
 
@@ -227,7 +227,7 @@ function normalizeCurrentFactoryDocument(
     };
   } catch (error) {
     if (error instanceof FactoryDefinitionAPIError) {
-      throw new CurrentEditableFactoryDefinitionError(
+      throw new CurrentFactoryDefinitionError(
         `The current factory editing API returned a factory definition the dashboard cannot edit. ${error.message}`,
         {
           cause: error,
@@ -242,9 +242,9 @@ function normalizeCurrentFactoryDocument(
   }
 }
 
-function normalizeEditableFactoryDefinitionVersion(
+function normalizeCurrentFactoryVersion(
   value: unknown,
-): EditableFactoryDefinitionVersion {
+): CurrentFactoryVersion {
   const record = isAPIRecord(value) ? value : null;
   if (
     !record ||
@@ -252,7 +252,7 @@ function normalizeEditableFactoryDefinitionVersion(
     !Number.isFinite(record.logical) ||
     typeof record.physical !== "string"
   ) {
-    throw new CurrentEditableFactoryDefinitionError(
+    throw new CurrentFactoryDefinitionError(
       "The current factory editing API returned an invalid response.",
       {
         code: "INTERNAL_ERROR",
@@ -267,9 +267,9 @@ function normalizeEditableFactoryDefinitionVersion(
   };
 }
 
-function normalizeCurrentEditableFactoryDefinitionErrorCode(
+function normalizeCurrentFactoryDefinitionErrorCode(
   code: string | undefined,
-): CurrentEditableFactoryDefinitionErrorCode {
+): CurrentFactoryDefinitionErrorCode {
   switch (code) {
     case "BAD_REQUEST":
       return code;

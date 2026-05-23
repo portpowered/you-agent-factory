@@ -1,1 +1,1 @@
-export * from "./hooks/useCurrentEditableFactoryDefinition";
+export * from "./hooks/useCurrentFactoryDefinition";

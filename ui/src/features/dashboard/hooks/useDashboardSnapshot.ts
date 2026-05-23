@@ -5,9 +5,9 @@ import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES, openFactoryEventStream } from "../../../api/events";
 import { normalizeFactoryDefinition } from "../../../api/factory-definition";
 import {
-  CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
+  CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
   currentFactoryDocumentQueryKey,
-  currentEditableFactoryDefinitionQueryKey,
+  currentFactoryDefinitionQueryKey,
 } from "../../current-factory-definition";
 import { resetSelectionHistoryStore } from "../../current-selection/state/selectionHistoryStore";
 import {
@@ -36,11 +36,11 @@ function resetDashboardSessionScopedState(
   resetStreamState();
   resetSelectionHistoryStore();
   queryClient.removeQueries({
-    queryKey: [CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
+    queryKey: [CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
     exact: false,
   });
   queryClient.removeQueries({
-    queryKey: [CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
+    queryKey: [CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
     exact: false,
   });
 }
@@ -155,7 +155,7 @@ export function useDashboardSnapshot({
 
     const stream = openFactoryEventStream(
       (event) => {
-        syncCurrentEditableFactoryDefinition(queryClient, event, sessionID);
+        syncCurrentFactoryDefinition(queryClient, event, sessionID);
         queuedEventsRef.current.push(
           compactFactoryEventForTimeline(event, debugOptions),
         );
@@ -223,7 +223,7 @@ export function useDashboardSnapshot({
   );
 }
 
-function syncCurrentEditableFactoryDefinition(
+function syncCurrentFactoryDefinition(
   queryClient: ReturnType<typeof useQueryClient>,
   event: FactoryEvent,
   sessionID: string,
@@ -237,7 +237,7 @@ function syncCurrentEditableFactoryDefinition(
   }
   try {
     queryClient.setQueryData(
-      currentEditableFactoryDefinitionQueryKey(sessionID),
+      currentFactoryDefinitionQueryKey(sessionID),
       normalizeFactoryDefinition(payloadFactory),
     );
     void queryClient.invalidateQueries({

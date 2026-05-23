@@ -12,9 +12,6 @@ func CurrentFactoryPath(sessionID string) string {
 }
 
 func ScopedPath(legacyPath string, sessionID string) string {
-	if legacyPath == "/factory/~current" {
-		return CurrentFactoryPath(sessionID)
-	}
 	return fmt.Sprintf("/factory-sessions/%s%s", escapedSessionID(sessionID), legacyPath)
 }
 

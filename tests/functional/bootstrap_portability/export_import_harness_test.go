@@ -109,7 +109,7 @@ func (r exportImportSmokeHarnessResult) AssertAPIContractSuccess(t *testing.T, f
 	t.Helper()
 
 	if r.ExportedFactory.Name == "" {
-		t.Fatal("api contract drift: GET /factory/~current returned an empty current factory name")
+		t.Fatal("api contract drift: GET /factory-sessions/~default/factory returned an empty current factory name")
 	}
 	if !reflect.DeepEqual(
 		comparableExportImportFactory(r.ExportedFactory),
@@ -135,7 +135,7 @@ func (r exportImportSmokeHarnessResult) AssertAPIContractSuccess(t *testing.T, f
 		)
 	}
 	if r.CurrentFactory.Name != r.ImportRequest.Name {
-		t.Fatalf("api contract drift: GET /factory/~current after import = %q, want %q", r.CurrentFactory.Name, r.ImportRequest.Name)
+		t.Fatalf("api contract drift: GET /factory-sessions/~default/factory after import = %q, want %q", r.CurrentFactory.Name, r.ImportRequest.Name)
 	}
 	if !reflect.DeepEqual(
 		comparableExportImportFactory(r.CurrentFactory),
@@ -195,13 +195,13 @@ func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.
 func getCurrentFactory(t *testing.T, serverURL string) factoryapi.Factory {
 	t.Helper()
 
-	resp, err := http.Get(serverURL + "/factory/~current")
+	resp, err := http.Get(serverURL + "/factory-sessions/~default/factory")
 	if err != nil {
-		t.Fatalf("GET /factory/~current: %v", err)
+		t.Fatalf("GET /factory-sessions/~default/factory: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		t.Fatalf("GET /factory/~current status = %d, want 200", resp.StatusCode)
+		t.Fatalf("GET /factory-sessions/~default/factory status = %d, want 200", resp.StatusCode)
 	}
 
 	var current factoryapi.Factory

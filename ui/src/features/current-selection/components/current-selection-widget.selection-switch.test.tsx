@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition";
+import { useCurrentFactoryDefinition } from "../../current-factory-definition";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
@@ -18,7 +18,7 @@ vi.mock("../../current-factory-definition", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDefinition: vi.fn(),
   };
 });
 
@@ -46,7 +46,7 @@ describe("CurrentSelectionWidget selection switching", () => {
       isSuccess: true,
       status: "success",
     } as never);
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
     vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue({

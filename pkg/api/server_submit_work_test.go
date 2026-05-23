@@ -466,14 +466,14 @@ func assertSubmitSurfaceSmokeSubmitAndList(t *testing.T, serverURL string, mf *t
 func assertSubmitSurfaceSmokeCurrentFactory(t *testing.T, serverURL string) {
 	t.Helper()
 
-	currentResp, err := http.Get(serverURL + "/factory/~current")
+	currentResp, err := http.Get(serverURL + "/factory-sessions/~default/factory")
 	if err != nil {
-		t.Fatalf("GET /factory/~current: %v", err)
+		t.Fatalf("GET /factory-sessions/~default/factory: %v", err)
 	}
 	defer currentResp.Body.Close()
 	if currentResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(currentResp.Body)
-		t.Fatalf("GET /factory/~current status = %d, want 200: %s", currentResp.StatusCode, string(body))
+		t.Fatalf("GET /factory-sessions/~default/factory status = %d, want 200: %s", currentResp.StatusCode, string(body))
 	}
 	var currentBody factoryapi.Factory
 	if err := json.NewDecoder(currentResp.Body).Decode(&currentBody); err != nil {

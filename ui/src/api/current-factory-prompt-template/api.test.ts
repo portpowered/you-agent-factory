@@ -83,7 +83,7 @@ describe("current-factory prompt-template API", () => {
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/factory/~current/workstations/Review/prompt-template-validation",
+        "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
       ),
       expect.objectContaining({
         body: JSON.stringify({ prompt: "{{ (index .Inputs 1).Payload }}" }),

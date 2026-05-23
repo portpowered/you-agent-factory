@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_FACTORY_SESSION_ID,
+  currentFactoryWorkstationPath,
   currentFactorySessionPath,
   factorySessionScopedPath,
   isDefaultFactorySessionID,
@@ -30,16 +31,22 @@ describe("factorySessionScopedPath", () => {
     );
   });
 
-  it("maps current-factory reads to the canonical session factory route", () => {
-    expect(factorySessionScopedPath("/factory/~current", "session-beta")).toBe(
-      "/factory-sessions/session-beta/factory",
-    );
-  });
-
   it("exposes the canonical current-factory session route directly", () => {
     expect(currentFactorySessionPath(undefined)).toBe("/factory-sessions/~default/factory");
     expect(currentFactorySessionPath("session/beta")).toBe(
       "/factory-sessions/session%2Fbeta/factory",
+    );
+  });
+
+  it("builds canonical current-factory workstation subroutes under the session path", () => {
+    expect(
+      currentFactoryWorkstationPath(
+        "Review Queue",
+        "session/beta",
+        "prompt-template-contract",
+      ),
+    ).toBe(
+      "/factory-sessions/session%2Fbeta/factory/workstations/Review%20Queue/prompt-template-contract",
     );
   });
 });

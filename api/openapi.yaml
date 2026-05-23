@@ -477,7 +477,7 @@ paths:
         - Factory
       operationId: createFactory
       summary: Create factory
-      description: Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory/~current` readback only and cannot be activated as a customer-named factory.
+      description: Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory-sessions/~default/factory` readback only and cannot be activated as a customer-named factory.
       requestBody:
         required: true
         content:
@@ -557,16 +557,18 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factory/~current:
+  /factory-sessions/{session_id}/factory:
     get:
       tags:
         - Factory
-      operationId: getCurrentFactory
-      summary: Get current factory
-      description: Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Current-factory responses include server-managed version metadata for replacement saves. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
+      operationId: getCurrentFactoryBySessionId
+      summary: Get current factory for one session
+      description: Returns the current factory definition owned by the explicitly selected live session together with server-managed version metadata for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
-          description: Current active factory and version metadata, or the active default root runtime when no current-factory pointer exists yet.
+          description: Current active factory definition and version metadata for the targeted session, or the active default root runtime when the default session has no durable current-factory pointer yet. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
           content:
             application/json:
               schema:
@@ -601,53 +603,6 @@ paths:
                           - workType: task
                             state: done
         '404':
-          $ref: '#/components/responses/CurrentFactoryNotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-    put:
-      tags:
-        - Factory
-      operationId: saveCurrentFactory
-      summary: Save current factory
-      description: Submits one complete replacement for the current factory definition. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Factory'
-      responses:
-        '200':
-          description: Saved current factory definition and new version metadata.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Factory'
-        '400':
-          $ref: '#/components/responses/SaveCurrentFactoryBadRequest'
-        '404':
-          $ref: '#/components/responses/CurrentFactoryNotFound'
-        '409':
-          $ref: '#/components/responses/SaveCurrentFactoryConflict'
-        '500':
-          $ref: '#/components/responses/InternalError'
-  /factory-sessions/{session_id}/factory:
-    get:
-      tags:
-        - Factory
-      operationId: getCurrentFactoryBySessionId
-      summary: Get current factory for one session
-      description: Returns the current factory definition owned by the explicitly selected live session together with server-managed version metadata for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
-      parameters:
-        - $ref: '#/components/parameters/SessionID'
-      responses:
-        '200':
-          description: Current active factory definition and version metadata for the targeted session.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Factory'
-        '404':
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
@@ -680,14 +635,15 @@ paths:
           $ref: '#/components/responses/SaveCurrentFactoryConflict'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factory/~current/workstations/{workstation_name}/prompt-template-contract:
+  /factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract:
     get:
       tags:
         - Factory
-      operationId: getCurrentFactoryWorkstationPromptTemplateContract
+      operationId: getCurrentFactoryWorkstationPromptTemplateContractBySessionId
       summary: Get workstation prompt-template contract
       description: Returns the authoritative prompt-variable reference and unavailable-access patterns for the selected current-factory workstation editing context.
       parameters:
+        - $ref: '#/components/parameters/SessionID'
         - name: workstation_name
           in: path
           required: true
@@ -705,14 +661,15 @@ paths:
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factory/~current/workstations/{workstation_name}/prompt-template-validation:
+  /factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation:
     post:
       tags:
         - Factory
-      operationId: validateCurrentFactoryWorkstationPromptTemplate
+      operationId: validateCurrentFactoryWorkstationPromptTemplateBySessionId
       summary: Validate workstation prompt template
       description: Validates a prompt draft against the authoritative current-factory workstation prompt contract and returns typed syntax or variable diagnostics.
       parameters:
+        - $ref: '#/components/parameters/SessionID'
         - name: workstation_name
           in: path
           required: true
@@ -1856,7 +1813,7 @@ components:
       type: string
       minLength: 1
       pattern: ^(UNDEFINED|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$
-      description: Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+      description: Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
       example: customer-support-triage
     FactoryWorldWorkstationRequestProjectionSlice:
       type: object

@@ -251,7 +251,7 @@ func assertPublishedOperations(t *testing.T, paths map[string]any) {
 		"/models/{model_name}/pull":        {"post"},
 		"/provider-sessions/detail":        {"get"},
 		"/factories":                       {"post"},
-		"/factory/~current":                {"get"},
+		"/factory-sessions/{session_id}/factory": {"get", "put"},
 	}
 	for path, methods := range requiredOperations {
 		pathItem, ok := paths[path].(map[string]any)
@@ -536,16 +536,16 @@ func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	assertResponseRef(t, createFactory, "400", "#/components/responses/CreateFactoryBadRequest")
 	assertResponseRef(t, createFactory, "409", "#/components/responses/CreateFactoryConflict")
 
-	currentFactory := pathOperation(t, paths, "/factory/~current", "get")
+	currentFactory := pathOperation(t, paths, "/factory-sessions/{session_id}/factory", "get")
 	assertResponseSchemaRef(t, currentFactory, "200", "#/components/schemas/Factory")
-	assertResponseRef(t, currentFactory, "404", "#/components/responses/CurrentFactoryNotFound")
+	assertResponseRef(t, currentFactory, "404", "#/components/responses/NotFound")
 
-	saveCurrentFactory := pathOperation(t, paths, "/factory/~current", "put")
+	saveCurrentFactory := pathOperation(t, paths, "/factory-sessions/{session_id}/factory", "put")
 	assertRequestSchemaRef(t, saveCurrentFactory, "#/components/schemas/Factory")
 	assertResponseSchemaRef(t, saveCurrentFactory, "200", "#/components/schemas/Factory")
 	assertResponseRef(t, saveCurrentFactory, "400", "#/components/responses/SaveCurrentFactoryBadRequest")
 	assertResponseRef(t, saveCurrentFactory, "409", "#/components/responses/SaveCurrentFactoryConflict")
-	assertResponseRef(t, saveCurrentFactory, "404", "#/components/responses/CurrentFactoryNotFound")
+	assertResponseRef(t, saveCurrentFactory, "404", "#/components/responses/NotFound")
 
 	listModels := pathOperation(t, paths, "/models", "get")
 	assertResponseSchemaRef(t, listModels, "200", "#/components/schemas/ListModelsResponse")

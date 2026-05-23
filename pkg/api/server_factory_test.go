@@ -50,7 +50,7 @@ func TestGetCurrentFactory_ReturnsFactoryShape(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodGet, "/factory/~current", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/factory", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -72,7 +72,7 @@ func TestGetCurrentFactory_AllowsDefaultRuntimeIdentifier(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodGet, "/factory/~current", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/factory", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -288,7 +288,7 @@ func TestGetCurrentFactory_ReturnsDefinitionAndVersion(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodGet, "/factory/~current", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/factory", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -309,7 +309,7 @@ func TestSaveCurrentFactory_SubmitsCompleteDefinitionAndReturnsVersion(t *testin
 	}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current", bytes.NewBufferString(`{"name":"beta","metadata":{"owner":"graph-editor"},"workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}]}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(`{"name":"beta","metadata":{"owner":"graph-editor"},"workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}]}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -332,7 +332,7 @@ func TestSaveCurrentFactory_SubmitsCompleteDefinitionAndReturnsVersion(t *testin
 func TestSaveCurrentFactory_MapsValidationErrorsToTargets(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{SaveCurrentFactoryErr: apisurface.ErrInvalidNamedFactory})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current", bytes.NewBufferString(`{"name":"beta"}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(`{"name":"beta"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -352,7 +352,7 @@ func TestSaveCurrentFactory_MapsTopologyValidationTargets(t *testing.T) {
 	target := factoryapi.ErrorTarget{Kind: "edge", Id: &targetID, Field: &field}
 	srv := newTestServer(&testutil.MockFactory{SaveCurrentFactoryErr: apisurface.NewTopologyValidationError("dangling output", []factoryapi.ErrorTarget{target})})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current", bytes.NewBufferString(`{"name":"beta"}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(`{"name":"beta"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -370,7 +370,7 @@ func TestSaveCurrentFactory_MapsTopologyValidationTargets(t *testing.T) {
 func TestSaveCurrentFactory_MapsStaleVersion(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{SaveCurrentFactoryErr: apisurface.ErrFactoryVersionStale})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current", bytes.NewBufferString(`{"name":"beta"}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(`{"name":"beta"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -389,7 +389,7 @@ func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/factory/~current/workstations/Review/prompt-template-contract", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/factory/workstations/Review/prompt-template-contract", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -410,7 +410,7 @@ func TestValidateCurrentFactoryWorkstationPromptTemplate(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/factory/~current/workstations/Review/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ (index .Inputs 1).Payload }}"}`))
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ (index .Inputs 1).Payload }}"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -427,7 +427,7 @@ func TestValidateCurrentFactoryWorkstationPromptTemplate(t *testing.T) {
 func TestValidateCurrentFactoryWorkstationPromptTemplate_UnknownWorkstation(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{CurrentFactory: &factoryapi.Factory{Name: "beta"}})
 
-	req := httptest.NewRequest(http.MethodPost, "/factory/~current/workstations/Missing/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ .Context.Project }}"}`))
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/factory/workstations/Missing/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ .Context.Project }}"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -487,7 +487,7 @@ func TestCreateFactory_RejectsNonIdleRuntime(t *testing.T) {
 
 func TestGetCurrentFactory_ReturnsNotFoundWithoutStoredNamedFactory(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{CurrentFactoryErr: apisurface.ErrCurrentFactoryNotFound})
-	req := httptest.NewRequest(http.MethodGet, "/factory/~current", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/factory", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "Current factory not found.")

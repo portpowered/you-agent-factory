@@ -8,7 +8,7 @@ import {
   buildDashboardWorkstationRequestFixture,
 } from "../../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition";
+import { useCurrentFactoryDefinition } from "../../current-factory-definition";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
@@ -22,7 +22,7 @@ vi.mock("../../current-factory-definition", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDefinition: vi.fn(),
   };
 });
 
@@ -143,7 +143,7 @@ describe("CurrentSelectionWidget", () => {
       isSuccess: true,
       status: "success",
     } as never);
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
       data: undefined,
       error: null,
       failureCount: 0,
@@ -670,7 +670,7 @@ describe("CurrentSelectionWidget", () => {
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
     });
-    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
+    expect(vi.mocked(useCurrentFactoryDefinition)).toHaveBeenCalledWith(
       true,
     );
     expect(
@@ -690,7 +690,7 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
+    expect(vi.mocked(useCurrentFactoryDefinition)).toHaveBeenCalledWith(
       false,
     );
   });
@@ -718,14 +718,14 @@ describe("CurrentSelectionWidget", () => {
     );
 
     expect(
-      vi.mocked(useCurrentEditableFactoryDefinition),
+      vi.mocked(useCurrentFactoryDefinition),
     ).toHaveBeenLastCalledWith(true);
   });
 
   it("loads editable workstation inputs when a workstation is already selected on mount", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
@@ -740,7 +740,7 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
+    expect(vi.mocked(useCurrentFactoryDefinition)).toHaveBeenCalledWith(
       true,
     );
 
@@ -757,7 +757,7 @@ describe("CurrentSelectionWidget", () => {
   it("initializes editable workstation inputs from the canonical factory definition and allows worker edits", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
@@ -801,7 +801,7 @@ describe("CurrentSelectionWidget", () => {
   it("preserves unsaved editable workstation input when the server definition refreshes", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
@@ -830,7 +830,7 @@ describe("CurrentSelectionWidget", () => {
       target: { value: "Keep my local edit." },
     });
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           prompt: "Server changed prompt",

@@ -6,7 +6,7 @@ import type { FactoryValue } from "../../../api/named-factory";
 import { createFactory, NamedFactoryAPIError } from "../../../api/named-factory";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../current-factory-definition";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition";
+import { useCurrentFactoryDefinition } from "../../current-factory-definition";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
@@ -17,7 +17,7 @@ vi.mock("../../current-factory-definition", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDefinition: vi.fn(),
   };
 });
 
@@ -40,7 +40,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
     vi.mocked(createFactory).mockReset();
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
     vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
@@ -348,7 +348,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "reviewer" },
     });
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(refreshedFactory),
     );
 
@@ -375,7 +375,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   it("preserves worker models while saving workstation prompt changes against a shared-worker definition", async () => {
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildSharedWorkerFactoryDefinition()),
     );
     vi.mocked(createFactory).mockResolvedValue(
@@ -429,7 +429,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     vi.mocked(createFactory).mockReturnValue(deferredSave.promise);
@@ -524,7 +524,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     vi.mocked(createFactory).mockResolvedValue(savedFactory);
@@ -556,7 +556,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ).toBeTruthy();
     });
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(savedFactory),
     );
 
@@ -621,7 +621,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     vi.mocked(createFactory).mockResolvedValue(savedFactory);
@@ -653,7 +653,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ).toBeTruthy();
     });
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(savedFactory),
     );
 
@@ -721,7 +721,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     vi.mocked(createFactory).mockReturnValue(deferredSave.promise);
@@ -801,7 +801,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     vi.mocked(createFactory).mockRejectedValue(
@@ -894,7 +894,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const planNode = snapshot.topology.workstation_nodes_by_id.plan;
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildMultiWorkstationEditableFactoryDefinition()),
     );
     vi.mocked(createFactory).mockRejectedValue(

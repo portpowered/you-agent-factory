@@ -478,6 +478,9 @@ func (s *Server) GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Req
 		case errors.Is(err, apisurface.ErrFactorySessionNotFound):
 			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 			return
+		case errors.Is(err, apisurface.ErrCurrentFactoryNotFound):
+			s.writeError(w, http.StatusNotFound, "Current factory not found.", "NOT_FOUND")
+			return
 		default:
 			s.logger.Error("get current factory failed", zap.Error(err), zap.String("session_id", string(sessionID)))
 			s.writeError(w, http.StatusInternalServerError, "failed to load current factory", "INTERNAL_ERROR")
@@ -487,8 +490,8 @@ func (s *Server) GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Req
 	s.writeJSON(w, http.StatusOK, namedFactory)
 }
 
-func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request, workstationName string) {
-	namedFactory, ok := s.loadCurrentFactory(w, r)
+func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, workstationName string) {
+	namedFactory, ok := s.loadCurrentFactoryBySession(w, r, sessionID)
 	if !ok {
 		return
 	}
@@ -502,8 +505,8 @@ func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContract(w http.Respo
 	s.writeJSON(w, http.StatusOK, promptTemplateContractResponse(contract))
 }
 
-func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request, workstationName string) {
-	namedFactory, ok := s.loadCurrentFactory(w, r)
+func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, workstationName string) {
+	namedFactory, ok := s.loadCurrentFactoryBySession(w, r, sessionID)
 	if !ok {
 		return
 	}
@@ -535,6 +538,29 @@ func (s *Server) loadCurrentFactory(w http.ResponseWriter, r *http.Request) (fac
 			return factoryapi.Factory{}, false
 		default:
 			s.logger.Error("get current factory failed", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to load current factory", "INTERNAL_ERROR")
+			return factoryapi.Factory{}, false
+		}
+	}
+	return namedFactory, true
+}
+
+func (s *Server) loadCurrentFactoryBySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) (factoryapi.Factory, bool) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return factoryapi.Factory{}, false
+	}
+	namedFactory, err := sessionRuntime.GetCurrentFactoryForSession(r.Context(), string(sessionID))
+	if err != nil {
+		switch {
+		case errors.Is(err, apisurface.ErrFactorySessionNotFound):
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return factoryapi.Factory{}, false
+		case errors.Is(err, apisurface.ErrCurrentFactoryNotFound):
+			s.writeError(w, http.StatusNotFound, "Current factory not found.", "NOT_FOUND")
+			return factoryapi.Factory{}, false
+		default:
+			s.logger.Error("get current factory failed", zap.Error(err), zap.String("session_id", string(sessionID)))
 			s.writeError(w, http.StatusInternalServerError, "failed to load current factory", "INTERNAL_ERROR")
 			return factoryapi.Factory{}, false
 		}
@@ -1567,42 +1593,42 @@ func decodeOpenFactorySessionBody(body io.Reader) (factoryapi.OpenFactorySession
 	return req, nil
 }
 
-func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryJSONRequestBody, error) {
+func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return factoryapi.SaveCurrentFactoryJSONRequestBody{}, err
+		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
 	}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 
-	var req factoryapi.SaveCurrentFactoryJSONRequestBody
+	var req factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody
 	if err := decoder.Decode(&req); err != nil {
-		return factoryapi.SaveCurrentFactoryJSONRequestBody{}, err
+		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		if err == nil {
-			return factoryapi.SaveCurrentFactoryJSONRequestBody{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
+			return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
 		}
-		return factoryapi.SaveCurrentFactoryJSONRequestBody{}, err
+		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
 	}
 	return req, nil
 }
-func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody, error) {
+func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody{}, err
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody{}, err
 	}
 
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 
-	var req factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody
+	var req factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody
 	if err := dec.Decode(&req); err != nil {
-		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody{}, err
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody{}, err
 	}
 	if err := ensureSingleJSONObject(dec); err != nil {
-		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody{}, err
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody{}, err
 	}
 
 	return req, nil

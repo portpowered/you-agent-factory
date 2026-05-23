@@ -686,7 +686,7 @@ type Factory struct {
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
 	Metadata   *StringMap   `json:"metadata,omitempty"`
 
-	// Name Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+	// Name Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 	Name FactoryName `json:"name"`
 
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
@@ -794,7 +794,7 @@ type FactoryGuard struct {
 	Type GuardType `json:"type"`
 }
 
-// FactoryName Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+// FactoryName Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string
 
 // FactorySessionSummary defines model for FactorySessionSummary.
@@ -2538,17 +2538,14 @@ type OpenFactorySessionJSONRequestBody = OpenFactorySessionRequest
 // SaveCurrentFactoryBySessionIdJSONRequestBody defines body for SaveCurrentFactoryBySessionId for application/json ContentType.
 type SaveCurrentFactoryBySessionIdJSONRequestBody = Factory
 
+// ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplateBySessionId for application/json ContentType.
+type ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody = PromptTemplateValidationRequest
+
 // SubmitWorkBySessionIdJSONRequestBody defines body for SubmitWorkBySessionId for application/json ContentType.
 type SubmitWorkBySessionIdJSONRequestBody = SubmitWorkRequest
 
 // UpsertWorkRequestBySessionIdJSONRequestBody defines body for UpsertWorkRequestBySessionId for application/json ContentType.
 type UpsertWorkRequestBySessionIdJSONRequestBody = WorkRequest
-
-// SaveCurrentFactoryJSONRequestBody defines body for SaveCurrentFactory for application/json ContentType.
-type SaveCurrentFactoryJSONRequestBody = Factory
-
-// ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplate for application/json ContentType.
-type ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody = PromptTemplateValidationRequest
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
@@ -3125,6 +3122,12 @@ type ServerInterface interface {
 	// Save current factory for one session
 	// (PUT /factory-sessions/{session_id}/factory)
 	SaveCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Get workstation prompt-template contract
+	// (GET /factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract)
+	GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workstationName string)
+	// Validate workstation prompt template
+	// (POST /factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation)
+	ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workstationName string)
 	// Get runtime status for one session
 	// (GET /factory-sessions/{session_id}/status)
 	GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -3140,18 +3143,6 @@ type ServerInterface interface {
 	// Get work token for one session
 	// (GET /factory-sessions/{session_id}/work/{id})
 	GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, id WorkOrTokenID)
-	// Get current factory
-	// (GET /factory/~current)
-	GetCurrentFactory(w http.ResponseWriter, r *http.Request)
-	// Save current factory
-	// (PUT /factory/~current)
-	SaveCurrentFactory(w http.ResponseWriter, r *http.Request)
-	// Get workstation prompt-template contract
-	// (GET /factory/~current/workstations/{workstation_name}/prompt-template-contract)
-	GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request, workstationName string)
-	// Validate workstation prompt template
-	// (POST /factory/~current/workstations/{workstation_name}/prompt-template-validation)
-	ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request, workstationName string)
 	// List discovered models
 	// (GET /models)
 	ListModels(w http.ResponseWriter, r *http.Request)
@@ -3349,6 +3340,74 @@ func (siw *ServerInterfaceWrapper) SaveCurrentFactoryBySessionId(w http.Response
 	handler.ServeHTTP(w, r)
 }
 
+// GetCurrentFactoryWorkstationPromptTemplateContractBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "workstation_name" -------------
+	var workstationName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workstation_name", mux.Vars(r)["workstation_name"], &workstationName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workstation_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w, r, sessionId, workstationName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ValidateCurrentFactoryWorkstationPromptTemplateBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "workstation_name" -------------
+	var workstationName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workstation_name", mux.Vars(r)["workstation_name"], &workstationName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workstation_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w, r, sessionId, workstationName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetStatusBySessionId operation middleware
 func (siw *ServerInterfaceWrapper) GetStatusBySessionId(w http.ResponseWriter, r *http.Request) {
 
@@ -3526,84 +3585,6 @@ func (siw *ServerInterfaceWrapper) GetWorkBySessionId(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetWorkBySessionId(w, r, sessionId, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetCurrentFactory operation middleware
-func (siw *ServerInterfaceWrapper) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetCurrentFactory(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SaveCurrentFactory operation middleware
-func (siw *ServerInterfaceWrapper) SaveCurrentFactory(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SaveCurrentFactory(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetCurrentFactoryWorkstationPromptTemplateContract operation middleware
-func (siw *ServerInterfaceWrapper) GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "workstation_name" -------------
-	var workstationName string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "workstation_name", mux.Vars(r)["workstation_name"], &workstationName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workstation_name", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetCurrentFactoryWorkstationPromptTemplateContract(w, r, workstationName)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ValidateCurrentFactoryWorkstationPromptTemplate operation middleware
-func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "workstation_name" -------------
-	var workstationName string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "workstation_name", mux.Vars(r)["workstation_name"], &workstationName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workstation_name", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ValidateCurrentFactoryWorkstationPromptTemplate(w, r, workstationName)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4032,6 +4013,10 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory", wrapper.SaveCurrentFactoryBySessionId).Methods("PUT")
 
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract", wrapper.GetCurrentFactoryWorkstationPromptTemplateContractBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId).Methods("POST")
+
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/status", wrapper.GetStatusBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work", wrapper.ListWorkBySessionId).Methods("GET")
@@ -4041,14 +4026,6 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work-requests/{request_id}", wrapper.UpsertWorkRequestBySessionId).Methods("PUT")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work/{id}", wrapper.GetWorkBySessionId).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factory/~current", wrapper.GetCurrentFactory).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factory/~current", wrapper.SaveCurrentFactory).Methods("PUT")
-
-	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-contract", wrapper.GetCurrentFactoryWorkstationPromptTemplateContract).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplate).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/models", wrapper.ListModels).Methods("GET")
 

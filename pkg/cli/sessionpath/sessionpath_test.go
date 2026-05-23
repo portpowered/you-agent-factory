@@ -34,12 +34,6 @@ func TestScopedPath(t *testing.T) {
 			sessionID: "session/beta",
 			want:      "/factory-sessions/session%2Fbeta/work",
 		},
-		{
-			name:      "current factory path maps to canonical session resource",
-			legacy:    "/factory/~current",
-			sessionID: "session-beta",
-			want:      "/factory-sessions/session-beta/factory",
-		},
 	}
 
 	for _, tt := range tests {

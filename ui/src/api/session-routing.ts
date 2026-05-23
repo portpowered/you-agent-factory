@@ -11,14 +11,19 @@ export function currentFactorySessionPath(sessionID: string | null | undefined):
   return `/factory-sessions/${encodeURIComponent(normalizedSessionID)}/factory`;
 }
 
+export function currentFactoryWorkstationPath(
+  workstationName: string,
+  sessionID: string | null | undefined,
+  suffix: "prompt-template-contract" | "prompt-template-validation",
+): string {
+  return `${currentFactorySessionPath(sessionID)}/workstations/${encodeURIComponent(workstationName)}/${suffix}`;
+}
+
 export function factorySessionScopedPath(
-  legacyPath: string,
+  path: string,
   sessionID: string | null | undefined,
 ): string {
-  const normalizedPath = legacyPath.startsWith("/") ? legacyPath : `/${legacyPath}`;
-  if (normalizedPath === "/factory/~current") {
-    return currentFactorySessionPath(sessionID);
-  }
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const normalizedSessionID: string = isDefaultFactorySessionID(sessionID)
     ? DEFAULT_FACTORY_SESSION_ID
     : (sessionID ?? DEFAULT_FACTORY_SESSION_ID);

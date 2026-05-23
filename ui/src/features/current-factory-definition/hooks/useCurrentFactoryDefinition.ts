@@ -2,41 +2,41 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
-  getCurrentEditableFactoryDefinition,
+  getCurrentFactoryDefinition,
   getCurrentFactoryDocument,
   saveCurrentFactoryDocument,
   type CanonicalFactoryDefinition,
-  type CurrentEditableFactoryDefinitionError,
+  type CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
-  type SaveCurrentEditableFactoryDefinitionInput,
+  type SaveCurrentFactoryInput,
 } from "../../../api/current-factory-definition";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 
-export const CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY_PREFIX =
-  "current-editable-factory-definition";
+export const CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX =
+  "current-factory-definition";
 
 function normalizeSessionQueryKey(sessionID: string | null | undefined): string {
   return sessionID ?? DEFAULT_FACTORY_SESSION_ID;
 }
 
-export function currentEditableFactoryDefinitionQueryKey(
+export function currentFactoryDefinitionQueryKey(
   sessionID: string | null | undefined,
 ) {
   return [
-    CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
+    CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
     normalizeSessionQueryKey(sessionID),
   ] as const;
 }
 
-export const CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY =
-  currentEditableFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID);
+export const CURRENT_FACTORY_DEFINITION_QUERY_KEY =
+  currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID);
 
-export function useCurrentEditableFactoryDefinition(isEnabled = true) {
+export function useCurrentFactoryDefinition(isEnabled = true) {
   const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
 
-  return useQuery<CanonicalFactoryDefinition, CurrentEditableFactoryDefinitionError>({
-    queryKey: currentEditableFactoryDefinitionQueryKey(sessionID),
-    queryFn: () => getCurrentEditableFactoryDefinition({ sessionID }),
+  return useQuery<CanonicalFactoryDefinition, CurrentFactoryDefinitionError>({
+    queryKey: currentFactoryDefinitionQueryKey(sessionID),
+    queryFn: () => getCurrentFactoryDefinition({ sessionID }),
     enabled: isEnabled,
     gcTime: 0,
     refetchOnWindowFocus: false,
@@ -48,7 +48,7 @@ export function currentFactoryDocumentQueryKey(
   sessionID: string | null | undefined,
 ) {
   return [
-    ...currentEditableFactoryDefinitionQueryKey(sessionID),
+    ...currentFactoryDefinitionQueryKey(sessionID),
     "document",
   ] as const;
 }
@@ -61,7 +61,7 @@ export function useCurrentFactoryDocument(isEnabled = true) {
 
   return useQuery<
     CurrentFactoryDocument,
-    CurrentEditableFactoryDefinitionError
+    CurrentFactoryDefinitionError
   >({
     queryKey: currentFactoryDocumentQueryKey(sessionID),
     queryFn: () => getCurrentFactoryDocument({ sessionID }),
@@ -78,8 +78,8 @@ export function useSaveCurrentFactory() {
 
   return useMutation<
     CurrentFactoryDocument,
-    CurrentEditableFactoryDefinitionError,
-    SaveCurrentEditableFactoryDefinitionInput
+    CurrentFactoryDefinitionError,
+    SaveCurrentFactoryInput
   >({
     mutationFn: (input) =>
       saveCurrentFactoryDocument(input, { sessionID }),
@@ -89,7 +89,7 @@ export function useSaveCurrentFactory() {
         document,
       );
       queryClient.setQueryData(
-        currentEditableFactoryDefinitionQueryKey(sessionID),
+        currentFactoryDefinitionQueryKey(sessionID),
         document,
       );
     },

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition";
+import { useCurrentFactoryDefinition } from "../../current-factory-definition";
 import {
   applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
@@ -49,7 +49,7 @@ export function useEditableWorkstationConfigurationState(
   const isNodeSelection = selection?.kind === "node" && selectedNode != null;
   const messages = getWorkstationDetailMessages(locale);
   const editableDefinition =
-    useCurrentEditableFactoryDefinition(isNodeSelection);
+    useCurrentFactoryDefinition(isNodeSelection);
   const promptTemplateContract = useCurrentWorkstationPromptTemplateContract(
     selectedNode?.workstation_name,
     isNodeSelection,
@@ -124,7 +124,7 @@ export function useEditableWorkstationConfigurationState(
 
 function useEditableWorkstationSession(
   editableDefinition: ReturnType<
-    typeof useCurrentEditableFactoryDefinition
+    typeof useCurrentFactoryDefinition
   >["data"],
   selectedNode: DashboardWorkstationNode | null,
   selection: DashboardSelection | null,
@@ -294,7 +294,7 @@ function buildReadyEditableWorkstationConfigurationState({
   setSessionState,
 }: {
   editableDefinition: NonNullable<
-    ReturnType<typeof useCurrentEditableFactoryDefinition>["data"]
+    ReturnType<typeof useCurrentFactoryDefinition>["data"]
   >;
   messages: WorkstationDetailMessages;
   promptHelpState: EditableWorkstationPromptHelpState;

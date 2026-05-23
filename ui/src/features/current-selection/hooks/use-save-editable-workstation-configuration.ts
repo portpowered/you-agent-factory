@@ -7,7 +7,7 @@ import {
   type FactoryValue,
   NamedFactoryAPIError,
 } from "../../../api/named-factory";
-import { CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY } from "../../current-factory-definition";
+import { CURRENT_FACTORY_DEFINITION_QUERY_KEY } from "../../current-factory-definition";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationSaveState,
@@ -74,7 +74,7 @@ export function useSaveEditableWorkstationConfiguration({
       const normalizedFactory = normalizeFactoryDefinition(value);
 
       queryClient.setQueryData(
-        CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
+        CURRENT_FACTORY_DEFINITION_QUERY_KEY,
         normalizedFactory,
       );
       variables.markChangesSaved?.();
