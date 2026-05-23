@@ -162,6 +162,22 @@ func CloneWorkstationInputs(inputs []WorkstationInput) []WorkstationInput {
 	return cloneWorkstationInputs(inputs)
 }
 
+// CloneFactoryWorkItems returns detached copies of canonical factory work
+// items while preserving nil output for empty input.
+func CloneFactoryWorkItems(items []FactoryWorkItem) []FactoryWorkItem {
+	if len(items) == 0 {
+		return nil
+	}
+	clone := make([]FactoryWorkItem, len(items))
+	for i, item := range items {
+		clone[i] = item
+		clone[i].PreviousChainingTraceIDs = cloneStringSlice(item.PreviousChainingTraceIDs)
+		clone[i].Content = CloneWorkContentParts(item.Content)
+		clone[i].Tags = cloneStringMap(item.Tags)
+	}
+	return clone
+}
+
 func cloneSafeRenderedPromptDiagnostic(diagnostic *SafeRenderedPromptDiagnostic) *SafeRenderedPromptDiagnostic {
 	if diagnostic == nil {
 		return nil
@@ -204,16 +220,7 @@ func cloneFactoryTerminalWork(terminalWork *FactoryTerminalWork) *FactoryTermina
 }
 
 func cloneFactoryWorkItems(items []FactoryWorkItem) []FactoryWorkItem {
-	if len(items) == 0 {
-		return nil
-	}
-	clone := make([]FactoryWorkItem, len(items))
-	for i, item := range items {
-		clone[i] = item
-		clone[i].PreviousChainingTraceIDs = cloneStringSlice(item.PreviousChainingTraceIDs)
-		clone[i].Tags = cloneStringMap(item.Tags)
-	}
-	return clone
+	return CloneFactoryWorkItems(items)
 }
 
 func cloneWorkstationInputs(inputs []WorkstationInput) []WorkstationInput {
