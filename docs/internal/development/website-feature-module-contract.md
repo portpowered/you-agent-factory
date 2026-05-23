@@ -34,10 +34,18 @@ When a more specific name communicates ownership better than a generic helper bu
 
 ## Public Surface Rules
 
-- Public entrypoints must live under an approved subdirectory rather than at the feature root.
-- App-level composition, cross-feature imports, and shared UI should depend on intentional public-surface modules instead of ad hoc deep imports.
-- When a feature exposes multiple supported seams, use explicit sub-boundary entrypoints rather than exporting every implementation file.
-- Deep imports may exist temporarily inside the same feature during migrations, but maintained public imports should converge on the documented public-surface directories for that feature.
+- `public/` is the one canonical directory for feature public exports.
+- The default public entrypoint is `ui/src/features/<feature>/public/index.ts`.
+- A feature that exposes more than one supported public seam may add explicitly named siblings under `public/`, such as `public/testing.ts` or `public/editor.ts`, but should not create a second public-export directory name.
+- Public entrypoints must live under `public/` rather than at the feature root.
+- App-level composition, cross-feature imports, and shared UI should depend on intentional `public/` modules instead of ad hoc deep imports.
+- When a feature exposes multiple supported seams, use explicit `public/*` entrypoints rather than exporting every implementation file.
+- Deep imports may exist temporarily inside the same feature during migrations, but maintained public imports should converge on the documented `public/` entrypoints for that feature.
+
+Example import intent:
+
+- Prefer `ui/src/features/header/public` over `ui/src/features/header/dashboard-header`.
+- Prefer `ui/src/features/current-selection/public/provider-session` over a consumer guessing which internal `components/` or `hooks/` file is safe to import.
 
 ## Boundary Rules
 
@@ -51,5 +59,7 @@ When a more specific name communicates ownership better than a generic helper bu
 
 - This governance initiative standardizes structure only; it does not change backend contracts, generated API artifacts, or intended customer-visible behavior.
 - Migrate one feature slice at a time and preserve existing loading, empty, error, and success states while moving modules.
-- When a migration changes the location of a public module, update the owning public entrypoint in the same change so downstream imports remain stable.
+- When a migration removes a feature-root `index.ts`, move its supported exports into `public/index.ts` in the same feature and update maintained consumers to import from that `public/` path instead of relying on the root barrel.
+- If a previous root `index.ts` mixed public and internal exports, keep only the supported consumer-facing API in `public/` and move internal-only helpers into the most descriptive non-public directory.
+- When a migration changes the location of a public module, update the owning `public/` entrypoint in the same change so downstream imports remain stable in behavior even if the import path changes.
 - Temporary exceptions should be explicit, centrally tracked, and removed as each migrated slice eliminates its feature-root files.
