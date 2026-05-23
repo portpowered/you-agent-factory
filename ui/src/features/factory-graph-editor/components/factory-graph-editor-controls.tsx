@@ -252,10 +252,10 @@ function FactoryGraphEditorAddMenu({
         className="grid gap-2"
       >
         <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-af-ink">
+          <p className="m-0 text-sm font-semibold text-af-text">
             {messages.toolbarVisibilityMenuTitle}
           </p>
-          <p className="m-0 text-xs leading-5 text-af-ink/68">
+          <p className="m-0 text-xs leading-5 text-af-text-muted">
             {messages.toolbarVisibilityMenuDescription}
           </p>
         </div>
@@ -349,9 +349,9 @@ export function FactoryGraphEditorActionPopover({
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent align="start" className="grid gap-3" sideOffset={12}>
         <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-af-ink">{title}</p>
+          <p className="m-0 text-sm font-semibold text-af-text">{title}</p>
           {description ? (
-            <p className="m-0 text-xs leading-5 text-af-ink/68">
+            <p className="m-0 text-xs leading-5 text-af-text-muted">
               {description}
             </p>
           ) : null}

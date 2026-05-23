@@ -163,11 +163,11 @@
   }
 
   .af-dashboard-body-code {
-    @apply font-mono text-[0.9rem] leading-[1.55] text-af-code-ink/78;
+    @apply font-mono text-[0.9rem] leading-[1.55] text-af-code-ink;
   }
 
   .af-dashboard-supporting-code {
-    @apply font-mono text-[0.8rem] leading-[1.45] text-af-code-ink/78;
+    @apply font-mono text-[0.8rem] leading-[1.45] text-af-code-ink;
   }
 
   .af-dashboard-widget-subtitle {

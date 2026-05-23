@@ -336,6 +336,12 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         "The factory has not published any workstation graph yet.",
       ),
     ).toBeTruthy();
+    expect(
+      screen.getByText("No workflow topology loaded").parentElement?.className,
+    ).toContain("border-af-border-strong");
+    expect(
+      screen.getByText("No workflow topology loaded").parentElement?.className,
+    ).toContain("bg-af-surface-subtle");
     expect(screen.queryByTestId("mock-react-flow")).toBeNull();
   });
 

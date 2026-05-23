@@ -5,14 +5,12 @@ import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
 import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
+  REQUEST_HISTORY_TEXT_CLASS,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
 } from "./detail-card-shared";
 import type { WorkstationRequestDetailView } from "./workstation-request-detail-view";
-
-const SCRIPT_OUTPUT_TEXT_CLASS =
-  "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 [overflow-wrap:anywhere]";
 
 export function ResponseDetailsSection({
   request,
@@ -210,7 +208,7 @@ function ScriptOutputField({
       <dt>{title}</dt>
       <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
         {value ? (
-          <pre className={SCRIPT_OUTPUT_TEXT_CLASS}>{value}</pre>
+          <pre className={REQUEST_HISTORY_TEXT_CLASS}>{value}</pre>
         ) : (
           emptyMessage
         )}

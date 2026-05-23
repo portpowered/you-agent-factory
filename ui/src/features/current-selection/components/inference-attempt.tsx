@@ -13,6 +13,7 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import {
+  CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   EXECUTION_PILL_CLASS,
   HISTORY_HEADER_CLASS,
   HISTORY_TOGGLE_CLASS,
@@ -300,7 +301,7 @@ function AttemptProviderSessionDetails({
           className={cn(
             PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
             state.providerSessionSelected &&
-              "border-af-accent/35 bg-af-accent/10 text-af-accent",
+              CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
           )}
           onClick={() => onSelectProviderSession(loadableProviderSession)}
           type="button"

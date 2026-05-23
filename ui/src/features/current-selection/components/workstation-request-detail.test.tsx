@@ -907,7 +907,10 @@ describe("WorkstationRequestDetailCard", () => {
         "dispatch-review-script-success/script-request/1",
       ),
     ).toBeTruthy();
-    expect(responseDetails.getByText("script success stdout")).toBeTruthy();
+    const stdoutPanel = responseDetails.getByText("script success stdout");
+    expect(stdoutPanel).toBeTruthy();
+    expect(stdoutPanel.className).toContain("border-af-border");
+    expect(stdoutPanel.className).toContain("bg-af-surface-raised");
     expect(
       responseDetails.getByText(
         "No stderr was recorded for this script response.",

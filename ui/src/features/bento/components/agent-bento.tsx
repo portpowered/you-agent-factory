@@ -62,7 +62,7 @@ const BENTO_GRID_CLASS = "min-h-px";
 const BENTO_ITEM_CLASS = "min-w-0";
 const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
-  "flex min-h-13 cursor-move items-center justify-between gap-3 border-af-overlay/10 px-3.5 py-3";
+  "flex min-h-13 cursor-move items-center justify-between gap-3 border-af-border px-3.5 py-3";
 const BENTO_CARD_HEADER_COMPACT_CLASS =
   "min-h-11 gap-2 px-3 py-2.5";
 const BENTO_CARD_TITLE_CLASS = cn(
@@ -73,9 +73,9 @@ const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS = "gap-1.5";
 const BENTO_DRAG_HANDLE_CLASS =
-  "inline-grid size-9 shrink-0 cursor-grab place-items-center rounded-lg border border-af-overlay/18 bg-af-overlay/8 text-af-ink/68 outline-af-ink/55 transition-colors hover:border-af-overlay/28 hover:bg-af-overlay/12 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 active:cursor-grabbing";
+  "inline-grid size-9 shrink-0 cursor-grab place-items-center rounded-lg border border-af-border bg-af-surface-raised text-af-text-muted outline-af-accent transition-colors hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 active:cursor-grabbing";
 const BENTO_DRAG_HANDLE_COMPACT_CLASS =
-  "size-8 rounded-md border-af-overlay/12 bg-transparent text-af-ink/54 hover:border-af-overlay/20 hover:bg-af-overlay/8 hover:text-af-ink/80";
+  "size-8 rounded-md border-af-border bg-transparent text-af-text-subtle hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
 const BENTO_CARD_BODY_CLASS = cn(
   "grid h-full min-h-0 flex-1 gap-2.5 overflow-auto p-3.5 [&_p]:m-0",
   DASHBOARD_BODY_TEXT_CLASS,

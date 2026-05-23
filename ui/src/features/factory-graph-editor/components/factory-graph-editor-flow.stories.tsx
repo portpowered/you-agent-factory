@@ -76,7 +76,7 @@ function PendingRemovalStory() {
   });
 
   return (
-    <div className="h-[520px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
+    <div className="h-[520px] w-full rounded-[1.5rem] border border-af-border bg-af-surface-raised p-4">
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
         edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
@@ -138,7 +138,7 @@ function ConnectionAnchorsStory() {
   });
 
   return (
-    <div className="h-[520px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
+    <div className="h-[520px] w-full rounded-[1.5rem] border border-af-border bg-af-surface-raised p-4">
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
         edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
@@ -228,7 +228,7 @@ function PendingEdgeChangesStory() {
   });
 
   return (
-    <div className="h-[520px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
+    <div className="h-[520px] w-full rounded-[1.5rem] border border-af-border bg-af-surface-raised p-4">
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
         edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
@@ -397,7 +397,7 @@ function WorkerResourceDensityStory() {
   });
 
   return (
-    <div className="relative h-[560px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
+    <div className="relative h-[560px] w-full rounded-[1.5rem] border border-af-border bg-af-surface-raised p-4">
       <FactoryGraphEditorVisibilityPanel
         onSelectPreset={setSelectedPreset}
         options={[

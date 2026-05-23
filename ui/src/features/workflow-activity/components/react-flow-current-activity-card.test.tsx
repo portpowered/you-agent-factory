@@ -1758,6 +1758,8 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(viewport.getAttribute("data-current-activity-drop-state")).toBe(
       "drag-active",
     );
+    expect(viewport.className).toContain("border-af-accent-border");
+    expect(viewport.className).toContain("bg-af-accent-surface");
     expect(screen.getByText("Import factory PNG")).toBeTruthy();
     expect(
       screen.getByText(
@@ -1949,6 +1951,8 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(viewport.getAttribute("data-current-activity-drop-state")).toBe(
       "error",
     );
+    expect(viewport.className).toContain("border-af-danger-border");
+    expect(viewport.className).toContain("bg-af-danger-surface");
     expect(
       screen.getByRole("button", { name: "Select Review workstation" }),
     ).toBeTruthy();

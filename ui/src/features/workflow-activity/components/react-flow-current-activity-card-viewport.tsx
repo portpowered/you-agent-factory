@@ -160,8 +160,9 @@ export function CurrentActivityGraphViewport({
           "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",
           (imports.dropState.status === "drag-active" ||
             imports.dropState.status === "reading") &&
-            "border-af-accent/35 bg-af-accent/6",
-          imports.dropState.status === "error" && "border-af-danger/18",
+            "border-af-accent-border bg-af-accent-surface",
+          imports.dropState.status === "error" &&
+            "border-af-danger-border bg-af-danger-surface",
           imports.dropState.status === "idle" && "border-transparent",
         )}
         data-current-activity-drop-state={graphDropStateAttribute(

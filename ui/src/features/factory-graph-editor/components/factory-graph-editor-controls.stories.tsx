@@ -67,7 +67,7 @@ function EditorModeStory() {
         hasChanges={true}
         isDefinitionLoading={false}
       />
-      <div className="relative min-h-44 rounded-[1.5rem] border border-af-overlay/12 bg-af-overlay/4">
+      <div className="relative min-h-44 rounded-[1.5rem] border border-af-border bg-af-surface-subtle">
         <FactoryGraphEditorToolbar
           activeTool={activeTool}
           addMenuActions={[...ADD_MENU_ACTIONS]}
@@ -87,7 +87,7 @@ function EditorModeStory() {
 function AddMenuOpenStory() {
   return (
     <div className="grid gap-4 p-6">
-      <div className="relative min-h-52 rounded-[1.5rem] border border-af-overlay/12 bg-af-overlay/4">
+      <div className="relative min-h-52 rounded-[1.5rem] border border-af-border bg-af-surface-subtle">
         <FactoryGraphEditorToolbar
           activeTool="add"
           addMenuActions={[...ADD_MENU_ACTIONS]}

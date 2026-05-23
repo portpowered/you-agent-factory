@@ -1,7 +1,7 @@
 import { useId, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 const INLINE_TOOLTIP_CLASS =
-  "pointer-events-none absolute left-1/2 top-full z-30 mt-2 -translate-x-1/2 rounded-xl border border-af-overlay/14 bg-af-ink px-3 py-2 text-center text-xs font-medium text-af-canvas shadow-af-panel";
+  "pointer-events-none absolute left-1/2 top-full z-30 mt-2 -translate-x-1/2 rounded-xl border border-af-border-strong bg-af-surface-raised px-3 py-2 text-center text-xs font-medium text-af-text shadow-af-panel";
 
 export function FactoryGraphEditorTooltipButton({
   children,
