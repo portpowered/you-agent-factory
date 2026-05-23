@@ -782,10 +782,7 @@ func boolPtrIfTrue(value bool) *bool {
 }
 
 func stringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
+	return optional.StringValue(value)
 }
 
 func stringSliceValue(values *[]string) []string {
@@ -797,15 +794,9 @@ func stringMapValue(values *factoryapi.StringMap) map[string]string {
 }
 
 func intValue(value *int) int {
-	if value == nil {
-		return 0
-	}
-	return *value
+	return optional.IntValue(value)
 }
 
 func boolValue(value *bool) bool {
-	if value == nil {
-		return false
-	}
-	return *value
+	return optional.BoolValue(value)
 }

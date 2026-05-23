@@ -16,6 +16,13 @@ func IntValue(value *int) int {
 	return *value
 }
 
+func BoolValue(value *bool) bool {
+	if value == nil {
+		return false
+	}
+	return *value
+}
+
 func NonEmptyStringPtr(value string) *string {
 	if value == "" {
 		return nil
