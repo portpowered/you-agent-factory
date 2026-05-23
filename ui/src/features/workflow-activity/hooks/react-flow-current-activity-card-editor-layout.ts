@@ -1,70 +1,40 @@
-import { useEffect, useState } from "react";
-
 import { buildFactoryGraphEditorLayout } from "../../factory-graph-editor/lib/factory-graph-editor-layout";
 import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import {
+  createWorkflowTopologyAsyncCache,
+  useWorkflowTopologyAsyncCache,
+} from "./workflow-topology-async-cache";
 
-const EDITOR_LAYOUT_CACHE = new Map<
-  string,
+const EMPTY_LAYOUT_POSITIONS = new Map<string, { x: number; y: number }>();
+const EDITOR_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<
   Awaited<ReturnType<typeof buildFactoryGraphEditorLayout>>
->();
-const EDITOR_LAYOUT_PROMISE_CACHE = new Map<
-  string,
-  Promise<Awaited<ReturnType<typeof buildFactoryGraphEditorLayout>>>
 >();
 
 export function useFactoryGraphEditorLayoutPositions(
   topology: FactoryGraphTopology,
   topologyKey: string,
 ) {
-  const [layoutPositionsByNodeId, setLayoutPositionsByNodeId] = useState<
-    ReadonlyMap<string, { x: number; y: number }>
-  >(new Map());
-
-  useEffect(() => {
-    if (topology.nodes.length === 0) {
-      setLayoutPositionsByNodeId(new Map());
-      return;
-    }
-
-    let cancelled = false;
-    const cachedLayout = EDITOR_LAYOUT_CACHE.get(topologyKey);
-    if (cachedLayout) {
-      setLayoutPositionsByNodeId(layoutNodePositions(cachedLayout.nodes));
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const inFlightLayout =
-      EDITOR_LAYOUT_PROMISE_CACHE.get(topologyKey) ??
-      buildFactoryGraphEditorLayout(topology);
-    EDITOR_LAYOUT_PROMISE_CACHE.set(topologyKey, inFlightLayout);
-
-    inFlightLayout
-      .then((layout) => {
-        EDITOR_LAYOUT_CACHE.set(topologyKey, layout);
-        EDITOR_LAYOUT_PROMISE_CACHE.delete(topologyKey);
-        if (!cancelled) {
-          setLayoutPositionsByNodeId(layoutNodePositions(layout.nodes));
-        }
-      })
-      .catch(() => {
-        EDITOR_LAYOUT_PROMISE_CACHE.delete(topologyKey);
-        if (!cancelled) {
-          setLayoutPositionsByNodeId(new Map());
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [topology, topologyKey]);
-
-  return layoutPositionsByNodeId;
+  return useWorkflowTopologyAsyncCache({
+    cache: EDITOR_LAYOUT_CACHE,
+    dependencies: [topology],
+    disabled: topology.nodes.length === 0,
+    disabledValue: EMPTY_LAYOUT_POSITIONS,
+    fallbackValue: EMPTY_LAYOUT_POSITIONS,
+    initialValue: EMPTY_LAYOUT_POSITIONS,
+    loadLayout: () => buildFactoryGraphEditorLayout(topology),
+    mapResolvedLayout: mapLayoutNodePositions,
+    topologyKey,
+  });
 }
 
 function layoutNodePositions(
   nodes: Array<{ nodeId: string; x: number; y: number }>,
 ) {
   return new Map(nodes.map((node) => [node.nodeId, { x: node.x, y: node.y }]));
+}
+
+function mapLayoutNodePositions(
+  layout: Awaited<ReturnType<typeof buildFactoryGraphEditorLayout>>,
+) {
+  return layoutNodePositions(layout.nodes);
 }

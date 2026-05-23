@@ -31,6 +31,10 @@ import {
   useActiveExecutions,
 } from "../hooks/react-flow-current-activity-card-active-executions";
 import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
+import {
+  createWorkflowTopologyAsyncCache,
+  useWorkflowTopologyAsyncCache,
+} from "../hooks/workflow-topology-async-cache";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { useFactoryGraphEditorViewModel } from "../hooks/react-flow-current-activity-card-editor-graph";
@@ -60,8 +64,7 @@ export {
   currentActivityTopologyKey,
 } from "../lib/react-flow-current-activity-card-keys";
 
-const GRAPH_LAYOUT_CACHE = new Map<string, GraphLayout>();
-const GRAPH_LAYOUT_PROMISE_CACHE = new Map<string, Promise<GraphLayout>>();
+const GRAPH_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<GraphLayout>();
 const CURRENT_ACTIVITY_CARD_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
   "relative flex h-full min-h-0 min-w-0 flex-col p-4 md:p-5",
@@ -123,45 +126,20 @@ function useGraphLayout(snapshot: DashboardSnapshot) {
     [snapshot.topology],
   );
   const layoutTopology = useMemo(() => snapshot.topology, [snapshot.topology]);
-  const [graphLayout, setGraphLayout] =
-    useState<GraphLayout>(EMPTY_GRAPH_LAYOUT);
 
-  useEffect(() => {
-    let cancelled = false;
-    const cachedLayout = GRAPH_LAYOUT_CACHE.get(topologyKey);
-    if (cachedLayout) {
-      setGraphLayout(cachedLayout);
-      return () => {
-        cancelled = true;
-      };
-    }
+  return useWorkflowTopologyAsyncCache({
+    cache: GRAPH_LAYOUT_CACHE,
+    dependencies: [layoutTopology],
+    fallbackValue: EMPTY_GRAPH_LAYOUT,
+    initialValue: EMPTY_GRAPH_LAYOUT,
+    loadLayout: () => buildGraphLayout(layoutTopology),
+    mapResolvedLayout: identityGraphLayout,
+    topologyKey,
+  });
+}
 
-    const inFlightLayout =
-      GRAPH_LAYOUT_PROMISE_CACHE.get(topologyKey) ??
-      buildGraphLayout(layoutTopology);
-    GRAPH_LAYOUT_PROMISE_CACHE.set(topologyKey, inFlightLayout);
-
-    inFlightLayout
-      .then((layout) => {
-        GRAPH_LAYOUT_CACHE.set(topologyKey, layout);
-        GRAPH_LAYOUT_PROMISE_CACHE.delete(topologyKey);
-        if (!cancelled) {
-          setGraphLayout(layout);
-        }
-      })
-      .catch(() => {
-        GRAPH_LAYOUT_PROMISE_CACHE.delete(topologyKey);
-        if (!cancelled) {
-          setGraphLayout(EMPTY_GRAPH_LAYOUT);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [layoutTopology, topologyKey]);
-
-  return graphLayout;
+function identityGraphLayout(layout: GraphLayout) {
+  return layout;
 }
 
 function useCurrentActivityBaseNodes({
