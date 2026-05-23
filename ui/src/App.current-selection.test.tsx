@@ -25,7 +25,7 @@ import { installDashboardBrowserTestShims } from "./components/dashboard/test-br
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import { reloadDashboardLayoutFromStorage } from "./features/bento";
 import { useDashboardBentoStore } from "./features/bento/state";
-import { useCurrentFactoryDefinition } from "./features/current-factory-definition";
+import { useCurrentFactoryDocument } from "./features/current-factory-definition";
 import { resetSelectionHistoryStore } from "./features/current-selection/state";
 import {
   useDashboardSessionStore,
@@ -43,7 +43,7 @@ vi.mock("./features/current-factory-definition", async () => {
 
   return {
     ...actual,
-    useCurrentFactoryDefinition: vi.fn(),
+    useCurrentFactoryDocument: vi.fn(),
   };
 });
 
@@ -585,6 +585,10 @@ function resizeDashboardViewport(width: number): void {
 function buildEditableFactoryDefinitionForCurrentSelection() {
   return {
     name: "Current Factory",
+    version: {
+      logical: 4,
+      physical: "2026-05-20T03:45:00Z",
+    },
     workers: [
       {
         model: "gpt-5.5",
@@ -636,7 +640,7 @@ function buildEditableFactoryDefinitionForCurrentSelection() {
 }
 
 function mockPendingEditableFactoryDefinition(): void {
-  vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+  vi.mocked(useCurrentFactoryDocument).mockReturnValue({
     data: undefined,
     error: null,
     failureCount: 0,
@@ -1311,7 +1315,7 @@ describe("App current selection", () => {
   });
 
   it("keeps one editable configuration section bound to the latest workstation across repeated switches", async () => {
-    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: buildEditableFactoryDefinitionForCurrentSelection(),
       error: null,
       failureCount: 0,
