@@ -98,6 +98,8 @@ interface RenderAppResult extends ReturnType<typeof render> {
   fetchMock: FetchMock;
 }
 
+type CurrentFactoryDocumentResult = ReturnType<typeof useCurrentFactoryDocument>;
+
 const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
@@ -369,6 +371,12 @@ export function createFileDropTransfer(files: File[]): {
   };
 }
 
+export function mockCurrentFactoryDocument(
+  result: CurrentFactoryDocumentResult,
+): void {
+  vi.mocked(useCurrentFactoryDocument).mockReturnValue(result as never);
+}
+
 export function registerAppDashboardTestLifecycle(): void {
   beforeEach(() => {
     window.localStorage.clear();
@@ -378,7 +386,7 @@ export function registerAppDashboardTestLifecycle(): void {
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    mockCurrentFactoryDocument({
       data: undefined,
       error: null,
       failureCount: 0,

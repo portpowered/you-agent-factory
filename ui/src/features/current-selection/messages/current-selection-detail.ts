@@ -13,6 +13,11 @@ export interface CurrentSelectionDetailMessages {
   awaitingProviderResponse: string;
   commandLabel: string;
   commandUnavailable: string;
+  consumedPayloadEmpty: string;
+  consumedPayloadError: string;
+  consumedPayloadHeading: string;
+  consumedPayloadLoading: string;
+  consumedPayloadUnavailable: string;
   countLabel: string;
   consumedWorkItemsLabel: string;
   currentWorkHeading: string;
@@ -155,6 +160,15 @@ const currentSelectionDetailMessagesByLocale = {
     commandLabel: "Command",
     commandUnavailable:
       "Script command details are not available for this workstation request.",
+    consumedPayloadEmpty:
+      "No consumed payload content was recorded for this work item.",
+    consumedPayloadError:
+      "Consumed payload details could not be loaded for this work item.",
+    consumedPayloadHeading: "Consumed payload",
+    consumedPayloadLoading:
+      "Consumed payload details are still loading for this work item.",
+    consumedPayloadUnavailable:
+      "Consumed payload details are unavailable for this work item.",
     consumedWorkItemsLabel: "Consumed work items",
     dispatchIdLabel: "Dispatch ID",
     durationLabel: "Duration",
@@ -287,6 +301,15 @@ const currentSelectionDetailMessagesByLocale = {
     commandLabel: "Command",
     commandUnavailable:
       "Script command details are not available for this workstation request.",
+    consumedPayloadEmpty:
+      "No consumed payload content was recorded for this work item.",
+    consumedPayloadError:
+      "Consumed payload details could not be loaded for this work item.",
+    consumedPayloadHeading: "Consumed payload",
+    consumedPayloadLoading:
+      "Consumed payload details are still loading for this work item.",
+    consumedPayloadUnavailable:
+      "Consumed payload details are unavailable for this work item.",
     consumedWorkItemsLabel: "Consumed work items",
     dispatchIdLabel: "Dispatch ID",
     durationLabel: "Duration",
@@ -419,6 +442,15 @@ const currentSelectionDetailMessagesByLocale = {
     commandLabel: "Command",
     commandUnavailable:
       "Script command details are not available for this workstation request.",
+    consumedPayloadEmpty:
+      "No consumed payload content was recorded for this work item.",
+    consumedPayloadError:
+      "Consumed payload details could not be loaded for this work item.",
+    consumedPayloadHeading: "Consumed payload",
+    consumedPayloadLoading:
+      "Consumed payload details are still loading for this work item.",
+    consumedPayloadUnavailable:
+      "Consumed payload details are unavailable for this work item.",
     consumedWorkItemsLabel: "Consumed work items",
     dispatchIdLabel: "Dispatch ID",
     durationLabel: "Duration",
@@ -540,12 +572,18 @@ const currentSelectionDetailMessagesByLocale = {
   "zh-CN": {
     attemptAriaLabel: (attemptNumber: number) => `推理尝试 ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `尝试 ${attemptNumber}`,
-    collapseAttemptAction: (attemptNumber: number) => `收起尝试 ${attemptNumber}`,
+    collapseAttemptAction: (attemptNumber: number) =>
+      `收起尝试 ${attemptNumber}`,
     collapseRequestBodyAction: "收起请求正文",
     collapseResponseBodyAction: "收起响应正文",
     awaitingProviderResponse: "正在等待提供方响应。",
     commandLabel: "命令",
     commandUnavailable: "此工作站请求没有可用的脚本命令详情。",
+    consumedPayloadEmpty: "此工作项没有记录已消费的负载内容。",
+    consumedPayloadError: "此工作项的已消费负载详情暂时无法加载。",
+    consumedPayloadHeading: "已消费的负载",
+    consumedPayloadLoading: "此工作项的已消费负载详情仍在加载。",
+    consumedPayloadUnavailable: "此工作项的已消费负载详情不可用。",
     countLabel: "数量",
     consumedWorkItemsLabel: "已消费的工作项",
     currentWorkHeading: "当前工作",

@@ -61,6 +61,7 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 	return &factoryWorldReducer{
 		stateValue: interfaces.FactoryWorldState{
 			Tick:                          selectedTick,
+			PayloadLineage:                interfaces.WorkPayloadLineageProjection{},
 			WorkRequestsByID:              make(map[string]interfaces.WorkRequestPayload),
 			RelationsByWorkID:             make(map[string][]interfaces.FactoryRelation),
 			WorkItemsByID:                 make(map[string]interfaces.FactoryWorkItem),
@@ -268,6 +269,7 @@ func (r *factoryWorldReducer) applyWorkRequest(context factoryapi.FactoryEventCo
 		WorkItems:     cloneWorkItems(workItems),
 	}
 	for _, item := range workItems {
+		r.stateValue.PayloadLineage.RecordWorkRequestSnapshot(context.Tick, requestID, item)
 		r.stateValue.WorkItemsByID[item.ID] = item
 		r.stateValue.ActiveWorkItemsByID[item.ID] = item
 		r.addWorkToken(item.ID, item.PlaceID, item)

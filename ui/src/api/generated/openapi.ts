@@ -899,11 +899,22 @@ export interface components {
         FactoryWorldWorkItemRef: {
             workId: string;
             workTypeId?: string;
+            state?: string;
             displayName?: string;
             chainingTraceDepth?: number;
             currentChainingTraceId?: string;
             previousChainingTraceIds?: string[];
             traceId?: string;
+            content?: components["schemas"]["WorkContent"];
+            /** @enum {string} */
+            payloadStatus?: "RESOLVED" | "UNAVAILABLE" | "LOADING" | "ERROR";
+            payloadUnavailableReason?: string;
+            lineageLogicalWorkId?: string;
+            /** @enum {string} */
+            lineageSourceKind?: "WORK_REQUEST" | "DISPATCH_RESPONSE_OUTPUT";
+            /** @enum {string} */
+            lineageContinuity?: "INITIAL_SUBMISSION" | "SAME_WORK_ID_CONTINUATION" | "NEW_DOWNSTREAM_WORK";
+            lineageParentWorkIds?: string[];
         };
         FactoryWorldTokenView: {
             tokenId: string;

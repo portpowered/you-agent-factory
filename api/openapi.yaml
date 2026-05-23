@@ -1864,6 +1864,8 @@ components:
           type: string
         workTypeId:
           type: string
+        state:
+          type: string
         displayName:
           type: string
         chainingTraceDepth:
@@ -1877,6 +1879,34 @@ components:
             type: string
         traceId:
           type: string
+        content:
+          $ref: '#/components/schemas/WorkContent'
+        payloadStatus:
+          type: string
+          enum:
+            - RESOLVED
+            - UNAVAILABLE
+            - LOADING
+            - ERROR
+        payloadUnavailableReason:
+          type: string
+        lineageLogicalWorkId:
+          type: string
+        lineageSourceKind:
+          type: string
+          enum:
+            - WORK_REQUEST
+            - DISPATCH_RESPONSE_OUTPUT
+        lineageContinuity:
+          type: string
+          enum:
+            - INITIAL_SUBMISSION
+            - SAME_WORK_ID_CONTINUATION
+            - NEW_DOWNSTREAM_WORK
+        lineageParentWorkIds:
+          type: array
+          items:
+            type: string
     FactoryWorldTokenView:
       type: object
       additionalProperties: false
