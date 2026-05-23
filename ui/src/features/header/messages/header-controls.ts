@@ -4,6 +4,7 @@ import {
 } from "../../../i18n";
 
 export interface HeaderControlsMessages {
+  activeSessionFolderLabelTemplate: string;
   brandWordmark: string;
   browseSessionFolderButtonLabel: string;
   closingSessionButtonLabel: string;
@@ -67,6 +68,7 @@ export const HEADER_MAX_TICK_TOKEN = "{{maxTick}}";
 
 const headerControlsMessagesByLocale = {
   en: {
+    activeSessionFolderLabelTemplate: "Active folder: {{folderPath}}",
     brandWordmark: "you-agent-factory",
     browseSessionFolderButtonLabel: "Choose folder",
     closingSessionButtonLabel: "Closing session",
@@ -141,6 +143,7 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "Waiting for more ticks",
   },
   ja: {
+    activeSessionFolderLabelTemplate: "アクティブなフォルダー: {{folderPath}}",
     brandWordmark: "you-agent-factory",
     browseSessionFolderButtonLabel: "フォルダーを選ぶ",
     closingSessionButtonLabel: "セッションを終了中",
@@ -216,6 +219,7 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "ティックが増えるまで待機しています",
   },
   ko: {
+    activeSessionFolderLabelTemplate: "활성 폴더: {{folderPath}}",
     brandWordmark: "you-agent-factory",
     browseSessionFolderButtonLabel: "폴더 선택",
     closingSessionButtonLabel: "세션 종료 중",
@@ -291,6 +295,7 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "틱이 더 쌓일 때까지 기다리는 중",
   },
   "zh-CN": {
+    activeSessionFolderLabelTemplate: "当前文件夹：{{folderPath}}",
     brandWordmark: "you-agent-factory",
     browseSessionFolderButtonLabel: "选择文件夹",
     closingSessionButtonLabel: "正在关闭会话",

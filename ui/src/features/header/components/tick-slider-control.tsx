@@ -8,17 +8,17 @@ import {
 } from "../messages/header-controls";
 
 const TICK_SLIDER_SHELL_CLASS = cn(
-  "flex min-w-0 w-full flex-wrap items-center gap-1.5 px-1 py-1",
-  "md:flex-nowrap",
+  "flex min-w-0 w-full flex-wrap items-center gap-1.5 rounded-lg border border-af-border bg-af-surface-subtle px-2.5 py-1.5",
+  "md:w-auto md:min-w-72 md:max-w-lg md:flex-nowrap",
 );
 const TICK_SLIDER_LABEL_CLASS =
-  "flex min-w-36 flex-1 flex-col gap-0.5 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-ink/62 md:min-w-52";
+  "flex min-w-36 flex-1 flex-col gap-0.5 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-text-subtle md:min-w-52";
 const TICK_SLIDER_INPUT_CLASS =
   "h-1.5 min-w-32 flex-1 cursor-pointer accent-af-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25 disabled:cursor-not-allowed disabled:opacity-45";
 const TICK_SLIDER_META_CLASS =
   "ml-auto flex items-center";
 const TICK_SLIDER_STATUS_CLASS =
-  "whitespace-nowrap text-xs font-medium tabular-nums text-af-ink/76";
+  "whitespace-nowrap text-xs font-medium tabular-nums text-af-text-muted";
 const MINIMUM_TIMELINE_TICKS = 2;
 
 interface TimelineBounds {
