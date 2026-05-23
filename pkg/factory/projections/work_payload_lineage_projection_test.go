@@ -1,9 +1,14 @@
 package projections
 
 import (
+	"bufio"
+	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -242,6 +247,52 @@ func TestReconstructFactoryWorldState_WorkPayloadLineageMarksIncompleteConsumedH
 	}
 }
 
+func TestReconstructFactoryWorldState_ReplayFixturePreservesConsumedAndChainedPayloadLineage(t *testing.T) {
+	events := loadProjectionReplayFixtureEvents(t, "testdata", "work-payload-lineage-replay.jsonl")
+
+	state, err := ReconstructFactoryWorldState(events, lastProjectionFixtureTick(events))
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+
+	consumed := state.PayloadLineage.ResolveConsumedInputSnapshot("dispatch-follow-up", "work-child")
+	if consumed.Status != interfaces.WorkPayloadResolutionResolved || consumed.Snapshot == nil {
+		t.Fatalf("consumed child snapshot = %#v, want resolved dispatch-time snapshot", consumed)
+	}
+	assertLineageTextContent(t, consumed.Snapshot.WorkItem, "child-v1")
+	if consumed.Snapshot.SourceKind != interfaces.WorkPayloadSnapshotKindDispatchOutput {
+		t.Fatalf("consumed child source kind = %q, want DISPATCH_RESPONSE_OUTPUT", consumed.Snapshot.SourceKind)
+	}
+
+	selected := state.PayloadLineage.ResolveSelectedWorkSnapshot("work-child")
+	if selected.Status != interfaces.WorkPayloadResolutionResolved || selected.Snapshot == nil {
+		t.Fatalf("selected child snapshot = %#v, want resolved latest snapshot", selected)
+	}
+	assertLineageTextContent(t, selected.Snapshot.WorkItem, "child-v2")
+
+	output := state.PayloadLineage.ResolveOutputWorkSnapshot("dispatch-review", "work-child")
+	if output.Status != interfaces.WorkPayloadResolutionResolved || output.Snapshot == nil {
+		t.Fatalf("output child snapshot = %#v, want resolved output snapshot", output)
+	}
+	if output.Snapshot.Continuity != interfaces.WorkPayloadContinuityNewDownstreamWork {
+		t.Fatalf("output child continuity = %q, want NEW_DOWNSTREAM_WORK", output.Snapshot.Continuity)
+	}
+	if output.Snapshot.LogicalWorkID != "work-child" {
+		t.Fatalf("output child logical work ID = %q, want work-child", output.Snapshot.LogicalWorkID)
+	}
+	if len(output.Snapshot.ParentWorkIDs) != 1 || output.Snapshot.ParentWorkIDs[0] != "work-root" {
+		t.Fatalf("output child parent work IDs = %#v, want [work-root]", output.Snapshot.ParentWorkIDs)
+	}
+
+	missing := state.PayloadLineage.ResolveConsumedInputSnapshot("dispatch-missing", "work-missing")
+	if missing.Status != interfaces.WorkPayloadResolutionUnavailable {
+		t.Fatalf("missing consumed snapshot = %#v, want unavailable", missing)
+	}
+	if missing.Reason == "" {
+		t.Fatalf("missing consumed reason = %q, want explicit unavailable reason", missing.Reason)
+	}
+}
+
 func workPayloadLineageProjectionEvents(t *testing.T, t0 time.Time) []factoryapi.FactoryEvent {
 	t.Helper()
 	initial := interfaces.FactoryWorkItem{
@@ -347,6 +398,45 @@ func workPayloadLineageProjectionEvents(t *testing.T, t0 time.Time) []factoryapi
 			},
 		),
 	}
+}
+
+func loadProjectionReplayFixtureEvents(t *testing.T, rel ...string) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	path := testpath.MustRepoPathFromCaller(t, 0, append([]string{"pkg", "factory", "projections"}, rel...)...)
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open replay fixture %s: %v", path, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	events := make([]factoryapi.FactoryEvent, 0)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var event factoryapi.FactoryEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("parse replay fixture line %q: %v", line, err)
+		}
+		events = append(events, event)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan replay fixture %s: %v", path, err)
+	}
+	return events
+}
+
+func lastProjectionFixtureTick(events []factoryapi.FactoryEvent) int {
+	tick := 0
+	for _, event := range events {
+		if event.Context.Tick > tick {
+			tick = event.Context.Tick
+		}
+	}
+	return tick
 }
 
 func generatedLineageWorkForProjectionTest(t *testing.T, item interfaces.FactoryWorkItem, requestID string) factoryapi.Work {

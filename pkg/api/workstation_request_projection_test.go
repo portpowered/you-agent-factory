@@ -1,11 +1,16 @@
 package api
 
 import (
+	"bufio"
 	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -273,6 +278,45 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_UsesDispatchTimeCons
 	}})
 }
 
+func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ReplayFixtureProjectsHistoricalConsumedPayloads(t *testing.T) {
+	events := loadWorkstationProjectionReplayFixtureEvents(t, "pkg", "factory", "projections", "testdata", "work-payload-lineage-replay.jsonl")
+	state, err := projections.ReconstructFactoryWorldState(events, lastWorkstationProjectionFixtureTick(events))
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+
+	slice := BuildFactoryWorldWorkstationRequestProjectionSlice(state)
+	requests := requireWorkstationProjectionRequests(t, slice, 3)
+
+	followUpItems := requests["dispatch-follow-up"].Request.InputWorkItems
+	if followUpItems == nil || len(*followUpItems) != 1 {
+		t.Fatalf("dispatch-follow-up input work items = %#v, want one replay-backed input", followUpItems)
+	}
+	followUp := (*followUpItems)[0]
+	if followUp.PayloadStatus == nil || *followUp.PayloadStatus != factoryapi.FactoryWorldWorkItemRefPayloadStatusRESOLVED {
+		t.Fatalf("dispatch-follow-up payload status = %#v, want RESOLVED", followUp.PayloadStatus)
+	}
+	if followUp.State == nil || *followUp.State != "review" {
+		t.Fatalf("dispatch-follow-up state = %#v, want review dispatch-time snapshot", followUp.State)
+	}
+	assertGeneratedWorkContentParts(t, followUp.Content, []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "child-v1",
+	}})
+
+	missingItems := requests["dispatch-missing"].Request.InputWorkItems
+	if missingItems == nil || len(*missingItems) != 1 {
+		t.Fatalf("dispatch-missing input work items = %#v, want one replay-backed input", missingItems)
+	}
+	missing := (*missingItems)[0]
+	if missing.PayloadStatus == nil || *missing.PayloadStatus != factoryapi.FactoryWorldWorkItemRefPayloadStatusUNAVAILABLE {
+		t.Fatalf("dispatch-missing payload status = %#v, want UNAVAILABLE", missing.PayloadStatus)
+	}
+	if missing.PayloadUnavailableReason == nil || *missing.PayloadUnavailableReason == "" {
+		t.Fatalf("dispatch-missing payload unavailable reason = %#v, want explicit reason", missing.PayloadUnavailableReason)
+	}
+}
+
 func requireWorkstationProjectionRequests(t *testing.T, slice factoryapi.FactoryWorldWorkstationRequestProjectionSlice, want int) map[string]factoryapi.FactoryWorldWorkstationRequestView {
 	t.Helper()
 	if slice.WorkstationRequestsByDispatchId == nil {
@@ -283,6 +327,45 @@ func requireWorkstationProjectionRequests(t *testing.T, slice factoryapi.Factory
 		t.Fatalf("workstation request count = %d, want %d", len(requests), want)
 	}
 	return requests
+}
+
+func loadWorkstationProjectionReplayFixtureEvents(t *testing.T, rel ...string) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	path := testpath.MustRepoPathFromCaller(t, 0, rel...)
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open replay fixture %s: %v", path, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	events := make([]factoryapi.FactoryEvent, 0)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var event factoryapi.FactoryEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("parse replay fixture line %q: %v", line, err)
+		}
+		events = append(events, event)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan replay fixture %s: %v", path, err)
+	}
+	return events
+}
+
+func lastWorkstationProjectionFixtureTick(events []factoryapi.FactoryEvent) int {
+	tick := 0
+	for _, event := range events {
+		if event.Context.Tick > tick {
+			tick = event.Context.Tick
+		}
+	}
+	return tick
 }
 
 func workstationRequestProjectionStateFixture() interfaces.FactoryWorldState {
