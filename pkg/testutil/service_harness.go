@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +34,8 @@ type ServiceTestHarness struct {
 	svc             *service.FactoryService
 	mocks           map[string]*MockExecutor
 	customExecutors map[string]workers.WorkerExecutor
+	markingMu       sync.RWMutex
+	latestMarking   *petri.MarkingSnapshot
 }
 
 // harnessConfig holds internal configuration for NewServiceTestHarness,
@@ -218,11 +223,15 @@ func (h *ServiceTestHarness) submit(ctx context.Context, reqs []interfaces.Submi
 
 // getMarking delegates to the canonical engine-state snapshot.
 func (h *ServiceTestHarness) getMarking(ctx context.Context) (*petri.MarkingSnapshot, error) {
+	if h == nil || h.svc == nil {
+		return nil, fmt.Errorf("factory service runtime is not available")
+	}
 	snap, err := h.svc.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &snap.Marking, nil
+	h.storeLatestMarking(&snap.Marking)
+	return cloneMarkingSnapshot(&snap.Marking), nil
 }
 
 // waitToComplete delegates to the underlying FactoryService.
@@ -235,7 +244,8 @@ func (h *ServiceTestHarness) waitForRuntimeAvailability(ctx context.Context, run
 	defer ticker.Stop()
 
 	for {
-		if _, err := h.svc.GetEngineStateSnapshot(context.Background()); err == nil {
+		if snap, err := h.svc.GetEngineStateSnapshot(context.Background()); err == nil {
+			h.storeLatestMarking(&snap.Marking)
 			return nil
 		}
 
@@ -376,15 +386,25 @@ func (h *ServiceTestHarness) RunUntilCompleteError(timeout time.Duration) error 
 		return err
 	}
 
-	select {
-	case <-h.waitToComplete():
-		cancel()
-	case <-ctx.Done():
-		cancel()
-		<-errCh
-		return fmt.Errorf("timed out waiting for factory to complete within %s\n", timeout)
+	pollTicker := time.NewTicker(10 * time.Millisecond)
+	defer pollTicker.Stop()
+
+	for {
+		select {
+		case <-h.waitToComplete():
+			_, _ = h.getMarking(context.Background())
+			cancel()
+			goto waitForRunExit
+		case <-pollTicker.C:
+			_, _ = h.getMarking(context.Background())
+		case <-ctx.Done():
+			cancel()
+			<-errCh
+			return fmt.Errorf("timed out waiting for factory to complete within %s\n", timeout)
+		}
 	}
 
+waitForRunExit:
 	if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("factory run error: %w", err)
 	}
@@ -456,6 +476,9 @@ func (h *ServiceTestHarness) SubmitWorkRequest(ctx context.Context, request inte
 func (h *ServiceTestHarness) Marking() *petri.MarkingSnapshot {
 	snap, err := h.getMarking(context.Background())
 	if err != nil {
+		if cached := h.latestMarkingSnapshot(); cached != nil {
+			return cached
+		}
 		h.t.Fatalf("ServiceTestHarness.Marking: %v", err)
 	}
 	return snap
@@ -476,7 +499,62 @@ func (h *ServiceTestHarness) WaitToComplete() <-chan struct{} {
 // GetEngineStateSnapshot returns a unified EngineStateSnapshot combining runtime
 // state, factory lifecycle, session metrics, and uptime.
 func (h *ServiceTestHarness) GetEngineStateSnapshot() (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	return h.svc.GetEngineStateSnapshot(context.Background())
+	if h == nil || h.svc == nil {
+		return nil, fmt.Errorf("factory service runtime is not available")
+	}
+	snap, err := h.svc.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	h.storeLatestMarking(&snap.Marking)
+	return snap, nil
+}
+
+func (h *ServiceTestHarness) storeLatestMarking(snapshot *petri.MarkingSnapshot) {
+	if h == nil || snapshot == nil {
+		return
+	}
+	h.markingMu.Lock()
+	defer h.markingMu.Unlock()
+	h.latestMarking = cloneMarkingSnapshot(snapshot)
+}
+
+func (h *ServiceTestHarness) latestMarkingSnapshot() *petri.MarkingSnapshot {
+	if h == nil {
+		return nil
+	}
+	h.markingMu.RLock()
+	defer h.markingMu.RUnlock()
+	return cloneMarkingSnapshot(h.latestMarking)
+}
+
+func cloneMarkingSnapshot(snapshot *petri.MarkingSnapshot) *petri.MarkingSnapshot {
+	if snapshot == nil {
+		return nil
+	}
+
+	tokens := make(map[string]*interfaces.Token, len(snapshot.Tokens))
+	for id, token := range snapshot.Tokens {
+		if token == nil {
+			tokens[id] = nil
+			continue
+		}
+		cloned := interfaces.CloneToken(*token)
+		tokens[id] = &cloned
+	}
+
+	placeTokens := make(map[string][]string, len(snapshot.PlaceTokens))
+	for placeID, ids := range snapshot.PlaceTokens {
+		placeTokens[placeID] = slices.Clone(ids)
+	}
+
+	return &petri.MarkingSnapshot{
+		Tokens:       tokens,
+		PlaceTokens:  placeTokens,
+		TickCount:    snapshot.TickCount,
+		WorkflowID:   snapshot.WorkflowID,
+		TraceContext: maps.Clone(snapshot.TraceContext),
+	}
 }
 
 // GetFactoryEvents returns the canonical factory event history recorded by the service.
