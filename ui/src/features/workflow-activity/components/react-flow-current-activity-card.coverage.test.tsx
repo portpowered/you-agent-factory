@@ -5,6 +5,7 @@ import {
   render,
   renderHook,
   screen,
+  within,
 } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
@@ -339,6 +340,32 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     ).toContain("\"borderRadius\":8");
   });
 
+  it("renders the compact editor toolbar inside the graph card without duplicate add controls", () => {
+    renderViewport({
+      addMenuActions: [{ id: "workstation", label: "Workstation" }],
+      editorMode: true,
+      graphKey: "graph-key",
+      onAddAction: vi.fn(),
+    });
+
+    const toolbar = screen.getByRole("region", {
+      name: "Factory graph editor tools",
+    });
+
+    expect(
+      within(toolbar).getByRole("button", { name: "Open add entity menu" }),
+    ).toBeTruthy();
+    expect(
+      within(toolbar).getByRole("button", { name: "Connect" }),
+    ).toBeTruthy();
+    expect(
+      within(toolbar).getByRole("button", { name: "Delete" }),
+    ).toBeTruthy();
+    expect(
+      within(toolbar).queryByRole("button", { name: "Add" }),
+    ).toBeNull();
+  });
+
   it("skips node-position persistence when the viewport has no graph key", () => {
     renderViewport({ graphKey: "" });
 
@@ -519,17 +546,21 @@ function renderWithQueryClient(view: React.ReactElement) {
 
 function renderViewport({
   activeTool = null,
+  addMenuActions,
   editorMode = false,
   graphKey,
   nodes = [],
+  onAddAction,
   onConnect,
   onEditorEdgeClick,
   onEditorNodeClick,
 }: {
   activeTool?: "add" | "connect" | "delete" | null;
+  addMenuActions?: Parameters<typeof CurrentActivityGraphViewport>[0]["addMenuActions"];
   editorMode?: boolean;
   graphKey: string;
   nodes?: Parameters<typeof CurrentActivityGraphViewport>[0]["nodes"];
+  onAddAction?: Parameters<typeof CurrentActivityGraphViewport>[0]["onAddAction"];
   onConnect?: Parameters<typeof CurrentActivityGraphViewport>[0]["onConnect"];
   onEditorEdgeClick?: Parameters<
     typeof CurrentActivityGraphViewport
@@ -541,6 +572,7 @@ function renderViewport({
   return render(
     <CurrentActivityGraphViewport
       activeTool={activeTool}
+      addMenuActions={addMenuActions}
       canInteractWithEditor={editorMode}
       editorMode={editorMode}
       edges={[]}
@@ -552,6 +584,7 @@ function renderViewport({
       initialFitViewOptions={{ padding: 0.18 }}
       nodeTypes={{}}
       nodes={nodes}
+      onAddAction={onAddAction}
       onConnect={onConnect}
       onEditorEdgeClick={onEditorEdgeClick}
       onEditorNodeClick={onEditorNodeClick}

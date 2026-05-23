@@ -50,7 +50,6 @@ describe("factory graph editor toolbar controls", () => {
     renderToolbar();
 
     await user.tab();
-    await user.tab();
     await user.keyboard("{Enter}");
 
     const menu = await screen.findByLabelText("Add graph entity menu");
@@ -59,6 +58,36 @@ describe("factory graph editor toolbar controls", () => {
       within(menu).getByRole("button", { name: "Workstation" }),
     ).toBeTruthy();
     expect(screen.getByText("Draft changes pending")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: "Add",
+      }),
+    ).toBeNull();
+  });
+
+  it("uses icon toggles with accessible names and pressed state", async () => {
+    const user = userEvent.setup();
+
+    renderToolbar();
+
+    const connectButton = screen.getByRole("button", { name: "Connect" });
+    const deleteButton = screen.getByRole("button", { name: "Delete" });
+
+    expect(connectButton.textContent).toBe("");
+    expect(deleteButton.textContent).toBe("");
+    expect(connectButton.getAttribute("aria-pressed")).toBe("false");
+
+    await user.click(connectButton);
+    expect(connectButton.getAttribute("aria-pressed")).toBe("true");
+
+    await user.tab();
+    await user.tab();
+    await user.hover(deleteButton);
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Remove nodes or edges from the draft",
+      }),
+    ).toBeTruthy();
   });
 
   it("renders the confirmation dialog through the shared dialog pattern", async () => {

@@ -826,7 +826,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(screen.getByText("Observe mode")).toBeTruthy();
   });
 
-  it("shows the add, delete, and connect toolbar in editor mode", async () => {
+  it("shows the add menu, delete, and connect toolbar controls in editor mode", async () => {
     vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -844,7 +844,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
     const toolbar = await screen.findByRole("region", {
       name: "Factory graph editor tools",
     });
-    expect(within(toolbar).getByRole("button", { name: "Add" })).toBeTruthy();
+    expect(
+      within(toolbar).getByRole("button", { name: "Open add entity menu" }),
+    ).toBeTruthy();
     expect(
       within(toolbar).getByRole("button", { name: "Delete" }),
     ).toBeTruthy();
@@ -1380,7 +1382,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(screen.getByText("Loading editor definition")).toBeTruthy();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Add" })
+        .getByRole("button", { name: "Open add entity menu" })
         .getAttribute("disabled"),
     ).not.toBeNull();
     expect(

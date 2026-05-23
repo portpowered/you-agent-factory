@@ -34,7 +34,7 @@ export interface FactoryGraphEditorVisibilityOption {
 }
 
 const TOOLBAR_SHELL_CLASS =
-  "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:translate-x-0 max-md:justify-between";
+  "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0";
 const MENU_LIST_CLASS = "grid gap-1";
 const MENU_ACTION_CLASS =
   "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent/20 hover:bg-af-overlay/6 focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:opacity-55";
@@ -49,7 +49,7 @@ const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
 };
 
 const STATUS_PILL_CLASS =
-  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold";
+  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold max-md:min-w-0 max-md:flex-1 max-md:justify-center";
 
 export function FactoryGraphEditorToolbar({
   activeTool,
@@ -84,14 +84,6 @@ export function FactoryGraphEditorToolbar({
       aria-label={messages.toolbarAriaLabel}
       className={TOOLBAR_SHELL_CLASS}
     >
-      <FactoryGraphEditorToolbarButton
-        active={activeTool === "add"}
-        description={messages.toolbarAddDescription}
-        disabled={!canInteract}
-        label={messages.toolbarAddLabel}
-        onClick={() => onSelectTool(activeTool === "add" ? null : "add")}
-        tone={activeTool === "add" ? "secondary" : "outline"}
-      />
       <FactoryGraphEditorAddMenu
         actions={addMenuActions}
         canInteract={canInteract}
@@ -104,6 +96,7 @@ export function FactoryGraphEditorToolbar({
         active={activeTool === "delete"}
         description={messages.toolbarDeleteDescription}
         disabled={!canInteract}
+        icon={<TrashIcon />}
         label={messages.toolbarDeleteLabel}
         onClick={() => onSelectTool(activeTool === "delete" ? null : "delete")}
         tone={activeTool === "delete" ? "secondary" : "outline"}
@@ -112,6 +105,7 @@ export function FactoryGraphEditorToolbar({
         active={activeTool === "connect"}
         description={messages.toolbarConnectDescription}
         disabled={!canInteract}
+        icon={<ConnectIcon />}
         label={messages.toolbarConnectLabel}
         onClick={() =>
           onSelectTool(activeTool === "connect" ? null : "connect")
@@ -204,6 +198,7 @@ function FactoryGraphEditorToolbarButton({
   active,
   description,
   disabled,
+  icon,
   label,
   onClick,
   tone,
@@ -211,20 +206,22 @@ function FactoryGraphEditorToolbarButton({
   active: boolean;
   description: string;
   disabled: boolean;
+  icon: ReactNode;
   label: string;
   onClick: () => void;
   tone: "outline" | "secondary";
 }) {
   return (
     <FactoryGraphEditorTooltipButton
+      aria-label={label}
       aria-pressed={active}
-      className={buttonVariants({ size: "sm", tone })}
+      className={buttonVariants({ size: "icon", tone })}
       disabled={disabled}
       onClick={onClick}
       tooltip={description}
       type="button"
     >
-      {label}
+      {icon}
     </FactoryGraphEditorTooltipButton>
   );
 }
@@ -309,6 +306,49 @@ function FactoryGraphEditorAddMenu({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function ConnectIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M7 7h3v3" />
+      <path d="M14 14h3v3" />
+      <path d="M10 7H7v10h10v-3" />
+      <path d="M10 14 17 7" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M4 7h16" />
+      <path d="M9 7V5h6v2" />
+      <path d="M8 7v11a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
+    </svg>
   );
 }
 
