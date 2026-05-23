@@ -27,7 +27,7 @@ describe("scanSemanticColorTokens", () => {
     tempRoots.length = 0;
   });
 
-  it("reports slash-opacity color utilities, opacity shortcuts, local alpha math, and forbidden foundation tokens", async () => {
+  it("reports slash-opacity color utilities, opacity shortcuts, filter color math, local alpha math, and forbidden foundation tokens", async () => {
     const rootDir = await mkdtemp(
       path.join(os.tmpdir(), "semantic-color-token-guard-"),
     );
@@ -37,19 +37,20 @@ describe("scanSemanticColorTokens", () => {
       "features/example/example.tsx",
       [
         'export function Example() {',
-        '  return <div className="text-af-ink/72 text-af-danger-ink opacity-80 [background:rgb(from var(--color-af-overlay) r g b / 0.16)]" style={{ color: "var(--color-af-ink)" }} />;',
+        '  return <div className="text-af-ink/72 text-af-danger-ink opacity-80 brightness-105 [background:rgb(from var(--color-af-overlay) r g b / 0.16)]" style={{ color: "var(--color-af-ink)" }} />;',
         "}",
       ].join("\n"),
     );
 
     const violations = await scanSemanticColorTokens(rootDir);
 
-    expect(violations).toHaveLength(6);
+    expect(violations).toHaveLength(7);
     expect(violations.map((violation) => violation.kind)).toEqual([
       "alpha-color-utility",
       "foundation-color-token",
       "foundation-color-token",
       "opacity-utility",
+      "filter-color-utility",
       "alpha-color-expression",
       "foundation-color-token",
     ]);

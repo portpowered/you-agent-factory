@@ -38,6 +38,8 @@ const colorUtilityWithAlphaPattern =
   /(?:^|[\s"'`])((?:[a-z-]+:)*(?:bg|text|border|fill|stroke|decoration|outline|ring|ring-offset)-[^\s"'`]+\/\d{1,3}\b)/g;
 const opacityUtilityPattern =
   /(?:^|[\s"'`])((?:[a-z-]+:)*opacity-(\d{1,3})\b)/g;
+const brightnessUtilityPattern =
+  /(?:^|[\s"'`])((?:[a-z-]+:)*brightness-(\d{1,3})\b)/g;
 const rgbFromVarAlphaPattern = /rgb\(from[^\n]*?\/[^\n]*?\)/g;
 const forbiddenFoundationUtilityPattern = new RegExp(
   `(?:^|[\\s"'\\\`])((?:[a-z-]+:)*(?:bg|text|border|fill|stroke|decoration|outline|ring|ring-offset)-(?:${forbiddenFoundationTokenPattern})\\b)`,
@@ -53,6 +55,7 @@ export interface SemanticColorTokenViolation {
   kind:
     | "alpha-color-utility"
     | "alpha-color-expression"
+    | "filter-color-utility"
     | "foundation-color-token"
     | "opacity-utility";
   message: string;
@@ -137,113 +140,144 @@ function createViolation(
   };
 }
 
+function collectPatternViolations(
+  sourceText: string,
+  sourceLines: string[],
+  pattern: RegExp,
+  createMatchViolation: (
+    match: RegExpMatchArray,
+    token: string,
+    tokenIndex: number,
+  ) => SemanticColorTokenViolation | null,
+) {
+  const violations: SemanticColorTokenViolation[] = [];
+
+  for (const match of sourceText.matchAll(pattern)) {
+    const token = match[1] ?? match[0];
+    const tokenIndex = (match.index ?? 0) + match[0].indexOf(token);
+    const position = indexToPosition(sourceText, tokenIndex);
+    if (hasExceptionMarker(sourceLines, position.line)) {
+      continue;
+    }
+
+    const violation = createMatchViolation(match, token, tokenIndex);
+    if (violation) {
+      violations.push(violation);
+    }
+  }
+
+  return violations;
+}
+
 function findViolationsInSource(
   sourceText: string,
   filePath: string,
 ): SemanticColorTokenViolation[] {
-  const scanSharedStyleFileOnly = path.basename(filePath) === "styles.css";
   const sourceLines = sourceText.split("\n");
   const violations: SemanticColorTokenViolation[] = [];
 
-  for (const match of sourceText.matchAll(colorUtilityWithAlphaPattern)) {
-    const token = match[1];
-    const tokenIndex = (match.index ?? 0) + match[0].indexOf(token);
-    const position = indexToPosition(sourceText, tokenIndex);
-    if (hasExceptionMarker(sourceLines, position.line)) {
-      continue;
-    }
-
-    violations.push(
-      createViolation(
-        filePath,
-        "alpha-color-utility",
-        "Slash-opacity color utilities are not allowed in component-facing ui/src code. Use semantic tokens such as af-text-muted, af-surface-subtle, af-border, or a named token in ui/src/styles.css instead.",
-        token,
-        tokenIndex,
-        sourceText,
-      ),
-    );
-  }
-
-  for (const match of sourceText.matchAll(opacityUtilityPattern)) {
-    const token = match[1];
-    const opacityValue = Number(match[2]);
-    if (opacityValue === 0 || opacityValue === 100) {
-      continue;
-    }
-
-    const tokenIndex = (match.index ?? 0) + match[0].indexOf(token);
-    const position = indexToPosition(sourceText, tokenIndex);
-    if (hasExceptionMarker(sourceLines, position.line)) {
-      continue;
-    }
-
-    violations.push(
-      createViolation(
-        filePath,
-        "opacity-utility",
-        "Opacity utilities that encode component color emphasis are not allowed here. Use semantic text, surface, border, or disabled-state tokens instead.",
-        token,
-        tokenIndex,
-        sourceText,
-      ),
-    );
-  }
-
-  for (const match of sourceText.matchAll(forbiddenFoundationUtilityPattern)) {
-    const token = match[1];
-    const tokenIndex = (match.index ?? 0) + match[0].indexOf(token);
-    const position = indexToPosition(sourceText, tokenIndex);
-    if (hasExceptionMarker(sourceLines, position.line)) {
-      continue;
-    }
-
-    violations.push(
-      createViolation(
-        filePath,
-        "foundation-color-token",
-        "Foundation or alias color tokens are not allowed in component-facing ui/src code. Replace them with approved semantic roles such as af-text, af-surface, af-danger-text, af-success-text, af-warning-text, af-info-text, or another centrally defined semantic token.",
-        token,
-        tokenIndex,
-        sourceText,
-      ),
-    );
-  }
-
-  if (!scanSharedStyleFileOnly) {
-    for (const match of sourceText.matchAll(rgbFromVarAlphaPattern)) {
-      const token = match[0];
-      if (!token.includes("--color-")) {
-        continue;
-      }
-
-      const tokenIndex = match.index ?? 0;
-      const position = indexToPosition(sourceText, tokenIndex);
-      if (hasExceptionMarker(sourceLines, position.line)) {
-        continue;
-      }
-
-      violations.push(
+  violations.push(
+    ...collectPatternViolations(
+      sourceText,
+      sourceLines,
+      colorUtilityWithAlphaPattern,
+      (_match, token, tokenIndex) =>
         createViolation(
+          filePath,
+          "alpha-color-utility",
+          "Slash-opacity color utilities are not allowed in component-facing ui/src code. Use semantic tokens such as af-text-muted, af-surface-subtle, af-border, or a named token in ui/src/styles.css instead.",
+          token,
+          tokenIndex,
+          sourceText,
+        ),
+    ),
+    ...collectPatternViolations(
+      sourceText,
+      sourceLines,
+      opacityUtilityPattern,
+      (match, token, tokenIndex) => {
+        const opacityValue = Number(match[2]);
+        if (opacityValue === 0 || opacityValue === 100) {
+          return null;
+        }
+
+        return createViolation(
+          filePath,
+          "opacity-utility",
+          "Opacity utilities that encode component color emphasis are not allowed here. Use semantic text, surface, border, or disabled-state tokens instead.",
+          token,
+          tokenIndex,
+          sourceText,
+        );
+      },
+    ),
+    ...collectPatternViolations(
+      sourceText,
+      sourceLines,
+      brightnessUtilityPattern,
+      (_match, token, tokenIndex) =>
+        createViolation(
+          filePath,
+          "filter-color-utility",
+          "Filter-based color math such as brightness-* is not allowed in component-facing ui/src code. Define a semantic hover or emphasis token in ui/src/styles.css and consume it through approved utilities instead.",
+          token,
+          tokenIndex,
+          sourceText,
+        ),
+    ),
+    ...collectPatternViolations(
+      sourceText,
+      sourceLines,
+      forbiddenFoundationUtilityPattern,
+      (_match, token, tokenIndex) =>
+        createViolation(
+          filePath,
+          "foundation-color-token",
+          "Foundation or alias color tokens are not allowed in component-facing ui/src code. Replace them with approved semantic roles such as af-text, af-surface, af-danger-text, af-success-text, af-warning-text, af-info-text, or another centrally defined semantic token.",
+          token,
+          tokenIndex,
+          sourceText,
+        ),
+    ),
+  );
+
+  if (path.basename(filePath) !== "styles.css") {
+    violations.push(...collectNonStyleViolations(sourceText, filePath, sourceLines));
+  }
+
+  return violations;
+}
+
+function collectNonStyleViolations(
+  sourceText: string,
+  filePath: string,
+  sourceLines: string[],
+) {
+  return [
+    ...collectPatternViolations(
+      sourceText,
+      sourceLines,
+      rgbFromVarAlphaPattern,
+      (_match, token, tokenIndex) => {
+        if (!token.includes("--color-")) {
+          return null;
+        }
+
+        return createViolation(
           filePath,
           "alpha-color-expression",
           "Component-local color alpha math is not allowed in ui/src code. Move the semantic or system-integration token definition into ui/src/styles.css and consume it through var(--color-...) instead.",
           token,
           tokenIndex,
           sourceText,
-        ),
-      );
-    }
-
-    for (const match of sourceText.matchAll(forbiddenFoundationVarPattern)) {
-      const token = match[0];
-      const tokenIndex = match.index ?? 0;
-      const position = indexToPosition(sourceText, tokenIndex);
-      if (hasExceptionMarker(sourceLines, position.line)) {
-        continue;
-      }
-
-      violations.push(
+        );
+      },
+    ),
+    ...collectPatternViolations(
+      sourceText,
+      sourceLines,
+      forbiddenFoundationVarPattern,
+      (_match, token, tokenIndex) =>
         createViolation(
           filePath,
           "foundation-color-token",
@@ -252,11 +286,8 @@ function findViolationsInSource(
           tokenIndex,
           sourceText,
         ),
-      );
-    }
-  }
-
-  return violations;
+    ),
+  ];
 }
 
 export async function scanSemanticColorTokens(rootDirectory = sourceDir) {

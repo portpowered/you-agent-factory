@@ -11,9 +11,9 @@ const BUTTON_BASE_CLASS =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-af-focus-ring focus-visible:ring-offset-0 disabled:pointer-events-none disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
 const BUTTON_TONE_CLASS: Record<NonNullable<ButtonProps["tone"]>, string> = {
   default:
-    "border-af-accent bg-af-accent text-af-on-accent hover:brightness-105",
+    "border-af-accent bg-af-accent text-af-on-accent hover:border-af-accent-hover hover:bg-af-accent-hover",
   destructive:
-    "border-af-danger bg-af-danger text-af-on-danger hover:brightness-110",
+    "border-af-danger bg-af-danger text-af-on-danger hover:border-af-danger-hover hover:bg-af-danger-hover",
   ghost: "border-transparent bg-transparent text-af-text-muted hover:bg-af-overlay hover:text-af-text",
   outline:
     "border-af-border bg-af-surface-raised text-af-text hover:border-af-border-strong hover:bg-af-overlay",

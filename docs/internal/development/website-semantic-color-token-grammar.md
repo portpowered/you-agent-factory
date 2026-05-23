@@ -89,15 +89,17 @@ family naming and be added centrally before routine component usage.
 
 Current centrally approved supporting status roles include:
 
-- accent: `af-accent-surface` and `af-accent-border`
+- accent: `af-accent-hover`, `af-accent-surface`, and `af-accent-border`
 - success: `af-success-surface`, `af-success-border`, and `af-success-text`
 - warning: `af-warning-surface`, `af-warning-border`, and `af-warning-text`
-- danger: `af-danger-surface`, `af-danger-border`, and `af-danger-text`
+- danger: `af-danger-hover`, `af-danger-surface`, `af-danger-border`, and `af-danger-text`
 - info: `af-info-surface`, `af-info-border`, and `af-info-text`
 
 Use the `*-text` roles for readable status-colored text on neutral or subtle
 status surfaces. Reserve `af-on-*` for content that sits on a strong solid
-status fill.
+status fill. Use `*-hover` roles when an interactive control needs a stronger
+status-family hover fill without falling back to local filter math such as
+`brightness-*`.
 
 ## Naming Rules
 

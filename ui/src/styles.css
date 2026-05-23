@@ -42,6 +42,7 @@
   --color-af-text-disabled: rgb(from var(--color-af-foundation-ink) r g b / 0.42);
   --color-af-text-inverse: var(--color-af-foundation-canvas);
   --color-af-accent: var(--color-af-foundation-accent);
+  --color-af-accent-hover: var(--color-af-foundation-accent-strong);
   --color-af-accent-surface: rgb(from var(--color-af-foundation-accent) r g b / 0.18);
   --color-af-accent-border: rgb(from var(--color-af-foundation-accent) r g b / 0.28);
   --color-af-on-accent: var(--color-af-text-inverse);
@@ -56,6 +57,7 @@
   --color-af-warning-text: var(--color-af-foundation-warning-ink);
   --color-af-on-warning: var(--color-af-text-inverse);
   --color-af-danger: var(--color-af-foundation-danger);
+  --color-af-danger-hover: var(--color-af-foundation-danger-bright);
   --color-af-danger-surface: rgb(from var(--color-af-foundation-danger) r g b / 0.18);
   --color-af-danger-border: rgb(from var(--color-af-foundation-danger) r g b / 0.3);
   --color-af-danger-text: var(--color-af-foundation-danger-ink);
