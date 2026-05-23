@@ -13,6 +13,12 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 	if apiCfg.Id != nil {
 		cfg.Project = *apiCfg.Id
 	}
+	if apiCfg.Version != nil {
+		cfg.Version = &interfaces.FactoryVersion{
+			Logical:  apiCfg.Version.Logical,
+			Physical: apiCfg.Version.Physical.UTC(),
+		}
+	}
 	cfg.Guards = factoryGuardsInternalFromAPI(apiCfg.Guards)
 	if apiCfg.InputTypes != nil {
 		cfg.InputTypes = inputTypesInternalFromAPI(*apiCfg.InputTypes)
@@ -239,7 +245,7 @@ func hostedLinearWorkerInternalFromAPI(cfg *factoryapi.HostedLinearWorkerConfig)
 		TeamIDs:      stringSliceValue(cfg.TeamIds),
 		StateIDs:     stringSliceValue(cfg.StateIds),
 		Mapping:      hostedLinearWorkerMappingInternalFromAPI(cfg.Mapping),
-		Claim: hostedLinearWorkerClaimInternalFromAPI(cfg.Claim),
+		Claim:        hostedLinearWorkerClaimInternalFromAPI(cfg.Claim),
 	}
 }
 

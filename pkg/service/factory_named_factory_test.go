@@ -587,8 +587,12 @@ func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPa
 
 func TestFactoryService_GetCurrentNamedFactory_IncludesVersionMetadata(t *testing.T) {
 	rootDir := t.TempDir()
+	versionTime := time.Date(2026, 5, 23, 12, 30, 0, 0, time.UTC)
 
-	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayloadWithVersion(t, "alpha", factoryapi.HybridLogicalTimestamp{
+		Logical:  23,
+		Physical: versionTime,
+	})); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
 	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
@@ -611,15 +615,19 @@ func TestFactoryService_GetCurrentNamedFactory_IncludesVersionMetadata(t *testin
 	if current.Name != factoryapi.FactoryName("alpha") {
 		t.Fatalf("current factory name = %q, want alpha", current.Name)
 	}
-	if current.Version == nil || current.Version.Logical <= 0 || current.Version.Physical.IsZero() {
-		t.Fatalf("current factory version = %#v, want logical and physical components", current.Version)
+	if current.Version == nil || current.Version.Logical != 23 || !current.Version.Physical.Equal(versionTime) {
+		t.Fatalf("current factory version = %#v, want logical=23 physical=%s", current.Version, versionTime)
 	}
 }
 
 func TestFactoryService_SaveCurrentFactory_ReplacesCurrentDefinition(t *testing.T) {
 	rootDir := t.TempDir()
+	initialVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  41,
+		Physical: time.Date(2026, 5, 23, 13, 0, 0, 0, time.UTC),
+	}
 
-	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayloadWithVersion(t, "alpha", initialVersion)); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
 	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
@@ -643,8 +651,8 @@ func TestFactoryService_SaveCurrentFactory_ReplacesCurrentDefinition(t *testing.
 	if saved.WorkTypes == nil || len(*saved.WorkTypes) != 1 || (*saved.WorkTypes)[0].Name != "story" {
 		t.Fatalf("saved work types = %#v, want story", saved.WorkTypes)
 	}
-	if saved.Version == nil || saved.Version.Logical <= 0 || saved.Version.Physical.IsZero() {
-		t.Fatalf("saved version = %#v, want logical and physical components", saved.Version)
+	if saved.Version == nil || saved.Version.Logical != initialVersion.Logical+1 || !saved.Version.Physical.After(initialVersion.Physical) {
+		t.Fatalf("saved version = %#v, want logical=%d physical after %s", saved.Version, initialVersion.Logical+1, initialVersion.Physical)
 	}
 
 	current, err := svc.GetCurrentNamedFactory(context.Background())
@@ -654,13 +662,46 @@ func TestFactoryService_SaveCurrentFactory_ReplacesCurrentDefinition(t *testing.
 	if current.WorkTypes == nil || (*current.WorkTypes)[0].Name != "story" {
 		t.Fatalf("current work types after save = %#v, want story", current.WorkTypes)
 	}
+	if current.Version == nil || current.Version.Logical != saved.Version.Logical || !current.Version.Physical.Equal(saved.Version.Physical) {
+		t.Fatalf("current version after save = %#v, want %#v", current.Version, saved.Version)
+	}
+	loaded, err := config.LoadRuntimeConfig(filepath.Join(rootDir, "alpha"), nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(alpha) after save: %v", err)
+	}
+	if loaded.FactoryConfig().Version == nil || loaded.FactoryConfig().Version.Logical != saved.Version.Logical || !loaded.FactoryConfig().Version.Physical.Equal(saved.Version.Physical) {
+		t.Fatalf("persisted version after save = %#v, want %#v", loaded.FactoryConfig().Version, saved.Version)
+	}
+	restarted, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService(restarted): %v", err)
+	}
+	restartedCurrent, err := restarted.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory(restarted): %v", err)
+	}
+	if restartedCurrent.Version == nil || restartedCurrent.Version.Logical != saved.Version.Logical || !restartedCurrent.Version.Physical.Equal(saved.Version.Physical) {
+		t.Fatalf("restarted version = %#v, want %#v", restartedCurrent.Version, saved.Version)
+	}
 	assertCurrentFactoryPointer(t, rootDir, "alpha", "after current factory save")
 }
 
 func TestFactoryService_SaveCurrentFactory_RejectsStaleBaseVersion(t *testing.T) {
 	rootDir := t.TempDir()
+	initialVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  7,
+		Physical: time.Date(2026, 5, 23, 14, 0, 0, 0, time.UTC),
+	}
+	newerVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  8,
+		Physical: initialVersion.Physical.Add(time.Second),
+	}
 
-	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayloadWithVersion(t, "alpha", initialVersion)); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
 	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
@@ -681,13 +722,11 @@ func TestFactoryService_SaveCurrentFactory_RejectsStaleBaseVersion(t *testing.T)
 		t.Fatalf("GetCurrentNamedFactory: %v", err)
 	}
 
-	factoryJSON := filepath.Join(rootDir, "alpha", interfaces.FactoryConfigFile)
 	if current.Version == nil {
 		t.Fatal("expected current factory version metadata")
 	}
-	newer := current.Version.Physical.Add(time.Second)
-	if err := os.Chtimes(factoryJSON, newer, newer); err != nil {
-		t.Fatalf("advance factory version: %v", err)
+	if _, err := config.ReplaceNamedFactory(rootDir, "alpha", serviceNamedFactoryPayloadWithVersion(t, "alpha", newerVersion)); err != nil {
+		t.Fatalf("ReplaceNamedFactory(alpha newer version): %v", err)
 	}
 
 	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
@@ -703,6 +742,9 @@ func TestFactoryService_SaveCurrentFactory_RejectsStaleBaseVersion(t *testing.T)
 	}
 	if currentAfterStaleSave.WorkTypes == nil || (*currentAfterStaleSave.WorkTypes)[0].Name != "task" {
 		t.Fatalf("current work types after stale save = %#v, want unchanged task", currentAfterStaleSave.WorkTypes)
+	}
+	if currentAfterStaleSave.Version == nil || currentAfterStaleSave.Version.Logical != newerVersion.Logical || !currentAfterStaleSave.Version.Physical.Equal(newerVersion.Physical) {
+		t.Fatalf("current version after stale save = %#v, want %#v", currentAfterStaleSave.Version, newerVersion)
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -54,6 +53,11 @@ func minimalFactoryConfig() map[string]any {
 func serviceNamedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()
 	return serviceNamedFactoryPayloadWithWorkType(t, project, "task")
+}
+
+func serviceNamedFactoryPayloadWithVersion(t *testing.T, project string, version factoryapi.HybridLogicalTimestamp) []byte {
+	t.Helper()
+	return withServicePayloadVersion(t, serviceNamedFactoryPayload(t, project), version)
 }
 
 func serviceNamedFactoryPayloadWithWorkType(t *testing.T, project, workType string) []byte {
@@ -186,6 +190,24 @@ func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string
 
 	generated.Name = factoryapi.FactoryName(name)
 	return generated
+}
+
+func withServicePayloadVersion(t *testing.T, payload []byte, version factoryapi.HybridLogicalTimestamp) []byte {
+	t.Helper()
+
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("unmarshal service factory payload: %v", err)
+	}
+	decoded["version"] = map[string]any{
+		"logical":  version.Logical,
+		"physical": version.Physical.UTC().Format(time.RFC3339Nano),
+	}
+	updated, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatalf("marshal service factory payload with version: %v", err)
+	}
+	return updated
 }
 
 func submitWorkRequestsToService(ctx context.Context, svc *FactoryService, reqs []interfaces.SubmitRequest) error {

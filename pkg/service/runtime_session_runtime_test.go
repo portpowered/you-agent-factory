@@ -396,6 +396,12 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 	if got := betaConfig.FactoryConfig().WorkTypes; len(got) != 1 || got[0].Name != "story" {
 		t.Fatalf("persisted beta work types after save = %#v, want story", got)
 	}
+	if betaConfig.FactoryConfig().Version == nil || betaCurrent.Version == nil {
+		t.Fatal("expected persisted and returned beta version metadata")
+	}
+	if betaConfig.FactoryConfig().Version.Logical != betaCurrent.Version.Logical || !betaConfig.FactoryConfig().Version.Physical.Equal(betaCurrent.Version.Physical) {
+		t.Fatalf("persisted beta version after save = %#v, want %#v", betaConfig.FactoryConfig().Version, betaCurrent.Version)
+	}
 
 	legacyCurrent, err := harness.svc.GetCurrentNamedFactory(context.Background())
 	if err != nil {

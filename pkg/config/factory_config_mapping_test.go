@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -16,6 +17,10 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 	original := &interfaces.FactoryConfig{
 		Name:    "customer-facing-name",
 		Project: "sample-service",
+		Version: &interfaces.FactoryVersion{
+			Logical:  7,
+			Physical: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC),
+		},
 		WorkTypes: []interfaces.WorkTypeConfig{
 			{
 				Name: "story",
@@ -69,6 +74,9 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 	}
 	if expanded.Name != original.Name {
 		t.Fatalf("expected name %q, got %q", original.Name, expanded.Name)
+	}
+	if expanded.Version == nil || expanded.Version.Logical != original.Version.Logical || !expanded.Version.Physical.Equal(original.Version.Physical) {
+		t.Fatalf("expected version %#v, got %#v", original.Version, expanded.Version)
 	}
 
 	if len(expanded.WorkTypes) != len(original.WorkTypes) {

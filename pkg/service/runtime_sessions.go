@@ -296,7 +296,7 @@ func (fs *FactoryService) SaveCurrentFactoryForSession(
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	sessionRootDir, payload, err := fs.prepareEditableFactoryDefinitionSave(sessionFactoryRootDir(fs, session), current, request)
+	sessionRootDir, sanitized, err := fs.prepareEditableFactoryDefinitionSave(sessionFactoryRootDir(fs, session), current, request)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
@@ -308,6 +308,11 @@ func (fs *FactoryService) SaveCurrentFactoryForSession(
 		return factoryapi.Factory{}, err
 	}
 	if err := fs.requireFreshEditableFactoryVersionAtRoot(request.Version, sessionRootDir, current.Name); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	nextVersion := nextEditableFactoryVersion(current.Version, factory.EnsureClock(fs.clock).Now().UTC())
+	payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
+	if err != nil {
 		return factoryapi.Factory{}, err
 	}
 
@@ -333,26 +338,22 @@ func (fs *FactoryService) prepareEditableFactoryDefinitionSave(
 	sessionRootDir string,
 	current factoryapi.Factory,
 	request factoryapi.Factory,
-) (string, []byte, error) {
+) (string, factoryapi.Factory, error) {
 	if current.Name == apisurface.DefaultCurrentFactoryName {
-		return "", nil, ErrCurrentNamedFactoryNotFound
+		return "", factoryapi.Factory{}, ErrCurrentNamedFactoryNotFound
 	}
 	if request.Name != current.Name {
-		return "", nil, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
+		return "", factoryapi.Factory{}, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
 	}
 	if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
-		return "", nil, err
+		return "", factoryapi.Factory{}, err
 	}
 	sanitized := request
 	sanitized.Version = nil
 	if err := validateEditableFactoryTopology(sanitized); err != nil {
-		return "", nil, err
+		return "", factoryapi.Factory{}, err
 	}
-	payload, err := json.Marshal(sanitized)
-	if err != nil {
-		return "", nil, fmt.Errorf("marshal editable factory payload: %w", err)
-	}
-	return sessionRootDir, payload, nil
+	return sessionRootDir, sanitized, nil
 }
 
 func (fs *FactoryService) replaceEditableFactoryDefinition(

@@ -1,11 +1,15 @@
 package interfaces
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // FactoryConfig is the specification of a factory as a JSON file.
 type FactoryConfig struct {
 	Name             string                          `json:"name"`
 	Project          string                          `json:"project,omitempty"`
+	Version          *FactoryVersion                 `json:"version,omitempty"`
 	Runner           string                          `json:"runner,omitempty"`
 	Guards           []FactoryGuardConfig            `json:"guards,omitempty"`
 	InputTypes       []InputTypeConfig               `json:"input_types,omitempty"`
@@ -14,6 +18,13 @@ type FactoryConfig struct {
 	ResourceManifest *PortableResourceManifestConfig `json:"resourceManifest,omitempty"`
 	Workers          []WorkerConfig                  `json:"workers"`
 	Workstations     []FactoryWorkstationConfig      `json:"workstations"`
+}
+
+// FactoryVersion is the durable optimistic-concurrency metadata stored with a
+// persisted factory definition.
+type FactoryVersion struct {
+	Logical  int64     `json:"logical"`
+	Physical time.Time `json:"physical"`
 }
 
 // InputTypeConfig declares a named input type that the factory accepts.
