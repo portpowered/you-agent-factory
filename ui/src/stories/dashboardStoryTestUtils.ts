@@ -228,8 +228,10 @@ export async function expectTimelineToolbarAlignment(
     currentButton.parentElement,
     "expected timeline meta group in dashboard toolbar",
   );
+  const currentTickStatus = within(sliderMetaGroup).getByText("5/5");
   const headingRect = heading.getBoundingClientRect();
   const sliderRect = sliderShell.getBoundingClientRect();
+  const currentTickStatusRect = currentTickStatus.getBoundingClientRect();
   const currentButtonRect = currentButton.getBoundingClientRect();
   const languageButtonRect = languageButton.getBoundingClientRect();
   const streamStatusRect = streamStatus.getBoundingClientRect();
@@ -240,15 +242,16 @@ export async function expectTimelineToolbarAlignment(
   expect(sliderMetaGroup.contains(within(sliderMetaGroup).getByText("5/5"))).toBe(
     true,
   );
-  expect(sliderRect.left).toBeGreaterThanOrEqual(headingRect.right - 1);
-  expect(currentButtonRect.left).toBeGreaterThanOrEqual(sliderRect.left);
-  expect(streamStatusRect.left).toBeGreaterThanOrEqual(sliderRect.right - 1);
-  expect(exportButtonRect.left).toBeGreaterThanOrEqual(
-    streamStatusRect.right - 1,
-  );
+  expect(exportButtonRect.left).toBeGreaterThanOrEqual(headingRect.right - 1);
   expect(languageButtonRect.left).toBeGreaterThanOrEqual(
     exportButtonRect.right - 1,
   );
+  expect(currentButtonRect.left).toBeGreaterThanOrEqual(
+    currentTickStatusRect.right - 1,
+  );
+  expect(streamStatus.className).toContain("sr-only");
+  expect(streamStatusRect.width).toBeLessThanOrEqual(1);
+  expect(streamStatusRect.height).toBeLessThanOrEqual(1);
 }
 
 export async function selectWorkstationRequest(

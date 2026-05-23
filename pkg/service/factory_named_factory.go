@@ -86,7 +86,7 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 	}
 	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(rootDir, name)
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("resolve current named factory %q: %w", name, err)
+		return factoryapi.Factory{}, fmt.Errorf("resolve current factory %q: %w", name, err)
 	}
 	var workstationLoader factoryconfig.WorkstationLoader
 	if fs.cfg != nil {
@@ -94,7 +94,7 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 	}
 	current, err := factoryconfig.LoadRuntimeConfig(factoryDir, workstationLoader)
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("load current named factory %q: %w", name, err)
+		return factoryapi.Factory{}, fmt.Errorf("load current factory %q: %w", name, err)
 	}
 
 	return fs.serializeNamedFactory(factoryapi.FactoryName(name), current, true)
@@ -188,7 +188,7 @@ func (fs *FactoryService) serializeNamedFactory(
 		replay.WithGeneratedFactoryWorkflowID(fs.workflowID()),
 	)
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("serialize current named factory: %w", err)
+		return factoryapi.Factory{}, fmt.Errorf("serialize current factory: %w", err)
 	}
 	generatedFactory.Name = factoryapi.FactoryName(name)
 	return generatedFactory, nil

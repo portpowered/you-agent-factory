@@ -45,7 +45,7 @@ documents own the durable contract rules.
 | Identifier | Format | Producer | Consumer | Validation evidence |
 | --- | --- | --- | --- | --- |
 | `/factory` | HTTP `POST` route | Agent Factory REST API | UI import flows, backend clients | `TestOpenAPIContract_ContainsCoveredJSONOperations` and named-factory server tests |
-| `/factory/~current` | HTTP `GET` route | Agent Factory REST API | UI reloads and backend readers | `TestOpenAPIContract_ContainsCoveredJSONOperations` and named-factory server tests |
+| `/factory-sessions/{session_id}/factory` | HTTP `GET` route | Agent Factory REST API | UI reloads and backend readers | current-factory contract surface tests and session-scoping server tests |
 | `schemaVersion` | PNG metadata string field | browser export envelope | browser import reader | PNG metadata tests in `factory-png-export.test.ts` and `factory-png-import.test.ts` |
 | `INVALID_FACTORY_NAME` | machine-readable error code | named-factory validation response | clients branch on invalid-name failures without parsing prose | `ErrorResponse.code` enum plus response-example guard |
 | `FACTORY_ALREADY_EXISTS` | machine-readable error code | named-factory conflict response | clients branch on duplicate-name failures | `ErrorResponse.code` enum plus response-example guard |
@@ -68,7 +68,7 @@ documents own the durable contract rules.
 | --- | --- | --- | --- | --- | --- |
 | authored named-factory contract | `api/openapi-main.yaml` | bundled `api/openapi.yaml` | authored source -> bundled artifact | missing route refs, schema refs, or example wiring drops the published contract | `make generate-api`, bundled contract guards |
 | service-owned API runtime seam | `pkg/service.FactoryService` | `pkg/api.Server` | service -> API boundary | API reads pinned to startup runtime after activation | `pkg/api/server_test.go` activated-runtime submission regression |
-| current-factory export seam | `pkg/api.Server` `GET /factory/~current` | `ui/src/api/named-factory/api.ts` and export dialog hooks | API -> generated UI types -> dashboard export flow | event-history reconstruction or private DTOs drift from authored config | `current-factory-export.test.ts` and `App.test.tsx` |
+| current-factory export seam | `pkg/api.Server` `GET /factory-sessions/{session_id}/factory` | `ui/src/api/named-factory/api.ts` and export dialog hooks | API -> generated UI types -> dashboard export flow | event-history reconstruction or private DTOs drift from authored config | `current-factory-export.test.ts` and `App.test.tsx` |
 | import activation seam | `ui/src/features/import/factory-png-import.ts` | `ui/src/features/import/use-factory-import-activation.ts` then `POST /factory` | PNG reader -> dashboard hook -> API | dashboard-only field renames or reshaping diverge from API contract | `use-factory-import-activation.test.tsx` |
 
 ## Canonical Sharing Boundary
@@ -86,10 +86,10 @@ The canonical sharing payload is the generated OpenAPI `NamedFactory` schema:
 
 Every public sharing boundary reuses that payload:
 
-1. `GET /factory/~current` returns the authored `NamedFactory` payload for the
-   current factory. When the active runtime is still the default root runtime
-   and no durable pointer exists yet, the response uses `name: "UNDEFINED"` as
-   the reserved canonical identifier.
+1. `GET /factory-sessions/{session_id}/factory` returns the authored
+   `NamedFactory` payload for the current factory in the addressed live
+   session. The default runtime is addressed through the canonical
+   `session_id` route instead of a `~current` sentinel segment.
 2. Browser PNG export embeds that same payload inside
    `PortOSFactoryPngEnvelope`, which adds only `schemaVersion`.
 3. Browser PNG import reads `PortOSFactoryPngEnvelope`, validates
@@ -110,12 +110,12 @@ attempts to activate a named factory with the reserved default-runtime name.
 
 - Shared interface, generated schema, contract package, or equivalent selected:
   `NamedFactory` is the one public request and response shape for
-  `POST /factory`, `GET /factory/~current`, and the PNG sharing payload inside
+  `POST /factory`, `GET /factory-sessions/{session_id}/factory`, and the PNG sharing payload inside
   `PortOSFactoryPngEnvelope`.
 - Shared runtime seam selected: `pkg/apisurface.APISurface` is the API server's owner
   for current runtime reads and named-factory activation so `/work`, `/status`,
-  `/events`, and `/factory/~current` all observe the same swapped runtime
-  pointer.
+  `/events`, and `/factory-sessions/{session_id}/factory` all observe the same
+  swapped runtime pointer.
 - Reason: the persistence and activation stories already made `FactoryService`
   the owner of the durable current-factory pointer and runtime swap. The
   export/import contract stories extend that same seam so the browser reuses
