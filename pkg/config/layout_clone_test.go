@@ -173,6 +173,75 @@ func TestCloneFactoryConfig_ClonesModelOperationBindingWorkContent(t *testing.T)
 	assertBindingMultiPartContent(t, bindings[0].DefaultContent, "fallback prompt", "fallback-diagram.png", "Fallback diagram", "default after source mutation")
 }
 
+func TestCloneWorkerConfig_PreservesNilHostedConfig(t *testing.T) {
+	cloned := CloneWorkerConfig(interfaces.WorkerConfig{
+		Name:     "hosted-linear",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: interfaces.HostedWorkerProviderLinear,
+	})
+
+	if cloned.Auth != nil {
+		t.Fatalf("cloned auth = %#v, want nil", cloned.Auth)
+	}
+	if cloned.Linear != nil {
+		t.Fatalf("cloned linear = %#v, want nil", cloned.Linear)
+	}
+}
+
+func TestCloneWorkerConfig_DetachesHostedNestedConfig(t *testing.T) {
+	source := interfaces.WorkerConfig{
+		Name:     "hosted-linear",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Auth: &interfaces.HostedWorkerAuthConfig{
+			SecretRef: "linear-secret",
+		},
+		Linear: &interfaces.HostedLinearWorkerConfig{
+			PollInterval: "30s",
+			TeamIDs:      []string{"team-1", "team-2"},
+			StateIDs:     []string{"state-1", "state-2"},
+			Claim: &interfaces.HostedLinearWorkerClaimConfig{
+				AssigneeField: "owner",
+			},
+		},
+	}
+
+	cloned := CloneWorkerConfig(source)
+	if cloned.Auth == nil || cloned.Auth.SecretRef != "linear-secret" {
+		t.Fatalf("cloned auth = %#v, want preserved hosted auth", cloned.Auth)
+	}
+	if cloned.Linear == nil {
+		t.Fatal("cloned linear = nil, want detached hosted linear config")
+	}
+	if !reflect.DeepEqual(cloned.Linear.TeamIDs, []string{"team-1", "team-2"}) {
+		t.Fatalf("cloned TeamIDs = %#v, want preserved values", cloned.Linear.TeamIDs)
+	}
+	if !reflect.DeepEqual(cloned.Linear.StateIDs, []string{"state-1", "state-2"}) {
+		t.Fatalf("cloned StateIDs = %#v, want preserved values", cloned.Linear.StateIDs)
+	}
+	if cloned.Linear.Claim == nil || cloned.Linear.Claim.AssigneeField != "owner" {
+		t.Fatalf("cloned claim = %#v, want preserved claim config", cloned.Linear.Claim)
+	}
+
+	source.Auth.SecretRef = "mutated-secret"
+	source.Linear.TeamIDs[0] = "mutated-team"
+	source.Linear.StateIDs[0] = "mutated-state"
+	source.Linear.Claim.AssigneeField = "mutated-owner"
+
+	if cloned.Auth.SecretRef != "linear-secret" {
+		t.Fatalf("cloned auth after source mutation = %#v, want detached auth", cloned.Auth)
+	}
+	if !reflect.DeepEqual(cloned.Linear.TeamIDs, []string{"team-1", "team-2"}) {
+		t.Fatalf("cloned TeamIDs after source mutation = %#v, want detached values", cloned.Linear.TeamIDs)
+	}
+	if !reflect.DeepEqual(cloned.Linear.StateIDs, []string{"state-1", "state-2"}) {
+		t.Fatalf("cloned StateIDs after source mutation = %#v, want detached values", cloned.Linear.StateIDs)
+	}
+	if cloned.Linear.Claim == nil || cloned.Linear.Claim.AssigneeField != "owner" {
+		t.Fatalf("cloned claim after source mutation = %#v, want detached claim config", cloned.Linear.Claim)
+	}
+}
+
 func assertBindingMultiPartContent(
 	t *testing.T,
 	parts []interfaces.WorkContentPart,
