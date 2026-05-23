@@ -15,17 +15,29 @@ describe("factorySessionScopedPath", () => {
   });
 
   it("always returns an explicit default-session scoped path", () => {
-    expect(factorySessionScopedPath("/work", undefined)).toBe("/factories/~default/work");
-    expect(factorySessionScopedPath("/work", null)).toBe("/factories/~default/work");
-    expect(factorySessionScopedPath("/work", "")).toBe("/factories/~default/work");
+    expect(factorySessionScopedPath("/work", undefined)).toBe("/factory-sessions/~default/work");
+    expect(factorySessionScopedPath("/work", null)).toBe("/factory-sessions/~default/work");
+    expect(factorySessionScopedPath("/work", "")).toBe("/factory-sessions/~default/work");
     expect(factorySessionScopedPath("work", DEFAULT_FACTORY_SESSION_ID)).toBe(
-      "/factories/~default/work",
+      "/factory-sessions/~default/work",
     );
   });
 
   it("preserves non-default session identifiers in the scoped path", () => {
     expect(factorySessionScopedPath("/events", "session-beta")).toBe(
-      "/factories/session-beta/events",
+      "/factory-sessions/session-beta/events",
     );
+  });
+
+  it("maps current-factory reads to the canonical session factory route", () => {
+    expect(factorySessionScopedPath("/factory/~current", "session-beta")).toBe(
+      "/factory-sessions/session-beta/factory",
+    );
+  });
+
+  it("maps editable current-factory requests under the canonical session factory root", () => {
+    expect(
+      factorySessionScopedPath("/factory/~current/editable-definition", "session-beta"),
+    ).toBe("/factory-sessions/session-beta/factory/editable-definition");
   });
 });

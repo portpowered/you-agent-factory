@@ -12,5 +12,11 @@ export function factorySessionScopedPath(
   const normalizedSessionID: string = isDefaultFactorySessionID(sessionID)
     ? DEFAULT_FACTORY_SESSION_ID
     : (sessionID ?? DEFAULT_FACTORY_SESSION_ID);
-  return `/factories/${encodeURIComponent(normalizedSessionID)}${normalizedPath}`;
+  if (normalizedPath === "/factory/~current") {
+    return `/factory-sessions/${encodeURIComponent(normalizedSessionID)}/factory`;
+  }
+  if (normalizedPath === "/factory/~current/editable-definition") {
+    return `/factory-sessions/${encodeURIComponent(normalizedSessionID)}/factory/editable-definition`;
+  }
+  return `/factory-sessions/${encodeURIComponent(normalizedSessionID)}${normalizedPath}`;
 }

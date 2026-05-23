@@ -122,6 +122,49 @@ func TestOpenAPIContract_PersistedFactoryRoutesUseCanonicalPluralVocabulary(t *t
 	}
 }
 
+func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("paths object is missing")
+	}
+
+	requiredOperations := map[string][]string{
+		"/factory-sessions/{session_id}/work":                        {"get", "post"},
+		"/factory-sessions/{session_id}/work-requests/{request_id}":  {"put"},
+		"/factory-sessions/{session_id}/work/{id}":                   {"get"},
+		"/factory-sessions/{session_id}/events":                      {"get"},
+		"/factory-sessions/{session_id}/status":                      {"get"},
+		"/factory-sessions/{session_id}/factory":                     {"get"},
+		"/factory-sessions/{session_id}/factory/editable-definition": {"get", "put"},
+	}
+	for path, methods := range requiredOperations {
+		pathItem, ok := paths[path].(map[string]any)
+		if !ok {
+			t.Fatalf("paths.%s is missing", path)
+		}
+		for _, method := range methods {
+			if _, ok := pathItem[method].(map[string]any); !ok {
+				t.Fatalf("paths.%s.%s operation is missing", path, method)
+			}
+		}
+	}
+
+	for _, retiredPath := range []string{
+		"/factories/{factory_id}/work",
+		"/factories/{factory_id}/work-requests/{request_id}",
+		"/factories/{factory_id}/work/{id}",
+		"/factories/{factory_id}/events",
+		"/factories/{factory_id}/status",
+		"/factories/{factory_id}/factory/~current",
+		"/factories/{factory_id}/factory/~current/editable-definition",
+	} {
+		if _, ok := paths[retiredPath]; ok {
+			t.Fatalf("paths.%s must not be published for session-scoped routes", retiredPath)
+		}
+	}
+}
+
 func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) {
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 	assertWorkstationRequestProjectionSchemasPresent(t, schemas)

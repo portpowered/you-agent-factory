@@ -200,7 +200,7 @@ describe("SubmitWorkWidget", () => {
     expect(submittingStatus.className).toContain("text-on-foreground");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
     );
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       method: "POST",
@@ -445,7 +445,7 @@ describe("SubmitWorkWidget", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/factories/session-beta/work",
+        "/factory-sessions/session-beta/work",
         expect.objectContaining({
           method: "POST",
         }),

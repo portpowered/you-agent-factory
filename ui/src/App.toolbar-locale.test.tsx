@@ -40,7 +40,7 @@ describe("App shell locale and toolbar flows", () => {
             ? `${input.pathname}${input.search}`
             : input.url;
 
-      if (path === "/factories/~default/factory/~current") {
+      if (path === "/factory-sessions/~default/factory") {
         return jsonResponse(currentNamedFactoryExportResponse);
       }
 

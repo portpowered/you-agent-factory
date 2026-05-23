@@ -29,9 +29,9 @@ const readyTimeoutMs = 90_000;
 const replayDelayMs = 25;
 const uiInteractionTimeoutMs = 10_000;
 const defaultFactorySessionID = "~default";
-const defaultEventsPath = `/factories/${defaultFactorySessionID}/events`;
+const defaultEventsPath = `/factory-sessions/${defaultFactorySessionID}/events`;
 const defaultCurrentFactoryPath =
-  `/factories/${defaultFactorySessionID}/factory/~current`;
+  `/factory-sessions/${defaultFactorySessionID}/factory`;
 const defaultEditableDefinitionPath =
   `${defaultCurrentFactoryPath}/editable-definition`;
 const promptTemplateContractPathPattern =

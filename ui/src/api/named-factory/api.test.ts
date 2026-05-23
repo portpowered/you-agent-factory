@@ -121,7 +121,7 @@ describe("factory API", () => {
       workers: [],
       workstations: [],
     });
-    expect(fetchMock).toHaveBeenCalledWith("/factories/~default/factory/~current", {
+    expect(fetchMock).toHaveBeenCalledWith("/factory-sessions/~default/factory", {
       method: "GET",
     });
   });
@@ -156,7 +156,7 @@ describe("factory API", () => {
       workstations: [],
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/factories/session-2/factory/~current",
+      "/factory-sessions/session-2/factory",
       {
         method: "GET",
       },

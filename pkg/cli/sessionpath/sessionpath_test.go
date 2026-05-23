@@ -12,27 +12,39 @@ func TestScopedPath(t *testing.T) {
 		want      string
 	}{
 		{
-			name:   "default legacy path without explicit session",
+			name:   "default path is always explicitly scoped",
 			legacy: "/work",
-			want:   "/work",
+			want:   "/factory-sessions/~default/work",
 		},
 		{
-			name:      "default legacy path with explicit default session",
+			name:      "explicit default session stays scoped",
 			legacy:    "/work",
 			sessionID: DefaultFactorySessionID,
-			want:      "/work",
+			want:      "/factory-sessions/~default/work",
 		},
 		{
 			name:      "non default session scopes path",
 			legacy:    "/work",
 			sessionID: "session-beta",
-			want:      "/factories/session-beta/work",
+			want:      "/factory-sessions/session-beta/work",
 		},
 		{
 			name:      "session id is path escaped",
 			legacy:    "/work",
 			sessionID: "session/beta",
-			want:      "/factories/session%2Fbeta/work",
+			want:      "/factory-sessions/session%2Fbeta/work",
+		},
+		{
+			name:      "current factory path maps to canonical session resource",
+			legacy:    "/factory/~current",
+			sessionID: "session-beta",
+			want:      "/factory-sessions/session-beta/factory",
+		},
+		{
+			name:      "editable factory path keeps session root and editing suffix",
+			legacy:    "/factory/~current/editable-definition",
+			sessionID: "session-beta",
+			want:      "/factory-sessions/session-beta/factory/editable-definition",
 		},
 	}
 

@@ -24,7 +24,7 @@ describe("submitWork", () => {
       }),
     ).resolves.toEqual({ traceId: "trace-story" });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/factories/~default/work",
+      "/factory-sessions/~default/work",
       expect.objectContaining({
         body: JSON.stringify({
           name: "Driver review",
@@ -84,7 +84,7 @@ describe("submitWork", () => {
       }),
     ).resolves.toEqual({ traceId: "trace-story" });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/factories/~default/work",
+      "/factory-sessions/~default/work",
       expect.objectContaining({
         body: JSON.stringify({
           name: "Empty payload review",
@@ -118,7 +118,7 @@ describe("submitWork", () => {
       ),
     ).resolves.toEqual({ traceId: "trace-story" });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/factories/session-beta/work",
+      "/factory-sessions/session-beta/work",
       expect.objectContaining({
         method: "POST",
       }),

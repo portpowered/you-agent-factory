@@ -92,15 +92,15 @@ paths:
                 $ref: '#/components/schemas/ListWorkResponse'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/work:
+  /factory-sessions/{session_id}/work:
     post:
       tags:
         - Work
-      operationId: submitWorkByFactoryId
+      operationId: submitWorkBySessionId
       summary: Submit work for one session
       description: Submits one work item to the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
       requestBody:
         required: true
         content:
@@ -123,11 +123,11 @@ paths:
     get:
       tags:
         - Work
-      operationId: listWorkByFactoryId
+      operationId: listWorkBySessionId
       summary: List work for one session
       description: Lists current work tokens from the engine state snapshot owned by the explicitly selected live factory session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/MaxResults'
         - $ref: '#/components/parameters/NextToken'
         - $ref: '#/components/parameters/StateName'
@@ -175,15 +175,15 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/work-requests/{request_id}:
+  /factory-sessions/{session_id}/work-requests/{request_id}:
     put:
       tags:
         - Work
-      operationId: upsertWorkRequestByFactoryId
+      operationId: upsertWorkRequestBySessionId
       summary: Upsert work request for one session
       description: Submits or retries one canonical work request batch against the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
         - name: request_id
           in: path
           required: true
@@ -229,15 +229,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/work/{id}:
+  /factory-sessions/{session_id}/work/{id}:
     get:
       tags:
         - Work
-      operationId: getWorkByFactoryId
+      operationId: getWorkBySessionId
       summary: Get work token for one session
       description: Returns one token by token ID from the current marking owned by the explicitly selected live factory session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/WorkOrTokenID'
       responses:
         '200':
@@ -268,15 +268,15 @@ paths:
               x-event-schema: '#/components/schemas/FactoryEvent'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/events:
+  /factory-sessions/{session_id}/events:
     get:
       tags:
         - Runtime
-      operationId: getEventsByFactoryId
+      operationId: getEventsBySessionId
       summary: Stream factory events for one session
       description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
           description: Factory event stream for the targeted session.
@@ -412,15 +412,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/status:
+  /factory-sessions/{session_id}/status:
     get:
       tags:
         - Runtime
-      operationId: getStatusByFactoryId
+      operationId: getStatusBySessionId
       summary: Get runtime status for one session
       description: Returns the current factory lifecycle status, token category counts, and resource availability from the aggregate engine snapshot owned by the explicitly selected live factory session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
           description: Current runtime status summary for the targeted session.
@@ -604,15 +604,15 @@ paths:
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/factory/~current:
+  /factory-sessions/{session_id}/factory:
     get:
       tags:
         - Factory
-      operationId: getCurrentFactoryByFactoryId
+      operationId: getCurrentFactoryBySessionId
       summary: Get current factory for one session
       description: Returns the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
           description: Current active factory definition for the targeted session.
@@ -624,15 +624,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/factory/~current/editable-definition:
+  /factory-sessions/{session_id}/factory/editable-definition:
     get:
       tags:
         - Factory
-      operationId: getEditableCurrentFactoryDefinitionByFactoryId
+      operationId: getEditableCurrentFactoryDefinitionBySessionId
       summary: Get editable current factory definition for one session
       description: Returns the complete current factory definition for graph editing together with version metadata for the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
           description: Editable current factory definition and version metadata for the targeted session.
@@ -647,11 +647,11 @@ paths:
     put:
       tags:
         - Factory
-      operationId: saveEditableCurrentFactoryDefinitionByFactoryId
+      operationId: saveEditableCurrentFactoryDefinitionBySessionId
       summary: Save editable current factory definition for one session
       description: Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
       requestBody:
         required: true
         content:
@@ -776,8 +776,8 @@ paths:
           $ref: '#/components/responses/InternalError'
 components:
   parameters:
-    FactoryID:
-      name: factory_id
+    SessionID:
+      name: session_id
       in: path
       required: true
       description: Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly.

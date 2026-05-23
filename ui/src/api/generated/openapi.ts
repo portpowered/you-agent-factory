@@ -28,7 +28,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factories/{factory_id}/work": {
+    "/factory-sessions/{session_id}/work": {
         parameters: {
             query?: never;
             header?: never;
@@ -39,13 +39,13 @@ export interface paths {
          * List work for one session
          * @description Lists current work tokens from the engine state snapshot owned by the explicitly selected live factory session.
          */
-        get: operations["listWorkByFactoryId"];
+        get: operations["listWorkBySessionId"];
         put?: never;
         /**
          * Submit work for one session
          * @description Submits one work item to the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
          */
-        post: operations["submitWorkByFactoryId"];
+        post: operations["submitWorkBySessionId"];
         delete?: never;
         options?: never;
         head?: never;
@@ -72,7 +72,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factories/{factory_id}/work-requests/{request_id}": {
+    "/factory-sessions/{session_id}/work-requests/{request_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -84,7 +84,7 @@ export interface paths {
          * Upsert work request for one session
          * @description Submits or retries one canonical work request batch against the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
          */
-        put: operations["upsertWorkRequestByFactoryId"];
+        put: operations["upsertWorkRequestBySessionId"];
         post?: never;
         delete?: never;
         options?: never;
@@ -112,7 +112,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factories/{factory_id}/work/{id}": {
+    "/factory-sessions/{session_id}/work/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -123,7 +123,7 @@ export interface paths {
          * Get work token for one session
          * @description Returns one token by token ID from the current marking owned by the explicitly selected live factory session.
          */
-        get: operations["getWorkByFactoryId"];
+        get: operations["getWorkBySessionId"];
         put?: never;
         post?: never;
         delete?: never;
@@ -152,7 +152,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factories/{factory_id}/events": {
+    "/factory-sessions/{session_id}/events": {
         parameters: {
             query?: never;
             header?: never;
@@ -163,7 +163,7 @@ export interface paths {
          * Stream factory events for one session
          * @description Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
          */
-        get: operations["getEventsByFactoryId"];
+        get: operations["getEventsBySessionId"];
         put?: never;
         post?: never;
         delete?: never;
@@ -272,7 +272,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factories/{factory_id}/status": {
+    "/factory-sessions/{session_id}/status": {
         parameters: {
             query?: never;
             header?: never;
@@ -283,7 +283,7 @@ export interface paths {
          * Get runtime status for one session
          * @description Returns the current factory lifecycle status, token category counts, and resource availability from the aggregate engine snapshot owned by the explicitly selected live factory session.
          */
-        get: operations["getStatusByFactoryId"];
+        get: operations["getStatusBySessionId"];
         put?: never;
         post?: never;
         delete?: never;
@@ -396,7 +396,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factories/{factory_id}/factory/~current": {
+    "/factory-sessions/{session_id}/factory": {
         parameters: {
             query?: never;
             header?: never;
@@ -407,7 +407,7 @@ export interface paths {
          * Get current factory for one session
          * @description Returns the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
          */
-        get: operations["getCurrentFactoryByFactoryId"];
+        get: operations["getCurrentFactoryBySessionId"];
         put?: never;
         post?: never;
         delete?: never;
@@ -416,7 +416,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/factories/{factory_id}/factory/~current/editable-definition": {
+    "/factory-sessions/{session_id}/factory/editable-definition": {
         parameters: {
             query?: never;
             header?: never;
@@ -427,12 +427,12 @@ export interface paths {
          * Get editable current factory definition for one session
          * @description Returns the complete current factory definition for graph editing together with version metadata for the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
          */
-        get: operations["getEditableCurrentFactoryDefinitionByFactoryId"];
+        get: operations["getEditableCurrentFactoryDefinitionBySessionId"];
         /**
          * Save editable current factory definition for one session
          * @description Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
          */
-        put: operations["saveEditableCurrentFactoryDefinitionByFactoryId"];
+        put: operations["saveEditableCurrentFactoryDefinitionBySessionId"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2307,7 +2307,7 @@ export interface components {
     };
     parameters: {
         /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-        FactoryID: string;
+        SessionID: string;
         /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
         MaxResults: number;
         /** @description Optional base64-encoded token ID cursor. */
@@ -2385,7 +2385,7 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    listWorkByFactoryId: {
+    listWorkBySessionId: {
         parameters: {
             query?: {
                 /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
@@ -2402,7 +2402,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                factory_id: components["parameters"]["FactoryID"];
+                session_id: components["parameters"]["SessionID"];
             };
             cookie?: never;
         };
@@ -2421,13 +2421,13 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    submitWorkByFactoryId: {
+    submitWorkBySessionId: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                factory_id: components["parameters"]["FactoryID"];
+                session_id: components["parameters"]["SessionID"];
             };
             cookie?: never;
         };
@@ -2480,13 +2480,13 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    upsertWorkRequestByFactoryId: {
+    upsertWorkRequestBySessionId: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                factory_id: components["parameters"]["FactoryID"];
+                session_id: components["parameters"]["SessionID"];
                 /** @description Stable request identifier used for idempotent submission. */
                 request_id: string;
             };
@@ -2537,13 +2537,13 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    getWorkByFactoryId: {
+    getWorkBySessionId: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                factory_id: components["parameters"]["FactoryID"];
+                session_id: components["parameters"]["SessionID"];
                 /** @description Work or token identifier, depending on route. */
                 id: components["parameters"]["WorkOrTokenID"];
             };
@@ -2585,13 +2585,13 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    getEventsByFactoryId: {
+    getEventsBySessionId: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                factory_id: components["parameters"]["FactoryID"];
+                session_id: components["parameters"]["SessionID"];
             };
             cookie?: never;
         };
@@ -2734,13 +2734,13 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    getStatusByFactoryId: {
+    getStatusBySessionId: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                factory_id: components["parameters"]["FactoryID"];
+                session_id: components["parameters"]["SessionID"];
             };
             cookie?: never;
         };
@@ -2908,13 +2908,13 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    getCurrentFactoryByFactoryId: {
+    getCurrentFactoryBySessionId: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                factory_id: components["parameters"]["FactoryID"];
+                session_id: components["parameters"]["SessionID"];
             };
             cookie?: never;
         };
@@ -2933,13 +2933,13 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    getEditableCurrentFactoryDefinitionByFactoryId: {
+    getEditableCurrentFactoryDefinitionBySessionId: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                factory_id: components["parameters"]["FactoryID"];
+                session_id: components["parameters"]["SessionID"];
             };
             cookie?: never;
         };
@@ -2958,13 +2958,13 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
-    saveEditableCurrentFactoryDefinitionByFactoryId: {
+    saveEditableCurrentFactoryDefinitionBySessionId: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                factory_id: components["parameters"]["FactoryID"];
+                session_id: components["parameters"]["SessionID"];
             };
             cookie?: never;
         };

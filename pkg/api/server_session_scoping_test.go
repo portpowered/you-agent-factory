@@ -87,7 +87,7 @@ func sessionScopedStateNet() *state.Net {
 func assertScopedSessionSubmit(t *testing.T, serverURL string, betaSession *testutil.MockFactory, defaultSession *testutil.MockFactory) {
 	t.Helper()
 
-	response := requireHTTPSuccess(t, http.MethodPost, serverURL+"/factories/session-beta/work", bytes.NewBufferString(`{"name":"scoped-submit","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"scoped"}}`), "application/json", http.StatusCreated)
+	response := requireHTTPSuccess(t, http.MethodPost, serverURL+"/factory-sessions/session-beta/work", bytes.NewBufferString(`{"name":"scoped-submit","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"scoped"}}`), "application/json", http.StatusCreated)
 	defer response.Body.Close()
 
 	if len(betaSession.WorkRequests) != 1 {
@@ -101,7 +101,7 @@ func assertScopedSessionSubmit(t *testing.T, serverURL string, betaSession *test
 func assertScopedSessionList(t *testing.T, serverURL string, betaSession *testutil.MockFactory, defaultSession *testutil.MockFactory) {
 	t.Helper()
 
-	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factories/session-beta/work", nil, "", http.StatusOK)
+	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factory-sessions/session-beta/work", nil, "", http.StatusOK)
 	defer response.Body.Close()
 
 	var listBody factoryapi.ListWorkResponse
@@ -122,21 +122,21 @@ func assertScopedSessionList(t *testing.T, serverURL string, betaSession *testut
 func assertScopedSessionWorkRead(t *testing.T, serverURL string) {
 	t.Helper()
 
-	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factories/session-beta/work/tok-beta-1", nil, "", http.StatusOK)
+	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factory-sessions/session-beta/work/tok-beta-1", nil, "", http.StatusOK)
 	defer response.Body.Close()
 }
 
 func assertScopedSessionStatus(t *testing.T, serverURL string) {
 	t.Helper()
 
-	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factories/session-beta/status", nil, "", http.StatusOK)
+	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factory-sessions/session-beta/status", nil, "", http.StatusOK)
 	defer response.Body.Close()
 }
 
 func assertScopedCurrentFactory(t *testing.T, serverURL string, wantName string) {
 	t.Helper()
 
-	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factories/session-beta/factory/~current", nil, "", http.StatusOK)
+	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factory-sessions/session-beta/factory", nil, "", http.StatusOK)
 	defer response.Body.Close()
 
 	var currentBody factoryapi.Factory
@@ -151,18 +151,18 @@ func assertScopedCurrentFactory(t *testing.T, serverURL string, wantName string)
 func assertScopedSessionEvents(t *testing.T, serverURL string, wantEventID string) {
 	t.Helper()
 
-	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/factories/session-beta/events", nil)
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/factory-sessions/session-beta/events", nil)
 	if err != nil {
 		t.Fatalf("new scoped /events request: %v", err)
 	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		t.Fatalf("GET /factories/session-beta/events: %v", err)
+		t.Fatalf("GET /factory-sessions/session-beta/events: %v", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("GET /factories/session-beta/events status = %d, want 200: %s", response.StatusCode, string(body))
+		t.Fatalf("GET /factory-sessions/session-beta/events status = %d, want 200: %s", response.StatusCode, string(body))
 	}
 
 	streamed := readSSEFactoryEvent(t, bufio.NewReader(response.Body))
@@ -218,7 +218,7 @@ func TestSessionScopedAPI_UnknownSessionReturnsNotFound(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/factories/missing-session/status", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/missing-session/status", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -344,7 +344,7 @@ func TestFactorySessionsAPI_CloseFactorySession_NotFound(t *testing.T) {
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
 }
 
-func TestGetEditableCurrentFactoryDefinitionByFactoryId_ReturnsSessionDefinitionAndVersion(t *testing.T) {
+func TestGetEditableCurrentFactoryDefinitionBySessionId_ReturnsSessionDefinitionAndVersion(t *testing.T) {
 	defaultVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 1).UTC(), Logical: 1}
 	sessionVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 2).UTC(), Logical: 2}
 	srv := newTestServer(&testutil.MockFactory{
@@ -360,7 +360,7 @@ func TestGetEditableCurrentFactoryDefinitionByFactoryId_ReturnsSessionDefinition
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/factories/session-2/factory/~current/editable-definition", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-2/factory/editable-definition", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -376,7 +376,7 @@ func TestGetEditableCurrentFactoryDefinitionByFactoryId_ReturnsSessionDefinition
 	}
 }
 
-func TestSaveEditableCurrentFactoryDefinitionByFactoryId_SubmitsToTargetedSessionOnly(t *testing.T) {
+func TestSaveEditableCurrentFactoryDefinitionBySessionId_SubmitsToTargetedSessionOnly(t *testing.T) {
 	defaultVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 1).UTC(), Logical: 1}
 	sessionVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 2).UTC(), Logical: 2}
 	defaultFactory := &testutil.MockFactory{
@@ -395,7 +395,7 @@ func TestSaveEditableCurrentFactoryDefinitionByFactoryId_SubmitsToTargetedSessio
 	})
 
 	body := `{"baseVersion":{"physical":"1970-01-01T00:00:00.000000002Z","logical":2},"factoryDefinition":{"name":"beta","workTypes":[],"workstations":[],"workers":[]}}`
-	req := httptest.NewRequest(http.MethodPut, "/factories/session-2/factory/~current/editable-definition", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/session-2/factory/editable-definition", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -415,19 +415,19 @@ func TestSaveEditableCurrentFactoryDefinitionByFactoryId_SubmitsToTargetedSessio
 	}
 }
 
-func TestEditableCurrentFactoryDefinitionByFactoryId_UnknownSessionReturnsNotFound(t *testing.T) {
+func TestEditableCurrentFactoryDefinitionBySessionId_UnknownSessionReturnsNotFound(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
 			"~default": {},
 		},
 	})
 
-	getReq := httptest.NewRequest(http.MethodGet, "/factories/missing-session/factory/~current/editable-definition", nil)
+	getReq := httptest.NewRequest(http.MethodGet, "/factory-sessions/missing-session/factory/editable-definition", nil)
 	getRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(getRec, getReq)
 	assertJSONError(t, getRec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
 
-	putReq := httptest.NewRequest(http.MethodPut, "/factories/missing-session/factory/~current/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta"}}`))
+	putReq := httptest.NewRequest(http.MethodPut, "/factory-sessions/missing-session/factory/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta"}}`))
 	putReq.Header.Set("Content-Type", "application/json")
 	putRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(putRec, putReq)

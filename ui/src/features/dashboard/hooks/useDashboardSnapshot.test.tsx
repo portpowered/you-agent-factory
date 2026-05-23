@@ -292,7 +292,7 @@ describe("useDashboardSnapshot", () => {
     expect(result.current.snapshot?.tick_count).toBe(SEEDED_SNAPSHOT.tick_count);
     expect(replayHarness.getStreams()).toHaveLength(1);
     expect(replayHarness.getStreams()[0]?.url).toBe(
-      `/factories/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
 
     act(() => {
@@ -320,7 +320,7 @@ describe("useDashboardSnapshot", () => {
     });
 
     expect(replayHarness.getStreams()[0]?.url).toBe(
-      `/factories/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
 
     act(() => {
@@ -344,7 +344,7 @@ describe("useDashboardSnapshot", () => {
       expect(replayHarness.getStreams()).toHaveLength(2);
     });
     expect(replayHarness.getStreams()[1]?.url).toBe(
-      "/factories/session-beta/events",
+      "/factory-sessions/session-beta/events",
     );
     expect(useFactoryTimelineStore.getState().events).toEqual([]);
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);

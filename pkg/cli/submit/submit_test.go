@@ -68,7 +68,7 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		if r.Method != http.MethodPost || r.URL.Path != "/work" {
+		if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/~default/work" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -118,8 +118,8 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	if receivedReq.WorkTypeName != "code-change" {
 		t.Errorf("WorkTypeName = %q, want %q", receivedReq.WorkTypeName, "code-change")
 	}
-	if gotPath != "/work" {
-		t.Fatalf("path = %q, want /work", gotPath)
+	if gotPath != "/factory-sessions/~default/work" {
+		t.Fatalf("path = %q, want /factory-sessions/~default/work", gotPath)
 	}
 	if _, ok := rawReq["name"]; !ok {
 		t.Fatalf("request should include name, got keys %#v", rawReq)
@@ -178,8 +178,8 @@ func TestSubmit_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 
-	if gotPath != "/factories/session-beta/work" {
-		t.Fatalf("path = %q, want /factories/session-beta/work", gotPath)
+	if gotPath != "/factory-sessions/session-beta/work" {
+		t.Fatalf("path = %q, want /factory-sessions/session-beta/work", gotPath)
 	}
 }
 
