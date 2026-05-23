@@ -76,58 +76,103 @@ const editableDocument = {
 };
 
 describe("current activity graph editor controllers", () => {
-  it("commits keyboard anchor connections and clears the pending source", () => {
-    const updateDraft = vi.fn(
-      (updater: (draft: FactoryGraphDraft) => FactoryGraphDraft) =>
-        updater(createEmptyFactoryGraphDraft()),
-    );
-    const draftState = createDraftState({ updateDraft });
+  it.each([
+    {
+      edgeKind: "workstation-output",
+      sourceAnchorId: "workstation-output-source",
+      targetAnchorId: "workstation-output-target",
+      targetNodeId: "work-state:story:done",
+      targetStateName: "done",
+    },
+    {
+      edgeKind: "workstation-on-continue",
+      sourceAnchorId: "workstation-on-continue-source",
+      targetAnchorId: "workstation-on-continue-target",
+      targetNodeId: "work-state:story:queued",
+      targetStateName: "queued",
+    },
+    {
+      edgeKind: "workstation-on-failure",
+      sourceAnchorId: "workstation-on-failure-source",
+      targetAnchorId: "workstation-on-failure-target",
+      targetNodeId: "work-state:story:queued",
+      targetStateName: "queued",
+    },
+    {
+      edgeKind: "workstation-on-rejection",
+      sourceAnchorId: "workstation-on-rejection-source",
+      targetAnchorId: "workstation-on-rejection-target",
+      targetNodeId: "work-state:story:done",
+      targetStateName: "done",
+    },
+  ])(
+    "commits %s keyboard anchor connections and clears the pending source",
+    ({
+      edgeKind,
+      sourceAnchorId,
+      targetAnchorId,
+      targetNodeId,
+      targetStateName,
+    }) => {
+      const graph = createDraftState().graph;
+      const updateDraft = vi.fn(
+        (updater: (draft: FactoryGraphDraft) => FactoryGraphDraft) =>
+          updater(createEmptyFactoryGraphDraft()),
+      );
+      const draftState = createDraftState({
+        graph: {
+          ...graph,
+          edges: graph.edges.filter((edge) => edge.kind !== edgeKind),
+        },
+        updateDraft,
+      });
 
-    const { result } = renderHook(() =>
-      useFactoryGraphConnectionController({
-        activeTool: "connect",
-        canInteractWithEditor: true,
-        draftState,
-      }),
-    );
+      const { result } = renderHook(() =>
+        useFactoryGraphConnectionController({
+          activeTool: "connect",
+          canInteractWithEditor: true,
+          draftState,
+        }),
+      );
 
-    act(() => {
-      result.current.handleConnectionAnchorClick({
-        anchorId: "workstation-on-failure-source",
+      act(() => {
+        result.current.handleConnectionAnchorClick({
+          anchorId: sourceAnchorId,
+          nodeId: "workstation:review",
+        });
+      });
+
+      expect(result.current.pendingConnectionSource).toEqual({
+        anchorId: sourceAnchorId,
         nodeId: "workstation:review",
       });
-    });
 
-    expect(result.current.pendingConnectionSource).toEqual({
-      anchorId: "workstation-on-failure-source",
-      nodeId: "workstation:review",
-    });
-
-    act(() => {
-      result.current.handleConnectionAnchorClick({
-        anchorId: "workstation-on-failure-target",
-        nodeId: "work-state:story:queued",
+      act(() => {
+        result.current.handleConnectionAnchorClick({
+          anchorId: targetAnchorId,
+          nodeId: targetNodeId,
+        });
       });
-    });
 
-    expect(updateDraft).toHaveBeenCalledTimes(1);
-    expect(updateDraft.mock.results[0]?.value.edgeChanges.additions).toEqual([
-      {
-        kind: "workstation-on-failure",
-        source: {
-          kind: "workstation",
-          name: "review",
+      expect(updateDraft).toHaveBeenCalledTimes(1);
+      expect(updateDraft.mock.results[0]?.value.edgeChanges.additions).toEqual([
+        {
+          kind: edgeKind,
+          source: {
+            kind: "workstation",
+            name: "review",
+          },
+          target: {
+            kind: "work-state",
+            stateName: targetStateName,
+            workTypeName: "story",
+          },
         },
-        target: {
-          kind: "work-state",
-          stateName: "queued",
-          workTypeName: "story",
-        },
-      },
-    ]);
-    expect(result.current.connectionNotice).toBeNull();
-    expect(result.current.pendingConnectionSource).toBeNull();
-  });
+      ]);
+      expect(result.current.connectionNotice).toBeNull();
+      expect(result.current.pendingConnectionSource).toBeNull();
+    },
+  );
 
   it("shows actionable connection notices for invalid connection paths", () => {
     const updateDraft = vi.fn();

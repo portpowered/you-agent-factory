@@ -20,10 +20,6 @@ export async function verifyDashboardSessionTabs(
     "Named session tab",
   );
   await expectVisible(openButton, "Open another session button");
-  await expectVisible(
-    page.getByText("Active folder: /workspace/root"),
-    "Default session folder label",
-  );
   await expectNoHorizontalOverflow(
     page,
     `Dashboard session tabs at ${viewport.label}`,

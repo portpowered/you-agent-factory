@@ -82,3 +82,13 @@ Date: `2026-05-22`
 - `cd ui && bun run build-storybook` passed after the `you-agent-factory` Storybook slug updates.
 - `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6013 bun x vitest run --config vitest.storybook.config.ts --project=storybook src/features/header/components/dashboard-header.stories.tsx src/App.stories.tsx src/features/current-selection/provider-session-detail-panel.stories.tsx` passed in a browser-backed runner, covering the renamed `you-agent-factory/Dashboard/Dashboard Header`, `you-agent-factory/Workflow Dashboard`, and `you-agent-factory/Current Selection/Provider Session Detail Panel` stories, including the accessible `you-agent-factory` header branding and the provider-session success panel.
 - `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6014 bun run storybook:responsive-check` passed against built Storybook `iframe.html` stories for the renamed `you-agent-factory` export/import dialogs, dashboard header, session tabs, workflow dashboard verification stories, and `TimestampPrefixedSessionSuccess`, confirming visible controls, keyboard timeline interactions, and no horizontal overflow at mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) widths.
+
+Date: `2026-05-23`
+
+- `cd ui && bun run tsc` passed.
+- `cd ui && bun run lint` passed after splitting the new graph-parity responsive assertions into `ui/scripts/verify-graph-parity-storybook-responsive.mjs`.
+- `cd ui && bun x vitest run src/features/factory-graph-editor/components/factory-graph-editor-flow.test.tsx src/features/workflow-activity/react-flow-current-activity-card-editor-controllers.test.tsx src/features/workflow-activity/components/react-flow-current-activity-card.coverage.test.tsx src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx` passed, covering all four saved workstation outcome anchors plus draft connection creation through the shared editor controller path.
+- `cd ui && bun x vitest run --config vitest.storybook.config.ts --project=storybook src/features/factory-graph-editor/components/factory-graph-editor-flow.stories.tsx src/features/workflow-activity/components/react-flow-current-activity-card.stories.tsx` passed in a browser-backed runner, covering the focused editor parity stories and the observer current-activity card stories together.
+- `cd ui && bun run build` passed.
+- `cd ui && bun run build-storybook` passed.
+- `cd ui && bun run storybook:responsive-check` passed after narrowing two brittle pre-existing responsive assertions in the shared dashboard session-tab/header verifiers and adding the new observer/editor graph parity stories, confirming visible graph controls and no horizontal overflow at mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) widths.

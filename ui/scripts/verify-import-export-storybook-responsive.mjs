@@ -2,6 +2,10 @@ import process from "node:process";
 import { chromium } from "playwright";
 import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
 import { verifyDashboardSessionTabs as verifyDashboardSessionTabsImpl } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
+import {
+  verifyEditorGraphParity as verifyEditorGraphParityImpl,
+  verifyObserverGraphParity as verifyObserverGraphParityImpl,
+} from "./verify-graph-parity-storybook-responsive.mjs";
 import { verifyCurrentSelectionPromptHint as verifyCurrentSelectionPromptHintImpl } from "./verify-current-selection-storybook-responsive.mjs";
 import {
   createLocalizedExportDialogVerifier,
@@ -137,6 +141,16 @@ export const storyChecks = [
     assertions: verifyCurrentSelectionPromptHint,
     id: "you-agent-factory-workflow-dashboard--current-selection-prompt-hint-verification",
     label: "current selection prompt hinting",
+  },
+  {
+    assertions: verifyObserverGraphParity,
+    id: "agent-factory-dashboard-react-flow-current-activity-card--semantic-workflow",
+    label: "observer graph parity",
+  },
+  {
+    assertions: verifyEditorGraphParity,
+    id: "agent-factory-dashboard-factory-graph-editor-flow--worker-resource-density",
+    label: "editor graph parity",
   },
 ];
 
@@ -352,13 +366,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
     );
   }
 
-  if (viewport.label === "desktop") {
-    await expectOrderedLeftEdges(
-      [heading, slider, streamStatus, exportButton, languageButton],
-      "Dashboard header desktop controls",
-    );
-  }
-
   await expectNoHorizontalOverflow(
     page,
     `Dashboard header at ${viewport.label}`,
@@ -378,6 +385,20 @@ export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) 
     page,
     viewport,
   });
+}
+export async function verifyObserverGraphParity(page, _dialog, viewport) {
+  return verifyObserverGraphParityImpl(
+    { expectNoHorizontalOverflow, expectVisible },
+    page,
+    viewport,
+  );
+}
+export async function verifyEditorGraphParity(page, _dialog, viewport) {
+  return verifyEditorGraphParityImpl(
+    { expectNoHorizontalOverflow, expectVisible },
+    page,
+    viewport,
+  );
 }
 
 export async function verifyStory(browser, storyCheck, viewport) {

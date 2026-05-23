@@ -39,6 +39,30 @@ const EDITOR_EDGE_TOPOLOGY: FactoryGraphTopology = {
       },
       targetId: "work-state:story:queued",
     },
+    {
+      id: "workstation-on-continue:review->story:retry",
+      kind: "workstation-on-continue",
+      source: { kind: "workstation", name: "review" },
+      sourceId: "workstation:review",
+      target: {
+        kind: "work-state",
+        stateName: "retry",
+        workTypeName: "story",
+      },
+      targetId: "work-state:story:retry",
+    },
+    {
+      id: "workstation-on-rejection:review->story:rejected",
+      kind: "workstation-on-rejection",
+      source: { kind: "workstation", name: "review" },
+      sourceId: "workstation:review",
+      target: {
+        kind: "work-state",
+        stateName: "rejected",
+        workTypeName: "story",
+      },
+      targetId: "work-state:story:rejected",
+    },
   ],
   nodes: [
     {
@@ -66,6 +90,26 @@ const EDITOR_EDGE_TOPOLOGY: FactoryGraphTopology = {
       },
       kind: "work-state",
       label: "story:queued",
+    },
+    {
+      id: "work-state:story:retry",
+      key: {
+        kind: "work-state",
+        stateName: "retry",
+        workTypeName: "story",
+      },
+      kind: "work-state",
+      label: "story:retry",
+    },
+    {
+      id: "work-state:story:rejected",
+      key: {
+        kind: "work-state",
+        stateName: "rejected",
+        workTypeName: "story",
+      },
+      kind: "work-state",
+      label: "story:rejected",
     },
   ],
 };
@@ -261,6 +305,16 @@ describe("factory graph editor edge labels", () => {
           id: "workstation-on-failure:review->story:queued",
           sourceHandle: "workstation-on-failure-source",
           targetHandle: "workstation-on-failure-target",
+        }),
+        expect.objectContaining({
+          id: "workstation-on-continue:review->story:retry",
+          sourceHandle: "workstation-on-continue-source",
+          targetHandle: "workstation-on-continue-target",
+        }),
+        expect.objectContaining({
+          id: "workstation-on-rejection:review->story:rejected",
+          sourceHandle: "workstation-on-rejection-source",
+          targetHandle: "workstation-on-rejection-target",
         }),
       ]),
     );
