@@ -47,15 +47,41 @@ const EDITOR_EDGE_TOPOLOGY: FactoryGraphTopology = {
   ],
 };
 
-function renderEditorFlow(canEditConnections = false) {
+const EDITOR_NODE_TOPOLOGY: FactoryGraphTopology = {
+  edges: [],
+  nodes: [
+    {
+      id: "worker:writer",
+      key: { kind: "worker", name: "writer" },
+      kind: "worker",
+      label: "writer",
+    },
+    {
+      id: "workstation:review",
+      key: { kind: "workstation", name: "review" },
+      kind: "workstation",
+      label: "review",
+    },
+  ],
+};
+
+function renderEditorFlow(
+  canEditConnections = false,
+  topology: FactoryGraphTopology = EDITOR_EDGE_TOPOLOGY,
+  options?: {
+    pendingAdditionNodeIds?: ReadonlySet<string>;
+    workerStatusByName?: ReadonlyMap<string, "active" | "errored" | "idle" | "unavailable">;
+  },
+) {
   const flow = buildFactoryGraphEditorFlowModel({
     canEditConnections,
     pendingAdditionEdgeIds: new Set<string>(),
-    pendingAdditionNodeIds: new Set<string>(),
+    pendingAdditionNodeIds: options?.pendingAdditionNodeIds ?? new Set<string>(),
     pendingConnectionSource: null,
     pendingRemovalEdgeIds: new Set<string>(),
     pendingRemovalNodeIds: new Set<string>(),
-    topology: EDITOR_EDGE_TOPOLOGY,
+    topology,
+    workerStatusByName: options?.workerStatusByName,
   });
 
   render(
@@ -86,6 +112,33 @@ describe("factory graph editor edge labels", () => {
     cleanup();
     restoreBrowserTestShims?.();
     restoreBrowserTestShims = null;
+  });
+
+  it("reuses observer-style badges and title treatment for editor nodes", async () => {
+    renderEditorFlow(false, EDITOR_NODE_TOPOLOGY, {
+      pendingAdditionNodeIds: new Set(["workstation:review"]),
+      workerStatusByName: new Map([["writer", "active"]]),
+    });
+
+    const reviewNode = (await screen.findByTitle("review")).closest("article");
+    const writerNode = (await screen.findByTitle("writer")).closest("article");
+
+    expect(reviewNode).not.toBeNull();
+    expect(writerNode).not.toBeNull();
+    expect(
+      reviewNode.querySelector("[data-factory-entity-semantic-icon] [data-graph-semantic-icon='workstation']"),
+    ).not.toBeNull();
+    expect(
+      reviewNode.querySelector("[data-factory-entity-title]")?.textContent,
+    ).toContain("review");
+    expect(reviewNode.textContent).toContain("Workstation");
+    expect(reviewNode.textContent).toContain("Pending");
+
+    expect(
+      writerNode.querySelector("[data-factory-entity-semantic-icon] [data-graph-semantic-icon='active-work']"),
+    ).not.toBeNull();
+    expect(writerNode.textContent).toContain("Worker");
+    expect(writerNode.textContent).toContain("Active");
   });
 
   it("keeps inline labels hidden by default while preserving accessible edge names", async () => {

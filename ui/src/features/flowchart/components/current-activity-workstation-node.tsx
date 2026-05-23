@@ -11,6 +11,10 @@ import {
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+import {
+  ActivityGraphNodeBadge,
+  activityGraphNodeTitleClassName,
+} from "./current-activity-node-chrome";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
 import { workstationIconMetadata } from "../workstation-icon-metadata";
@@ -213,17 +217,16 @@ function ActiveWorkstationNodeContent({
           {workstationTitle}
         </span>
         {data.active ? (
-          <span
-            className="inline-flex min-h-5 shrink-0 items-center justify-center rounded-full bg-af-success/15 px-1.5 py-0.5 text-af-success-ink"
-            data-workstation-active-icon
-            title="Active"
+          <ActivityGraphNodeBadge
+            className="min-h-5 shrink-0 justify-center px-1.5"
+            tone="success"
           >
             <GraphSemanticIcon
               className="h-3.5 w-3.5 text-af-success-ink"
               kind="active-work"
               label="Active"
             />
-          </span>
+          </ActivityGraphNodeBadge>
         ) : null}
       </button>
 
@@ -334,7 +337,7 @@ function workstationTitleClassName(label: string): string {
         : "text-[1rem]";
 
   return cn(
-    "block min-w-0 basis-0 flex-1 truncate whitespace-nowrap font-bold leading-tight",
+    activityGraphNodeTitleClassName("basis-0 flex-1"),
     textSizeClassName,
   );
 }

@@ -7,9 +7,14 @@ import {
 
 import { cn } from "../../../lib/cn";
 import {
+  ActivityGraphNodeBadge,
+  activityGraphNodeTitleClassName,
+} from "../../flowchart/current-activity-node-chrome";
+import {
   ActivityGraphNodeShell,
   type ActivityGraphNodeHandle,
 } from "../../flowchart/current-activity-node-shell";
+import { GraphSemanticIcon, type GraphSemanticIconKind } from "../../flowchart/components/graph-semantic-icon";
 import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "./factory-graph-editor-edge";
 import type {
   FactoryGraphNodeKind,
@@ -50,17 +55,11 @@ const COLUMN_BY_KIND: Record<FactoryGraphNodeKind, number> = {
   "work-state": 4,
 };
 const KIND_CLASS: Record<FactoryGraphNodeKind, string> = {
-  resource: "border-af-success/24 bg-af-success/6",
-  worker: "border-af-info/24 bg-af-info/6",
-  workstation: "border-af-accent/28 bg-af-accent/6",
-  "work-type": "border-af-overlay/16 bg-af-overlay/4",
-  "work-state": "border-af-overlay/18 bg-af-surface/92",
-};
-const WORKER_STATUS_CLASS: Record<FactoryGraphWorkerRuntimeStatus, string> = {
-  active: "border-af-success/24 bg-af-success/10 text-af-success-ink",
-  errored: "border-af-danger/24 bg-af-danger/10 text-af-danger-ink",
-  idle: "border-af-overlay/14 bg-af-overlay/6 text-af-ink/68",
-  unavailable: "border-af-warning/24 bg-af-warning/10 text-af-warning-ink",
+  resource: "border-af-overlay/22 bg-af-canvas",
+  worker: "border-af-info/24 bg-af-surface/88",
+  workstation: "border-2 border-af-info/28 bg-af-surface/88",
+  "work-type": "border-af-overlay/18 bg-af-overlay/4",
+  "work-state": "border-af-overlay/22 bg-af-canvas",
 };
 const EDGE_COLOR_BY_KIND = {
   "worker-assignment": "var(--color-af-info)",
@@ -254,7 +253,7 @@ function FactoryGraphEditorNodeView({
   return (
     <ActivityGraphNodeShell
       className={cn(
-        "min-w-0 w-full justify-start border text-left shadow-none",
+        "min-w-0 w-full justify-start overflow-hidden text-left shadow-none",
         KIND_CLASS[data.kind],
         data.draftStatus === "addition" && "ring-2 ring-af-warning/34",
         data.draftStatus === "removal" &&
@@ -265,40 +264,71 @@ function FactoryGraphEditorNodeView({
       nodeType={data.kind === "workstation" ? "workstation" : "resource"}
       outgoingHandleCount={data.outgoingHandleCount}
     >
-      <div className="grid h-full min-w-0 content-start gap-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="rounded-full border border-af-overlay/14 bg-af-overlay/8 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-af-ink/64">
-            {data.kindLabel}
-          </span>
-          {data.draftStatus === "addition" ? (
-            <span className="rounded-full border border-af-warning/24 bg-af-warning/10 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-af-warning-ink">
-              {data.pendingLabel}
-            </span>
-          ) : null}
-          {data.draftStatus === "removal" ? (
-            <span className="rounded-full border border-af-danger/24 bg-af-danger/10 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-af-danger-ink">
-              {data.removingLabel}
-            </span>
-          ) : null}
-          {data.kind === "worker" && data.workerStatus ? (
+      <div className="grid h-full min-w-0 content-start gap-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2 overflow-hidden">
             <span
-              className={cn(
-                "rounded-full border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]",
-                WORKER_STATUS_CLASS[data.workerStatus],
-              )}
+              className="flex min-h-5 shrink-0 items-center"
+              data-factory-entity-semantic-icon
+              title={data.kindLabel}
+            >
+              <GraphSemanticIcon
+                className={cn(
+                  "h-4 w-4",
+                  semanticIconClassName(data.kind),
+                )}
+                kind={semanticIconKind(data.kind)}
+                label={data.kindLabel}
+              />
+            </span>
+            <ActivityGraphNodeBadge weight="label">
+              {data.kindLabel}
+            </ActivityGraphNodeBadge>
+          </div>
+          {data.kind === "worker" && data.workerStatus ? (
+            <ActivityGraphNodeBadge
+              className="shrink-0"
+              tone={workerStatusTone(data.workerStatus)}
+              weight="label"
             >
               {data.workerStatusLabel}
-            </span>
+            </ActivityGraphNodeBadge>
+          ) : null}
+          {data.draftStatus === "addition" ? (
+            <ActivityGraphNodeBadge
+              className="shrink-0"
+              tone="warning"
+              weight="label"
+            >
+              {data.pendingLabel}
+            </ActivityGraphNodeBadge>
+          ) : null}
+          {data.draftStatus === "removal" ? (
+            <ActivityGraphNodeBadge
+              className="shrink-0"
+              tone="danger"
+              weight="label"
+            >
+              {data.removingLabel}
+            </ActivityGraphNodeBadge>
           ) : null}
         </div>
         <p
-          className="m-0 min-w-0 truncate font-mono text-sm font-bold leading-6 text-af-ink"
+          className={cn(
+            "m-0",
+            activityGraphNodeTitleClassName(
+              data.kind === "workstation"
+                ? "font-mono text-[1rem]"
+                : "font-mono text-[0.88rem]",
+            ),
+          )}
+          data-factory-entity-title
           title={data.label}
         >
           {data.label}
         </p>
         {data.canEditConnections ? (
-          <p className="m-0 text-[0.65rem] leading-5 text-af-ink/60">
+          <p className="m-0 text-[0.68rem] leading-5 text-af-ink/60">
             {data.connectionHint}
           </p>
         ) : null}
@@ -392,4 +422,49 @@ function findNode(topology: FactoryGraphTopology, nodeId: string) {
     throw new Error(`Expected graph node "${nodeId}" to exist in editor topology.`);
   }
   return node;
+}
+
+function semanticIconKind(kind: FactoryGraphNodeKind): GraphSemanticIconKind {
+  switch (kind) {
+    case "resource":
+      return "resource";
+    case "worker":
+      return "active-work";
+    case "workstation":
+      return "workstation";
+    case "work-type":
+      return "constraint";
+    case "work-state":
+      return "queue";
+  }
+}
+
+function semanticIconClassName(kind: FactoryGraphNodeKind) {
+  switch (kind) {
+    case "resource":
+      return "text-af-success-ink/76";
+    case "worker":
+      return "text-af-info/78";
+    case "workstation":
+      return "text-af-ink/62";
+    case "work-type":
+      return "text-af-info/74";
+    case "work-state":
+      return "text-af-ink/58";
+  }
+}
+
+function workerStatusTone(
+  status: FactoryGraphWorkerRuntimeStatus,
+): "danger" | "neutral" | "success" | "warning" {
+  switch (status) {
+    case "active":
+      return "success";
+    case "errored":
+      return "danger";
+    case "idle":
+      return "neutral";
+    case "unavailable":
+      return "warning";
+  }
 }
