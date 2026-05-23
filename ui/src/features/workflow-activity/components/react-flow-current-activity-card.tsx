@@ -15,29 +15,29 @@ import type { FactoryValue } from "../../../api/named-factory";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
-import { FactoryGraphEditorDraftActions } from "../../factory-graph-editor/factory-graph-editor-draft-actions";
-import type { CurrentActivityNode } from "../../flowchart/current-activity-nodes";
-import { buildGraphLayout, type GraphLayout } from "../../flowchart/layout";
+import { FactoryGraphEditorDraftActions } from "../../factory-graph-editor/components/factory-graph-editor-draft-actions";
+import type { CurrentActivityNode } from "../../flowchart/public";
+import { buildGraphLayout, type GraphLayout } from "../../flowchart/lib/layout";
 import type {
   FactoryPngImportValue,
   ReadFactoryImportFile,
-} from "../../import";
+} from "../../import/public";
 import {
   type CurrentActivityImportController,
   useCurrentActivityImportController,
-} from "../current-activity-import-controller";
+} from "../hooks/current-activity-import-controller";
 import {
   groupActiveExecutionsByWorkstationNodeID,
   useActiveExecutions,
-} from "../react-flow-current-activity-card-active-executions";
-import { useCurrentActivityGraphEditor } from "../react-flow-current-activity-card-editor";
+} from "../hooks/react-flow-current-activity-card-active-executions";
+import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
-import { useFactoryGraphEditorViewModel } from "../react-flow-current-activity-card-editor-graph";
+import { useFactoryGraphEditorViewModel } from "../hooks/react-flow-current-activity-card-editor-graph";
 import {
   buildGraphEdges,
   initialFocusNodes,
-} from "../react-flow-current-activity-card-edges";
+} from "../lib/react-flow-current-activity-card-edges";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 import {
   buildActiveGraphHighlights,
@@ -47,18 +47,18 @@ import {
   buildVisibleGraphEdges,
   EMPTY_GRAPH_LAYOUT,
   EMPTY_NODE_POSITIONS,
-} from "../react-flow-current-activity-card-graph";
+} from "../lib/react-flow-current-activity-card-graph";
 import {
   currentActivityGraphKey,
   currentActivityTopologyKey,
-} from "../react-flow-current-activity-card-keys";
+} from "../lib/react-flow-current-activity-card-keys";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 
 export {
   currentActivityGraphKey,
   currentActivityTopologyKey,
-} from "../react-flow-current-activity-card-keys";
+} from "../lib/react-flow-current-activity-card-keys";
 
 const GRAPH_LAYOUT_CACHE = new Map<string, GraphLayout>();
 const GRAPH_LAYOUT_PROMISE_CACHE = new Map<string, Promise<GraphLayout>>();

@@ -5,7 +5,7 @@ import { ProviderSessionAttempts } from "./provider-session-attempts";
 import {
   type LoadableProviderSessionRef,
   providerSessionSelectionKey,
-} from "../provider-session-details";
+} from "../../provider-session-detail/lib/provider-session-ref";
 import { getWorkstationDetailMessages } from "../messages";
 
 describe("ProviderSessionAttempts", () => {

@@ -18,9 +18,9 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
-import { downloadBlobAsFile } from "../browser-download";
-import { buildFactoryExportFilename } from "../build-factory-export-filename";
-import { writeFactoryExportPng } from "../factory-png-export";
+import { downloadBlobAsFile } from "../lib/browser-download";
+import { buildFactoryExportFilename } from "../lib/build-factory-export-filename";
+import { writeFactoryExportPng } from "../lib/factory-png-export";
 import { getExportDialogMessages } from "../messages/export-dialog";
 import type { CurrentFactoryExportFailure } from "../hooks/use-current-factory-export";
 

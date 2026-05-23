@@ -11,17 +11,17 @@ import {
   buildDashboardWorkstationRequestFixture,
 } from "../../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { useCurrentFactoryDocument } from "../../current-factory-definition";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/public";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
-import type { DashboardSelection, TerminalWorkDetail } from "../types";
+import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
 import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
 
-vi.mock("../../current-factory-definition", async () => {
-  const actual = await vi.importActual("../../current-factory-definition");
+vi.mock("../../current-factory-definition/public", async () => {
+  const actual = await vi.importActual("../../current-factory-definition/public");
 
   return {
     ...actual,

@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
-import type { FactoryPngImportValue } from "../factory-png-import";
+import type { FactoryPngImportValue } from "../lib/factory-png-import";
 import {
   getImportPreviewDialogMessages,
   IMPORT_PREVIEW_FACTORY_NAME_TOKEN,

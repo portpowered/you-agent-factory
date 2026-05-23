@@ -1,11 +1,11 @@
 import { useId, useState } from "react";
 import { cn } from "../../../lib/cn";
-import type { GraphSemanticIconKind } from "../../flowchart/graph-semantic-icon";
-import { GraphSemanticIcon } from "../../flowchart/graph-semantic-icon";
+import type { GraphSemanticIconKind } from "../../flowchart/public";
+import { GraphSemanticIcon } from "../../flowchart/public";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
-} from "../../flowchart/workstation-icon-metadata";
+} from "../../flowchart/public";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 
 export interface DashboardFlowAxisLegendEdgeItem {

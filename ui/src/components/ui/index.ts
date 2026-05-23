@@ -1,4 +1,4 @@
-export * from "../../features/bento";
+export * from "../../features/bento/public";
 export * from "./button";
 export * from "./calendar";
 export * from "./chart";

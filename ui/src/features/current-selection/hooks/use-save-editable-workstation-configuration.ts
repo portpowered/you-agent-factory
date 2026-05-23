@@ -6,11 +6,11 @@ import type {
 } from "../../../api/current-factory-definition";
 import {
   useSaveCurrentFactory,
-} from "../../current-factory-definition";
+} from "../../current-factory-definition/public";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationSaveState,
-} from "../detail-card-types";
+} from "../components/detail-card-types";
 import { getWorkstationDetailMessages } from "../messages";
 
 interface UseSaveEditableWorkstationConfigurationOptions {

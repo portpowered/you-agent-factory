@@ -13,7 +13,7 @@ import { cn } from "../../../lib/cn";
 import type {
   EditableWorkstationPromptDiagnostic,
   EditableWorkstationPromptHelpState,
-} from "../detail-card-types";
+} from "./detail-card-types";
 import {
   buildWorkstationPromptMarkers,
   isInsideTemplate,

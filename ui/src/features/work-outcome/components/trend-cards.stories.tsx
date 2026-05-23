@@ -1,7 +1,7 @@
 import { expect, within } from "storybook/test";
 
 import "../../../styles.css";
-import { getDashboardChartSemanticStyle } from "../chart-contract";
+import { getDashboardChartSemanticStyle } from "../lib/chart-contract";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -9,7 +9,7 @@ import {
   DASHBOARD_WIDGET_SUBTITLE_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { FailureTrendCard, ReworkTrendCard, TimingTrendCard } from "./trend-cards";
-import type { FailureTrendModel, ReworkTrendModel, TimingTrendModel } from "../trends";
+import type { FailureTrendModel, ReworkTrendModel, TimingTrendModel } from "../lib/trends";
 
 const failureTrend = {
   currentFailed: 3,

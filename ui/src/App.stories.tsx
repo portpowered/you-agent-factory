@@ -7,7 +7,7 @@ import {
   twentyNodeDashboardSnapshot,
 } from "./components/dashboard/test-fixtures";
 import { formatTimeOfDay } from "./components/ui/formatters";
-import { DashboardScreen } from "./features/dashboard";
+import { DashboardScreen } from "./features/dashboard/public";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
 import {
   activeStoryTrace,

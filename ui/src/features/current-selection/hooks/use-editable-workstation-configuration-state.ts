@@ -1,36 +1,36 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
-import { useCurrentFactoryDocument } from "../../current-factory-definition";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/public";
 import {
   applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
-} from "../../current-factory-definition/workstation-editable-values";
+} from "../../current-factory-definition/public";
 import {
   workstationBehaviorRequiresPrompt,
   workerSupportsPollerBehavior,
   type EditableWorkstationBehavior,
-} from "../../current-factory-definition/workstation-behavior";
+} from "../../current-factory-definition/public";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
   EditableWorkstationValidationErrors,
   EditableWorkstationWorkerOptionsState,
-} from "../detail-card-types";
+} from "../components/detail-card-types";
 import {
   resolvePromptHelpState,
   resolvePromptValidationState,
-} from "../editable-workstation-prompt-state";
-import { resolveEditableWorkstationOverwriteFields } from "../editable-workstation-overwrite-fields";
+} from "../editing/editable-workstation-prompt-state";
+import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
 } from "../messages";
-import type { RunnerID } from "../runner-metadata";
-import type { DashboardSelection } from "../types";
+import type { RunnerID } from "../editing/runner-metadata";
+import type { DashboardSelection } from "../state/selection-types";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 

@@ -29,7 +29,7 @@ import {
   getCachedTraceGraphLayout,
   layoutTraceGraphWithElk,
   traceGraphLayoutKey,
-} from "../trace-elk-layout";
+} from "../lib/trace-elk-layout";
 
 // tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =

@@ -1,14 +1,14 @@
 import { useCallback, useState } from "react";
 
-import type { useSaveCurrentFactory } from "../../current-factory-definition";
+import type { useSaveCurrentFactory } from "../../current-factory-definition/public";
 import {
   applyFactoryGraphEntityRemoval,
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
   type useFactoryGraphDraftState,
-} from "../../factory-graph-editor/factory-graph-draft";
-import { applyFactoryGraphEdgeRemoval } from "../../factory-graph-editor/factory-graph-editor-connections";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/factory-graph-editor-controls";
+} from "../../factory-graph-editor/public";
+import { applyFactoryGraphEdgeRemoval } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 
 export function useFactoryGraphRemovalController({
   activeTool,

@@ -2,9 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import * as currentFactoryFeature from "../../current-factory-definition";
+import * as currentFactoryFeature from "../../current-factory-definition/public";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import type { EditableWorkstationConfigurationState } from "../detail-card-types";
+import type { EditableWorkstationConfigurationState } from "../components/detail-card-types";
 import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 
 describe("useSaveEditableWorkstationConfiguration", () => {

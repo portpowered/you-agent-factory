@@ -10,7 +10,7 @@ import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard
 import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
-} from "../../current-factory-definition";
+} from "../../current-factory-definition/public";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
@@ -18,8 +18,8 @@ import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurre
 
 const saveCurrentFactoryMutation = vi.fn();
 
-vi.mock("../../current-factory-definition", async () => {
-  const actual = await vi.importActual("../../current-factory-definition");
+vi.mock("../../current-factory-definition/public", async () => {
+  const actual = await vi.importActual("../../current-factory-definition/public");
 
   return {
     ...actual,

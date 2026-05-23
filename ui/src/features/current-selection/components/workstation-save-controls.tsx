@@ -3,8 +3,8 @@ import { Button } from "../../../components/ui";
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
-} from "../detail-card-types";
-import { formatEditableOverwriteFieldLabels } from "../editable-workstation-overwrite-fields";
+} from "./detail-card-types";
+import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import { getWorkstationDetailMessages } from "../messages";
 
 export function EditableWorkstationSaveHeaderAction({

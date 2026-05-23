@@ -6,8 +6,11 @@ import {
   NamedFactoryAPIError,
   type FactoryValue,
 } from "../../../api/named-factory";
-import { writeFactoryExportPng } from "../../export/factory-png-export";
-import { PORT_OS_FACTORY_PNG_SCHEMA_VERSION, readFactoryImportPng } from "../factory-png-import";
+import { writeFactoryExportPng } from "../../export/lib/factory-png-export";
+import {
+  PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+  readFactoryImportPng,
+} from "../lib/factory-png-import";
 import { useFactoryImportActivation } from "./use-factory-import-activation";
 
 const ONE_PIXEL_PNG_BASE64 =

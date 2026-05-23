@@ -6,17 +6,17 @@ import {
   within,
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
-import { downloadBlobAsFile } from "../browser-download";
+import { downloadBlobAsFile } from "../lib/browser-download";
 import { ExportFactoryDialog } from "./export-factory-dialog";
-import type { WriteFactoryExportPngResult } from "../factory-png-export";
-import { writeFactoryExportPng } from "../factory-png-export";
+import type { WriteFactoryExportPngResult } from "../lib/factory-png-export";
+import { writeFactoryExportPng } from "../lib/factory-png-export";
 import { getExportDialogMessages } from "../messages/export-dialog";
 
-vi.mock("../browser-download", () => ({
+vi.mock("../lib/browser-download", () => ({
   downloadBlobAsFile: vi.fn(),
 }));
 
-vi.mock("../factory-png-export", () => ({
+vi.mock("../lib/factory-png-export", () => ({
   writeFactoryExportPng: vi.fn(),
 }));
 

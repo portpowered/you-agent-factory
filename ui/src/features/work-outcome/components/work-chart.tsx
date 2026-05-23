@@ -11,7 +11,7 @@ import {
 
 import {
   DASHBOARD_CHART_AXIS_LABEL_CLASS,
-} from "../chart-contract";
+} from "../lib/chart-contract";
 import {
   ChartContainer,
   ChartLegend,
@@ -27,16 +27,16 @@ import {
   EMPTY_STATE_COMPACT_CLASS,
 } from "../../../components/dashboard/widget-board";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
-import type { WorkChartModel } from "../trends";
+import type { WorkChartModel } from "../lib/trends";
 import {
   buildWorkChartData,
   type WorkChartBuiltSeries,
   type WorkChartData,
   type WorkChartRow,
   type WorkChartSeriesDefinition,
-} from "../work-chart-data";
+} from "../lib/work-chart-data";
 
-export type { WorkChartSeriesDefinition } from "../work-chart-data";
+export type { WorkChartSeriesDefinition } from "../lib/work-chart-data";
 
 export const WORK_CHART_AXIS_LABEL_CLASS = DASHBOARD_CHART_AXIS_LABEL_CLASS;
 const WORK_CHART_MARGIN = { bottom: 40, left: 18, right: 28, top: 28 };
