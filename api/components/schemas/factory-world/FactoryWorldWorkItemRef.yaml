@@ -33,3 +33,20 @@ properties:
       - ERROR
   payloadUnavailableReason:
     type: string
+  lineageLogicalWorkId:
+    type: string
+  lineageSourceKind:
+    type: string
+    enum:
+      - WORK_REQUEST
+      - DISPATCH_RESPONSE_OUTPUT
+  lineageContinuity:
+    type: string
+    enum:
+      - INITIAL_SUBMISSION
+      - SAME_WORK_ID_CONTINUATION
+      - NEW_DOWNSTREAM_WORK
+  lineageParentWorkIds:
+    type: array
+    items:
+      type: string

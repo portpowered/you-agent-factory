@@ -116,6 +116,19 @@ const (
 	Unsupported FactoryWorldRunnerOptionalCapabilityStatus = "unsupported"
 )
 
+// Defines values for FactoryWorldWorkItemRefLineageContinuity.
+const (
+	INITIALSUBMISSION      FactoryWorldWorkItemRefLineageContinuity = "INITIAL_SUBMISSION"
+	NEWDOWNSTREAMWORK      FactoryWorldWorkItemRefLineageContinuity = "NEW_DOWNSTREAM_WORK"
+	SAMEWORKIDCONTINUATION FactoryWorldWorkItemRefLineageContinuity = "SAME_WORK_ID_CONTINUATION"
+)
+
+// Defines values for FactoryWorldWorkItemRefLineageSourceKind.
+const (
+	DISPATCHRESPONSEOUTPUT FactoryWorldWorkItemRefLineageSourceKind = "DISPATCH_RESPONSE_OUTPUT"
+	WORKREQUEST            FactoryWorldWorkItemRefLineageSourceKind = "WORK_REQUEST"
+)
+
 // Defines values for FactoryWorldWorkItemRefPayloadStatus.
 const (
 	FactoryWorldWorkItemRefPayloadStatusERROR       FactoryWorldWorkItemRefPayloadStatus = "ERROR"
@@ -956,17 +969,27 @@ type FactoryWorldWorkItemRef struct {
 	ChainingTraceDepth *int `json:"chainingTraceDepth,omitempty"`
 
 	// Content Ordered canonical content parts for one work item.
-	Content                  *WorkContent                          `json:"content,omitempty"`
-	CurrentChainingTraceId   *string                               `json:"currentChainingTraceId,omitempty"`
-	DisplayName              *string                               `json:"displayName,omitempty"`
-	PayloadStatus            *FactoryWorldWorkItemRefPayloadStatus `json:"payloadStatus,omitempty"`
-	PayloadUnavailableReason *string                               `json:"payloadUnavailableReason,omitempty"`
-	PreviousChainingTraceIds *[]string                             `json:"previousChainingTraceIds,omitempty"`
-	State                    *string                               `json:"state,omitempty"`
-	TraceId                  *string                               `json:"traceId,omitempty"`
-	WorkId                   string                                `json:"workId"`
-	WorkTypeId               *string                               `json:"workTypeId,omitempty"`
+	Content                  *WorkContent                              `json:"content,omitempty"`
+	CurrentChainingTraceId   *string                                   `json:"currentChainingTraceId,omitempty"`
+	DisplayName              *string                                   `json:"displayName,omitempty"`
+	LineageContinuity        *FactoryWorldWorkItemRefLineageContinuity `json:"lineageContinuity,omitempty"`
+	LineageLogicalWorkId     *string                                   `json:"lineageLogicalWorkId,omitempty"`
+	LineageParentWorkIds     *[]string                                 `json:"lineageParentWorkIds,omitempty"`
+	LineageSourceKind        *FactoryWorldWorkItemRefLineageSourceKind `json:"lineageSourceKind,omitempty"`
+	PayloadStatus            *FactoryWorldWorkItemRefPayloadStatus     `json:"payloadStatus,omitempty"`
+	PayloadUnavailableReason *string                                   `json:"payloadUnavailableReason,omitempty"`
+	PreviousChainingTraceIds *[]string                                 `json:"previousChainingTraceIds,omitempty"`
+	State                    *string                                   `json:"state,omitempty"`
+	TraceId                  *string                                   `json:"traceId,omitempty"`
+	WorkId                   string                                    `json:"workId"`
+	WorkTypeId               *string                                   `json:"workTypeId,omitempty"`
 }
+
+// FactoryWorldWorkItemRefLineageContinuity defines model for FactoryWorldWorkItemRef.LineageContinuity.
+type FactoryWorldWorkItemRefLineageContinuity string
+
+// FactoryWorldWorkItemRefLineageSourceKind defines model for FactoryWorldWorkItemRef.LineageSourceKind.
+type FactoryWorldWorkItemRefLineageSourceKind string
 
 // FactoryWorldWorkItemRefPayloadStatus defines model for FactoryWorldWorkItemRef.PayloadStatus.
 type FactoryWorldWorkItemRefPayloadStatus string

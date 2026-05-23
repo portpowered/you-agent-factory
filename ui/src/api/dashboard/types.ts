@@ -76,6 +76,14 @@ export interface DashboardWorkItemRef {
   content?: components["schemas"]["WorkContent"];
   currentChainingTraceId?: string;
   chainingTraceDepth?: number;
+  lineageLogicalWorkId?: string;
+  lineageContinuity?: string;
+  lineageSourceKind?: string;
+  lineageParentWorkIds?: string[];
+  lineage_logical_work_id?: string;
+  lineage_continuity?: string;
+  lineage_source_kind?: string;
+  lineage_parent_work_ids?: string[];
   payloadStatus?: string;
   payloadUnavailableReason?: string;
   payload_status?: string;

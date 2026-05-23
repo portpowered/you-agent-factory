@@ -137,7 +137,7 @@ func workstationDispatchViewFromCompletion(
 	if len(inputWorkItems) == 0 {
 		inputWorkItems = generatedWorkItemRefs(workItemRefsForIDs(completion.WorkItemIDs, state.WorkItemsByID))
 	}
-	outputWorkItems := generatedWorkItemRefs(workItemRefsForItems(completion.OutputWorkItems))
+	outputWorkItems := generatedWorkItemRefs(outputWorkItemRefsForCompletion(completion, state))
 	if len(outputWorkItems) == 0 && completion.TerminalWork != nil && !interfaces.IsSystemTimeWorkType(completion.TerminalWork.WorkItem.WorkTypeID) {
 		outputWorkItems = generatedWorkItemRefs([]interfaces.FactoryWorldWorkItemRef{
 			workItemRef(completion.TerminalWork.WorkItem),
@@ -365,6 +365,10 @@ func generatedWorkItemRefs(refs []interfaces.FactoryWorldWorkItemRef) []factorya
 			Content:                  workcontent.GeneratedPtrFromParts(ref.Content),
 			PayloadStatus:            generatedWorkItemPayloadStatusPtr(ref.PayloadStatus),
 			PayloadUnavailableReason: workstationRequestStringPtr(ref.PayloadUnavailableReason),
+			LineageLogicalWorkId:     workstationRequestStringPtr(ref.LineageLogicalWorkID),
+			LineageSourceKind:        generatedWorkItemLineageSourceKindPtr(ref.LineageSourceKind),
+			LineageContinuity:        generatedWorkItemLineageContinuityPtr(ref.LineageContinuity),
+			LineageParentWorkIds:     stringSlicePtr(sortedStrings(ref.LineageParentWorkIDs)),
 		})
 	}
 	return out
@@ -376,6 +380,22 @@ func generatedWorkItemPayloadStatusPtr(value string) *factoryapi.FactoryWorldWor
 	}
 	status := factoryapi.FactoryWorldWorkItemRefPayloadStatus(value)
 	return &status
+}
+
+func generatedWorkItemLineageSourceKindPtr(value string) *factoryapi.FactoryWorldWorkItemRefLineageSourceKind {
+	if value == "" {
+		return nil
+	}
+	sourceKind := factoryapi.FactoryWorldWorkItemRefLineageSourceKind(value)
+	return &sourceKind
+}
+
+func generatedWorkItemLineageContinuityPtr(value string) *factoryapi.FactoryWorldWorkItemRefLineageContinuity {
+	if value == "" {
+		return nil
+	}
+	continuity := factoryapi.FactoryWorldWorkItemRefLineageContinuity(value)
+	return &continuity
 }
 
 func consumedInputWorkItemRefsForActiveDispatch(
@@ -457,11 +477,7 @@ func consumedInputWorkItemRef(
 	resolution interfaces.WorkPayloadResolution,
 ) interfaces.FactoryWorldWorkItemRef {
 	if resolution.Status == interfaces.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
-		ref := workItemRef(resolution.Snapshot.WorkItem)
-		ref.State = resolution.Snapshot.WorkItem.State
-		ref.Content = cloneWorkContentParts(resolution.Snapshot.WorkItem.Content)
-		ref.PayloadStatus = string(resolution.Status)
-		return ref
+		return lineageResolvedWorkItemRef(resolution.Snapshot, string(resolution.Status))
 	}
 
 	item := interfaces.FactoryWorkItem{ID: workID}
@@ -475,6 +491,51 @@ func consumedInputWorkItemRef(
 	ref.State = item.State
 	ref.PayloadStatus = string(resolution.Status)
 	ref.PayloadUnavailableReason = resolution.Reason
+	return ref
+}
+
+func outputWorkItemRefsForCompletion(
+	completion interfaces.FactoryWorldDispatchCompletion,
+	state interfaces.FactoryWorldState,
+) []interfaces.FactoryWorldWorkItemRef {
+	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(completion.OutputWorkItems))
+	seen := make(map[string]struct{}, len(completion.OutputWorkItems))
+	for _, item := range completion.OutputWorkItems {
+		if item.ID == "" || interfaces.IsSystemTimeWorkType(item.WorkTypeID) {
+			continue
+		}
+		if _, exists := seen[item.ID]; exists {
+			continue
+		}
+		resolution := state.PayloadLineage.ResolveOutputWorkSnapshot(completion.DispatchID, item.ID)
+		if resolution.Status == interfaces.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
+			refs = append(refs, lineageResolvedWorkItemRef(resolution.Snapshot, string(resolution.Status)))
+		} else {
+			ref := workItemRef(item)
+			ref.PayloadStatus = string(resolution.Status)
+			ref.PayloadUnavailableReason = resolution.Reason
+			refs = append(refs, ref)
+		}
+		seen[item.ID] = struct{}{}
+	}
+	if len(refs) > 0 {
+		return refs
+	}
+	return workItemRefsForItems(completion.OutputWorkItems)
+}
+
+func lineageResolvedWorkItemRef(
+	snapshot *interfaces.WorkPayloadSnapshot,
+	payloadStatus string,
+) interfaces.FactoryWorldWorkItemRef {
+	ref := workItemRef(snapshot.WorkItem)
+	ref.State = snapshot.WorkItem.State
+	ref.Content = cloneWorkContentParts(snapshot.WorkItem.Content)
+	ref.PayloadStatus = payloadStatus
+	ref.LineageLogicalWorkID = snapshot.LogicalWorkID
+	ref.LineageSourceKind = string(snapshot.SourceKind)
+	ref.LineageContinuity = string(snapshot.Continuity)
+	ref.LineageParentWorkIDs = cloneStringSlice(snapshot.ParentWorkIDs)
 	return ref
 }
 

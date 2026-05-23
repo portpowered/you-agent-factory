@@ -116,6 +116,10 @@ type FactoryWorldWorkItemRef struct {
 	Content                  []WorkContentPart `json:"content,omitempty"`
 	PayloadStatus            string            `json:"payload_status,omitempty"`
 	PayloadUnavailableReason string            `json:"payload_unavailable_reason,omitempty"`
+	LineageLogicalWorkID     string            `json:"lineage_logical_work_id,omitempty"`
+	LineageSourceKind        string            `json:"lineage_source_kind,omitempty"`
+	LineageContinuity        string            `json:"lineage_continuity,omitempty"`
+	LineageParentWorkIDs     []string          `json:"lineage_parent_work_ids,omitempty"`
 }
 
 type FactoryWorldSessionRuntime struct {

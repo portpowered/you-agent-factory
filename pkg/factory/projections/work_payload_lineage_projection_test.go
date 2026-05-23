@@ -74,6 +74,139 @@ func TestReconstructFactoryWorldState_BuildsCanonicalWorkPayloadLineage(t *testi
 	}
 }
 
+func TestReconstructFactoryWorldState_ResolvesDownstreamOutputForLaterSelectionAndChainedConsumption(t *testing.T) {
+	t0 := time.Date(2026, 5, 1, 11, 0, 0, 0, time.UTC)
+	initial := interfaces.FactoryWorkItem{
+		ID:          "work-root",
+		WorkTypeID:  "task",
+		DisplayName: "Root",
+		TraceID:     "trace-root",
+		PlaceID:     "task:init",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "root-v1",
+		}},
+	}
+	downstream := interfaces.FactoryWorkItem{
+		ID:          "work-child",
+		WorkTypeID:  "task",
+		DisplayName: "Child",
+		TraceID:     "trace-child",
+		PlaceID:     "task:review",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "child-v1",
+		}},
+	}
+	laterSelected := downstream
+	laterSelected.PlaceID = "task:done"
+	laterSelected.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "child-v2",
+	}}
+
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		generatedProjectionEvent(
+			factoryapi.FactoryEventTypeWorkRequest,
+			"work-input/root-v1",
+			1,
+			t0.Add(time.Second),
+			factoryapi.FactoryEventContext{
+				RequestId: stringPtrForProjectionTest("request/root-v1"),
+				TraceIds:  stringSlicePtrForProjectionTest([]string{"trace-root"}),
+				WorkIds:   stringSlicePtrForProjectionTest([]string{"work-root"}),
+			},
+			factoryapi.WorkRequestEventPayload{
+				Type:  factoryapi.WorkRequestTypeFactoryRequestBatch,
+				Works: &[]factoryapi.Work{generatedLineageWorkForProjectionTest(t, initial, "request/root-v1")},
+			},
+		),
+		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-create-child",
+			TransitionID: "t-review",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID:  "tok-root",
+				PlaceID:  "task:init",
+				WorkItem: &initial,
+			}},
+		}),
+		generatedProjectionEvent(
+			factoryapi.FactoryEventTypeDispatchResponse,
+			"response/dispatch-create-child",
+			3,
+			t0.Add(3*time.Second),
+			factoryapi.FactoryEventContext{
+				DispatchId: stringPtrForProjectionTest("dispatch-create-child"),
+				TraceIds:   stringSlicePtrForProjectionTest([]string{"trace-root", "trace-child"}),
+				WorkIds:    stringSlicePtrForProjectionTest([]string{"work-root", "work-child"}),
+			},
+			factoryapi.DispatchResponseEventPayload{
+				TransitionId: "t-review",
+				Outcome:      factoryapi.WorkOutcomeAccepted,
+				OutputWork: &[]factoryapi.Work{
+					generatedLineageWorkForProjectionTest(t, downstream, ""),
+				},
+			},
+		),
+		workstationRequestEvent(4, t0.Add(4*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-consume-child",
+			TransitionID: "t-follow-up",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-follow-up", Name: "Follow Up"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID:  "tok-child",
+				PlaceID:  "task:review",
+				WorkItem: &downstream,
+			}},
+		}),
+		generatedProjectionEvent(
+			factoryapi.FactoryEventTypeWorkRequest,
+			"work-input/child-v2",
+			5,
+			t0.Add(5*time.Second),
+			factoryapi.FactoryEventContext{
+				RequestId: stringPtrForProjectionTest("request/child-v2"),
+				TraceIds:  stringSlicePtrForProjectionTest([]string{"trace-child"}),
+				WorkIds:   stringSlicePtrForProjectionTest([]string{"work-child"}),
+			},
+			factoryapi.WorkRequestEventPayload{
+				Type:  factoryapi.WorkRequestTypeFactoryRequestBatch,
+				Works: &[]factoryapi.Work{generatedLineageWorkForProjectionTest(t, laterSelected, "request/child-v2")},
+			},
+		),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 5)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+
+	selected := state.PayloadLineage.ResolveSelectedWorkSnapshot("work-child")
+	if selected.Status != interfaces.WorkPayloadResolutionResolved || selected.Snapshot == nil {
+		t.Fatalf("selected downstream snapshot = %#v, want resolved latest snapshot", selected)
+	}
+	assertLineageTextContent(t, selected.Snapshot.WorkItem, "child-v2")
+	if selected.Snapshot.LogicalWorkID != "work-child" {
+		t.Fatalf("selected downstream logical work ID = %q, want work-child", selected.Snapshot.LogicalWorkID)
+	}
+
+	consumed := state.PayloadLineage.ResolveConsumedInputSnapshot("dispatch-consume-child", "work-child")
+	if consumed.Status != interfaces.WorkPayloadResolutionResolved || consumed.Snapshot == nil {
+		t.Fatalf("consumed downstream snapshot = %#v, want resolved dispatch-time snapshot", consumed)
+	}
+	assertLineageTextContent(t, consumed.Snapshot.WorkItem, "child-v1")
+	if consumed.Snapshot.SourceKind != interfaces.WorkPayloadSnapshotKindDispatchOutput {
+		t.Fatalf("consumed downstream source kind = %q, want DISPATCH_RESPONSE_OUTPUT", consumed.Snapshot.SourceKind)
+	}
+	if consumed.Snapshot.Continuity != interfaces.WorkPayloadContinuityNewDownstreamWork {
+		t.Fatalf("consumed downstream continuity = %q, want NEW_DOWNSTREAM_WORK", consumed.Snapshot.Continuity)
+	}
+	if len(consumed.Snapshot.ParentWorkIDs) != 1 || consumed.Snapshot.ParentWorkIDs[0] != "work-root" {
+		t.Fatalf("consumed downstream parent work IDs = %#v, want [work-root]", consumed.Snapshot.ParentWorkIDs)
+	}
+}
+
 func TestReconstructFactoryWorldState_WorkPayloadLineageMarksIncompleteConsumedHistoryUnavailable(t *testing.T) {
 	t0 := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{

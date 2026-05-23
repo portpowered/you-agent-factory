@@ -321,6 +321,7 @@ func workstationRequestProjectionStateFixture() interfaces.FactoryWorldState {
 	lineage.RecordConsumedInputSnapshot("dispatch-active", activeWork)
 	lineage.RecordWorkRequestSnapshot(2, "request-completed", completedInput)
 	lineage.RecordConsumedInputSnapshot("dispatch-completed", completedInput)
+	lineage.RecordDispatchOutputSnapshot(4, "dispatch-completed", []interfaces.FactoryWorkItem{completedInput}, completedOutput, 0)
 	return interfaces.FactoryWorldState{
 		PayloadLineage: lineage,
 		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
@@ -423,6 +424,15 @@ func assertCompletedProjectionRequest(t *testing.T, completed factoryapi.Factory
 	}
 	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].ChainingTraceDepth == nil || *outputItems[0].ChainingTraceDepth != 4 {
 		t.Fatalf("completed output work item depth = %#v, want 4", outputItems)
+	}
+	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].LineageContinuity == nil || *outputItems[0].LineageContinuity != factoryapi.NEWDOWNSTREAMWORK {
+		t.Fatalf("completed output work item lineage continuity = %#v, want NEW_DOWNSTREAM_WORK", outputItems)
+	}
+	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].LineageLogicalWorkId == nil || *outputItems[0].LineageLogicalWorkId != "work-completed-output" {
+		t.Fatalf("completed output work item logical lineage ID = %#v, want work-completed-output", outputItems)
+	}
+	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].LineageParentWorkIds == nil || len(*outputItems[0].LineageParentWorkIds) != 1 || (*outputItems[0].LineageParentWorkIds)[0] != "work-completed-input" {
+		t.Fatalf("completed output work item lineage parents = %#v, want [work-completed-input]", outputItems)
 	}
 }
 
