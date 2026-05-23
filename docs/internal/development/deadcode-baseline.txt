@@ -1,2 +1,0 @@
-tests/functional/internal/support/events.go:23:6: unreachable func: FactoryRelationsValue
-tests/functional/internal/support/fixtures.go:159:6: unreachable func: UpdateFactoryConfig
