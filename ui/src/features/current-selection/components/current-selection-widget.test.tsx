@@ -3,7 +3,6 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import type {
-  CanonicalFactoryDefinition,
   CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import {
