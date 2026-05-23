@@ -16,8 +16,10 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
-import type { EditableWorkstationValues } from "../../current-factory-definition/workstation-editable-values";
-import type { EditableWorkstationBehavior } from "../../current-factory-definition/workstation-behavior";
+import type {
+  EditableWorkstationBehavior,
+  EditableWorkstationValues,
+} from "../../current-factory-definition/public";
 import type { WorkstationDetailMessages } from "../messages";
 import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";

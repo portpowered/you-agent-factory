@@ -12,7 +12,7 @@ import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard
 import {
   useCurrentEditableFactoryDefinitionDocument,
   useSaveCurrentEditableFactoryDefinition,
-} from "../../current-factory-definition";
+} from "../../current-factory-definition/public";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
 import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/factory-graph-draft-types";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
@@ -182,8 +182,8 @@ vi.mock("./react-flow-current-activity-card-import", () => ({
   graphDropStateAttribute: () => "idle",
 }));
 
-vi.mock("../../current-factory-definition", async () => {
-  const actual = await vi.importActual("../../current-factory-definition");
+vi.mock("../../current-factory-definition/public", async () => {
+  const actual = await vi.importActual("../../current-factory-definition/public");
 
   return {
     ...actual,

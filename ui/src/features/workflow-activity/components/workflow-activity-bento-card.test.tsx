@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useCurrentEditableFactoryDefinitionDocument,
   useSaveCurrentEditableFactoryDefinition,
-} from "../../current-factory-definition";
+} from "../../current-factory-definition/public";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { DashboardSelection } from "../../current-selection/public";
@@ -15,8 +15,8 @@ import type { CurrentActivityImportController } from "../current-activity-import
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 
-vi.mock("../../current-factory-definition", async () => {
-  const actual = await vi.importActual("../../current-factory-definition");
+vi.mock("../../current-factory-definition/public", async () => {
+  const actual = await vi.importActual("../../current-factory-definition/public");
 
   return {
     ...actual,

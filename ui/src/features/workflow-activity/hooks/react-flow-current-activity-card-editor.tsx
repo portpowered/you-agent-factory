@@ -4,7 +4,7 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import {
   useCurrentEditableFactoryDefinitionDocument,
   useSaveCurrentEditableFactoryDefinition,
-} from "../../current-factory-definition";
+} from "../../current-factory-definition/public";
 import {
   createEmptyFactoryGraphDraft,
   useFactoryGraphDraftState,

@@ -1,5 +1,6 @@
-import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
-import type { DashboardWorkstationNode } from "../../api/dashboard/types";
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing workstation-editable-values coverage stayed intact during feature-root migration.
+import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import {
   applyEditableWorkstationDraft,
   resolveEditableWorkstationValues,

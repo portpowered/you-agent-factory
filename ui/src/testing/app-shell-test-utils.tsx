@@ -17,7 +17,7 @@ import { installDashboardBrowserTestShims } from "../components/dashboard/test-b
 import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { reloadDashboardLayoutFromStorage } from "../features/bento/public";
 import { useDashboardBentoStore } from "../features/bento/state";
-import { useCurrentEditableFactoryDefinition } from "../features/current-factory-definition";
+import { useCurrentEditableFactoryDefinition } from "../features/current-factory-definition/public";
 import { resetSelectionHistoryStore } from "../features/current-selection/state";
 import {
   createDefaultDashboardStreamState,
@@ -29,9 +29,9 @@ import type { FactoryPngImportValue } from "../features/import/public";
 import type { WorldState } from "../features/timeline/state";
 import { useFactoryTimelineStore } from "../features/timeline/state";
 
-vi.mock("../features/current-factory-definition", async () => {
+vi.mock("../features/current-factory-definition/public", async () => {
   const actual = await vi.importActual(
-    "../features/current-factory-definition",
+    "../features/current-factory-definition/public",
   );
 
   return {

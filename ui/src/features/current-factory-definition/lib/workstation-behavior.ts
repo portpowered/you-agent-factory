@@ -1,4 +1,4 @@
-import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
+import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]

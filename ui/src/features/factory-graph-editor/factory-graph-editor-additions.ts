@@ -9,7 +9,7 @@ import {
   resolveEditableWorkstationBehaviorOptions,
   workerSupportsPollerBehavior,
   type EditableWorkstationBehavior,
-} from "../current-factory-definition/workstation-behavior";
+} from "../current-factory-definition/public";
 
 export type FactoryGraphAddEntityKind =
   | "resource"

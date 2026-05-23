@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import type { useSaveCurrentEditableFactoryDefinition } from "../../current-factory-definition";
+import type { useSaveCurrentEditableFactoryDefinition } from "../../current-factory-definition/public";
 import {
   applyFactoryGraphEntityRemoval,
   buildFactoryGraphEdgeRemovalIntent,

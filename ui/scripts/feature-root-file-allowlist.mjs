@@ -1,10 +1,6 @@
 // Temporary feature-root debt inventory.
 // Remove each entry in the same change that deletes or relocates the root-level file.
 export const allowlistedFeatureRootFiles = [
-  "src/features/current-factory-definition/index.ts",
-  "src/features/current-factory-definition/workstation-behavior.ts",
-  "src/features/current-factory-definition/workstation-editable-values.test.ts",
-  "src/features/current-factory-definition/workstation-editable-values.ts",
   "src/features/factory-graph-editor/factory-graph-draft-apply.ts",
   "src/features/factory-graph-editor/factory-graph-draft-graph.ts",
   "src/features/factory-graph-editor/factory-graph-draft-types.ts",

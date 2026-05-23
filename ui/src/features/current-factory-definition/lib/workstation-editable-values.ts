@@ -1,9 +1,9 @@
-import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
-import type { DashboardWorkstationNode } from "../../api/dashboard/types";
+import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import {
   BUILT_IN_RUNNER_IDS,
   type RunnerID,
-} from "../current-selection/editing/runner-metadata";
+} from "../../current-selection/editing/runner-metadata";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
   resolveEditableWorkstationBehavior,

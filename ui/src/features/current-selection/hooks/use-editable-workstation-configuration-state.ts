@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition";
+import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition/public";
 import {
   applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
-} from "../../current-factory-definition/workstation-editable-values";
+} from "../../current-factory-definition/public";
 import {
   workstationBehaviorRequiresPrompt,
   workerSupportsPollerBehavior,
   type EditableWorkstationBehavior,
-} from "../../current-factory-definition/workstation-behavior";
+} from "../../current-factory-definition/public";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationPromptHelpState,

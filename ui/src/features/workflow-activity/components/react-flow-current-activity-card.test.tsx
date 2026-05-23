@@ -33,7 +33,7 @@ import {
 import {
   useCurrentEditableFactoryDefinitionDocument,
   useSaveCurrentEditableFactoryDefinition,
-} from "../../current-factory-definition";
+} from "../../current-factory-definition/public";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
@@ -57,8 +57,8 @@ import {
 import { buildVisibleGraphEdges } from "../react-flow-current-activity-card-graph";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 
-vi.mock("../../current-factory-definition", async () => {
-  const actual = await vi.importActual("../../current-factory-definition");
+vi.mock("../../current-factory-definition/public", async () => {
+  const actual = await vi.importActual("../../current-factory-definition/public");
 
   return {
     ...actual,
