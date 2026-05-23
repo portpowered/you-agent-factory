@@ -29,12 +29,23 @@ export async function verifyEditorGraphParity(
   page,
   viewport,
 ) {
-  const allPreset = page.getByRole("button", { name: "All" });
-  const workflowPreset = page.getByRole("button", { name: "Workflow" });
-  const infrastructurePreset = page.getByRole("button", {
-    name: "Infrastructure",
+  const visibilityPresets = page.getByRole("region", {
+    name: "Factory graph visibility presets",
+  });
+  const allPreset = visibilityPresets.getByRole("button", {
+    name: /^All$/,
+  });
+  const workflowPreset = visibilityPresets.getByRole("button", {
+    name: /^Workflow$/,
+  });
+  const infrastructurePreset = visibilityPresets.getByRole("button", {
+    name: /^Infrastructure$/,
   });
 
+  await expectVisible(
+    visibilityPresets,
+    "Factory graph visibility presets region",
+  );
   await expectVisible(allPreset, "All visibility preset");
   await expectVisible(workflowPreset, "Workflow visibility preset");
   await expectVisible(
