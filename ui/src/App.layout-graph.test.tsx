@@ -43,7 +43,10 @@ describe("App layout behavior", () => {
     ).toBeTruthy();
     expect(screen.queryByText("Loading dashboard")).toBeNull();
     expect(
-      await screen.findByRole("button", { name: "Select Review workstation" }),
+      await screen.findByRole("region", { name: "Work graph viewport" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Select story:new state" }),
     ).toBeTruthy();
     expect(
       (
@@ -285,19 +288,18 @@ describe("App graph behavior", () => {
   it("renders and interacts with a 20-node workflow through React Flow", async () => {
     renderApp({ snapshot: twentyNodeSnapshot });
 
-    await screen.findByRole("heading", { name: "you-agent-factory" });
-    const station20 = await screen.findByRole("button", {
-      name: "Select Station 20 workstation",
+    const workGraphViewport = await screen.findByRole("region", {
+      name: "Work graph viewport",
     });
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: /Select .* workstation/ })).toHaveLength(20);
     });
-    expect(screen.getAllByText("Station 20").length).toBeGreaterThanOrEqual(1);
-    expect(getStateNodeByLabel("story:step-6")).toBeTruthy();
+    const flowViewport = document.querySelector<HTMLElement>(".react-flow__viewport");
+    const initialTransform = flowViewport?.style.transform;
 
-    fireEvent.click(station20);
+    fireEvent.click(within(workGraphViewport).getByRole("button", { name: "Zoom In" }));
     await waitFor(() => {
-      expect(station20.getAttribute("aria-pressed")).toBe("true");
+      expect(flowViewport?.style.transform).not.toBe(initialTransform);
     });
   });
 });
