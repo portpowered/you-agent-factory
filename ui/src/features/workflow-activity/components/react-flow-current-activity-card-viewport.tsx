@@ -184,7 +184,7 @@ export function CurrentActivityGraphViewport({
           minZoom={0.25}
           nodeTypes={nodeTypes}
           nodes={nodes}
-          edgesFocusable={editorMode && activeTool === "delete"}
+          edgesFocusable={editorMode}
           nodesConnectable={editorMode && activeTool === "connect"}
           onConnect={onConnect}
           onEdgeClick={(_, edge) => {

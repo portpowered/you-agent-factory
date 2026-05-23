@@ -70,6 +70,7 @@ vi.mock("@xyflow/react", async () => {
     ),
     ReactFlow: ({
       children,
+      edgesFocusable,
       isValidConnection,
       onConnect,
       onEdgeClick,
@@ -77,6 +78,7 @@ vi.mock("@xyflow/react", async () => {
       onNodeDragStop,
     }: {
       children: React.ReactNode;
+      edgesFocusable?: boolean;
       isValidConnection?: (connection: {
         source?: string | null;
         sourceHandle?: string | null;
@@ -97,6 +99,9 @@ vi.mock("@xyflow/react", async () => {
       ) => void;
     }) => (
       <div data-testid="mock-react-flow">
+        <output data-testid="edges-focusable">
+          {String(edgesFocusable ?? false)}
+        </output>
         <output data-testid="valid-workstation-output">
           {String(
             isValidConnection?.({
@@ -421,6 +426,30 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     });
     expect(onEditorEdgeClick).toHaveBeenCalledWith("edge-review-done");
     expect(onEditorNodeClick).toHaveBeenCalledWith("workstation:review");
+  });
+
+  it("keeps editor edges focusable outside delete mode so hidden labels stay reachable", () => {
+    renderViewport({
+      activeTool: "connect",
+      editorMode: true,
+      graphKey: "graph-key",
+      nodes: [
+        {
+          data: { kind: "workstation" },
+          id: "workstation:review",
+          position: { x: 0, y: 0 },
+          type: "workstation",
+        },
+        {
+          data: { kind: "work-state" },
+          id: "work-state:story:done",
+          position: { x: 240, y: 0 },
+          type: "workState",
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("edges-focusable").textContent).toBe("true");
   });
 
   it("adds draft edges from valid controller connections", () => {
