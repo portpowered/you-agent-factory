@@ -33,23 +33,23 @@ import {
 
 // tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
-  "h-[60rem] min-h-[40rem] border-transparent bg-af-overlay/4";
+  "h-[60rem] min-h-[40rem] border-transparent bg-af-surface-subtle";
 const RELATION_NODE_CLASS =
-  "flex h-full min-w-0 w-full flex-col gap-2 overflow-hidden rounded-lg border px-3 py-3 text-left text-af-ink shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
+  "flex h-full min-w-0 w-full flex-col gap-2 overflow-hidden rounded-lg border px-3 py-3 text-left text-af-text shadow-af-card transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const RELATION_NODE_ACTIVE_CLASS =
-  "hover:border-af-accent/30 hover:bg-af-accent/8";
+  "hover:border-af-accent-border hover:bg-af-accent-surface";
 const RELATION_NODE_BADGE_CLASS =
   "inline-flex rounded-full border px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em]";
 const RELATION_STATE_BADGE_DANGER_CLASS =
-  "border-af-danger/24 bg-af-danger/10 text-af-danger-ink";
+  "border-af-danger-border bg-af-danger-surface text-af-danger-ink";
 const RELATION_STATE_BADGE_SUCCESS_CLASS =
-  "border-af-success/24 bg-af-success/10 text-af-success-ink";
+  "border-af-success-border bg-af-success-surface text-af-success-ink";
 const RELATION_STATE_BADGE_WARNING_CLASS =
-  "border-af-warning/24 bg-af-warning/10 text-af-warning-ink";
-const RELATION_NODE_TONE_DEFAULT_CLASS = "border-af-overlay/10 bg-af-canvas";
-const RELATION_NODE_TONE_DANGER_CLASS = "border-af-danger/24 bg-af-danger/6";
-const RELATION_NODE_TONE_SUCCESS_CLASS = "border-af-success/20 bg-af-success/6";
-const RELATION_NODE_TONE_WARNING_CLASS = "border-af-warning/20 bg-af-warning/6";
+  "border-af-warning-border bg-af-warning-surface text-af-warning-ink";
+const RELATION_NODE_TONE_DEFAULT_CLASS = "border-af-border bg-af-surface";
+const RELATION_NODE_TONE_DANGER_CLASS = "border-af-danger-border bg-af-danger-surface";
+const RELATION_NODE_TONE_SUCCESS_CLASS = "border-af-success-border bg-af-success-surface";
+const RELATION_NODE_TONE_WARNING_CLASS = "border-af-warning-border bg-af-warning-surface";
 const RELATION_NODE_WIDTH = 220;
 const RELATION_NODE_HEIGHT = 112;
 const GRAPH_FIT_VIEW_OPTIONS = { maxZoom: 1.5, padding: 0.08 } as const;
@@ -214,7 +214,7 @@ function RelationWorkNode({
         <span
           className={cn(
             RELATION_NODE_BADGE_CLASS,
-            "border-af-accent/24 bg-af-accent/10 text-af-accent",
+            "border-af-accent-border bg-af-accent-surface text-af-accent",
             DASHBOARD_SUPPORTING_LABEL_CLASS,
           )}
         >
@@ -224,7 +224,7 @@ function RelationWorkNode({
           <span
             className={cn(
               RELATION_NODE_BADGE_CLASS,
-              "border-af-info/24 bg-af-info/8 text-af-info",
+              "border-af-info-border bg-af-info-surface text-af-info",
               DASHBOARD_SUPPORTING_LABEL_CLASS,
             )}
             key={relationType}
@@ -246,7 +246,7 @@ function RelationWorkNode({
         ))}
       </div>
       <strong
-        className={cn("text-sm text-af-ink [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("text-sm text-af-text [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
       >
         {data.label}
       </strong>

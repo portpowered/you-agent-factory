@@ -192,7 +192,8 @@ describe("TraceRelationFlow", () => {
     const implementButton = screen.getByRole("button", {
       name: "Implement story",
     });
-    expect(implementButton.className).toContain("border-af-success/20");
+    expect(implementButton.className).toContain("border-af-success-border");
+    expect(implementButton.className).toContain("bg-af-success-surface");
     expect(within(implementButton).getByText("PARENT CHILD")).toBeTruthy();
     expect(within(implementButton).getByText("DONE")).toBeTruthy();
     expect(screen.getByText("FAILED")).toBeTruthy();
@@ -201,8 +202,12 @@ describe("TraceRelationFlow", () => {
     expect(onSelectWorkID).toHaveBeenCalledWith("work-implement");
   });
 
-  it("renders semantic edge labels and tones for comparable relation states", () => {
+  it("renders semantic edge labels and tones for comparable relation states", async () => {
     render(<TraceRelationFlow relations={RELATIONS} />);
+
+    await waitFor(() => {
+      expect(renderedEdges()).toHaveLength(2);
+    });
 
     const edges = renderedEdges();
     expect(edges[0]?.ariaLabel).toBe(
