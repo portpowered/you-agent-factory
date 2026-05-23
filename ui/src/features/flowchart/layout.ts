@@ -1,5 +1,4 @@
-import ELK from "elkjs/lib/elk.bundled.js";
-import type { ElkExtendedEdge, ElkNode, LayoutOptions } from "elkjs/lib/elk.bundled.js";
+import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk.bundled.js";
 
 import { formatDashboardPlaceLabel } from "../../components/ui/place-labels";
 import type {
@@ -10,6 +9,9 @@ import type {
   DashboardWorkstationNode,
   StateCategory,
 } from "../../api/dashboard/types";
+import {
+  buildLayeredGraphLayout,
+} from "./layered-layout";
 import { isExhaustionWorkstation } from "./workstation-semantics";
 
 export type PositionedNodeKind = "constraint" | "state_position" | "resource" | "workstation";
@@ -68,22 +70,6 @@ const RESOURCE_NODE_WIDTH = 168;
 const RESOURCE_NODE_HEIGHT = STATE_NODE_HEIGHT;
 const CONSTRAINT_NODE_WIDTH = 156;
 const CONSTRAINT_NODE_HEIGHT = 58;
-const PADDING_X = 40;
-const PADDING_Y = 36;
-const LAYER_SPACING = 56;
-const NODE_SPACING = 40;
-
-const elk = new ELK();
-
-const ELK_LAYOUT_OPTIONS: LayoutOptions = {
-  "elk.algorithm": "layered",
-  "elk.direction": "RIGHT",
-  "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
-  "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
-  "elk.layered.spacing.nodeNodeBetweenLayers": `${LAYER_SPACING}`,
-  "elk.spacing.nodeNode": `${NODE_SPACING}`,
-};
-
 interface GraphSeedNode extends ElkNode {
   height: number;
   id: string;
@@ -343,22 +329,6 @@ function toPositionedNode(
   };
 }
 
-function buildOrdinalAssignments(
-  nodes: GraphSeedNode[],
-  coordinate: "x" | "y",
-): Map<string, number> {
-  const sortedCoordinates = [
-    ...new Set(nodes.map((node) => Math.round(node[coordinate] ?? 0))),
-  ].sort((left, right) => left - right);
-
-  return new Map(
-    nodes.map((node) => [
-      node.nodeId,
-      sortedCoordinates.indexOf(Math.round(node[coordinate] ?? 0)),
-    ]),
-  );
-}
-
 function buildEdgePath(points: { x: number; y: number }[]): string {
   if (points.length === 0) {
     return "";
@@ -432,38 +402,16 @@ export async function buildGraphLayout(
   }
 
   const seeds = buildGraphSeeds(topology);
-  const graph: ElkNode = {
-    children: seeds.nodes,
-    edges: seeds.edges,
-    id: "root",
-    layoutOptions: ELK_LAYOUT_OPTIONS,
-  };
-  const layoutedGraph = await elk.layout(graph);
-  const layoutedNodes = (layoutedGraph.children ?? []) as GraphSeedNode[];
-  const minX = Math.min(...layoutedNodes.map((node) => node.x ?? 0));
-  const minY = Math.min(...layoutedNodes.map((node) => node.y ?? 0));
-  const columnAssignments = buildOrdinalAssignments(layoutedNodes, "x");
-  const rowAssignments = buildOrdinalAssignments(layoutedNodes, "y");
-  const positionedNodes = layoutedNodes
-    .map((node) =>
-      toPositionedNode(
-        node,
-        columnAssignments.get(node.nodeId) ?? 0,
-        rowAssignments.get(node.nodeId) ?? 0,
-        (node.x ?? 0) - minX + PADDING_X,
-        (node.y ?? 0) - minY + PADDING_Y,
-      ),
-    )
-    .sort((left, right) => left.column - right.column || left.row - right.row);
+  const layeredLayout = await buildLayeredGraphLayout(seeds);
+  const positionedNodes = layeredLayout.nodes.map((node) =>
+    toPositionedNode(node, node.column, node.row, node.x, node.y),
+  );
   const positionedNodesById = new Map(positionedNodes.map((node) => [node.nodeId, node]));
-  const rightmostX = Math.max(...positionedNodes.map((node) => node.x + node.width));
-  const bottomY = Math.max(...positionedNodes.map((node) => node.y + node.height));
 
   return {
-    edges: toPositionedEdges(seeds.edges, positionedNodesById),
-    height: bottomY + PADDING_Y,
+    edges: toPositionedEdges(layeredLayout.edges, positionedNodesById),
+    height: layeredLayout.height,
     nodes: positionedNodes,
-    width: rightmostX + PADDING_X,
+    width: layeredLayout.width,
   };
 }
-

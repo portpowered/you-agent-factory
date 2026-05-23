@@ -7,7 +7,6 @@ import type { FactoryGraphNodeKind } from "../factory-graph-draft-types";
 import type { FactoryGraphWorkerRuntimeStatus } from "../factory-graph-editor-runtime";
 
 export interface FactoryGraphEditorMessages {
-  denseGraphTitle: string;
   addDialogAddEntityAction: string;
   addDialogAssignedWorkerLabel: string;
   addDialogAssignedWorkerPlaceholder: string;
@@ -32,6 +31,19 @@ export interface FactoryGraphEditorMessages {
   draftActionsSave: string;
   draftActionsSaving: string;
   draftActionsTitle: string;
+  edgeAriaLabel: (label: string, source: string, target: string) => string;
+  edgeKindLabel: (
+    kind:
+      | "worker-assignment"
+      | "worker-resource"
+      | "work-type-state"
+      | "workstation-input"
+      | "workstation-on-continue"
+      | "workstation-on-failure"
+      | "workstation-on-rejection"
+      | "workstation-output"
+      | "workstation-resource",
+  ) => string;
   flowConnectionHint: string;
   flowPendingLabel: string;
   flowRemovingLabel: string;
@@ -75,17 +87,14 @@ export interface FactoryGraphEditorMessages {
   toolbarOpenAddMenuLabel: string;
   toolbarPendingChanges: string;
   toolbarNoPendingChanges: string;
-  toolbarVisibilityAriaLabel: string;
-  toolbarVisibilityDescription: string;
   toolbarVisibilityMenuAriaLabel: string;
   toolbarVisibilityMenuDescription: string;
   toolbarVisibilityMenuTitle: string;
-  toolbarVisibilityResourcesLabel: string;
-  toolbarVisibilityToggleLabel: (
-    visible: boolean,
-    optionLabel: string,
-  ) => string;
-  toolbarVisibilityWorkersLabel: string;
+  visibilityPresetAllLabel: string;
+  visibilityPresetExecutionLabel: string;
+  visibilityPresetInfrastructureLabel: string;
+  visibilityPresetWorkflowLabel: string;
+  visibilityPresetsAriaLabel: string;
   viewportLabel: string;
   workerStatusLabel: (status: FactoryGraphWorkerRuntimeStatus) => string;
 }
@@ -143,10 +152,34 @@ function describeEnglishWorkerStatus(status: FactoryGraphWorkerRuntimeStatus) {
   }
 }
 
+function describeEnglishEdgeKind(
+  kind: Parameters<FactoryGraphEditorMessages["edgeKindLabel"]>[0],
+) {
+  switch (kind) {
+    case "worker-assignment":
+      return "Worker assignment";
+    case "worker-resource":
+      return "Worker resource";
+    case "work-type-state":
+      return "State membership";
+    case "workstation-input":
+      return "Input route";
+    case "workstation-on-continue":
+      return "Continue route";
+    case "workstation-on-failure":
+      return "Failure route";
+    case "workstation-on-rejection":
+      return "Reject route";
+    case "workstation-output":
+      return "Success route";
+    case "workstation-resource":
+      return "Station resource";
+  }
+}
+
 const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEditorMessages> =
   {
     en: {
-      denseGraphTitle: "Dense graph",
       addDialogAddEntityAction: "Add entity",
       addDialogAssignedWorkerLabel: "Assigned worker",
       addDialogAssignedWorkerPlaceholder: "Select a worker",
@@ -175,6 +208,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       draftActionsSave: "Save changes",
       draftActionsSaving: "Saving...",
       draftActionsTitle: "Pending graph changes",
+      edgeAriaLabel: (label, source, target) => `${label} from ${source} to ${target}`,
+      edgeKindLabel: describeEnglishEdgeKind,
       flowConnectionHint: "Use labeled anchors for compatible connections.",
       flowPendingLabel: "Pending",
       flowRemovingLabel: "Removing",
@@ -225,22 +260,19 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarOpenAddMenuLabel: "Open add entity menu",
       toolbarPendingChanges: "Draft changes pending",
       toolbarNoPendingChanges: "No draft changes",
-      toolbarVisibilityAriaLabel: "Factory graph density controls",
-      toolbarVisibilityDescription:
-        "Collapse worker or resource lanes to focus on the rest of the topology while editing.",
       toolbarVisibilityMenuAriaLabel: "Add graph entity menu",
       toolbarVisibilityMenuDescription:
         "Choose a supported entity to add to the current draft.",
       toolbarVisibilityMenuTitle: "Add graph entity",
-      toolbarVisibilityResourcesLabel: "Resources",
-      toolbarVisibilityToggleLabel: (visible, optionLabel) =>
-        `${visible ? "Hide" : "Show"} ${optionLabel.toLowerCase()} lane`,
-      toolbarVisibilityWorkersLabel: "Workers",
+      visibilityPresetAllLabel: "All",
+      visibilityPresetExecutionLabel: "Execution",
+      visibilityPresetInfrastructureLabel: "Infrastructure",
+      visibilityPresetWorkflowLabel: "Workflow",
+      visibilityPresetsAriaLabel: "Factory graph visibility presets",
       viewportLabel: "Work graph viewport",
       workerStatusLabel: describeEnglishWorkerStatus,
     },
     "zh-CN": {
-      denseGraphTitle: "密集图",
       addDialogAddEntityAction: "添加实体",
       addDialogAssignedWorkerLabel: "分配的工作者",
       addDialogAssignedWorkerPlaceholder: "选择一个工作者",
@@ -284,6 +316,29 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       draftActionsSave: "保存更改",
       draftActionsSaving: "保存中...",
       draftActionsTitle: "待处理图更改",
+      edgeAriaLabel: (label, source, target) => `${label}：从 ${source} 到 ${target}`,
+      edgeKindLabel: (kind) => {
+        switch (kind) {
+          case "worker-assignment":
+            return "工作者分配";
+          case "worker-resource":
+            return "工作者资源";
+          case "work-type-state":
+            return "状态归属";
+          case "workstation-input":
+            return "输入路由";
+          case "workstation-on-continue":
+            return "继续路由";
+          case "workstation-on-failure":
+            return "失败路由";
+          case "workstation-on-rejection":
+            return "拒绝路由";
+          case "workstation-output":
+            return "成功路由";
+          case "workstation-resource":
+            return "工作站资源";
+        }
+      },
       flowConnectionHint: "请使用带标签的锚点创建兼容连接。",
       flowPendingLabel: "待处理",
       flowRemovingLabel: "移除中",
@@ -345,16 +400,14 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarOpenAddMenuLabel: "打开添加实体菜单",
       toolbarPendingChanges: "草稿更改待处理",
       toolbarNoPendingChanges: "没有草稿更改",
-      toolbarVisibilityAriaLabel: "工厂图密度控制",
-      toolbarVisibilityDescription:
-        "折叠工作者或资源泳道，以便在编辑时聚焦其余拓扑。",
       toolbarVisibilityMenuAriaLabel: "添加图实体菜单",
       toolbarVisibilityMenuDescription: "选择要添加到当前草稿的受支持实体。",
       toolbarVisibilityMenuTitle: "添加图实体",
-      toolbarVisibilityResourcesLabel: "资源",
-      toolbarVisibilityToggleLabel: (visible, optionLabel) =>
-        `${visible ? "隐藏" : "显示"}${optionLabel}泳道`,
-      toolbarVisibilityWorkersLabel: "工作者",
+      visibilityPresetAllLabel: "全部",
+      visibilityPresetExecutionLabel: "执行",
+      visibilityPresetInfrastructureLabel: "基础设施",
+      visibilityPresetWorkflowLabel: "工作流",
+      visibilityPresetsAriaLabel: "工厂图可见性预设",
       viewportLabel: "工作图视口",
       workerStatusLabel: (status) => {
         switch (status) {

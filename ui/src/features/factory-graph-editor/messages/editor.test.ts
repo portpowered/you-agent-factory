@@ -111,12 +111,10 @@ describe("getFactoryGraphEditorMessages", () => {
     expect(messages.kindLabel("workstation")).toBe("工作站");
     expect(messages.kindLabel("work-type")).toBe("工作类型");
     expect(messages.kindLabel("work-state")).toBe("工作状态");
-    expect(messages.toolbarVisibilityToggleLabel(true, "工作者")).toBe(
-      "隐藏工作者泳道",
-    );
-    expect(messages.toolbarVisibilityToggleLabel(false, "资源")).toBe(
-      "显示资源泳道",
-    );
+    expect(messages.visibilityPresetAllLabel).toBe("全部");
+    expect(messages.visibilityPresetWorkflowLabel).toBe("工作流");
+    expect(messages.visibilityPresetExecutionLabel).toBe("执行");
+    expect(messages.visibilityPresetInfrastructureLabel).toBe("基础设施");
     expect(messages.workerStatusLabel("active")).toBe("活跃");
     expect(messages.workerStatusLabel("errored")).toBe("错误");
     expect(messages.workerStatusLabel("idle")).toBe("空闲");

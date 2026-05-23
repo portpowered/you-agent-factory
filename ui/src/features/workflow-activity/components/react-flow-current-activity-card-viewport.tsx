@@ -3,6 +3,7 @@ import {
   type Connection,
   Controls,
   type Edge,
+  type EdgeTypes,
   type FitViewOptions,
   type IsValidConnection,
   type Node,
@@ -70,6 +71,7 @@ export function CurrentActivityGraphViewport({
   imports,
   initialFitViewKey,
   initialFitViewOptions,
+  edgeTypes,
   locale,
   nodeTypes,
   nodes,
@@ -93,6 +95,7 @@ export function CurrentActivityGraphViewport({
   imports: CurrentActivityImportController;
   initialFitViewKey: string;
   initialFitViewOptions: FitViewOptions;
+  edgeTypes?: EdgeTypes;
   locale?: string;
   nodeTypes: NodeTypes;
   nodes: Node[];
@@ -172,6 +175,7 @@ export function CurrentActivityGraphViewport({
       >
         <ReactFlow
           edges={edges}
+          edgeTypes={edgeTypes}
           fitView
           fitViewOptions={initialFitViewOptions}
           key={initialFitViewKey}
@@ -180,7 +184,7 @@ export function CurrentActivityGraphViewport({
           minZoom={0.25}
           nodeTypes={nodeTypes}
           nodes={nodes}
-          edgesFocusable={editorMode && activeTool === "delete"}
+          edgesFocusable={editorMode}
           nodesConnectable={editorMode && activeTool === "connect"}
           onConnect={onConnect}
           onEdgeClick={(_, edge) => {

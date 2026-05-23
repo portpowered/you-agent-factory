@@ -187,6 +187,26 @@
     @apply opacity-50;
   }
 
+  [data-current-activity-flow] .agent-factory-editor-edge:focus-visible .react-flow__edge-path,
+  [data-current-activity-flow] .agent-factory-editor-edge:hover .react-flow__edge-path {
+    filter: drop-shadow(0 0 4px rgb(from var(--color-af-accent) r g b / 0.2));
+  }
+
+  [data-current-activity-flow] .agent-factory-editor-edge-label {
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  [data-current-activity-flow]
+    .agent-factory-editor-edge[data-label-visible="true"]
+    .agent-factory-editor-edge-label,
+  [data-current-activity-flow] .react-flow__edge:hover .agent-factory-editor-edge-label,
+  [data-current-activity-flow]
+    .react-flow__edge:focus-visible
+    .agent-factory-editor-edge-label {
+    opacity: 1;
+  }
+
   [data-current-activity-flow] .agent-flow-node--active {
     animation: agent-flow-node-border 1.35s ease-in-out infinite;
   }

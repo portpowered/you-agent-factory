@@ -89,8 +89,8 @@ export function CurrentActivityGraphSurface({
       ) : null}
       <FactoryGraphEditorVisibilityPanel
         locale={locale}
-        onToggle={editorGraph.toggleEntityVisibility}
-        options={editorGraph.entityVisibilityOptions}
+        onSelectPreset={editorGraph.selectVisibilityPreset}
+        options={editorGraph.visibilityPresetOptions}
         visible={editor.editorMode}
       />
       <CurrentActivityGraphViewport
@@ -99,6 +99,7 @@ export function CurrentActivityGraphSurface({
         canInteractWithEditor={editor.canInteractWithEditor}
         editorMode={editor.editorMode}
         edges={activeGraph.edges}
+        edgeTypes={editor.editorMode ? editorGraph.edgeTypes : undefined}
         graphKey={activeGraph.graphKey}
         handleNodesChange={activeGraph.handleNodesChange}
         hasPendingChanges={editor.draftState.hasChanges}

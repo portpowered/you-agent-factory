@@ -142,16 +142,6 @@ src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|63|1
 src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|65|14|string-literal|failure route
 src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|67|14|string-literal|rejection route
 src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|69|14|string-literal|state membership
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|170|20|string-literal|from to
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|218|14|string-literal|Worker assignment
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|220|14|string-literal|Worker resource
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|222|14|string-literal|State membership
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|224|14|string-literal|Input route
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|226|14|string-literal|Continue route
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|228|14|string-literal|Failure route
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|230|14|string-literal|Reject route
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|232|14|string-literal|Success route
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|234|14|string-literal|Station resource
 src/features/factory-graph-editor/factory-graph-editor-removals.ts|96|19|string-literal|Delete
 src/features/factory-graph-editor/factory-graph-editor-removals.ts|98|12|string-literal|Remove ?
 src/features/factory-graph-editor/factory-graph-editor-removals.ts|148|19|string-literal|Remove
@@ -162,18 +152,18 @@ src/features/factory-graph-editor/factory-graph-editor-removals.ts|430|12|string
 src/features/factory-graph-editor/factory-graph-editor-save-summary.ts|48|12|string-literal|No graph changes are pending.
 src/features/factory-graph-editor/factory-graph-editor-save-summary.ts|52|12|string-literal|This save will apply .
 src/features/factory-graph-editor/factory-graph-editor-save-summary.ts|56|10|string-literal|This save will apply and .
-src/features/flowchart/components/current-activity-place-node.tsx|150|14|string-literal|border-af-overlay/22 bg-af-canvas text-af-ink
-src/features/flowchart/components/current-activity-place-node.tsx|152|12|string-literal|border-dashed border-af-info/36 bg-af-surface/78 text-af-ink
-src/features/flowchart/components/current-activity-place-node.tsx|167|14|string-literal|Terminal
-src/features/flowchart/components/current-activity-place-node.tsx|170|14|string-literal|Failed
-src/features/flowchart/components/current-activity-place-node.tsx|172|12|string-literal|Queue
-src/features/flowchart/components/current-activity-place-node.tsx|176|12|string-literal|Resource
-src/features/flowchart/components/current-activity-place-node.tsx|179|35|string-literal|Limit
-src/features/flowchart/components/current-activity-place-node.tsx|179|45|string-literal|Constraint
-src/features/flowchart/components/current-activity-place-node.tsx|207|12|string-literal|Processing state
-src/features/flowchart/components/current-activity-place-node.tsx|280|12|string-literal|resource tokens
-src/features/flowchart/components/current-activity-workstation-node.tsx|219|19|jsx-attribute|Active
-src/features/flowchart/components/current-activity-workstation-node.tsx|224|21|jsx-prop|Active
+src/features/flowchart/components/current-activity-node-chrome.tsx|26|10|string-literal|text-[0.65rem] font-semibold uppercase tracking-[0.08em]
+src/features/flowchart/components/current-activity-place-node.tsx|151|14|string-literal|border-af-overlay/22 bg-af-canvas text-af-ink
+src/features/flowchart/components/current-activity-place-node.tsx|153|12|string-literal|border-dashed border-af-info/36 bg-af-surface/78 text-af-ink
+src/features/flowchart/components/current-activity-place-node.tsx|168|14|string-literal|Terminal
+src/features/flowchart/components/current-activity-place-node.tsx|171|14|string-literal|Failed
+src/features/flowchart/components/current-activity-place-node.tsx|173|12|string-literal|Queue
+src/features/flowchart/components/current-activity-place-node.tsx|177|12|string-literal|Resource
+src/features/flowchart/components/current-activity-place-node.tsx|180|35|string-literal|Limit
+src/features/flowchart/components/current-activity-place-node.tsx|180|45|string-literal|Constraint
+src/features/flowchart/components/current-activity-place-node.tsx|208|12|string-literal|Processing state
+src/features/flowchart/components/current-activity-place-node.tsx|281|12|string-literal|resource tokens
+src/features/flowchart/components/current-activity-workstation-node.tsx|227|21|jsx-prop|Active
 src/features/flowchart/components/graph-semantic-icon.tsx|39|12|string-literal|Active work
 src/features/flowchart/components/graph-semantic-icon.tsx|48|12|string-literal|Constraint
 src/features/flowchart/components/graph-semantic-icon.tsx|58|12|string-literal|Cron workstation
@@ -187,8 +177,8 @@ src/features/flowchart/components/graph-semantic-icon.tsx|130|12|string-literal|
 src/features/flowchart/components/graph-semantic-icon.tsx|141|12|string-literal|Resource
 src/features/flowchart/components/graph-semantic-icon.tsx|151|12|string-literal|Terminal state
 src/features/flowchart/components/graph-semantic-icon.tsx|160|12|string-literal|Workstation
-src/features/flowchart/layout.ts|114|10|string-literal|workstation:
-src/features/flowchart/layout.ts|118|10|string-literal|place:
+src/features/flowchart/layout.ts|100|10|string-literal|workstation:
+src/features/flowchart/layout.ts|104|10|string-literal|place:
 src/features/flowchart/workstation-icon-metadata.ts|33|12|string-literal|Cron workstation
 src/features/flowchart/workstation-icon-metadata.ts|39|12|string-literal|Poller workstation
 src/features/flowchart/workstation-icon-metadata.ts|45|12|string-literal|Exhaustion rule

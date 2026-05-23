@@ -826,7 +826,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(screen.getByText("Observe mode")).toBeTruthy();
   });
 
-  it("shows the add, delete, and connect toolbar in editor mode", async () => {
+  it("shows the add menu, delete, and connect toolbar controls in editor mode", async () => {
     vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -844,7 +844,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
     const toolbar = await screen.findByRole("region", {
       name: "Factory graph editor tools",
     });
-    expect(within(toolbar).getByRole("button", { name: "Add" })).toBeTruthy();
+    expect(
+      within(toolbar).getByRole("button", { name: "Open add entity menu" }),
+    ).toBeTruthy();
     expect(
       within(toolbar).getByRole("button", { name: "Delete" }),
     ).toBeTruthy();
@@ -1160,7 +1162,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
   });
 
-  it("lets operators collapse worker and resource lanes without leaving editor mode", async () => {
+  it("lets operators switch visibility presets without leaving editor mode or losing editor nodes", async () => {
     vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
       error: null,
@@ -1183,20 +1185,35 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
     expect(await screen.findByText("writer")).toBeTruthy();
     expect(screen.getByText("gpu")).toBeTruthy();
+    expect(screen.getByText("draft")).toBeTruthy();
+    expect(screen.getByText("story:review")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide workers lane" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Hide resources lane" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Infrastructure" }));
 
     await waitFor(() => {
-      expect(screen.queryByText("writer")).toBeNull();
-      expect(screen.queryByText("reviewer")).toBeNull();
-      expect(screen.queryByText("gpu")).toBeNull();
+      expect(screen.getByText("writer")).toBeTruthy();
+      expect(screen.getByText("gpu")).toBeTruthy();
+      expect(screen.queryByText("story:review")).toBeNull();
     });
     expect(screen.getByText("draft")).toBeTruthy();
     expect(screen.getByText("review")).toBeTruthy();
-    expect(screen.getByText("story:queued")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Workflow" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("writer")).toBeNull();
+      expect(screen.queryByText("gpu")).toBeNull();
+      expect(screen.getByText("story:queued")).toBeTruthy();
+      expect(screen.getByText("story:review")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("writer")).toBeTruthy();
+      expect(screen.getByText("gpu")).toBeTruthy();
+      expect(screen.getByText("story:review")).toBeTruthy();
+    });
   });
 
   it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {
@@ -1380,7 +1397,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(screen.getByText("Loading editor definition")).toBeTruthy();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Add" })
+        .getByRole("button", { name: "Open add entity menu" })
         .getAttribute("disabled"),
     ).not.toBeNull();
     expect(

@@ -50,7 +50,6 @@ describe("factory graph editor toolbar controls", () => {
     renderToolbar();
 
     await user.tab();
-    await user.tab();
     await user.keyboard("{Enter}");
 
     const menu = await screen.findByLabelText("Add graph entity menu");
@@ -59,6 +58,36 @@ describe("factory graph editor toolbar controls", () => {
       within(menu).getByRole("button", { name: "Workstation" }),
     ).toBeTruthy();
     expect(screen.getByText("Draft changes pending")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: "Add",
+      }),
+    ).toBeNull();
+  });
+
+  it("uses icon toggles with accessible names and pressed state", async () => {
+    const user = userEvent.setup();
+
+    renderToolbar();
+
+    const connectButton = screen.getByRole("button", { name: "Connect" });
+    const deleteButton = screen.getByRole("button", { name: "Delete" });
+
+    expect(connectButton.textContent).toBe("");
+    expect(deleteButton.textContent).toBe("");
+    expect(connectButton.getAttribute("aria-pressed")).toBe("false");
+
+    await user.click(connectButton);
+    expect(connectButton.getAttribute("aria-pressed")).toBe("true");
+
+    await user.tab();
+    await user.tab();
+    await user.hover(deleteButton);
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Remove nodes or edges from the draft",
+      }),
+    ).toBeTruthy();
   });
 
   it("renders the confirmation dialog through the shared dialog pattern", async () => {
@@ -168,16 +197,22 @@ describe("factory graph editor status and popover controls", () => {
 });
 
 describe("factory graph editor visibility controls", () => {
-  it("exposes keyboard-reachable worker and resource visibility controls", async () => {
+  it("exposes keyboard-reachable graph visibility presets with pressed state", async () => {
     const user = userEvent.setup();
-    const onToggle = vi.fn();
+    const onSelectPreset = vi.fn();
 
     render(
       <FactoryGraphEditorVisibilityPanel
-        onToggle={onToggle}
+        onSelectPreset={onSelectPreset}
         options={[
-          { count: 3, key: "workers", label: "Workers", visible: true },
-          { count: 2, key: "resources", label: "Resources", visible: false },
+          { key: "all", label: "All", selected: false },
+          { key: "workflow", label: "Workflow", selected: true },
+          { key: "execution", label: "Execution", selected: false },
+          {
+            key: "infrastructure",
+            label: "Infrastructure",
+            selected: false,
+          },
         ]}
         visible={true}
       />,
@@ -186,16 +221,14 @@ describe("factory graph editor visibility controls", () => {
     await user.tab();
     await user.keyboard("{Enter}");
 
-    expect(onToggle).toHaveBeenCalledWith("workers");
+    expect(onSelectPreset).toHaveBeenCalledWith("all");
     expect(
-      screen
-        .getByRole("button", { name: "Hide workers lane" })
-        .getAttribute("aria-pressed"),
+      screen.getByRole("button", { name: "Workflow" }).getAttribute(
+        "aria-pressed",
+      ),
     ).toBe("true");
     expect(
-      screen
-        .getByRole("button", { name: "Show resources lane" })
-        .getAttribute("aria-pressed"),
+      screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed"),
     ).toBe("false");
   });
 });

@@ -12,6 +12,7 @@ import {
   ActivityGraphNodeShell,
   type PlaceNodeType,
 } from "./current-activity-node-shell";
+import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
 import type { GraphSemanticIconKind } from "./graph-semantic-icon";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
 
@@ -289,14 +290,14 @@ function placeTokenCountDisplay(
   count: number,
 ): ReactNode {
   return (
-    <span
+    <ActivityGraphNodeBadge
       aria-label={tokenCountLabel(place, count)}
-      className="inline-flex w-fit rounded-full border border-af-overlay/12 bg-af-overlay/8 px-2 py-0.5 font-mono text-[0.68rem] text-af-ink/64"
+      className="w-fit"
       data-place-token-count
       role="status"
     >
       {count}
-    </span>
+    </ActivityGraphNodeBadge>
   );
 }
 
@@ -406,7 +407,7 @@ function StaticPlaceNodeContent({
           </strong>
         </span>
         <span
-        className="flex min-h-4 w-full shrink-0 items-center justify-start overflow-hidden"
+          className="flex min-h-4 w-full shrink-0 items-center justify-start overflow-hidden"
           data-place-marker-zone
           title={label}
         >

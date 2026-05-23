@@ -5,6 +5,7 @@ import {
   render,
   renderHook,
   screen,
+  within,
 } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
@@ -69,6 +70,7 @@ vi.mock("@xyflow/react", async () => {
     ),
     ReactFlow: ({
       children,
+      edgesFocusable,
       isValidConnection,
       onConnect,
       onEdgeClick,
@@ -76,6 +78,7 @@ vi.mock("@xyflow/react", async () => {
       onNodeDragStop,
     }: {
       children: React.ReactNode;
+      edgesFocusable?: boolean;
       isValidConnection?: (connection: {
         source?: string | null;
         sourceHandle?: string | null;
@@ -96,6 +99,9 @@ vi.mock("@xyflow/react", async () => {
       ) => void;
     }) => (
       <div data-testid="mock-react-flow">
+        <output data-testid="edges-focusable">
+          {String(edgesFocusable ?? false)}
+        </output>
         <output data-testid="valid-workstation-output">
           {String(
             isValidConnection?.({
@@ -339,6 +345,32 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     ).toContain("\"borderRadius\":8");
   });
 
+  it("renders the compact editor toolbar inside the graph card without duplicate add controls", () => {
+    renderViewport({
+      addMenuActions: [{ id: "workstation", label: "Workstation" }],
+      editorMode: true,
+      graphKey: "graph-key",
+      onAddAction: vi.fn(),
+    });
+
+    const toolbar = screen.getByRole("region", {
+      name: "Factory graph editor tools",
+    });
+
+    expect(
+      within(toolbar).getByRole("button", { name: "Open add entity menu" }),
+    ).toBeTruthy();
+    expect(
+      within(toolbar).getByRole("button", { name: "Connect" }),
+    ).toBeTruthy();
+    expect(
+      within(toolbar).getByRole("button", { name: "Delete" }),
+    ).toBeTruthy();
+    expect(
+      within(toolbar).queryByRole("button", { name: "Add" }),
+    ).toBeNull();
+  });
+
   it("skips node-position persistence when the viewport has no graph key", () => {
     renderViewport({ graphKey: "" });
 
@@ -394,6 +426,30 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     });
     expect(onEditorEdgeClick).toHaveBeenCalledWith("edge-review-done");
     expect(onEditorNodeClick).toHaveBeenCalledWith("workstation:review");
+  });
+
+  it("keeps editor edges focusable outside delete mode so hidden labels stay reachable", () => {
+    renderViewport({
+      activeTool: "connect",
+      editorMode: true,
+      graphKey: "graph-key",
+      nodes: [
+        {
+          data: { kind: "workstation" },
+          id: "workstation:review",
+          position: { x: 0, y: 0 },
+          type: "workstation",
+        },
+        {
+          data: { kind: "work-state" },
+          id: "work-state:story:done",
+          position: { x: 240, y: 0 },
+          type: "workState",
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("edges-focusable").textContent).toBe("true");
   });
 
   it("adds draft edges from valid controller connections", () => {
@@ -519,17 +575,21 @@ function renderWithQueryClient(view: React.ReactElement) {
 
 function renderViewport({
   activeTool = null,
+  addMenuActions,
   editorMode = false,
   graphKey,
   nodes = [],
+  onAddAction,
   onConnect,
   onEditorEdgeClick,
   onEditorNodeClick,
 }: {
   activeTool?: "add" | "connect" | "delete" | null;
+  addMenuActions?: Parameters<typeof CurrentActivityGraphViewport>[0]["addMenuActions"];
   editorMode?: boolean;
   graphKey: string;
   nodes?: Parameters<typeof CurrentActivityGraphViewport>[0]["nodes"];
+  onAddAction?: Parameters<typeof CurrentActivityGraphViewport>[0]["onAddAction"];
   onConnect?: Parameters<typeof CurrentActivityGraphViewport>[0]["onConnect"];
   onEditorEdgeClick?: Parameters<
     typeof CurrentActivityGraphViewport
@@ -541,6 +601,7 @@ function renderViewport({
   return render(
     <CurrentActivityGraphViewport
       activeTool={activeTool}
+      addMenuActions={addMenuActions}
       canInteractWithEditor={editorMode}
       editorMode={editorMode}
       edges={[]}
@@ -552,6 +613,7 @@ function renderViewport({
       initialFitViewOptions={{ padding: 0.18 }}
       nodeTypes={{}}
       nodes={nodes}
+      onAddAction={onAddAction}
       onConnect={onConnect}
       onEditorEdgeClick={onEditorEdgeClick}
       onEditorNodeClick={onEditorNodeClick}

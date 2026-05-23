@@ -7,6 +7,7 @@ import { FactoryGraphEditorVisibilityPanel } from "./factory-graph-editor-contro
 import type { FactoryGraphTopology } from "../factory-graph-draft-types";
 import {
   buildFactoryGraphEditorFlowModel,
+  FACTORY_GRAPH_EDITOR_EDGE_TYPES,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "./factory-graph-editor-flow";
 import type { FactoryGraphConnectionEndpoint } from "../factory-graph-editor-connections";
@@ -78,6 +79,7 @@ function PendingRemovalStory() {
     <div className="h-[520px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
         edges={flow.edges}
         fitView={true}
         nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
@@ -139,6 +141,7 @@ function ConnectionAnchorsStory() {
     <div className="h-[520px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
         edges={flow.edges}
         fitView={true}
         nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
@@ -228,6 +231,7 @@ function PendingEdgeChangesStory() {
     <div className="h-[520px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
         edges={flow.edges}
         fitView={true}
         nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
@@ -317,26 +321,64 @@ const WORKER_RESOURCE_TOPOLOGY: FactoryGraphTopology = {
 };
 
 function WorkerResourceDensityStory() {
-  const [visibleKinds, setVisibleKinds] = useState({
-    resources: true,
-    workers: true,
+  const [selectedPreset, setSelectedPreset] = useState<
+    "all" | "workflow" | "execution" | "infrastructure"
+  >("all");
+  const visibleNodes = WORKER_RESOURCE_TOPOLOGY.nodes.filter((node) => {
+    if (selectedPreset === "all") {
+      return true;
+    }
+    if (selectedPreset === "workflow") {
+      return (
+        node.kind === "workstation" ||
+        node.kind === "work-type" ||
+        node.kind === "work-state"
+      );
+    }
+    if (selectedPreset === "execution") {
+      return node.kind === "workstation" || node.kind === "work-state";
+    }
+    return (
+      node.kind === "resource" ||
+      node.kind === "worker" ||
+      node.kind === "workstation"
+    );
   });
-  const hiddenKinds = new Set<string>();
-  if (!visibleKinds.resources) {
-    hiddenKinds.add("resource");
-  }
-  if (!visibleKinds.workers) {
-    hiddenKinds.add("worker");
-  }
-  const visibleNodes = WORKER_RESOURCE_TOPOLOGY.nodes.filter(
-    (node) => !hiddenKinds.has(node.kind),
-  );
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
   const visibleTopology = {
-    edges: WORKER_RESOURCE_TOPOLOGY.edges.filter(
-      (edge) =>
-        visibleNodeIds.has(edge.sourceId) && visibleNodeIds.has(edge.targetId),
-    ),
+    edges: WORKER_RESOURCE_TOPOLOGY.edges.filter((edge) => {
+      if (
+        !visibleNodeIds.has(edge.sourceId) ||
+        !visibleNodeIds.has(edge.targetId)
+      ) {
+        return false;
+      }
+      if (selectedPreset === "workflow") {
+        return (
+          edge.kind === "work-type-state" ||
+          edge.kind === "workstation-input" ||
+          edge.kind === "workstation-output"
+        );
+      }
+      if (selectedPreset === "execution") {
+        return (
+          edge.kind === "work-type-state" ||
+          edge.kind === "workstation-input" ||
+          edge.kind === "workstation-output" ||
+          edge.kind === "workstation-on-continue" ||
+          edge.kind === "workstation-on-failure" ||
+          edge.kind === "workstation-on-rejection"
+        );
+      }
+      if (selectedPreset === "infrastructure") {
+        return (
+          edge.kind === "worker-assignment" ||
+          edge.kind === "worker-resource" ||
+          edge.kind === "workstation-resource"
+        );
+      }
+      return true;
+    }),
     nodes: visibleNodes,
   };
   const flow = buildFactoryGraphEditorFlowModel({
@@ -357,30 +399,34 @@ function WorkerResourceDensityStory() {
   return (
     <div className="relative h-[560px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
       <FactoryGraphEditorVisibilityPanel
-        onToggle={(key) =>
-          setVisibleKinds((currentKinds) => ({
-            ...currentKinds,
-            [key]: !currentKinds[key],
-          }))
-        }
+        onSelectPreset={setSelectedPreset}
         options={[
           {
-            count: 3,
-            key: "workers",
-            label: "Workers",
-            visible: visibleKinds.workers,
+            key: "all",
+            label: "All",
+            selected: selectedPreset === "all",
           },
           {
-            count: 1,
-            key: "resources",
-            label: "Resources",
-            visible: visibleKinds.resources,
+            key: "workflow",
+            label: "Workflow",
+            selected: selectedPreset === "workflow",
+          },
+          {
+            key: "execution",
+            label: "Execution",
+            selected: selectedPreset === "execution",
+          },
+          {
+            key: "infrastructure",
+            label: "Infrastructure",
+            selected: selectedPreset === "infrastructure",
           },
         ]}
         visible={true}
       />
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
         edges={flow.edges}
         fitView={true}
         nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
@@ -497,18 +543,19 @@ export const WorkerResourceDensity = {
       "Unavailable",
     );
 
-    const hideWorkers = await canvas.findByRole("button", {
-      name: "Hide workers lane",
+    const infrastructurePreset = await canvas.findByRole("button", {
+      name: "Infrastructure",
     });
-    await userEvent.click(hideWorkers);
-    await expect(canvas.queryByText("writer")).toBeNull();
-    await expect(canvas.queryByText("reviewer")).toBeNull();
-
-    const hideResources = await canvas.findByRole("button", {
-      name: "Hide resources lane",
-    });
-    await userEvent.click(hideResources);
-    await expect(canvas.queryByText("gpu")).toBeNull();
+    await userEvent.click(infrastructurePreset);
+    await expect(canvas.getByText("gpu")).toBeVisible();
     await expect(canvas.getByText("draft")).toBeVisible();
+
+    const workflowPreset = await canvas.findByRole("button", {
+      name: "Workflow",
+    });
+    await userEvent.click(workflowPreset);
+    await expect(canvas.queryByText("writer")).toBeNull();
+    await expect(canvas.queryByText("gpu")).toBeNull();
+    await expect(canvas.getByText("review")).toBeVisible();
   },
 };

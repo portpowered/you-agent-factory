@@ -18,6 +18,11 @@ import { FactoryGraphEditorTooltipButton } from "./factory-graph-editor-tooltip-
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
 export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
+export type FactoryGraphEditorVisibilityPreset =
+  | "all"
+  | "workflow"
+  | "execution"
+  | "infrastructure";
 
 export interface FactoryGraphEditorMenuAction {
   description?: string;
@@ -26,22 +31,21 @@ export interface FactoryGraphEditorMenuAction {
   label: string;
 }
 
-export interface FactoryGraphEditorVisibilityOption {
-  count: number;
-  key: "resources" | "workers";
+export interface FactoryGraphEditorVisibilityPresetOption {
+  key: FactoryGraphEditorVisibilityPreset;
   label: string;
-  visible: boolean;
+  selected: boolean;
 }
 
 const TOOLBAR_SHELL_CLASS =
-  "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:translate-x-0 max-md:justify-between";
+  "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0";
 const MENU_LIST_CLASS = "grid gap-1";
 const MENU_ACTION_CLASS =
   "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent/20 hover:bg-af-overlay/6 focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:opacity-55";
 const MENU_ACTION_LABEL_CLASS = "text-sm font-semibold text-af-ink";
 const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-ink/68";
 const VISIBILITY_PANEL_CLASS =
-  "pointer-events-auto absolute right-7 top-24 z-20 grid gap-3 rounded-2xl border border-af-overlay/12 bg-af-surface/94 p-3 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-20";
+  "pointer-events-auto absolute right-7 top-7 z-20 flex flex-wrap items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-2 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4";
 const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
   danger: "border-af-danger/28 bg-af-danger/8 text-af-danger-ink",
   neutral: "border-af-overlay/14 bg-af-overlay/6 text-af-ink/82",
@@ -49,7 +53,7 @@ const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
 };
 
 const STATUS_PILL_CLASS =
-  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold";
+  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold max-md:min-w-0 max-md:flex-1 max-md:justify-center";
 
 export function FactoryGraphEditorToolbar({
   activeTool,
@@ -84,14 +88,6 @@ export function FactoryGraphEditorToolbar({
       aria-label={messages.toolbarAriaLabel}
       className={TOOLBAR_SHELL_CLASS}
     >
-      <FactoryGraphEditorToolbarButton
-        active={activeTool === "add"}
-        description={messages.toolbarAddDescription}
-        disabled={!canInteract}
-        label={messages.toolbarAddLabel}
-        onClick={() => onSelectTool(activeTool === "add" ? null : "add")}
-        tone={activeTool === "add" ? "secondary" : "outline"}
-      />
       <FactoryGraphEditorAddMenu
         actions={addMenuActions}
         canInteract={canInteract}
@@ -104,6 +100,7 @@ export function FactoryGraphEditorToolbar({
         active={activeTool === "delete"}
         description={messages.toolbarDeleteDescription}
         disabled={!canInteract}
+        icon={<TrashIcon />}
         label={messages.toolbarDeleteLabel}
         onClick={() => onSelectTool(activeTool === "delete" ? null : "delete")}
         tone={activeTool === "delete" ? "secondary" : "outline"}
@@ -112,6 +109,7 @@ export function FactoryGraphEditorToolbar({
         active={activeTool === "connect"}
         description={messages.toolbarConnectDescription}
         disabled={!canInteract}
+        icon={<ConnectIcon />}
         label={messages.toolbarConnectLabel}
         onClick={() =>
           onSelectTool(activeTool === "connect" ? null : "connect")
@@ -137,13 +135,13 @@ export function FactoryGraphEditorToolbar({
 
 export function FactoryGraphEditorVisibilityPanel({
   locale,
-  onToggle,
+  onSelectPreset,
   options,
   visible,
 }: {
   locale?: string;
-  onToggle: (key: FactoryGraphEditorVisibilityOption["key"]) => void;
-  options: FactoryGraphEditorVisibilityOption[];
+  onSelectPreset: (preset: FactoryGraphEditorVisibilityPreset) => void;
+  options: FactoryGraphEditorVisibilityPresetOption[];
   visible: boolean;
 }) {
   if (!visible || options.length === 0) {
@@ -153,49 +151,22 @@ export function FactoryGraphEditorVisibilityPanel({
 
   return (
     <section
-      aria-label={messages.toolbarVisibilityAriaLabel}
+      aria-label={messages.visibilityPresetsAriaLabel}
       className={VISIBILITY_PANEL_CLASS}
     >
-      <div className="grid gap-1">
-        <p className="m-0 text-sm font-semibold text-af-ink">
-          {messages.denseGraphTitle}
-        </p>
-        <p className="m-0 text-xs leading-5 text-af-ink/68">
-          {messages.toolbarVisibilityDescription}
-        </p>
-      </div>
-      <div className="grid gap-2">
-        {options.map((option) => (
-          <button
-            aria-label={messages.toolbarVisibilityToggleLabel(
-              option.visible,
-              option.label,
-            )}
-            aria-pressed={option.visible}
-            className={cn(
-              "flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-af-accent",
-              option.visible
-                ? "border-af-accent/20 bg-af-accent/8 text-af-ink"
-                : "border-af-overlay/12 bg-af-overlay/4 text-af-ink/72",
-            )}
-            key={option.key}
-            onClick={() => onToggle(option.key)}
-            type="button"
-          >
-            <span className="grid gap-0.5">
-              <span className="text-sm font-semibold">{option.label}</span>
-              <span className="text-xs opacity-80">
-                {option.visible
-                  ? messages.stateVisible
-                  : messages.stateCollapsed}
-              </span>
-            </span>
-            <span className="rounded-full border border-current/15 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]">
-              {option.count}
-            </span>
-          </button>
-        ))}
-      </div>
+      {options.map((option) => (
+        <Button
+          aria-pressed={option.selected}
+          className="min-w-20"
+          key={option.key}
+          onClick={() => onSelectPreset(option.key)}
+          size="sm"
+          tone={option.selected ? "secondary" : "outline"}
+          type="button"
+        >
+          {option.label}
+        </Button>
+      ))}
     </section>
   );
 }
@@ -204,6 +175,7 @@ function FactoryGraphEditorToolbarButton({
   active,
   description,
   disabled,
+  icon,
   label,
   onClick,
   tone,
@@ -211,20 +183,22 @@ function FactoryGraphEditorToolbarButton({
   active: boolean;
   description: string;
   disabled: boolean;
+  icon: ReactNode;
   label: string;
   onClick: () => void;
   tone: "outline" | "secondary";
 }) {
   return (
     <FactoryGraphEditorTooltipButton
+      aria-label={label}
       aria-pressed={active}
-      className={buttonVariants({ size: "sm", tone })}
+      className={buttonVariants({ size: "icon", tone })}
       disabled={disabled}
       onClick={onClick}
       tooltip={description}
       type="button"
     >
-      {label}
+      {icon}
     </FactoryGraphEditorTooltipButton>
   );
 }
@@ -309,6 +283,49 @@ function FactoryGraphEditorAddMenu({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function ConnectIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M7 7h3v3" />
+      <path d="M14 14h3v3" />
+      <path d="M10 7H7v10h10v-3" />
+      <path d="M10 14 17 7" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M4 7h16" />
+      <path d="M9 7V5h6v2" />
+      <path d="M8 7v11a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
+    </svg>
   );
 }
 
