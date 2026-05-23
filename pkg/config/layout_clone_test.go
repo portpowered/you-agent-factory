@@ -116,3 +116,57 @@ func TestCloneFactoryConfig_PreservesFactoryGuards(t *testing.T) {
 		t.Fatalf("expected cloned factory guard to be independent of source mutations, got %#v", cloned.Guards[0])
 	}
 }
+
+func TestCloneFactoryConfig_ClonesModelOperationBindingWorkContent(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:      "writer",
+			Operation: "MODEL_INVOKE",
+			OperationBindings: []interfaces.ModelOperationBinding{{
+				Slot: "draft",
+				Config: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "configured prompt",
+				}},
+				DefaultContent: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "fallback prompt",
+				}},
+			}, {
+				Slot:           "empty",
+				Config:         []interfaces.WorkContentPart{},
+				DefaultContent: []interfaces.WorkContentPart{},
+			}},
+		}},
+	}
+
+	cloned, err := CloneFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("CloneFactoryConfig: %v", err)
+	}
+	bindings := cloned.Workstations[0].OperationBindings
+	if len(bindings) != 2 {
+		t.Fatalf("cloned bindings = %#v, want two bindings", bindings)
+	}
+	if bindings[0].Config == nil || len(bindings[0].Config) != 1 || bindings[0].Config[0].Text != "configured prompt" {
+		t.Fatalf("cloned config content = %#v, want one detached configured part", bindings[0].Config)
+	}
+	if bindings[0].DefaultContent == nil || len(bindings[0].DefaultContent) != 1 || bindings[0].DefaultContent[0].Text != "fallback prompt" {
+		t.Fatalf("cloned default content = %#v, want one detached default part", bindings[0].DefaultContent)
+	}
+	if bindings[1].Config != nil {
+		t.Fatalf("empty config content = %#v, want nil", bindings[1].Config)
+	}
+	if bindings[1].DefaultContent != nil {
+		t.Fatalf("empty default content = %#v, want nil", bindings[1].DefaultContent)
+	}
+
+	cfg.Workstations[0].OperationBindings[0].Config[0].Text = "mutated config"
+	cfg.Workstations[0].OperationBindings[0].DefaultContent[0].Text = "mutated default"
+	if bindings[0].Config[0].Text != "configured prompt" {
+		t.Fatalf("cloned config content changed after source mutation: %#v", bindings[0].Config)
+	}
+	if bindings[0].DefaultContent[0].Text != "fallback prompt" {
+		t.Fatalf("cloned default content changed after source mutation: %#v", bindings[0].DefaultContent)
+	}
+}

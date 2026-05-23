@@ -39,18 +39,23 @@ func CloneTokenColor(color TokenColor) TokenColor {
 		ParentID:                 color.ParentID,
 		Tags:                     cloneStringMap(color.Tags),
 		Relations:                cloneRelations(color.Relations),
-		Content:                  cloneWorkContentParts(color.Content),
+		Content:                  CloneWorkContentParts(color.Content),
 		Payload:                  cloneBytes(color.Payload),
 	}
 }
 
-func cloneWorkContentParts(parts []WorkContentPart) []WorkContentPart {
+// CloneWorkContentParts returns a detached copy of canonical work content parts.
+func CloneWorkContentParts(parts []WorkContentPart) []WorkContentPart {
 	if len(parts) == 0 {
 		return nil
 	}
 	clone := make([]WorkContentPart, len(parts))
 	copy(clone, parts)
 	return clone
+}
+
+func cloneWorkContentParts(parts []WorkContentPart) []WorkContentPart {
+	return CloneWorkContentParts(parts)
 }
 
 // CloneTokenHistory returns a detached copy of canonical runtime token history.

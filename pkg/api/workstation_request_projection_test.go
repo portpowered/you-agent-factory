@@ -278,6 +278,78 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_UsesDispatchTimeCons
 	}})
 }
 
+func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsNilAndDetachedWorkContent(t *testing.T) {
+	state := workstationRequestProjectionStateFixture()
+	state.PayloadLineage.RecordConsumedInputSnapshot("dispatch-empty", interfaces.FactoryWorkItem{
+		ID:          "work-empty",
+		WorkTypeID:  "task",
+		DisplayName: "Empty story",
+		TraceID:     "trace-empty",
+		PlaceID:     "task:queued",
+		Content:     []interfaces.WorkContentPart{},
+	})
+	state.WorkItemsByID["work-empty"] = interfaces.FactoryWorkItem{
+		ID:          "work-empty",
+		WorkTypeID:  "task",
+		DisplayName: "Empty story",
+		TraceID:     "trace-empty",
+		PlaceID:     "task:queued",
+	}
+	state.CompletedDispatches = append(state.CompletedDispatches, interfaces.FactoryWorldDispatchCompletion{
+		DispatchID:   "dispatch-empty",
+		TransitionID: "review",
+		Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
+		StartedAt:    time.Date(2026, 4, 22, 20, 0, 0, 0, time.UTC),
+		CompletedAt:  time.Date(2026, 4, 22, 20, 0, 1, 0, time.UTC),
+		Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+		WorkItemIDs:  []string{"work-empty"},
+		ConsumedInputs: []interfaces.WorkstationInput{{
+			TokenID: "token-empty",
+			PlaceID: "task:queued",
+			WorkItem: &interfaces.FactoryWorkItem{
+				ID:          "work-empty",
+				WorkTypeID:  "task",
+				DisplayName: "Empty story",
+				TraceID:     "trace-empty",
+				PlaceID:     "task:queued",
+			},
+		}},
+		InputWorkItems: []interfaces.FactoryWorkItem{{
+			ID:          "work-empty",
+			WorkTypeID:  "task",
+			DisplayName: "Empty story",
+			TraceID:     "trace-empty",
+			PlaceID:     "task:queued",
+			Content:     []interfaces.WorkContentPart{},
+		}},
+	})
+
+	slice := BuildFactoryWorldWorkstationRequestProjectionSlice(state)
+	requests := requireWorkstationProjectionRequests(t, slice, 3)
+
+	completedItems := requests["dispatch-completed"].Request.InputWorkItems
+	if completedItems == nil || len(*completedItems) != 1 {
+		t.Fatalf("dispatch-completed input work items = %#v, want one", completedItems)
+	}
+	if (*completedItems)[0].Content == nil || len(*(*completedItems)[0].Content) != 1 {
+		t.Fatalf("dispatch-completed content = %#v, want one projected part", (*completedItems)[0].Content)
+	}
+
+	emptyItems := requests["dispatch-empty"].Request.InputWorkItems
+	if emptyItems == nil || len(*emptyItems) != 1 {
+		t.Fatalf("dispatch-empty input work items = %#v, want one", emptyItems)
+	}
+	if (*emptyItems)[0].Content != nil {
+		t.Fatalf("dispatch-empty content = %#v, want nil for empty source content", (*emptyItems)[0].Content)
+	}
+
+	state.CompletedDispatches[0].InputWorkItems[0].Content[0].Text = "mutated after projection"
+	assertGeneratedWorkContentParts(t, (*completedItems)[0].Content, []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "Completed dispatch payload",
+	}})
+}
+
 func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ReplayFixtureProjectsHistoricalConsumedPayloads(t *testing.T) {
 	events := loadWorkstationProjectionReplayFixtureEvents(t, "pkg", "factory", "projections", "testdata", "work-payload-lineage-replay.jsonl")
 	state, err := projections.ReconstructFactoryWorldState(events, lastWorkstationProjectionFixtureTick(events))
