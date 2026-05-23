@@ -48,6 +48,9 @@ func TestRunCommand_RecordFlagsDocumentDefaultRecordingBehavior(t *testing.T) {
 	if !strings.Contains(recordFlag.Usage, "default live runs record automatically unless --no-record is used") {
 		t.Fatalf("--record usage = %q, want default-recording guidance", recordFlag.Usage)
 	}
+	if !strings.Contains(recordFlag.Usage, "replay artifacts are sensitive") {
+		t.Fatalf("--record usage = %q, want sensitivity guidance", recordFlag.Usage)
+	}
 
 	noRecordFlag := runCmd.Flags().Lookup("no-record")
 	if noRecordFlag == nil {
@@ -61,6 +64,17 @@ func TestRunCommand_RecordFlagsDocumentDefaultRecordingBehavior(t *testing.T) {
 	}
 	if !strings.Contains(runCmd.Long, "Normal live runs record by default unless you pass --no-record.") {
 		t.Fatal("expected run command long help text to document default recording")
+	}
+	if !strings.Contains(runCmd.Long, "Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata.") {
+		t.Fatal("expected run command long help text to document replay artifact sensitivity")
+	}
+
+	replayFlag := runCmd.Flags().Lookup("replay")
+	if replayFlag == nil {
+		t.Fatal("expected --replay flag on run command")
+	}
+	if !strings.Contains(replayFlag.Usage, "existing sensitive replay artifact") {
+		t.Fatalf("--replay usage = %q, want sensitivity guidance", replayFlag.Usage)
 	}
 }
 
