@@ -345,9 +345,9 @@ func buildModelSummary(aggregate discoveredModelAggregate) factoryapi.ModelSumma
 
 func modelStatus(aggregate discoveredModelAggregate) factoryapi.ModelStatus {
 	if aggregate.localCount > 0 && !aggregate.hasModelScoped {
-		return factoryapi.UNAVAILABLE
+		return factoryapi.ModelStatusUNAVAILABLE
 	}
-	return factoryapi.READY
+	return factoryapi.ModelStatusREADY
 }
 
 func modelLoadState(aggregate discoveredModelAggregate) factoryapi.ModelLoadState {
@@ -379,7 +379,7 @@ func modelDiagnostics(aggregate discoveredModelAggregate, summary factoryapi.Mod
 		"workers":          strings.Join(aggregate.workerNames, ","),
 		"mixedLocality":    strconv.FormatBool(len(aggregate.localities) > 1),
 	}
-	if summary.Status == factoryapi.UNAVAILABLE {
+	if summary.Status == factoryapi.ModelStatusUNAVAILABLE {
 		diagnostics["statusReason"] = "local model workers require a matching MODEL resource declaration for readiness"
 	} else {
 		diagnostics["statusReason"] = "declared worker capabilities and resources are discoverable"

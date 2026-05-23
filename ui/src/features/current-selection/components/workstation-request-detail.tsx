@@ -1,12 +1,19 @@
+import type { ReactNode } from "react";
 import { formatWorkItemLabel } from "../../../components/ui/formatters";
 import { formatDurationMillis } from "../../../components/ui/formatters";
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
+import {
+  DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_LABEL_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+} from "../../../components/ui/dashboard-typography";
 import { WIDGET_SUBTITLE_CLASS } from "../../../components/dashboard/widget-board";
 import { cn } from "../../../lib/cn";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
+  AuthoredBodyText,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   MetadataSection,
+  REQUEST_AUTHORED_TEXT_CLASS,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
@@ -83,7 +90,9 @@ function WorkstationRequestSummary({
   view: WorkstationRequestDetailView;
 }) {
   const messages = useCurrentSelectionDetailMessages();
-  const requestRunnerMetadata = resolveSelectedRunnerMetadata(view.requestRunner);
+  const requestRunnerMetadata = resolveSelectedRunnerMetadata(
+    view.requestRunner,
+  );
 
   return (
     <>
@@ -121,7 +130,8 @@ function WorkstationRequestSummary({
                 <span>{view.outcome}</span>
                 {view.hasFailedOutcome && view.normalizedFailureReason ? (
                   <span>
-                    {messages.failureReasonLabel}: {view.normalizedFailureReason}
+                    {messages.failureReasonLabel}:{" "}
+                    {view.normalizedFailureReason}
                   </span>
                 ) : null}
                 {view.hasFailedOutcome && view.normalizedFailureMessage ? (
@@ -177,7 +187,10 @@ function WorkstationRequestSummary({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm text-af-ink">
-                      {labelForRunnerCapability(messages, capability.capability)}
+                      {labelForRunnerCapability(
+                        messages,
+                        capability.capability,
+                      )}
                     </span>
                     <span
                       className={
@@ -244,7 +257,9 @@ function RequestDetailsSection({
         aria-label={messages.requestDetailsTitle}
         className={RUNTIME_DETAILS_SECTION_CLASS}
       >
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.requestDetailsTitle}</h4>
+        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+          {messages.requestDetailsTitle}
+        </h4>
         <ConsumedWorkItemsSection
           onSelectWorkID={onSelectWorkID}
           selectedWorkID={selectedWorkID}
@@ -259,7 +274,9 @@ function RequestDetailsSection({
       aria-label={messages.requestDetailsTitle}
       className={RUNTIME_DETAILS_SECTION_CLASS}
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.requestDetailsTitle}</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.requestDetailsTitle}
+      </h4>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <ScriptRequestFields request={request} />
       </dl>
@@ -292,31 +309,233 @@ function ConsumedWorkItemsSection({
   }
 
   return (
-    <div className="grid gap-1">
+    <div className="grid gap-2">
       <span>{messages.consumedWorkItemsLabel}</span>
-      <div className="flex flex-wrap gap-2">
+      <div className="grid gap-3">
         {workItems.map((workItem) => {
           const workLabel = formatWorkItemLabel(workItem);
           const isSelected = selectedWorkID === workItem.work_id;
+          const hasPayloadDetails = workItemHasPayloadDetails(workItem);
 
           return (
-            <button
-              aria-label={messages.selectWorkItemLabel(workLabel)}
-              aria-pressed={isSelected}
-              className={cn(
-                WORK_SELECTION_BUTTON_CLASS,
-                isSelected && "border-af-accent/35 bg-af-accent/10 text-af-accent",
-              )}
+            <article
+              className="grid gap-2 rounded-lg border border-af-overlay/8 bg-af-overlay/4 p-3"
               key={workItem.work_id}
-              onClick={() => onSelectWorkID?.(workItem.work_id)}
-              type="button"
             >
-              {workLabel}
-            </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  aria-label={messages.selectWorkItemLabel(workLabel)}
+                  aria-pressed={isSelected}
+                  className={cn(
+                    WORK_SELECTION_BUTTON_CLASS,
+                    isSelected &&
+                      "border-af-accent/35 bg-af-accent/10 text-af-accent",
+                  )}
+                  onClick={() => onSelectWorkID?.(workItem.work_id)}
+                  type="button"
+                >
+                  {workLabel}
+                </button>
+                {workItem.state ? (
+                  <span
+                    className={cn(
+                      "text-af-ink/68",
+                      DASHBOARD_SUPPORTING_TEXT_CLASS,
+                    )}
+                  >
+                    {messages.stateLabel}: {workItem.state}
+                  </span>
+                ) : null}
+                {(workItem.work_type_id ?? workItem.workTypeId) ? (
+                  <span
+                    className={cn(
+                      "text-af-ink/68",
+                      DASHBOARD_SUPPORTING_TEXT_CLASS,
+                    )}
+                  >
+                    {messages.workTypeLabel}:{" "}
+                    {workItem.work_type_id ?? workItem.workTypeId}
+                  </span>
+                ) : null}
+              </div>
+              {hasPayloadDetails ? (
+                <ConsumedWorkPayload workItem={workItem} />
+              ) : null}
+            </article>
           );
         })}
       </div>
     </div>
+  );
+}
+
+function ConsumedWorkPayload({
+  workItem,
+}: {
+  workItem: NonNullable<
+    NonNullable<
+      WorkstationRequestDetailCardProps["request"]["request_view"]
+    >["input_work_items"]
+  >[number];
+}) {
+  const messages = useCurrentSelectionDetailMessages();
+  const payloadStatus =
+    workItem.payloadStatus ?? workItem.payload_status ?? undefined;
+  const payloadReason =
+    workItem.payloadUnavailableReason ?? workItem.payload_unavailable_reason;
+  const content = workItem.content ?? [];
+
+  let body: ReactNode = null;
+  switch (payloadStatus) {
+    case "ERROR":
+      body = (
+        <p
+          className={cn(
+            "m-0 text-af-warning-ink",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+        >
+          {messages.consumedPayloadError}
+          {payloadReason ? ` ${payloadReason}` : ""}
+        </p>
+      );
+      break;
+    case "LOADING":
+      body = (
+        <p
+          className={cn("m-0 text-af-ink/68", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+        >
+          {messages.consumedPayloadLoading}
+        </p>
+      );
+      break;
+    case "UNAVAILABLE":
+      body = (
+        <p
+          className={cn(
+            "m-0 text-af-warning-ink",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+        >
+          {messages.consumedPayloadUnavailable}
+          {payloadReason ? ` ${payloadReason}` : ""}
+        </p>
+      );
+      break;
+    default:
+      if (content.length === 0) {
+        body = (
+          <p
+            className={cn(
+              "m-0 text-af-ink/68",
+              DASHBOARD_SUPPORTING_TEXT_CLASS,
+            )}
+          >
+            {messages.consumedPayloadEmpty}
+          </p>
+        );
+      } else {
+        body = (
+          <div className="grid gap-2">
+            {content.map((part, index) =>
+              renderConsumedContentPart(part, index),
+            )}
+          </div>
+        );
+      }
+      break;
+  }
+
+  return (
+    <section
+      aria-label={messages.consumedPayloadHeading}
+      className="grid gap-2"
+    >
+      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+        {messages.consumedPayloadHeading}
+      </span>
+      {body}
+    </section>
+  );
+}
+
+function renderConsumedContentPart(
+  part: NonNullable<
+    NonNullable<
+      NonNullable<
+        WorkstationRequestDetailCardProps["request"]["request_view"]
+      >["input_work_items"]
+    >[number]["content"]
+  >[number],
+  index: number,
+) {
+  switch (part.type) {
+    case "text":
+    case "TEXT":
+      if (!part.text) {
+        return null;
+      }
+      return <AuthoredBodyText key={`content-${index}`} value={part.text} />;
+    case "JSON": {
+      const value =
+        typeof part.json === "string"
+          ? part.json
+          : JSON.stringify(part.json ?? null, null, 2);
+      return (
+        <pre className={REQUEST_AUTHORED_TEXT_CLASS} key={`content-${index}`}>
+          <code>{value}</code>
+        </pre>
+      );
+    }
+    default:
+      return (
+        <div
+          className={cn(
+            "rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 text-af-ink/72",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+          key={`content-${index}`}
+        >
+          {describeNonTextContentPart(part)}
+        </div>
+      );
+  }
+}
+
+function describeNonTextContentPart(
+  part: NonNullable<
+    NonNullable<
+      NonNullable<
+        WorkstationRequestDetailCardProps["request"]["request_view"]
+      >["input_work_items"]
+    >[number]["content"]
+  >[number],
+) {
+  if ("file" in part && part.file) {
+    return `${part.type} content: ${part.file}`;
+  }
+  if ("label" in part && part.label) {
+    return `${part.type} content: ${part.label}`;
+  }
+  if ("contentType" in part && part.contentType) {
+    return `${part.type} content (${part.contentType})`;
+  }
+  return `${part.type} content`;
+}
+
+function workItemHasPayloadDetails(
+  workItem: NonNullable<
+    NonNullable<
+      WorkstationRequestDetailCardProps["request"]["request_view"]
+    >["input_work_items"]
+  >[number],
+) {
+  return Boolean(
+    workItem.payloadStatus ||
+      workItem.payload_status ||
+      workItem.payloadUnavailableReason ||
+      workItem.payload_unavailable_reason ||
+      workItem.content?.length,
   );
 }
 

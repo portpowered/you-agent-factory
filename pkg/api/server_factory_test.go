@@ -91,7 +91,7 @@ func TestListModels_ReturnsDiscoveredModelSummaries(t *testing.T) {
 			Results: []factoryapi.ModelSummary{{
 				Name:             "OMNIVOICE_Q4_K_M",
 				ProviderLocality: factoryapi.WorkerModelLocalityLocal,
-				Status:           factoryapi.READY,
+				Status:           factoryapi.ModelStatusREADY,
 				LoadState:        factoryapi.UNLOADED,
 				Operations:       []factoryapi.ModelOperation{{Name: "TTS"}},
 				Modalities:       []factoryapi.ModelOperationContentType{factoryapi.ModelOperationContentTypeAudio, factoryapi.ModelOperationContentTypeText},
@@ -120,7 +120,7 @@ func TestGetModel_ReturnsDiscoveredModelDetail(t *testing.T) {
 			"OMNIVOICE_Q4_K_M": {
 				Name:             "OMNIVOICE_Q4_K_M",
 				ProviderLocality: factoryapi.WorkerModelLocalityLocal,
-				Status:           factoryapi.READY,
+				Status:           factoryapi.ModelStatusREADY,
 				LoadState:        factoryapi.UNLOADED,
 				Operations:       []factoryapi.ModelOperation{{Name: "TTS"}},
 				Modalities:       []factoryapi.ModelOperationContentType{factoryapi.ModelOperationContentTypeAudio, factoryapi.ModelOperationContentTypeText},

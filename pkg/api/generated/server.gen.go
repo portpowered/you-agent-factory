@@ -116,6 +116,14 @@ const (
 	Unsupported FactoryWorldRunnerOptionalCapabilityStatus = "unsupported"
 )
 
+// Defines values for FactoryWorldWorkItemRefPayloadStatus.
+const (
+	FactoryWorldWorkItemRefPayloadStatusERROR       FactoryWorldWorkItemRefPayloadStatus = "ERROR"
+	FactoryWorldWorkItemRefPayloadStatusLOADING     FactoryWorldWorkItemRefPayloadStatus = "LOADING"
+	FactoryWorldWorkItemRefPayloadStatusRESOLVED    FactoryWorldWorkItemRefPayloadStatus = "RESOLVED"
+	FactoryWorldWorkItemRefPayloadStatusUNAVAILABLE FactoryWorldWorkItemRefPayloadStatus = "UNAVAILABLE"
+)
+
 // Defines values for GuardType.
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
@@ -182,8 +190,8 @@ const (
 
 // Defines values for ModelStatus.
 const (
-	READY       ModelStatus = "READY"
-	UNAVAILABLE ModelStatus = "UNAVAILABLE"
+	ModelStatusREADY       ModelStatus = "READY"
+	ModelStatusUNAVAILABLE ModelStatus = "UNAVAILABLE"
 )
 
 // Defines values for PromptTemplateDiagnosticKind.
@@ -945,14 +953,23 @@ type FactoryWorldWorkDiagnostics struct {
 
 // FactoryWorldWorkItemRef defines model for FactoryWorldWorkItemRef.
 type FactoryWorldWorkItemRef struct {
-	ChainingTraceDepth       *int      `json:"chainingTraceDepth,omitempty"`
-	CurrentChainingTraceId   *string   `json:"currentChainingTraceId,omitempty"`
-	DisplayName              *string   `json:"displayName,omitempty"`
-	PreviousChainingTraceIds *[]string `json:"previousChainingTraceIds,omitempty"`
-	TraceId                  *string   `json:"traceId,omitempty"`
-	WorkId                   string    `json:"workId"`
-	WorkTypeId               *string   `json:"workTypeId,omitempty"`
+	ChainingTraceDepth *int `json:"chainingTraceDepth,omitempty"`
+
+	// Content Ordered canonical content parts for one work item.
+	Content                  *WorkContent                          `json:"content,omitempty"`
+	CurrentChainingTraceId   *string                               `json:"currentChainingTraceId,omitempty"`
+	DisplayName              *string                               `json:"displayName,omitempty"`
+	PayloadStatus            *FactoryWorldWorkItemRefPayloadStatus `json:"payloadStatus,omitempty"`
+	PayloadUnavailableReason *string                               `json:"payloadUnavailableReason,omitempty"`
+	PreviousChainingTraceIds *[]string                             `json:"previousChainingTraceIds,omitempty"`
+	State                    *string                               `json:"state,omitempty"`
+	TraceId                  *string                               `json:"traceId,omitempty"`
+	WorkId                   string                                `json:"workId"`
+	WorkTypeId               *string                               `json:"workTypeId,omitempty"`
 }
+
+// FactoryWorldWorkItemRefPayloadStatus defines model for FactoryWorldWorkItemRef.PayloadStatus.
+type FactoryWorldWorkItemRefPayloadStatus string
 
 // FactoryWorldWorkstationRequestCountView defines model for FactoryWorldWorkstationRequestCountView.
 type FactoryWorldWorkstationRequestCountView struct {

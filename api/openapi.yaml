@@ -1957,6 +1957,8 @@ components:
           type: string
         workTypeId:
           type: string
+        state:
+          type: string
         displayName:
           type: string
         chainingTraceDepth:
@@ -1969,6 +1971,17 @@ components:
           items:
             type: string
         traceId:
+          type: string
+        content:
+          $ref: '#/components/schemas/WorkContent'
+        payloadStatus:
+          type: string
+          enum:
+            - RESOLVED
+            - UNAVAILABLE
+            - LOADING
+            - ERROR
+        payloadUnavailableReason:
           type: string
     FactoryWorldTokenView:
       type: object
