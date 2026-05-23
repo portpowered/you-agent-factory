@@ -278,6 +278,20 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_UsesDispatchTimeCons
 	}})
 }
 
+func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsNilAndDetachedWorkContent(t *testing.T) {
+	state := workstationRequestProjectionStateFixture()
+	appendEmptyAndMultiPartProjectionFixtures(&state)
+
+	slice := BuildFactoryWorldWorkstationRequestProjectionSlice(state)
+	requests := requireWorkstationProjectionRequests(t, slice, 4)
+	assertProjectedNilAndMultiPartContent(t, requests)
+
+	state.CompletedDispatches[0].InputWorkItems[0].Content[0].Text = "mutated after projection"
+	state.CompletedDispatches[2].InputWorkItems[0].Content[0].Text = "mutated multi-part text"
+	state.CompletedDispatches[2].InputWorkItems[0].Content[1].File = "mutated-payload-diagram.png"
+	assertProjectedNilAndMultiPartContent(t, requests)
+}
+
 func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ReplayFixtureProjectsHistoricalConsumedPayloads(t *testing.T) {
 	events := loadWorkstationProjectionReplayFixtureEvents(t, "pkg", "factory", "projections", "testdata", "work-payload-lineage-replay.jsonl")
 	state, err := projections.ReconstructFactoryWorldState(events, lastWorkstationProjectionFixtureTick(events))
@@ -327,6 +341,116 @@ func requireWorkstationProjectionRequests(t *testing.T, slice factoryapi.Factory
 		t.Fatalf("workstation request count = %d, want %d", len(requests), want)
 	}
 	return requests
+}
+
+func appendEmptyAndMultiPartProjectionFixtures(state *interfaces.FactoryWorldState) {
+	emptyItem := interfaces.FactoryWorkItem{
+		ID:          "work-empty",
+		WorkTypeID:  "task",
+		DisplayName: "Empty story",
+		TraceID:     "trace-empty",
+		PlaceID:     "task:queued",
+		Content:     []interfaces.WorkContentPart{},
+	}
+	state.PayloadLineage.RecordConsumedInputSnapshot("dispatch-empty", emptyItem)
+	state.WorkItemsByID[emptyItem.ID] = interfaces.FactoryWorkItem{
+		ID:          emptyItem.ID,
+		WorkTypeID:  emptyItem.WorkTypeID,
+		DisplayName: emptyItem.DisplayName,
+		TraceID:     emptyItem.TraceID,
+		PlaceID:     emptyItem.PlaceID,
+	}
+
+	multiPartItem := interfaces.FactoryWorkItem{
+		ID:          "work-multi",
+		WorkTypeID:  "task",
+		DisplayName: "Multi-part story",
+		TraceID:     "trace-multi",
+		PlaceID:     "task:queued",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "first multi-part payload",
+		}, {
+			Type:  interfaces.WorkContentPartTypeImage,
+			File:  "payload-diagram.png",
+			Label: "Payload diagram",
+		}},
+	}
+	state.PayloadLineage.RecordWorkRequestSnapshot(2, "request-multi", multiPartItem)
+	state.PayloadLineage.RecordConsumedInputSnapshot("dispatch-multi", multiPartItem)
+	state.WorkItemsByID[multiPartItem.ID] = interfaces.FactoryWorkItem{
+		ID:          multiPartItem.ID,
+		WorkTypeID:  multiPartItem.WorkTypeID,
+		DisplayName: multiPartItem.DisplayName,
+		TraceID:     multiPartItem.TraceID,
+		PlaceID:     multiPartItem.PlaceID,
+	}
+
+	state.CompletedDispatches = append(
+		state.CompletedDispatches,
+		workContentProjectionCompletion("dispatch-empty", emptyItem, time.Date(2026, 4, 22, 20, 0, 0, 0, time.UTC)),
+		workContentProjectionCompletion("dispatch-multi", multiPartItem, time.Date(2026, 4, 22, 20, 5, 0, 0, time.UTC)),
+	)
+}
+
+func workContentProjectionCompletion(
+	dispatchID string,
+	item interfaces.FactoryWorkItem,
+	startedAt time.Time,
+) interfaces.FactoryWorldDispatchCompletion {
+	itemCopy := item
+	return interfaces.FactoryWorldDispatchCompletion{
+		DispatchID:   dispatchID,
+		TransitionID: "review",
+		Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
+		StartedAt:    startedAt,
+		CompletedAt:  startedAt.Add(time.Second),
+		Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+		WorkItemIDs:  []string{item.ID},
+		ConsumedInputs: []interfaces.WorkstationInput{{
+			TokenID:  "token-" + strings.TrimPrefix(dispatchID, "dispatch-"),
+			PlaceID:  item.PlaceID,
+			WorkItem: &itemCopy,
+		}},
+		InputWorkItems: []interfaces.FactoryWorkItem{item},
+	}
+}
+
+func assertProjectedNilAndMultiPartContent(
+	t *testing.T,
+	requests map[string]factoryapi.FactoryWorldWorkstationRequestView,
+) {
+	t.Helper()
+
+	completedItems := requests["dispatch-completed"].Request.InputWorkItems
+	if completedItems == nil || len(*completedItems) != 1 {
+		t.Fatalf("dispatch-completed input work items = %#v, want one", completedItems)
+	}
+	assertGeneratedWorkContentParts(t, (*completedItems)[0].Content, []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "Completed dispatch payload",
+	}})
+
+	emptyItems := requests["dispatch-empty"].Request.InputWorkItems
+	if emptyItems == nil || len(*emptyItems) != 1 {
+		t.Fatalf("dispatch-empty input work items = %#v, want one", emptyItems)
+	}
+	if (*emptyItems)[0].Content != nil {
+		t.Fatalf("dispatch-empty content = %#v, want nil for empty source content", (*emptyItems)[0].Content)
+	}
+
+	multiItems := requests["dispatch-multi"].Request.InputWorkItems
+	if multiItems == nil || len(*multiItems) != 1 {
+		t.Fatalf("dispatch-multi input work items = %#v, want one", multiItems)
+	}
+	assertGeneratedWorkContentParts(t, (*multiItems)[0].Content, []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "first multi-part payload",
+	}, {
+		Type:  interfaces.WorkContentPartTypeImage,
+		File:  "payload-diagram.png",
+		Label: "Payload diagram",
+	}})
 }
 
 func loadWorkstationProjectionReplayFixtureEvents(t *testing.T, rel ...string) []factoryapi.FactoryEvent {

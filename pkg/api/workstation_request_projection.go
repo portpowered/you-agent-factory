@@ -530,22 +530,13 @@ func lineageResolvedWorkItemRef(
 ) interfaces.FactoryWorldWorkItemRef {
 	ref := workItemRef(snapshot.WorkItem)
 	ref.State = snapshot.WorkItem.State
-	ref.Content = cloneWorkContentParts(snapshot.WorkItem.Content)
+	ref.Content = interfaces.CloneWorkContentParts(snapshot.WorkItem.Content)
 	ref.PayloadStatus = payloadStatus
 	ref.LineageLogicalWorkID = snapshot.LogicalWorkID
 	ref.LineageSourceKind = string(snapshot.SourceKind)
 	ref.LineageContinuity = string(snapshot.Continuity)
 	ref.LineageParentWorkIDs = cloneStringSlice(snapshot.ParentWorkIDs)
 	return ref
-}
-
-func cloneWorkContentParts(parts []interfaces.WorkContentPart) []interfaces.WorkContentPart {
-	if len(parts) == 0 {
-		return nil
-	}
-	cloned := make([]interfaces.WorkContentPart, len(parts))
-	copy(cloned, parts)
-	return cloned
 }
 
 func workItemRefsForIDs(

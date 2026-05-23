@@ -116,3 +116,76 @@ func TestCloneFactoryConfig_PreservesFactoryGuards(t *testing.T) {
 		t.Fatalf("expected cloned factory guard to be independent of source mutations, got %#v", cloned.Guards[0])
 	}
 }
+
+func TestCloneFactoryConfig_ClonesModelOperationBindingWorkContent(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:      "writer",
+			Operation: "MODEL_INVOKE",
+			OperationBindings: []interfaces.ModelOperationBinding{{
+				Slot: "draft",
+				Config: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "configured prompt",
+				}, {
+					Type:  interfaces.WorkContentPartTypeImage,
+					File:  "configured-diagram.png",
+					Label: "Configured diagram",
+				}},
+				DefaultContent: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "fallback prompt",
+				}, {
+					Type:  interfaces.WorkContentPartTypeImage,
+					File:  "fallback-diagram.png",
+					Label: "Fallback diagram",
+				}},
+			}, {
+				Slot:           "empty",
+				Config:         []interfaces.WorkContentPart{},
+				DefaultContent: []interfaces.WorkContentPart{},
+			}},
+		}},
+	}
+
+	cloned, err := CloneFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("CloneFactoryConfig: %v", err)
+	}
+	bindings := cloned.Workstations[0].OperationBindings
+	if len(bindings) != 2 {
+		t.Fatalf("cloned bindings = %#v, want two bindings", bindings)
+	}
+	assertBindingMultiPartContent(t, bindings[0].Config, "configured prompt", "configured-diagram.png", "Configured diagram", "config")
+	assertBindingMultiPartContent(t, bindings[0].DefaultContent, "fallback prompt", "fallback-diagram.png", "Fallback diagram", "default")
+	if bindings[1].Config != nil {
+		t.Fatalf("empty config content = %#v, want nil", bindings[1].Config)
+	}
+	if bindings[1].DefaultContent != nil {
+		t.Fatalf("empty default content = %#v, want nil", bindings[1].DefaultContent)
+	}
+
+	cfg.Workstations[0].OperationBindings[0].Config[0].Text = "mutated config"
+	cfg.Workstations[0].OperationBindings[0].Config[1].File = "mutated-configured-diagram.png"
+	cfg.Workstations[0].OperationBindings[0].DefaultContent[0].Text = "mutated default"
+	cfg.Workstations[0].OperationBindings[0].DefaultContent[1].Label = "Mutated fallback diagram"
+	assertBindingMultiPartContent(t, bindings[0].Config, "configured prompt", "configured-diagram.png", "Configured diagram", "config after source mutation")
+	assertBindingMultiPartContent(t, bindings[0].DefaultContent, "fallback prompt", "fallback-diagram.png", "Fallback diagram", "default after source mutation")
+}
+
+func assertBindingMultiPartContent(
+	t *testing.T,
+	parts []interfaces.WorkContentPart,
+	wantText string,
+	wantFile string,
+	wantLabel string,
+	label string,
+) {
+	t.Helper()
+	if parts == nil || len(parts) != 2 {
+		t.Fatalf("%s content = %#v, want two detached parts", label, parts)
+	}
+	if parts[0].Text != wantText || parts[1].File != wantFile || parts[1].Label != wantLabel {
+		t.Fatalf("%s content = %#v, want preserved multi-part content", label, parts)
+	}
+}
