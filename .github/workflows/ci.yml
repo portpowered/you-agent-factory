@@ -21,6 +21,7 @@ jobs:
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -46,6 +47,7 @@ jobs:
     name: Build, Lint, and API
     runs-on: ubuntu-latest
     needs: typecheck
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -75,16 +77,39 @@ jobs:
       - name: Build backend binaries
         run: make build
 
-      - name: Run lint verification
-        run: make lint
+      - name: Run dashboard lint verification
+        timeout-minutes: 10
+        run: make ui-lint
+
+      - name: Run dashboard deadcode verification
+        timeout-minutes: 10
+        run: make ui-deadcode
+
+      - name: Run Go vet verification
+        timeout-minutes: 10
+        run: make vet
+
+      - name: Run backend size verification
+        timeout-minutes: 10
+        run: make backend-size
+
+      - name: Run pkg maintainability verification
+        timeout-minutes: 10
+        run: make pkg-maint
+
+      - name: Run backend deadcode verification
+        timeout-minutes: 10
+        run: make deadcode
 
       - name: Run API smoke verification
+        timeout-minutes: 10
         run: make api-smoke
 
   verify-tests:
     name: Website and Backend Tests
     runs-on: ubuntu-latest
     needs: verify-build-contracts
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -106,22 +131,29 @@ jobs:
           node-version: lts/*
 
       - name: Install dashboard dependencies
+        timeout-minutes: 10
         run: make ui-deps
 
       - name: Install Playwright browser for dashboard integration tests
+        timeout-minutes: 10
         run: make ui-install-playwright
 
       - name: Run dashboard test suite
+        timeout-minutes: 15
         run: make ui-test
 
       - name: Run dashboard coverage suite
+        timeout-minutes: 15
         run: make ui-test-coverage
 
       - name: Run replay coverage verification
+        timeout-minutes: 10
         run: make ui-replay-coverage-check
 
       - name: Run backend coverage suite
+        timeout-minutes: 15
         run: make test-coverage-go
 
       - name: Run backend functional suite
+        timeout-minutes: 15
         run: make test-functional
