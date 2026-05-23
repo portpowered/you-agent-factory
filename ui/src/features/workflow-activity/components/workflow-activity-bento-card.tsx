@@ -1,6 +1,6 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { AgentBentoCard } from "../../../components/ui";
-import type { DashboardSelection } from "../../current-selection";
+import type { DashboardSelection } from "../../current-selection/public";
 import type { CurrentActivityImportController } from "../current-activity-import-controller";
 import {
   type CurrentActivitySelection,

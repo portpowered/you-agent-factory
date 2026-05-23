@@ -9,20 +9,20 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
-} from "../../api/dashboard/types";
+} from "../../../api/dashboard/types";
 import {
   findWorkItemReference,
   findWorkstationNodeIDForPlace,
-} from "./state/dashboardSelection";
+} from "../state/dashboardSelection";
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
-} from "../terminal-work";
+} from "../../terminal-work";
 import type {
   DashboardSelection,
   StatePositionWorkItem,
   TerminalWorkDetail,
-} from "./types";
+} from "../state/selection-types";
 import {
   requestDispatchID,
   requestStartedAt,

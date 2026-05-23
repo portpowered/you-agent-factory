@@ -1,4 +1,4 @@
-import type { components } from "../../api/generated/openapi";
+import type { components } from "../../../api/generated/openapi";
 
 export type RunnerID = components["schemas"]["RunnerID"];
 export type RunnerBaselineCapability =

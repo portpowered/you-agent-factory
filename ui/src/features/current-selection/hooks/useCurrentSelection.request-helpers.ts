@@ -5,7 +5,7 @@ import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
-} from "../../api/dashboard/types";
+} from "../../../api/dashboard/types";
 
 export type DispatchWorkstationRequest =
   | DashboardRuntimeWorkstationRequest

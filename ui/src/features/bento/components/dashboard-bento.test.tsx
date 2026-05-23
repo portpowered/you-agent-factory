@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { LoadableProviderSessionRef } from "../../current-selection";
+import type { LoadableProviderSessionRef } from "../../provider-session-detail/public";
 
 import { DashboardBento } from "./dashboard-bento";
 
@@ -42,7 +42,7 @@ const SHARED_SELECTED_SESSION: LoadableProviderSessionRef = {
   provider: "codex",
 };
 
-vi.mock("../../current-selection", async () => {
+vi.mock("../../current-selection/public", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
 
   return {
@@ -61,16 +61,6 @@ vi.mock("../../current-selection", async () => {
         </button>
       </section>
     ),
-    ProviderSessionWidget: ({
-      selectedProviderSession,
-    }: {
-      selectedProviderSession: LoadableProviderSessionRef | null;
-    }) => (
-      <section>
-        Provider session card
-        {selectedProviderSession ? `: ${selectedProviderSession.id}` : ""}
-      </section>
-    ),
     useCurrentSelection: () => currentSelectionState,
     useCurrentSelectionDetails: () => ({
       selectedWorkExecutionDetails: null,
@@ -87,6 +77,19 @@ vi.mock("../../current-selection", async () => {
     },
   };
 });
+
+vi.mock("../../provider-session-detail/public", () => ({
+  ProviderSessionWidget: ({
+    selectedProviderSession,
+  }: {
+    selectedProviderSession: LoadableProviderSessionRef | null;
+  }) => (
+    <section>
+      Provider session card
+      {selectedProviderSession ? `: ${selectedProviderSession.id}` : ""}
+    </section>
+  ),
+}));
 
 vi.mock("../../import", () => ({
   DashboardImportPreviewDialog: () => null,

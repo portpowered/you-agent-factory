@@ -3,7 +3,7 @@ import type { DashboardWorkstationNode } from "../../api/dashboard/types";
 import {
   BUILT_IN_RUNNER_IDS,
   type RunnerID,
-} from "../current-selection/runner-metadata";
+} from "../current-selection/editing/runner-metadata";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
   resolveEditableWorkstationBehavior,

@@ -11,10 +11,10 @@ import { useCurrentEditableFactoryDefinition } from "../../current-factory-defin
 import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
-import { providerSessionSelectionKey } from "../provider-session-details";
+import { providerSessionSelectionKey } from "../../provider-session-detail/lib/provider-session-ref";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
-import type { DashboardSelection } from "../types";
+import type { DashboardSelection } from "../state/selection-types";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 
 vi.mock("../../current-factory-definition", async () => {

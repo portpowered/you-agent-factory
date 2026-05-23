@@ -1,5 +1,5 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import type { DashboardSelection } from "../../current-selection";
+import type { DashboardSelection } from "../../current-selection/public";
 import type { CurrentActivityImportController } from "../current-activity-import-controller";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 

@@ -1,5 +1,5 @@
 import { DashboardWidgetFrame, DETAIL_COPY_CLASS } from "../../../components/ui";
-import type { LoadableProviderSessionRef } from "../provider-session-details";
+import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 import { getProviderSessionWidgetMessages } from "../messages/provider-session-widget";
 

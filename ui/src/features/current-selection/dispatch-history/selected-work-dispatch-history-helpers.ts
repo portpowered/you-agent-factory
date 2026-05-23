@@ -1,13 +1,13 @@
 import type {
   SelectedWorkRequestHistoryItem,
-} from "./detail-card-types";
+} from "../components/detail-card-types";
 import type {
   DashboardInferenceAttempt,
   DashboardWorkItemRef,
   DashboardScriptRequest,
   DashboardScriptResponse,
-} from "../../api/dashboard/types";
-import { formatWorkItemLabel } from "../../components/ui/formatters";
+} from "../../../api/dashboard/types";
+import { formatWorkItemLabel } from "../../../components/ui/formatters";
 
 export function isProjectedWorkstationRequest(
   request: SelectedWorkRequestHistoryItem,

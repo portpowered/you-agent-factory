@@ -27,11 +27,11 @@ import type {
   CollapsibleProviderSessionAttemptsProps,
   ProviderSessionAttemptsProps,
   ProviderSessionLogAccessProps,
-} from "../detail-card-types";
+} from "./detail-card-types";
 import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
-} from "../provider-session-details";
+} from "../../provider-session-detail/lib/provider-session-ref";
 import { getWorkstationDetailMessages } from "../messages";
 
 const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = getWorkstationDetailMessages(undefined);

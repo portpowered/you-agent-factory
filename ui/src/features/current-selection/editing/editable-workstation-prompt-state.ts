@@ -1,11 +1,11 @@
-import type { WorkstationDetailMessages } from "./messages";
+import type { WorkstationDetailMessages } from "../messages";
 import type {
   EditableWorkstationPromptDiagnostic,
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
-} from "./detail-card-types";
-import type { useCurrentWorkstationPromptTemplateContract } from "./hooks/useCurrentWorkstationPromptTemplateContract";
-import type { useCurrentWorkstationPromptTemplateValidation } from "./hooks/useCurrentWorkstationPromptTemplateValidation";
+} from "../components/detail-card-types";
+import type { useCurrentWorkstationPromptTemplateContract } from "../hooks/useCurrentWorkstationPromptTemplateContract";
+import type { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
 
 export function resolvePromptHelpState(
   promptTemplateContract: ReturnType<

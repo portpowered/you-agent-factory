@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: existing request-helper coverage stayed intact during feature-family migration.
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -7,8 +8,8 @@ import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
-} from "../../api/dashboard/types";
-import { buildEmptyDashboardRuntimeFixture } from "../../components/dashboard/fixtures/runtime";
+} from "../../../api/dashboard/types";
+import { buildEmptyDashboardRuntimeFixture } from "../../../components/dashboard/fixtures/runtime";
 import {
   buildSelectedWorkDispatchAttempts,
   filterProviderSessionAttempts,

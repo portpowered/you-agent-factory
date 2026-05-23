@@ -11,7 +11,7 @@ import { CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY } from "../../current-fac
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationSaveState,
-} from "../detail-card-types";
+} from "../components/detail-card-types";
 import { getWorkstationDetailMessages } from "../messages";
 
 interface UseSaveEditableWorkstationConfigurationOptions {

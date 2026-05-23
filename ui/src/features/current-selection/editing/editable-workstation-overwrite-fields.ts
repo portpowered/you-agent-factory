@@ -1,7 +1,7 @@
-import { formatList } from "../../components/ui/formatters";
-import type { EditableWorkstationDraft } from "../current-factory-definition/workstation-editable-values";
-import type { EditableWorkstationOverwriteField } from "./detail-card-types";
-import type { WorkstationDetailMessages } from "./messages";
+import { formatList } from "../../../components/ui/formatters";
+import type { EditableWorkstationDraft } from "../../current-factory-definition/workstation-editable-values";
+import type { EditableWorkstationOverwriteField } from "../components/detail-card-types";
+import type { WorkstationDetailMessages } from "../messages";
 
 export function resolveEditableWorkstationOverwriteFields(
   draft: EditableWorkstationDraft,

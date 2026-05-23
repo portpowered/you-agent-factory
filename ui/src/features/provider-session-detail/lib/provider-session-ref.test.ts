@@ -1,4 +1,4 @@
-import { getLoadableProviderSessionRef } from "./provider-session-details";
+import { getLoadableProviderSessionRef } from "./provider-session-ref";
 
 describe("getLoadableProviderSessionRef", () => {
   it("returns the canonical typed request shape with dispatch context", () => {

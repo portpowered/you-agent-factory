@@ -1,16 +1,16 @@
-import { Select } from "../../components/ui";
+import { Select } from "../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../components/ui/dashboard-typography";
-import { cn } from "../../lib/cn";
+} from "../../../components/ui/dashboard-typography";
+import { cn } from "../../../lib/cn";
 import type { WorkstationDetailCardProps } from "./detail-card-types";
-import type { getWorkstationDetailMessages } from "./messages";
+import type { getWorkstationDetailMessages } from "../messages";
 import {
   getRunnerDisplayName,
   getRunnerMetadata,
   type RunnerID,
-} from "./runner-metadata";
+} from "../editing/runner-metadata";
 
 export function EditableConfigurationRunnerField({
   messages,

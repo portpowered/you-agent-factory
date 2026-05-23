@@ -12,7 +12,7 @@ import type { ProviderSessionDetailResponse } from "../../../api/provider-sessio
 import { PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
 import { TranscriptSection } from "./provider-session-transcript";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
-import type { LoadableProviderSessionRef } from "../provider-session-details";
+import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
 
 export interface ProviderSessionDetailPanelProps {

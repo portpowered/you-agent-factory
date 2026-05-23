@@ -5,12 +5,12 @@ import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useAppLocale } from "../../../i18n";
 import {
   CurrentSelectionWidget,
-  ProviderSessionWidget,
   useCurrentSelection,
   useCurrentSelectionDetails,
   useSelectedProviderSessionState,
-} from "../../current-selection";
+} from "../../current-selection/public";
 import { DashboardImportPreviewDialog } from "../../import";
+import { ProviderSessionWidget } from "../../provider-session-detail/public";
 import { SubmitWorkWidget } from "../../submit-work/public";
 import { TerminalWorkWidget } from "../../terminal-work";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";

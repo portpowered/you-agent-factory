@@ -7,8 +7,6 @@ import {
   getCurrentSelectionDispatchHistoryMessages,
   type CurrentSelectionDispatchHistoryMessages,
 } from "./current-selection-dispatch-history";
-import { getProviderSessionDetailMessages } from "./provider-session-detail";
-import type { ProviderSessionDetailMessages } from "./provider-session-detail-types";
 import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
@@ -108,37 +106,6 @@ const invokeDispatchHistory = (
   }
 };
 
-const invokeProviderSessionDetail = (
-  key: string,
-  formatter: (...args: never[]) => unknown,
-) => {
-  switch (key satisfies keyof ProviderSessionDetailMessages) {
-    case "transcriptLineNumberLabel":
-      return [formatter({ lineNumber: 42 } as never)];
-    case "lineLabel":
-    case "unknownEventOnLineLabel":
-      return [formatter({ lineNumber: 42 } as never)];
-    case "orderLabel":
-      return [
-        formatter({ order: 1 } as never),
-        formatter({ order: 2, turnIndex: 7 } as never),
-      ];
-    case "transcriptTimestampLabel":
-      return [formatter({ timestamp: "2026-05-22T11:00:00Z" } as never)];
-    case "transcriptToggleLabel":
-      return [
-        formatter({ expanded: false, section: "Arguments" } as never),
-        formatter({ expanded: true, section: "Output" } as never),
-      ];
-    case "transcriptTurnLabel":
-      return [formatter({ turnIndex: 3 } as never)];
-    case "turnLabel":
-      return [formatter({ index: 3 } as never)];
-    default:
-      throw new Error(`Unhandled provider-session formatter ${key}`);
-  }
-};
-
 const invokeWorkstationDetail = (
   key: string,
   formatter: (...args: never[]) => unknown,
@@ -200,18 +167,6 @@ describe("current-selection message catalogs", () => {
         unknown
       >,
       invokeDispatchHistory,
-    );
-  });
-
-  it.each(
-    SUPPORTED_LOCALES,
-  )("resolves every %s provider-session detail value", (locale) => {
-    assertCatalogValuesResolve(
-      getProviderSessionDetailMessages(locale) as unknown as Record<
-        string,
-        unknown
-      >,
-      invokeProviderSessionDetail,
     );
   });
 

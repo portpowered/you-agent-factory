@@ -19,18 +19,18 @@ import type {
   EditableWorkstationPromptValidationState,
   EditableWorkstationValidationErrors,
   EditableWorkstationWorkerOptionsState,
-} from "../detail-card-types";
+} from "../components/detail-card-types";
 import {
   resolvePromptHelpState,
   resolvePromptValidationState,
-} from "../editable-workstation-prompt-state";
-import { resolveEditableWorkstationOverwriteFields } from "../editable-workstation-overwrite-fields";
+} from "../editing/editable-workstation-prompt-state";
+import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
 } from "../messages";
-import type { RunnerID } from "../runner-metadata";
-import type { DashboardSelection } from "../types";
+import type { RunnerID } from "../editing/runner-metadata";
+import type { DashboardSelection } from "../state/selection-types";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 

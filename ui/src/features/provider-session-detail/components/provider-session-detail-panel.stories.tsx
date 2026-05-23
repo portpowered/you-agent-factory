@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
-import { ProviderSessionDetailPanel } from "./components/provider-session-detail-panel";
+import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 
 const providerSessionVerificationSessionID =
   "019e44f4-580e-7f32-981e-1e54ec6907d6";

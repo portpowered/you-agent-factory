@@ -23,7 +23,7 @@ import type {
   StateNodeDetailCardProps,
   StatePositionWorkListItemProps,
   StatePositionWorkListProps,
-} from "../detail-card-types";
+} from "./detail-card-types";
 
 export function StateNodeDetailCard({
   currentWorkItems,

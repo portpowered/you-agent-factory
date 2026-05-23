@@ -15,7 +15,7 @@ const helperMocks = vi.hoisted(() => ({
   resolveWorkItemSelectionByWorkID: vi.fn(),
 }));
 
-vi.mock("../useCurrentSelection.helpers", () => helperMocks);
+vi.mock("./useCurrentSelection.helpers", () => helperMocks);
 
 describe("useCurrentSelectionActions", () => {
   beforeEach(() => {

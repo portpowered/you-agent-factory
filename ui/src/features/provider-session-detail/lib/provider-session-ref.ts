@@ -1,8 +1,8 @@
-import type { DashboardProviderSessionAttempt } from "../../api/dashboard/types";
+import type { DashboardProviderSessionAttempt } from "../../../api/dashboard/types";
 import {
   toProviderSessionDetailRef,
   type ProviderSessionDetailRef,
-} from "../../api/provider-session-details";
+} from "../../../api/provider-session-details";
 
 export interface LoadableProviderSessionRef extends ProviderSessionDetailRef {
   dispatchID: string;

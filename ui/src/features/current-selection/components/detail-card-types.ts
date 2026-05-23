@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
-import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
+import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type {
   PromptTemplateContract,
   PromptTemplateValidationResult,
-} from "../../api/current-factory-prompt-template";
+} from "../../../api/current-factory-prompt-template";
 import type {
   DashboardActiveExecution,
   DashboardFailedWorkDetail,
@@ -15,15 +15,15 @@ import type {
   DashboardTrace,
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
-} from "../../api/dashboard/types";
-import type { EditableWorkstationValues } from "../current-factory-definition/workstation-editable-values";
-import type { EditableWorkstationBehavior } from "../current-factory-definition/workstation-behavior";
-import type { WorkstationDetailMessages } from "./messages";
-import type { CurrentSelectionDetailMessages } from "./messages/current-selection-detail";
-import type { LoadableProviderSessionRef } from "./provider-session-details";
-import type { RunnerID } from "./runner-metadata";
-import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
-import type { DashboardWorkItemSelection, StatePositionWorkItem } from "./types";
+} from "../../../api/dashboard/types";
+import type { EditableWorkstationValues } from "../../current-factory-definition/workstation-editable-values";
+import type { EditableWorkstationBehavior } from "../../current-factory-definition/workstation-behavior";
+import type { WorkstationDetailMessages } from "../messages";
+import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
+import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
+import type { RunnerID } from "../editing/runner-metadata";
+import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
+import type { DashboardWorkItemSelection, StatePositionWorkItem } from "../state/selection-types";
 
 export interface SelectionDetailLayoutProps {
   children: ReactNode;

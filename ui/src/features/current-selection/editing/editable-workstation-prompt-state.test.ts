@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing prompt-state coverage stayed intact during feature-family migration.
 import {
   resolvePromptHelpState,
   resolvePromptValidationState,

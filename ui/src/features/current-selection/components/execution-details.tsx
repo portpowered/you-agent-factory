@@ -17,7 +17,7 @@ import {
 import type {
   ExecutionDetailsSectionProps,
   InferenceAttemptsSectionProps,
-} from "../detail-card-types";
+} from "./detail-card-types";
 import { InferenceAttemptCard } from "./inference-attempt";
 
 export function ExecutionDetailsSection({

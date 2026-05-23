@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing dispatch-history regression coverage stayed intact during feature-family migration.
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -5,7 +6,7 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
-import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
+import type { SelectedWorkRequestHistoryItem } from "../components/detail-card-types";
 import {
   dedupeWorkItems,
   hasResponseDetails,

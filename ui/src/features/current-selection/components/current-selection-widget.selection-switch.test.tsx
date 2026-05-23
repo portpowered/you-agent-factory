@@ -8,7 +8,7 @@ import { useCurrentEditableFactoryDefinition } from "../../current-factory-defin
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
-import type { DashboardSelection } from "../types";
+import type { DashboardSelection } from "../state/selection-types";
 import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";

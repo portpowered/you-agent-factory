@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { createFactory } from "../../../api/named-factory";
-import type { EditableWorkstationConfigurationState } from "../detail-card-types";
+import type { EditableWorkstationConfigurationState } from "../components/detail-card-types";
 import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 
 vi.mock("../../../api/named-factory", async () => {

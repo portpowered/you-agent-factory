@@ -10,7 +10,7 @@ import {
 } from "../../current-factory-definition";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import type { DashboardSelection } from "../../current-selection";
+import type { DashboardSelection } from "../../current-selection/public";
 import type { CurrentActivityImportController } from "../current-activity-import-controller";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";

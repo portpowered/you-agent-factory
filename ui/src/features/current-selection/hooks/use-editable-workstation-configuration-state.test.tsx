@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../current-factory-definition";
 import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition";
-import type { DashboardSelection } from "../types";
+import type { DashboardSelection } from "../state/selection-types";
 import {
   useEditableWorkstationConfigurationState,
   validateEditableWorkstationDraft,

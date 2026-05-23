@@ -24,7 +24,7 @@ import {
   REQUEST_SELECTION_STATUS_CLASS,
   normalizeDetailText,
 } from "./detail-card-shared";
-import type { InferenceAttemptCardProps } from "../detail-card-types";
+import type { InferenceAttemptCardProps } from "./detail-card-types";
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionWorkstationDetailMessages,
@@ -32,7 +32,7 @@ import {
 import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
-} from "../provider-session-details";
+} from "../../provider-session-detail/lib/provider-session-ref";
 
 export function InferenceAttemptCard({
   attempt,

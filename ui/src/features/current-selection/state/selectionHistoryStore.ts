@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import type { DashboardSelection } from "./dashboardSelection";
-import type { TerminalWorkDetail } from "../types";
+import type { TerminalWorkDetail } from "../state/selection-types";
 
 const SELECTION_HISTORY_LIMIT = 50;
 

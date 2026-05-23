@@ -6,7 +6,7 @@ import {
   type ProviderSessionDetailsAPIError,
   type ProviderSessionDetailResponse,
 } from "../../../api/provider-session-details";
-import type { LoadableProviderSessionRef } from "../provider-session-details";
+import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 
 export const PROVIDER_SESSION_DETAIL_QUERY_KEY = [
   "current-selection-provider-session-detail",

@@ -5,7 +5,7 @@ import {
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import { useCurrentSelectionShellMessages } from "./current-selection-locale";
 import { normalizeDetailText } from "./detail-card-shared";
-import type { TerminalWorkSummaryCardProps } from "../detail-card-types";
+import type { TerminalWorkSummaryCardProps } from "./detail-card-types";
 import { ExecutionDetailsSection } from "./execution-details";
 
 export function TerminalWorkSummaryCard({

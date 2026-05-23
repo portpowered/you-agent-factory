@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { currentSelectionDetailMessagesByLocale } from "../features/current-selection/messages/current-selection-detail";
 import { currentSelectionDispatchHistoryMessagesByLocale } from "../features/current-selection/messages/current-selection-dispatch-history";
 import { currentSelectionShellMessagesByLocale } from "../features/current-selection/messages/current-selection-shell";
-import { providerSessionDetailMessagesByLocale } from "../features/current-selection/messages/provider-session-detail";
+import { providerSessionDetailMessagesByLocale } from "../features/provider-session-detail/messages/provider-session-detail";
 import { workstationDetailMessagesByLocale } from "../features/current-selection/messages/workstation-detail";
 import { exportDialogMessagesByLocale } from "../features/export/messages/export-dialog";
 import { headerControlsMessagesByLocale } from "../features/header/messages/header-controls";
