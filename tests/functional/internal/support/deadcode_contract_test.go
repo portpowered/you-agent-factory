@@ -2,9 +2,13 @@ package support
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -59,6 +63,64 @@ func TestCountFactoryEvents_CountsMatchingEventTypes(t *testing.T) {
 	}
 	if got := CountFactoryEvents(events, factoryapi.FactoryEventTypeDispatchResponse); got != 1 {
 		t.Fatalf("CountFactoryEvents(dispatch response) = %d, want 1", got)
+	}
+}
+
+func TestFactoryRelationsValue_ReturnsNilAndPopulatedRelations(t *testing.T) {
+	var nilRelations *[]factoryapi.Relation
+	if got := FactoryRelationsValue(nilRelations); got != nil {
+		t.Fatalf("FactoryRelationsValue(nil) = %#v, want nil", got)
+	}
+
+	relations := []factoryapi.Relation{{
+		Type:           factoryapi.RelationTypeDependsOn,
+		SourceWorkName: "generated-beta",
+		TargetWorkName: "generated-alpha",
+	}}
+
+	got := FactoryRelationsValue(&relations)
+	if len(got) != 1 {
+		t.Fatalf("FactoryRelationsValue(...) length = %d, want 1", len(got))
+	}
+	if got[0] != relations[0] {
+		t.Fatalf("FactoryRelationsValue(...) = %#v, want %#v", got[0], relations[0])
+	}
+}
+
+func TestUpdateFactoryConfig_RewritesScaffoldedFactoryConfig(t *testing.T) {
+	dir := ScaffoldFactory(t, map[string]any{
+		"name": "original-factory",
+		"workstations": []map[string]any{{
+			"name": "writer",
+		}},
+	})
+
+	UpdateFactoryConfig(t, dir, func(cfg map[string]any) {
+		cfg["name"] = "updated-factory"
+		cfg["labels"] = map[string]any{
+			"team": "runtime",
+		}
+	})
+
+	data, err := os.ReadFile(filepath.Join(dir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("read updated factory config: %v", err)
+	}
+
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("unmarshal updated factory config: %v", err)
+	}
+
+	if got := cfg["name"]; got != "updated-factory" {
+		t.Fatalf("factory name = %#v, want %q", got, "updated-factory")
+	}
+	labels, ok := cfg["labels"].(map[string]any)
+	if !ok {
+		t.Fatalf("factory labels type = %T, want map[string]any", cfg["labels"])
+	}
+	if got := labels["team"]; got != "runtime" {
+		t.Fatalf("factory labels.team = %#v, want %q", got, "runtime")
 	}
 }
 
