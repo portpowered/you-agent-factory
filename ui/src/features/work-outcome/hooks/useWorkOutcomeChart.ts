@@ -31,12 +31,6 @@ interface TimelineWorkItem {
   workTypeID: string;
 }
 
-interface LegacyTimelineWorkCompat {
-  trace_id?: string;
-  work_id?: string;
-  work_type_name?: string;
-}
-
 interface ActiveDispatch {
   inputWorkIDs: string[];
   systemOnly: boolean;
@@ -252,7 +246,7 @@ function applyDispatchRequest(
   }
 
   const inputWorkIDs = (payload.inputs ?? [])
-    .map((input) => input.workId ?? (input as { work_id?: string }).work_id)
+    .map((input) => input.workId)
     .filter((workID): workID is string => typeof workID === "string" && workID.length > 0);
 
   for (const workID of inputWorkIDs) {
@@ -382,18 +376,15 @@ function timelineWorkItemFromOutputWork(
 }
 
 function workTypeIDFromWork(work: FactoryWork): string | undefined {
-  const legacyWork = work as FactoryWork & LegacyTimelineWorkCompat;
-  return work.workTypeName ?? legacyWork.work_type_name;
+  return work.workTypeName;
 }
 
 function timelineWorkID(work: FactoryWork): string | undefined {
-  const legacyWork = work as FactoryWork & LegacyTimelineWorkCompat;
-  return work.workId ?? legacyWork.work_id;
+  return work.workId;
 }
 
 function timelineWorkTraceID(work: FactoryWork): string | undefined {
-  const legacyWork = work as FactoryWork & LegacyTimelineWorkCompat;
-  return work.traceId ?? legacyWork.trace_id;
+  return work.traceId;
 }
 
 function placeID(workTypeID: string, workState: string): string {

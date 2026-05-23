@@ -32,9 +32,9 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
           works: [
             {
               name: "Story One",
-              trace_id: "trace-1",
-              work_id: "work-1",
-              work_type_name: "story",
+              traceId: "trace-1",
+              workId: "work-1",
+              workTypeName: "story",
             },
           ],
         }),
@@ -51,9 +51,9 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
             {
               name: "Story One",
               state: "done",
-              trace_id: "trace-1",
-              work_id: "work-1",
-              work_type_name: "story",
+              traceId: "trace-1",
+              workId: "work-1",
+              workTypeName: "story",
             },
           ],
           transitionId: "review",
@@ -65,9 +65,9 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
           works: [
             {
               name: "Story Two",
-              trace_id: "trace-2",
-              work_id: "work-2",
-              work_type_name: "story",
+              traceId: "trace-2",
+              workId: "work-2",
+              workTypeName: "story",
             },
           ],
         }),
@@ -86,9 +86,9 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
             {
               name: "Story Two",
               state: "failed",
-              trace_id: "trace-2",
-              work_id: "work-2",
-              work_type_name: "story",
+              traceId: "trace-2",
+              workId: "work-2",
+              workTypeName: "story",
             },
           ],
           transitionId: "review",
