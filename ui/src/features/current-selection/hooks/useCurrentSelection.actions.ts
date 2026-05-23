@@ -8,7 +8,7 @@ import type {
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
-} from "../../terminal-work";
+} from "../../terminal-work/public";
 import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
 import {
   findTerminalWorkItem,

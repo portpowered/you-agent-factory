@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import type { components } from "../../api/generated/openapi";
+import type { components } from "../../../api/generated/openapi";
 import { writeFactoryExportPng } from "./factory-png-export";
 
 type FactorySchemas = components["schemas"];

@@ -21,7 +21,7 @@ import { buildGraphLayout, type GraphLayout } from "../../flowchart/layout";
 import type {
   FactoryPngImportValue,
   ReadFactoryImportFile,
-} from "../../import";
+} from "../../import/public";
 import {
   type CurrentActivityImportController,
   useCurrentActivityImportController,

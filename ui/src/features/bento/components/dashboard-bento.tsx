@@ -9,10 +9,10 @@ import {
   useCurrentSelectionDetails,
   useSelectedProviderSessionState,
 } from "../../current-selection/public";
-import { DashboardImportPreviewDialog } from "../../import";
+import { DashboardImportPreviewDialog } from "../../import/public";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
 import { SubmitWorkWidget } from "../../submit-work/public";
-import { TerminalWorkWidget } from "../../terminal-work";
+import { TerminalWorkWidget } from "../../terminal-work/public";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { TraceDrilldownWidget, useTraceDrilldown } from "../../trace-drilldown";

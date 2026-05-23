@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { FactoryPngImportValue } from "../factory-png-import";
+import type { FactoryPngImportValue } from "../lib/factory-png-import";
 
 export type FactoryImportPreviewState =
   | { status: "idle" }
@@ -60,4 +60,3 @@ export function useFactoryImportPreview({
     previewState,
   };
 }
-

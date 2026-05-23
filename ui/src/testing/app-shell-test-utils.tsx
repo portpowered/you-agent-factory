@@ -25,7 +25,7 @@ import {
 } from "../features/dashboard/state";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import { useExportDialogStore } from "../features/export/state";
-import type { FactoryPngImportValue } from "../features/import";
+import type { FactoryPngImportValue } from "../features/import/public";
 import type { WorldState } from "../features/timeline/state";
 import { useFactoryTimelineStore } from "../features/timeline/state";
 

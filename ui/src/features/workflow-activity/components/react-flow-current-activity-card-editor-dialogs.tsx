@@ -6,7 +6,7 @@ import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/factor
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
   FactoryImportPreviewDialog,
-} from "../../import";
+} from "../../import/public";
 import type { CurrentActivityImportController } from "../current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../react-flow-current-activity-card-editor";
 import { GraphImportErrorPanel } from "./react-flow-current-activity-card-import";

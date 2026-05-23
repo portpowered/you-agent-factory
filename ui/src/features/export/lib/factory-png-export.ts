@@ -1,4 +1,4 @@
-import type { FactoryValue } from "../../api/named-factory";
+import type { FactoryValue } from "../../../api/named-factory";
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const PNG_TEXT_CHUNK = "tEXt";

@@ -1,5 +1,5 @@
-import { normalizeFactoryDefinition } from "../../api/factory-definition";
-import type { CanonicalFactoryDefinition } from "../../api/factory-definition";
+import { normalizeFactoryDefinition } from "../../../api/factory-definition";
+import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const PNG_TEXT_CHUNK = "tEXt";

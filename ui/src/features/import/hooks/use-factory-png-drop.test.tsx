@@ -1,6 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 
-import type { FactoryPngImportValue, ReadFactoryImportPngResult } from "../factory-png-import";
+import type {
+  FactoryPngImportValue,
+  ReadFactoryImportPngResult,
+} from "../lib/factory-png-import";
 import { type ReadFactoryImportFile, type UseFactoryPngDropResult, useFactoryPngDrop } from "./use-factory-png-drop";
 
 describe("useFactoryPngDrop", () => {

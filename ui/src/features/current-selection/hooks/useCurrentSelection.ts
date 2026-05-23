@@ -12,7 +12,7 @@ import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
-} from "../../terminal-work";
+} from "../../terminal-work/public";
 import type {
   DashboardSelection,
   StatePositionWorkItem,

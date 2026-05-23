@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import type { components } from "../../api/generated/openapi";
+import type { components } from "../../../api/generated/openapi";
 import {
   PORT_OS_FACTORY_PNG_METADATA_KEYWORD,
   PORT_OS_FACTORY_PNG_SCHEMA_VERSION,

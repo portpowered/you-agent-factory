@@ -1,4 +1,5 @@
-import type { components } from "../../api/generated/openapi";
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: fixture-heavy PNG export coverage stays consolidated while this migration only changes feature structure.
+import type { components } from "../../../api/generated/openapi";
 import {
   PORT_OS_FACTORY_PNG_METADATA_KEYWORD,
   PORT_OS_FACTORY_PNG_SCHEMA_VERSION,

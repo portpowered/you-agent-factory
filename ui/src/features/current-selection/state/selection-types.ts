@@ -1,7 +1,7 @@
 import type {
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-export type { TerminalWorkDetail } from "../../terminal-work";
+export type { TerminalWorkDetail } from "../../terminal-work/public";
 
 export type {
   DashboardSelection,

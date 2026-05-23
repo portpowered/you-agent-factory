@@ -1,7 +1,7 @@
 import type {
   DashboardProviderSessionAttempt,
   DashboardWorkItemRef,
-} from "../../api/dashboard/types";
+} from "../../../api/dashboard/types";
 
 export type TerminalWorkStatus = "completed" | "failed";
 

@@ -43,7 +43,7 @@ import { buildGraphLayout } from "../../flowchart/layout";
 import type {
   FactoryPngImportValue,
   ReadFactoryImportFile,
-} from "../../import";
+} from "../../import/public";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import type { CurrentActivityImportController } from "../current-activity-import-controller";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";

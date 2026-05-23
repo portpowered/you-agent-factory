@@ -67,8 +67,8 @@ src/features/current-selection/state/selectionHistoryStore.ts|38|14|string-liter
 src/features/current-selection/state/selectionHistoryStore.ts|40|14|string-literal|work: : :
 src/features/current-selection/state/selectionHistoryStore.ts|42|14|string-literal|request: :
 src/features/dashboard/state/dashboardStreamStore.ts|7|12|string-literal|Loading factory events...
-src/features/export/factory-png-export.ts|59|18|string-literal|The selected image could not be decoded for PNG export.
-src/features/export/factory-png-export.ts|82|18|string-literal|The exported PNG metadata could not be written.
+src/features/export/lib/factory-png-export.ts|59|18|string-literal|The selected image could not be decoded for PNG export.
+src/features/export/lib/factory-png-export.ts|82|18|string-literal|The exported PNG metadata could not be written.
 src/features/factory-graph-editor/factory-graph-draft-types.ts|243|14|string-literal|resource:
 src/features/factory-graph-editor/factory-graph-draft-types.ts|245|14|string-literal|worker:
 src/features/factory-graph-editor/factory-graph-draft-types.ts|247|14|string-literal|work-state: :
@@ -184,18 +184,18 @@ src/features/flowchart/workstation-icon-metadata.ts|39|12|string-literal|Poller 
 src/features/flowchart/workstation-icon-metadata.ts|45|12|string-literal|Exhaustion rule
 src/features/flowchart/workstation-icon-metadata.ts|51|12|string-literal|Repeater workstation
 src/features/flowchart/workstation-icon-metadata.ts|57|12|string-literal|Standard workstation
-src/features/import/factory-png-import.ts|95|18|string-literal|The selected image could not be decoded for preview.
-src/features/import/factory-png-import.ts|109|18|string-literal|The browser could not create a preview for the selected image.
-src/features/import/factory-png-import.ts|137|18|string-literal|The selected image could not be read.
-src/features/import/factory-png-import.ts|147|18|string-literal|The selected file is not a PNG image.
-src/features/import/factory-png-import.ts|186|18|string-literal|The selected PNG image is invalid or truncated.
-src/features/import/factory-png-import.ts|195|16|string-literal|The selected PNG does not contain you-agent-factory factory metadata.
-src/features/import/factory-png-import.ts|210|18|string-literal|The you-agent-factory factory metadata is not valid JSON.
-src/features/import/factory-png-import.ts|220|18|string-literal|The you-agent-factory factory metadata must be an object.
-src/features/import/factory-png-import.ts|230|18|string-literal|The you-agent-factory factory metadata is missing the schema version.
-src/features/import/factory-png-import.ts|243|18|string-literal|The selected PNG uses an unsupported you-agent-factory factory metadata version.
-src/features/import/factory-png-import.ts|270|18|string-literal|The you-agent-factory factory metadata does not contain a valid factory payload.
-src/features/import/factory-png-import.ts|309|16|string-literal|The you-agent-factory factory metadata is missing the factory name.
+src/features/import/lib/factory-png-import.ts|95|18|string-literal|The selected image could not be decoded for preview.
+src/features/import/lib/factory-png-import.ts|109|18|string-literal|The browser could not create a preview for the selected image.
+src/features/import/lib/factory-png-import.ts|137|18|string-literal|The selected image could not be read.
+src/features/import/lib/factory-png-import.ts|147|18|string-literal|The selected file is not a PNG image.
+src/features/import/lib/factory-png-import.ts|186|18|string-literal|The selected PNG image is invalid or truncated.
+src/features/import/lib/factory-png-import.ts|195|16|string-literal|The selected PNG does not contain you-agent-factory factory metadata.
+src/features/import/lib/factory-png-import.ts|210|18|string-literal|The you-agent-factory factory metadata is not valid JSON.
+src/features/import/lib/factory-png-import.ts|220|18|string-literal|The you-agent-factory factory metadata must be an object.
+src/features/import/lib/factory-png-import.ts|230|18|string-literal|The you-agent-factory factory metadata is missing the schema version.
+src/features/import/lib/factory-png-import.ts|243|18|string-literal|The selected PNG uses an unsupported you-agent-factory factory metadata version.
+src/features/import/lib/factory-png-import.ts|270|18|string-literal|The you-agent-factory factory metadata does not contain a valid factory payload.
+src/features/import/lib/factory-png-import.ts|309|16|string-literal|The you-agent-factory factory metadata is missing the factory name.
 src/features/timeline/state/timeline/replayGraphState.ts|220|10|string-literal|:resource:
 src/features/trace-drilldown/components/trace-workstation-path.tsx|280|67|string-literal|Unknown workstation
 src/features/trace-drilldown/components/trace-workstation-path.tsx|431|12|string-literal|border-af-overlay/10 bg-af-canvas

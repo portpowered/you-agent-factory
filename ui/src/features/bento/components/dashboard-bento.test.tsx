@@ -99,7 +99,7 @@ vi.mock("../../submit-work/public", () => ({
   SubmitWorkWidget: () => <section>Submit work card</section>,
 }));
 
-vi.mock("../../terminal-work", () => ({
+vi.mock("../../terminal-work/public", () => ({
   TerminalWorkWidget: () => <section>Terminal work card</section>,
 }));
 

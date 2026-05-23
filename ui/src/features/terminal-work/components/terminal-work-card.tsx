@@ -20,8 +20,8 @@ import { cn } from "../../../lib/cn";
 import type { GraphSemanticIconKind } from "../../flowchart/graph-semantic-icon";
 import { GraphSemanticIcon } from "../../flowchart/graph-semantic-icon";
 import { getTerminalWorkMessages } from "../messages";
-import type { TerminalWorkItem, TerminalWorkStatus } from "../types";
-export type { TerminalWorkItem, TerminalWorkStatus } from "../types";
+import type { TerminalWorkItem, TerminalWorkStatus } from "../lib/types";
+export type { TerminalWorkItem, TerminalWorkStatus } from "../lib/types";
 
 export interface CompletedFailedWorkstationCardProps {
   className?: string;
