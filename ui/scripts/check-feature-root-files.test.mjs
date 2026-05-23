@@ -47,6 +47,7 @@ test("scanFeatureRootFiles passes when feature roots contain directories only", 
   try {
     await expect(scanFeatureRootFiles(featuresDir, [])).resolves.toEqual({
       allowlistedDebt: [],
+      staleAllowlistEntries: [],
       violations: [],
     });
   } finally {
@@ -75,7 +76,27 @@ test("scanFeatureRootFiles distinguishes allowlisted debt from new hard-fail vio
         expect.objectContaining({ relativeFilePath: "src/features/alpha/index.ts" }),
         expect.objectContaining({ relativeFilePath: "src/features/beta/widget.test.ts" }),
       ],
+      staleAllowlistEntries: [],
       violations: [expect.objectContaining({ relativeFilePath: "src/features/alpha/README.md" })],
+    });
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test("scanFeatureRootFiles reports stale allowlist entries when the root file no longer exists", async () => {
+  const { featuresDir, tempRoot } = await createFeatureTree({
+    alpha: {
+      "components/panel.tsx": "export function Panel() { return null; }\n",
+      "public/index.ts": "export * from '../components/panel';\n",
+    },
+  });
+
+  try {
+    await expect(scanFeatureRootFiles(featuresDir, ["src/features/alpha/index.ts"])).resolves.toEqual({
+      allowlistedDebt: [],
+      staleAllowlistEntries: ["src/features/alpha/index.ts"],
+      violations: [],
     });
   } finally {
     await rm(tempRoot, { force: true, recursive: true });
@@ -96,6 +117,7 @@ test("CLI reports allowlisted legacy debt during a passing run", async () => {
         env: {
           ...process.env,
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
+          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST: "src/features/bento/index.ts",
         },
       }),
     ).resolves.toMatchObject({
@@ -123,6 +145,7 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
         env: {
           ...process.env,
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
+          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST: "src/features/bento/index.ts",
         },
       }),
     ).rejects.toMatchObject({
@@ -135,6 +158,7 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
         env: {
           ...process.env,
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
+          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST: "src/features/bento/index.ts",
         },
       }),
     ).rejects.toMatchObject({
@@ -146,10 +170,51 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
         env: {
           ...process.env,
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
+          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST: "src/features/bento/index.ts",
         },
       }),
     ).rejects.toMatchObject({
       stderr: expect.stringContaining("Allowlisted legacy debt:"),
+    });
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test("CLI fails when the allowlist contains a stale entry", async () => {
+  const { featuresDir, tempRoot } = await createFeatureTree({
+    alpha: {
+      "components/panel.tsx": "export function Panel() { return null; }\n",
+    },
+  });
+
+  try {
+    await expect(
+      execFileAsync(process.execPath, [scriptPath], {
+        cwd: tempRoot,
+        env: {
+          ...process.env,
+          AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
+          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
+            "src/features/alpha/index.ts",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining("Stale allowlist entries:"),
+    });
+    await expect(
+      execFileAsync(process.execPath, [scriptPath], {
+        cwd: tempRoot,
+        env: {
+          ...process.env,
+          AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
+          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
+            "src/features/alpha/index.ts",
+        },
+      }),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("src/features/alpha/index.ts"),
     });
   } finally {
     await rm(tempRoot, { force: true, recursive: true });

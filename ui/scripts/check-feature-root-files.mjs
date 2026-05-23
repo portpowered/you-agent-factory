@@ -11,6 +11,18 @@ const featureRootDir = process.env.AGENT_FACTORY_UI_FEATURES_DIR
   ? path.resolve(process.env.AGENT_FACTORY_UI_FEATURES_DIR)
   : path.join(defaultUiDir, "src", "features");
 const uiDir = path.dirname(path.dirname(featureRootDir));
+const allowlistOverride = process.env.AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST;
+
+function getConfiguredAllowlist() {
+  if (!allowlistOverride) {
+    return allowlistedFeatureRootFiles;
+  }
+
+  return allowlistOverride
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
 
 function toPosixPath(filePath) {
   return filePath.split(path.sep).join(path.posix.sep);
@@ -30,6 +42,7 @@ export async function scanFeatureRootFiles(
 ) {
   const rootUiDirectory = path.dirname(path.dirname(rootDirectory));
   const allowlistedPaths = new Set(allowlist.map((filePath) => toPosixPath(filePath)));
+  const observedAllowlistedPaths = new Set();
   const featureEntries = await readdir(rootDirectory, { withFileTypes: true });
   const allowlistedDebt = [];
   const violations = [];
@@ -56,6 +69,7 @@ export async function scanFeatureRootFiles(
       };
 
       if (allowlistedPaths.has(relativeFilePath)) {
+        observedAllowlistedPaths.add(relativeFilePath);
         allowlistedDebt.push(record);
         continue;
       }
@@ -64,14 +78,19 @@ export async function scanFeatureRootFiles(
     }
   }
 
+  const staleAllowlistEntries = [...allowlistedPaths]
+    .filter((filePath) => !observedAllowlistedPaths.has(filePath))
+    .sort((left, right) => left.localeCompare(right));
+
   return {
     allowlistedDebt,
+    staleAllowlistEntries,
     violations,
   };
 }
 
 async function main() {
-  const report = await scanFeatureRootFiles(featureRootDir);
+  const report = await scanFeatureRootFiles(featureRootDir, getConfiguredAllowlist());
   const allowlistedDebtReport = report.allowlistedDebt
     .map((entry) =>
       formatViolation(
@@ -80,8 +99,16 @@ async function main() {
       ),
     )
     .join("\n\n");
+  const staleAllowlistReport = report.staleAllowlistEntries
+    .map((filePath) =>
+      formatViolation(
+        filePath,
+        "Allowlist entry is stale. Remove it in the same change that deleted or relocated the feature-root file.",
+      ),
+    )
+    .join("\n\n");
 
-  if (report.violations.length > 0) {
+  if (report.violations.length > 0 || report.staleAllowlistEntries.length > 0) {
     const violationReport = report.violations
       .map((entry) =>
         formatViolation(
@@ -97,6 +124,7 @@ async function main() {
         "Each ui/src/features/<feature>/ directory may contain subdirectories only, with no root-level files.",
         "New hard-fail violations:",
         violationReport,
+        staleAllowlistReport.length > 0 ? ["Stale allowlist entries:", staleAllowlistReport].join("\n\n") : "",
         allowlistedDebtReport.length > 0 ? ["Allowlisted legacy debt:", allowlistedDebtReport].join("\n\n") : "",
       ]
         .filter(Boolean)
