@@ -1,4 +1,4 @@
-import "../../styles.css";
+import "../../../styles.css";
 
 import { useEffect } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
@@ -7,7 +7,7 @@ import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
   historicalWorkOutcomeSnapshot,
   liveWorkOutcomeSnapshot,
-} from "../../stories/dashboardStorySupport";
+} from "../../../stories/dashboardStorySupport";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 

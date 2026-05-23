@@ -18,7 +18,7 @@ import {
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
-} from "../../flowchart";
+} from "../../flowchart/public";
 import type {
   FactoryPngImportValue,
   ReadFactoryImportFile,

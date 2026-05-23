@@ -1,10 +1,10 @@
-import "../../styles.css";
+import "../../../styles.css";
 
 import type {
   DashboardTraceDispatch,
   DashboardWorkItemRef,
   DashboardWorkRelation,
-} from "../../api/dashboard/types";
+} from "../../../api/dashboard/types";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
 
