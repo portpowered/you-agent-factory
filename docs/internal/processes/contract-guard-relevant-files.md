@@ -15,3 +15,4 @@ This file inventories the broad contract guards that scan filesystem roots with 
 
 - Broad handwritten-source guards should keep package-specific generated-path exclusions explicit at each `contractguard.ShouldSkipDir(...)` call site even when hidden-directory handling is shared.
 - The inventory separates handwritten-source scans from generated-output exclusions so future guard cleanup can document ownership decisions in code and in this file together.
+- Keep structural `FactoryWorld*View` allowlists in `pkg/interfaces/world_view_contract_guard_test.go`; behavioral cross-boundary smokes in `pkg/api` should assert replayed runtime outputs instead of re-parsing source files for duplicate ownership.
