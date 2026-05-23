@@ -23,14 +23,20 @@ export interface HeaderControlsMessages {
   openSessionFolderNotRunnableError: string;
   openSessionFolderUnreadableError: string;
   openSessionFolderUnknownError: string;
+  openSessionOverrideNotFoundError: string;
   openSessionLaunchReadyMultipleTargets: string;
   openSessionLaunchReadySingleTarget: string;
+  openSessionLaunchSummaryTemplate: string;
   openSessionDialogTitle: string;
   openSessionSubmitLabel: string;
   openSessionSubmitPendingLabel: string;
   pauseSessionStreamLabelTemplate: string;
   openSessionTargetLabel: string;
   openSessionTargetPendingLabel: string;
+  manualFactoryNameFieldLabel: string;
+  manualFactoryNameFieldPlaceholder: string;
+  manualFactoryNameHelperText: string;
+  manualFactoryNamePrecedenceTemplate: string;
   openSessionValidationPendingLabel: string;
   returnToCurrentTickLabel: string;
   resumeSessionStreamLabelTemplate: string;
@@ -87,15 +93,25 @@ const headerControlsMessagesByLocale = {
       "This folder could not be read from this machine. Check its permissions, then choose a readable local factory folder.",
     openSessionFolderUnknownError:
       "The dashboard could not verify this factory folder. Check the path and try again.",
+    openSessionOverrideNotFoundError:
+      "This factory name is not launchable from the chosen folder. Check the name or clear the override and use a detected target.",
     openSessionLaunchReadyMultipleTargets:
       "Folder is ready. Choose one runnable target to continue.",
     openSessionLaunchReadySingleTarget:
       "Folder is ready. Open the runnable target shown below to continue.",
+    openSessionLaunchSummaryTemplate:
+      "Launch will use folder {{folderPath}} and factory {{factoryName}}.",
     openSessionDialogTitle: "Open a factory folder",
     openSessionSubmitLabel: "Check folder",
     openSessionSubmitPendingLabel: "Checking folder...",
     openSessionTargetLabel: "Open selected target",
     openSessionTargetPendingLabel: "Opening target...",
+    manualFactoryNameFieldLabel: "Manual factory override",
+    manualFactoryNameFieldPlaceholder: "named-factory",
+    manualFactoryNameHelperText:
+      "Optional. Leave this blank to launch a detected target, or enter a named factory when you want an explicit override.",
+    manualFactoryNamePrecedenceTemplate:
+      "Manual override {{factoryName}} will launch instead of the detected selection.",
     openSessionValidationPendingLabel:
       "Checking whether this folder contains a runnable factory...",
     pauseSessionStreamLabelTemplate: "Pause {{sessionLabel}} updates",
@@ -151,15 +167,25 @@ const headerControlsMessagesByLocale = {
       "このフォルダーをこの端末から読み取れませんでした。権限を確認してから、読み取れるローカルファクトリーフォルダーを選んでください。",
     openSessionFolderUnknownError:
       "このファクトリーフォルダーをダッシュボードで確認できませんでした。パスを確認して、もう一度試してください。",
+    openSessionOverrideNotFoundError:
+      "このファクトリー名は選択したフォルダーから起動できません。名前を確認するか、上書きを空にして検出されたターゲットを使ってください。",
     openSessionLaunchReadyMultipleTargets:
       "フォルダーを確認できました。続行するには実行可能なターゲットを 1 つ選んでください。",
     openSessionLaunchReadySingleTarget:
       "フォルダーを確認できました。続行するには下に表示された実行可能なターゲットを開いてください。",
+    openSessionLaunchSummaryTemplate:
+      "起動にはフォルダー {{folderPath}} とファクトリー {{factoryName}} を使います。",
     openSessionDialogTitle: "ファクトリーフォルダーを開く",
     openSessionSubmitLabel: "フォルダーを確認する",
     openSessionSubmitPendingLabel: "フォルダーを確認しています...",
     openSessionTargetLabel: "選択したターゲットを開く",
     openSessionTargetPendingLabel: "ターゲットを開いています...",
+    manualFactoryNameFieldLabel: "手動ファクトリー上書き",
+    manualFactoryNameFieldPlaceholder: "named-factory",
+    manualFactoryNameHelperText:
+      "任意です。空欄のままなら検出されたターゲットを使い、明示的に起動したい名前付きファクトリーがある場合はここに入力してください。",
+    manualFactoryNamePrecedenceTemplate:
+      "手動上書き {{factoryName}} は検出された選択より優先して起動されます。",
     openSessionValidationPendingLabel:
       "このフォルダーに実行可能なファクトリーがあるか確認しています...",
     pauseSessionStreamLabelTemplate: "{{sessionLabel}} の更新を一時停止",
@@ -216,15 +242,25 @@ const headerControlsMessagesByLocale = {
       "이 기기에서 이 폴더를 읽을 수 없습니다. 권한을 확인한 다음 읽을 수 있는 로컬 팩토리 폴더를 선택하세요.",
     openSessionFolderUnknownError:
       "대시보드에서 이 팩토리 폴더를 확인할 수 없습니다. 경로를 확인한 뒤 다시 시도하세요.",
+    openSessionOverrideNotFoundError:
+      "이 팩토리 이름은 선택한 폴더에서 실행할 수 없습니다. 이름을 확인하거나 재정의를 비우고 감지된 대상을 사용하세요.",
     openSessionLaunchReadyMultipleTargets:
       "폴더를 확인했습니다. 계속하려면 실행 가능한 대상을 하나 선택하세요.",
     openSessionLaunchReadySingleTarget:
       "폴더를 확인했습니다. 계속하려면 아래에 표시된 실행 가능한 대상을 여세요.",
+    openSessionLaunchSummaryTemplate:
+      "실행에는 폴더 {{folderPath}} 및 팩토리 {{factoryName}}이 사용됩니다.",
     openSessionDialogTitle: "팩토리 폴더 열기",
     openSessionSubmitLabel: "폴더 확인",
     openSessionSubmitPendingLabel: "폴더 확인 중...",
     openSessionTargetLabel: "선택한 대상 열기",
     openSessionTargetPendingLabel: "대상을 여는 중...",
+    manualFactoryNameFieldLabel: "수동 팩토리 재정의",
+    manualFactoryNameFieldPlaceholder: "named-factory",
+    manualFactoryNameHelperText:
+      "선택 사항입니다. 비워 두면 감지된 대상을 사용하고, 특정 이름의 팩토리를 명시적으로 실행하려면 여기에 입력하세요.",
+    manualFactoryNamePrecedenceTemplate:
+      "수동 재정의 {{factoryName}}이 감지된 선택보다 우선하여 실행됩니다.",
     openSessionValidationPendingLabel:
       "이 폴더에 실행 가능한 팩토리가 있는지 확인하는 중...",
     pauseSessionStreamLabelTemplate: "{{sessionLabel}} 업데이트 일시중지",
@@ -281,15 +317,25 @@ const headerControlsMessagesByLocale = {
       "无法从这台设备读取此文件夹。请检查权限，然后选择一个可读取的本地工厂文件夹。",
     openSessionFolderUnknownError:
       "仪表板无法验证此工厂文件夹。请检查路径后重试。",
+    openSessionOverrideNotFoundError:
+      "所填工厂名称无法从所选文件夹启动。请检查名称，或清空覆盖并改用检测到的目标。",
     openSessionLaunchReadyMultipleTargets:
       "文件夹已就绪。请选择一个可运行目标后继续。",
     openSessionLaunchReadySingleTarget:
       "文件夹已就绪。请打开下方显示的可运行目标后继续。",
+    openSessionLaunchSummaryTemplate:
+      "启动将使用文件夹 {{folderPath}} 和工厂 {{factoryName}}。",
     openSessionDialogTitle: "打开工厂文件夹",
     openSessionSubmitLabel: "检查文件夹",
     openSessionSubmitPendingLabel: "正在检查文件夹...",
     openSessionTargetLabel: "打开所选目标",
     openSessionTargetPendingLabel: "正在打开目标...",
+    manualFactoryNameFieldLabel: "手动工厂覆盖",
+    manualFactoryNameFieldPlaceholder: "named-factory",
+    manualFactoryNameHelperText:
+      "可选。留空时将使用检测到的目标；如果你想明确启动某个命名工厂，请在这里输入名称。",
+    manualFactoryNamePrecedenceTemplate:
+      "手动覆盖 {{factoryName}} 将优先于检测到的选择进行启动。",
     openSessionValidationPendingLabel:
       "正在检查此文件夹是否包含可运行的工厂...",
     pauseSessionStreamLabelTemplate: "暂停 {{sessionLabel}} 更新",

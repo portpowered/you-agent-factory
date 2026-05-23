@@ -1,5 +1,6 @@
 import {
   type FactorySessionTarget,
+  type FactorySessionTargetRef,
   type FactorySessionSummary,
   FactorySessionsAPIError,
 } from "../../../api/factory-sessions";
@@ -16,6 +17,7 @@ export type FolderValidationErrorReason =
   | "missing"
   | "not_directory"
   | "not_runnable"
+  | "target_not_found"
   | "unreadable"
   | "unknown";
 
@@ -116,6 +118,12 @@ export function classifyFactorySessionFolderValidationError(
   ) {
     return "unreadable";
   }
+  if (
+    message.startsWith('factory session target "') &&
+    message.endsWith('" was not found')
+  ) {
+    return "target_not_found";
+  }
   if (message.includes("does not expose any runnable factory targets")) {
     return "not_runnable";
   }
@@ -126,9 +134,41 @@ export function classifyFactorySessionFolderValidationError(
 export function factorySessionTargetOptionValue(
   target: Pick<FactorySessionTarget, "ref">,
 ): string {
-  return target.ref.kind === "default"
-    ? "default"
-    : `named:${target.ref.name ?? ""}`;
+  if (target.ref.kind === "default") {
+    return "default";
+  }
+
+  // hardcoded-ui-copy-exception: non-product-diagnostic
+  return `named:${target.ref.name ?? ""}`;
+}
+
+export function selectedFactorySessionTarget(
+  targets: FactorySessionTarget[],
+  selectedTargetValue: string,
+): FactorySessionTarget | null {
+  return (
+    targets.find(
+      (target) => factorySessionTargetOptionValue(target) === selectedTargetValue,
+    ) ?? null
+  );
+}
+
+export function manualFactorySessionTargetRef(
+  factoryName: string,
+): FactorySessionTargetRef | null {
+  const normalizedFactoryName = normalizeManualFactoryName(factoryName);
+  if (normalizedFactoryName === "") {
+    return null;
+  }
+
+  return {
+    kind: "named",
+    name: normalizedFactoryName,
+  };
+}
+
+export function normalizeManualFactoryName(factoryName: string): string {
+  return factoryName.trim();
 }
 
 function folderValidationErrorMessage(
@@ -144,6 +184,8 @@ function folderValidationErrorMessage(
       return messages.openSessionFolderNotDirectoryError;
     case "not_runnable":
       return messages.openSessionFolderNotRunnableError;
+    case "target_not_found":
+      return messages.openSessionOverrideNotFoundError;
     case "unreadable":
       return messages.openSessionFolderUnreadableError;
     default:

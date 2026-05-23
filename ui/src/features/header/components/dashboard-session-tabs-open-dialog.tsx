@@ -22,12 +22,15 @@ import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typo
 import { cn } from "../../../lib/cn";
 import {
   factorySessionTargetOptionValue,
+  manualFactorySessionTargetRef,
+  normalizeManualFactoryName,
   type FolderValidationState,
   folderValidationStatusMessage,
 } from "../lib/dashboard-session-tabs-utils";
 import {
   type getHeaderControlsMessages,
 } from "../messages/header-controls";
+import { selectedFactorySessionTarget } from "../lib/dashboard-session-tabs-utils";
 
 const SESSION_SECTION_LABEL_CLASS =
   "text-xs uppercase tracking-[0.18em] text-af-ink/52";
@@ -44,8 +47,10 @@ export function OpenSessionDialog({
   folderValidation,
   folderPath,
   isPending,
+  manualFactoryName,
   messages,
   onChangeFolderPath,
+  onChangeManualFactoryName,
   onInspectFolder,
   onOpenTarget,
   onSelectTarget,
@@ -56,8 +61,10 @@ export function OpenSessionDialog({
   folderValidation: FolderValidationState;
   folderPath: string;
   isPending: boolean;
+  manualFactoryName: string;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onChangeFolderPath: (value: string) => void;
+  onChangeManualFactoryName: (value: string) => void;
   onInspectFolder: (event: FormEvent<HTMLFormElement>) => void;
   onOpenTarget: () => void;
   onSelectTarget: (value: string) => void;
@@ -65,6 +72,8 @@ export function OpenSessionDialog({
 }) {
   const folderFieldID = useId();
   const folderHelperTextID = useId();
+  const manualFactoryFieldID = useId();
+  const manualFactoryHelperTextID = useId();
   const folderPickerInputRef = useRef<HTMLInputElement | null>(null);
   const validationStatusMessage = folderValidationStatusMessage(
     folderValidation,
@@ -134,6 +143,31 @@ export function OpenSessionDialog({
           >
             {messages.sessionFolderHelperText}
           </p>
+        </div>
+        <div className="grid gap-2">
+          <label
+            className={SESSION_SECTION_LABEL_CLASS}
+            htmlFor={manualFactoryFieldID}
+          >
+            {messages.manualFactoryNameFieldLabel}
+          </label>
+          <Input
+            aria-describedby={manualFactoryHelperTextID}
+            className="flex-1"
+            disabled={isPending}
+            id={manualFactoryFieldID}
+            onChange={(event) => {
+              onChangeManualFactoryName(event.target.value);
+            }}
+            placeholder={messages.manualFactoryNameFieldPlaceholder}
+            value={manualFactoryName}
+          />
+          <p
+            className={cn("text-sm text-af-ink/68", DASHBOARD_BODY_TEXT_CLASS)}
+            id={manualFactoryHelperTextID}
+          >
+            {messages.manualFactoryNameHelperText}
+          </p>
           <input
             {...({ directory: "", webkitdirectory: "" } as Record<string, string>)}
             aria-hidden="true"
@@ -173,6 +207,7 @@ export function OpenSessionDialog({
       {folderValidation.status === "ready" && discoveredTargets.length > 0 ? (
         <SessionTargetPicker
           isPending={isPending}
+          manualFactoryName={manualFactoryName}
           messages={messages}
           onOpenTarget={onOpenTarget}
           onSelectTarget={onSelectTarget}
@@ -186,6 +221,7 @@ export function OpenSessionDialog({
 
 function SessionTargetPicker({
   isPending,
+  manualFactoryName,
   messages,
   onOpenTarget,
   onSelectTarget,
@@ -193,6 +229,7 @@ function SessionTargetPicker({
   targets,
 }: {
   isPending: boolean;
+  manualFactoryName: string;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onOpenTarget: () => void;
   onSelectTarget: (value: string) => void;
@@ -200,10 +237,22 @@ function SessionTargetPicker({
   targets: FactorySessionTarget[];
 }) {
   const targetSelectID = useId();
-  const selectedTarget =
-    targets.find(
-      (target) => factorySessionTargetOptionValue(target) === selectedTargetValue,
-    ) ?? null;
+  const normalizedManualFactoryName = normalizeManualFactoryName(manualFactoryName);
+  const manualOverrideTargetRef = manualFactorySessionTargetRef(manualFactoryName);
+  const selectedTarget = selectedFactorySessionTarget(targets, selectedTargetValue);
+  const manualOverrideTarget =
+    manualOverrideTargetRef == null
+      ? null
+      : targets.find(
+          (target) =>
+            target.ref.kind === manualOverrideTargetRef.kind &&
+            target.ref.name === manualOverrideTargetRef.name,
+        ) ?? null;
+  const launchTarget = manualOverrideTarget ?? selectedTarget;
+  const launchTargetName =
+    normalizedManualFactoryName !== ""
+      ? normalizedManualFactoryName
+      : launchTarget?.label ?? null;
 
   return (
     <section aria-label={messages.targetPickerTitle} className="grid gap-3">
@@ -238,11 +287,18 @@ function SessionTargetPicker({
           </Select>
         </div>
       ) : null}
-      {selectedTarget ? (
+      {normalizedManualFactoryName !== "" ? (
+        <p className={SESSION_DIALOG_STATUS_CLASS} role="status">
+          {messages.manualFactoryNamePrecedenceTemplate
+            .replace("{{factoryName}}", normalizedManualFactoryName)
+            .replace("{{detectedTarget}}", selectedTarget?.label ?? messages.selectSessionTargetPlaceholder)}
+        </p>
+      ) : null}
+      {launchTarget ? (
         <div className={SESSION_TARGET_BUTTON_CLASS}>
-          <span className="font-semibold text-af-ink">{selectedTarget.label}</span>
+          <span className="font-semibold text-af-ink">{launchTarget.label}</span>
           <span className="truncate text-xs text-af-ink/58">
-            {selectedTarget.project || selectedTarget.factoryDir}
+            {launchTarget.project || launchTarget.factoryDir}
           </span>
         </div>
       ) : (
@@ -250,9 +306,16 @@ function SessionTargetPicker({
           {messages.selectSessionTargetPrompt}
         </p>
       )}
+      {launchTargetName ? (
+        <p className={cn("text-sm text-af-ink/72", DASHBOARD_BODY_TEXT_CLASS)}>
+          {messages.openSessionLaunchSummaryTemplate
+            .replace("{{folderPath}}", launchTarget?.folderPath ?? "")
+            .replace("{{factoryName}}", launchTargetName)}
+        </p>
+      ) : null}
       <div className="flex justify-end">
         <Button
-          disabled={isPending || selectedTarget == null}
+          disabled={isPending || launchTarget == null}
           onClick={onOpenTarget}
           type="button"
         >
