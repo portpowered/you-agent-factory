@@ -68,4 +68,44 @@ describe("factory graph editor layout positions", () => {
       SINGLE_NODE_TOPOLOGY,
     );
   });
+
+  it("reuses cached successful layouts without rerunning layout work on rerender", async () => {
+    mockBuildFactoryGraphEditorLayout.mockResolvedValue({
+      edges: [],
+      nodes: [{ nodeId: "workstation:review", x: 24, y: 48 }],
+    });
+
+    const { result, rerender } = renderHook(
+      ({ topologyKey }) =>
+        useFactoryGraphEditorLayoutPositions(SINGLE_NODE_TOPOLOGY, topologyKey),
+      {
+        initialProps: {
+          topologyKey: "workflow:single-node-success",
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.get("workstation:review")).toEqual({
+        x: 24,
+        y: 48,
+      });
+    });
+
+    const resolvedPositions = result.current;
+    rerender({ topologyKey: "workflow:single-node-success" });
+
+    await waitFor(() => {
+      expect(result.current.get("workstation:review")).toEqual({
+        x: 24,
+        y: 48,
+      });
+    });
+
+    expect(result.current).toBe(resolvedPositions);
+    expect(mockBuildFactoryGraphEditorLayout).toHaveBeenCalledTimes(1);
+    expect(mockBuildFactoryGraphEditorLayout).toHaveBeenCalledWith(
+      SINGLE_NODE_TOPOLOGY,
+    );
+  });
 });

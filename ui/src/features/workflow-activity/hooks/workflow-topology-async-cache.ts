@@ -1,4 +1,4 @@
-import { useEffect, useState, type DependencyList } from "react";
+import { useEffect, useRef, useState, type DependencyList } from "react";
 
 type WorkflowTopologyAsyncCache<TLayout> = {
   readonly inFlightByTopologyKey: Map<string, Promise<TLayout>>;
@@ -36,6 +36,11 @@ export function useWorkflowTopologyAsyncCache<TLayout, TResult>({
   topologyKey,
 }: UseWorkflowTopologyAsyncCacheOptions<TLayout, TResult>) {
   const [value, setValue] = useState<TResult>(initialValue);
+  const loadLayoutRef = useRef(loadLayout);
+  const mapResolvedLayoutRef = useRef(mapResolvedLayout);
+
+  loadLayoutRef.current = loadLayout;
+  mapResolvedLayoutRef.current = mapResolvedLayout;
 
   useEffect(() => {
     if (disabled) {
@@ -47,14 +52,14 @@ export function useWorkflowTopologyAsyncCache<TLayout, TResult>({
     const cachedLayout = cache.resolvedByTopologyKey.get(topologyKey);
 
     if (cachedLayout) {
-      setValue(mapResolvedLayout(cachedLayout));
+      setValue(mapResolvedLayoutRef.current(cachedLayout));
       return () => {
         cancelled = true;
       };
     }
 
     const inFlightLayout =
-      cache.inFlightByTopologyKey.get(topologyKey) ?? loadLayout();
+      cache.inFlightByTopologyKey.get(topologyKey) ?? loadLayoutRef.current();
     cache.inFlightByTopologyKey.set(topologyKey, inFlightLayout);
 
     inFlightLayout
@@ -62,7 +67,7 @@ export function useWorkflowTopologyAsyncCache<TLayout, TResult>({
         cache.resolvedByTopologyKey.set(topologyKey, layout);
         cache.inFlightByTopologyKey.delete(topologyKey);
         if (!cancelled) {
-          setValue(mapResolvedLayout(layout));
+          setValue(mapResolvedLayoutRef.current(layout));
         }
       })
       .catch(() => {
@@ -81,8 +86,6 @@ export function useWorkflowTopologyAsyncCache<TLayout, TResult>({
     disabledValue,
     fallbackValue,
     initialValue,
-    loadLayout,
-    mapResolvedLayout,
     topologyKey,
     ...dependencies,
   ]);
