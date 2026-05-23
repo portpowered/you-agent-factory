@@ -31,6 +31,19 @@ export interface FactoryGraphEditorMessages {
   draftActionsSave: string;
   draftActionsSaving: string;
   draftActionsTitle: string;
+  edgeAriaLabel: (label: string, source: string, target: string) => string;
+  edgeKindLabel: (
+    kind:
+      | "worker-assignment"
+      | "worker-resource"
+      | "work-type-state"
+      | "workstation-input"
+      | "workstation-on-continue"
+      | "workstation-on-failure"
+      | "workstation-on-rejection"
+      | "workstation-output"
+      | "workstation-resource",
+  ) => string;
   flowConnectionHint: string;
   flowPendingLabel: string;
   flowRemovingLabel: string;
@@ -139,6 +152,31 @@ function describeEnglishWorkerStatus(status: FactoryGraphWorkerRuntimeStatus) {
   }
 }
 
+function describeEnglishEdgeKind(
+  kind: Parameters<FactoryGraphEditorMessages["edgeKindLabel"]>[0],
+) {
+  switch (kind) {
+    case "worker-assignment":
+      return "Worker assignment";
+    case "worker-resource":
+      return "Worker resource";
+    case "work-type-state":
+      return "State membership";
+    case "workstation-input":
+      return "Input route";
+    case "workstation-on-continue":
+      return "Continue route";
+    case "workstation-on-failure":
+      return "Failure route";
+    case "workstation-on-rejection":
+      return "Reject route";
+    case "workstation-output":
+      return "Success route";
+    case "workstation-resource":
+      return "Station resource";
+  }
+}
+
 const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEditorMessages> =
   {
     en: {
@@ -170,6 +208,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       draftActionsSave: "Save changes",
       draftActionsSaving: "Saving...",
       draftActionsTitle: "Pending graph changes",
+      edgeAriaLabel: (label, source, target) => `${label} from ${source} to ${target}`,
+      edgeKindLabel: describeEnglishEdgeKind,
       flowConnectionHint: "Use labeled anchors for compatible connections.",
       flowPendingLabel: "Pending",
       flowRemovingLabel: "Removing",
@@ -276,6 +316,29 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       draftActionsSave: "保存更改",
       draftActionsSaving: "保存中...",
       draftActionsTitle: "待处理图更改",
+      edgeAriaLabel: (label, source, target) => `${label}：从 ${source} 到 ${target}`,
+      edgeKindLabel: (kind) => {
+        switch (kind) {
+          case "worker-assignment":
+            return "工作者分配";
+          case "worker-resource":
+            return "工作者资源";
+          case "work-type-state":
+            return "状态归属";
+          case "workstation-input":
+            return "输入路由";
+          case "workstation-on-continue":
+            return "继续路由";
+          case "workstation-on-failure":
+            return "失败路由";
+          case "workstation-on-rejection":
+            return "拒绝路由";
+          case "workstation-output":
+            return "成功路由";
+          case "workstation-resource":
+            return "工作站资源";
+        }
+      },
       flowConnectionHint: "请使用带标签的锚点创建兼容连接。",
       flowPendingLabel: "待处理",
       flowRemovingLabel: "移除中",

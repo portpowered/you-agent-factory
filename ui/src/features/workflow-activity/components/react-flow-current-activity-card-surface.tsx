@@ -99,6 +99,7 @@ export function CurrentActivityGraphSurface({
         canInteractWithEditor={editor.canInteractWithEditor}
         editorMode={editor.editorMode}
         edges={activeGraph.edges}
+        edgeTypes={editor.editorMode ? editorGraph.edgeTypes : undefined}
         graphKey={activeGraph.graphKey}
         handleNodesChange={activeGraph.handleNodesChange}
         hasPendingChanges={editor.draftState.hasChanges}

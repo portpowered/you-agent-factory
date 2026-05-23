@@ -7,6 +7,7 @@ import { FactoryGraphEditorVisibilityPanel } from "./factory-graph-editor-contro
 import type { FactoryGraphTopology } from "../factory-graph-draft-types";
 import {
   buildFactoryGraphEditorFlowModel,
+  FACTORY_GRAPH_EDITOR_EDGE_TYPES,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "./factory-graph-editor-flow";
 import type { FactoryGraphConnectionEndpoint } from "../factory-graph-editor-connections";
@@ -78,6 +79,7 @@ function PendingRemovalStory() {
     <div className="h-[520px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
         edges={flow.edges}
         fitView={true}
         nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
@@ -139,6 +141,7 @@ function ConnectionAnchorsStory() {
     <div className="h-[520px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
         edges={flow.edges}
         fitView={true}
         nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
@@ -228,6 +231,7 @@ function PendingEdgeChangesStory() {
     <div className="h-[520px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
         edges={flow.edges}
         fitView={true}
         nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
@@ -422,6 +426,7 @@ function WorkerResourceDensityStory() {
       />
       <ReactFlow
         defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
         edges={flow.edges}
         fitView={true}
         nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}

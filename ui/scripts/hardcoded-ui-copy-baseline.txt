@@ -142,16 +142,6 @@ src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|63|1
 src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|65|14|string-literal|failure route
 src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|67|14|string-literal|rejection route
 src/features/factory-graph-editor/factory-graph-editor-edge-removal-copy.ts|69|14|string-literal|state membership
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|170|20|string-literal|from to
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|218|14|string-literal|Worker assignment
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|220|14|string-literal|Worker resource
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|222|14|string-literal|State membership
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|224|14|string-literal|Input route
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|226|14|string-literal|Continue route
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|228|14|string-literal|Failure route
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|230|14|string-literal|Reject route
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|232|14|string-literal|Success route
-src/features/factory-graph-editor/components/factory-graph-editor-flow.tsx|234|14|string-literal|Station resource
 src/features/factory-graph-editor/factory-graph-editor-removals.ts|96|19|string-literal|Delete
 src/features/factory-graph-editor/factory-graph-editor-removals.ts|98|12|string-literal|Remove ?
 src/features/factory-graph-editor/factory-graph-editor-removals.ts|148|19|string-literal|Remove

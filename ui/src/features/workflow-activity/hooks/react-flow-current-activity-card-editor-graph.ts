@@ -14,6 +14,7 @@ import {
   nodeKeyId,
 } from "../../factory-graph-editor/factory-graph-draft";
 import {
+  FACTORY_GRAPH_EDITOR_EDGE_TYPES,
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "../../factory-graph-editor/factory-graph-editor-flow";
@@ -79,6 +80,7 @@ export function useFactoryGraphEditorViewModel(
       maxZoom: 1.1,
       padding: 0.18,
     } satisfies FitViewOptions,
+    edgeTypes: FACTORY_GRAPH_EDITOR_EDGE_TYPES,
     visibilityPresetOptions,
     nodeTypes: FACTORY_GRAPH_EDITOR_NODE_TYPES,
     nodes,
