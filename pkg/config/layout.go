@@ -194,20 +194,8 @@ func CloneWorkerConfig(def interfaces.WorkerConfig) interfaces.WorkerConfig {
 	def.Args = append([]string(nil), def.Args...)
 	def.Operations = cloneModelOperations(def.Operations)
 	def.Resources = append([]interfaces.ResourceConfig(nil), def.Resources...)
-	if def.Auth != nil {
-		auth := *def.Auth
-		def.Auth = &auth
-	}
-	if def.Linear != nil {
-		linear := *def.Linear
-		linear.TeamIDs = append([]string(nil), def.Linear.TeamIDs...)
-		linear.StateIDs = append([]string(nil), def.Linear.StateIDs...)
-		if def.Linear.Claim != nil {
-			claim := *def.Linear.Claim
-			linear.Claim = &claim
-		}
-		def.Linear = &linear
-	}
+	def.Auth = cloneHostedWorkerAuthConfig(def.Auth)
+	def.Linear = cloneHostedLinearWorkerConfig(def.Linear)
 	return def
 }
 
