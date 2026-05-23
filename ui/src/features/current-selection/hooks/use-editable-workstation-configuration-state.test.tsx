@@ -1,9 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import type { CanonicalFactoryDefinition } from "../../current-factory-definition";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition";
-import type { DashboardSelection } from "../types";
+import type { CanonicalFactoryDefinition } from "../../current-factory-definition/public";
+import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition/public";
+import type { DashboardSelection } from "../state/selection-types";
 import {
   useEditableWorkstationConfigurationState,
   validateEditableWorkstationDraft,
@@ -11,8 +11,8 @@ import {
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
-vi.mock("../../current-factory-definition", async () => {
-  const actual = await vi.importActual("../../current-factory-definition");
+vi.mock("../../current-factory-definition/public", async () => {
+  const actual = await vi.importActual("../../current-factory-definition/public");
 
   return {
     ...actual,

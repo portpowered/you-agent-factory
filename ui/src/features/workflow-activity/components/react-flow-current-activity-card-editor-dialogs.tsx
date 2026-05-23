@@ -1,14 +1,12 @@
-import { FactoryGraphEditorAddEntityDialog } from "../../factory-graph-editor/factory-graph-editor-add-dialog";
-import {
-  FactoryGraphEditorConfirmationDialog,
-} from "../../factory-graph-editor/factory-graph-editor-controls";
-import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/factory-graph-editor-leave-dialog";
+import { FactoryGraphEditorAddEntityDialog } from "../../factory-graph-editor/components/factory-graph-editor-add-dialog";
+import { FactoryGraphEditorConfirmationDialog } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/components/factory-graph-editor-leave-dialog";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
   FactoryImportPreviewDialog,
-} from "../../import";
-import type { CurrentActivityImportController } from "../current-activity-import-controller";
-import type { useCurrentActivityGraphEditor } from "../react-flow-current-activity-card-editor";
+} from "../../import/public";
+import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
+import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { GraphImportErrorPanel } from "./react-flow-current-activity-card-import";
 
 export function CurrentActivityGraphEditorDialogs({

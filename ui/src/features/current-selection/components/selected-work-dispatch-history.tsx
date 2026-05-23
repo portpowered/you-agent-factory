@@ -5,7 +5,7 @@ import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import { getWorkstationDetailMessages } from "../messages";
 import type {
   SelectedWorkDispatchHistorySectionProps,
-} from "../detail-card-types";
+} from "./detail-card-types";
 import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
 import { ProviderSessionAttempts } from "./provider-session-attempts";
 import { DispatchHistoryCard } from "./selected-work-dispatch-history-card";

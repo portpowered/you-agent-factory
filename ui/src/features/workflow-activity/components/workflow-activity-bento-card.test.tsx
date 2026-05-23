@@ -7,16 +7,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useCurrentEditableFactoryDefinitionDocument,
   useSaveCurrentEditableFactoryDefinition,
-} from "../../current-factory-definition";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
+} from "../../current-factory-definition/public";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import type { DashboardSelection } from "../../current-selection";
-import type { CurrentActivityImportController } from "../current-activity-import-controller";
+import type { DashboardSelection } from "../../current-selection/public";
+import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 
-vi.mock("../../current-factory-definition", async () => {
-  const actual = await vi.importActual("../../current-factory-definition");
+vi.mock("../../current-factory-definition/public", async () => {
+  const actual = await vi.importActual("../../current-factory-definition/public");
 
   return {
     ...actual,
@@ -25,9 +25,9 @@ vi.mock("../../current-factory-definition", async () => {
   };
 });
 
-vi.mock("../../factory-graph-editor/factory-graph-draft", async () => {
+vi.mock("../../factory-graph-editor/public", async () => {
   const actual = await vi.importActual(
-    "../../factory-graph-editor/factory-graph-draft",
+    "../../factory-graph-editor/public",
   );
 
   return {

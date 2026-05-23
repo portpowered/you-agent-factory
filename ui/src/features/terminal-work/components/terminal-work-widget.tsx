@@ -6,7 +6,7 @@ import type {
   TerminalWorkDetail,
   TerminalWorkItem,
   TerminalWorkStatus,
-} from "../types";
+} from "../lib/types";
 
 export interface TerminalWorkWidgetProps {
   completedItems: TerminalWorkItem[];

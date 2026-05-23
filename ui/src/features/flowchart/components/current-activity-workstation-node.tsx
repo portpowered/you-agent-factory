@@ -17,7 +17,7 @@ import {
 } from "./current-activity-node-chrome";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
-import { workstationIconMetadata } from "../workstation-icon-metadata";
+import { workstationIconMetadata } from "../lib/workstation-icon-metadata";
 
 export interface WorkstationNodeData extends Record<string, unknown> {
   active: boolean;

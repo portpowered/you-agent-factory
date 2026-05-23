@@ -224,28 +224,46 @@ export async function expectTimelineToolbarAlignment(
     slider.closest<HTMLElement>("div"),
     "expected slider shell in dashboard toolbar",
   );
+  const primaryRow = requireValue(
+    heading.closest<HTMLElement>("div"),
+    "expected primary dashboard toolbar row",
+  );
+  const secondaryRow = requireValue(
+    sliderShell.parentElement,
+    "expected secondary dashboard toolbar row",
+  );
   const sliderMetaGroup = requireValue(
     currentButton.parentElement,
     "expected timeline meta group in dashboard toolbar",
   );
   const headingRect = heading.getBoundingClientRect();
+  const primaryRowRect = primaryRow.getBoundingClientRect();
+  const secondaryRowRect = secondaryRow.getBoundingClientRect();
   const sliderRect = sliderShell.getBoundingClientRect();
   const currentButtonRect = currentButton.getBoundingClientRect();
   const languageButtonRect = languageButton.getBoundingClientRect();
-  const streamStatusRect = streamStatus.getBoundingClientRect();
   const exportButtonRect = exportButton.getBoundingClientRect();
+  const headerControls = Array.from(
+    toolbar.querySelectorAll(
+      '[aria-label="Timeline tick"], [aria-label="Change language"], [aria-label="Export PNG"], [role="status"]',
+    ),
+  );
 
   expect(sliderShell.className).toContain("gap-1.5");
   expect(sliderShell.className).toContain("px-2.5");
+  expect(streamStatus.className).toContain("sr-only");
   expect(sliderMetaGroup.contains(within(sliderMetaGroup).getByText("5/5"))).toBe(
     true,
   );
-  expect(sliderRect.left).toBeGreaterThanOrEqual(headingRect.right - 1);
+  expect(headerControls).toHaveLength(4);
+  expect(headerControls[0]).toBe(streamStatus);
+  expect(headerControls[1]).toBe(exportButton);
+  expect(headerControls[2]).toBe(languageButton);
+  expect(headerControls[3]).toBe(slider);
+  expect(primaryRowRect.top).toBeLessThan(secondaryRowRect.top);
+  expect(sliderRect.top).toBeGreaterThanOrEqual(headingRect.bottom - 1);
   expect(currentButtonRect.left).toBeGreaterThanOrEqual(sliderRect.left);
-  expect(streamStatusRect.left).toBeGreaterThanOrEqual(sliderRect.right - 1);
-  expect(exportButtonRect.left).toBeGreaterThanOrEqual(
-    streamStatusRect.right - 1,
-  );
+  expect(exportButtonRect.left).toBeGreaterThanOrEqual(headingRect.right - 1);
   expect(languageButtonRect.left).toBeGreaterThanOrEqual(
     exportButtonRect.right - 1,
   );

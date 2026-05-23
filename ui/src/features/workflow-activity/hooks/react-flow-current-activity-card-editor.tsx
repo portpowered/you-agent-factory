@@ -4,15 +4,15 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import {
   useCurrentEditableFactoryDefinitionDocument,
   useSaveCurrentEditableFactoryDefinition,
-} from "../../current-factory-definition";
+} from "../../current-factory-definition/public";
 import {
   createEmptyFactoryGraphDraft,
   useFactoryGraphDraftState,
-} from "../../factory-graph-editor/factory-graph-draft";
-import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/factory-graph-editor-additions";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/factory-graph-editor-controls";
-import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/factory-graph-editor-save-summary";
-import { useFactoryGraphAddEntityController } from "../react-flow-current-activity-card-editor-chrome";
+} from "../../factory-graph-editor/public";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
+import { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import {
   findClassifierGraphEditorUnsupportedWorkstationName,
   findClassifierGraphEditorUnsupportedWorkstationNameFromTopology,

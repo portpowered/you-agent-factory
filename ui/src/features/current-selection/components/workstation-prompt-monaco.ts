@@ -4,8 +4,8 @@ import type {
 } from "monaco-editor";
 
 import type { PromptTemplateContract } from "../../../api/current-factory-prompt-template";
-import type { EditableWorkstationPromptDiagnostic } from "../detail-card-types";
-import type { EditableWorkstationPromptHelpState } from "../detail-card-types";
+import type { EditableWorkstationPromptDiagnostic } from "./detail-card-types";
+import type { EditableWorkstationPromptHelpState } from "./detail-card-types";
 
 type MonacoModule = typeof import("monaco-editor");
 

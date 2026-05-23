@@ -1,5 +1,5 @@
 import type { DashboardTopology } from "../../../api/dashboard/types";
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/factory-graph-draft-types";
+import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 
 export function findClassifierGraphEditorUnsupportedWorkstationName(
   factoryDefinition: CanonicalFactoryDefinition | null,

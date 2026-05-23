@@ -20,9 +20,9 @@ import {
   PROVIDER_SESSION_CARD_CLASS,
 } from "./detail-card-shared";
 import { InferenceAttemptCard } from "./inference-attempt";
-import type { SelectedWorkRequestHistoryItem } from "../detail-card-types";
+import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
 import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
-import type { LoadableProviderSessionRef } from "../provider-session-details";
+import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
 import {
   requestModel,
   requestProvider,
@@ -33,7 +33,7 @@ import {
   scriptResponseDurationMillis,
   scriptResponseExitCode,
   scriptResponseFailureType,
-} from "../selected-work-dispatch-history-helpers";
+} from "../dispatch-history/selected-work-dispatch-history-helpers";
 import {
   ScriptArgsSection,
   ScriptOutputSection,

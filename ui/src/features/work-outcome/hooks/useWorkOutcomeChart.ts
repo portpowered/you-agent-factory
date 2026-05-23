@@ -16,7 +16,7 @@ import {
   buildWorkChartModel,
   recordThroughputSample,
   type ThroughputSample,
-} from "../trends";
+} from "../lib/trends";
 
 const WORK_OUTCOME_RANGE_ID = "session";
 const SESSION_WORK_CHART_NOW = 0;

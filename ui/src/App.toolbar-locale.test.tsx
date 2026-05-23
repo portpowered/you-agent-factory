@@ -6,7 +6,7 @@ import {
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "./components/ui/dashboard-typography";
 import { useDashboardStreamStore } from "./features/dashboard/state";
-import * as factoryPngImportModule from "./features/import/factory-png-import";
+import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
 import {
   createFactoryImportValue,
   createFileDropTransfer,

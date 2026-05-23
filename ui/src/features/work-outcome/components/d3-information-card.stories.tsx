@@ -6,8 +6,8 @@ import {
   AgentBentoLayout,
   type AgentBentoLayoutItem,
 } from "../../bento/components/agent-bento";
-import { getDashboardWorkChartSeriesDefinitions } from "../chart-contract";
-import type { WorkChartModel } from "../trends";
+import { getDashboardWorkChartSeriesDefinitions } from "../lib/chart-contract";
+import type { WorkChartModel } from "../lib/trends";
 import { D3CompletionInformationCard } from "./d3-information-card";
 import type { WorkChartState } from "./work-chart";
 import { WorkOutcomeWidget } from "./work-outcome-widget";

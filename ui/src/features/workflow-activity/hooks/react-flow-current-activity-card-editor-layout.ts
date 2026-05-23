@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { buildFactoryGraphEditorLayout } from "../../factory-graph-editor/factory-graph-editor-layout";
-import type { FactoryGraphTopology } from "../../factory-graph-editor/factory-graph-draft-types";
+import { buildFactoryGraphEditorLayout } from "../../factory-graph-editor/lib/factory-graph-editor-layout";
+import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 
 const EDITOR_LAYOUT_CACHE = new Map<
   string,

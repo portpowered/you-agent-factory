@@ -27,14 +27,14 @@ function StatusPanelProbe({
   );
 }
 
-vi.mock("../../bento", () => ({
+vi.mock("../../bento/public", () => ({
   DashboardBento: ({ locale }: { locale?: string }) => {
     const { locale: resolvedLocale } = useAppLocale(locale);
     return <section>Dashboard bento {resolvedLocale}</section>;
   },
 }));
 
-vi.mock("../../header", () => ({
+vi.mock("../../header/public", () => ({
   DashboardExportDialog: ({ locale }: { locale?: string }) => {
     const { locale: resolvedLocale } = useAppLocale(locale);
     return <div>Dashboard export dialog {resolvedLocale}</div>;

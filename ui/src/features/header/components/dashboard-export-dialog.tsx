@@ -1,5 +1,5 @@
 import { useAppLocale } from "../../../i18n";
-import { ExportFactoryDialog, useCurrentFactoryExport } from "../../export";
+import { ExportFactoryDialog, useCurrentFactoryExport } from "../../export/public";
 import { useExportDialogStore } from "../../export/state/exportDialogStore";
 
 export interface DashboardExportDialogProps {

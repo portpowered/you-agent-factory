@@ -1,1 +1,1 @@
-export * from "../../features/bento";
+export * from "../../features/bento/public";

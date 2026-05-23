@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import * as factoryPngExportModule from "./features/export/factory-png-export";
+import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import {
   baselineSnapshot,
   jsonResponse,

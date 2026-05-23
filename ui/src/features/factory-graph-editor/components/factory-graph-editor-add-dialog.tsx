@@ -1,11 +1,11 @@
 import { Button, Input, Select, Textarea } from "../../../components/ui";
-import { DashboardMutationDialog } from "../../workflow-activity/mutation-dialog";
-import type { CanonicalFactoryDefinition } from "../factory-graph-draft-types";
+import { DashboardMutationDialog } from "../../workflow-activity/components/mutation-dialog";
+import type { CanonicalFactoryDefinition } from "../lib/factory-graph-draft-types";
 import type {
   FactoryGraphAddEntityDraft,
   FactoryGraphAddEntityFieldErrors,
-} from "../factory-graph-editor-additions";
-import { editableWorkstationBehaviorOptions } from "../factory-graph-editor-additions";
+} from "../lib/factory-graph-editor-additions";
+import { editableWorkstationBehaviorOptions } from "../lib/factory-graph-editor-additions";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 const FIELD_GROUP_CLASS = "grid gap-2";

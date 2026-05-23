@@ -8,7 +8,7 @@ import {
 
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { NoSelectionDetailCard } from "../../current-selection/components/no-selection-detail-card";
-import { WorkTotalsCard } from "../../work-totals";
+import { WorkTotalsCard } from "../../work-totals/public";
 import {
   AgentBentoCard,
   AgentBentoLayout,

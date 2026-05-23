@@ -5,15 +5,15 @@ import type { ReactNode } from "react";
 import type { FactoryValue } from "../../../api/named-factory";
 import { createFactory, NamedFactoryAPIError } from "../../../api/named-factory";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import type { CanonicalFactoryDefinition } from "../../current-factory-definition";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition";
+import type { CanonicalFactoryDefinition } from "../../current-factory-definition/public";
+import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition/public";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
 
-vi.mock("../../current-factory-definition", async () => {
-  const actual = await vi.importActual("../../current-factory-definition");
+vi.mock("../../current-factory-definition/public", async () => {
+  const actual = await vi.importActual("../../current-factory-definition/public");
 
   return {
     ...actual,

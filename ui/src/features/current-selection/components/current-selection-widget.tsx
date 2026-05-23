@@ -13,7 +13,7 @@ import {
 } from "./current-selection-cards";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
-import type { LoadableProviderSessionRef } from "../provider-session-details";
+import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
 import { useEditableWorkstationConfigurationState } from "../hooks/use-editable-workstation-configuration-state";
 import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";

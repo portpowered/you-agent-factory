@@ -5,8 +5,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import "../../../styles.css";
-import type { FactoryGraphTopology } from "../factory-graph-draft-types";
-import { buildFactoryGraphEditorLayout } from "../factory-graph-editor-layout";
+import type { FactoryGraphTopology } from "../lib/factory-graph-draft-types";
+import { buildFactoryGraphEditorLayout } from "../lib/factory-graph-editor-layout";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
