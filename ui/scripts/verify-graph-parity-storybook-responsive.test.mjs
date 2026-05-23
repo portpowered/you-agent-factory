@@ -42,14 +42,11 @@ describe("verifyEditorGraphParity", () => {
       }),
     };
     const page = {
-      getByRole: vi.fn((role, options) => {
-        if (
-          role === "region" &&
-          options?.name === "Factory graph visibility presets"
-        ) {
+      locator: vi.fn((selector) => {
+        if (selector === '[aria-label="Factory graph visibility presets"]') {
           return visibilityPresets;
         }
-        throw new Error(`Unexpected role query ${role}:${options?.name}`);
+        throw new Error(`Unexpected locator query ${selector}`);
       }),
       getByTestId: vi.fn((value) => {
         if (value === "rf__node-workstation:review") {
