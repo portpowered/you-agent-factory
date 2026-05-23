@@ -392,32 +392,12 @@ func cloneReplayPlannedResult(result interfaces.WorkResult) interfaces.WorkResul
 		clone.SpawnedWork = append([]interfaces.TokenColor(nil), result.SpawnedWork...)
 	}
 	if result.RecordedOutputWork != nil {
-		clone.RecordedOutputWork = cloneReplayFactoryWorkItems(result.RecordedOutputWork)
+		clone.RecordedOutputWork = interfaces.CloneFactoryWorkItems(result.RecordedOutputWork)
 	}
 	clone.ProviderFailure = interfaces.CloneProviderFailureMetadata(result.ProviderFailure)
 	clone.ProviderSession = interfaces.CloneProviderSessionMetadata(result.ProviderSession)
 	clone.Diagnostics = interfaces.CloneWorkDiagnostics(result.Diagnostics)
 	return clone
-}
-
-func cloneReplayFactoryWorkItems(items []interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
-	if len(items) == 0 {
-		return nil
-	}
-	out := make([]interfaces.FactoryWorkItem, len(items))
-	for i := range items {
-		out[i] = items[i]
-		if items[i].PreviousChainingTraceIDs != nil {
-			out[i].PreviousChainingTraceIDs = append([]string(nil), items[i].PreviousChainingTraceIDs...)
-		}
-		if items[i].Content != nil {
-			out[i].Content = append([]interfaces.WorkContentPart(nil), items[i].Content...)
-		}
-		if items[i].Tags != nil {
-			out[i].Tags = cloneStringMap(items[i].Tags)
-		}
-	}
-	return out
 }
 
 func (p *CompletionDeliveryPlan) expectedForObservedDispatchLocked(observed interfaces.WorkDispatch) (completionDeliveryRecord, bool) {

@@ -123,7 +123,7 @@ func replayDispatchCompletedEvent(t *testing.T, completionID string, result inte
 		TransitionId:    result.TransitionID,
 		Outcome:         factoryapi.WorkOutcome(result.Outcome),
 		Output:          stringPtrIfNotEmpty(result.Output),
-		OutputWork:      generatedReplayOutputWorkPtr(result.RecordedOutputWork),
+		OutputWork:      generatedReplayOutputWorkPtr(t, result.RecordedOutputWork),
 		Error:           stringPtrIfNotEmpty(result.Error),
 		Feedback:        stringPtrIfNotEmpty(result.Feedback),
 		ProviderFailure: interfaces.GeneratedProviderFailureMetadata(result.ProviderFailure),
@@ -146,7 +146,8 @@ func replayDispatchCompletedEvent(t *testing.T, completionID string, result inte
 	}
 }
 
-func generatedReplayOutputWorkPtr(items []interfaces.FactoryWorkItem) *[]factoryapi.Work {
+func generatedReplayOutputWorkPtr(t *testing.T, items []interfaces.FactoryWorkItem) *[]factoryapi.Work {
+	t.Helper()
 	if len(items) == 0 {
 		return nil
 	}
@@ -164,6 +165,7 @@ func generatedReplayOutputWorkPtr(items []interfaces.FactoryWorkItem) *[]factory
 			CurrentChainingTraceId:   stringPtrIfNotEmpty(currentChainingTraceID),
 			PreviousChainingTraceIds: slicePtr(item.PreviousChainingTraceIDs),
 			TraceId:                  stringPtrIfNotEmpty(item.TraceID),
+			Content:                  replayWorkContentForDeliveryTest(t, item.Content),
 			Tags:                     generatedStringMapPtr(item.Tags),
 		})
 	}
@@ -201,8 +203,15 @@ func TestReduceReplayEvents_CompletionsPreserveRecordedOutputWork(t *testing.T) 
 					WorkTypeID:             "plan",
 					DisplayName:            "story-1",
 					CurrentChainingTraceID: "trace-1",
-					TraceID:                "trace-1",
-					Tags:                   map[string]string{"kind": "plan"},
+					PreviousChainingTraceIDs: []string{
+						"trace-parent",
+					},
+					TraceID: "trace-1",
+					Content: []interfaces.WorkContentPart{{
+						Type: interfaces.WorkContentPartTypeText,
+						Text: "draft story",
+					}},
+					Tags: map[string]string{"kind": "plan"},
 				},
 				{
 					ID:                     "work-task-39",
@@ -228,6 +237,15 @@ func TestReduceReplayEvents_CompletionsPreserveRecordedOutputWork(t *testing.T) 
 	}
 	if got[0].ID != "work-plan-38" || got[0].WorkTypeID != "plan" {
 		t.Fatalf("recorded output work[0] = %#v, want work-plan-38/plan", got[0])
+	}
+	if traceIDs := got[0].PreviousChainingTraceIDs; len(traceIDs) != 1 || traceIDs[0] != "trace-parent" {
+		t.Fatalf("recorded output work[0] previous chaining trace IDs = %#v, want [trace-parent]", traceIDs)
+	}
+	if content := got[0].Content; len(content) != 1 || content[0].Text != "draft story" {
+		t.Fatalf("recorded output work[0] content = %#v, want detached draft story content", content)
+	}
+	if got[0].Tags["kind"] != "plan" {
+		t.Fatalf("recorded output work[0] tags = %#v, want kind=plan", got[0].Tags)
 	}
 	if got[1].ID != "work-task-39" || got[1].WorkTypeID != "task" {
 		t.Fatalf("recorded output work[1] = %#v, want work-task-39/task", got[1])

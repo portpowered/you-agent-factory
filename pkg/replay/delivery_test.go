@@ -347,6 +347,61 @@ func TestCompletionDeliveryPlan_PlannedResultClonesProviderMetadata(t *testing.T
 	}
 }
 
+func TestCompletionDeliveryPlan_PlannedResultDetachesRecordedOutputWorkFromSourceMutation(t *testing.T) {
+	completion := replayTestCompletion("completion-1", "dispatch-1", "process", 3)
+	completion.RecordedOutputWork = []interfaces.FactoryWorkItem{{
+		ID:                       "recorded-work-1",
+		PreviousChainingTraceIDs: []string{"chain-a"},
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "original content",
+		}},
+		Tags: map[string]string{"priority": "high"},
+	}}
+
+	plan, err := NewCompletionDeliveryPlan(deliveryArtifact(t,
+		replayTestDispatch("dispatch-1", "process", 2, "trace-1", "work-1", "tok-1"),
+		completion,
+	))
+	if err != nil {
+		t.Fatalf("NewCompletionDeliveryPlan: %v", err)
+	}
+
+	observed := replayTestDispatch("observed-dispatch", "process", 2, "trace-1", "work-1", "tok-1")
+	deliveryTick, ok, err := plan.DeliveryTickForDispatch(observed)
+	if err != nil {
+		t.Fatalf("DeliveryTickForDispatch: %v", err)
+	}
+	if !ok || deliveryTick != 3 {
+		t.Fatalf("delivery match = (%t, %d), want (true, 3)", ok, deliveryTick)
+	}
+
+	completion.RecordedOutputWork[0].PreviousChainingTraceIDs[0] = "chain-z"
+	completion.RecordedOutputWork[0].Content[0].Text = "mutated content"
+	completion.RecordedOutputWork[0].Tags["priority"] = "low"
+
+	planned, ok, err := plan.PlannedResultForDispatch(observed)
+	if err != nil {
+		t.Fatalf("PlannedResultForDispatch: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected planned result for observed dispatch")
+	}
+	if len(planned.RecordedOutputWork) != 1 {
+		t.Fatalf("planned recorded output work = %#v, want one item", planned.RecordedOutputWork)
+	}
+	item := planned.RecordedOutputWork[0]
+	if got := strings.Join(item.PreviousChainingTraceIDs, ","); got != "chain-a" {
+		t.Fatalf("planned previous chaining trace IDs = %q, want chain-a", got)
+	}
+	if len(item.Content) != 1 || item.Content[0].Text != "original content" {
+		t.Fatalf("planned content = %#v, want original detached content", item.Content)
+	}
+	if item.Tags["priority"] != "high" {
+		t.Fatalf("planned tags = %#v, want detached original tags", item.Tags)
+	}
+}
+
 func TestCompletionDeliveryPlan_LineageMismatchReportsDivergence(t *testing.T) {
 	plan, err := NewCompletionDeliveryPlan(deliveryArtifact(t,
 		replayTestDispatch("dispatch-1", "process", 2, "trace-1", "work-1", "tok-1"),
