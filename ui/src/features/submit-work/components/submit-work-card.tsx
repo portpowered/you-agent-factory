@@ -48,7 +48,7 @@ const FIELD_GROUP_CLASS = "grid gap-2";
 const FIELD_LABEL_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
 const ACTION_ROW_CLASS = "mt-auto flex items-start gap-3";
 const HELP_TEXT_CLASS = cn(
-  "max-w-xl leading-relaxed text-af-ink/66",
+  "max-w-xl leading-relaxed text-af-text-muted",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 const VALIDATION_TEXT_CLASS = cn(
@@ -57,8 +57,8 @@ const VALIDATION_TEXT_CLASS = cn(
 );
 const STATUS_TONE_CLASS_BY_KIND: Record<SubmitWorkStatus["kind"], string> = {
   error: "text-af-danger-ink",
-  guidance: "text-on-foreground/66",
-  submitting: "text-on-foreground",
+  guidance: "text-af-text-subtle",
+  submitting: "text-af-text",
   success: "text-af-success-ink",
   "validation-error": "text-af-danger-ink",
 };
