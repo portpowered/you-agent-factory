@@ -4,6 +4,7 @@ import {
   buildWorkstationPromptMarkers,
   buildWorkstationPromptCompletionItems,
   extractTemplateExpression,
+  getCurrentTemplateExpression,
   isInsideTemplate,
   registerWorkstationPromptCompletionProvider,
   resetWorkstationPromptMonacoRegistrationForTests,
@@ -76,7 +77,7 @@ describe("registerWorkstationPromptMonaco", () => {
     expect(defineTheme).toHaveBeenCalledWith(
       WORKSTATION_PROMPT_THEME_ID,
       expect.objectContaining({
-        base: "vs",
+        base: "vs-dark",
         inherit: true,
         rules: expect.arrayContaining([
           expect.objectContaining({
@@ -137,6 +138,40 @@ describe("registerWorkstationPromptMonaco", () => {
         insertText: "{{ (index .Inputs 0).Payload }}",
       }),
     ]);
+
+    expect(
+      buildWorkstationPromptCompletionItems(contract, {
+        currentTemplateExpression: "(index .Inputs 0).",
+        currentWordText: "",
+        insideTemplateExpression: true,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        insertText: ".WorkID",
+        label: ".WorkID",
+      }),
+      expect.objectContaining({
+        insertText: "Payload",
+        label: "Payload",
+      }),
+    ]);
+
+    expect(
+      buildWorkstationPromptCompletionItems(contract, {
+        currentTemplateExpression: "(index .Inputs 0).Na",
+        currentWordText: "Na",
+        insideTemplateExpression: true,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        insertText: ".WorkID",
+        label: ".WorkID",
+      }),
+      expect.objectContaining({
+        insertText: "Payload",
+        label: "Payload",
+      }),
+    ]);
   });
 
   it("detects whether the caret is already inside a template expression", () => {
@@ -151,6 +186,13 @@ describe("registerWorkstationPromptMonaco", () => {
       "(index .Inputs 0).Payload",
     );
     expect(extractTemplateExpression(".Prompt")).toBe(".Prompt");
+  });
+
+  it("finds the active template expression before the cursor", () => {
+    expect(
+      getCurrentTemplateExpression("Before {{ (index .Inputs 0).Na", 31),
+    ).toBe("(index .Inputs 0).Na");
+    expect(getCurrentTemplateExpression("Before {{ .WorkID }} after", 26)).toBe("");
   });
 
   it("builds Monaco markers from authoritative byte offsets, source-text fallback, and multiline prompts", () => {
@@ -245,6 +287,7 @@ describe("registerWorkstationPromptMonaco", () => {
         {
           getOffsetAt: () => 4,
           getValue: () => "Plan",
+          getValueInRange: () => "Plan",
           getWordUntilPosition: () => ({
             endColumn: 5,
             startColumn: 1,
@@ -260,6 +303,7 @@ describe("registerWorkstationPromptMonaco", () => {
         {
           getOffsetAt: () => 4,
           getValue: () => "Plan",
+          getValueInRange: () => "Plan",
           getWordUntilPosition: () => ({
             endColumn: 5,
             startColumn: 1,

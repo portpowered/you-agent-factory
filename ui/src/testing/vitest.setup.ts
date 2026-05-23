@@ -13,6 +13,10 @@ if (typeof HTMLAnchorElement !== "undefined") {
   };
 }
 
+if (typeof document !== "undefined" && !document.queryCommandSupported) {
+  document.queryCommandSupported = () => false;
+}
+
 vi.mock("@monaco-editor/react", () => ({
   default: ({
     loading,
@@ -49,13 +53,16 @@ vi.mock("@monaco-editor/react", () => ({
       const disposeListeners: Array<() => void> = [];
       onMount?.(
         {
+          addCommand: () => undefined,
           getModel: () => model,
+          getPosition: () => ({ column: 1, lineNumber: 1 }),
           getScrollLeft: () => 0,
           getScrollTop: () => 0,
           onDidDispose: (listener: () => void) => {
             disposeListeners.push(listener);
             return { dispose() {} };
           },
+          onDidChangeModelContent: () => ({ dispose() {} }),
           onDidScrollChange: (
             listener: (event: { scrollLeft: number; scrollTop: number }) => void,
           ) => {
@@ -64,6 +71,7 @@ vi.mock("@monaco-editor/react", () => ({
           },
         },
         {
+          KeyCode: { Space: 10 },
           editor: {
             setModelMarkers: (
               nextModel: typeof model,

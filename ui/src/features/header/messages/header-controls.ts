@@ -4,8 +4,8 @@ import {
 } from "../../../i18n";
 
 export interface HeaderControlsMessages {
-  activeSessionPathLabel: string;
   brandWordmark: string;
+  browseSessionFolderButtonLabel: string;
   closingSessionButtonLabel: string;
   currentTickStatusTemplate: string;
   dashboardSummaryLabel: string;
@@ -44,8 +44,8 @@ export const HEADER_MAX_TICK_TOKEN = "{{maxTick}}";
 
 const headerControlsMessagesByLocale = {
   en: {
-    activeSessionPathLabel: "Active folder",
     brandWordmark: "you-agent-factory",
+    browseSessionFolderButtonLabel: "Browse folders",
     closingSessionButtonLabel: "Closing session",
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "dashboard summary",
@@ -80,8 +80,8 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "Waiting for more ticks",
   },
   ja: {
-    activeSessionPathLabel: "現在のフォルダー",
     brandWordmark: "you-agent-factory",
+    browseSessionFolderButtonLabel: "フォルダーを選択",
     closingSessionButtonLabel: "セッションを終了中",
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "ダッシュボードの概要",
@@ -117,8 +117,8 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "ティックが増えるまで待機しています",
   },
   ko: {
-    activeSessionPathLabel: "활성 폴더",
     brandWordmark: "you-agent-factory",
+    browseSessionFolderButtonLabel: "폴더 찾아보기",
     closingSessionButtonLabel: "세션 종료 중",
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "대시보드 요약",
@@ -154,8 +154,8 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "틱이 더 쌓일 때까지 기다리는 중",
   },
   "zh-CN": {
-    activeSessionPathLabel: "当前文件夹",
     brandWordmark: "you-agent-factory",
+    browseSessionFolderButtonLabel: "选择文件夹",
     closingSessionButtonLabel: "正在关闭会话",
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "仪表板概览",

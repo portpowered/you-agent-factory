@@ -101,8 +101,6 @@ export const OpenFlowVerification = {
         canvas.getByRole("tab", { name: /catalog \/ review/i }),
       ).toHaveAttribute("aria-selected", "true");
     });
-    await expect(canvas.getByText("Active folder: /workspace/catalog")).toBeVisible();
-
     await userEvent.click(
       canvas.getByRole("button", { name: "Close catalog / review session" }),
     );
@@ -114,7 +112,6 @@ export const OpenFlowVerification = {
     await expect(
       canvas.queryByRole("tab", { name: /catalog \/ review/i }),
     ).toBeNull();
-    await expect(canvas.getByText("Active folder: /workspace/root")).toBeVisible();
   },
 };
 

@@ -9,7 +9,7 @@ import {
 } from "../messages/header-controls";
 
 const TICK_SLIDER_SHELL_CLASS = cn(
-  "flex min-w-0 w-full flex-wrap items-center gap-1.5 rounded-lg border border-af-overlay/10 bg-af-overlay/4 px-2.5 py-1.5",
+  "flex min-w-0 w-full flex-wrap items-center gap-1.5 rounded-lg border border-af-overlay/14 bg-af-surface/72 px-2.5 py-1.5",
   "md:w-auto md:min-w-72 md:max-w-lg md:flex-nowrap",
 );
 const TICK_SLIDER_LABEL_CLASS =
