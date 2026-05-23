@@ -228,10 +228,11 @@ export const EditorMode = {
     const toolbar = canvas.getByRole("region", {
       name: "Factory graph editor tools",
     });
+    const addMenuButton = within(toolbar).getByRole("button", {
+      name: "Open add entity menu",
+    });
 
-    await expect(
-      within(toolbar).getByRole("button", { name: "Add" }),
-    ).toHaveAttribute("aria-pressed", "false");
+    await expect(addMenuButton).toHaveAttribute("aria-expanded", "false");
     await expect(
       within(toolbar).getByRole("button", { name: "Connect" }),
     ).toHaveAttribute("aria-pressed", "true");
