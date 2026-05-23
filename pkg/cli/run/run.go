@@ -48,6 +48,9 @@ type RunConfig struct {
 	AutoPort   bool
 	RecordPath string
 	ReplayPath string
+	// DisableDefaultRecording disables the default live-run replay artifact
+	// generation for a single invocation.
+	DisableDefaultRecording bool
 	// RuntimeLogDir overrides the service-owned structured runtime log
 	// directory. Empty uses the service default under the user's home directory.
 	RuntimeLogDir string
@@ -269,10 +272,13 @@ func Run(ctx context.Context, cfg RunConfig) error {
 }
 
 func resolveRecordPathForRun(cfg RunConfig) (string, error) {
+	if cfg.DisableDefaultRecording && strings.TrimSpace(cfg.RecordPath) != "" {
+		return "", fmt.Errorf("--no-record cannot be used with --record")
+	}
 	if strings.TrimSpace(cfg.RecordPath) != "" {
 		return cfg.RecordPath, nil
 	}
-	if strings.TrimSpace(cfg.ReplayPath) != "" {
+	if cfg.DisableDefaultRecording || strings.TrimSpace(cfg.ReplayPath) != "" {
 		return "", nil
 	}
 	recordPath, err := defaultLiveRunRecordPath()

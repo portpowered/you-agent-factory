@@ -393,6 +393,7 @@ func newRunCommand() *cobra.Command {
 			"That default flow bootstraps ./factory, watches factory/inputs/task/default, " +
 			"keeps the runtime alive, and reports the first available dashboard URL, preferring http://localhost:7437/dashboard/ui. " +
 			"Default execution uses batch mode and exits after idle completion. " +
+			"Normal live runs record by default unless you pass --no-record. " +
 			"Use --runner to override the factory-level runner for this run while still allowing workstation-specific runner overrides to win. " +
 			"Use --continuously to keep the factory alive while idle until you cancel it. " +
 			"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
@@ -432,7 +433,8 @@ func newRunCommand() *cobra.Command {
 		interfaces.RunnerIDOpenCode,
 	}, ", ")))
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port; specifying this flag disables automatic fallback")
-	cmd.Flags().StringVar(&cfg.RecordPath, "record", "", "path to write a replay artifact for this run")
+	cmd.Flags().StringVar(&cfg.RecordPath, "record", "", "path to write a replay artifact for this run; default live runs record automatically unless --no-record is used")
+	cmd.Flags().BoolVar(&cfg.DisableDefaultRecording, "no-record", false, "disable the default replay artifact for this invocation")
 	cmd.Flags().StringVar(&cfg.ReplayPath, "replay", "", "path to replay an existing replay artifact")
 	cmd.Flags().StringVar(&cfg.RuntimeLogDir, "runtime-log-dir", "", "directory for structured runtime log files (default: ~/.you-agent-factory/logs)")
 	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxSize, "runtime-log-max-size-mb", cfg.RuntimeLogConfig.MaxSize, "rotate each runtime log file after this many megabytes")

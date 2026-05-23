@@ -329,9 +329,22 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 			wantRecordPath: "run.replay.json",
 		},
 		{
+			name: "record mode with one-shot opt-out rejects conflicting flags",
+			cfg: RunConfig{
+				RecordPath:              "run.replay.json",
+				DisableDefaultRecording: true,
+			},
+		},
+		{
 			name:           "replay mode",
 			cfg:            RunConfig{ReplayPath: "existing.replay.json"},
 			wantReplayPath: "existing.replay.json",
+		},
+		{
+			name: "default recording disabled for one run",
+			cfg: RunConfig{
+				DisableDefaultRecording: true,
+			},
 		},
 	}
 
@@ -356,7 +369,20 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 				return stubFactoryService{run: func(context.Context) error { return nil }}, nil
 			}
 
-			if err := Run(context.Background(), tt.cfg); err != nil {
+			err := Run(context.Background(), tt.cfg)
+			if tt.cfg.DisableDefaultRecording && tt.cfg.RecordPath != "" {
+				if err == nil {
+					t.Fatal("expected conflicting --record and --no-record settings to fail")
+				}
+				if !strings.Contains(err.Error(), "--no-record cannot be used with --record") {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if generatorCalls != 0 {
+					t.Fatalf("default record path generator calls = %d, want 0", generatorCalls)
+				}
+				return
+			}
+			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}
 			if capturedRecordPath != tt.wantRecordPath {

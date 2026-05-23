@@ -34,6 +34,36 @@ func TestRunCommand_VerboseFlag(t *testing.T) {
 	}
 }
 
+func TestRunCommand_RecordFlagsDocumentDefaultRecordingBehavior(t *testing.T) {
+	root := NewRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find run: %v", err)
+	}
+
+	recordFlag := runCmd.Flags().Lookup("record")
+	if recordFlag == nil {
+		t.Fatal("expected --record flag on run command")
+	}
+	if !strings.Contains(recordFlag.Usage, "default live runs record automatically unless --no-record is used") {
+		t.Fatalf("--record usage = %q, want default-recording guidance", recordFlag.Usage)
+	}
+
+	noRecordFlag := runCmd.Flags().Lookup("no-record")
+	if noRecordFlag == nil {
+		t.Fatal("expected --no-record flag on run command")
+	}
+	if noRecordFlag.DefValue != "false" {
+		t.Fatalf("--no-record default = %q, want false", noRecordFlag.DefValue)
+	}
+	if !strings.Contains(noRecordFlag.Usage, "disable the default replay artifact for this invocation") {
+		t.Fatalf("--no-record usage = %q", noRecordFlag.Usage)
+	}
+	if !strings.Contains(runCmd.Long, "Normal live runs record by default unless you pass --no-record.") {
+		t.Fatal("expected run command long help text to document default recording")
+	}
+}
+
 func TestRootCommand_NoArgsStartsContinuousRun(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -477,10 +507,10 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 	root.SetArgs([]string{
 		"run",
 		"--quiet",
+		"--no-record",
 		"--dir", "custom-factory",
 		"--workflow", "workflow-1",
 		"--work", "work.json",
-		"--record", "record.replay.json",
 		"--port", "0",
 	})
 
@@ -500,8 +530,11 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 	if got.WorkFile != "work.json" {
 		t.Errorf("work file = %q, want %q", got.WorkFile, "work.json")
 	}
-	if got.RecordPath != "record.replay.json" {
-		t.Errorf("record path = %q, want %q", got.RecordPath, "record.replay.json")
+	if !got.DisableDefaultRecording {
+		t.Fatal("expected --no-record to disable default recording")
+	}
+	if got.RecordPath != "" {
+		t.Errorf("record path = %q, want empty", got.RecordPath)
 	}
 	if got.Port != 0 {
 		t.Errorf("port = %d, want %d", got.Port, 0)
@@ -511,6 +544,38 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 	}
 	if got.Logger == nil {
 		t.Fatal("expected run command to set logger")
+	}
+}
+
+func TestRunCommand_RecordAndNoRecordFlagsCanBePassedTogetherForDeterministicValidation(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"run",
+		"--record", "record.replay.json",
+		"--no-record",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run with --record and --no-record: %v", err)
+	}
+	if got.RecordPath != "record.replay.json" {
+		t.Fatalf("record path = %q, want record.replay.json", got.RecordPath)
+	}
+	if !got.DisableDefaultRecording {
+		t.Fatal("expected --no-record to map into RunConfig for downstream validation")
 	}
 }
 
