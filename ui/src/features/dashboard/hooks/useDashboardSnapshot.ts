@@ -6,7 +6,7 @@ import { FACTORY_EVENT_TYPES, openFactoryEventStream } from "../../../api/events
 import { normalizeFactoryDefinition } from "../../../api/factory-definition";
 import {
   CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
-  currentEditableFactoryDefinitionDocumentQueryKey,
+  currentFactoryDocumentQueryKey,
   currentEditableFactoryDefinitionQueryKey,
 } from "../../current-factory-definition";
 import { resetSelectionHistoryStore } from "../../current-selection/state/selectionHistoryStore";
@@ -241,7 +241,7 @@ function syncCurrentEditableFactoryDefinition(
       normalizeFactoryDefinition(payloadFactory),
     );
     void queryClient.invalidateQueries({
-      queryKey: currentEditableFactoryDefinitionDocumentQueryKey(sessionID),
+      queryKey: currentFactoryDocumentQueryKey(sessionID),
     });
   } catch {
     return;

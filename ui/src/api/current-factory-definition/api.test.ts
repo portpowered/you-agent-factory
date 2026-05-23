@@ -1,8 +1,8 @@
 import {
   CurrentEditableFactoryDefinitionError,
   getCurrentEditableFactoryDefinition,
-  getCurrentEditableFactoryDefinitionDocument,
-  saveCurrentEditableFactoryDefinitionDocument,
+  getCurrentFactoryDocument,
+  saveCurrentFactoryDocument,
 } from "./api";
 
 describe("getCurrentEditableFactoryDefinition", () => {
@@ -67,6 +67,10 @@ describe("getCurrentEditableFactoryDefinition", () => {
     expect(factoryDefinition).toEqual({
       id: "factory-current",
       name: "Current Factory",
+      version: {
+        logical: 7,
+        physical: "2026-05-18T14:22:00Z",
+      },
       workers: [
         {
           model: "gpt-5",
@@ -106,7 +110,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
   });
 
   it("returns version metadata together with the editable current factory definition document", async () => {
-    const document = await getCurrentEditableFactoryDefinitionDocument({
+    const document = await getCurrentFactoryDocument({
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
@@ -131,12 +135,10 @@ describe("getCurrentEditableFactoryDefinition", () => {
     });
 
     expect(document).toEqual({
-      factoryDefinition: {
-        name: "Current Factory",
-        workers: [],
-        workstations: [],
-        workTypes: [],
-      },
+      name: "Current Factory",
+      workers: [],
+      workstations: [],
+      workTypes: [],
       version: {
         logical: 9,
         physical: "2026-05-18T14:25:00Z",
@@ -167,7 +169,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
       ),
     );
 
-    await getCurrentEditableFactoryDefinitionDocument({
+    await getCurrentFactoryDocument({
       fetch,
       sessionID: "session-2",
     });
@@ -212,7 +214,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
     vi.stubGlobal("fetch", undefined);
 
     await expect(
-      getCurrentEditableFactoryDefinitionDocument(),
+      getCurrentFactoryDocument(),
     ).rejects.toMatchObject({
       code: "NETWORK_ERROR",
       message: "Current factory editing is unavailable in this environment.",
@@ -222,7 +224,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("surfaces the existing network fallback when the editable-definition load request throws", async () => {
     await expect(
-      getCurrentEditableFactoryDefinitionDocument({
+      getCurrentFactoryDocument({
         fetch: vi.fn().mockRejectedValue(new Error("socket closed")),
       }),
     ).rejects.toMatchObject({
@@ -236,7 +238,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("keeps the existing load rejection fallback when the API does not return a structured error message", async () => {
     await expect(
-      getCurrentEditableFactoryDefinitionDocument({
+      getCurrentFactoryDocument({
         fetch: vi.fn().mockResolvedValue(
           new Response("", {
             status: 500,
@@ -256,7 +258,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("normalizes INVALID_FACTORY editable-definition rejections into INVALID_FACTORY_DEFINITION", async () => {
     await expect(
-      getCurrentEditableFactoryDefinitionDocument({
+      getCurrentFactoryDocument({
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
@@ -288,7 +290,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("rejects load success payloads that are not editable-definition documents", async () => {
     await expect(
-      getCurrentEditableFactoryDefinitionDocument({
+      getCurrentFactoryDocument({
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
@@ -384,7 +386,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
   });
 
   it("accepts editable-definition payloads with classifier workstations", async () => {
-    const document = await getCurrentEditableFactoryDefinitionDocument({
+    const document = await getCurrentFactoryDocument({
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
@@ -432,35 +434,33 @@ describe("getCurrentEditableFactoryDefinition", () => {
     });
 
     expect(document).toEqual({
-      factoryDefinition: {
-        name: "Current Factory",
-        workers: [{ name: "classifier" }],
-        workTypes: [
-          {
-            name: "story",
-            states: [
-              { name: "new", type: "INITIAL" },
-              { name: "approved", type: "TERMINAL" },
-              { name: "failed", type: "FAILED" },
-            ],
-          },
-        ],
-        workstations: [
-          {
-            classificationRoutes: [
-              {
-                label: "approved",
-                outputs: [{ state: "approved", workType: "story" }],
-              },
-            ],
-            inputs: [{ state: "new", workType: "story" }],
-            name: "Classify",
-            onFailure: [{ state: "failed", workType: "story" }],
-            type: "CLASSIFIER_WORKSTATION",
-            worker: "classifier",
-          },
-        ],
-      },
+      name: "Current Factory",
+      workers: [{ name: "classifier" }],
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "new", type: "INITIAL" },
+            { name: "approved", type: "TERMINAL" },
+            { name: "failed", type: "FAILED" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          classificationRoutes: [
+            {
+              label: "approved",
+              outputs: [{ state: "approved", workType: "story" }],
+            },
+          ],
+          inputs: [{ state: "new", workType: "story" }],
+          name: "Classify",
+          onFailure: [{ state: "failed", workType: "story" }],
+          type: "CLASSIFIER_WORKSTATION",
+          worker: "classifier",
+        },
+      ],
       version: {
         logical: 12,
         physical: "2026-05-18T14:30:00Z",
@@ -470,7 +470,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("rejects editable-definition payloads with unexpected classifier-route keys", async () => {
     await expect(
-      getCurrentEditableFactoryDefinitionDocument({
+      getCurrentFactoryDocument({
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
@@ -550,7 +550,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
       ),
     );
 
-    const document = await saveCurrentEditableFactoryDefinitionDocument(
+    const document = await saveCurrentFactoryDocument(
       {
         baseVersion: {
           logical: 9,
@@ -611,7 +611,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
       ),
     );
 
-    await saveCurrentEditableFactoryDefinitionDocument(
+    await saveCurrentFactoryDocument(
       {
         factoryDefinition: {
           name: "Scoped Factory",
@@ -636,7 +636,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("preserves structured save error targets when the API rejects a topology edit", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           baseVersion: {
             logical: 9,
@@ -687,7 +687,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("preserves valid structured save error targets from mixed target arrays", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           baseVersion: {
             logical: 9,
@@ -739,7 +739,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("preserves active-work save rejections from the editable current-factory API", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           baseVersion: {
             logical: 9,
@@ -790,7 +790,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("surfaces the existing network fallback when the editable-definition save request throws", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           factoryDefinition: {
             name: "Current Factory",
@@ -814,7 +814,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("keeps the existing save rejection fallback when the API does not return a structured error message", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           factoryDefinition: {
             name: "Current Factory",
@@ -844,7 +844,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("rejects save success payloads whose factory definition cannot be normalized canonically", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           factoryDefinition: {
             name: "Current Factory",

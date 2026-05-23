@@ -7,7 +7,7 @@ import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { createReplayHarness } from "../../../testing/replay-harness";
 import {
-  CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
+  CURRENT_FACTORY_DOCUMENT_QUERY_KEY,
   CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
 } from "../../current-factory-definition";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
@@ -560,13 +560,11 @@ describe("useDashboardSnapshot", () => {
   });
 
   it("updates streamed dashboard topology and the editable current-factory cache from a factory-change event", async () => {
-    queryClient.setQueryData(CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY, {
-      factoryDefinition: {
-        name: "factory",
-        workers: [],
-        workstations: [],
-        workTypes: [],
-      },
+    queryClient.setQueryData(CURRENT_FACTORY_DOCUMENT_QUERY_KEY, {
+      name: "factory",
+      workers: [],
+      workstations: [],
+      workTypes: [],
       version: {
         logical: 7,
         physical: "2026-05-17T14:59:00Z",
@@ -642,7 +640,7 @@ describe("useDashboardSnapshot", () => {
     await waitFor(() => {
       expect(
         queryClient.getQueryState(
-          CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
+          CURRENT_FACTORY_DOCUMENT_QUERY_KEY,
         )?.isInvalidated,
       ).toBe(true);
     });

@@ -8,7 +8,7 @@ import {
 import {
   createEmptyFactoryGraphDraft,
   hasFactoryGraphDraftChanges,
-  type EditableFactoryDefinitionDocument,
+  type CurrentFactoryDocument,
   type FactoryGraphDraftDerivedState,
   type FactoryGraphDraftSessionState,
   type FactoryGraphDraftValidationError,
@@ -24,14 +24,14 @@ type FactoryGraphDraftCallbacks = Pick<
 >;
 
 interface UseFactoryGraphDraftStateOptions {
-  editableDefinitionDocument?: EditableFactoryDefinitionDocument;
+  currentFactoryDocument?: CurrentFactoryDocument;
   projectedTopology?: DashboardTopology;
 }
 
 export function useFactoryGraphDraftState(
   options: UseFactoryGraphDraftStateOptions,
 ): FactoryGraphDraftDerivedState {
-  const editableDefinitionDocument = options.editableDefinitionDocument;
+  const currentFactoryDocument = options.currentFactoryDocument;
   const emptyDraft = useMemo(() => createEmptyFactoryGraphDraft(), []);
   const projectedGraph = useMemo(
     () =>
@@ -45,7 +45,7 @@ export function useFactoryGraphDraftState(
     (draft: FactoryGraphDraftSessionState["draft"]) => {
       setSessionState((currentState) => {
         const document =
-          editableDefinitionDocument ?? currentState?.latestDocument;
+          currentFactoryDocument ?? currentState?.latestDocument;
         if (!document) {
           return currentState;
         }
@@ -57,7 +57,7 @@ export function useFactoryGraphDraftState(
         };
       });
     },
-    [editableDefinitionDocument],
+    [currentFactoryDocument],
   );
 
   const updateDraft = useCallback(
@@ -68,7 +68,7 @@ export function useFactoryGraphDraftState(
     ) => {
       setSessionState((currentState) => {
         const document =
-          editableDefinitionDocument ?? currentState?.latestDocument;
+          currentFactoryDocument ?? currentState?.latestDocument;
         if (!document) {
           return currentState;
         }
@@ -83,12 +83,12 @@ export function useFactoryGraphDraftState(
         };
       });
     },
-    [editableDefinitionDocument],
+    [currentFactoryDocument],
   );
 
   const resetDraft = useCallback(() => {
     setSessionState((currentState) => {
-      const document = editableDefinitionDocument ?? currentState?.latestDocument;
+      const document = currentFactoryDocument ?? currentState?.latestDocument;
       if (!document) {
         return currentState;
       }
@@ -99,10 +99,10 @@ export function useFactoryGraphDraftState(
         sessionStartDocument: document,
       };
     });
-  }, [editableDefinitionDocument]);
+  }, [currentFactoryDocument]);
 
   useEffect(() => {
-    if (!editableDefinitionDocument) {
+    if (!currentFactoryDocument) {
       setSessionState((currentState) =>
         currentState && hasFactoryGraphDraftChanges(currentState.draft)
           ? currentState
@@ -114,16 +114,16 @@ export function useFactoryGraphDraftState(
     setSessionState((currentState) =>
       syncFactoryGraphDraftSession(
         currentState,
-        editableDefinitionDocument,
+        currentFactoryDocument,
       ),
     );
-  }, [editableDefinitionDocument]);
+  }, [currentFactoryDocument]);
 
-  const editableDefinitionState =
+  const currentFactoryState =
     useMemo<FactoryGraphDraftDerivedState | null>(
       () =>
         sessionState
-          ? createEditableDefinitionFactoryGraphDraftState({
+          ? createCurrentFactoryGraphDraftState({
               callbacks: {
                 replaceDraft,
                 resetDraft,
@@ -149,10 +149,10 @@ export function useFactoryGraphDraftState(
     [emptyDraft, projectedGraph, replaceDraft, resetDraft, updateDraft],
   );
 
-  return editableDefinitionState ?? projectionState;
+  return currentFactoryState ?? projectionState;
 }
 
-function createEditableDefinitionFactoryGraphDraftState({
+function createCurrentFactoryGraphDraftState({
   callbacks,
   sessionState,
 }: {
@@ -160,11 +160,11 @@ function createEditableDefinitionFactoryGraphDraftState({
   sessionState: FactoryGraphDraftSessionState;
 }): FactoryGraphDraftDerivedState {
   const pendingFactoryDefinition = buildPendingFactoryDefinition(
-    sessionState.latestDocument.factoryDefinition,
+    sessionState.latestDocument,
     sessionState.draft,
   );
   const validationErrors = validateFactoryGraphDraft(
-    sessionState.latestDocument.factoryDefinition,
+    sessionState.latestDocument,
     sessionState.draft,
   );
 
@@ -172,14 +172,14 @@ function createEditableDefinitionFactoryGraphDraftState({
     baseDocument: sessionState.sessionStartDocument,
     draft: sessionState.draft,
     graph: buildFactoryGraphTopologyFromDefinition(
-      pendingFactoryDefinition ?? sessionState.latestDocument.factoryDefinition,
+      pendingFactoryDefinition ?? sessionState.latestDocument,
     ),
     hasChanges: hasFactoryGraphDraftChanges(sessionState.draft),
     latestDocument: sessionState.latestDocument,
     pendingFactoryDefinition,
     replaceDraft: callbacks.replaceDraft,
     resetDraft: callbacks.resetDraft,
-    source: "editable-definition",
+    source: "current-factory",
     updateDraft: callbacks.updateDraft,
     validationErrors,
   };
@@ -211,27 +211,27 @@ function createProjectionFactoryGraphDraftState({
 
 export function syncFactoryGraphDraftSession(
   currentState: FactoryGraphDraftSessionState | null,
-  editableDefinitionDocument: EditableFactoryDefinitionDocument,
+  currentFactoryDocument: CurrentFactoryDocument,
 ): FactoryGraphDraftSessionState {
   if (!currentState || !hasFactoryGraphDraftChanges(currentState.draft)) {
     return {
       draft: createEmptyFactoryGraphDraft(),
-      latestDocument: editableDefinitionDocument,
-      sessionStartDocument: editableDefinitionDocument,
+      latestDocument: currentFactoryDocument,
+      sessionStartDocument: currentFactoryDocument,
     };
   }
 
   if (
     currentState.latestDocument.version.logical ===
-      editableDefinitionDocument.version.logical &&
+      currentFactoryDocument.version.logical &&
     currentState.latestDocument.version.physical ===
-      editableDefinitionDocument.version.physical
+      currentFactoryDocument.version.physical
   ) {
     return currentState;
   }
 
   return {
     ...currentState,
-    latestDocument: editableDefinitionDocument,
+    latestDocument: currentFactoryDocument,
   };
 }

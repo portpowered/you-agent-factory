@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import type { useSaveCurrentEditableFactoryDefinition } from "../../current-factory-definition";
+import type { useSaveCurrentFactory } from "../../current-factory-definition";
 import {
   applyFactoryGraphEntityRemoval,
   buildFactoryGraphEdgeRemovalIntent,
@@ -20,7 +20,7 @@ export function useFactoryGraphRemovalController({
   canInteractWithEditor: boolean;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentEditableFactoryDefinition
+    typeof useSaveCurrentFactory
   >;
 }) {
   const {
@@ -51,7 +51,7 @@ export function useFactoryGraphRemovalController({
       draftState.updateDraft((currentDraft) =>
         applyFactoryGraphEntityRemoval(
           currentDraft,
-          latestDocument.factoryDefinition,
+          latestDocument,
           pendingRemovalIntent.key,
         ),
       );
@@ -100,7 +100,7 @@ function useFactoryGraphDeleteTargetHandlers({
   canInteractWithEditor: boolean;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentEditableFactoryDefinition
+    typeof useSaveCurrentFactory
   >;
   setBlockedRemovalReason: (reason: string | null) => void;
   setPendingRemovalEdgeId: (edgeId: string | null) => void;
@@ -117,7 +117,7 @@ function useFactoryGraphDeleteTargetHandlers({
       }
 
       const intent = buildFactoryGraphRemovalIntent({
-        baseFactoryDefinition: draftState.latestDocument.factoryDefinition,
+        baseFactoryDefinition: draftState.latestDocument,
         draft: draftState.draft,
         nodeId,
       });
@@ -157,7 +157,7 @@ function useFactoryGraphDeleteTargetHandlers({
       }
 
       const intent = buildFactoryGraphEdgeRemovalIntent({
-        baseFactoryDefinition: draftState.latestDocument.factoryDefinition,
+        baseFactoryDefinition: draftState.latestDocument,
         draft: draftState.draft,
         edgeId,
       });
@@ -208,7 +208,7 @@ function usePendingRemovalIntentState(
   const pendingNodeRemovalIntent =
     draftState.latestDocument && pendingRemovalNodeId
       ? buildFactoryGraphRemovalIntent({
-          baseFactoryDefinition: draftState.latestDocument.factoryDefinition,
+          baseFactoryDefinition: draftState.latestDocument,
           draft: draftState.draft,
           nodeId: pendingRemovalNodeId,
         })
@@ -216,7 +216,7 @@ function usePendingRemovalIntentState(
   const pendingEdgeRemovalIntent =
     draftState.latestDocument && pendingRemovalEdgeId
       ? buildFactoryGraphEdgeRemovalIntent({
-          baseFactoryDefinition: draftState.latestDocument.factoryDefinition,
+          baseFactoryDefinition: draftState.latestDocument,
           draft: draftState.draft,
           edgeId: pendingRemovalEdgeId,
         })

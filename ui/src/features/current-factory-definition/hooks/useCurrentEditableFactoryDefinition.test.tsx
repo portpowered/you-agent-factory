@@ -4,14 +4,14 @@ import type { ReactNode } from "react";
 
 import {
   getCurrentEditableFactoryDefinition,
-  getCurrentEditableFactoryDefinitionDocument,
+  getCurrentFactoryDocument,
   type CanonicalFactoryDefinition,
-  type EditableFactoryDefinitionDocument,
+  type CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
   useCurrentEditableFactoryDefinition,
-  useCurrentEditableFactoryDefinitionDocument,
+  useCurrentFactoryDocument,
 } from "./useCurrentEditableFactoryDefinition";
 
 vi.mock("../../../api/current-factory-definition", async () => {
@@ -20,7 +20,7 @@ vi.mock("../../../api/current-factory-definition", async () => {
   return {
     ...actual,
     getCurrentEditableFactoryDefinition: vi.fn(),
-    getCurrentEditableFactoryDefinitionDocument: vi.fn(),
+    getCurrentFactoryDocument: vi.fn(),
   };
 });
 
@@ -60,7 +60,7 @@ const editableFactoryDefinition: CanonicalFactoryDefinition = {
 describe("useCurrentEditableFactoryDefinition", () => {
   beforeEach(() => {
     vi.mocked(getCurrentEditableFactoryDefinition).mockReset();
-    vi.mocked(getCurrentEditableFactoryDefinitionDocument).mockReset();
+    vi.mocked(getCurrentFactoryDocument).mockReset();
     useDashboardSessionStore.setState({ selectedSessionID: "~default" });
   });
 
@@ -138,20 +138,19 @@ describe("useCurrentEditableFactoryDefinition", () => {
   });
 
   it("returns the editable current-factory document with version metadata", async () => {
-    const editableFactoryDefinitionDocument: EditableFactoryDefinitionDocument =
-      {
-        factoryDefinition: editableFactoryDefinition,
-        version: {
-          logical: 4,
-          physical: "2026-05-18T14:48:00Z",
-        },
-      };
-    vi.mocked(getCurrentEditableFactoryDefinitionDocument).mockResolvedValue(
+    const editableFactoryDefinitionDocument: CurrentFactoryDocument = {
+      ...editableFactoryDefinition,
+      version: {
+        logical: 4,
+        physical: "2026-05-18T14:48:00Z",
+      },
+    };
+    vi.mocked(getCurrentFactoryDocument).mockResolvedValue(
       editableFactoryDefinitionDocument,
     );
 
     const { result } = renderHook(
-      () => useCurrentEditableFactoryDefinitionDocument(),
+      () => useCurrentFactoryDocument(),
       {
         wrapper: createQueryClientWrapper(),
       },
@@ -169,20 +168,20 @@ describe("useCurrentEditableFactoryDefinition", () => {
 
   it("loads the editable document for the selected non-default session", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
-    vi.mocked(getCurrentEditableFactoryDefinitionDocument).mockResolvedValue({
-      factoryDefinition: editableFactoryDefinition,
+    vi.mocked(getCurrentFactoryDocument).mockResolvedValue({
+      ...editableFactoryDefinition,
       version: {
         logical: 5,
         physical: "2026-05-18T14:49:00Z",
       },
     });
 
-    renderHook(() => useCurrentEditableFactoryDefinitionDocument(), {
+    renderHook(() => useCurrentFactoryDocument(), {
       wrapper: createQueryClientWrapper(),
     });
 
     await waitFor(() => {
-      expect(getCurrentEditableFactoryDefinitionDocument).toHaveBeenCalledWith({
+      expect(getCurrentFactoryDocument).toHaveBeenCalledWith({
         sessionID: "session-2",
       });
     });

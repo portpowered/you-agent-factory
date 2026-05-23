@@ -3,11 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
   getCurrentEditableFactoryDefinition,
-  getCurrentEditableFactoryDefinitionDocument,
-  saveCurrentEditableFactoryDefinitionDocument,
+  getCurrentFactoryDocument,
+  saveCurrentFactoryDocument,
   type CanonicalFactoryDefinition,
   type CurrentEditableFactoryDefinitionError,
-  type EditableFactoryDefinitionDocument,
+  type CurrentFactoryDocument,
   type SaveCurrentEditableFactoryDefinitionInput,
 } from "../../../api/current-factory-definition";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
@@ -44,7 +44,7 @@ export function useCurrentEditableFactoryDefinition(isEnabled = true) {
   });
 }
 
-export function currentEditableFactoryDefinitionDocumentQueryKey(
+export function currentFactoryDocumentQueryKey(
   sessionID: string | null | undefined,
 ) {
   return [
@@ -53,18 +53,18 @@ export function currentEditableFactoryDefinitionDocumentQueryKey(
   ] as const;
 }
 
-export const CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY =
-  currentEditableFactoryDefinitionDocumentQueryKey(DEFAULT_FACTORY_SESSION_ID);
+export const CURRENT_FACTORY_DOCUMENT_QUERY_KEY =
+  currentFactoryDocumentQueryKey(DEFAULT_FACTORY_SESSION_ID);
 
-export function useCurrentEditableFactoryDefinitionDocument(isEnabled = true) {
+export function useCurrentFactoryDocument(isEnabled = true) {
   const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
 
   return useQuery<
-    EditableFactoryDefinitionDocument,
+    CurrentFactoryDocument,
     CurrentEditableFactoryDefinitionError
   >({
-    queryKey: currentEditableFactoryDefinitionDocumentQueryKey(sessionID),
-    queryFn: () => getCurrentEditableFactoryDefinitionDocument({ sessionID }),
+    queryKey: currentFactoryDocumentQueryKey(sessionID),
+    queryFn: () => getCurrentFactoryDocument({ sessionID }),
     enabled: isEnabled,
     gcTime: 0,
     refetchOnWindowFocus: false,
@@ -72,25 +72,25 @@ export function useCurrentEditableFactoryDefinitionDocument(isEnabled = true) {
   });
 }
 
-export function useSaveCurrentEditableFactoryDefinition() {
+export function useSaveCurrentFactory() {
   const queryClient = useQueryClient();
   const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
 
   return useMutation<
-    EditableFactoryDefinitionDocument,
+    CurrentFactoryDocument,
     CurrentEditableFactoryDefinitionError,
     SaveCurrentEditableFactoryDefinitionInput
   >({
     mutationFn: (input) =>
-      saveCurrentEditableFactoryDefinitionDocument(input, { sessionID }),
+      saveCurrentFactoryDocument(input, { sessionID }),
     onSuccess: (document) => {
       queryClient.setQueryData(
-        currentEditableFactoryDefinitionDocumentQueryKey(sessionID),
+        currentFactoryDocumentQueryKey(sessionID),
         document,
       );
       queryClient.setQueryData(
         currentEditableFactoryDefinitionQueryKey(sessionID),
-        document.factoryDefinition,
+        document,
       );
     },
   });

@@ -312,7 +312,7 @@ function createDraftState({
     pendingFactoryDefinition: baseFactoryDefinition,
     replaceDraft: vi.fn(),
     resetDraft: vi.fn(),
-    source: "editable-definition" as const,
+    source: "current-factory" as const,
     updateDraft,
     validationErrors: [],
   };

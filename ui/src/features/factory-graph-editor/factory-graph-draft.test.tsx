@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 
 import type {
   CanonicalFactoryDefinition,
-  EditableFactoryDefinitionDocument,
+  CurrentFactoryDocument,
 } from "../../api/current-factory-definition";
 import type { DashboardTopology } from "../../api/dashboard/types";
 import {
@@ -75,8 +75,8 @@ const baseFactoryDefinition: CanonicalFactoryDefinition = {
   ],
 };
 
-const editableDefinitionDocument: EditableFactoryDefinitionDocument = {
-  factoryDefinition: baseFactoryDefinition,
+const editableDefinitionDocument: CurrentFactoryDocument = {
+  ...baseFactoryDefinition,
   version: {
     logical: 5,
     physical: "2026-05-18T15:00:00Z",
@@ -467,7 +467,7 @@ describe("factory graph draft state", () => {
         sessionStartDocument: editableDefinitionDocument,
       },
       {
-        factoryDefinition: baseFactoryDefinition,
+        ...baseFactoryDefinition,
         version: {
           logical: 6,
           physical: "2026-05-18T15:05:00Z",
@@ -483,7 +483,7 @@ describe("factory graph draft state", () => {
   it("resets a dirty draft back to the latest server-backed document", () => {
     const { result } = renderHook(() =>
       useFactoryGraphDraftState({
-        editableDefinitionDocument,
+        currentFactoryDocument: editableDefinitionDocument,
       }),
     );
 
@@ -550,7 +550,7 @@ describe("factory graph draft state", () => {
 
     const { result, rerender } = renderHook(
       (props: {
-        editableDefinitionDocument?: EditableFactoryDefinitionDocument;
+        currentFactoryDocument?: CurrentFactoryDocument;
         projectedTopology?: DashboardTopology;
       }) => useFactoryGraphDraftState(props),
       {
@@ -568,11 +568,11 @@ describe("factory graph draft state", () => {
     ]);
 
     rerender({
-      editableDefinitionDocument,
+      currentFactoryDocument: editableDefinitionDocument,
       projectedTopology,
     });
 
-    expect(result.current.source).toBe("editable-definition");
+    expect(result.current.source).toBe("current-factory");
     expect(result.current.baseDocument?.version.logical).toBe(5);
   });
 });

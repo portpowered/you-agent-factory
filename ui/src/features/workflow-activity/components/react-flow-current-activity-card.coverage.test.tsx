@@ -10,8 +10,8 @@ import {
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
-  useCurrentEditableFactoryDefinitionDocument,
-  useSaveCurrentEditableFactoryDefinition,
+  useCurrentFactoryDocument,
+  useSaveCurrentFactory,
 } from "../../current-factory-definition";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
 import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/factory-graph-draft-types";
@@ -187,8 +187,8 @@ vi.mock("../../current-factory-definition", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinitionDocument: vi.fn(),
-    useSaveCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDocument: vi.fn(),
+    useSaveCurrentFactory: vi.fn(),
   };
 });
 
@@ -265,12 +265,12 @@ function createProps(
 describe("ReactFlowCurrentActivityCard coverage", () => {
   beforeEach(() => {
     mockSetStoredNodePosition.mockReset();
-    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: undefined,
       error: null,
       status: "pending",
     } as never);
-    vi.mocked(useSaveCurrentEditableFactoryDefinition).mockReturnValue({
+    vi.mocked(useSaveCurrentFactory).mockReturnValue({
       mutateAsync: vi.fn(),
       reset: vi.fn(),
       status: "idle",

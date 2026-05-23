@@ -19,10 +19,9 @@ export type EditableFactoryDefinitionVersion =
   components["schemas"]["HybridLogicalTimestamp"];
 type ErrorTarget = components["schemas"]["ErrorTarget"];
 
-export interface EditableFactoryDefinitionDocument {
-  factoryDefinition: CanonicalFactoryDefinition;
+export type CurrentFactoryDocument = CanonicalFactoryDefinition & {
   version: EditableFactoryDefinitionVersion;
-}
+};
 
 export type CurrentEditableFactoryDefinitionErrorCode =
   | "BAD_REQUEST"
@@ -57,7 +56,7 @@ export interface SaveCurrentEditableFactoryDefinitionInput {
   factoryDefinition: CanonicalFactoryDefinition;
 }
 
-interface RequestEditableFactoryDefinitionDocumentOptions {
+interface RequestCurrentFactoryDocumentOptions {
   body?: string;
   fetch?: typeof globalThis.fetch;
   headers?: HeadersInit;
@@ -97,14 +96,13 @@ export class CurrentEditableFactoryDefinitionError extends Error {
 export async function getCurrentEditableFactoryDefinition(
   options: GetCurrentEditableFactoryDefinitionOptions = {},
 ): Promise<CanonicalFactoryDefinition> {
-  const document = await getCurrentEditableFactoryDefinitionDocument(options);
-  return document.factoryDefinition;
+  return getCurrentFactoryDocument(options);
 }
 
-export async function getCurrentEditableFactoryDefinitionDocument(
+export async function getCurrentFactoryDocument(
   options: GetCurrentEditableFactoryDefinitionOptions = {},
-): Promise<EditableFactoryDefinitionDocument> {
-  return requestEditableFactoryDefinitionDocument({
+): Promise<CurrentFactoryDocument> {
+  return requestCurrentFactoryDocument({
     fetch: options.fetch,
     method: "GET",
     rejectedMessage: "The current factory editing API rejected the request.",
@@ -112,16 +110,16 @@ export async function getCurrentEditableFactoryDefinitionDocument(
   });
 }
 
-export async function saveCurrentEditableFactoryDefinitionDocument(
+export async function saveCurrentFactoryDocument(
   input: SaveCurrentEditableFactoryDefinitionInput,
   options: SaveCurrentEditableFactoryDefinitionOptions = {},
-): Promise<EditableFactoryDefinitionDocument> {
+): Promise<CurrentFactoryDocument> {
   const requestBody: CanonicalFactory = {
     ...input.factoryDefinition,
     version: input.baseVersion,
   };
 
-  return requestEditableFactoryDefinitionDocument({
+  return requestCurrentFactoryDocument({
     body: JSON.stringify(requestBody),
     fetch: options.fetch,
     headers: {
@@ -134,14 +132,14 @@ export async function saveCurrentEditableFactoryDefinitionDocument(
   });
 }
 
-async function requestEditableFactoryDefinitionDocument({
+async function requestCurrentFactoryDocument({
   body,
   fetch,
   headers,
   method,
   rejectedMessage,
   sessionID,
-}: RequestEditableFactoryDefinitionDocumentOptions): Promise<EditableFactoryDefinitionDocument> {
+}: RequestCurrentFactoryDocumentOptions): Promise<CurrentFactoryDocument> {
   const fetchImplementation = fetch ?? globalThis.fetch;
 
   if (typeof fetchImplementation !== "function") {
@@ -193,19 +191,19 @@ async function requestEditableFactoryDefinitionDocument({
     );
   }
 
-  return normalizeEditableFactoryDefinitionDocument(responseBody, {
+  return normalizeCurrentFactoryDocument(responseBody, {
     status: response.status,
     statusText: response.statusText,
   });
 }
 
-function normalizeEditableFactoryDefinitionDocument(
+function normalizeCurrentFactoryDocument(
   responseBody: unknown,
   responseDetails: Pick<
     CurrentEditableFactoryDefinitionErrorDetails,
     "status" | "statusText"
   >,
-): EditableFactoryDefinitionDocument {
+): CurrentFactoryDocument {
   if (!isEditableFactoryDefinitionValue(responseBody)) {
     throw new CurrentEditableFactoryDefinitionError(
       "The current factory editing API returned an invalid response.",
@@ -218,14 +216,13 @@ function normalizeEditableFactoryDefinitionDocument(
   }
 
   try {
-    const { factoryPayload, versionPayload } =
-      extractFactoryDocumentPayload(responseBody);
-    const normalizedFactory = normalizeFactoryDefinition(factoryPayload);
-    const version = normalizeEditableFactoryDefinitionVersion(versionPayload);
-    const { version: _ignoredVersion, ...factoryDefinition } = normalizedFactory;
+    const normalizedFactory = normalizeFactoryDefinition(responseBody);
+    const version = normalizeEditableFactoryDefinitionVersion(
+      normalizedFactory.version,
+    );
 
     return {
-      factoryDefinition,
+      ...normalizedFactory,
       version,
     };
   } catch (error) {
@@ -300,24 +297,4 @@ function isEditableFactoryDefinitionValue(
 
 function isErrorTarget(value: unknown): value is ErrorTarget {
   return isAPIRecord(value) && typeof value.kind === "string";
-}
-
-function extractFactoryDocumentPayload(responseBody: unknown): {
-  factoryPayload: unknown;
-  versionPayload: unknown;
-} {
-  if (!isEditableFactoryDefinitionValue(responseBody)) {
-    throw new CurrentEditableFactoryDefinitionError(
-      "The current factory editing API returned an invalid response.",
-      {
-        code: "INTERNAL_ERROR",
-        responseBody,
-      },
-    );
-  }
-
-  return {
-    factoryPayload: responseBody,
-    versionPayload: responseBody.version,
-  };
 }

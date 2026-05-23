@@ -161,12 +161,12 @@ function useFactoryGraphEditorFlowGraph(input: {
       buildFactoryGraphWorkerStatusMap({
         factoryDefinition:
           input.editor.draftState.pendingFactoryDefinition ??
-          input.editor.draftState.latestDocument?.factoryDefinition ??
+          input.editor.draftState.latestDocument ??
           null,
         snapshot: input.snapshot,
       }),
     [
-      input.editor.draftState.latestDocument?.factoryDefinition,
+      input.editor.draftState.latestDocument,
       input.editor.draftState.pendingFactoryDefinition,
       input.snapshot,
     ],
@@ -243,7 +243,7 @@ function useFactoryGraphEditorDraftGraphState(
     () =>
       editor.draftState.latestDocument
         ? buildFactoryGraphTopologyFromDefinition(
-            editor.draftState.latestDocument.factoryDefinition,
+            editor.draftState.latestDocument,
           )
         : { edges: [], nodes: [] },
     [editor.draftState.latestDocument],
@@ -264,7 +264,7 @@ function useFactoryGraphEditorDraftGraphState(
     () =>
       editor.draftState.latestDocument
         ? collectPendingRemovalNodeIds(
-            editor.draftState.latestDocument.factoryDefinition,
+            editor.draftState.latestDocument,
             editor.draftState.draft,
           )
         : new Set<string>(),
@@ -274,7 +274,7 @@ function useFactoryGraphEditorDraftGraphState(
     () =>
       editor.draftState.latestDocument
         ? collectPendingRemovalEdgeIds(
-            editor.draftState.latestDocument.factoryDefinition,
+            editor.draftState.latestDocument,
             editor.draftState.draft,
           )
         : new Set<string>(),

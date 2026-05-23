@@ -1,7 +1,7 @@
 import type { DashboardTopology } from "../../api/dashboard/types";
 import type {
   CanonicalFactoryDefinition,
-  EditableFactoryDefinitionDocument,
+  CurrentFactoryDocument,
 } from "../../api/current-factory-definition";
 
 type FactoryResource = NonNullable<CanonicalFactoryDefinition["resources"]>[number];
@@ -16,7 +16,7 @@ type FactoryWorkstationIO = FactoryWorkstation["inputs"][number];
 export type { DashboardTopology };
 export type {
   CanonicalFactoryDefinition,
-  EditableFactoryDefinitionDocument,
+  CurrentFactoryDocument,
   FactoryResource,
   FactoryWorker,
   FactoryWorkState,
@@ -145,23 +145,23 @@ export interface FactoryGraphTopology {
 }
 
 export interface FactoryGraphDraftDerivedState {
-  baseDocument: EditableFactoryDefinitionDocument | null;
+  baseDocument: CurrentFactoryDocument | null;
   draft: FactoryGraphDraft;
   graph: FactoryGraphTopology;
   hasChanges: boolean;
-  latestDocument: EditableFactoryDefinitionDocument | null;
+  latestDocument: CurrentFactoryDocument | null;
   pendingFactoryDefinition: CanonicalFactoryDefinition | null;
   replaceDraft: (draft: FactoryGraphDraft) => void;
   resetDraft: () => void;
-  source: "editable-definition" | "projection";
+  source: "current-factory" | "projection";
   updateDraft: (updater: (draft: FactoryGraphDraft) => FactoryGraphDraft) => void;
   validationErrors: FactoryGraphDraftValidationError[];
 }
 
 export interface FactoryGraphDraftSessionState {
   draft: FactoryGraphDraft;
-  latestDocument: EditableFactoryDefinitionDocument;
-  sessionStartDocument: EditableFactoryDefinitionDocument;
+  latestDocument: CurrentFactoryDocument;
+  sessionStartDocument: CurrentFactoryDocument;
 }
 
 export function createEmptyFactoryGraphDraft(): FactoryGraphDraft {
