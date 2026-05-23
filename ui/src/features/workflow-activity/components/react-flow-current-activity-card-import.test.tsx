@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import type { ReadFactoryImportPngError } from "../../import";
+import type { ReadFactoryImportPngError } from "../../import/public";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 import {
   GraphDropOverlay,

@@ -1,4 +1,4 @@
-import type { WorkstationRequestDetailCardProps } from "../detail-card-types";
+import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
 import { formatWorkItemLabel } from "../../../components/ui/formatters";
 import { normalizeDetailText } from "./detail-card-shared";
 import type { DashboardSelectedRunner } from "../../../api/dashboard/types";

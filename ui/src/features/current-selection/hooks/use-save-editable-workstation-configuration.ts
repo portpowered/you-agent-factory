@@ -7,11 +7,11 @@ import {
   type FactoryValue,
   NamedFactoryAPIError,
 } from "../../../api/named-factory";
-import { CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY } from "../../current-factory-definition";
+import { CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY } from "../../current-factory-definition/public";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationSaveState,
-} from "../detail-card-types";
+} from "../components/detail-card-types";
 import { getWorkstationDetailMessages } from "../messages";
 
 interface UseSaveEditableWorkstationConfigurationOptions {

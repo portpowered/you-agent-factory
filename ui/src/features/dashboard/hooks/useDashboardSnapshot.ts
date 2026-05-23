@@ -8,7 +8,7 @@ import {
   CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
   currentEditableFactoryDefinitionDocumentQueryKey,
   currentEditableFactoryDefinitionQueryKey,
-} from "../../current-factory-definition";
+} from "../../current-factory-definition/public";
 import { resetSelectionHistoryStore } from "../../current-selection/state/selectionHistoryStore";
 import {
   compactFactoryEventForTimeline,

@@ -6,7 +6,7 @@ import {
   type FactoryValue,
   NamedFactoryAPIError,
 } from "../../../api/named-factory";
-import type { FactoryPngImportValue } from "../factory-png-import";
+import type { FactoryPngImportValue } from "../lib/factory-png-import";
 
 export type FactoryImportActivationState =
   | { status: "idle" }

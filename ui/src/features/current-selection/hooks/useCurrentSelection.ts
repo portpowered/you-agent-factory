@@ -12,12 +12,12 @@ import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
-} from "../../terminal-work";
+} from "../../terminal-work/public";
 import type {
   DashboardSelection,
   StatePositionWorkItem,
   TerminalWorkDetail,
-} from "../types";
+} from "../state/selection-types";
 import { useCurrentSelectionActions } from "./useCurrentSelection.actions";
 import type { WorkSelectionHint } from "./useCurrentSelection.actions";
 import {
@@ -25,7 +25,7 @@ import {
   useSelectionSynchronization,
   useTerminalWorkDetailCleanup,
 } from "./useCurrentSelection.derived";
-import { resolveProjectedWorkstationRequestsByDispatchID, type WorkstationRequestLike } from "../useCurrentSelection.helpers";
+import { resolveProjectedWorkstationRequestsByDispatchID, type WorkstationRequestLike } from "./useCurrentSelection.helpers";
 
 export interface CurrentSelectionState {
   canRedoSelection: boolean;

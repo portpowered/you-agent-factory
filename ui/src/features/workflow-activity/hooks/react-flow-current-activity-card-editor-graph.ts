@@ -9,22 +9,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import {
   buildFactoryGraphTopologyFromDefinition,
-  collectPendingRemovalEdgeIds,
-  collectPendingRemovalNodeIds,
-  nodeKeyId,
-} from "../../factory-graph-editor/factory-graph-draft";
+} from "../../factory-graph-editor/lib/factory-graph-draft-graph";
 import {
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
-} from "../../factory-graph-editor/factory-graph-editor-flow";
+} from "../../factory-graph-editor/components/factory-graph-editor-flow";
 import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { buildFactoryGraphWorkerStatusMap } from "../../factory-graph-editor/factory-graph-editor-runtime";
-import type { FactoryGraphTopology } from "../../factory-graph-editor/factory-graph-draft-types";
+import {
+  collectPendingRemovalEdgeIds,
+  collectPendingRemovalNodeIds,
+} from "../../factory-graph-editor/lib/factory-graph-editor-removals";
+import { buildFactoryGraphWorkerStatusMap } from "../../factory-graph-editor/lib/factory-graph-editor-runtime";
+import {
+  nodeKeyId,
+  type FactoryGraphTopology,
+} from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 import { useFactoryGraphEditorLayoutPositions } from "./react-flow-current-activity-card-editor-layout";
-import { EMPTY_NODE_POSITIONS } from "../react-flow-current-activity-card-graph";
+import { EMPTY_NODE_POSITIONS } from "../lib/react-flow-current-activity-card-graph";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 
 export function useFactoryGraphEditorViewModel(

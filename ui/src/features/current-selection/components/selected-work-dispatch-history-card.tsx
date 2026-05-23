@@ -15,7 +15,7 @@ import {
   PROVIDER_SESSION_CARD_CLASS,
   normalizeDetailText,
 } from "./detail-card-shared";
-import type { SelectedWorkRequestHistoryItem } from "../detail-card-types";
+import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
 import {
   DispatchInferenceAttemptsSection,
   DispatchScriptAttemptsSection,
@@ -45,8 +45,8 @@ import {
   requestTitle,
   requestTraceIDs,
   scriptResponseFailureType,
-} from "../selected-work-dispatch-history-helpers";
-import type { LoadableProviderSessionRef } from "../provider-session-details";
+} from "../dispatch-history/selected-work-dispatch-history-helpers";
+import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
 
 interface DispatchHistoryCardProps {
   activeTraceID?: string | null;

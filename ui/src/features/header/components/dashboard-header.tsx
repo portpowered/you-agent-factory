@@ -25,10 +25,10 @@ import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import { useExportDialogStore } from "../../export/state/exportDialogStore";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
-import { DashboardSessionTabs } from "../dashboard-session-tabs";
+import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { TickSliderControl } from "./tick-slider-control";
 import { getHeaderControlsMessages } from "../messages/header-controls";
-import { useDashboardSessionTabsState } from "../use-dashboard-session-tabs-state";
+import { useDashboardSessionTabsState } from "../hooks/use-dashboard-session-tabs-state";
 
 const DASHBOARD_TOOLBAR_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,

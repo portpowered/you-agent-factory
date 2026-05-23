@@ -3,7 +3,7 @@ import { DashboardWidgetFrame } from "../../../components/ui";
 import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
 import { useCurrentSelectionShellMessages } from "./current-selection-locale";
-import type { SelectionDetailLayoutProps } from "../detail-card-types";
+import type { SelectionDetailLayoutProps } from "./detail-card-types";
 import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 
 const SELECTION_HISTORY_ACTIONS_CLASS = "flex items-center gap-2";

@@ -2,13 +2,13 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import {
   FactoryGraphEditorNotice,
   FactoryGraphEditorVisibilityPanel,
-} from "../../factory-graph-editor/factory-graph-editor-controls";
+} from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/current-activity-nodes";
-import type { CurrentActivityImportController } from "../current-activity-import-controller";
+import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
+import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card";
-import type { useCurrentActivityGraphEditor } from "../react-flow-current-activity-card-editor";
-import type { useFactoryGraphEditorViewModel } from "../react-flow-current-activity-card-editor-graph";
+import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
+import type { useFactoryGraphEditorViewModel } from "../hooks/react-flow-current-activity-card-editor-graph";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 export function CurrentActivityGraphSurface({

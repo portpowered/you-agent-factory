@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { requestInferenceAttempts } from "../selected-work-dispatch-history-helpers";
+import { requestInferenceAttempts } from "../dispatch-history/selected-work-dispatch-history-helpers";
 import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
   type LoadableProviderSessionRef,
-} from "../provider-session-details";
+} from "../../provider-session-detail/lib/provider-session-ref";
 import type { CurrentSelectionState } from "./useCurrentSelection";
 
 type CurrentSelectionVisibleProviderSessions = Pick<

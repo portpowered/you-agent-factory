@@ -1,15 +1,15 @@
 import type { Connection } from "@xyflow/react";
 import { useCallback, useEffect, useState } from "react";
 
-import type { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
+import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import {
   applyFactoryGraphEdgeAddition,
   buildFactoryGraphConnectionNotice,
   buildFactoryGraphEdgeChangeFromConnection,
   getFactoryGraphConnectionAnchor,
   type FactoryGraphConnectionEndpoint,
-} from "../../factory-graph-editor/factory-graph-editor-connections";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/factory-graph-editor-controls";
+} from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 
 export function useFactoryGraphConnectionController({
   activeTool,

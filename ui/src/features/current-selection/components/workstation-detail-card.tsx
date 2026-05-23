@@ -25,7 +25,7 @@ import {
 import type {
   WorkstationActiveWorkListProps,
   WorkstationDetailCardProps,
-} from "../detail-card-types";
+} from "./detail-card-types";
 import { getWorkstationDetailMessages } from "../messages";
 import { CollapsibleProviderSessionAttempts } from "./provider-session-attempts";
 import {

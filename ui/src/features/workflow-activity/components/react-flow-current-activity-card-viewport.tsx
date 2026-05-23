@@ -15,13 +15,13 @@ import {
 import type { CSSProperties } from "react";
 
 import { cn } from "../../../lib/cn";
-import type { FactoryGraphNodeKind } from "../../factory-graph-editor/factory-graph-draft-types";
-import { isValidFactoryGraphConnection } from "../../factory-graph-editor/factory-graph-editor-connections";
 import {
   FactoryGraphEditorToolbar,
   type FactoryGraphEditorMenuAction,
-} from "../../factory-graph-editor/factory-graph-editor-controls";
-import type { CurrentActivityImportController } from "../current-activity-import-controller";
+} from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,

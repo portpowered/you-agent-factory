@@ -7,7 +7,7 @@ import {
   sessionCloseLabel,
   sessionStreamToggleLabel,
   sessionTabLabel,
-} from "./dashboard-session-tabs-utils";
+} from "./lib/dashboard-session-tabs-utils";
 import type { getHeaderControlsMessages } from "./messages/header-controls";
 
 const SESSION_TAB_ITEM_CLASS =

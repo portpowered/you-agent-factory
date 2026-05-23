@@ -207,11 +207,14 @@ export async function expectTimelineToolbarAlignment(
     name: "dashboard summary",
   });
   const heading = within(toolbar).getByRole("heading", { name: "you-agent-factory" });
+  const streamStatus = within(toolbar).getByRole("status", {
+    name: /you-agent-factory event stream (connecting|live)/,
+  });
   const activeTab = within(toolbar).getByRole("tab", { name: "root" });
   const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
     name: "Timeline tick",
   });
-  const progressText = within(toolbar).getByText("5/5");
+  const progressText = within(toolbar).getByText(/^\d+\/\d+$/);
   const languageButton = within(toolbar).getByRole("button", {
     name: "Change language",
   });
@@ -223,6 +226,14 @@ export async function expectTimelineToolbarAlignment(
     slider.closest<HTMLElement>("div"),
     "expected slider shell in dashboard toolbar",
   );
+  const primaryRow = requireValue(
+    heading.closest<HTMLElement>("div"),
+    "expected primary dashboard toolbar row",
+  );
+  const secondaryRow = requireValue(
+    sliderShell.parentElement,
+    "expected secondary dashboard toolbar row",
+  );
   const sliderMetaGroup = requireValue(
     progressText.parentElement,
     "expected timeline meta group in dashboard toolbar",
@@ -230,25 +241,37 @@ export async function expectTimelineToolbarAlignment(
   const headingRect = heading.getBoundingClientRect();
   const activeTabRect = activeTab.getBoundingClientRect();
   const actionsGroupRect = actionsGroup.getBoundingClientRect();
+  const primaryRowRect = primaryRow.getBoundingClientRect();
+  const secondaryRowRect = secondaryRow.getBoundingClientRect();
   const sliderRect = sliderShell.getBoundingClientRect();
   const sliderInputRect = slider.getBoundingClientRect();
   const progressTextRect = progressText.getBoundingClientRect();
   const languageButtonRect = languageButton.getBoundingClientRect();
   const exportButtonRect = exportButton.getBoundingClientRect();
+  const headerControls = Array.from(
+    toolbar.querySelectorAll(
+      '[aria-label="Timeline tick"], [aria-label="Change language"], [aria-label="Export PNG"], [role="status"]',
+    ),
+  );
 
   expect(sliderShell.className).toContain("gap-1.5");
   expect(sliderShell.className).toContain("px-2.5");
+  expect(streamStatus.className).toContain("sr-only");
   expect(sliderMetaGroup.contains(progressText)).toBe(true);
   expect(
     within(toolbar).queryByRole("button", { name: "Return to current tick" }),
   ).toBeNull();
+  expect(headerControls).toHaveLength(4);
+  expect(headerControls[0]).toBe(streamStatus);
+  expect(headerControls[1]).toBe(exportButton);
+  expect(headerControls[2]).toBe(languageButton);
+  expect(headerControls[3]).toBe(slider);
+  expect(primaryRowRect.top).toBeLessThan(secondaryRowRect.top);
   expect(sliderRect.top).toBeGreaterThanOrEqual(headingRect.bottom - 1);
   expect(sliderRect.top).toBeGreaterThanOrEqual(activeTabRect.bottom - 1);
   expect(sliderRect.top).toBeGreaterThanOrEqual(actionsGroupRect.bottom - 1);
   expect(progressTextRect.left).toBeGreaterThanOrEqual(sliderInputRect.right - 1);
-  expect(exportButtonRect.left).toBeGreaterThanOrEqual(
-    actionsGroupRect.left - 1,
-  );
+  expect(exportButtonRect.left).toBeGreaterThanOrEqual(actionsGroupRect.left - 1);
   expect(languageButtonRect.left).toBeGreaterThanOrEqual(
     exportButtonRect.right - 1,
   );

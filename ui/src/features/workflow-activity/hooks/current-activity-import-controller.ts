@@ -10,7 +10,7 @@ import {
   useFactoryImportActivation,
   useFactoryImportPreview,
   useFactoryPngDrop,
-} from "../../import";
+} from "../../import/public";
 
 export interface CurrentActivityImportController {
   activateImport: (value: FactoryPngImportValue) => Promise<void>;

@@ -18,7 +18,7 @@ import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineSto
 import { DashboardHeader } from "./dashboard-header";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 
-vi.mock("../dashboard-session-tabs", () => ({
+vi.mock("./dashboard-session-tabs", () => ({
   DashboardSessionTabs: ({ locale }: { locale: string }) => (
     <div data-testid={`dashboard-session-tabs-${locale}`}>
       <div>Dashboard session tabs {locale}</div>

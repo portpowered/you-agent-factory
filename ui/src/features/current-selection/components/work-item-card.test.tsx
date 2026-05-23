@@ -16,7 +16,7 @@ import {
 } from "./detail-card-test-helpers";
 import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
-import { providerSessionSelectionKey } from "../provider-session-details";
+import { providerSessionSelectionKey } from "../../provider-session-detail/lib/provider-session-ref";
 import { WorkItemDetailCard } from "./work-item-card";
 
 function getDetailRow(container: HTMLElement, label: string): HTMLElement {

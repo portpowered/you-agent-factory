@@ -11,7 +11,7 @@ import {
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
 } from "./detail-card-shared";
-import type { WorkstationRequestDetailCardProps } from "../detail-card-types";
+import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
 import { InferenceAttemptsSection } from "./execution-details";
 import {
   ErrorDetailsSection,
@@ -27,7 +27,7 @@ import {
   getRunnerDisplayName,
   resolveSelectedRunnerMetadata,
   type RunnerOptionalCapability,
-} from "../runner-metadata";
+} from "../editing/runner-metadata";
 
 export function WorkstationRequestDetailCard({
   onSelectWorkID,

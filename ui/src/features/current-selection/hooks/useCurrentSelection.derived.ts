@@ -7,7 +7,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
 import { resolveDashboardSelection } from "../state/dashboardSelection";
-import type { DashboardSelection, TerminalWorkDetail } from "../types";
+import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
 import {
   activeExecutionsForSelectedWorkstation,
   buildTerminalWorkItems,
@@ -20,7 +20,7 @@ import {
   terminalHistoryItemsForPlace,
   type WorkstationRequestLike,
   buildSelectedWorkDispatchAttempts,
-} from "../useCurrentSelection.helpers";
+} from "./useCurrentSelection.helpers";
 
 export function useSelectionSynchronization({
   projectedWorkstationRequestsByDispatchID,

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { LoadableProviderSessionRef } from "../../current-selection";
+import type { LoadableProviderSessionRef } from "../../provider-session-detail/public";
 
 import { DashboardBento } from "./dashboard-bento";
 
@@ -42,7 +42,7 @@ const SHARED_SELECTED_SESSION: LoadableProviderSessionRef = {
   provider: "codex",
 };
 
-vi.mock("../../current-selection", async () => {
+vi.mock("../../current-selection/public", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
 
   return {
@@ -59,16 +59,6 @@ vi.mock("../../current-selection", async () => {
         >
           Select shared provider session
         </button>
-      </section>
-    ),
-    ProviderSessionWidget: ({
-      selectedProviderSession,
-    }: {
-      selectedProviderSession: LoadableProviderSessionRef | null;
-    }) => (
-      <section>
-        Provider session card
-        {selectedProviderSession ? `: ${selectedProviderSession.id}` : ""}
       </section>
     ),
     useCurrentSelection: () => currentSelectionState,
@@ -88,15 +78,28 @@ vi.mock("../../current-selection", async () => {
   };
 });
 
+vi.mock("../../provider-session-detail/public", () => ({
+  ProviderSessionWidget: ({
+    selectedProviderSession,
+  }: {
+    selectedProviderSession: LoadableProviderSessionRef | null;
+  }) => (
+    <section>
+      Provider session card
+      {selectedProviderSession ? `: ${selectedProviderSession.id}` : ""}
+    </section>
+  ),
+}));
+
 vi.mock("../../import", () => ({
   DashboardImportPreviewDialog: () => null,
 }));
 
-vi.mock("../../submit-work", () => ({
+vi.mock("../../submit-work/public", () => ({
   SubmitWorkWidget: () => <section>Submit work card</section>,
 }));
 
-vi.mock("../../terminal-work", () => ({
+vi.mock("../../terminal-work/public", () => ({
   TerminalWorkWidget: () => <section>Terminal work card</section>,
 }));
 
@@ -143,7 +146,7 @@ vi.mock("../../timeline/state/factoryTimelineStore", () => ({
     }),
 }));
 
-vi.mock("../../trace-drilldown", () => ({
+vi.mock("../../trace-drilldown/public", () => ({
   TraceDrilldownWidget: () => <section>Trace card</section>,
   useTraceDrilldown: () => ({
     selectedTrace: null,
@@ -151,16 +154,16 @@ vi.mock("../../trace-drilldown", () => ({
   }),
 }));
 
-vi.mock("../../work-outcome", () => ({
+vi.mock("../../work-outcome/public", () => ({
   WorkOutcomeWidget: () => <section>Work outcome card</section>,
   useWorkOutcomeChart: () => ({ status: "empty" }),
 }));
 
-vi.mock("../../work-totals", () => ({
+vi.mock("../../work-totals/public", () => ({
   WorkTotalsWidget: () => <section>Work totals card</section>,
 }));
 
-vi.mock("../../workflow-activity", () => ({
+vi.mock("../../workflow-activity/public", () => ({
   WorkflowActivityWidget: () => <section>Workflow activity card</section>,
   useCurrentActivityImportController: () => ({
     activationState: { status: "idle" },

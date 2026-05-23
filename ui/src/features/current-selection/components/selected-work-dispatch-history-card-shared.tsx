@@ -12,7 +12,7 @@ import {
   TRACE_ACTION_LINK_CLASS,
   WORK_SELECTION_BUTTON_CLASS,
 } from "./detail-card-shared";
-import type { dedupeWorkItems } from "../selected-work-dispatch-history-helpers";
+import type { dedupeWorkItems } from "../dispatch-history/selected-work-dispatch-history-helpers";
 
 export function ScriptArgsSection({
   args,

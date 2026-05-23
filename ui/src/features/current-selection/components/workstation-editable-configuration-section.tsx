@@ -20,13 +20,13 @@ import type {
   WorkstationDetailCardProps,
   WorkstationSummaryItemProps,
   WorkstationSummaryProps,
-} from "../detail-card-types";
-import { formatEditableOverwriteFieldLabels } from "../editable-workstation-overwrite-fields";
+} from "./detail-card-types";
+import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import type { getWorkstationDetailMessages } from "../messages";
 import {
   EditableConfigurationRunnerField,
   resolveWorkstationSummaryRunnerValue,
-} from "../workstation-runner-field";
+} from "./workstation-runner-field";
 import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 
 export function EditableConfigurationSection({

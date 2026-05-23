@@ -13,7 +13,7 @@ import {
 } from "../../../components/ui/formatters";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import { WORK_SELECTION_BUTTON_CLASS } from "./detail-card-shared";
-import type { WorkItemDetailCardProps } from "../detail-card-types";
+import type { WorkItemDetailCardProps } from "./detail-card-types";
 import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
 import { SelectedWorkDispatchHistorySection } from "./selected-work-dispatch-history";
 

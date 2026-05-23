@@ -7,7 +7,7 @@ import { DashboardExportDialog } from "./dashboard-export-dialog";
 const closeExportDialog = vi.fn();
 let isExportDialogOpen = false;
 let currentFactoryExportState: ReturnType<
-  typeof import("../../export").useCurrentFactoryExport
+  typeof import("../../export/public").useCurrentFactoryExport
 >;
 
 vi.mock("../../export/state/exportDialogStore", () => ({
@@ -25,8 +25,8 @@ vi.mock("../../export/state/exportDialogStore", () => ({
     }),
 }));
 
-vi.mock("../../export", async () => {
-  const actual = await vi.importActual("../../export");
+vi.mock("../../export/public", async () => {
+  const actual = await vi.importActual("../../export/public");
 
   return {
     ...actual,

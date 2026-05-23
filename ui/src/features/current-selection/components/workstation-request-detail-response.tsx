@@ -1,7 +1,7 @@
 import { formatDurationMillis } from "../../../components/ui/formatters";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
-import type { WorkstationRequestDetailCardProps } from "../detail-card-types";
+import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
 import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,

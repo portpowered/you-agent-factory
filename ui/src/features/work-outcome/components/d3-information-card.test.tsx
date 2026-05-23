@@ -2,7 +2,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { D3CompletionInformationCard } from "./d3-information-card";
-import type { WorkChartModel } from "../trends";
+import type { WorkChartModel } from "../lib/trends";
 
 const populatedTrend: WorkChartModel = {
   delta: {

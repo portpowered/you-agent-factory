@@ -15,7 +15,7 @@ import type {
   InferenceAttemptDetailProps,
   InferenceAttemptTextSectionProps,
   MetadataSectionProps,
-} from "../detail-card-types";
+} from "./detail-card-types";
 import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
 
 export const EXECUTION_PILL_CLASS = cn(

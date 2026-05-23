@@ -4,19 +4,19 @@ import { cn } from "../../../lib/cn";
 import {
   applyFactoryGraphAddEntityDraft,
   createFactoryGraphAddEntityDraft,
+  type CanonicalFactoryDefinition,
   type FactoryGraphAddEntityDraft,
   type FactoryGraphAddEntityFieldErrors,
   type FactoryGraphAddEntityKind,
+  type useFactoryGraphDraftState,
   validateFactoryGraphAddEntityDraft,
-} from "../../factory-graph-editor/factory-graph-editor-additions";
+} from "../../factory-graph-editor/public";
 import {
   FactoryGraphEditorModeToggle,
   FactoryGraphEditorStatus,
   type FactoryGraphEditorTool,
-} from "../../factory-graph-editor/factory-graph-editor-controls";
+} from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/factory-graph-draft-types";
-import type { useFactoryGraphDraftState } from "../../factory-graph-editor/factory-graph-draft";
 
 export function useFactoryGraphAddEntityController({
   currentFactoryDefinition,

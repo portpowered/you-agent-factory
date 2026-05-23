@@ -1,6 +1,6 @@
 import "./styles.css";
 
-import { DashboardScreen } from "./features/dashboard";
+import { DashboardScreen } from "./features/dashboard/public";
 import { AppLocaleProvider } from "./i18n";
 
 export interface AppProps {

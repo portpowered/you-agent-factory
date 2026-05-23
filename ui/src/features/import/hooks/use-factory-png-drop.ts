@@ -6,7 +6,7 @@ import {
   type ReadFactoryImportPngError,
   type ReadFactoryImportPngResult,
   readFactoryImportPng,
-} from "../factory-png-import";
+} from "../lib/factory-png-import";
 
 const FILE_DRAG_DATA_TYPE = "Files";
 
@@ -179,4 +179,3 @@ function fileFromDragEvent(event: Pick<DragEvent, "dataTransfer">): File | null 
   const firstFile = files[0];
   return firstFile instanceof File ? firstFile : null;
 }
-

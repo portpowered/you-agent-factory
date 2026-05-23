@@ -8,14 +8,14 @@ import type {
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
-} from "../../terminal-work";
-import type { DashboardSelection, TerminalWorkDetail } from "../types";
+} from "../../terminal-work/public";
+import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
 import {
   findTerminalWorkItem,
   inferStateWorkTerminalStatus,
   placeNodeID,
   resolveWorkItemSelectionByWorkID,
-} from "../useCurrentSelection.helpers";
+} from "./useCurrentSelection.helpers";
 
 type CurrentSelectionActionArgs = {
   commitSelectionState: (state: { selection: DashboardSelection | null; terminalWorkDetail: TerminalWorkDetail | null }) => void;
