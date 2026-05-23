@@ -1,21 +1,48 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react-swc";
 import { defineConfig } from "vite";
+import monacoEditorPluginModule from "vite-plugin-monaco-editor";
 import { coverageConfigDefaults } from "vitest/config";
 
 const apiOrigin = process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
-const storybookInteropDeps = [
+const monacoEditorPlugin =
+  typeof monacoEditorPluginModule === "function"
+    ? monacoEditorPluginModule
+    : monacoEditorPluginModule.default;
+const optimizedDeps = [
   "monaco-editor/esm/vs/editor/editor.api.js",
   "react",
   "react-dom",
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
 ] as const;
+const storybookInteropDeps = [
+  "react",
+  "react-dom",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+] as const;
 const proxiedAPIPaths = [
-  "/events",
-  "/factory",
-  "/provider-sessions/detail",
   "/work",
+  "^/factories/[^/]+/work$",
+  "^/work-requests/[^/]+$",
+  "^/factories/[^/]+/work-requests/[^/]+$",
+  "^/work/[^/]+$",
+  "^/factories/[^/]+/work/[^/]+$",
+  "/events",
+  "^/factories/[^/]+/events$",
+  "/status",
+  "^/factories/[^/]+/status$",
+  "/provider-sessions/detail",
+  "/factory",
+  "/factory-sessions",
+  "^/factory-sessions/[^/]+$",
+  "/factory/~current",
+  "^/factories/[^/]+/factory/~current$",
+  "^/factories/[^/]+/factory/~current/editable-definition$",
+  "^/factory/~current/workstations/[^/]+/prompt-template-contract$",
+  "/factory/~current/editable-definition",
+  "^/factory/~current/workstations/[^/]+/prompt-template-validation$",
 ] as const;
 const apiProxy = Object.fromEntries(
   proxiedAPIPaths.map((path) => [
@@ -42,10 +69,16 @@ export default defineConfig({
     jsxDev: false,
   },
   optimizeDeps: {
-    include: [...storybookInteropDeps],
+    include: [...optimizedDeps],
     needsInterop: [...storybookInteropDeps],
   },
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    monacoEditorPlugin({
+      languageWorkers: ["editorWorkerService"],
+    }),
+  ],
   server: {
     host: true,
     port: 4173,

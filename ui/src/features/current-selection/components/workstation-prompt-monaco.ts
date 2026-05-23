@@ -44,6 +44,14 @@ export function registerWorkstationPromptCompletionProvider(
     WORKSTATION_PROMPT_LANGUAGE_ID,
     {
       provideCompletionItems(model, position, _context) {
+        const currentWord = model.getWordUntilPosition(position);
+        const range = {
+          endColumn: currentWord.endColumn,
+          endLineNumber: position.lineNumber,
+          startColumn: currentWord.startColumn,
+          startLineNumber: position.lineNumber,
+        };
+
         const promptHelpState = getPromptHelpState();
         if (promptHelpState.status !== "ready") {
           return { suggestions: [] };
@@ -61,22 +69,21 @@ export function registerWorkstationPromptCompletionProvider(
           return { suggestions: [] };
         }
 
-        const currentWord = model.getWordUntilPosition(position);
-        const range = {
-          endColumn: currentWord.endColumn,
-          endLineNumber: position.lineNumber,
-          startColumn: currentWord.startColumn,
-          startLineNumber: position.lineNumber,
-        };
+        const currentTemplateExpression = isInsideTemplateExpression
+          ? getCurrentTemplateExpression(prompt, cursorOffset)
+          : undefined;
 
         return {
           suggestions: buildWorkstationPromptCompletionItems(
             promptHelpState.contract,
             {
+              currentTemplateExpression,
+              currentWordText: model.getValueInRange(range),
               insideTemplateExpression: isInsideTemplateExpression,
             },
           ).map((suggestion, index) => ({
             detail: suggestion.detail,
+            filterText: suggestion.filterText,
             documentation: {
               value: suggestion.documentation,
             },
@@ -96,17 +103,32 @@ export function registerWorkstationPromptCompletionProvider(
 export function buildWorkstationPromptCompletionItems(
   contract: PromptTemplateContract,
   options: {
+    currentTemplateExpression?: string;
+    currentWordText?: string;
     insideTemplateExpression: boolean;
   },
 ) {
-  return contract.availableVariables.map((variable) => ({
-    detail: `${variable.category} - ${variable.description}`,
-    documentation: variable.example,
-    insertText: options.insideTemplateExpression
-      ? extractTemplateExpression(variable.example)
-      : variable.example,
-    label: variable.path,
-  }));
+  return contract.availableVariables.map((variable) => {
+    const fullTemplateExpression = extractTemplateExpression(variable.example).trim();
+    const contextualSuggestion = options.insideTemplateExpression
+      ? toContextualTemplateSuggestion(
+          fullTemplateExpression,
+          variable.path,
+          options.currentTemplateExpression,
+          options.currentWordText,
+        )
+      : null;
+
+    return {
+      detail: `${variable.category} - ${variable.description}`,
+      documentation: variable.example,
+      filterText: contextualSuggestion?.filterText ?? fullTemplateExpression,
+      insertText: options.insideTemplateExpression
+        ? (contextualSuggestion?.insertText ?? fullTemplateExpression)
+        : variable.example,
+      label: contextualSuggestion?.label ?? variable.path,
+    };
+  });
 }
 
 function isManualCompletionTrigger(
@@ -130,6 +152,48 @@ export function extractTemplateExpression(example: string) {
   const templateMatch = example.match(/^\s*\{\{\s*([\s\S]*?)\s*\}\}\s*$/);
 
   return templateMatch?.[1] ?? example;
+}
+
+export function getCurrentTemplateExpression(prompt: string, cursorOffset: number) {
+  const contentBeforeCursor = prompt.slice(0, cursorOffset);
+  const lastOpenIndex = contentBeforeCursor.lastIndexOf("{{");
+  const lastCloseIndex = contentBeforeCursor.lastIndexOf("}}");
+  if (lastOpenIndex < 0 || lastOpenIndex < lastCloseIndex) {
+    return "";
+  }
+
+  return contentBeforeCursor.slice(lastOpenIndex + 2).trimStart();
+}
+
+function toContextualTemplateSuggestion(
+  fullTemplateExpression: string,
+  path: string,
+  currentTemplateExpression?: string,
+  currentWordText?: string,
+) {
+  const normalizedCurrentExpression = currentTemplateExpression?.trimStart() ?? "";
+  if (normalizedCurrentExpression.length === 0) {
+    return null;
+  }
+
+  const normalizedCurrentWord = currentWordText?.trim() ?? "";
+  const expressionBase =
+    normalizedCurrentWord.length > 0 &&
+    normalizedCurrentExpression.endsWith(normalizedCurrentWord)
+      ? normalizedCurrentExpression.slice(0, -normalizedCurrentWord.length)
+      : normalizedCurrentExpression;
+
+  if (!fullTemplateExpression.startsWith(expressionBase)) {
+    return null;
+  }
+
+  const relativeInsertText = fullTemplateExpression.slice(expressionBase.length);
+
+  return {
+    filterText: fullTemplateExpression,
+    insertText: relativeInsertText,
+    label: relativeInsertText.length > 0 ? relativeInsertText : path,
+  };
 }
 
 export function buildWorkstationPromptMarkers(
@@ -307,18 +371,36 @@ const WORKSTATION_PROMPT_MONARCH_LANGUAGE: MonacoLanguagesAPI.IMonarchLanguage =
 };
 
 const WORKSTATION_PROMPT_THEME: MonacoEditorAPI.IStandaloneThemeData = {
-  base: "vs",
-  colors: {},
+  base: "vs-dark",
+  colors: {
+    "editor.background": "#091117",
+    "editor.foreground": "#F7F2E8",
+    "editor.lineHighlightBackground": "#101C23",
+    "editor.selectionBackground": "#21414A",
+    "editor.inactiveSelectionBackground": "#173039",
+    "editorCursor.foreground": "#F5C76F",
+    "editorWhitespace.foreground": "#FFFFFF24",
+    "editorIndentGuide.background1": "#FFFFFF14",
+    "editorIndentGuide.activeBackground1": "#FFFFFF2E",
+    "editorWidget.background": "#091117",
+    "editorWidget.border": "#FFFFFF1F",
+    "editorSuggestWidget.background": "#091117",
+    "editorSuggestWidget.foreground": "#F7F2E8",
+    "editorSuggestWidget.selectedBackground": "#132C37",
+    "editorSuggestWidget.highlightForeground": "#F5C76F",
+    "editorHoverWidget.background": "#091117",
+    "editorHoverWidget.border": "#FFFFFF1F",
+  },
   inherit: true,
   rules: [
-    { foreground: "334155", token: "text" },
-    { fontStyle: "bold", foreground: "0369a1", token: "delimiter.template" },
-    { foreground: "7c3aed", token: "keyword.template" },
-    { foreground: "b45309", token: "keyword.function.template" },
-    { foreground: "1d4ed8", token: "identifier.template" },
-    { foreground: "0f766e", token: "string.template" },
-    { foreground: "475569", token: "number.template" },
-    { foreground: "c2410c", token: "variable.local" },
-    { foreground: "4338ca", token: "variable.root" },
+    { foreground: "F7F2E8", token: "text" },
+    { fontStyle: "bold", foreground: "F5C76F", token: "delimiter.template" },
+    { foreground: "7DD3FC", token: "keyword.template" },
+    { foreground: "B5EDF4", token: "keyword.function.template" },
+    { foreground: "F7F2E8", token: "identifier.template" },
+    { foreground: "A7F0C4", token: "string.template" },
+    { foreground: "F5C76F", token: "number.template" },
+    { foreground: "FFB2B2", token: "variable.local" },
+    { foreground: "5CCADD", token: "variable.root" },
   ],
 };

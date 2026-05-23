@@ -7,13 +7,10 @@ import {
   useState,
 } from "react";
 
-import type { DashboardStreamState } from "../../../api/dashboard/types";
 import { cn } from "../../../lib/cn";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import {
   getNativeLanguageLabel,
@@ -21,7 +18,6 @@ import {
   type SupportedLocale,
   useAppLocale,
 } from "../../../i18n";
-import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import { useExportDialogStore } from "../../export/state/exportDialogStore";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
@@ -29,24 +25,21 @@ import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { DashboardSessionTabs } from "../dashboard-session-tabs";
 import { TickSliderControl } from "./tick-slider-control";
 import { getHeaderControlsMessages } from "../messages/header-controls";
+import { useDashboardSessionTabsState } from "../use-dashboard-session-tabs-state";
 
 const DASHBOARD_TOOLBAR_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
-  "mb-3 flex flex-wrap items-center gap-2 p-2 md:px-3 md:py-2",
+  "mb-3 grid gap-2 p-2 md:px-3 md:py-2",
 );
+const DASHBOARD_PRIMARY_ROW_CLASS = cn(
+  "flex min-w-0 flex-wrap items-start gap-2",
+  "max-md:items-stretch",
+);
+const DASHBOARD_SECONDARY_ROW_CLASS = "w-full border-t border-af-overlay/10 pt-2";
 const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
 const DASHBOARD_CONTROLS_CLASS = cn(
-  "ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2",
-  "max-md:ml-0 max-md:w-full max-md:justify-stretch",
-);
-const STREAM_STATUS_SHELL_CLASS = cn(
-  "flex shrink-0 items-center justify-end",
-  "max-md:justify-start",
-);
-const STREAM_STATUS_CLASS = cn(
-  "inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-overlay/12 bg-af-overlay/4",
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
+  "ml-auto flex shrink-0 items-center gap-2",
+  "max-md:ml-0 max-md:w-full max-md:justify-end",
 );
 const LOCALE_MENU_PANEL_CLASS =
   "absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-af-overlay/12 bg-af-surface/96 p-1 shadow-af-panel backdrop-blur-lg";
@@ -66,7 +59,7 @@ export interface DashboardHeaderProps {
 
 export function DashboardHeader({ locale }: DashboardHeaderProps) {
   const { locale: resolvedLocale, setLocale } = useAppLocale(locale);
-  const streamState = useDashboardStreamStore((state) => state.streamState);
+  const sessionTabsState = useDashboardSessionTabsState();
   const isExportDialogOpen = useExportDialogStore(
     (state) => state.isExportDialogOpen,
   );
@@ -81,52 +74,61 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
       className={DASHBOARD_TOOLBAR_CLASS}
       aria-label={headerMessages.dashboardSummaryLabel}
     >
-      <h1 className={DASHBOARD_TITLE_CLASS}>
-        <DashboardBrandLockup
+      <div className={DASHBOARD_PRIMARY_ROW_CLASS}>
+        <h1 className={DASHBOARD_TITLE_CLASS}>
+          <DashboardBrandLockup
+            locale={resolvedLocale}
+            wordmarkClassName="truncate"
+          />
+        </h1>
+        <DashboardSessionTabs
+          hideOpenButton
           locale={resolvedLocale}
-          wordmarkClassName="truncate"
+          state={sessionTabsState}
         />
-      </h1>
-      <div className={DASHBOARD_CONTROLS_CLASS}>
-        <TickSliderControl locale={resolvedLocale} />
-        <div className={STREAM_STATUS_SHELL_CLASS}>
-          <div
-            aria-label={streamStatusLabel(streamState.status, resolvedLocale)}
-            className={streamStatusClassName(streamState.status)}
-            role="status"
+        <div className={DASHBOARD_CONTROLS_CLASS}>
+          <DashboardHeaderActionButton
+            aria-haspopup="dialog"
+            aria-label={headerMessages.openSessionButtonLabel}
+            compact
+            onClick={() => {
+              sessionTabsState.setDialogOpen(true);
+            }}
           >
-            <StreamStatusIcon status={streamState.status} />
-          </div>
+            <span aria-hidden="true" className="text-lg leading-none">+</span>
+          </DashboardHeaderActionButton>
+          <DashboardHeaderActionButton
+            aria-label={exportMessages.triggerLabel}
+            aria-expanded={isExportDialogOpen}
+            aria-haspopup="dialog"
+            compact
+            onClick={openExportDialog}
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="18"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.8"
+              viewBox="0 0 24 24"
+              width="18"
+            >
+              <path d="M14 5h5v5" />
+              <path d="M10 14 19 5" />
+              <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+            </svg>
+          </DashboardHeaderActionButton>
+          <DashboardLocaleMenu
+            locale={resolvedLocale}
+            onChangeLocale={setLocale}
+          />
         </div>
-        <DashboardHeaderActionButton
-          aria-label={exportMessages.triggerLabel}
-          aria-expanded={isExportDialogOpen}
-          aria-haspopup="dialog"
-          compact
-          onClick={openExportDialog}
-        >
-          <svg
-            aria-hidden="true"
-            fill="none"
-            height="18"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.8"
-            viewBox="0 0 24 24"
-            width="18"
-          >
-            <path d="M14 5h5v5" />
-            <path d="M10 14 19 5" />
-            <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
-          </svg>
-        </DashboardHeaderActionButton>
-        <DashboardLocaleMenu
-          locale={resolvedLocale}
-          onChangeLocale={setLocale}
-        />
       </div>
-      <DashboardSessionTabs locale={resolvedLocale} />
+      <div className={DASHBOARD_SECONDARY_ROW_CLASS}>
+        <TickSliderControl locale={resolvedLocale} />
+      </div>
     </section>
   );
 }
@@ -411,87 +413,4 @@ function moveLocaleMenuFocus(
 
   event.preventDefault();
   items[nextIndex]?.focus();
-}
-
-function streamStatusClassName(status: DashboardStreamState["status"]): string {
-  return cn(
-    STREAM_STATUS_CLASS,
-    status === "live" &&
-      "border-af-success/30 bg-af-success/16 text-af-success-ink",
-    status === "connecting" &&
-      "border-af-accent/30 bg-af-accent/12 text-af-accent",
-    status === "offline" &&
-      "border-af-danger/30 bg-af-danger/12 text-af-danger-ink",
-  );
-}
-
-function streamStatusLabel(
-  status: DashboardStreamState["status"],
-  locale?: string,
-): string {
-  const messages = getHeaderControlsMessages(locale);
-
-  if (status === "live") {
-    return messages.streamStatusLiveLabel;
-  }
-  if (status === "offline") {
-    return messages.streamStatusOfflineLabel;
-  }
-
-  return messages.streamStatusConnectingLabel;
-}
-
-function StreamStatusIcon({
-  status,
-}: {
-  status: DashboardStreamState["status"];
-}) {
-  if (status === "live") {
-    return (
-      <span
-        aria-hidden="true"
-        className="relative inline-flex size-3.5 items-center justify-center"
-      >
-        <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-35" />
-        <span className="relative inline-flex size-2.5 rounded-full bg-current" />
-      </span>
-    );
-  }
-
-  if (status === "offline") {
-    return (
-      <svg
-        aria-hidden="true"
-        fill="none"
-        height="16"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.8"
-        viewBox="0 0 16 16"
-        width="16"
-      >
-        <circle cx="8" cy="8" r="4.25" />
-        <path d="M4.75 11.25 11.25 4.75" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="16"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 16 16"
-      width="16"
-    >
-      <circle cx="8" cy="8" r="4.25" strokeDasharray="1.6 2.2" />
-      <path d="M8 5v3" />
-      <circle cx="8" cy="11" r="0.75" fill="currentColor" stroke="none" />
-    </svg>
-  );
 }

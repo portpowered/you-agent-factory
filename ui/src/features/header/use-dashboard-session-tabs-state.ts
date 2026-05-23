@@ -13,6 +13,10 @@ import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionSto
 
 export const FACTORY_SESSIONS_QUERY_KEY = ["factory-sessions"] as const;
 
+export type DashboardSessionTabsState = ReturnType<
+  typeof useDashboardSessionTabsState
+>;
+
 export function useDashboardSessionTabsState() {
   const queryClient = useQueryClient();
   const sessionsQuery = useQuery({

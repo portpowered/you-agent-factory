@@ -1,5 +1,7 @@
 import Editor, { loader } from "@monaco-editor/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import "monaco-editor/esm/vs/editor/editor.all.js";
+import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 
 import {
@@ -13,6 +15,7 @@ import type {
 } from "../detail-card-types";
 import {
   buildWorkstationPromptMarkers,
+  isInsideTemplate,
   registerWorkstationPromptCompletionProvider,
   registerWorkstationPromptMonaco,
   WORKSTATION_PROMPT_LANGUAGE_ID,
@@ -24,6 +27,7 @@ const PROMPT_EDITOR_OPTIONS = {
   fontFamily: "inherit",
   fontLigatures: false,
   fontSize: 14,
+  fixedOverflowWidgets: true,
   glyphMargin: false,
   lineDecorationsWidth: 10,
   lineNumbers: "off",
@@ -41,15 +45,29 @@ const PROMPT_EDITOR_OPTIONS = {
     useShadows: false,
     verticalScrollbarSize: 8,
   },
+  quickSuggestions: {
+    comments: false,
+    other: true,
+    strings: true,
+  },
   scrollBeyondLastLine: false,
+  suggestOnTriggerCharacters: true,
   tabSize: 2,
   wordWrap: "on",
   wordWrapColumn: 80,
   wrappingIndent: "same",
 } as const;
 
-let monacoLoaderReady = import.meta.env.MODE === "test";
-let monacoLoaderPromise: Promise<void> | null = null;
+let monacoSetupState: "error" | "ready" = "ready";
+
+if (import.meta.env.MODE !== "test") {
+  try {
+    registerWorkstationPromptMonaco(monaco);
+    loader.config({ monaco });
+  } catch {
+    monacoSetupState = "error";
+  }
+}
 
 interface WorkstationPromptEditorProps {
   ariaLabel: string;
@@ -87,9 +105,7 @@ export function WorkstationPromptEditor({
   const autocompleteStateRef = useRef(autocompleteState);
   const editorRef = useRef<MonacoEditorAPI.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
-  const [startupState, setStartupState] = useState<"error" | "loading" | "ready">(
-    monacoLoaderReady ? "ready" : "loading",
-  );
+  const startupState = monacoSetupState;
   const markers = useMemo(
     () => buildWorkstationPromptMarkers(value, diagnostics),
     [diagnostics, value],
@@ -100,30 +116,9 @@ export function WorkstationPromptEditor({
   }, [autocompleteState]);
 
   useEffect(() => {
-    let cancelled = false;
-
     onReadyChange?.(startupState === "ready");
 
-    if (startupState === "ready" || import.meta.env.MODE === "test") {
-      return () => {
-        onReadyChange?.(false);
-      };
-    }
-
-    configureMonacoLoader()
-      .then(() => {
-        if (!cancelled) {
-          setStartupState("ready");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setStartupState("error");
-        }
-      });
-
     return () => {
-      cancelled = true;
       onReadyChange?.(false);
     };
   }, [onReadyChange, startupState]);
@@ -166,14 +161,14 @@ export function WorkstationPromptEditor({
   return (
     <Editor
       className={cn(
-        "overflow-hidden rounded-xl border border-af-overlay/14 bg-transparent",
+        "overflow-visible rounded-xl border border-af-overlay/14 bg-transparent",
         hasDiagnostics
           ? "border-af-danger/45 focus-within:border-af-danger"
           : undefined,
         className,
       )}
-      defaultLanguage={WORKSTATION_PROMPT_LANGUAGE_ID}
       height="13.5rem"
+      language={WORKSTATION_PROMPT_LANGUAGE_ID}
       onChange={(nextValue) => onChange(nextValue ?? "")}
       onMount={(editorInstance, monaco) => {
         editorRef.current = editorInstance;
@@ -182,11 +177,45 @@ export function WorkstationPromptEditor({
           monaco,
           () => autocompleteStateRef.current,
         );
+        editorInstance.addCommand(monaco.KeyCode.Space, () => {
+          editorInstance.trigger("workstation-prompt-space", "type", { text: " " });
+        });
+        const typeListener = editorInstance.onDidType((text) => {
+          const model = editorInstance.getModel();
+          const position = editorInstance.getPosition();
+          if (!model || !position) {
+            return;
+          }
+
+          const prompt = model.getValue();
+          const cursorOffset = model.getOffsetAt(position);
+          const insideTemplateExpression = isInsideTemplate(prompt, cursorOffset);
+          if (!insideTemplateExpression) {
+            return;
+          }
+
+          const typedTrigger =
+            text.includes("{") ||
+            text.includes(".") ||
+            text.includes("$") ||
+            text.includes("(");
+          const typedIdentifierText = text.trim().length > 0;
+          if (!typedTrigger && !typedIdentifierText) {
+            return;
+          }
+
+          editorInstance.trigger(
+            "workstation-prompt-autocomplete",
+            "editor.action.triggerSuggest",
+            {},
+          );
+        });
 
         editorInstance.onDidDispose(() => {
           editorRef.current = null;
           monacoRef.current = null;
           completionProvider.dispose();
+          typeListener.dispose();
         });
         onMount?.(editorInstance);
         onScrollChange?.({
@@ -212,32 +241,6 @@ export function WorkstationPromptEditor({
       }}
     />
   );
-}
-
-async function configureMonacoLoader() {
-  if (monacoLoaderReady) {
-    return;
-  }
-
-  if (!monacoLoaderPromise) {
-    monacoLoaderPromise = Promise.all([
-      import("monaco-editor/esm/vs/editor/editor.api.js"),
-      import("monaco-editor/esm/vs/editor/editor.worker?worker&inline"),
-    ]).then(([monaco, editorWorker]) => {
-        registerWorkstationPromptMonaco(monaco);
-
-        self.MonacoEnvironment = {
-          getWorker() {
-            return new editorWorker.default();
-          },
-        };
-
-        loader.config({ monaco });
-        monacoLoaderReady = true;
-      });
-  }
-
-  return monacoLoaderPromise;
 }
 
 function PromptEditorFallbackState({
