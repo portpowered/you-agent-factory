@@ -5,11 +5,16 @@ import {
   closeFactorySession,
   type FactorySessionSummary,
   type FactorySessionTarget,
-  FactorySessionsAPIError,
+  type FactorySessionsAPIError,
   listFactorySessions,
   openFactorySession,
 } from "../../../api/factory-sessions";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import {
+  classifyFactorySessionFolderValidationError,
+  type FolderValidationState,
+  normalizeFactorySessionsError,
+} from "../lib/dashboard-session-tabs-utils";
 
 export const FACTORY_SESSIONS_QUERY_KEY = ["factory-sessions"] as const;
 
@@ -23,56 +28,14 @@ export function useDashboardSessionTabsState() {
     queryKey: FACTORY_SESSIONS_QUERY_KEY,
     queryFn: () => listFactorySessions(),
   });
-  const openSessionMutation = useMutation({
-    mutationFn: (input: Parameters<typeof openFactorySession>[0]) =>
-      openFactorySession(input),
-  });
   const closeSessionMutation = useMutation({
     mutationFn: (sessionID: string) => closeFactorySession(sessionID),
   });
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogError, setDialogError] = useState<FactorySessionsAPIError | null>(null);
   const [closeError, setCloseError] = useState<FactorySessionsAPIError | null>(null);
-  const [folderPath, setFolderPath] = useState("");
-  const [discoveredTargets, setDiscoveredTargets] = useState<FactorySessionTarget[]>([]);
-
   const sessions = sessionsQuery.data ?? [];
   const { activeSession, activeSessionID, pausedSessionIDs, setActiveSessionID, setSessionPaused } =
     useActiveDashboardSession(sessions);
-
-  async function handleInspectFolder(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setDialogError(null);
-    setDiscoveredTargets([]);
-
-    try {
-      const response = await openSessionMutation.mutateAsync({
-        folderPath,
-      });
-      if (response.session) {
-        await finishOpeningSession(response.session);
-        return;
-      }
-      setDiscoveredTargets(response.targets ?? []);
-    } catch (error) {
-      setDialogError(normalizeFactorySessionsError(error));
-    }
-  }
-
-  async function handleOpenTarget(target: FactorySessionTarget) {
-    setDialogError(null);
-    try {
-      const response = await openSessionMutation.mutateAsync({
-        folderPath,
-        target: target.ref,
-      });
-      if (response.session) {
-        await finishOpeningSession(response.session);
-      }
-    } catch (error) {
-      setDialogError(normalizeFactorySessionsError(error));
-    }
-  }
+  const dialogState = useOpenSessionDialogState({ queryClient, setActiveSessionID });
 
   async function handleCloseSession(sessionID: string) {
     setCloseError(null);
@@ -98,31 +61,6 @@ export function useDashboardSessionTabsState() {
     }
   }
 
-  async function finishOpeningSession(session: FactorySessionSummary) {
-    queryClient.setQueryData(
-      FACTORY_SESSIONS_QUERY_KEY,
-      (current: FactorySessionSummary[] | undefined) => {
-        const next = current ?? [];
-        if (next.some((existingSession) => existingSession.id === session.id)) {
-          return next;
-        }
-        return [...next, session];
-      },
-    );
-    await queryClient.invalidateQueries({
-      queryKey: FACTORY_SESSIONS_QUERY_KEY,
-    });
-    setActiveSessionID(session.id);
-    resetDialogState();
-    setDialogOpen(false);
-  }
-
-  function resetDialogState() {
-    setDialogError(null);
-    setDiscoveredTargets([]);
-    setFolderPath("");
-  }
-
   function isSessionStreamPaused(sessionID: string): boolean {
     return pausedSessionIDs.includes(sessionID);
   }
@@ -130,29 +68,142 @@ export function useDashboardSessionTabsState() {
   function toggleSessionStreamPaused(sessionID: string) {
     setSessionPaused(sessionID, !isSessionStreamPaused(sessionID));
   }
-
   return {
     activeSession,
     activeSessionID,
     closeError,
     closeSessionMutation,
-    dialogError,
-    dialogOpen,
-    discoveredTargets,
-    folderPath,
+    ...dialogState,
     handleCloseSession,
-    handleInspectFolder,
-    handleOpenTarget,
     isSessionStreamPaused,
-    openSessionMutation,
-    resetDialogState,
     sessions,
     sessionsQuery,
     setActiveSessionID,
-    setDialogOpen,
-    setFolderPath,
     toggleSessionStreamPaused,
   };
+}
+
+function useOpenSessionDialogState({
+  queryClient,
+  setActiveSessionID,
+}: {
+  queryClient: ReturnType<typeof useQueryClient>;
+  setActiveSessionID: (sessionID: string | null) => void;
+}) {
+  const openSessionMutation = useMutation({
+    mutationFn: (input: Parameters<typeof openFactorySession>[0]) =>
+      openFactorySession(input),
+  });
+  const validateFolderMutation = useMutation({
+    mutationFn: (folderPath: string) =>
+      openFactorySession({
+        folderPath,
+        validateOnly: true,
+      }),
+  });
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogError, setDialogError] = useState<FactorySessionsAPIError | null>(null);
+  const [folderPath, setFolderPath] = useState("");
+  const [discoveredTargets, setDiscoveredTargets] = useState<FactorySessionTarget[]>([]);
+  const [folderValidation, setFolderValidation] = useState<FolderValidationState>({
+    status: "idle",
+  });
+
+  async function handleInspectFolder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setDialogError(null);
+    setDiscoveredTargets([]);
+    setFolderValidation({ status: "pending" });
+
+    try {
+      const response = await validateFolderMutation.mutateAsync(folderPath);
+      const targets = response.targets ?? [];
+      setDiscoveredTargets(targets);
+      setFolderValidation({ status: "ready", targets });
+    } catch (error) {
+      const apiError = normalizeFactorySessionsError(error);
+      setDialogError(apiError);
+      setFolderValidation({
+        status: "error",
+        reason: classifyFactorySessionFolderValidationError(apiError),
+      });
+    }
+  }
+
+  async function handleOpenTarget(target: FactorySessionTarget) {
+    setDialogError(null);
+    try {
+      const response = await openSessionMutation.mutateAsync({
+        folderPath,
+        target: target.ref,
+      });
+      if (response.session) {
+        await finishOpeningSession(
+          queryClient,
+          response.session,
+          resetDialogState,
+          setActiveSessionID,
+          setDialogOpen,
+        );
+      }
+    } catch (error) {
+      setDialogError(normalizeFactorySessionsError(error));
+    }
+  }
+
+  function resetDialogState() {
+    setDialogError(null);
+    setDiscoveredTargets([]);
+    setFolderValidation({ status: "idle" });
+    setFolderPath("");
+  }
+
+  function handleChangeFolderPath(value: string) {
+    setFolderPath(value);
+    setDialogError(null);
+    setDiscoveredTargets([]);
+    setFolderValidation({ status: "idle" });
+  }
+
+  return {
+    dialogError,
+    dialogOpen,
+    discoveredTargets,
+    folderValidation,
+    folderPath,
+    handleChangeFolderPath,
+    handleInspectFolder,
+    handleOpenTarget,
+    openSessionMutation,
+    resetDialogState,
+    setDialogOpen,
+    validateFolderMutation,
+  };
+}
+
+async function finishOpeningSession(
+  queryClient: ReturnType<typeof useQueryClient>,
+  session: FactorySessionSummary,
+  resetDialogState: () => void,
+  setActiveSessionID: (sessionID: string | null) => void,
+  setDialogOpen: (open: boolean) => void,
+) {
+  queryClient.setQueryData(
+    FACTORY_SESSIONS_QUERY_KEY,
+    (current: FactorySessionSummary[] | undefined) => {
+      const next = current ?? [];
+      if (next.some((existingSession) => existingSession.id === session.id)) {
+        return next;
+      }
+      return [...next, session];
+    },
+  );
+  await queryClient.invalidateQueries({
+    queryKey: FACTORY_SESSIONS_QUERY_KEY,
+  });
+  setActiveSessionID(session.id);
+  resetDialogState();
+  setDialogOpen(false);
 }
 
 function useActiveDashboardSession(sessions: FactorySessionSummary[]) {
@@ -183,17 +234,4 @@ function useActiveDashboardSession(sessions: FactorySessionSummary[]) {
     setActiveSessionID,
     setSessionPaused,
   };
-}
-
-function normalizeFactorySessionsError(error: unknown): FactorySessionsAPIError {
-  if (error instanceof FactorySessionsAPIError) {
-    return error;
-  }
-  return new FactorySessionsAPIError(
-    "The dashboard could not complete the factory session request.",
-    {
-      code: "INTERNAL_ERROR",
-      responseBody: error,
-    },
-  );
 }

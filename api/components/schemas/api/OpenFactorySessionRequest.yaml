@@ -7,3 +7,6 @@ properties:
     type: string
   target:
     $ref: './FactorySessionTargetRef.yaml'
+  validateOnly:
+    type: boolean
+    description: When true, validate the folder and optional target selection without creating a live session.

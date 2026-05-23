@@ -347,7 +347,7 @@ export interface paths {
         put?: never;
         /**
          * Open another live factory session
-         * @description Opens another live factory session from a folder path and optional target selection. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
+         * @description Opens another live factory session from a folder path and optional target selection. When `validateOnly` is true, the request validates the folder and optional target selection without creating a session. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
          */
         post: operations["openFactorySession"];
         delete?: never;
@@ -738,6 +738,8 @@ export interface components {
         OpenFactorySessionRequest: {
             folderPath: string;
             target?: components["schemas"]["FactorySessionTargetRef"];
+            /** @description When true, validate the folder and optional target selection without creating a live session. */
+            validateOnly?: boolean;
         };
         OpenFactorySessionResponse: {
             session?: components["schemas"]["FactorySessionSummary"];

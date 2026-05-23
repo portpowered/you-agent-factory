@@ -518,7 +518,7 @@ paths:
         - Factory
       operationId: openFactorySession
       summary: Open another live factory session
-      description: Opens another live factory session from a folder path and optional target selection. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
+      description: Opens another live factory session from a folder path and optional target selection. When `validateOnly` is true, the request validates the folder and optional target selection without creating a session. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
       requestBody:
         required: true
         content:
@@ -1543,6 +1543,9 @@ components:
           type: string
         target:
           $ref: '#/components/schemas/FactorySessionTargetRef'
+        validateOnly:
+          type: boolean
+          description: When true, validate the folder and optional target selection without creating a live session.
     OpenFactorySessionResponse:
       type: object
       additionalProperties: false

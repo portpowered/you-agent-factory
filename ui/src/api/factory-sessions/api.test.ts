@@ -138,6 +138,65 @@ describe("factory sessions API", () => {
     );
   });
 
+  it("posts validateOnly when checking a folder before launch", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          targets: [
+            {
+              factoryDir: "/workspace/project",
+              folderPath: "/workspace/project",
+              label: "default",
+              project: "project",
+              ref: {
+                kind: "default",
+              },
+            },
+          ],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      openFactorySession({
+        folderPath: "/workspace/project",
+        validateOnly: true,
+      }),
+    ).resolves.toEqual({
+      targets: [
+        {
+          factoryDir: "/workspace/project",
+          folderPath: "/workspace/project",
+          label: "default",
+          project: "project",
+          ref: {
+            kind: "default",
+          },
+        },
+      ],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions",
+      expect.objectContaining({
+        body: JSON.stringify({
+          folderPath: "/workspace/project",
+          validateOnly: true,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      }),
+    );
+  });
+
   it("maps validation failures into typed API errors", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

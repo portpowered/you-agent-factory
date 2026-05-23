@@ -71,17 +71,24 @@ function DashboardSessionTabsView({
     dialogError,
     dialogOpen,
     discoveredTargets,
+    folderValidation,
     folderPath,
+    handleChangeManualFactoryName,
+    handleChangeFolderPath,
     handleCloseSession,
     handleInspectFolder,
     handleOpenTarget,
+    manualFactoryName,
     openSessionMutation,
     resetDialogState,
+    selectedTargetValue,
     sessions,
     sessionsQuery,
     setActiveSessionID,
     setDialogOpen,
-    setFolderPath,
+    validateFolderMutation,
+    setSelectedTargetValue,
+    toggleSessionStreamPaused,
   } = state;
 
   useEffect(() => {
@@ -138,12 +145,19 @@ function DashboardSessionTabsView({
         <OpenSessionDialog
           dialogError={dialogError}
           discoveredTargets={discoveredTargets}
+          folderValidation={folderValidation}
           folderPath={folderPath}
-          isPending={openSessionMutation.isPending}
+          isPending={
+            openSessionMutation.isPending || validateFolderMutation.isPending
+          }
+          manualFactoryName={manualFactoryName}
           messages={messages}
-          onChangeFolderPath={setFolderPath}
+          onChangeFolderPath={handleChangeFolderPath}
+          onChangeManualFactoryName={handleChangeManualFactoryName}
           onInspectFolder={handleInspectFolder}
           onOpenTarget={handleOpenTarget}
+          onSelectTarget={setSelectedTargetValue}
+          selectedTargetValue={selectedTargetValue}
         />
       </Dialog>
     </>

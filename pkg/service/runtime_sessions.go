@@ -367,7 +367,7 @@ func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factor
 			Name: targetName,
 		}
 	}
-	result, err := fs.OpenFactorySessionFromFolder(ctx, request.FolderPath, target)
+	result, err := fs.OpenFactorySessionFromFolder(ctx, request.FolderPath, target, request.ValidateOnly != nil && *request.ValidateOnly)
 	if err != nil {
 		return factoryapi.OpenFactorySessionResponse{}, err
 	}
@@ -416,6 +416,7 @@ func (fs *FactoryService) OpenFactorySessionFromFolder(
 	ctx context.Context,
 	folderPath string,
 	target *FactorySessionTargetRef,
+	validateOnly bool,
 ) (*FactorySessionOpenResult, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("factory service is required")
@@ -431,6 +432,9 @@ func (fs *FactoryService) OpenFactorySessionFromFolder(
 		return nil, err
 	}
 	if selectedTarget == nil {
+		return &FactorySessionOpenResult{Targets: cloneFactorySessionTargets(targets)}, nil
+	}
+	if validateOnly {
 		return &FactorySessionOpenResult{Targets: cloneFactorySessionTargets(targets)}, nil
 	}
 

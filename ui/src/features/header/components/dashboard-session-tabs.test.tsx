@@ -203,7 +203,7 @@ describe("DashboardSessionTabs", () => {
     });
   });
 
-  it("opens a folder and auto-activates the created session when one target exists", async () => {
+  it("validates a folder inline and opens the only runnable target after confirmation", async () => {
     listFactorySessions
       .mockResolvedValueOnce([
         {
@@ -239,18 +239,32 @@ describe("DashboardSessionTabs", () => {
           },
         },
       ]);
-    openFactorySession.mockResolvedValue({
-      session: {
-        factoryDir: "/workspace/other",
-        folderPath: "/workspace/other",
-        id: "session-other",
-        isDefault: false,
-        project: "other",
-        target: {
-          kind: "default",
+    openFactorySession
+      .mockResolvedValueOnce({
+        targets: [
+          {
+            factoryDir: "/workspace/other",
+            folderPath: "/workspace/other",
+            label: "default",
+            project: "other",
+            ref: {
+              kind: "default",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        session: {
+          factoryDir: "/workspace/other",
+          folderPath: "/workspace/other",
+          id: "session-other",
+          isDefault: false,
+          project: "other",
+          target: {
+            kind: "default",
+          },
         },
-      },
-    });
+      });
 
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);
     const messages = getHeaderControlsMessages("en");
@@ -285,6 +299,19 @@ describe("DashboardSessionTabs", () => {
     await waitFor(() => {
       expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
         folderPath: "/workspace/other",
+        validateOnly: true,
+      });
+    });
+    expect(
+      screen.getByText(messages.openSessionLaunchReadySingleTarget),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /default/i }));
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+        folderPath: "/workspace/other",
+        target: {
+          kind: "default",
+        },
       });
     });
     await waitFor(() => {
@@ -389,6 +416,7 @@ describe("DashboardSessionTabs", () => {
     await waitFor(() => {
       expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
         folderPath: "/workspace/fleet",
+        validateOnly: true,
       });
     });
   });
@@ -495,6 +523,7 @@ describe("DashboardSessionTabs", () => {
     await waitFor(() => {
       expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
         folderPath: "/workspace/fleet",
+        validateOnly: true,
       });
     });
   });
@@ -681,6 +710,16 @@ describe("DashboardSessionTabs", () => {
         .closest("form") as HTMLFormElement,
     );
 
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+        folderPath: "/workspace/fleet",
+        validateOnly: true,
+      });
+    });
+    expect(
+      screen.getByText(messages.openSessionLaunchReadyMultipleTargets),
+    ).toBeTruthy();
+
     const targetPicker = await screen.findByRole("region", {
       name: messages.targetPickerTitle,
     });
@@ -697,6 +736,110 @@ describe("DashboardSessionTabs", () => {
         },
       });
     });
+  });
+
+  it("shows recovery-oriented inline validation feedback for invalid folders", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+    ]);
+    openFactorySession
+      .mockRejectedValueOnce(
+        new FactorySessionsAPIError(
+          'stat factory session folder "/workspace/missing": stat /workspace/missing: no such file or directory',
+          { code: "BAD_REQUEST" },
+        ),
+      )
+      .mockRejectedValueOnce(
+        new FactorySessionsAPIError(
+          'factory session folder "/workspace/factory.yaml" must be a directory',
+          { code: "BAD_REQUEST" },
+        ),
+      )
+      .mockRejectedValueOnce(
+        new FactorySessionsAPIError(
+          "read factory session folder /workspace/private: open /workspace/private: permission denied",
+          { code: "BAD_REQUEST" },
+        ),
+      )
+      .mockRejectedValueOnce(
+        new FactorySessionsAPIError(
+          'folder "/workspace/empty" does not expose any runnable factory targets',
+          { code: "BAD_REQUEST" },
+        ),
+      );
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
+
+    const folderField = screen.getByRole("textbox", {
+      name: messages.sessionFolderFieldLabel,
+    });
+    const form = screen
+      .getByRole("button", { name: messages.openSessionSubmitLabel })
+      .closest("form") as HTMLFormElement;
+
+    fireEvent.change(folderField, { target: { value: "/workspace/missing" } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "This folder does not exist yet. Check the path and choose an existing local factory folder.",
+        ),
+      ).toBeTruthy();
+    });
+
+    fireEvent.change(folderField, {
+      target: { value: "/workspace/factory.yaml" },
+    });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "This path points to a file instead of a folder. Choose a local factory folder that contains a runnable factory.",
+        ),
+      ).toBeTruthy();
+    });
+
+    fireEvent.change(folderField, { target: { value: "/workspace/private" } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "This folder could not be read from this machine. Check its permissions, then choose a readable local factory folder.",
+        ),
+      ).toBeTruthy();
+    });
+
+    fireEvent.change(folderField, { target: { value: "/workspace/empty" } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "This folder was found, but it does not contain a runnable factory. Choose a folder with a runnable factory and try again.",
+        ),
+      ).toBeTruthy();
+    });
+    expect(openFactorySession).toHaveBeenCalledTimes(4);
+    expect(screen.queryByRole("region", { name: messages.targetPickerTitle })).toBeNull();
   });
 
   it("closes the active session tab and selects the remaining session deterministically", async () => {

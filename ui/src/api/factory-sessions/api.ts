@@ -34,6 +34,7 @@ export interface ListFactorySessionsOptions {
 export interface OpenFactorySessionInput {
   folderPath: string;
   target?: FactorySessionTargetRef;
+  validateOnly?: boolean;
 }
 
 export interface OpenFactorySessionOptions {

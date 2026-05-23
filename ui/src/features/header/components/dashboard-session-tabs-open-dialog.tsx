@@ -12,12 +12,20 @@ import type {
 import { Button, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
-import type { getHeaderControlsMessages } from "../messages/header-controls";
+import {
+  type FolderValidationState,
+  folderValidationStatusMessage,
+} from "../lib/dashboard-session-tabs-utils";
+import {
+  type getHeaderControlsMessages,
+} from "../messages/header-controls";
 
 const SESSION_SECTION_LABEL_CLASS =
   "text-xs uppercase tracking-[0.18em] text-af-ink/52";
 const SESSION_DIALOG_ERROR_CLASS =
   "rounded-xl border border-af-danger/32 bg-af-danger/8 px-3 py-2 text-sm text-af-ink";
+const SESSION_DIALOG_STATUS_CLASS =
+  "rounded-xl border border-af-accent/24 bg-af-accent/8 px-3 py-2 text-sm text-af-ink";
 const SESSION_TARGET_LIST_CLASS = "grid gap-2 sm:grid-cols-2";
 const SESSION_TARGET_BUTTON_CLASS =
   "flex min-h-11 flex-col items-start justify-center rounded-xl border border-af-overlay/12 bg-af-overlay/4 px-3 py-2 text-left text-sm text-af-ink/82 transition-colors hover:border-af-accent/30 hover:bg-af-overlay/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
@@ -25,6 +33,7 @@ const SESSION_TARGET_BUTTON_CLASS =
 export function OpenSessionDialog({
   dialogError,
   discoveredTargets,
+  folderValidation,
   folderPath,
   isPending,
   messages,
@@ -34,6 +43,7 @@ export function OpenSessionDialog({
 }: {
   dialogError: FactorySessionsAPIError | null;
   discoveredTargets: FactorySessionTarget[];
+  folderValidation: FolderValidationState;
   folderPath: string;
   isPending: boolean;
   messages: ReturnType<typeof getHeaderControlsMessages>;
@@ -44,6 +54,10 @@ export function OpenSessionDialog({
   const folderFieldID = useId();
   const folderHelperTextID = useId();
   const folderPickerInputRef = useRef<HTMLInputElement | null>(null);
+  const validationStatusMessage = folderValidationStatusMessage(
+    folderValidation,
+    messages,
+  );
 
   async function handleOpenFolderPicker() {
     const directoryHandle = await pickDirectoryHandle();
@@ -119,7 +133,19 @@ export function OpenSessionDialog({
             type="file"
           />
         </div>
-        {dialogError ? (
+        {validationStatusMessage ? (
+          <p
+            className={
+              folderValidation.status === "error"
+                ? SESSION_DIALOG_ERROR_CLASS
+                : SESSION_DIALOG_STATUS_CLASS
+            }
+            role={folderValidation.status === "error" ? "alert" : "status"}
+          >
+            {validationStatusMessage}
+          </p>
+        ) : null}
+        {dialogError && folderValidation.status !== "error" ? (
           <p className={SESSION_DIALOG_ERROR_CLASS} role="alert">
             {dialogError.message}
           </p>
@@ -132,7 +158,7 @@ export function OpenSessionDialog({
           </Button>
         </div>
       </form>
-      {discoveredTargets.length > 0 ? (
+      {folderValidation.status === "ready" && discoveredTargets.length > 0 ? (
         <SessionTargetPicker
           isPending={isPending}
           messages={messages}

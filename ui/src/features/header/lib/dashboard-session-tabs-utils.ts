@@ -1,8 +1,23 @@
 import {
+  type FactorySessionTarget,
   type FactorySessionSummary,
   FactorySessionsAPIError,
 } from "../../../api/factory-sessions";
 import type { getHeaderControlsMessages } from "../messages/header-controls";
+
+export type FolderValidationState =
+  | { status: "idle" }
+  | { status: "pending" }
+  | { status: "error"; reason: FolderValidationErrorReason }
+  | { status: "ready"; targets: FactorySessionTarget[] };
+
+export type FolderValidationErrorReason =
+  | "required"
+  | "missing"
+  | "not_directory"
+  | "not_runnable"
+  | "unreadable"
+  | "unknown";
 
 export function sessionTabLabel(session: FactorySessionSummary): string {
   const namedTarget = session.target.kind === "named" ? session.target.name : "";
@@ -57,6 +72,75 @@ export function normalizeFactorySessionsError(error: unknown): FactorySessionsAP
       responseBody: error,
     },
   );
+}
+
+export function folderValidationStatusMessage(
+  validation: FolderValidationState,
+  messages: ReturnType<typeof getHeaderControlsMessages>,
+): string | null {
+  switch (validation.status) {
+    case "pending":
+      return messages.openSessionValidationPendingLabel;
+    case "ready":
+      return validation.targets.length > 1
+        ? messages.openSessionLaunchReadyMultipleTargets
+        : messages.openSessionLaunchReadySingleTarget;
+    case "error":
+      return folderValidationErrorMessage(validation.reason, messages);
+    default:
+      return null;
+  }
+}
+
+export function classifyFactorySessionFolderValidationError(
+  error: FactorySessionsAPIError,
+): FolderValidationErrorReason {
+  const message = error.message.trim();
+
+  if (message === "folderPath is required" || message === "factory session folder is required") {
+    return "required";
+  }
+  if (
+    message.includes("stat factory session folder") &&
+    message.includes("no such file or directory")
+  ) {
+    return "missing";
+  }
+  if (message.includes("must be a directory")) {
+    return "not_directory";
+  }
+  if (
+    (message.includes("read factory session folder") ||
+      message.includes("stat factory session folder")) &&
+    message.includes("permission denied")
+  ) {
+    return "unreadable";
+  }
+  if (message.includes("does not expose any runnable factory targets")) {
+    return "not_runnable";
+  }
+
+  return "unknown";
+}
+
+function folderValidationErrorMessage(
+  reason: FolderValidationErrorReason,
+  messages: ReturnType<typeof getHeaderControlsMessages>,
+): string {
+  switch (reason) {
+    case "required":
+      return messages.openSessionFolderRequiredError;
+    case "missing":
+      return messages.openSessionFolderMissingError;
+    case "not_directory":
+      return messages.openSessionFolderNotDirectoryError;
+    case "not_runnable":
+      return messages.openSessionFolderNotRunnableError;
+    case "unreadable":
+      return messages.openSessionFolderUnreadableError;
+    default:
+      return messages.openSessionFolderUnknownError;
+  }
 }
 
 function basename(path: string): string {
