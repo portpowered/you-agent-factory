@@ -340,24 +340,51 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   const heading = page.getByRole("heading", { name: "you-agent-factory" });
   const hiddenWordmark = heading.getByText("you-agent-factory");
   const slider = page.getByRole("slider", { name: "Timeline tick" });
+  const sessionTabs = page.getByRole("navigation", {
+    name: "factory sessions",
+  });
+  const rootTab = page.getByRole("tab", { name: "root" });
+  const allTabs = page.getByRole("tab");
+  const pauseButton = page.getByRole("button", {
+    name: "Pause root updates",
+  });
+  const closeSelectedSessionButton = page.getByRole("button", {
+    name: "Close root session",
+  });
   const languageButton = page.getByRole("button", {
     name: "Change language",
   });
   const streamStatus = page.getByRole("status", {
     name: /you-agent-factory event stream (connecting|live)/,
   });
-  const currentButton = page.getByRole("button", {
-    name: "Return to current tick",
-  });
   const exportButton = page.getByRole("button", { name: "Export PNG" });
+  const globalActions = page.getByRole("group", {
+    name: "Dashboard actions",
+  });
+  const timelineStatus = page.getByText(/^\d+\/\d+$/);
 
   await expectVisible(heading, "Dashboard heading");
   await expectVisible(hiddenWordmark, "Accessible you-agent-factory wordmark");
+  await expectVisible(sessionTabs, "Session tabs navigation");
+  await expectVisible(rootTab, "Default session tab");
+  await expectVisible(pauseButton, "Active session pause button");
+  await expectVisible(closeSelectedSessionButton, "Active session close button");
   await expectVisible(slider, "Timeline slider");
+  await expectVisible(timelineStatus, "Timeline status");
   await expectVisible(languageButton, "Language menu button");
   await expectVisible(streamStatus, "Dashboard stream status");
-  await expectVisible(currentButton, "Return-to-current button");
   await expectVisible(exportButton, "Export PNG button");
+  await expectVisible(globalActions, "Global header actions");
+
+  if ((await allTabs.count()) < 3) {
+    throw new Error("Dashboard header did not render the expected multi-session tab strip.");
+  }
+
+  if (await page.getByRole("button", { name: "Return to current tick" }).isVisible()) {
+    throw new Error(
+      "Dashboard header still rendered the retired return-to-current button.",
+    );
+  }
 
   const hiddenWordmarkClass = await hiddenWordmark.getAttribute("class");
   if (!hiddenWordmarkClass?.includes("sr-only")) {

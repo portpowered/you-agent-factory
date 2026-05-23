@@ -1,4 +1,3 @@
-import type { DashboardStreamState } from "../../api/dashboard/types";
 import {
   type FactorySessionSummary,
   FactorySessionsAPIError,
@@ -37,20 +36,6 @@ export function sessionStreamToggleLabel(
       : messages.pauseSessionStreamLabelTemplate,
     session,
   );
-}
-
-export function sessionStreamStatusLabel(
-  status: DashboardStreamState["status"],
-  messages: ReturnType<typeof getHeaderControlsMessages>,
-): string {
-  if (status === "live") {
-    return messages.streamStatusLiveLabel;
-  }
-  if (status === "offline") {
-    return messages.streamStatusOfflineLabel;
-  }
-
-  return messages.streamStatusConnectingLabel;
 }
 
 export function sessionTabID(sessionTabsID: string, sessionID: string): string {

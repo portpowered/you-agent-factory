@@ -69,7 +69,9 @@ describe("verifyDashboardShellConsolidation", () => {
   test("compares header and grid-card shell styles while preserving controls", async () => {
     const shellStyle = matchingShellStyle();
     const exportButton = { isVisible: vi.fn().mockResolvedValue(true) };
-    const currentButton = { isVisible: vi.fn().mockResolvedValue(true) };
+    const currentButton = { isVisible: vi.fn().mockResolvedValue(false) };
+    const timelineSlider = { isVisible: vi.fn().mockResolvedValue(true) };
+    const timelineStatus = { isVisible: vi.fn().mockResolvedValue(true) };
     const streamStatus = { isVisible: vi.fn().mockResolvedValue(true) };
     const moveButton = { isVisible: vi.fn().mockResolvedValue(true) };
     const workTotalsCard = {
@@ -82,11 +84,15 @@ describe("verifyDashboardShellConsolidation", () => {
         if (role === "status") {
           return streamStatus;
         }
+        if (role === "slider" && options?.name === "Timeline tick") {
+          return timelineSlider;
+        }
         if (options?.name === "Return to current tick") {
           return currentButton;
         }
         return exportButton;
       }),
+      getByText: vi.fn(() => timelineStatus),
       isVisible: vi.fn().mockResolvedValue(true),
       waitFor: vi.fn().mockResolvedValue(undefined),
     };
@@ -132,8 +138,8 @@ describe("verifyDashboardShellConsolidation", () => {
     expect(toolbar.getByRole).toHaveBeenCalledWith("button", {
       name: "Export PNG",
     });
-    expect(toolbar.getByRole).toHaveBeenCalledWith("button", {
-      name: "Return to current tick",
+    expect(toolbar.getByRole).toHaveBeenCalledWith("slider", {
+      name: "Timeline tick",
     });
   });
 });
