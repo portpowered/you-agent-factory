@@ -30,6 +30,12 @@ const SESSION_TAB_ACTIVE_CONTROL_BUTTON_CLASS =
   "flex items-center justify-center px-2.5 text-af-ink/62 transition-colors hover:text-af-ink";
 const SESSION_TAB_ACTIVE_TOGGLE_BUTTON_CLASS =
   "border-r border-af-overlay/12";
+const SESSION_TAB_INACTIVE_CLOSE_BUTTON_CLASS = cn(
+  "rounded-br-md rounded-tr-xl text-af-ink/34 transition-colors",
+  "hover:bg-af-overlay/8 hover:text-af-ink/68",
+  "group-focus-within:bg-af-overlay/10 group-focus-within:text-af-ink/76",
+  "focus-visible:bg-af-overlay/10 focus-visible:text-af-ink",
+);
 
 export function SessionTabButton({
   active,
@@ -122,7 +128,7 @@ export function SessionTabButton({
           aria-label={sessionCloseLabel(session, messages)}
           className={cn(
             SESSION_TAB_CLOSE_BUTTON_CLASS,
-            "rounded-br-md rounded-tr-xl text-af-ink/42 group-hover:text-af-ink/68",
+            SESSION_TAB_INACTIVE_CLOSE_BUTTON_CLASS,
           )}
           disabled={closeDisabled}
           onClick={onClose}

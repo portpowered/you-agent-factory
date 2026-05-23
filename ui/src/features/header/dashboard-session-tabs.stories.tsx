@@ -74,6 +74,9 @@ export const OpenFlowVerification = {
       canvas.getByRole("button", { name: "Pause root updates" }),
     ).toBeVisible();
     await expect(canvas.getByRole("tab", { name: "beta" })).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "Close beta session" }),
+    ).toBeVisible();
 
     await userEvent.click(openButton);
 

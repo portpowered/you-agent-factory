@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
@@ -794,6 +800,97 @@ describe("DashboardSessionTabs", () => {
       screen.getByRole("button", { name: "Close beta session" }).parentElement
         ?.className,
     ).not.toContain("border-l");
+  });
+
+  it("keeps inactive-tab close buttons quiet by default and directly operable", async () => {
+    listFactorySessions
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+        {
+          factoryDir: "/workspace/root/beta",
+          folderPath: "/workspace/root",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          target: {
+            kind: "named",
+            name: "beta",
+          },
+        },
+        {
+          factoryDir: "/workspace/root/gamma",
+          folderPath: "/workspace/root",
+          id: "session-gamma",
+          isDefault: false,
+          project: "gamma",
+          target: {
+            kind: "named",
+            name: "gamma",
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+        {
+          factoryDir: "/workspace/root/gamma",
+          folderPath: "/workspace/root",
+          id: "session-gamma",
+          isDefault: false,
+          project: "gamma",
+          target: {
+            kind: "named",
+            name: "gamma",
+          },
+        },
+      ]);
+    closeFactorySession.mockResolvedValue(undefined);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    const betaCloseButton = await screen.findByRole("button", {
+      name: "Close beta session",
+    });
+
+    expect(betaCloseButton.className).toContain("text-af-ink/34");
+    expect(betaCloseButton.className).toContain("group-focus-within:text-af-ink/76");
+    expect(betaCloseButton.className).toContain("focus-visible:text-af-ink");
+
+    betaCloseButton.focus();
+    expect(document.activeElement).toBe(betaCloseButton);
+    expect(
+      screen.getByRole("tab", { name: "root" }).getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("tab", { name: "beta" }).getAttribute("aria-selected"),
+    ).toBe("false");
+
+    fireEvent.click(betaCloseButton);
+
+    await waitFor(() => {
+      expect(closeFactorySession).toHaveBeenCalledWith("session-beta");
+    });
+    expect(
+      screen.getByRole("tab", { name: "root" }).getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(screen.queryByRole("tab", { name: "beta" })).toBeNull();
   });
 
   it("toggles the active session stream control between pause and resume labels", async () => {
