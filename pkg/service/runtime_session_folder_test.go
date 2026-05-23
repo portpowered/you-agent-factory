@@ -135,6 +135,26 @@ func TestFactoryService_OpenFactorySessionFromFolder_RejectsInvalidFolderAndTarg
 	}
 }
 
+func TestFactoryService_OpenFactorySessionFromFolder_RejectsReadableFolderWithoutRunnableTargetsWithoutMutation(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	before := harness.svc.sessions.count()
+	emptyDir := filepath.Join(harness.rootDir, "empty")
+	if err := os.Mkdir(emptyDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(empty): %v", err)
+	}
+
+	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, false); err == nil || !strings.Contains(err.Error(), `does not expose any runnable factory targets`) {
+		t.Fatalf("OpenFactorySessionFromFolder(empty runnable folder) error = %v, want no-runnable-targets failure", err)
+	}
+	if got := harness.svc.sessions.count(); got != before {
+		t.Fatalf("empty-folder open mutated live sessions to %d, want %d", got, before)
+	}
+}
+
 func TestFactoryService_OpenFactorySessionFromFolder_CanceledRequestDoesNotRegisterSession(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		defaultFactory: "beta",
