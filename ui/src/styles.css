@@ -73,6 +73,7 @@
   --color-af-success-ink: var(--color-af-foundation-success-ink);
   --color-af-danger-bright: var(--color-af-foundation-danger-bright);
   --color-af-danger-ink: var(--color-af-foundation-danger-ink);
+  --color-af-chart-grid-line: rgb(from var(--color-af-foundation-overlay) r g b / 0.032);
   --color-af-chart-queued: var(--color-af-accent-glow);
   --color-af-chart-in-flight: var(--color-af-info-ink);
   --color-af-chart-completed: var(--color-af-success-ink);
@@ -80,11 +81,21 @@
   --color-af-chart-failure-trend: var(--color-af-danger-bright);
   --color-af-chart-rework-trend: var(--color-af-accent);
   --color-af-chart-timing-trend: var(--color-af-info-bright);
+  --color-af-chart-selection-fill: var(--color-af-accent-surface);
+  --color-af-chart-selection-stroke: var(--color-af-accent-border);
+  --color-af-chart-cursor: var(--color-af-border-strong);
+  --color-af-chart-active-dot-stroke: var(--color-af-background);
   --color-af-code-ink: var(--color-af-foundation-code-ink);
   --color-on-foreground: var(--color-af-text-inverse);
   --color-af-edge-muted: var(--color-af-border-strong);
   --color-af-edge-muted-soft: var(--color-af-border);
   --color-af-edge-danger-muted: rgb(from var(--color-af-danger) r g b / 0.32);
+  --color-af-graph-controls-surface: var(--color-af-surface);
+  --color-af-graph-controls-button-surface: var(--color-af-surface-raised);
+  --color-af-graph-controls-button-surface-hover: var(--color-af-overlay);
+  --color-af-graph-controls-border: var(--color-af-border);
+  --color-af-graph-controls-text: var(--color-af-text-muted);
+  --color-af-graph-controls-text-hover: var(--color-af-text);
   --color-af-shadow: #000000;
   --shadow-af-card: 0 12px 28px rgb(from var(--color-af-shadow) r g b / 0.2);
   --shadow-af-panel: 0 18px 48px rgb(from var(--color-af-shadow) r g b / 0.24);
@@ -168,6 +179,13 @@
 
   .af-dashboard-supporting-code {
     @apply font-mono text-[0.8rem] leading-[1.45] text-af-code-ink;
+  }
+
+  .af-chart-grid-surface {
+    background-image:
+      linear-gradient(var(--color-af-chart-grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-af-chart-grid-line) 1px, transparent 1px);
+    background-size: 48px 32px;
   }
 
   .af-dashboard-widget-subtitle {

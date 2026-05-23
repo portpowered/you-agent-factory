@@ -2698,10 +2698,10 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     );
 
     expect(controls?.getAttribute("style")).toContain(
-      "--xy-controls-button-background-color-props: rgb(from var(--color-af-surface) r g b / 0.94)",
+      "--xy-controls-button-background-color-props: var(--color-af-graph-controls-button-surface)",
     );
     expect(controls?.getAttribute("style")).toContain(
-      "--xy-controls-button-color-props: rgb(from var(--color-af-ink) r g b / 0.72)",
+      "--xy-controls-button-color-props: var(--color-af-graph-controls-text)",
     );
     expect(controls?.getAttribute("style")).toContain(
       "--xy-controls-box-shadow: none",

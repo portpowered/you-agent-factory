@@ -182,7 +182,7 @@ describe("TraceRelationFlow", () => {
       screen
         .getByTestId("trace-relation-flow-controls")
         .getAttribute("data-controls-style"),
-    ).toContain("\"backgroundColor\":\"rgb(from var(--color-af-surface) r g b / 0.88)\"");
+    ).toContain("\"backgroundColor\":\"var(--color-af-graph-controls-surface)\"");
     expect(
       screen
         .getByTestId("trace-relation-flow-controls")

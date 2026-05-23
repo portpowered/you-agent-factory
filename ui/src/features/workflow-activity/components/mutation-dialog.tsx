@@ -28,7 +28,7 @@ const DIALOG_CONTENT_WITH_MEDIA_CLASS =
   "lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]";
 const DIALOG_MAIN_CLASS = "grid content-start gap-4";
 const DIALOG_CLOSE_BUTTON_CLASS =
-  "inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-border bg-af-surface-subtle text-af-text-muted outline-af-focus-ring transition hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-border bg-af-surface-subtle text-af-text-muted outline-af-focus-ring transition hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
 const DIALOG_FOOTER_CLASS = "flex flex-wrap justify-end gap-3";
 
 const MESSAGE_PANEL_TONE_CLASS = {

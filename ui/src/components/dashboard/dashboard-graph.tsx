@@ -17,16 +17,14 @@ type CSSPropertiesWithVariables = CSSProperties &
 const DASHBOARD_GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
   "--xy-controls-box-shadow": "none",
   "--xy-controls-button-background-color-hover-props":
-    "rgb(from var(--color-af-overlay) r g b / 0.1)",
+    "var(--color-af-graph-controls-button-surface-hover)",
   "--xy-controls-button-background-color-props":
-    "rgb(from var(--color-af-surface) r g b / 0.94)",
-  "--xy-controls-button-border-color-props":
-    "rgb(from var(--color-af-overlay) r g b / 0.08)",
-  "--xy-controls-button-color-hover-props": "var(--color-af-ink)",
-  "--xy-controls-button-color-props":
-    "rgb(from var(--color-af-ink) r g b / 0.72)",
-  backgroundColor: "rgb(from var(--color-af-surface) r g b / 0.88)",
-  border: "1px solid rgb(from var(--color-af-overlay) r g b / 0.08)",
+    "var(--color-af-graph-controls-button-surface)",
+  "--xy-controls-button-border-color-props": "var(--color-af-graph-controls-border)",
+  "--xy-controls-button-color-hover-props": "var(--color-af-graph-controls-text-hover)",
+  "--xy-controls-button-color-props": "var(--color-af-graph-controls-text)",
+  backgroundColor: "var(--color-af-graph-controls-surface)",
+  border: "1px solid var(--color-af-graph-controls-border)",
   borderRadius: 8,
   overflow: "hidden",
 };

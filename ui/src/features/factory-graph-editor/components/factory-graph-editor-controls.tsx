@@ -41,7 +41,7 @@ const TOOLBAR_SHELL_CLASS =
   "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:translate-x-0 max-md:justify-between";
 const MENU_LIST_CLASS = "grid gap-1";
 const MENU_ACTION_CLASS =
-  "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent-border hover:bg-af-accent-surface focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:opacity-55";
+  "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent-border hover:bg-af-accent-surface focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
 const MENU_ACTION_LABEL_CLASS = "text-sm font-semibold text-af-text";
 const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-text-muted";
 const VISIBILITY_PANEL_CLASS =

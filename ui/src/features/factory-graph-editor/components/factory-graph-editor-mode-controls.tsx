@@ -52,7 +52,7 @@ export function FactoryGraphEditorModeToggle({
       className={buttonVariants({
         className: cn(
           "shrink-0",
-          disabled && "cursor-not-allowed opacity-60",
+          disabled && "cursor-not-allowed",
           className,
         ),
         size: "icon",

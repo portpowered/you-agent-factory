@@ -134,7 +134,7 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
               <ChartLegend content={<ChartLegendContent />} />
               <Area
                 dataKey="completed"
-                fill="rgb(from var(--color-af-chart-completed) r g b / 0.2)"
+                fill="var(--color-af-success-surface)"
                 fillOpacity={1}
                 stroke="var(--color-af-chart-completed)"
                 strokeWidth={2}
@@ -142,7 +142,7 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
               />
               <Area
                 dataKey="failed"
-                fill="rgb(from var(--color-af-chart-failed) r g b / 0.18)"
+                fill="var(--color-af-danger-surface)"
                 fillOpacity={1}
                 stroke="var(--color-af-chart-failed)"
                 strokeWidth={2}

@@ -285,7 +285,7 @@ function FactoryGraphEditorNodeView({
         KIND_CLASS[data.kind],
         data.draftStatus === "addition" && "ring-2 ring-af-warning-border",
         data.draftStatus === "removal" &&
-          "border-af-danger-border bg-af-danger-surface opacity-70 ring-2 ring-af-danger-border",
+          "border-af-danger-border bg-af-danger-surface ring-2 ring-af-danger-border",
       )}
       handles={data.connectionAnchors}
       incomingHandleCount={data.incomingHandleCount}

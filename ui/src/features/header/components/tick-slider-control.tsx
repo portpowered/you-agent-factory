@@ -1,6 +1,7 @@
-import { type ChangeEvent, useId, useMemo } from "react";
+import { type ChangeEvent, useMemo } from "react";
 import { cn } from "../../../lib/cn";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
+import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import {
   getHeaderControlsMessages,
   HEADER_CURRENT_TICK_TOKEN,
@@ -14,9 +15,9 @@ const TICK_SLIDER_SHELL_CLASS = cn(
 const TICK_SLIDER_LABEL_CLASS =
   "flex min-w-36 flex-1 flex-col gap-0.5 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-text-subtle md:min-w-52";
 const TICK_SLIDER_INPUT_CLASS =
-  "h-1.5 min-w-32 flex-1 cursor-pointer accent-af-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25 disabled:cursor-not-allowed disabled:opacity-45";
+  "h-1.5 min-w-32 flex-1 cursor-pointer accent-af-accent disabled:cursor-not-allowed disabled:accent-af-text-disabled";
 const TICK_SLIDER_META_CLASS =
-  "ml-auto flex items-center";
+  "ml-auto flex w-full items-center justify-between gap-1.5 md:w-auto md:justify-start";
 const TICK_SLIDER_STATUS_CLASS =
   "whitespace-nowrap text-xs font-medium tabular-nums text-af-text-muted";
 const MINIMUM_TIMELINE_TICKS = 2;
@@ -72,7 +73,6 @@ function formatCurrentTickStatus(
 }
 
 export function TickSliderControl({ locale }: TickSliderControlProps) {
-  const tickStatusID = useId();
   const eventTicks = useFactoryTimelineStore((state) =>
     state.events.map((event) => event.context.tick),
   );
@@ -80,6 +80,7 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
     Object.keys(state.worldViewCache),
   );
   const latestTick = useFactoryTimelineStore((state) => state.latestTick);
+  const mode = useFactoryTimelineStore((state) => state.mode);
   const selectTick = useFactoryTimelineStore((state) => state.selectTick);
   const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
   const setCurrentMode = useFactoryTimelineStore(
@@ -97,21 +98,9 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
     bounds.maxTick,
   );
   const messages = getHeaderControlsMessages(locale);
-  const sliderValueText = isDisabled
-    ? messages.waitingForMoreTicks
-    : formatCurrentTickStatus(
-        messages.currentTickStatusTemplate,
-        displayedTick,
-        bounds.maxTick,
-      );
 
   const handleTickChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextTick = Number(event.target.value);
-    if (nextTick >= bounds.maxTick) {
-      setCurrentMode();
-      return;
-    }
-    selectTick(nextTick);
+    selectTick(Number(event.target.value));
   };
 
   return (
@@ -119,9 +108,7 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
       <label className={TICK_SLIDER_LABEL_CLASS}>
         <span className="sr-only">{messages.sliderLabel}</span>
         <input
-          aria-describedby={tickStatusID}
           aria-label={messages.sliderAriaLabel}
-          aria-valuetext={sliderValueText}
           className={TICK_SLIDER_INPUT_CLASS}
           disabled={isDisabled}
           max={bounds.maxTick}
@@ -133,9 +120,37 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
       </label>
 
       <div className={TICK_SLIDER_META_CLASS}>
-        <output className={TICK_SLIDER_STATUS_CLASS} id={tickStatusID}>
-          {sliderValueText}
-        </output>
+        <span className={TICK_SLIDER_STATUS_CLASS}>
+          {isDisabled
+            ? messages.waitingForMoreTicks
+            : formatCurrentTickStatus(
+                messages.currentTickStatusTemplate,
+                displayedTick,
+                bounds.maxTick,
+              )}
+        </span>
+
+        <DashboardHeaderActionButton
+          aria-label={messages.returnToCurrentTickLabel}
+          compact
+          disabled={isDisabled || mode === "current"}
+          onClick={setCurrentMode}
+        >
+          <svg
+            aria-hidden="true"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+            viewBox="0 0 24 24"
+            width="18"
+          >
+            <path d="M6 5.75v12.5" />
+            <path d="m10 8.25 8 3.75-8 3.75v-7.5" />
+          </svg>
+        </DashboardHeaderActionButton>
       </div>
     </div>
   );

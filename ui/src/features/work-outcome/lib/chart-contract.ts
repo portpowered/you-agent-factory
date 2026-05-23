@@ -52,7 +52,7 @@ export const DASHBOARD_CHART_POINT_CLASS = cn(
   DASHBOARD_CHART_POINT_WEIGHT_CLASS,
 );
 export const DASHBOARD_CHART_SURFACE_CLASS =
-  "block min-h-0 w-full rounded-lg [background:linear-gradient(rgb(from_var(--color-af-overlay)_r_g_b_/_0.032)_1px,transparent_1px),linear-gradient(90deg,rgb(from_var(--color-af-overlay)_r_g_b_/_0.032)_1px,transparent_1px)] [background-size:48px_32px]";
+  "af-chart-grid-surface block min-h-0 w-full rounded-lg";
 
 const DASHBOARD_CHART_SEMANTIC_STYLES: Record<
   DashboardChartSemanticRole,
