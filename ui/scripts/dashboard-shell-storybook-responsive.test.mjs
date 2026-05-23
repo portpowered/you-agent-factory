@@ -80,7 +80,7 @@ describe("verifyDashboardShellConsolidation", () => {
     };
     const toolbar = {
       evaluate: vi.fn().mockResolvedValue(shellStyle),
-      getByRole: vi.fn((role, options) => {
+      getByRole: vi.fn((role, _options) => {
         if (role === "status") {
           return streamStatus;
         }

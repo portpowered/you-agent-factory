@@ -2,16 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 
-import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
-import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
-import { DashboardSessionTabs } from "./components/dashboard-session-tabs";
-import { getHeaderControlsMessages } from "./messages/header-controls";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import { DashboardSessionTabs } from "./dashboard-session-tabs";
+import { getHeaderControlsMessages } from "../messages/header-controls";
 
 const listFactorySessions = vi.fn();
 const openFactorySession = vi.fn();
 const closeFactorySession = vi.fn();
 
-vi.mock("../../api/factory-sessions", () => ({
+vi.mock("../../../api/factory-sessions", () => ({
   FactorySessionsAPIError: class FactorySessionsAPIError extends Error {
     public readonly code: string;
     public readonly targets?: unknown[];
@@ -31,7 +31,7 @@ vi.mock("../../api/factory-sessions", () => ({
   openFactorySession: (...args: unknown[]) => openFactorySession(...args),
 }));
 
-describe("DashboardSessionTabs manual override", () => {
+describe("DashboardSessionTabs launch target selection", () => {
   beforeEach(() => {
     listFactorySessions.mockReset();
     openFactorySession.mockReset();
@@ -41,19 +41,43 @@ describe("DashboardSessionTabs manual override", () => {
     });
   });
 
-  it("uses the manual named-factory override instead of the detected selection", async () => {
-    listFactorySessions.mockResolvedValue([
-      {
-        factoryDir: "/workspace/root",
-        folderPath: "/workspace/root",
-        id: "~default",
-        isDefault: true,
-        project: "root",
-        target: {
-          kind: "default",
+  it("launches the selected named factory instead of falling back to the default target", async () => {
+    listFactorySessions
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
         },
-      },
-    ]);
+      ])
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+        {
+          factoryDir: "/workspace/fleet/beta",
+          folderPath: "/workspace/fleet",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          target: {
+            kind: "named",
+            name: "beta",
+          },
+        },
+      ]);
     openFactorySession
       .mockResolvedValueOnce({
         targets: [
@@ -101,7 +125,9 @@ describe("DashboardSessionTabs manual override", () => {
       ).toBeTruthy();
     });
 
-    openDialog(messages);
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
     fireEvent.change(
       screen.getByRole("textbox", {
         name: messages.sessionFolderFieldLabel,
@@ -110,42 +136,24 @@ describe("DashboardSessionTabs manual override", () => {
         target: { value: "/workspace/fleet" },
       },
     );
-    fireEvent.change(
-      screen.getByRole("textbox", {
-        name: messages.manualFactoryNameFieldLabel,
-      }),
-      {
-        target: { value: "beta" },
-      },
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: messages.openSessionSubmitLabel })
+        .closest("form") as HTMLFormElement,
     );
-    submitDialog(messages);
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
         folderPath: "/workspace/fleet",
-        target: {
-          kind: "named",
-          name: "beta",
-        },
         validateOnly: true,
       });
     });
-    expect(
-      screen.getByText(
-        "Manual override beta will launch instead of the detected selection.",
-      ),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Launch will use folder /workspace/fleet and factory beta.",
-      ),
-    ).toBeTruthy();
 
     fireEvent.change(
       screen.getByRole("combobox", {
         name: messages.selectSessionTargetLabel,
       }),
-      { target: { value: "default" } },
+      { target: { value: "named:beta" } },
     );
     fireEvent.click(
       screen.getByRole("button", { name: messages.openSessionTargetLabel }),
@@ -160,23 +168,11 @@ describe("DashboardSessionTabs manual override", () => {
         },
       });
     });
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      "session-beta",
+    );
   });
-
 });
-
-function openDialog(messages: ReturnType<typeof getHeaderControlsMessages>) {
-  fireEvent.click(
-    screen.getByRole("button", { name: messages.openSessionButtonLabel }),
-  );
-}
-
-function submitDialog(messages: ReturnType<typeof getHeaderControlsMessages>) {
-  fireEvent.submit(
-    screen
-      .getByRole("button", { name: messages.openSessionSubmitLabel })
-      .closest("form") as HTMLFormElement,
-  );
-}
 
 function renderWithQueryClient(view: ReactElement) {
   const queryClient = new QueryClient({

@@ -26,11 +26,9 @@ import {
   normalizeManualFactoryName,
   type FolderValidationState,
   folderValidationStatusMessage,
+  selectedFactorySessionTarget,
 } from "../lib/dashboard-session-tabs-utils";
-import {
-  type getHeaderControlsMessages,
-} from "../messages/header-controls";
-import { selectedFactorySessionTarget } from "../lib/dashboard-session-tabs-utils";
+import type { getHeaderControlsMessages } from "../messages/header-controls";
 
 const SESSION_SECTION_LABEL_CLASS =
   "text-xs uppercase tracking-[0.18em] text-af-ink/52";

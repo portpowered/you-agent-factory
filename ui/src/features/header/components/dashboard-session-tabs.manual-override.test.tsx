@@ -2,17 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 
-import { FactorySessionsAPIError } from "../../api/factory-sessions";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../api/session-routing";
-import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
-import { DashboardSessionTabs } from "./components/dashboard-session-tabs";
-import { getHeaderControlsMessages } from "./messages/header-controls";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import { DashboardSessionTabs } from "./dashboard-session-tabs";
+import { getHeaderControlsMessages } from "../messages/header-controls";
 
 const listFactorySessions = vi.fn();
 const openFactorySession = vi.fn();
 const closeFactorySession = vi.fn();
 
-vi.mock("../../api/factory-sessions", () => ({
+vi.mock("../../../api/factory-sessions", () => ({
   FactorySessionsAPIError: class FactorySessionsAPIError extends Error {
     public readonly code: string;
     public readonly targets?: unknown[];
@@ -32,7 +31,7 @@ vi.mock("../../api/factory-sessions", () => ({
   openFactorySession: (...args: unknown[]) => openFactorySession(...args),
 }));
 
-describe("DashboardSessionTabs invalid manual override", () => {
+describe("DashboardSessionTabs manual override", () => {
   beforeEach(() => {
     listFactorySessions.mockReset();
     openFactorySession.mockReset();
@@ -42,7 +41,7 @@ describe("DashboardSessionTabs invalid manual override", () => {
     });
   });
 
-  it("shows an inline error and blocks launch when the manual override target is invalid", async () => {
+  it("uses the manual named-factory override instead of the detected selection", async () => {
     listFactorySessions.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
@@ -55,18 +54,43 @@ describe("DashboardSessionTabs invalid manual override", () => {
         },
       },
     ]);
-    openFactorySession.mockRejectedValueOnce(
-      new FactorySessionsAPIError("target validation failed", {
-        code: "BAD_REQUEST",
+    openFactorySession
+      .mockResolvedValueOnce({
         targets: [
           {
-            field: "target.name",
-            id: "target_not_found",
-            kind: "factory-session-validation",
+            factoryDir: "/workspace/fleet",
+            folderPath: "/workspace/fleet",
+            label: "default",
+            project: "fleet",
+            ref: {
+              kind: "default",
+            },
+          },
+          {
+            factoryDir: "/workspace/fleet/beta",
+            folderPath: "/workspace/fleet",
+            label: "beta",
+            project: "beta",
+            ref: {
+              kind: "named",
+              name: "beta",
+            },
           },
         ],
-      }),
-    );
+      })
+      .mockResolvedValueOnce({
+        session: {
+          factoryDir: "/workspace/fleet/beta",
+          folderPath: "/workspace/fleet",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          target: {
+            kind: "named",
+            name: "beta",
+          },
+        },
+      });
 
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);
     const messages = getHeaderControlsMessages("en");
@@ -77,9 +101,7 @@ describe("DashboardSessionTabs invalid manual override", () => {
       ).toBeTruthy();
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
-    );
+    openDialog(messages);
     fireEvent.change(
       screen.getByRole("textbox", {
         name: messages.sessionFolderFieldLabel,
@@ -93,35 +115,67 @@ describe("DashboardSessionTabs invalid manual override", () => {
         name: messages.manualFactoryNameFieldLabel,
       }),
       {
-        target: { value: "gamma" },
+        target: { value: "beta" },
       },
     );
-    fireEvent.submit(
-      screen
-        .getByRole("button", { name: messages.openSessionSubmitLabel })
-        .closest("form") as HTMLFormElement,
-    );
+    submitDialog(messages);
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
         folderPath: "/workspace/fleet",
         target: {
           kind: "named",
-          name: "gamma",
+          name: "beta",
         },
         validateOnly: true,
       });
     });
     expect(
       screen.getByText(
-        "This factory name is not launchable from the chosen folder. Check the name or clear the override and use a detected target.",
+        "Manual override beta will launch instead of the detected selection.",
       ),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: messages.openSessionTargetLabel }),
-    ).toBeNull();
+      screen.getByText(
+        "Launch will use folder /workspace/fleet and factory beta.",
+      ),
+    ).toBeTruthy();
+
+    fireEvent.change(
+      screen.getByRole("combobox", {
+        name: messages.selectSessionTargetLabel,
+      }),
+      { target: { value: "default" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
+    );
+
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+        folderPath: "/workspace/fleet",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      });
+    });
   });
 });
+
+function openDialog(messages: ReturnType<typeof getHeaderControlsMessages>) {
+  fireEvent.click(
+    screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+  );
+}
+
+function submitDialog(messages: ReturnType<typeof getHeaderControlsMessages>) {
+  fireEvent.submit(
+    screen
+      .getByRole("button", { name: messages.openSessionSubmitLabel })
+      .closest("form") as HTMLFormElement,
+  );
+}
 
 function renderWithQueryClient(view: ReactElement) {
   const queryClient = new QueryClient({
