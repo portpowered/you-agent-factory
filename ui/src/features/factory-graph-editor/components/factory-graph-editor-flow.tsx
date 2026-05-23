@@ -470,15 +470,15 @@ function semanticIconKind(kind: FactoryGraphNodeKind): GraphSemanticIconKind {
 function semanticIconClassName(kind: FactoryGraphNodeKind) {
   switch (kind) {
     case "resource":
-      return "text-af-success-ink/76";
+      return "text-af-success";
     case "worker":
-      return "text-af-info/78";
+      return "text-af-info";
     case "workstation":
-      return "text-af-ink/62";
+      return "text-af-text";
     case "work-type":
-      return "text-af-info/74";
+      return "text-af-info";
     case "work-state":
-      return "text-af-ink/58";
+      return "text-af-text-muted";
   }
 }
 

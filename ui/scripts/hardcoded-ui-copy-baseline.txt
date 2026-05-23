@@ -148,17 +148,17 @@ src/features/factory-graph-editor/lib/factory-graph-editor-save-summary.ts|48|12
 src/features/factory-graph-editor/lib/factory-graph-editor-save-summary.ts|52|12|string-literal|This save will apply .
 src/features/factory-graph-editor/lib/factory-graph-editor-save-summary.ts|56|10|string-literal|This save will apply and .
 src/features/flowchart/components/current-activity-node-chrome.tsx|26|10|string-literal|text-[0.65rem] font-semibold uppercase tracking-[0.08em]
-src/features/flowchart/components/current-activity-place-node.tsx|151|14|string-literal|border-af-border-strong bg-af-surface text-af-text
-src/features/flowchart/components/current-activity-place-node.tsx|153|12|string-literal|border-dashed border-af-info-border bg-af-surface-subtle text-af-text
-src/features/flowchart/components/current-activity-place-node.tsx|168|14|string-literal|Terminal
-src/features/flowchart/components/current-activity-place-node.tsx|171|14|string-literal|Failed
-src/features/flowchart/components/current-activity-place-node.tsx|173|12|string-literal|Queue
-src/features/flowchart/components/current-activity-place-node.tsx|177|12|string-literal|Resource
-src/features/flowchart/components/current-activity-place-node.tsx|180|35|string-literal|Limit
-src/features/flowchart/components/current-activity-place-node.tsx|180|45|string-literal|Constraint
-src/features/flowchart/components/current-activity-place-node.tsx|208|12|string-literal|Processing state
-src/features/flowchart/components/current-activity-place-node.tsx|281|12|string-literal|resource tokens
-src/features/flowchart/components/current-activity-workstation-node.tsx|227|21|jsx-prop|Active
+src/features/flowchart/components/current-activity-place-node.tsx|152|14|string-literal|border-af-border-strong bg-af-surface text-af-text
+src/features/flowchart/components/current-activity-place-node.tsx|154|12|string-literal|border-dashed border-af-info-border bg-af-surface-subtle text-af-text
+src/features/flowchart/components/current-activity-place-node.tsx|169|14|string-literal|Terminal
+src/features/flowchart/components/current-activity-place-node.tsx|172|14|string-literal|Failed
+src/features/flowchart/components/current-activity-place-node.tsx|174|12|string-literal|Queue
+src/features/flowchart/components/current-activity-place-node.tsx|178|12|string-literal|Resource
+src/features/flowchart/components/current-activity-place-node.tsx|181|35|string-literal|Limit
+src/features/flowchart/components/current-activity-place-node.tsx|181|45|string-literal|Constraint
+src/features/flowchart/components/current-activity-place-node.tsx|209|12|string-literal|Processing state
+src/features/flowchart/components/current-activity-place-node.tsx|282|12|string-literal|resource tokens
+src/features/flowchart/components/current-activity-workstation-node.tsx|230|21|jsx-prop|Active
 src/features/flowchart/components/graph-semantic-icon.tsx|39|12|string-literal|Active work
 src/features/flowchart/components/graph-semantic-icon.tsx|48|12|string-literal|Constraint
 src/features/flowchart/components/graph-semantic-icon.tsx|58|12|string-literal|Cron workstation
