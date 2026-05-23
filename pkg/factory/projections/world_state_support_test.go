@@ -653,7 +653,7 @@ func scriptResponseEvent(tick int, eventTime time.Time, payload factoryapi.Scrip
 }
 
 func generatedWorkForProjectionTest(item interfaces.FactoryWorkItem, requestID string) factoryapi.Work {
-	return factoryapi.Work{
+	work := factoryapi.Work{
 		Name:                     item.DisplayName,
 		RequestId:                stringPtrForProjectionTest(requestID),
 		Tags:                     generatedStringMapForProjectionTest(item.Tags),
@@ -664,6 +664,34 @@ func generatedWorkForProjectionTest(item interfaces.FactoryWorkItem, requestID s
 		WorkId:                   stringPtrForProjectionTest(item.ID),
 		WorkTypeName:             stringPtrForProjectionTest(item.WorkTypeID),
 	}
+	if len(item.Content) == 0 {
+		return work
+	}
+	content := make(factoryapi.WorkContent, 0, len(item.Content))
+	for _, part := range item.Content {
+		var encoded factoryapi.WorkContentPart
+		switch part.Type {
+		case interfaces.WorkContentPartTypeText:
+			if err := encoded.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+				Type: factoryapi.WorkContentPartTypeText,
+				Text: part.Text,
+			}); err != nil {
+				panic(err)
+			}
+		case interfaces.WorkContentPartTypeImage:
+			if err := encoded.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
+				Type: factoryapi.WorkContentPartTypeImage,
+				File: part.File,
+			}); err != nil {
+				panic(err)
+			}
+		default:
+			panic("unsupported test content part type: " + string(part.Type))
+		}
+		content = append(content, encoded)
+	}
+	work.Content = &content
+	return work
 }
 
 func generatedOutputWorkForProjectionTest(payload interfaces.WorkstationResponsePayload) []factoryapi.Work {

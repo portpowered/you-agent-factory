@@ -233,6 +233,7 @@ func cloneWorkstationInputs(inputs []WorkstationInput) []WorkstationInput {
 		if input.WorkItem != nil {
 			item := *input.WorkItem
 			item.PreviousChainingTraceIDs = cloneStringSlice(item.PreviousChainingTraceIDs)
+			item.Content = CloneWorkContentParts(item.Content)
 			item.Tags = cloneStringMap(item.Tags)
 			clone[i].WorkItem = &item
 		}

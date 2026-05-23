@@ -479,7 +479,11 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 		TraceID:                  "trace-1",
 		PlaceID:                  "task:init",
 		PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
-		Tags:                     map[string]string{"priority": "high"},
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "original content",
+		}},
+		Tags: map[string]string{"priority": "high"},
 	}
 	request := workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 		DispatchID:   "dispatch-1",
@@ -532,6 +536,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 	}
 
 	dispatchSource.Inputs[0].WorkItem.PreviousChainingTraceIDs[0] = "chain-z"
+	dispatchSource.Inputs[0].WorkItem.Content[0].Text = "mutated content"
 	dispatchSource.Inputs[0].WorkItem.Tags["priority"] = "low"
 
 	state := reducer.state()
@@ -549,6 +554,9 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 	if completionInput.Tags["priority"] != "high" {
 		t.Fatalf("completed consumed input tags = %#v, want priority high", completionInput.Tags)
 	}
+	if len(completionInput.Content) != 1 || completionInput.Content[0].Text != "original content" {
+		t.Fatalf("completed consumed input content = %#v, want original content preserved", completionInput.Content)
+	}
 
 	providerInput := state.ProviderSessions[0].ConsumedInputs[0].WorkItem
 	if len(providerInput.PreviousChainingTraceIDs) != 2 || providerInput.PreviousChainingTraceIDs[0] != "chain-a" {
@@ -556,6 +564,9 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 	}
 	if providerInput.Tags["priority"] != "high" {
 		t.Fatalf("provider-session consumed input tags = %#v, want priority high", providerInput.Tags)
+	}
+	if len(providerInput.Content) != 1 || providerInput.Content[0].Text != "original content" {
+		t.Fatalf("provider-session consumed input content = %#v, want original content preserved", providerInput.Content)
 	}
 }
 

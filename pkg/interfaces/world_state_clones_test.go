@@ -136,6 +136,38 @@ func TestCloneFactoryWorkItems_PreservesNilForEmptyInput(t *testing.T) {
 	}
 }
 
+func TestCloneWorkstationInputs_DetachesNestedMutableWorkItemFields(t *testing.T) {
+	original := []WorkstationInput{{
+		TokenID: "token-1",
+		PlaceID: "task:init",
+		WorkItem: &FactoryWorkItem{
+			ID:                       "work-1",
+			WorkTypeID:               "task",
+			PreviousChainingTraceIDs: []string{"chain-a"},
+			Content: []WorkContentPart{{
+				Type: WorkContentPartTypeText,
+				Text: "original content",
+			}},
+			Tags: map[string]string{"priority": "high"},
+		},
+	}}
+
+	cloned := CloneWorkstationInputs(original)
+	cloned[0].WorkItem.PreviousChainingTraceIDs[0] = "chain-z"
+	cloned[0].WorkItem.Content[0].Text = "mutated content"
+	cloned[0].WorkItem.Tags["priority"] = "low"
+
+	if original[0].WorkItem.PreviousChainingTraceIDs[0] != "chain-a" {
+		t.Fatalf("original previous chaining traces = %#v, want chain-a unchanged", original[0].WorkItem.PreviousChainingTraceIDs)
+	}
+	if original[0].WorkItem.Content[0].Text != "original content" {
+		t.Fatalf("original content = %#v, want text unchanged", original[0].WorkItem.Content)
+	}
+	if original[0].WorkItem.Tags["priority"] != "high" {
+		t.Fatalf("original tags = %#v, want priority unchanged", original[0].WorkItem.Tags)
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this clone contract test keeps nil, empty, and detached-copy assertions together on the public seam.
 func TestCloneToken_PreserveNilAndEmptyValues(t *testing.T) {
 	tests := []struct {
