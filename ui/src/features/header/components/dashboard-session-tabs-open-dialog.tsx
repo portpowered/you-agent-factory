@@ -38,8 +38,12 @@ const SESSION_DIALOG_ERROR_CLASS =
   "rounded-xl border border-af-danger/32 bg-af-danger/8 px-3 py-2 text-sm text-af-ink";
 const SESSION_DIALOG_STATUS_CLASS =
   "rounded-xl border border-af-accent/24 bg-af-accent/8 px-3 py-2 text-sm text-af-ink";
+const SESSION_TARGET_PICKER_CLASS =
+  "grid gap-3 rounded-2xl border border-af-overlay/12 bg-af-overlay/4 p-4";
 const SESSION_TARGET_BUTTON_CLASS =
   "flex min-h-11 flex-col items-start justify-center rounded-xl border border-af-overlay/12 bg-af-overlay/4 px-3 py-2 text-left text-sm text-af-ink/82 transition-colors hover:border-af-accent/30 hover:bg-af-overlay/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
+const SESSION_LAUNCH_SUMMARY_CLASS =
+  "grid gap-2 rounded-xl border border-af-overlay/12 bg-af-surface/72 px-3 py-3";
 
 export function OpenSessionDialog({
   dialogError,
@@ -75,6 +79,7 @@ export function OpenSessionDialog({
   const manualFactoryFieldID = useId();
   const manualFactoryHelperTextID = useId();
   const folderPickerInputRef = useRef<HTMLInputElement | null>(null);
+  const hasFolderCandidate = folderPath.trim().length > 0;
   const validationStatusMessage = folderValidationStatusMessage(
     folderValidation,
     messages,
@@ -186,6 +191,7 @@ export function OpenSessionDialog({
                 ? SESSION_DIALOG_ERROR_CLASS
                 : SESSION_DIALOG_STATUS_CLASS
             }
+            aria-live="polite"
             role={folderValidation.status === "error" ? "alert" : "status"}
           >
             {validationStatusMessage}
@@ -197,7 +203,7 @@ export function OpenSessionDialog({
           </p>
         ) : null}
         <div className="flex justify-end">
-          <Button disabled={isPending} type="submit">
+          <Button disabled={isPending || !hasFolderCandidate} type="submit">
             {isPending
               ? messages.openSessionSubmitPendingLabel
               : messages.openSessionSubmitLabel}
@@ -255,7 +261,10 @@ function SessionTargetPicker({
       : launchTarget?.label ?? null;
 
   return (
-    <section aria-label={messages.targetPickerTitle} className="grid gap-3">
+    <section
+      aria-label={messages.targetPickerTitle}
+      className={SESSION_TARGET_PICKER_CLASS}
+    >
       <div className="grid gap-1">
         <p className={SESSION_SECTION_LABEL_CLASS}>{messages.targetPickerTitle}</p>
         <p className={cn("text-sm text-af-ink/72", DASHBOARD_BODY_TEXT_CLASS)}>
@@ -288,31 +297,37 @@ function SessionTargetPicker({
         </div>
       ) : null}
       {normalizedManualFactoryName !== "" ? (
-        <p className={SESSION_DIALOG_STATUS_CLASS} role="status">
+        <p
+          aria-live="polite"
+          className={SESSION_DIALOG_STATUS_CLASS}
+          role="status"
+        >
           {messages.manualFactoryNamePrecedenceTemplate
             .replace("{{factoryName}}", normalizedManualFactoryName)
             .replace("{{detectedTarget}}", selectedTarget?.label ?? messages.selectSessionTargetPlaceholder)}
         </p>
       ) : null}
       {launchTarget ? (
-        <div className={SESSION_TARGET_BUTTON_CLASS}>
-          <span className="font-semibold text-af-ink">{launchTarget.label}</span>
-          <span className="truncate text-xs text-af-ink/58">
-            {launchTarget.project || launchTarget.factoryDir}
-          </span>
+        <div className={SESSION_LAUNCH_SUMMARY_CLASS}>
+          <div className={SESSION_TARGET_BUTTON_CLASS}>
+            <span className="font-semibold text-af-ink">{launchTarget.label}</span>
+            <span className="truncate text-xs text-af-ink/58">
+              {launchTarget.project || launchTarget.factoryDir}
+            </span>
+          </div>
+          {launchTargetName ? (
+            <p className={cn("text-sm text-af-ink/72", DASHBOARD_BODY_TEXT_CLASS)}>
+              {messages.openSessionLaunchSummaryTemplate
+                .replace("{{folderPath}}", launchTarget.folderPath)
+                .replace("{{factoryName}}", launchTargetName)}
+            </p>
+          ) : null}
         </div>
       ) : (
         <p className={SESSION_DIALOG_STATUS_CLASS} role="status">
           {messages.selectSessionTargetPrompt}
         </p>
       )}
-      {launchTargetName ? (
-        <p className={cn("text-sm text-af-ink/72", DASHBOARD_BODY_TEXT_CLASS)}>
-          {messages.openSessionLaunchSummaryTemplate
-            .replace("{{folderPath}}", launchTarget?.folderPath ?? "")
-            .replace("{{factoryName}}", launchTargetName)}
-        </p>
-      ) : null}
       <div className="flex justify-end">
         <Button
           disabled={isPending || launchTarget == null}

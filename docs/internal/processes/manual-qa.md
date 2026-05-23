@@ -92,3 +92,4 @@ Date: `2026-05-23`
 - `cd ui && bun run build` passed.
 - `cd ui && bun run build-storybook` passed.
 - `cd ui && bun run storybook:responsive-check` passed after narrowing two brittle pre-existing responsive assertions in the shared dashboard session-tab/header verifiers and adding the new observer/editor graph parity stories, confirming visible graph controls and no horizontal overflow at mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) widths.
+- `cd ui && bun x vitest run --config vitest.storybook.config.ts --project=storybook src/features/header/dashboard-session-tabs.stories.tsx` passed in a browser-backed runner after aligning the story with the current folder-check and target-select flow, confirming the localized open-session labels, multi-target select control, launch summary, and newly opened session tab activation.

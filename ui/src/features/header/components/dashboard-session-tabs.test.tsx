@@ -282,18 +282,22 @@ describe("DashboardSessionTabs", () => {
     const folderField = screen.getByRole("textbox", {
       name: messages.sessionFolderFieldLabel,
     });
+    const inspectFolderButton = screen.getByRole("button", {
+      name: messages.openSessionSubmitLabel,
+    });
+    expect(inspectFolderButton.getAttribute("disabled")).not.toBeNull();
     expect(folderField.getAttribute("aria-describedby")).toBeTruthy();
     expect(screen.getByText(messages.sessionFolderHelperText)).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
     fireEvent.change(
       screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
       {
         target: { value: "/workspace/other" },
       },
     );
+    expect(inspectFolderButton.getAttribute("disabled")).toBeNull();
     fireEvent.submit(
-      screen
-        .getByRole("button", { name: messages.openSessionSubmitLabel })
-        .closest("form") as HTMLFormElement,
+      inspectFolderButton.closest("form") as HTMLFormElement,
     );
 
     await waitFor(() => {
@@ -851,6 +855,11 @@ describe("DashboardSessionTabs", () => {
     const targetSelect = picker.getByRole("combobox", {
       name: messages.selectSessionTargetLabel,
     });
+    expect(
+      picker.getByText(
+        messages.selectSessionTargetPrompt,
+      ),
+    ).toBeTruthy();
 
     expect(
       picker
@@ -859,6 +868,11 @@ describe("DashboardSessionTabs", () => {
     ).not.toBeNull();
 
     fireEvent.change(targetSelect, { target: { value: "named:beta" } });
+    expect(
+      picker.getByText(
+        "Launch will use folder /workspace/fleet and factory beta.",
+      ),
+    ).toBeTruthy();
     fireEvent.click(
       picker.getByRole("button", { name: messages.openSessionTargetLabel }),
     );

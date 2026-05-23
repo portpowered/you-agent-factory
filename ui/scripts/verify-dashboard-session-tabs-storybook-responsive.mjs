@@ -7,7 +7,7 @@ export async function verifyDashboardSessionTabs(
     name: "factory sessions",
   });
   const openButton = page.getByRole("button", {
-    name: "Open another session",
+    name: "Open factory folder",
   });
 
   await expectVisible(tabsNavigation, "Session tabs navigation");

@@ -264,7 +264,7 @@ describe("verifyDashboardSessionTabs", () => {
         if (role === "button" && options?.name === "Close root session") {
           return closeRootButton;
         }
-        if (role === "button" && options?.name === "Open another session") {
+        if (role === "button" && options?.name === "Open factory folder") {
           return openButton;
         }
         if (role === "button" && options?.name === "Close beta session") {

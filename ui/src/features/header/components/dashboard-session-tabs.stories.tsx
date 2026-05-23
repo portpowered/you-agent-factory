@@ -10,6 +10,7 @@ import {
 } from "../../../stories/dashboardStorySupport";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
+import { getHeaderControlsMessages } from "./messages/header-controls";
 
 const defaultSession = {
   factoryDir: "/workspace/root",
@@ -56,13 +57,14 @@ export const OpenFlowVerification = {
   parameters: sessionTabsStoryParameters(),
   render: () => <SessionTabsStory />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const messages = getHeaderControlsMessages("en");
     const canvas = within(canvasElement);
     const tabsNavigation = await canvas.findByRole("navigation", {
-      name: "factory sessions",
+      name: messages.sessionTabsLabel,
     });
     const openButton = within(canvasElement.ownerDocument.body).getByRole(
       "button",
-      { name: "Open another session" },
+      { name: messages.openSessionButtonLabel },
     );
 
     await expect(tabsNavigation).toBeVisible();
@@ -82,24 +84,36 @@ export const OpenFlowVerification = {
 
     const dialog = await within(canvasElement.ownerDocument.body).findByRole(
       "dialog",
-      { name: "Open factory session" },
+      { name: messages.openSessionDialogTitle },
     );
     const folderField = within(dialog).getByRole("textbox", {
-      name: "Factory folder",
+      name: messages.sessionFolderFieldLabel,
     });
     await userEvent.clear(folderField);
     await userEvent.type(folderField, "/workspace/catalog");
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "Inspect folder" }),
+      within(dialog).getByRole("button", { name: messages.openSessionSubmitLabel }),
     );
 
     await expect(
-      await within(dialog).findByRole("region", { name: "Pick a runnable target" }),
+      await within(dialog).findByRole("region", { name: messages.targetPickerTitle }),
     ).toBeVisible();
-    await expect(within(dialog).getByText("Choose one runnable target from this folder."))
-      .toBeVisible();
+    await expect(
+      within(dialog).getByText(messages.selectSessionTargetPrompt),
+    ).toBeVisible();
+    await userEvent.selectOptions(
+      within(dialog).getByRole("combobox", {
+        name: messages.selectSessionTargetLabel,
+      }),
+      "named:review",
+    );
+    await expect(
+      within(dialog).getByText(
+        "Launch will use folder /workspace/catalog and factory Catalog / review.",
+      ),
+    ).toBeVisible();
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "Catalog / review catalog" }),
+      within(dialog).getByRole("button", { name: messages.openSessionTargetLabel }),
     );
 
     await waitFor(() => {
@@ -170,9 +184,42 @@ function sessionTabsStoryParameters() {
               typeof init?.body === "string"
                 ? (JSON.parse(init.body) as {
                     folderPath?: string;
+                    validateOnly?: boolean;
                     target?: { kind?: string; name?: string };
                   })
                 : {};
+
+            if (
+              body.folderPath === "/workspace/catalog" &&
+              body.validateOnly === true
+            ) {
+              return {
+                body: {
+                  targets: [
+                    {
+                      factoryDir: "/workspace/catalog/review",
+                      folderPath: "/workspace/catalog",
+                      label: "Catalog / review",
+                      project: "catalog",
+                      ref: {
+                        kind: "named",
+                        name: "review",
+                      },
+                    },
+                    {
+                      factoryDir: "/workspace/catalog/plan",
+                      folderPath: "/workspace/catalog",
+                      label: "Catalog / plan",
+                      project: "catalog",
+                      ref: {
+                        kind: "named",
+                        name: "plan",
+                      },
+                    },
+                  ],
+                },
+              };
+            }
 
             if (
               body.folderPath === "/workspace/catalog" &&
@@ -187,34 +234,6 @@ function sessionTabsStoryParameters() {
                 status: 201,
               };
             }
-
-            if (body.folderPath === "/workspace/catalog") {
-              return {
-                body: {
-                  targets: [
-                    {
-                      factoryDir: "/workspace/catalog/review",
-                      label: "Catalog / review",
-                      project: "catalog",
-                      ref: {
-                        kind: "named",
-                        name: "review",
-                      },
-                    },
-                    {
-                      factoryDir: "/workspace/catalog/plan",
-                      label: "Catalog / plan",
-                      project: "catalog",
-                      ref: {
-                        kind: "named",
-                        name: "plan",
-                      },
-                    },
-                  ],
-                },
-              };
-            }
-
             return {
               body: {
                 code: "BAD_REQUEST",
