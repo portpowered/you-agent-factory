@@ -215,6 +215,6 @@ describe("TraceRelationFlow", () => {
     );
     expect(edges[0]?.style?.stroke).toBe("var(--color-af-success)");
     expect(edges[0]?.style?.strokeDasharray).toBe("7 5");
-    expect(edges[1]?.style?.stroke).toBe("var(--color-af-danger-ink)");
+    expect(edges[1]?.style?.stroke).toBe("var(--color-af-danger-text)");
   });
 });

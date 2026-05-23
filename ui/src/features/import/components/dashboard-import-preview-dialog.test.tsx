@@ -62,7 +62,11 @@ describe("DashboardImportPreviewDialog", () => {
         .getAttribute("src"),
     ).toBe("blob:factory-preview");
     expect(
-      within(previewDialog)
+      within(
+        within(previewDialog)
+          .getByText(messages.embeddedFactoryLabel)
+          .closest("div") as HTMLElement,
+      )
         .getByText("Dropped Factory")
         .className,
     ).toContain("text-af-text");
