@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
@@ -63,6 +63,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const { locale: resolvedLocale } = useAppLocale(locale);
   const { dashboardLayout, persistDashboardLayout } = useDashboardLayout();
   const now = useDashboardNow();
+  const [isInlineWidgetPickerOpen, setInlineWidgetPickerOpen] = useState(false);
   const incrementRefreshToken = useDashboardBentoStore(
     (state) => state.incrementRefreshToken,
   );
@@ -124,7 +125,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     timelineEvents,
     worldViewCache,
   });
-  const cards = buildDashboardCards({
+  const widgetCards = buildWidgetCards({
     currentSelection,
     importController,
     locale: resolvedLocale,
@@ -137,6 +138,12 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     snapshot,
     traceGridState,
     workChartModel,
+  });
+  const cards = buildDashboardCards({
+    cards: widgetCards,
+    isInlineWidgetPickerOpen,
+    locale: resolvedLocale,
+    onInlineWidgetPickerOpenChange: setInlineWidgetPickerOpen,
   });
   const renderableLayout = getRenderableDashboardLayout(
     dashboardLayout,
@@ -172,6 +179,35 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
 }
 
 interface DashboardCardBuilderArgs {
+  cards: AgentBentoLayoutCard[];
+  isInlineWidgetPickerOpen: boolean;
+  locale?: string;
+  onInlineWidgetPickerOpenChange: (open: boolean) => void;
+}
+
+function buildDashboardCards({
+  cards,
+  isInlineWidgetPickerOpen,
+  locale,
+  onInlineWidgetPickerOpenChange,
+}: DashboardCardBuilderArgs): AgentBentoLayoutCard[] {
+  return [
+    ...cards,
+    {
+      id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+      widgetType: DASHBOARD_WIDGET_IDS.addWidget,
+      children: (
+        <InlineAddWidgetCard
+          locale={locale}
+          onPickerOpenChange={onInlineWidgetPickerOpenChange}
+          pickerOpen={isInlineWidgetPickerOpen}
+        />
+      ),
+    },
+  ];
+}
+
+interface DashboardWidgetCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
   importController: ReturnType<typeof useCurrentActivityImportController>;
   locale?: string;
@@ -188,7 +224,7 @@ interface DashboardCardBuilderArgs {
   workChartModel: ReturnType<typeof useWorkOutcomeChart>;
 }
 
-function buildDashboardCards({
+function buildWidgetCards({
   currentSelection,
   importController,
   locale,
@@ -201,7 +237,7 @@ function buildDashboardCards({
   snapshot,
   traceGridState,
   workChartModel,
-}: DashboardCardBuilderArgs): AgentBentoLayoutCard[] {
+}: DashboardWidgetCardBuilderArgs): AgentBentoLayoutCard[] {
   return [
     {
       id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workTotals,
@@ -304,11 +340,6 @@ function buildDashboardCards({
           widgetId={DASHBOARD_WIDGET_IDS.trace}
         />
       ),
-    },
-    {
-      id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
-      widgetType: DASHBOARD_WIDGET_IDS.addWidget,
-      children: <InlineAddWidgetCard locale={locale} />,
     },
   ];
 }
