@@ -250,6 +250,14 @@ func mutateInlineWorkerMutableNestedFields(sourceWorker *interfaces.WorkerConfig
 func assertDetachedInlineWorkerMutableNestedFields(t *testing.T, workerDef *interfaces.WorkerConfig) {
 	t.Helper()
 
+	assertDetachedInlineWorkerArgsAndResources(t, workerDef)
+	assertDetachedInlineWorkerAuthAndLinear(t, workerDef)
+	assertDetachedInlineWorkerOperations(t, workerDef)
+}
+
+func assertDetachedInlineWorkerArgsAndResources(t *testing.T, workerDef *interfaces.WorkerConfig) {
+	t.Helper()
+
 	if !reflect.DeepEqual(workerDef.Args, []string{"--mode", "inline"}) {
 		t.Fatalf("expected inline worker args to stay detached, got %#v", workerDef.Args)
 	}
@@ -261,6 +269,11 @@ func assertDetachedInlineWorkerMutableNestedFields(t *testing.T, workerDef *inte
 	}}) {
 		t.Fatalf("expected inline worker resources to stay detached, got %#v", workerDef.Resources)
 	}
+}
+
+func assertDetachedInlineWorkerAuthAndLinear(t *testing.T, workerDef *interfaces.WorkerConfig) {
+	t.Helper()
+
 	if workerDef.Auth == nil || workerDef.Auth.SecretRef != "linear-token" {
 		t.Fatalf("expected inline worker auth to stay detached, got %#v", workerDef.Auth)
 	}
@@ -279,6 +292,11 @@ func assertDetachedInlineWorkerMutableNestedFields(t *testing.T, workerDef *inte
 	if workerDef.Linear.Claim == nil || workerDef.Linear.Claim.AssigneeField != "owner" {
 		t.Fatalf("expected inline worker linear claim to stay detached, got %#v", workerDef.Linear.Claim)
 	}
+}
+
+func assertDetachedInlineWorkerOperations(t *testing.T, workerDef *interfaces.WorkerConfig) {
+	t.Helper()
+
 	if len(workerDef.Operations) != 1 {
 		t.Fatalf("expected one inline operation, got %#v", workerDef.Operations)
 	}
