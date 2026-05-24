@@ -14,6 +14,7 @@ import {
   AgentBentoLayout,
   type AgentBentoLayoutItem,
 } from "./agent-bento";
+import { InlineAddWidgetCard } from "./inline-add-widget-card";
 
 const defaultLayout: AgentBentoLayoutItem[] = [
   { h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 },
@@ -229,6 +230,99 @@ describe("AgentBentoLayout", () => {
       expect(activityItem.getAttribute("style")).not.toBe(initialStyle);
       expect(onLayoutChange).toHaveBeenCalled();
     });
+  });
+
+  it("lets the inline add-widget card move through the shared grid handle and keeps a single add-widget instance", async () => {
+    const onLayoutChange = vi.fn();
+
+    render(
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "activity",
+            widgetType: "activity",
+            children: (
+              <AgentBentoCard title="Current activity">
+                <p>Active workstation graph goes here.</p>
+              </AgentBentoCard>
+            ),
+          },
+          {
+            id: "add-widget::inline-add",
+            widgetType: "add-widget",
+            children: <InlineAddWidgetCard />,
+          },
+        ]}
+        initialWidth={960}
+        layout={[
+          { h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 },
+          {
+            h: 4,
+            id: "add-widget::inline-add",
+            widgetType: "add-widget",
+            w: 4,
+            x: 6,
+            y: 0,
+          },
+        ]}
+        onLayoutChange={onLayoutChange}
+      />,
+    );
+
+    const addWidgetItem = getGridItem("Add widget");
+    const initialStyle = addWidgetItem.getAttribute("style");
+    const dragHandle = within(addWidgetItem).getByRole("button", {
+      name: "Move Add widget",
+    });
+
+    fireEvent.mouseDown(dragHandle, {
+      button: 0,
+      buttons: 1,
+      clientX: 640,
+      clientY: 48,
+    });
+
+    await waitFor(() => {
+      expect(addWidgetItem.classList.contains("react-draggable-dragging")).toBe(
+        true,
+      );
+    });
+
+    fireEvent.mouseMove(document, {
+      buttons: 1,
+      clientX: 360,
+      clientY: 196,
+    });
+    fireEvent.mouseUp(document, {
+      button: 0,
+      clientX: 360,
+      clientY: 196,
+    });
+
+    await waitFor(() => {
+      expect(addWidgetItem.getAttribute("style")).not.toBe(initialStyle);
+      expect(onLayoutChange).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "add-widget::inline-add",
+            widgetType: "add-widget",
+          }),
+        ]),
+      );
+    });
+
+    const latestLayout = onLayoutChange.mock.calls.at(-1)?.[0] as
+      | AgentBentoLayoutItem[]
+      | undefined;
+
+    expect(
+      latestLayout?.filter((item) => item.widgetType === "add-widget"),
+    ).toHaveLength(1);
+    expect(
+      within(addWidgetItem).getByText(
+        "The widget picker opens here in the next step.",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders real dashboard feature cards through the shared bento seam", () => {

@@ -13,6 +13,11 @@ describe("InlineAddWidgetCard", () => {
     expect(
       screen.getByText("The widget picker opens here in the next step."),
     ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Move Add widget" }).getAttribute(
+        "data-bento-drag-handle",
+      ),
+    ).toBe("true");
   });
 
   it("localizes the visible add-widget card title", () => {

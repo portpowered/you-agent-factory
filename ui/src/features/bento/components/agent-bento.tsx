@@ -84,6 +84,11 @@ const BENTO_CARD_BODY_CLASS = cn(
 );
 const BENTO_CARD_BODY_COMPACT_CLASS = "gap-2 p-3";
 
+interface AgentBentoDragHandleProps {
+  compact?: boolean;
+  title: string;
+}
+
 function toGridLayout(layout: AgentBentoLayoutItem[]): Layout {
   return layout.map((item) => ({
     h: item.h,
@@ -259,35 +264,44 @@ export function AgentBentoCard({
           )}
         >
           {headerAction}
-          <button
-            aria-label={`Move ${title}`}
-            className={cn(
-              BENTO_DRAG_HANDLE_CLASS,
-              compactChrome && BENTO_DRAG_HANDLE_COMPACT_CLASS,
-            )}
-            data-bento-drag-handle="true"
-            type="button"
-          >
-            <svg
-              aria-hidden="true"
-              fill="none"
-              height="18"
-              viewBox="0 0 18 18"
-              width="18"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M9 1.5v15M9 1.5 6.75 3.75M9 1.5l2.25 2.25M9 16.5l-2.25-2.25M9 16.5l2.25-2.25M1.5 9h15M1.5 9l2.25-2.25M1.5 9l2.25 2.25M16.5 9l-2.25-2.25M16.5 9l-2.25 2.25"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.7"
-              />
-            </svg>
-          </button>
+          <AgentBentoDragHandle compact={compactChrome} title={title} />
         </div>
       </header>
       <div className={cardBodyClassName}>{children}</div>
     </DashboardPanelShell>
+  );
+}
+
+export function AgentBentoDragHandle({
+  compact = false,
+  title,
+}: AgentBentoDragHandleProps) {
+  return (
+    <button
+      aria-label={`Move ${title}`}
+      className={cn(
+        BENTO_DRAG_HANDLE_CLASS,
+        compact && BENTO_DRAG_HANDLE_COMPACT_CLASS,
+      )}
+      data-bento-drag-handle="true"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        fill="none"
+        height="18"
+        viewBox="0 0 18 18"
+        width="18"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M9 1.5v15M9 1.5 6.75 3.75M9 1.5l2.25 2.25M9 16.5l-2.25-2.25M9 16.5l2.25-2.25M1.5 9h15M1.5 9l2.25-2.25M1.5 9l2.25 2.25M16.5 9l-2.25-2.25M16.5 9l-2.25 2.25"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.7"
+        />
+      </svg>
+    </button>
   );
 }
