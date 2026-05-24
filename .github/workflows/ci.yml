@@ -105,11 +105,48 @@ jobs:
         timeout-minutes: 10
         run: make api-smoke
 
-  verify-tests:
-    name: Website and Backend Tests
+  ui-coverage:
+    name: UI Coverage
     runs-on: ubuntu-latest
     needs: verify-build-contracts
-    timeout-minutes: 45
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up Bun for the dashboard workspace
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Set up Node for dashboard runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dashboard dependencies
+        timeout-minutes: 10
+        run: make ui-deps
+
+      - name: Run dashboard coverage suite
+        timeout-minutes: 15
+        run: make test-ui-coverage
+
+      - name: Run replay coverage verification
+        timeout-minutes: 10
+        run: make ui-replay-coverage-check
+
+  ui-browser-integration:
+    name: UI Browser Integration
+    runs-on: ubuntu-latest
+    needs: verify-build-contracts
+    timeout-minutes: 25
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -138,22 +175,29 @@ jobs:
         timeout-minutes: 10
         run: make ui-install-playwright
 
-      - name: Run dashboard test suite
+      - name: Run dashboard browser integration suite
         timeout-minutes: 15
-        run: make ui-test
+        run: make test-ui-browser-integration
 
-      - name: Run dashboard coverage suite
-        timeout-minutes: 15
-        run: make ui-test-coverage
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    needs: verify-build-contracts
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-      - name: Run replay coverage verification
-        timeout-minutes: 10
-        run: make ui-replay-coverage-check
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
 
       - name: Run backend coverage suite
         timeout-minutes: 15
-        run: make test-coverage-go
+        run: make test-backend-coverage
 
       - name: Run backend functional suite
         timeout-minutes: 15
-        run: make test-functional
+        run: make test-backend-functional

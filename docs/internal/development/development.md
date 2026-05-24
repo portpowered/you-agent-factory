@@ -61,13 +61,17 @@ The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automati
 
 The maintainer-owned CLI release policy lives in [CLI release policy](cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
 
-The workflow currently executes these repository-owned commands in order:
+The workflow currently executes these repository-owned commands through one prerequisite lane and three required verification lanes:
 
 1. `cd ui && bun install --frozen-lockfile`
 2. `cd ui && bun run tsc`
 3. `make verify-build-contracts`
-4. `cd ui && bunx playwright install chromium`
-5. `make verify-tests`
+4. `make test-ui-coverage`
+5. `make ui-replay-coverage-check`
+6. `cd ui && bunx playwright install chromium`
+7. `make test-ui-browser-integration`
+8. `make test-backend-coverage`
+9. `make test-backend-functional`
 
 Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and pins Bun to `1.3.12` in `.github/workflows/ci.yml`; keep that version aligned with the checked-in `ui/package.json` `packageManager` pin when either file changes.
 
@@ -85,7 +89,7 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make verify-build-contracts` is the repository-owned build-contract lane used by CI after dependency setup. It runs `make typecheck`, `make ui-build`, `make build`, `make lint`, and `make api-smoke` in the same order the `verify-build-contracts` GitHub Actions job enforces.
 
-`make verify-tests` is the repository-owned test aggregate used by CI after Playwright setup. It runs `make test-ui-coverage`, `make ui-replay-coverage-check`, `make test-ui-browser-integration`, `make test-backend-coverage`, and `make test-backend-functional`.
+`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make ui-replay-coverage-check`, `make test-ui-browser-integration`, `make test-backend-coverage`, and `make test-backend-functional`. The GitHub Actions workflow fans those commands out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Tests` jobs so required UI failures point at one lane instead of a mixed `make ui-test` rerun.
 
 Use the lane-specific targets below when you need to rerun one required CI lane locally without replaying the full suite:
 

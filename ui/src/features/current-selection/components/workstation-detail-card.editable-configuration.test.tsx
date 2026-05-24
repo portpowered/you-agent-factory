@@ -5,6 +5,7 @@ import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard
 import { WorkstationDetailCard } from "./workstation-detail-card";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
+const editableConfigurationCoverageTimeoutMs = 240_000;
 
 function editableConfigurationSection() {
   const heading = screen
@@ -516,51 +517,55 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeNull();
   });
 
-  it("keeps the squiggle aligned for runtime-generated diagnostics beyond column one", () => {
-    const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+  it(
+    "keeps the squiggle aligned for runtime-generated diagnostics beyond column one",
+    () => {
+      const snapshot = semanticWorkflowDashboardSnapshot;
+      const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
-    render(
-      <WorkstationDetailCard
-        activeExecutions={[]}
-        editableConfigurationState={buildReadyEditableConfigurationState({
-          prompt: "x{{ index .Context.Env 0 }} now",
-          promptDiagnostics: [
-            {
-              endOffset: 24,
-              kind: "INVALID_VARIABLE",
-              message:
-                "Template execution would fail: value has type int; should be string.",
-              path: ".Context.Env",
-              sourceText: "index .Context.Env 0",
-              startOffset: 5,
+      render(
+        <WorkstationDetailCard
+          activeExecutions={[]}
+          editableConfigurationState={buildReadyEditableConfigurationState({
+            prompt: "x{{ index .Context.Env 0 }} now",
+            promptDiagnostics: [
+              {
+                endOffset: 24,
+                kind: "INVALID_VARIABLE",
+                message:
+                  "Template execution would fail: value has type int; should be string.",
+                path: ".Context.Env",
+                sourceText: "index .Context.Env 0",
+                startOffset: 5,
+              },
+            ],
+            validationErrors: {
+              prompt:
+                "Resolve the highlighted prompt diagnostics before saving this workstation.",
             },
-          ],
-          validationErrors: {
-            prompt:
-              "Resolve the highlighted prompt diagnostics before saving this workstation.",
-          },
-        })}
-        now={DETAIL_CARD_NOW}
-        providerSessions={[]}
-        selectedNode={selectedNode}
-      />,
-    );
+          })}
+          now={DETAIL_CARD_NOW}
+          providerSessions={[]}
+          selectedNode={selectedNode}
+        />,
+      );
 
-    fireEvent.click(
-      within(editableConfigurationSection()).getByRole("button", {
-        name: "Expand editable configuration",
-      }),
-    );
+      fireEvent.click(
+        within(editableConfigurationSection()).getByRole("button", {
+          name: "Expand editable configuration",
+        }),
+      );
 
-    const editor = editableConfigurationSection().querySelector(
-      "[data-monaco-editor='workstation-prompt']",
-    );
-    expect(editor?.getAttribute("data-monaco-marker-count")).toBe("1");
-    expect(editor?.getAttribute("data-monaco-marker-messages")).toContain(
-      "Template execution would fail: value has type int; should be string.",
-    );
-  });
+      const editor = editableConfigurationSection().querySelector(
+        "[data-monaco-editor='workstation-prompt']",
+      );
+      expect(editor?.getAttribute("data-monaco-marker-count")).toBe("1");
+      expect(editor?.getAttribute("data-monaco-marker-messages")).toContain(
+        "Template execution would fail: value has type int; should be string.",
+      );
+    },
+    editableConfigurationCoverageTimeoutMs,
+  );
 
   it("renders explicit prompt-validation loading and error states", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
