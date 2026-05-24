@@ -163,6 +163,9 @@ describe("ProviderSessionDetailPanel", () => {
       );
     });
     expect(
+      screen.getByRole("heading", { name: "Maintainer diagnostics" }),
+    ).toBeTruthy();
+    expect(
       screen.getByText("invalid character '}' after object key:value pair"),
     ).toBeTruthy();
   });
@@ -216,8 +219,11 @@ describe("ProviderSessionDetailPanel", () => {
         "The selected session was parsed, but it did not contain any transcript-visible entries.",
       );
     });
-    expect(screen.getByRole("heading", { name: "Parse diagnostics" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Session analysis" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Token usage" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Maintainer diagnostics" }),
+    ).toBeTruthy();
     expect(screen.getByText("Unknown event on line 1")).toBeTruthy();
     expect(screen.getByText("Unknown event on line 2")).toBeTruthy();
   });
@@ -296,9 +302,13 @@ describe("ProviderSessionDetailPanel", () => {
     });
 
     expect(screen.getByText("2026/05/18/rollout-sess_active.jsonl")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Session analysis" })).toBeTruthy();
     expect(screen.getByText("Turn 1")).toBeTruthy();
     expect(screen.getByText("list_dir")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Reasoning" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Maintainer diagnostics" }),
+    ).toBeTruthy();
     expect(screen.getByText("182")).toBeTruthy();
     expect(screen.getByText("unexpected end of JSON input")).toBeTruthy();
     expect(screen.getByText("Unknown event on line 6")).toBeTruthy();
@@ -644,11 +654,12 @@ describe("ProviderSessionDetailPanel", () => {
       .map((heading) => heading.textContent ?? "");
     const transcriptIndex = headingNames.indexOf("Transcript");
     const supportingHeadings = [
+      "Session analysis",
       "Token usage",
       "Turns",
       "Function calls",
       "Reasoning",
-      "Parse diagnostics",
+      "Maintainer diagnostics",
     ];
 
     expect(transcriptIndex).toBeGreaterThan(-1);

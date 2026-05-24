@@ -28,10 +28,13 @@ export interface ProviderSessionDetailMessages {
   lineLabel: (params: { lineNumber: number }) => string;
   lineCountLabel: string;
   loadingState: string;
+  maintainerDiagnosticsDescription: string;
+  maintainerDiagnosticsHeading: string;
   malformedLineCountLabel: string;
   kindLabel: string;
   missingState: string;
   modifiedAtLabel: string;
+  parseSummaryHeading: string;
   providerLabel: string;
   rawTimestampDetailsLabel: string;
   noTimestamp: string;
@@ -46,6 +49,8 @@ export interface ProviderSessionDetailMessages {
   reasoningUnavailable: string;
   relativePathLabel: string;
   responseItemsLabel: string;
+  sessionAnalysisDescription: string;
+  sessionAnalysisHeading: string;
   selectedSessionHeading: string;
   sessionIdLabel: string;
   sessionLabel: string;

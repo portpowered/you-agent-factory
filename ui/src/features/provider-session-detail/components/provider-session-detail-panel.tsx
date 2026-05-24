@@ -121,10 +121,13 @@ function LoadedProviderSessionDetailPanel({
           <SourceFileSection detail={detail} locale={locale} />
           {detailState.status !== "empty" &&
           detailState.status !== "success" ? (
-            <>
+            <SecondarySection
+              description={messages.sessionAnalysisDescription}
+              heading={messages.sessionAnalysisHeading}
+            >
               <ParseOverview detail={detail} locale={locale} />
               <TokenUsageSection detail={detail} locale={locale} />
-            </>
+            </SecondarySection>
           ) : null}
           {detailState.status === "empty" ? (
             <StatusNotice>{messages.emptyState}</StatusNotice>
@@ -144,13 +147,16 @@ function LoadedProviderSessionDetailPanel({
           {detailState.status === "success" ? (
             <>
               <TranscriptSection detail={detail} locale={locale} />
-              <div className="grid gap-4 rounded-xl border border-af-overlay/8 bg-af-overlay/3 p-4">
+              <SecondarySection
+                description={messages.sessionAnalysisDescription}
+                heading={messages.sessionAnalysisHeading}
+              >
                 <ParseOverview detail={detail} locale={locale} />
                 <TokenUsageSection detail={detail} locale={locale} />
                 <TurnsSection detail={detail} locale={locale} />
                 <FunctionCallsSection detail={detail} locale={locale} />
                 <ReasoningSection detail={detail} locale={locale} />
-              </div>
+              </SecondarySection>
               <ParseDiagnosticsSection detail={detail} locale={locale} />
             </>
           ) : null}
@@ -254,9 +260,7 @@ function ParseOverview({
 
   return (
     <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.parseDiagnosticsHeading}
-      </h5>
+      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.parseSummaryHeading}</h5>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <DetailMetric
           label={messages.eventCountLabel}
@@ -497,45 +501,74 @@ function ParseDiagnosticsSection({
   }
 
   return (
-    <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.parseErrorsHeading}
-      </h5>
-      <div className="grid gap-3">
-        {detail.parse.parseErrors.map((error) => (
-          <article
-            className={PROVIDER_SESSION_CARD_CLASS}
-            key={`parse-error-${error.lineNumber}`}
-          >
-            <strong>{messages.lineLabel({ lineNumber: error.lineNumber })}</strong>
-            <p className={cn("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
-              {error.message}
-            </p>
-          </article>
-        ))}
-        {detail.parse.unknownEvents.map((event) => (
-          <article
-            className={PROVIDER_SESSION_CARD_CLASS}
-            key={`unknown-event-${event.lineNumber}`}
-          >
-            <strong>
-              {messages.unknownEventOnLineLabel({ lineNumber: event.lineNumber })}
-            </strong>
-            <p
-              className={cn(
-                "m-0 mt-1.5 text-af-ink/62",
-                DASHBOARD_SUPPORTING_TEXT_CLASS,
-              )}
+    <SecondarySection
+      description={messages.maintainerDiagnosticsDescription}
+      heading={messages.maintainerDiagnosticsHeading}
+    >
+      <section className="grid gap-2.5">
+        <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
+          {messages.parseErrorsHeading}
+        </h5>
+        <div className="grid gap-3">
+          {detail.parse.parseErrors.map((error) => (
+            <article
+              className={PROVIDER_SESSION_CARD_CLASS}
+              key={`parse-error-${error.lineNumber}`}
             >
-              {[
-                event.type ? `type=${event.type}` : null,
-                event.payloadType ? `payload=${event.payloadType}` : null,
-              ]
-                .filter(Boolean)
-                .join(" / ")}
-            </p>
-          </article>
-        ))}
+              <strong>{messages.lineLabel({ lineNumber: error.lineNumber })}</strong>
+              <p className={cn("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
+                {error.message}
+              </p>
+            </article>
+          ))}
+          {detail.parse.unknownEvents.map((event) => (
+            <article
+              className={PROVIDER_SESSION_CARD_CLASS}
+              key={`unknown-event-${event.lineNumber}`}
+            >
+              <strong>
+                {messages.unknownEventOnLineLabel({ lineNumber: event.lineNumber })}
+              </strong>
+              <p
+                className={cn(
+                  "m-0 mt-1.5 text-af-ink/62",
+                  DASHBOARD_SUPPORTING_TEXT_CLASS,
+                )}
+              >
+                {[
+                  event.type ? `type=${event.type}` : null,
+                  event.payloadType ? `payload=${event.payloadType}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" / ")}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </SecondarySection>
+  );
+}
+
+function SecondarySection({
+  children,
+  description,
+  heading,
+}: {
+  children: ReactNode;
+  description: string;
+  heading: string;
+}) {
+  return (
+    <section className="grid gap-4 rounded-xl border border-af-overlay/10 bg-af-overlay/3 p-4">
+      <div className="grid gap-1">
+        <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{heading}</h5>
+        <p className={cn("m-0 text-af-ink/68", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          {description}
+        </p>
+      </div>
+      <div className="grid gap-3">
+        {children}
       </div>
     </section>
   );

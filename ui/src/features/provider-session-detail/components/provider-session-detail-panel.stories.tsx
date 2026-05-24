@@ -129,7 +129,12 @@ export const MixedTranscript = {
                 ],
                 lineCount: 6,
                 malformedLineCount: 0,
-                parseErrors: [],
+                parseErrors: [
+                  {
+                    lineNumber: 7,
+                    message: "unexpected end of JSON input",
+                  },
+                ],
                 reasoning: [
                   {
                     order: 3,
@@ -155,8 +160,14 @@ export const MixedTranscript = {
                     startedAt: "2026-05-20T17:35:24Z",
                   },
                 ],
-                unknownEventCount: 0,
-                unknownEvents: [],
+                unknownEventCount: 1,
+                unknownEvents: [
+                  {
+                    lineNumber: 8,
+                    payloadType: "mystery_payload",
+                    type: "mystery_event",
+                  },
+                ],
               },
               providerSession: {
                 id: providerSessionVerificationSessionID,
@@ -254,7 +265,14 @@ export const MixedTranscript = {
 
     expect(transcriptIndex).toBeGreaterThan(-1);
 
-    for (const headingName of ["Token usage", "Turns", "Function calls", "Reasoning"]) {
+    for (const headingName of [
+      "Session analysis",
+      "Token usage",
+      "Turns",
+      "Function calls",
+      "Reasoning",
+      "Maintainer diagnostics",
+    ]) {
       const headingIndex = headingNames.indexOf(headingName);
       if (headingIndex !== -1) {
         expect(transcriptIndex).toBeLessThan(headingIndex);
@@ -284,6 +302,8 @@ export const MixedTranscript = {
         "Reasoning occurred for this step, but plaintext content is intentionally unavailable.",
       ),
     ).toBeTruthy();
+    expect(canvas.getByText("unexpected end of JSON input")).toBeTruthy();
+    expect(canvas.getByText("Unknown event on line 8")).toBeTruthy();
     expect(
       canvas
         .getAllByTitle("2026-05-20T17:35:27Z")
@@ -304,12 +324,14 @@ export const ZhCnLocalizedChrome = {
 
     await canvas.findByRole("heading", { name: "令牌用量" });
 
+    expect(canvas.getByRole("heading", { name: "会话分析" })).toBeTruthy();
     expect(canvas.getByText("提供方会话")).toBeTruthy();
     expect(canvas.getByText("提供方")).toBeTruthy();
     expect(canvas.getAllByText("类型").length).toBeGreaterThan(0);
     expect(canvas.getAllByText("用户").length).toBeGreaterThan(0);
     expect(canvas.getAllByText("助手").length).toBeGreaterThan(0);
     expect(canvas.getByRole("heading", { name: "令牌用量" })).toBeTruthy();
+    expect(canvas.getByRole("heading", { name: "维护诊断" })).toBeTruthy();
     expect(canvas.getByLabelText("已选会话详情").className).toContain(
       "af-provider-session-sans",
     );

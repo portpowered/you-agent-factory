@@ -38,11 +38,15 @@ const providerSessionDetailMessagesByLocale = {
     lineLabel: ({ lineNumber }) => `Line ${lineNumber}`,
     lineCountLabel: "Lines",
     loadingState: "Loading session details...",
+    maintainerDiagnosticsDescription:
+      "Malformed records and unknown events remain available here for parser debugging without competing with the transcript.",
+    maintainerDiagnosticsHeading: "Maintainer diagnostics",
     malformedLineCountLabel: "Malformed lines",
     kindLabel: "Kind",
     missingState:
       "The selected provider-session file could not be found under the configured Codex sessions directory.",
     modifiedAtLabel: "Modified at",
+    parseSummaryHeading: "Parse summary",
     providerLabel: "Provider",
     rawTimestampDetailsLabel: "Raw ISO timestamp",
     noTimestamp: "No timestamp",
@@ -59,6 +63,9 @@ const providerSessionDetailMessagesByLocale = {
     reasoningUnavailable: "No reasoning entries were recorded.",
     relativePathLabel: "Relative path",
     responseItemsLabel: "Response items",
+    sessionAnalysisDescription:
+      "Counts, inferred turns, token usage, and supporting summaries stay available here as secondary inspection aids.",
+    sessionAnalysisHeading: "Session analysis",
     selectedSessionHeading: "Selected session details",
     sessionIdLabel: "Session ID",
     sessionLabel: "Provider session",
@@ -124,11 +131,15 @@ const providerSessionDetailMessagesByLocale = {
     lineLabel: ({ lineNumber }) => `${lineNumber} 行`,
     lineCountLabel: "行数",
     loadingState: "セッション詳細を読み込み中...",
+    maintainerDiagnosticsDescription:
+      "不正なレコードや不明なイベントは、文字起こしの読み筋を邪魔しない範囲で、ここから解析デバッグ用に確認できます。",
+    maintainerDiagnosticsHeading: "メンテナー向け診断",
     malformedLineCountLabel: "不正な行数",
     kindLabel: "種別",
     missingState:
       "選択した provider-session ファイルは、設定済み Codex sessions ディレクトリ配下に見つかりませんでした。",
     modifiedAtLabel: "更新日時",
+    parseSummaryHeading: "解析サマリー",
     providerLabel: "プロバイダー",
     rawTimestampDetailsLabel: "ISO タイムスタンプ",
     noTimestamp: "タイムスタンプなし",
@@ -145,6 +156,9 @@ const providerSessionDetailMessagesByLocale = {
     reasoningUnavailable: "推論エントリは記録されていません。",
     relativePathLabel: "相対パス",
     responseItemsLabel: "応答項目",
+    sessionAnalysisDescription:
+      "件数、推定ターン、トークン使用量、補助サマリーを、読み取りの主導線ではなく補助情報としてここにまとめます。",
+    sessionAnalysisHeading: "セッション分析",
     selectedSessionHeading: "選択中セッションの詳細",
     sessionIdLabel: "セッション ID",
     sessionLabel: "プロバイダー セッション",
@@ -212,11 +226,15 @@ const providerSessionDetailMessagesByLocale = {
     lineLabel: ({ lineNumber }) => `${lineNumber}행`,
     lineCountLabel: "줄 수",
     loadingState: "세션 세부 정보를 불러오는 중...",
+    maintainerDiagnosticsDescription:
+      "잘못된 레코드와 알 수 없는 이벤트는 대화 기록 흐름을 방해하지 않도록 이곳에 유지하며 파서 디버깅에 활용할 수 있습니다.",
+    maintainerDiagnosticsHeading: "유지보수 진단",
     malformedLineCountLabel: "잘못된 줄 수",
     kindLabel: "유형",
     missingState:
       "선택한 provider-session 파일을 구성된 Codex sessions 디렉터리 아래에서 찾을 수 없습니다.",
     modifiedAtLabel: "수정 시각",
+    parseSummaryHeading: "파싱 요약",
     providerLabel: "공급자",
     rawTimestampDetailsLabel: "원시 ISO 타임스탬프",
     noTimestamp: "타임스탬프 없음",
@@ -233,6 +251,9 @@ const providerSessionDetailMessagesByLocale = {
     reasoningUnavailable: "추론 항목이 기록되지 않았습니다.",
     relativePathLabel: "상대 경로",
     responseItemsLabel: "응답 항목",
+    sessionAnalysisDescription:
+      "개수, 추론된 턴, 토큰 사용량, 보조 요약을 기본 읽기 흐름을 해치지 않는 보조 점검 정보로 이곳에 유지합니다.",
+    sessionAnalysisHeading: "세션 분석",
     selectedSessionHeading: "선택한 세션 세부 정보",
     sessionIdLabel: "세션 ID",
     sessionLabel: "공급자 세션",
@@ -296,11 +317,15 @@ const providerSessionDetailMessagesByLocale = {
     lineLabel: ({ lineNumber }) => `第 ${lineNumber} 行`,
     lineCountLabel: "行数",
     loadingState: "正在加载会话详情...",
+    maintainerDiagnosticsDescription:
+      "损坏记录和未知事件会保留在这里，便于维护者调试解析器，同时不会与会话记录的主阅读路径争夺注意力。",
+    maintainerDiagnosticsHeading: "维护诊断",
     malformedLineCountLabel: "损坏行数",
     kindLabel: "类型",
     missingState:
       "无法在已配置的 Codex sessions 目录下找到所选 provider-session 文件。",
     modifiedAtLabel: "修改时间",
+    parseSummaryHeading: "解析摘要",
     providerLabel: "提供方",
     rawTimestampDetailsLabel: "原始 ISO 时间戳",
     noTimestamp: "无时间戳",
@@ -317,6 +342,9 @@ const providerSessionDetailMessagesByLocale = {
     reasoningUnavailable: "没有记录任何推理条目。",
     relativePathLabel: "相对路径",
     responseItemsLabel: "响应项数",
+    sessionAnalysisDescription:
+      "计数、推断出的轮次、令牌用量和辅助摘要会作为次级检查信息保留在这里，不再与主会话记录争夺视觉优先级。",
+    sessionAnalysisHeading: "会话分析",
     selectedSessionHeading: "已选会话详情",
     sessionIdLabel: "会话 ID",
     sessionLabel: "提供方会话",
