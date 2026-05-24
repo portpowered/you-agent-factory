@@ -87,6 +87,7 @@ vi.mock("@xyflow/react", async () => {
     ),
     ReactFlow: ({
       children,
+      connectionLineStyle,
       edgesFocusable,
       isValidConnection,
       onConnect,
@@ -95,6 +96,7 @@ vi.mock("@xyflow/react", async () => {
       onNodeDragStop,
     }: {
       children: React.ReactNode;
+      connectionLineStyle?: Record<string, string | number>;
       edgesFocusable?: boolean;
       isValidConnection?: (connection: {
         source?: string | null;
@@ -118,6 +120,9 @@ vi.mock("@xyflow/react", async () => {
       <div data-testid="mock-react-flow">
         <output data-testid="edges-focusable">
           {String(edgesFocusable ?? false)}
+        </output>
+        <output data-testid="connection-line-style">
+          {JSON.stringify(connectionLineStyle ?? null)}
         </output>
         <output data-testid="valid-workstation-output">
           {String(
@@ -300,6 +305,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
   return {
     activeTool: null,
     canInteractWithEditor: false,
+    draftState: defaultDraftState,
     editorMode: false,
     handleConnectionAnchorClick: vi.fn(),
     pendingConnectionSource: null,
@@ -446,6 +452,9 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(
       screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
     ).toContain('"borderRadius":8');
+    expect(screen.getByTestId("connection-line-style").textContent).toContain(
+      '"stroke":"var(--color-af-accent)"',
+    );
   });
 
   it("renders the compact editor toolbar inside the graph card without duplicate add controls", () => {

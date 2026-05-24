@@ -43,7 +43,7 @@ import {
   buildActiveItemLabelsByPlaceId,
   buildCurrentActivityNodes,
   buildHandleAssignments,
-  buildVisibleGraphEdges,
+  buildVisibleGraphEdgesWithDraft,
   EMPTY_GRAPH_LAYOUT,
   EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
@@ -250,9 +250,13 @@ export function useCurrentActivityGraphViewModel({
   const setStoredNodePosition = useCurrentActivityGraphStore(
     (state) => state.setNodePosition,
   );
-  const visibleGraphEdges = useMemo(
-    () => buildVisibleGraphEdges(graphLayout),
-    [graphLayout],
+  const { pendingAdditionEdgeIds, visibleGraphEdges } = useMemo(
+    () =>
+      buildVisibleGraphEdgesWithDraft({
+        draft: editor.draftState.draft,
+        graphLayout,
+      }),
+    [editor.draftState.draft, graphLayout],
   );
   const handleAssignments = useMemo(
     () =>
@@ -309,9 +313,15 @@ export function useCurrentActivityGraphViewModel({
       buildGraphEdges(
         activeGraphHighlights,
         handleAssignments,
+        pendingAdditionEdgeIds,
         visibleGraphEdges,
       ),
-    [activeGraphHighlights, handleAssignments, visibleGraphEdges],
+    [
+      activeGraphHighlights,
+      handleAssignments,
+      pendingAdditionEdgeIds,
+      visibleGraphEdges,
+    ],
   );
   const initialFitViewOptions = useMemo<FitViewOptions>(
     () => ({

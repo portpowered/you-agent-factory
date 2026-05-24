@@ -7,6 +7,7 @@ import {
   buildCurrentActivityNodes,
   buildHandleAssignments,
   buildVisibleGraphEdges,
+  buildVisibleGraphEdgesWithDraft,
   EMPTY_NODE_POSITIONS,
 } from "./react-flow-current-activity-card-graph";
 
@@ -46,6 +47,7 @@ describe("current activity graph editor handles", () => {
     const edges = buildGraphEdges(
       buildActiveGraphHighlights([], visibleGraphEdges),
       handleAssignments,
+      new Set(),
       visibleGraphEdges,
     );
 
@@ -95,5 +97,75 @@ describe("current activity graph editor handles", () => {
       sourceHandle: "workstation-output-source",
       targetHandle: "workstation-output-target",
     });
+  });
+
+  it("adds supported pending draft routes onto the shared observer graph surface", async () => {
+    const graphLayout = await buildGraphLayout(
+      semanticWorkflowDashboardSnapshot.topology,
+    );
+    const { pendingAdditionEdgeIds, visibleGraphEdges } =
+      buildVisibleGraphEdgesWithDraft({
+        draft: {
+          additions: {
+            resources: [],
+            workers: [],
+            workStates: [],
+            workTypes: [],
+            workstations: [],
+          },
+          edgeChanges: {
+            additions: [
+              {
+                kind: "workstation-output",
+                source: { kind: "workstation", name: "review" },
+                target: {
+                  kind: "work-state",
+                  stateName: "blocked",
+                  workTypeName: "story",
+                },
+              },
+            ],
+            removals: [],
+          },
+          removals: {
+            resources: [],
+            workers: [],
+            workStates: [],
+            workTypes: [],
+            workstations: [],
+          },
+        },
+        graphLayout,
+      });
+    const handleAssignments = buildHandleAssignments(visibleGraphEdges, {
+      editorMode: true,
+    });
+    const edges = buildGraphEdges(
+      buildActiveGraphHighlights([], visibleGraphEdges),
+      handleAssignments,
+      pendingAdditionEdgeIds,
+      visibleGraphEdges,
+    );
+
+    expect(pendingAdditionEdgeIds).toEqual(
+      new Set([
+        "workstation-output:workstation:review->place:story:blocked",
+      ]),
+    );
+    expect(edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-output:workstation:review->place:story:blocked",
+          source: "workstation:review",
+          sourceHandle: "workstation-output-source",
+          style: expect.objectContaining({
+            stroke: "var(--color-af-warning-ink)",
+            strokeDasharray: "9 4",
+          }),
+          target: "place:story:blocked",
+          targetHandle: "workstation-output-target",
+        }),
+      ]),
+    );
   });
 });

@@ -241,6 +241,10 @@ export function CurrentActivityGraphViewport({
         onDrop={imports.onDrop}
       >
         <ReactFlow
+          connectionLineStyle={{
+            stroke: "var(--color-af-accent)",
+            strokeWidth: 2.4,
+          }}
           edges={edges}
           edgeTypes={edgeTypes}
           fitView
