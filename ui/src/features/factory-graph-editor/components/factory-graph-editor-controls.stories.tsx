@@ -4,7 +4,6 @@ import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
 import { Button } from "../../../components/ui";
-import { FactoryGraphEditorDraftActions } from "./factory-graph-editor-draft-actions";
 import {
   FactoryGraphEditorActionPopover,
   FactoryGraphEditorConfirmationDialog,
@@ -47,8 +46,12 @@ function ObserveModeStory() {
       <FactoryGraphEditorToolbar
         activeTool={null}
         canInteract={false}
+        canDiscard={false}
+        canSave={false}
         hasPendingChanges={false}
+        onDiscard={() => {}}
         onSelectTool={() => {}}
+        onSave={() => {}}
         visible={editorMode}
       />
     </div>
@@ -72,9 +75,13 @@ function EditorModeStory() {
           activeTool={activeTool}
           addMenuActions={[...ADD_MENU_ACTIONS]}
           canInteract={true}
+          canDiscard={true}
+          canSave={true}
           hasPendingChanges={true}
+          onDiscard={() => {}}
           onAddAction={() => {}}
           onAddMenuOpenChange={setAddMenuOpen}
+          onSave={() => {}}
           onSelectTool={setActiveTool}
           openAddMenu={addMenuOpen}
           visible={true}
@@ -92,9 +99,13 @@ function AddMenuOpenStory() {
           activeTool="add"
           addMenuActions={[...ADD_MENU_ACTIONS]}
           canInteract={true}
+          canDiscard={true}
+          canSave={true}
           hasPendingChanges={true}
+          onDiscard={() => {}}
           onAddAction={() => {}}
           onAddMenuOpenChange={() => {}}
+          onSave={() => {}}
           onSelectTool={() => {}}
           openAddMenu={true}
           visible={true}
@@ -124,13 +135,24 @@ function DeleteConfirmationStory() {
 function PendingDraftActionsStory() {
   return (
     <div className="grid gap-4 p-6">
-      <FactoryGraphEditorDraftActions
-        canSave={true}
-        description="This save will apply 2 created entities, 1 deleted entity and 3 changed edges."
-        onDiscard={() => {}}
-        onSave={() => {}}
-        visible={true}
-      />
+      <div className="relative min-h-44 rounded-[1.5rem] border border-af-overlay/12 bg-af-overlay/4">
+        <FactoryGraphEditorToolbar
+          activeTool="connect"
+          addMenuActions={[...ADD_MENU_ACTIONS]}
+          canInteract={true}
+          canDiscard={true}
+          canSave={false}
+          hasPendingChanges={true}
+          onDiscard={() => {}}
+          onAddAction={() => {}}
+          onAddMenuOpenChange={() => {}}
+          onSave={() => {}}
+          onSelectTool={() => {}}
+          openAddMenu={false}
+          saveDisabledReason="Save is unavailable while active work is still running in the current factory."
+          visible={true}
+        />
+      </div>
     </div>
   );
 }
@@ -277,13 +299,18 @@ export const PendingDraftActions = {
   render: () => <PendingDraftActionsStory />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
+    const toolbar = canvas.getByRole("region", {
+      name: "Factory graph editor tools",
+    });
 
-    await expect(canvas.getByText("Pending graph changes")).toBeVisible();
     await expect(
-      canvas.getByRole("button", { name: "Discard changes" }),
+      within(toolbar).getByText("Draft changes pending"),
     ).toBeVisible();
     await expect(
-      canvas.getByRole("button", { name: "Save changes" }),
+      within(toolbar).getByRole("button", { name: "Discard changes" }),
+    ).toBeVisible();
+    await expect(
+      within(toolbar).getByRole("button", { name: "Save changes" }),
     ).toBeVisible();
   },
 };

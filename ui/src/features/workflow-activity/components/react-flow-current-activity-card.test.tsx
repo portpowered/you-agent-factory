@@ -58,7 +58,9 @@ import { buildVisibleGraphEdges } from "../lib/react-flow-current-activity-card-
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 
 vi.mock("../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual("../../current-factory-definition/public");
+  const actual = await vi.importActual(
+    "../../current-factory-definition/public",
+  );
 
   return {
     ...actual,
@@ -68,9 +70,7 @@ vi.mock("../../current-factory-definition/public", async () => {
 });
 
 vi.mock("../../factory-graph-editor/public", async () => {
-  const actual = await vi.importActual(
-    "../../factory-graph-editor/public",
-  );
+  const actual = await vi.importActual("../../factory-graph-editor/public");
 
   return {
     ...actual,
@@ -164,95 +164,94 @@ const editableFactoryDefinitionDocument: CurrentFactoryDocument = {
   },
 };
 
-const workerDenseFactoryDefinitionDocument: CurrentFactoryDocument =
-  {
-    ...editableFactoryDefinition,
-    resources: [
-      {
-        capacity: 2,
-        name: "gpu",
-      },
-    ],
-    workers: [
-      {
-        model: "gpt-5",
-        name: "writer",
-        type: "MODEL_WORKER",
-      },
-      {
-        model: "gpt-5",
-        name: "reviewer",
-        type: "MODEL_WORKER",
-      },
-      {
-        model: "gpt-5",
-        name: "stalled",
-        type: "MODEL_WORKER",
-      },
-    ],
-    workstations: [
-      {
-        body: "Draft the story.",
-        inputs: [
-          {
-            state: "queued",
-            workType: "story",
-          },
-        ],
-        name: "draft",
-        outputs: [
-          {
-            state: "review",
-            workType: "story",
-          },
-        ],
-        resources: [{ capacity: 1, name: "gpu" }],
-        type: "MODEL_WORKSTATION",
-        worker: "writer",
-      },
-      {
-        body: "Review the draft.",
-        inputs: [
-          {
-            state: "review",
-            workType: "story",
-          },
-        ],
-        name: "review",
-        outputs: [
-          {
-            state: "done",
-            workType: "story",
-          },
-        ],
-        type: "MODEL_WORKSTATION",
-        worker: "reviewer",
-      },
-    ],
-    workTypes: [
-      {
-        name: "story",
-        states: [
-          {
-            name: "queued",
-            type: "INITIAL",
-          },
-          {
-            name: "review",
-            type: "PROCESSING",
-          },
-          {
-            name: "done",
-            type: "TERMINAL",
-          },
-        ],
-      },
-    ],
-    version: {
-      logical: 9,
-      physical: "2026-05-19T01:12:00Z",
+const workerDenseFactoryDefinitionDocument: CurrentFactoryDocument = {
+  ...editableFactoryDefinition,
+  resources: [
+    {
+      capacity: 2,
+      name: "gpu",
     },
-  };
+  ],
+  workers: [
+    {
+      model: "gpt-5",
+      name: "writer",
+      type: "MODEL_WORKER",
+    },
+    {
+      model: "gpt-5",
+      name: "reviewer",
+      type: "MODEL_WORKER",
+    },
+    {
+      model: "gpt-5",
+      name: "stalled",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workstations: [
+    {
+      body: "Draft the story.",
+      inputs: [
+        {
+          state: "queued",
+          workType: "story",
+        },
+      ],
+      name: "draft",
+      outputs: [
+        {
+          state: "review",
+          workType: "story",
+        },
+      ],
+      resources: [{ capacity: 1, name: "gpu" }],
+      type: "MODEL_WORKSTATION",
+      worker: "writer",
+    },
+    {
+      body: "Review the draft.",
+      inputs: [
+        {
+          state: "review",
+          workType: "story",
+        },
+      ],
+      name: "review",
+      outputs: [
+        {
+          state: "done",
+          workType: "story",
+        },
+      ],
+      type: "MODEL_WORKSTATION",
+      worker: "reviewer",
+    },
+  ],
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        {
+          name: "queued",
+          type: "INITIAL",
+        },
+        {
+          name: "review",
+          type: "PROCESSING",
+        },
+        {
+          name: "done",
+          type: "TERMINAL",
+        },
+      ],
+    },
+  ],
+  version: {
+    logical: 9,
+    physical: "2026-05-19T01:12:00Z",
+  },
+};
 
 const defaultDraftState = {
   baseDocument: editableFactoryDefinitionDocument,
@@ -1126,7 +1125,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
     await waitFor(() => {
       expect(
-        document.querySelector('[data-current-activity-node-type="workstation"]'),
+        document.querySelector(
+          '[data-current-activity-node-type="workstation"]',
+        ),
       ).toBeTruthy();
     });
     expect(screen.queryByText("Pending")).toBeNull();
@@ -1154,7 +1155,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
     await waitFor(() => {
       expect(
-        document.querySelector('[data-current-activity-node-type="workstation"]'),
+        document.querySelector(
+          '[data-current-activity-node-type="workstation"]',
+        ),
       ).toBeTruthy();
     });
 
@@ -1186,7 +1189,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
     await waitFor(() => {
       expect(
-        document.querySelector('[data-current-activity-node-type="workstation"]'),
+        document.querySelector(
+          '[data-current-activity-node-type="workstation"]',
+        ),
       ).toBeTruthy();
     });
 
@@ -1468,7 +1473,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
 
     const actions = await screen.findByRole("region", {
-      name: "Pending graph changes",
+      name: "Factory graph editor tools",
     });
     expect(
       within(actions).getByRole("button", { name: "Discard changes" }),
@@ -1477,8 +1482,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
       within(actions).getByRole("button", { name: "Save changes" }),
     ).toBeTruthy();
     expect(
-      within(actions).getByText("This save will apply 1 created entity."),
-    ).toBeTruthy();
+      screen.queryByRole("region", { name: "Pending graph changes" }),
+    ).toBeNull();
   });
 
   it("confirms pending save changes before saving the graph draft", async () => {
@@ -1522,7 +1527,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
     fireEvent.click(
       within(
-        await screen.findByRole("region", { name: "Pending graph changes" }),
+        await screen.findByRole("region", {
+          name: "Factory graph editor tools",
+        }),
       ).getByRole("button", { name: "Save changes" }),
     );
 

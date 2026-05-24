@@ -39,6 +39,8 @@ export interface FactoryGraphEditorVisibilityPresetOption {
 
 const TOOLBAR_SHELL_CLASS =
   "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0";
+const TOOLBAR_ACTIONS_CLASS =
+  "flex items-center gap-2 border-l border-af-overlay/10 pl-2 max-md:ml-auto";
 const MENU_LIST_CLASS = "grid gap-1";
 const MENU_ACTION_CLASS =
   "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent/20 hover:bg-af-overlay/6 focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:opacity-55";
@@ -59,10 +61,16 @@ export function FactoryGraphEditorToolbar({
   activeTool,
   addMenuActions = [],
   canInteract,
+  canSave = false,
+  canDiscard = true,
   hasPendingChanges = false,
+  isSaving = false,
   locale,
+  onDiscard,
   onAddAction,
   onAddMenuOpenChange,
+  onSave,
+  saveDisabledReason,
   visible,
   onSelectTool,
   openAddMenu = false,
@@ -70,10 +78,16 @@ export function FactoryGraphEditorToolbar({
   activeTool: FactoryGraphEditorTool;
   addMenuActions?: FactoryGraphEditorMenuAction[];
   canInteract: boolean;
+  canSave?: boolean;
+  canDiscard?: boolean;
   hasPendingChanges?: boolean;
+  isSaving?: boolean;
   locale?: string;
+  onDiscard?: () => void;
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
+  onSave?: () => void;
+  saveDisabledReason?: string;
   visible: boolean;
   onSelectTool: (tool: FactoryGraphEditorTool) => void;
   openAddMenu?: boolean;
@@ -129,6 +143,34 @@ export function FactoryGraphEditorToolbar({
           ? messages.toolbarPendingChanges
           : messages.toolbarNoPendingChanges}
       </p>
+      {hasPendingChanges ? (
+        <div className={TOOLBAR_ACTIONS_CLASS}>
+          <Button
+            disabled={!canDiscard || isSaving}
+            onClick={onDiscard}
+            size="sm"
+            tone="outline"
+            type="button"
+          >
+            {messages.draftActionsDiscard}
+          </Button>
+          <FactoryGraphEditorTooltipButton
+            aria-label={
+              isSaving ? messages.draftActionsSaving : messages.draftActionsSave
+            }
+            className={buttonVariants({
+              size: "icon",
+              tone: canSave && !isSaving ? "default" : "outline",
+            })}
+            disabled={!canSave || isSaving}
+            onClick={onSave}
+            tooltip={saveDisabledReason ?? messages.draftActionsSave}
+            type="button"
+          >
+            <SaveIcon />
+          </FactoryGraphEditorTooltipButton>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -325,6 +367,26 @@ function TrashIcon() {
       <path d="M8 7v11a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7" />
       <path d="M10 11v5" />
       <path d="M14 11v5" />
+    </svg>
+  );
+}
+
+function SaveIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M5 4h11l3 3v13H5z" />
+      <path d="M9 4v6h6V4" />
+      <path d="M9 20v-6h6v6" />
     </svg>
   );
 }

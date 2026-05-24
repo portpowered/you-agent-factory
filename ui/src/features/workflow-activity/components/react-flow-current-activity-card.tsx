@@ -15,7 +15,6 @@ import type { FactoryValue } from "../../../api/named-factory";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
-import { FactoryGraphEditorDraftActions } from "../../factory-graph-editor/components/factory-graph-editor-draft-actions";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import { buildGraphLayout, type GraphLayout } from "../../flowchart/lib/layout";
 import type {
@@ -381,18 +380,6 @@ export function ReactFlowCurrentActivityCardView(
       ) : (
         <CurrentActivityCardHeading hidden locale={props.locale} />
       )}
-      <FactoryGraphEditorDraftActions
-        canSave={editor.canSaveDraft}
-        description={editor.saveSummary.description}
-        isSaving={editor.saveEditableDefinition.status === "pending"}
-        locale={props.locale}
-        onDiscard={editor.handleDiscardPendingChanges}
-        onSave={() => {
-          editor.setIsConfirmingSave(true);
-        }}
-        saveDisabledReason={editor.saveBlockedReason}
-        visible={editor.editorMode && editor.draftState.hasChanges}
-      />
       <CurrentActivityGraphSurface
         editor={editor}
         graph={graph}

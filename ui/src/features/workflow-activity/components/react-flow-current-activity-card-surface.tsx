@@ -1,7 +1,5 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import {
-  FactoryGraphEditorNotice,
-} from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
@@ -85,14 +83,20 @@ export function CurrentActivityGraphSurface({
         activeTool={editor.activeTool}
         addMenuActions={editor.addMenuActions}
         canInteractWithEditor={editor.canInteractWithEditor}
+        canSaveDraft={editor.canSaveDraft}
         editorMode={editor.editorMode}
         edges={graph.edges}
         graphKey={graph.graphKey}
+        handleDiscardPendingChanges={editor.handleDiscardPendingChanges}
         handleNodesChange={graph.handleNodesChange}
+        handleSaveDraft={() => {
+          editor.setIsConfirmingSave(true);
+        }}
         hasPendingChanges={editor.draftState.hasChanges}
         imports={imports}
         initialFitViewKey={graph.initialFitViewKey}
         initialFitViewOptions={graph.initialFitViewOptions}
+        isSavingDraft={editor.saveEditableDefinition.status === "pending"}
         locale={locale}
         nodeTypes={CURRENT_ACTIVITY_NODE_TYPES}
         nodes={graph.nodes}
@@ -103,6 +107,7 @@ export function CurrentActivityGraphSurface({
         onEditorNodeClick={editor.handleEditorNodeDelete}
         onSelectTool={editor.setActiveTool}
         openAddMenu={editor.addMenuOpen}
+        saveDisabledReason={editor.saveBlockedReason}
         setStoredNodePosition={graph.setStoredNodePosition}
       />
     </div>
