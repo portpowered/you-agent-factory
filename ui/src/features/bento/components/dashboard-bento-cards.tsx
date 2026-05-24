@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { AgentBentoLayoutItem } from "../../../components/ui";
 import {
@@ -6,17 +8,32 @@ import {
   type useCurrentSelectionDetails,
   type useSelectedProviderSessionState,
 } from "../../current-selection/public";
+import { getCurrentSelectionShellMessages } from "../../current-selection/messages/current-selection-shell";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
+import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
 import { SubmitWorkWidget } from "../../submit-work/public";
+import { getSubmitWorkMessages } from "../../submit-work/messages/submit-work";
 import { TerminalWorkWidget } from "../../terminal-work/public";
-import { TraceDrilldownWidget, type useTraceDrilldown } from "../../trace-drilldown/public";
-import { type useWorkOutcomeChart, WorkOutcomeWidget } from "../../work-outcome/public";
+import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
+import {
+  TraceDrilldownWidget,
+  type useTraceDrilldown,
+} from "../../trace-drilldown/public";
+import { getTraceDrilldownMessages } from "../../trace-drilldown/messages/trace-drilldown";
+import {
+  type useWorkOutcomeChart,
+  WorkOutcomeWidget,
+} from "../../work-outcome/public";
+import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
 import {
   type useCurrentActivityImportController,
   WorkflowActivityWidget,
 } from "../../workflow-activity/public";
+import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { WorkTotalsWidget } from "../../work-totals/public";
+import { getWorkTotalsMessages } from "../../work-totals/messages/work-totals";
 import type { AgentBentoLayoutCard } from "./agent-bento";
+import { DashboardWidgetRemoveButton } from "./dashboard-widget-remove-button";
 import { InlineAddWidgetCard } from "./inline-add-widget-card";
 import {
   getDashboardWidgetPickerAvailability,
@@ -32,6 +49,7 @@ export interface DashboardCardBuilderArgs {
   locale?: string;
   now: number;
   onInlineWidgetPickerOpenChange: (open: boolean) => void;
+  onRemoveDashboardWidget: (widgetInstanceID: string) => void;
   onSelectInlineWidget: (widgetType: DashboardWidgetPickerWidgetType) => void;
   providerSessionState: ReturnType<typeof useSelectedProviderSessionState>;
   selectedTrace: ReturnType<typeof useTraceDrilldown>["selectedTrace"];
@@ -51,6 +69,7 @@ interface DashboardWidgetCardBuilderArgs {
   layoutItem: AgentBentoLayoutItem;
   locale?: string;
   now: number;
+  onRemoveDashboardWidget: (widgetInstanceID: string) => void;
   providerSessionState: ReturnType<typeof useSelectedProviderSessionState>;
   selectedTrace: ReturnType<typeof useTraceDrilldown>["selectedTrace"];
   selectedTraceID: string | null;
@@ -71,6 +90,7 @@ export function buildDashboardCards({
   locale,
   now,
   onInlineWidgetPickerOpenChange,
+  onRemoveDashboardWidget,
   onSelectInlineWidget,
   providerSessionState,
   selectedTrace,
@@ -109,6 +129,7 @@ export function buildDashboardCards({
         layoutItem,
         locale,
         now,
+        onRemoveDashboardWidget,
         providerSessionState,
         selectedTrace,
         selectedTraceID,
@@ -128,6 +149,7 @@ function buildWidgetCard({
   layoutItem,
   locale,
   now,
+  onRemoveDashboardWidget,
   providerSessionState,
   selectedTrace,
   selectedTraceID,
@@ -137,12 +159,21 @@ function buildWidgetCard({
   traceGridState,
   workChartModel,
 }: DashboardWidgetCardBuilderArgs): AgentBentoLayoutCard {
+  const removeAction = (
+    <DashboardWidgetRemoveButton
+      locale={locale}
+      onClick={() => onRemoveDashboardWidget(layoutItem.id)}
+      widgetTitle={getDashboardWidgetTitle(layoutItem.widgetType, locale)}
+    />
+  );
+
   if (
     layoutItem.widgetType === DASHBOARD_WIDGET_IDS.workTotals ||
     layoutItem.widgetType === DASHBOARD_WIDGET_IDS.workGraph
   ) {
     return buildOverviewWidgetCard({
       currentSelection,
+      headerAction: removeAction,
       importController,
       layoutItem,
       locale,
@@ -157,6 +188,7 @@ function buildWidgetCard({
   ) {
     return buildDuplicateCapableWidgetCard({
       currentSelection,
+      headerAction: removeAction,
       layoutItem,
       locale,
       workChartModel,
@@ -165,6 +197,7 @@ function buildWidgetCard({
 
   return buildSingletonWidgetCard({
     currentSelection,
+    headerAction: removeAction,
     layoutItem,
     locale,
     now,
@@ -180,6 +213,7 @@ function buildWidgetCard({
 
 function buildOverviewWidgetCard({
   currentSelection,
+  headerAction,
   importController,
   layoutItem,
   locale,
@@ -188,13 +222,21 @@ function buildOverviewWidgetCard({
 }: Pick<
   DashboardWidgetCardBuilderArgs,
   "currentSelection" | "importController" | "layoutItem" | "locale" | "now" | "snapshot"
->): AgentBentoLayoutCard {
+> & {
+  headerAction: ReactNode;
+}): AgentBentoLayoutCard {
   switch (layoutItem.widgetType) {
     case DASHBOARD_WIDGET_IDS.workTotals:
       return {
         id: layoutItem.id,
         widgetType: layoutItem.widgetType,
-        children: <WorkTotalsWidget locale={locale} snapshot={snapshot} />,
+        children: (
+          <WorkTotalsWidget
+            headerAction={headerAction}
+            locale={locale}
+            snapshot={snapshot}
+          />
+        ),
       };
     case DASHBOARD_WIDGET_IDS.workGraph:
       return {
@@ -202,6 +244,7 @@ function buildOverviewWidgetCard({
         widgetType: layoutItem.widgetType,
         children: (
           <WorkflowActivityWidget
+            headerAction={headerAction}
             importController={importController}
             locale={locale}
             now={now}
@@ -220,13 +263,16 @@ function buildOverviewWidgetCard({
 
 function buildDuplicateCapableWidgetCard({
   currentSelection,
+  headerAction,
   layoutItem,
   locale,
   workChartModel,
 }: Pick<
   DashboardWidgetCardBuilderArgs,
   "currentSelection" | "layoutItem" | "locale" | "workChartModel"
->): AgentBentoLayoutCard {
+> & {
+  headerAction: ReactNode;
+}): AgentBentoLayoutCard {
   switch (layoutItem.widgetType) {
     case DASHBOARD_WIDGET_IDS.terminalWork:
       return {
@@ -236,6 +282,7 @@ function buildDuplicateCapableWidgetCard({
           <TerminalWorkWidget
             completedItems={currentSelection.completedWorkItems}
             failedItems={currentSelection.failedWorkItems}
+            headerAction={headerAction}
             locale={locale}
             onSelectItem={currentSelection.openTerminalWorkDetail}
             selectedItem={currentSelection.terminalWorkDetail}
@@ -249,6 +296,7 @@ function buildDuplicateCapableWidgetCard({
         widgetType: layoutItem.widgetType,
         children: (
           <WorkOutcomeWidget
+            headerAction={headerAction}
             locale={locale}
             model={workChartModel}
             widgetId={layoutItem.id}
@@ -264,6 +312,7 @@ function buildDuplicateCapableWidgetCard({
 
 function buildSingletonWidgetCard({
   currentSelection,
+  headerAction,
   layoutItem,
   locale,
   now,
@@ -287,7 +336,9 @@ function buildSingletonWidgetCard({
   | "setSelectedTraceID"
   | "snapshot"
   | "traceGridState"
->): AgentBentoLayoutCard {
+> & {
+  headerAction: ReactNode;
+}): AgentBentoLayoutCard {
   switch (layoutItem.widgetType) {
     case DASHBOARD_WIDGET_IDS.currentSelection:
       return {
@@ -300,6 +351,7 @@ function buildSingletonWidgetCard({
             failedWorkDetailsByWorkID={
               snapshot.runtime.session.failed_work_details_by_work_id
             }
+            headerAction={headerAction}
             locale={locale}
             now={now}
             onSelectProviderSession={providerSessionState.setSelectedProviderSession}
@@ -317,6 +369,7 @@ function buildSingletonWidgetCard({
         widgetType: layoutItem.widgetType,
         children: (
           <ProviderSessionWidget
+            headerAction={headerAction}
             locale={locale}
             selectedProviderSession={providerSessionState.selectedProviderSession}
             widgetId={layoutItem.id}
@@ -329,6 +382,7 @@ function buildSingletonWidgetCard({
         widgetType: layoutItem.widgetType,
         children: (
           <SubmitWorkWidget
+            headerAction={headerAction}
             locale={locale}
             submitWorkTypes={snapshot.topology.submit_work_types}
           />
@@ -340,6 +394,7 @@ function buildSingletonWidgetCard({
         widgetType: layoutItem.widgetType,
         children: (
           <TraceDrilldownWidget
+            headerAction={headerAction}
             locale={locale}
             onSelectWorkID={currentSelection.selectWorkByID}
             state={traceGridState}
@@ -349,5 +404,28 @@ function buildSingletonWidgetCard({
       };
     default:
       throw new Error(`unsupported dashboard widget type: ${layoutItem.widgetType}`);
+  }
+}
+
+function getDashboardWidgetTitle(widgetType: string, locale?: string): string {
+  switch (widgetType) {
+    case DASHBOARD_WIDGET_IDS.currentSelection:
+      return getCurrentSelectionShellMessages(locale).title;
+    case DASHBOARD_WIDGET_IDS.providerSession:
+      return getProviderSessionWidgetMessages(locale).title;
+    case DASHBOARD_WIDGET_IDS.submitWork:
+      return getSubmitWorkMessages(locale).cardTitle;
+    case DASHBOARD_WIDGET_IDS.terminalWork:
+      return getTerminalWorkMessages(locale).cardTitle;
+    case DASHBOARD_WIDGET_IDS.trace:
+      return getTraceDrilldownMessages(locale).title;
+    case DASHBOARD_WIDGET_IDS.workGraph:
+      return getWorkflowActivityShellMessages(locale).widgetTitle;
+    case DASHBOARD_WIDGET_IDS.workOutcomeChart:
+      return getWorkOutcomeMessages(locale).chart.cardTitle;
+    case DASHBOARD_WIDGET_IDS.workTotals:
+      return getWorkTotalsMessages(locale).cardTitle;
+    default:
+      return widgetType;
   }
 }

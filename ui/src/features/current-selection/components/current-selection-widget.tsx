@@ -22,11 +22,13 @@ import {
   EditableWorkstationSaveDialog,
   EditableWorkstationSaveHeaderAction,
 } from "./workstation-save-controls";
+import { CurrentSelectionHeaderActionProvider } from "./current-selection-detail-layout";
 
 export interface CurrentSelectionWidgetProps {
   activeTraceID?: string | null;
   currentSelection: CurrentSelectionState;
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
+  headerAction?: ReactNode;
   locale?: string | null;
   now: number;
   onSelectTraceID?: (traceID: string) => void;
@@ -169,6 +171,7 @@ export function CurrentSelectionWidget({
   activeTraceID,
   currentSelection,
   failedWorkDetailsByWorkID,
+  headerAction,
   locale,
   now,
   onSelectTraceID,
@@ -210,7 +213,7 @@ export function CurrentSelectionWidget({
     controlledSelectedProviderSessionKey ?? providerSessionState.selectedProviderSessionKey;
   const handleSelectProviderSession =
     onSelectProviderSession ?? providerSessionState.setSelectedProviderSession;
-  const headerAction = (
+  const workstationHeaderAction = (
     <EditableWorkstationSaveHeaderAction
       canSave={workstationSave.canSave}
       locale={locale ?? undefined}
@@ -223,7 +226,7 @@ export function CurrentSelectionWidget({
     currentSelection,
     editableConfigurationState,
     failedWorkDetailsByWorkID,
-    headerAction,
+    headerAction: workstationHeaderAction,
     locale: locale ?? undefined,
     now,
     onSelectTraceID,
@@ -237,7 +240,9 @@ export function CurrentSelectionWidget({
 
   return (
     <CurrentSelectionLocaleProvider locale={locale ?? undefined}>
-      {detailCard}
+      <CurrentSelectionHeaderActionProvider headerAction={headerAction ?? null}>
+        {detailCard}
+      </CurrentSelectionHeaderActionProvider>
       <EditableWorkstationSaveDialog
         locale={locale ?? undefined}
         onCancel={workstationSave.cancelSaveConfirmation}

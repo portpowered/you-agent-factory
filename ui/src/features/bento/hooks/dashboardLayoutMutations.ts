@@ -60,6 +60,17 @@ export function addDashboardWidgetToLayout(
   return [...retainedItems, positionedWidgetLayout, repositionedAddWidgetLayout];
 }
 
+export function removeDashboardWidgetFromLayout(
+  layout: AgentBentoLayoutItem[],
+  widgetInstanceID: string,
+): AgentBentoLayoutItem[] {
+  if (widgetInstanceID === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID) {
+    return layout;
+  }
+
+  return layout.filter((item) => item.id !== widgetInstanceID);
+}
+
 function getNextDashboardWidgetInstanceID(
   layout: readonly AgentBentoLayoutItem[],
   widgetType: string,

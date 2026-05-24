@@ -2,7 +2,10 @@ import { create } from "zustand";
 
 import type { AgentBentoLayoutItem } from "../../../components/ui";
 import type { DashboardWidgetPickerWidgetType } from "../lib/dashboard-widget-picker";
-import { addDashboardWidgetToLayout } from "./dashboardLayoutMutations";
+import {
+  addDashboardWidgetToLayout,
+  removeDashboardWidgetFromLayout,
+} from "./dashboardLayoutMutations";
 import {
   mergeDashboardLayout,
   readStoredDashboardLayout,
@@ -23,12 +26,14 @@ export interface UseDashboardLayoutResult {
   addDashboardWidget: (widgetType: DashboardWidgetPickerWidgetType) => void;
   dashboardLayout: AgentBentoLayoutItem[];
   persistDashboardLayout: (layout: AgentBentoLayoutItem[]) => void;
+  removeDashboardWidget: (widgetInstanceID: string) => void;
 }
 
 interface DashboardLayoutStoreState {
   addDashboardWidget: (widgetType: DashboardWidgetPickerWidgetType) => void;
   dashboardLayout: AgentBentoLayoutItem[];
   persistDashboardLayout: (layout: AgentBentoLayoutItem[]) => void;
+  removeDashboardWidget: (widgetInstanceID: string) => void;
 }
 
 const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
@@ -47,14 +52,32 @@ const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
       return { dashboardLayout: nextLayout };
     });
   },
+  removeDashboardWidget: (widgetInstanceID) => {
+    set((state) => {
+      const nextLayout = removeDashboardWidgetFromLayout(
+        state.dashboardLayout,
+        widgetInstanceID,
+      );
+      writeStoredDashboardLayout(nextLayout);
+      return { dashboardLayout: nextLayout };
+    });
+  },
 }));
 
 export function useDashboardLayout(): UseDashboardLayoutResult {
   const addDashboardWidget = useDashboardLayoutStore((state) => state.addDashboardWidget);
   const dashboardLayout = useDashboardLayoutStore((state) => state.dashboardLayout);
   const persistDashboardLayout = useDashboardLayoutStore((state) => state.persistDashboardLayout);
+  const removeDashboardWidget = useDashboardLayoutStore(
+    (state) => state.removeDashboardWidget,
+  );
 
-  return { addDashboardWidget, dashboardLayout, persistDashboardLayout };
+  return {
+    addDashboardWidget,
+    dashboardLayout,
+    persistDashboardLayout,
+    removeDashboardWidget,
+  };
 }
 
 export function reloadDashboardLayoutFromStorage(): void {

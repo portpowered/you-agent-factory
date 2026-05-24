@@ -211,4 +211,38 @@ describe("useDashboardLayout inline add-widget persistence", () => {
       ),
     ).toHaveLength(1);
   });
+
+  it("removes only the targeted widget instance and keeps the inline add-widget card", () => {
+    const { result } = renderHook(() => useDashboardLayout());
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workOutcomeChart);
+    });
+
+    const duplicateInstance = result.current.dashboardLayout.find(
+      (item) => item.id === "work-outcome-chart::instance-1",
+    );
+
+    expect(duplicateInstance).toBeDefined();
+
+    act(() => {
+      result.current.removeDashboardWidget("work-outcome-chart::instance-1");
+    });
+
+    expect(
+      result.current.dashboardLayout.filter(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      ),
+    ).toHaveLength(1);
+    expect(
+      result.current.dashboardLayout.find(
+        (item) => item.id === "work-outcome-chart::instance-1",
+      ),
+    ).toBeUndefined();
+    expect(
+      result.current.dashboardLayout.find(
+        (item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+      ),
+    ).toBeDefined();
+  });
 });

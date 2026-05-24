@@ -9,13 +9,17 @@ import {
   useSelectedProviderSessionState,
 } from "../../current-selection/public";
 import { DashboardImportPreviewDialog } from "../../import/public";
+import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { useTraceDrilldown } from "../../trace-drilldown/public";
 import { useWorkOutcomeChart } from "../../work-outcome/public";
 import { useCurrentActivityImportController } from "../../workflow-activity/public";
 import { AgentBentoLayout } from "./agent-bento";
-import { buildDashboardCards } from "./dashboard-bento-cards";
+import {
+  buildDashboardCards,
+  type DashboardCardBuilderArgs,
+} from "./dashboard-bento-cards";
 import { useDashboardBentoStore } from "../state/dashboardBentoStore";
 import {
   getRenderableDashboardLayout,
@@ -50,8 +54,12 @@ export interface DashboardBentoProps {
 
 export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const { locale: resolvedLocale } = useAppLocale(locale);
-  const { addDashboardWidget, dashboardLayout, persistDashboardLayout } =
-    useDashboardLayout();
+  const {
+    addDashboardWidget,
+    dashboardLayout,
+    persistDashboardLayout,
+    removeDashboardWidget,
+  } = useDashboardLayout();
   const now = useDashboardNow();
   const [isInlineWidgetPickerOpen, setInlineWidgetPickerOpen] = useState(false);
   const incrementRefreshToken = useDashboardBentoStore(
@@ -115,22 +123,21 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     timelineEvents,
     worldViewCache,
   });
-  const cards = buildDashboardCards({
+  const cards = buildDashboardCardLayouts({
+    addDashboardWidget,
     currentSelection,
     dashboardLayout,
-    isInlineWidgetPickerOpen,
     importController,
+    isInlineWidgetPickerOpen,
     locale: resolvedLocale,
     now,
     onInlineWidgetPickerOpenChange: setInlineWidgetPickerOpen,
-    onSelectInlineWidget: (widgetType) => {
-      addDashboardWidget(widgetType);
-      setInlineWidgetPickerOpen(false);
-    },
+    onRemoveDashboardWidget: removeDashboardWidget,
     providerSessionState,
     selectedTrace,
     selectedTraceID,
     selectedWorkExecutionDetails,
+    setInlineWidgetPickerOpen,
     setSelectedTraceID,
     snapshot,
     traceGridState,
@@ -157,14 +164,73 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
         activationState={importController.activationState}
         importPreviewState={importController.importPreviewState}
         locale={resolvedLocale}
-        onCancel={() => {
-          importController.clearActivationError();
-          importController.closeImportPreview();
-        }}
-        onConfirm={(value) => {
-          void importController.activateImport(value);
-        }}
+        onCancel={createDashboardImportPreviewCancelHandler(importController)}
+        onConfirm={createDashboardImportPreviewConfirmHandler(importController)}
       />
     </>
   );
+}
+
+function buildDashboardCardLayouts({
+  addDashboardWidget,
+  currentSelection,
+  dashboardLayout,
+  importController,
+  isInlineWidgetPickerOpen,
+  locale,
+  now,
+  onInlineWidgetPickerOpenChange,
+  onRemoveDashboardWidget,
+  providerSessionState,
+  selectedTrace,
+  selectedTraceID,
+  selectedWorkExecutionDetails,
+  setInlineWidgetPickerOpen,
+  setSelectedTraceID,
+  snapshot,
+  traceGridState,
+  workChartModel,
+}: Omit<DashboardCardBuilderArgs, "onSelectInlineWidget"> & {
+  addDashboardWidget: ReturnType<typeof useDashboardLayout>["addDashboardWidget"];
+  setInlineWidgetPickerOpen: (open: boolean) => void;
+}) {
+  return buildDashboardCards({
+    currentSelection,
+    dashboardLayout,
+    importController,
+    isInlineWidgetPickerOpen,
+    locale,
+    now,
+    onInlineWidgetPickerOpenChange,
+    onRemoveDashboardWidget,
+    onSelectInlineWidget: (widgetType) => {
+      addDashboardWidget(widgetType);
+      setInlineWidgetPickerOpen(false);
+    },
+    providerSessionState,
+    selectedTrace,
+    selectedTraceID,
+    selectedWorkExecutionDetails,
+    setSelectedTraceID,
+    snapshot,
+    traceGridState,
+    workChartModel,
+  });
+}
+
+function createDashboardImportPreviewCancelHandler(
+  importController: ReturnType<typeof useCurrentActivityImportController>,
+) {
+  return () => {
+    importController.clearActivationError();
+    importController.closeImportPreview();
+  };
+}
+
+function createDashboardImportPreviewConfirmHandler(
+  importController: ReturnType<typeof useCurrentActivityImportController>,
+) {
+  return (value: FactoryPngImportValue) => {
+    void importController.activateImport(value);
+  };
 }

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { useState } from "react";
 import {
   DASHBOARD_WIDGET_CLASS,
@@ -27,6 +29,7 @@ export interface CompletedFailedWorkstationCardProps {
   className?: string;
   completedItems: TerminalWorkItem[];
   failedItems: TerminalWorkItem[];
+  headerAction?: ReactNode;
   locale?: string;
   onMove?: (widgetId: "terminal-work", direction: "left" | "right") => void;
   onSelectItem: (status: TerminalWorkStatus, item: TerminalWorkItem) => void;
@@ -91,6 +94,7 @@ export function CompletedFailedWorkstationCard({
   className = "",
   completedItems,
   failedItems,
+  headerAction,
   locale,
   onSelectItem,
   selectedItem = null,
@@ -107,7 +111,11 @@ export function CompletedFailedWorkstationCard({
   const resolvedTitle = title ?? messages.cardTitle;
 
   return (
-    <AgentBentoCard className={cardClassName} title={resolvedTitle}>
+    <AgentBentoCard
+      className={cardClassName}
+      headerAction={headerAction}
+      title={resolvedTitle}
+    >
       <fieldset className={TERMINAL_ROWS_CLASS}>
         <legend className="sr-only">{messages.legendLabel}</legend>
         <TerminalWorkRow

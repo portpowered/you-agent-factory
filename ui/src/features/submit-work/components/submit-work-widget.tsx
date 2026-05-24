@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { DashboardSubmitWorkType } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
@@ -6,11 +8,13 @@ import { SubmitWorkCard } from "./submit-work-card";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 
 export interface SubmitWorkWidgetProps {
+  headerAction?: ReactNode;
   locale?: string;
   submitWorkTypes?: DashboardSubmitWorkType[];
 }
 
 export function SubmitWorkWidget({
+  headerAction,
   locale,
   submitWorkTypes = [],
 }: SubmitWorkWidgetProps) {
@@ -37,6 +41,7 @@ export function SubmitWorkWidget({
   return (
     <SubmitWorkCard
       draft={draft}
+      headerAction={headerAction}
       isSubmitting={isSubmitting}
       locale={locale}
       onRequestNameChange={onRequestNameChange}

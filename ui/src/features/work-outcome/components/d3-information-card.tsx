@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { getDashboardWorkChartSeriesDefinitions } from "../lib/chart-contract";
 import { cn } from "../../../lib/cn";
 import type { WorkChartModel } from "../lib/trends";
@@ -10,6 +12,7 @@ import { getWorkOutcomeMessages } from "../messages/work-outcome";
 export interface WorkChartCardProps {
   chartState?: WorkChartState;
   className?: string;
+  headerAction?: ReactNode;
   locale?: string;
   model: WorkChartModel;
   title?: string;
@@ -23,6 +26,7 @@ const WORK_CHART_REGION_CLASS = "flex min-h-0 flex-1 px-4 sm:px-5";
 export function WorkChartCard({
   chartState,
   className = "",
+  headerAction,
   locale,
   model,
   title,
@@ -57,6 +61,7 @@ export function WorkChartCard({
     <AgentBentoCard
       bodyClassName={WORK_CHART_BODY_CLASS}
       className={cardClassName}
+      headerAction={headerAction}
       title={resolvedTitle}
     >
       <section
