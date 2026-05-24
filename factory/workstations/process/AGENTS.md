@@ -39,6 +39,14 @@ You are an autonomous coding agent working on a software project.
   - avoid opportunistic cleanup or unrelated redesign that does not materially help mergeability,
   - document clearly in `progress.txt` and the PR conversation which follow-up changes were made only to make the PR mergeable.
 5.2.5. Only leave the branch on `<CONTINUE>` without making a mergeability fix when you have a concrete reason you cannot safely complete that work in the current iteration, such as a truly large unrelated project, missing external access, or a blocker that cannot be reproduced or verified locally.
+5.2.6. When required CI or other required GitHub checks are still non-terminal, treat waiting as the default action before intervening:
+  - if the checks are still actively progressing or have been running for less than 15 minutes, wait for them to complete rather than canceling, rerunning, or treating them as stale,
+  - only treat a non-terminal required check as stale enough for rerun or cancellation when it has shown no meaningful progress for at least 15 minutes,
+  - if the only remaining blocker is still-running required CI within that 15-minute window, responding `<CONTINUE>` is correct.
+5.2.7. Standardize timestamp handling in this workflow to UTC by default:
+  - interpret GitHub timestamps, workflow timestamps, and progress comparisons in UTC,
+  - when recording times in `progress.txt` or PR conversation comments, prefer explicit UTC timestamps or clearly labeled UTC-normalized comparisons,
+  - do not compare local wall-clock timestamps against GitHub `Z` timestamps without converting both sides to the same timezone first.
 5.3. Preserve architecture and dependency direction. Keep pure logic separated from IO, transport, filesystem, environment, time, and process boundaries when practical.
 5.4. Keep state explicit, local, and easy to trace. Avoid hidden side effects, unexplained mutable shared state, and unexplained magic values.
 5.5. Favor small understandable functions and modules. Remove dead code you directly replace, but do not refactor broadly without need.
@@ -107,6 +115,8 @@ APPEND to progress.txt (never replace, always append):
   - Useful context (e.g., "the evaluation panel is in component X")
 ---
 ```
+
+Use UTC by default for the `[Date/Time]` value unless a different timezone is explicitly required, and label any non-UTC timestamp clearly.
 
 The learnings section is critical - it helps future iterations avoid repeating mistakes and understand the codebase better.
 
