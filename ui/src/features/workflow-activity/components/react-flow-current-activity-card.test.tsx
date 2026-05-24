@@ -1200,6 +1200,53 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(screen.queryByRole("button", { name: "All" })).toBeNull();
   });
 
+  it("renders supported workstation and work-state editor handles on the shared observer graph", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Route successful output from this workstation.",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Accept an input work state for this workstation.",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Route this work state into a workstation input.",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Receive a successful workstation output.",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: "Assign this worker to a workstation.",
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Provide this resource to a workstation.",
+      }),
+    ).toBeNull();
+  });
+
   it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {
     const updateDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
@@ -2259,6 +2306,68 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       await waitFor(() => {
         expect(document.querySelectorAll(".react-flow__edge")).not.toHaveLength(
           0,
+        );
+      });
+
+      expect(
+        reactFlowErrorSpy.mock.calls.some(([firstArg]) =>
+          String(firstArg).includes(
+            "Couldn't create edge for source handle id",
+          ),
+        ),
+      ).toBe(false);
+    } finally {
+      reactFlowErrorSpy.mockRestore();
+    }
+  });
+
+  it("renders pending shared-surface editor routes without handle-attachment errors", async () => {
+    const reactFlowErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const graphLayout = await buildGraphLayout(
+      semanticWorkflowDashboardSnapshot.topology,
+    );
+    const expectedEdgeCount = buildVisibleGraphEdges(graphLayout).length + 1;
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      draft: {
+        ...defaultDraftState.draft,
+        edgeChanges: {
+          additions: [
+            {
+              kind: "workstation-output",
+              source: { kind: "workstation", name: "review" },
+              target: {
+                kind: "work-state",
+                stateName: "blocked",
+                workTypeName: "story",
+              },
+            },
+          ],
+          removals: [],
+        },
+      },
+      hasChanges: true,
+    } as never);
+
+    try {
+      renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Enter factory graph editor" }),
+      );
+
+      await screen.findByRole("button", { name: "Save changes" });
+      await waitFor(() => {
+        expect(document.querySelectorAll(".react-flow__edge")).toHaveLength(
+          expectedEdgeCount,
         );
       });
 

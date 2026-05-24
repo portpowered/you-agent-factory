@@ -76,11 +76,13 @@ describe("factory graph editor toolbar controls", () => {
 
     const connectButton = screen.getByRole("button", { name: "Connect" });
     const deleteButton = screen.getByRole("button", { name: "Delete" });
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
 
     expect(connectButton.textContent).toBe("");
     expect(deleteButton.textContent).toBe("");
+    expect(saveButton.textContent).toBe("");
     expect(connectButton.getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
+    expect(saveButton).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Discard changes" }),
     ).toBeTruthy();
