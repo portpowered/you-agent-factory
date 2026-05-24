@@ -60,6 +60,18 @@ replacing it. Keep branch-owned deep dives, such as the open-session checklist,
 in their feature-specific docs rather than absorbing them into this generic
 section.
 
+When a live mock-worker run completes, append a `Latest Evidence` entry that
+records:
+
+- The exact command variant you ran, including whether the run used the default
+  mock-worker set or an explicit `./mock-workers.json` file.
+- The scenario or feature-specific checklist path you exercised, stated in
+  maintainer-observable terms.
+- The observed routing or terminal outcome that proved the scenario completed as
+  intended.
+- Any verified rejection, retry-loop, failure-handling, or script-side-effect
+  observations when those paths were part of the exercised run.
+
 ## Dashboard UI Checklist
 
 Use this checklist for the shadcn primitive migration lane and similar dashboard-control changes.
