@@ -1303,7 +1303,11 @@ function registerCurrentActivityCardTestLifecycle(): void {
       screen.getByRole("button", { name: "Enter factory graph editor" }),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
-    fireEvent.click(await screen.findByText("review"));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Select Review workstation",
+      }),
+    );
 
     const dialog = await screen.findByRole("dialog", {
       name: "Remove review workstation?",
@@ -1325,8 +1329,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(nextDraft.removals.workstations).toEqual(["review"]);
   });
 
-  it("shows an explicit blocked-removal notice for ineligible entity deletion", async () => {
-    const updateDraft = vi.fn();
+  it("keeps worker deletion targets off the shared observer graph surface", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -1360,7 +1363,6 @@ function registerCurrentActivityCardTestLifecycle(): void {
           },
         ],
       },
-      updateDraft,
     } as never);
 
     renderCurrentActivity({
@@ -1371,19 +1373,29 @@ function registerCurrentActivityCardTestLifecycle(): void {
       screen.getByRole("button", { name: "Enter factory graph editor" }),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
-    fireEvent.click(await screen.findByText("writer"));
 
-    const blockedNoticeTitle = await screen.findByText("Removal blocked");
-    expect(blockedNoticeTitle.closest("section")?.textContent).toContain(
-      "This worker is still assigned to 1 workstation. Reassign or remove those workstations before deleting writer.",
-    );
-    expect(updateDraft).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", {
+        name: "Select writer worker",
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByText("writer"),
+    ).toBeNull();
+    expect(
+      await screen.findByRole("button", {
+        name: "Select Review workstation",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Removal blocked"),
+    ).toBeNull();
     expect(
       screen.queryByRole("dialog", { name: "Remove writer worker?" }),
     ).toBeNull();
   });
 
-  it("keeps removed server-backed nodes visible with a pending-removal badge", async () => {
+  it("keeps removed server-backed workstations visible with a pending-removal badge", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -1413,7 +1425,11 @@ function registerCurrentActivityCardTestLifecycle(): void {
       screen.getByRole("button", { name: "Enter factory graph editor" }),
     );
 
-    expect(await screen.findByText("review")).toBeTruthy();
+    expect(
+      await screen.findByRole("button", {
+        name: "Select Review workstation",
+      }),
+    ).toBeTruthy();
     expect(screen.getByText("Removing")).toBeTruthy();
   });
 
