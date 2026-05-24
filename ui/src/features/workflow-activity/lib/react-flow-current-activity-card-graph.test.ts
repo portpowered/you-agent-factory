@@ -78,6 +78,19 @@ describe("current activity graph editor handles", () => {
         }),
       ]),
     );
+    expect(workstationNode?.data.handles).toHaveLength(5);
+    expect(workstationNode?.data.handles).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({
+          id: "worker-assignment-target",
+          label: "Worker",
+        }),
+        expect.objectContaining({
+          id: "workstation-resource-target",
+          label: "Resource",
+        }),
+      ]),
+    );
     expect(stateNode?.data.kind).toBe("work-state");
     expect(stateNode?.data.handles).toEqual(
       expect.arrayContaining([
@@ -93,6 +106,7 @@ describe("current activity graph editor handles", () => {
         }),
       ]),
     );
+    expect(stateNode?.data.handles).toHaveLength(5);
     expect(outputEdge).toMatchObject({
       sourceHandle: "workstation-output-source",
       targetHandle: "workstation-output-target",

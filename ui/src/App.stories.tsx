@@ -342,6 +342,21 @@ async function expectFactoryGraphHeaderBrowserFlow(
       name: "Factory graph editor tools",
     }),
   ).toBeVisible();
+  await expect(
+    within(graphCard).getAllByRole("button", {
+      name: "Route successful output from this workstation.",
+    }).length,
+  ).toBeGreaterThan(0);
+  await expect(
+    within(graphCard).queryByRole("button", {
+      name: "Accept a worker assignment for this workstation.",
+    }),
+  ).not.toBeInTheDocument();
+  await expect(
+    within(graphCard).queryByRole("button", {
+      name: "Accept a resource requirement for this workstation.",
+    }),
+  ).not.toBeInTheDocument();
   await userEvent.click(
     headerScope.getByRole("button", {
       name: "Leave factory graph editor",

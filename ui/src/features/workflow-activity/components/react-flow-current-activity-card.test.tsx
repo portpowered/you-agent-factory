@@ -1216,10 +1216,10 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
 
     expect(
-      await screen.findByRole("button", {
+      await screen.findAllByRole("button", {
         name: "Route successful output from this workstation.",
       }),
-    ).toBeTruthy();
+    ).not.toHaveLength(0);
     expect(
       screen.getByRole("button", {
         name: "Accept an input work state for this workstation.",
@@ -1238,6 +1238,16 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(
       screen.queryByRole("button", {
         name: "Assign this worker to a workstation.",
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Accept a worker assignment for this workstation.",
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Accept a resource requirement for this workstation.",
       }),
     ).toBeNull();
     expect(

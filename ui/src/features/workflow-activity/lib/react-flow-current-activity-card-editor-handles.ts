@@ -4,6 +4,7 @@ import {
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import type { ActivityGraphNodeHandle } from "../../flowchart/components/current-activity-node-shell";
 import type { PositionedEdge } from "../../flowchart/lib/layout";
+import type { FactoryGraphDraftEdgeChange } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 
 export interface CurrentActivityEditorState {
   activeTool: "add" | "connect" | "delete" | null;
@@ -12,6 +13,15 @@ export interface CurrentActivityEditorState {
   onConnectionAnchorClick: (endpoint: FactoryGraphConnectionEndpoint) => void;
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
 }
+
+const SUPPORTED_EDITOR_EDGE_KINDS: ReadonlySet<FactoryGraphDraftEdgeChange["kind"]> =
+  new Set([
+    "workstation-input",
+    "workstation-output",
+    "workstation-on-continue",
+    "workstation-on-failure",
+    "workstation-on-rejection",
+  ]);
 
 export function supportedEditorHandleIdsForEdge(edge: PositionedEdge) {
   const sourceIsWorkstation = edge.fromNodeId.startsWith("workstation:");
@@ -63,10 +73,12 @@ export function buildEditorHandles(args: {
   const connectable =
     args.editor.canInteractWithEditor && args.editor.activeTool === "connect";
 
-  return getFactoryGraphConnectionAnchors(args.nodeKind).map((anchor) => {
-    const selected =
-      args.editor.pendingConnectionSource?.nodeId === args.nodeId &&
-      args.editor.pendingConnectionSource.anchorId === anchor.id;
+  return getFactoryGraphConnectionAnchors(args.nodeKind)
+    .filter((anchor) => SUPPORTED_EDITOR_EDGE_KINDS.has(anchor.edgeKind))
+    .map((anchor) => {
+      const selected =
+        args.editor.pendingConnectionSource?.nodeId === args.nodeId &&
+        args.editor.pendingConnectionSource.anchorId === anchor.id;
     const validTarget =
       connectable &&
       args.editor.pendingConnectionSource !== null &&
@@ -89,5 +101,5 @@ export function buildEditorHandles(args: {
       type: anchor.role,
       variant: selected ? "selected" : validTarget ? "valid-target" : "default",
     } satisfies ActivityGraphNodeHandle;
-  });
+    });
 }
