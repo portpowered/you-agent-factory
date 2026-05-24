@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -94,6 +95,164 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 	}
 	if expanded.Workstations[0].Guards[0].Workstation != "review-story" || expanded.Workstations[0].Guards[0].MaxVisits != 3 {
 		t.Fatalf("expected visit_count guard details to roundtrip, got %#v", expanded.Workstations[0].Guards[0])
+	}
+}
+
+func TestFactoryConfigMapper_FlattenOmitsEmptyOptionalCollectionsAndExpandsPopulatedOptionals(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	flattened, err := mapper.Flatten(&interfaces.FactoryConfig{
+		Name: "optional-boundary-fields",
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			ID:               "execute-story-id",
+			Name:             "execute-story",
+			WorkerTypeName:   "executor",
+			Inputs:           []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:          []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+			WorkingDirectory: "/tmp/story",
+			StopWords:        []string{},
+			Env:              map[string]string{},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+
+	payload := mustDecodeFactoryPayload(t, flattened)
+	workstationPayload := payload["workstations"].([]any)[0].(map[string]any)
+	assertMissingKey(t, workstationPayload, "stopWords")
+	assertMissingKey(t, workstationPayload, "env")
+	if got := workstationPayload["id"]; got != "execute-story-id" {
+		t.Fatalf("flattened workstation id = %#v, want %q", got, "execute-story-id")
+	}
+	if got := workstationPayload["workingDirectory"]; got != "/tmp/story" {
+		t.Fatalf("flattened workingDirectory = %#v, want %q", got, "/tmp/story")
+	}
+
+	expanded, err := mapper.Expand([]byte(`{
+		"name": "optional-boundary-fields",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"id":"execute-story-id",
+			"name":"execute-story",
+			"worker":"executor",
+			"workingDirectory":"/tmp/story",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}],
+			"stopWords":["DONE"],
+			"env":{"MODE":"strict"}
+		}]
+	}`))
+	if err != nil {
+		t.Fatalf("mapper.Expand populated optionals: %v", err)
+	}
+
+	workstation := expanded.Workstations[0]
+	if workstation.WorkingDirectory != "/tmp/story" {
+		t.Fatalf("expanded workingDirectory = %q, want /tmp/story", workstation.WorkingDirectory)
+	}
+	if len(workstation.StopWords) != 1 || workstation.StopWords[0] != "DONE" {
+		t.Fatalf("expanded stopWords = %#v, want [DONE]", workstation.StopWords)
+	}
+	if workstation.Env["MODE"] != "strict" {
+		t.Fatalf("expanded env = %#v, want MODE=strict", workstation.Env)
+	}
+}
+
+func TestFactoryConfigToOpenAPI_CopiesOptionalCollections(t *testing.T) {
+	stopWords := []string{"DONE"}
+	env := map[string]string{"MODE": "strict"}
+	cfg := &interfaces.FactoryConfig{
+		Name: "copy-safe-optionals",
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			ID:             "execute-story-id",
+			Name:           "execute-story",
+			WorkerTypeName: "executor",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+			StopWords:      stopWords,
+			Env:            env,
+		}},
+	}
+
+	generated := FactoryConfigToOpenAPI(cfg)
+	stopWords[0] = "MUTATED"
+	stopWords = append(stopWords, "LATE")
+	env["MODE"] = "mutated"
+	env["LATE"] = "value"
+
+	workstation := (*generated.Workstations)[0]
+	if workstation.StopWords == nil || len(*workstation.StopWords) != 1 || (*workstation.StopWords)[0] != "DONE" {
+		t.Fatalf("generated stopWords = %#v, want copied pre-mutation values", workstation.StopWords)
+	}
+	if workstation.Env == nil || (*workstation.Env)["MODE"] != "strict" {
+		t.Fatalf("generated env = %#v, want copied pre-mutation values", workstation.Env)
+	}
+	if _, ok := (*workstation.Env)["LATE"]; ok {
+		t.Fatalf("generated env = %#v, want copied map to omit post-mapping additions", workstation.Env)
+	}
+}
+
+func TestFactoryConfigFromOpenAPI_CopiesOptionalCollections(t *testing.T) {
+	stopWords := []string{"DONE"}
+	env := factoryapi.StringMap{"MODE": "strict"}
+	apiCfg := factoryapi.Factory{
+		Name: "copy-safe-openapi-optionals",
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "story",
+			States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+			},
+		}},
+		Workers: &[]factoryapi.Worker{{Name: "executor"}},
+		Workstations: &[]factoryapi.Workstation{{
+			Id:        stringPtr("execute-story-id"),
+			Name:      "execute-story",
+			Worker:    "executor",
+			Inputs:    []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
+			Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}},
+			StopWords: &stopWords,
+			Env:       &env,
+		}},
+	}
+
+	cfg, err := FactoryConfigFromOpenAPI(apiCfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+
+	stopWords[0] = "MUTATED"
+	stopWords = append(stopWords, "LATE")
+	env["MODE"] = "mutated"
+	env["LATE"] = "value"
+
+	workstation := cfg.Workstations[0]
+	if len(workstation.StopWords) != 1 || workstation.StopWords[0] != "DONE" {
+		t.Fatalf("expanded stopWords = %#v, want copied pre-mutation values", workstation.StopWords)
+	}
+	if workstation.Env["MODE"] != "strict" {
+		t.Fatalf("expanded env = %#v, want copied pre-mutation values", workstation.Env)
+	}
+	if _, ok := workstation.Env["LATE"]; ok {
+		t.Fatalf("expanded env = %#v, want copied map to omit post-mapping additions", workstation.Env)
 	}
 }
 

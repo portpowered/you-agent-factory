@@ -5,6 +5,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
@@ -756,18 +757,11 @@ func generatedFactoryWorldScriptResponse(
 }
 
 func stringSlicePtr(values []string) *[]string {
-	if len(values) == 0 {
-		return nil
-	}
-	return &values
+	return optional.CopiedStringsPtr(values)
 }
 
 func workstationRequestStringMapPtr(values map[string]string) *factoryapi.StringMap {
-	if len(values) == 0 {
-		return nil
-	}
-	converted := factoryapi.StringMap(cloneStringMap(values))
-	return &converted
+	return optional.CopiedStringMapPtr(values)
 }
 
 func workItemRefSlicePtr(values []factoryapi.FactoryWorldWorkItemRef) *[]factoryapi.FactoryWorldWorkItemRef {
@@ -800,17 +794,11 @@ func int64Ptr(value int64) *int64 {
 }
 
 func intPtr(value int) *int {
-	if value == 0 {
-		return nil
-	}
-	return &value
+	return optional.NonZeroIntPtr(value)
 }
 
 func workstationRequestStringPtr(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
+	return optional.NonEmptyStringPtr(value)
 }
 
 func workstationNameOrID(name string, id string) string {

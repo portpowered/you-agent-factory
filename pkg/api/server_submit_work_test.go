@@ -194,6 +194,25 @@ func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T)
 	}
 }
 
+func TestSubmitWork_CopiesTagMapBeforeRuntimeSubmission(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := submitWorkRequest(t, srv, `{"name":"tag-copy","workTypeName":"prd","payload":{"title":"Draft PRD"},"tags":{"priority":"high","team":"api"}}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	}
+	if mf.Submitted[0].Tags["priority"] != "high" {
+		t.Fatalf("submitted tags = %#v, want priority=high", mf.Submitted[0].Tags)
+	}
+	if mf.Submitted[0].Tags["team"] != "api" {
+		t.Fatalf("submitted tags = %#v, want team=api", mf.Submitted[0].Tags)
+	}
+}
+
 func TestSubmitWork_MatchingTraceAliasesNormalizeAtBoundary(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)

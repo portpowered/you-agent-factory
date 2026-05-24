@@ -16,6 +16,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factorypkg "github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -1313,10 +1314,7 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 }
 
 func stringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
+	return optional.StringValue(value)
 }
 
 func generatedWorkStateName(value *factoryapi.WorkState) string {
@@ -1327,34 +1325,19 @@ func generatedWorkStateName(value *factoryapi.WorkState) string {
 }
 
 func intValue(value *int) int {
-	if value == nil {
-		return 0
-	}
-	return *value
+	return optional.IntValue(value)
 }
 
 func stringSliceValue(values *[]string) []string {
-	if values == nil {
-		return nil
-	}
-	out := make([]string, len(*values))
-	copy(out, *values)
-	return out
+	return optional.StringsValue(values)
 }
 
 func stringSlicePtrCopy(values []string) *[]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := append([]string(nil), values...)
-	return &out
+	return optional.CopiedStringsPtr(values)
 }
 
 func stringPtrIfNotEmpty(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
+	return optional.NonEmptyStringPtr(value)
 }
 
 func integerMapPtr(values map[string]int) *factoryapi.IntegerMap {
@@ -1366,18 +1349,11 @@ func integerMapPtr(values map[string]int) *factoryapi.IntegerMap {
 }
 
 func stringMapPtr(values map[string]string) *factoryapi.StringMap {
-	if len(values) == 0 {
-		return nil
-	}
-	converted := factoryapi.StringMap(values)
-	return &converted
+	return optional.CopiedStringMapPtr(values)
 }
 
 func intPtrIfPositive(value int) *int {
-	if value <= 0 {
-		return nil
-	}
-	return &value
+	return optional.PositiveIntPtr(value)
 }
 
 func firstNonEmptyString(values ...string) string {
@@ -1390,10 +1366,7 @@ func firstNonEmptyString(values ...string) string {
 }
 
 func generatedStringMap(values *factoryapi.StringMap) map[string]string {
-	if values == nil {
-		return nil
-	}
-	return map[string]string(*values)
+	return optional.StringMapValue(values)
 }
 
 func generatedSubmitRelations(values *[]factoryapi.SubmitRelation) []interfaces.Relation {

@@ -18,6 +18,7 @@ jobs:
   long-local-inference:
     name: Long Local Inference (${{ matrix.os_id }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +42,7 @@ jobs:
       OMNIVOICE_COMMAND_EXTRACT_DIR: ${{ github.workspace }}/.cache/omnivoice-command/extract
       OMNIVOICE_COMMAND_NAME: ${{ matrix.command_name }}
       OMNIVOICE_COMMAND_URL: ${{ matrix.backend_url }}
+      SEGMENT_DOWNLOAD_TIMEOUT_MINS: "5"
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -52,6 +54,7 @@ jobs:
           cache: false
 
       - name: Restore managed model cache
+        timeout-minutes: 10
         uses: actions/cache@v4
         with:
           path: |
@@ -61,23 +64,27 @@ jobs:
 
       - name: Install make on Windows
         if: runner.os == 'Windows'
+        timeout-minutes: 10
         shell: pwsh
         run: choco install make --no-progress -y
 
       - name: Install OMNIVOICE runtime on Unix
         if: runner.os != 'Windows'
         id: install-unix
+        timeout-minutes: 10
         shell: bash
         run: ./scripts/ci/install-omnivoice-command.sh
 
       - name: Install OMNIVOICE runtime on Windows
         if: runner.os == 'Windows'
         id: install-windows
+        timeout-minutes: 10
         shell: pwsh
         run: ./scripts/ci/install-omnivoice-command.ps1
 
-      - name: Run long local inference coverage
+      - name: Run managed-runtime coverage
         shell: bash
+        timeout-minutes: 15
         env:
           INFINITE_YOU_OMNIVOICE_COMMAND: ${{ steps.install-unix.outputs.command_path || steps.install-windows.outputs.command_path }}
         run: |
@@ -89,7 +96,23 @@ jobs:
             '${{ matrix.os_id }}' \
             "$INFINITE_YOU_OMNIVOICE_COMMAND" \
             "$INFINITE_YOU_OMNIVOICE_CACHE_DIR"
-          make long-tests
+          make long-tests-managed-runtime
+
+      - name: Run long local inference coverage
+        shell: bash
+        timeout-minutes: 25
+        env:
+          INFINITE_YOU_OMNIVOICE_COMMAND: ${{ steps.install-unix.outputs.command_path || steps.install-windows.outputs.command_path }}
+        run: |
+          set -euo pipefail
+          if [ '${{ matrix.os_id }}' = 'macos' ]; then
+            export GGML_BACKEND=CPU
+          fi
+          printf 'platform=%s\nbackend=%s\ncache_path=%s\n' \
+            '${{ matrix.os_id }}' \
+            "$INFINITE_YOU_OMNIVOICE_COMMAND" \
+            "$INFINITE_YOU_OMNIVOICE_CACHE_DIR"
+          make long-tests-functional-runtime
 
       - name: Print long-test diagnostics on failure
         if: failure()
