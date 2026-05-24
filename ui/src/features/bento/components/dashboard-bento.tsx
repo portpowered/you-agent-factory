@@ -23,8 +23,10 @@ import {
   WorkflowActivityWidget,
 } from "../../workflow-activity/public";
 import { AgentBentoLayout, type AgentBentoLayoutCard } from "./agent-bento";
+import { InlineAddWidgetCard } from "./inline-add-widget-card";
 import { useDashboardBentoStore } from "../state/dashboardBentoStore";
 import {
+  DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
   DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
   DASHBOARD_WIDGET_IDS,
   getRenderableDashboardLayout,
@@ -302,6 +304,11 @@ function buildDashboardCards({
           widgetId={DASHBOARD_WIDGET_IDS.trace}
         />
       ),
+    },
+    {
+      id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+      widgetType: DASHBOARD_WIDGET_IDS.addWidget,
+      children: <InlineAddWidgetCard locale={locale} />,
     },
   ];
 }

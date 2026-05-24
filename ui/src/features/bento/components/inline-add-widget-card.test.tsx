@@ -1,0 +1,24 @@
+import { render, screen } from "@testing-library/react";
+
+import { InlineAddWidgetCard } from "./inline-add-widget-card";
+
+describe("InlineAddWidgetCard", () => {
+  it("renders discoverable add-widget copy inside a dashboard grid card", () => {
+    render(<InlineAddWidgetCard />);
+
+    const card = screen.getByRole("article", { name: "Add widget" });
+
+    expect(card.dataset.dashboardPanelShell).toBe("grid-card");
+    expect(screen.getByText("Add a widget to this dashboard grid.")).toBeTruthy();
+    expect(
+      screen.getByText("The widget picker opens here in the next step."),
+    ).toBeTruthy();
+  });
+
+  it("localizes the visible add-widget card title", () => {
+    render(<InlineAddWidgetCard locale="zh-CN" />);
+
+    expect(screen.getByRole("article", { name: "添加小组件" })).toBeTruthy();
+    expect(screen.getByText("将小组件添加到此仪表板网格。")).toBeTruthy();
+  });
+});

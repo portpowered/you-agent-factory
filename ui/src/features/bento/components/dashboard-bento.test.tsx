@@ -194,6 +194,7 @@ vi.mock("../state/dashboardBentoStore", () => ({
 }));
 
 vi.mock("../hooks/useDashboardLayout", () => ({
+  DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID: "add-widget::inline-add",
   DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS: {
     currentSelection: "current-selection",
     providerSession: "provider-session",
@@ -242,6 +243,10 @@ vi.mock("./agent-bento", () => ({
   ),
 }));
 
+vi.mock("./inline-add-widget-card", () => ({
+  InlineAddWidgetCard: () => <section>Add widget card</section>,
+}));
+
 describe("DashboardBento", () => {
   it("registers the provider-session card alongside current selection", () => {
     render(<DashboardBento />);
@@ -251,6 +256,9 @@ describe("DashboardBento", () => {
     );
     expect(screen.getByTestId("provider-session").textContent).toContain(
       "Provider session card",
+    );
+    expect(screen.getByTestId("add-widget").textContent).toContain(
+      "Add widget card",
     );
   });
 
