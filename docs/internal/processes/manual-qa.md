@@ -21,6 +21,57 @@ After the preview server starts, open `http://127.0.0.1:4173` in a browser and s
 - Tablet: `768x1024`
 - Desktop: `1440x900`
 
+## Mock-Worker Runtime Verification
+
+Use live mock-worker QA when a change depends on real factory routing,
+runtime outcomes, or observable side effects that Storybook verification and
+unit-level automated coverage cannot prove on their own. This is the shared
+baseline for runtime-oriented checks; feature-specific mock-worker checklists
+may add narrower steps, but they extend this process instead of replacing it.
+
+Start from these existing command patterns:
+
+- `you run --dir ./factory --with-mock-workers`
+- `you run --dir ./factory --with-mock-workers ./mock-workers.json`
+
+Use the public [Authoring Factories](../../reference/authoring-factories.md)
+guide for command usage details, mock-worker setup expectations, and related
+runtime options instead of duplicating that setup documentation here.
+
+During live runs, verify these reusable runtime outcomes before closing the
+feature-specific checklist:
+
+- Routing reaches the expected workstation or terminal outcome for the scenario
+  you triggered, and the visible status, logs, or emitted artifacts match that
+  path instead of silently falling back to a different branch.
+- Rejection and retry-loop paths behave as intended for the exercised case,
+  including whether work requeues, stops, or surfaces an explicit rejected
+  outcome when a mock worker returns that result.
+- Failure handling stays observable to maintainers, including any surfaced
+  errors, preserved failure state, or recovery path that the runtime exposes
+  after a worker, script, or downstream step fails.
+- Script side effects that matter to the scenario actually happen, such as
+  expected files, outputs, or state transitions appearing once the run
+  completes, instead of only assuming the script was invoked.
+
+Feature-specific mock-worker checklists can add narrower scenarios or
+domain-owned assertions, but they should extend this baseline instead of
+replacing it. Keep branch-owned deep dives, such as the open-session checklist,
+in their feature-specific docs rather than absorbing them into this generic
+section.
+
+When a live mock-worker run completes, append a `Latest Evidence` entry that
+records:
+
+- The exact command variant you ran, including whether the run used the default
+  mock-worker set or an explicit `./mock-workers.json` file.
+- The scenario or feature-specific checklist path you exercised, stated in
+  maintainer-observable terms.
+- The observed routing or terminal outcome that proved the scenario completed as
+  intended.
+- Any verified rejection, retry-loop, failure-handling, or script-side-effect
+  observations when those paths were part of the exercised run.
+
 ## Dashboard UI Checklist
 
 Use this checklist for the shadcn primitive migration lane and similar dashboard-control changes.
