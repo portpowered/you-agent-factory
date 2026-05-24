@@ -10,6 +10,7 @@ import type {
 } from "../api/dashboard";
 import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
 import type { FactoryEvent } from "../api/events";
+import type { FactorySessionSummary } from "../api/factory-sessions/api";
 import {
   buildDashboardSnapshotFixture,
   mediumBranchingDashboardTopology,
@@ -115,6 +116,16 @@ type CurrentFactoryDocumentResult = ReturnType<typeof useCurrentFactoryDocument>
 const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
+const defaultFactorySessionSummary: FactorySessionSummary = {
+  factoryDir: "/workspace/default",
+  folderPath: "/workspace",
+  id: DEFAULT_FACTORY_SESSION_ID,
+  isDefault: true,
+  project: "default",
+  target: {
+    kind: "default",
+  },
+};
 
 export const baselineSnapshot = buildDashboardSnapshotFixture(
   mediumBranchingDashboardTopology,
@@ -289,18 +300,7 @@ export function renderApp({
 
       if (path === "/factory-sessions") {
         return jsonResponse({
-          sessions: [
-            {
-              factoryDir: "/tmp/default-factory-session",
-              folderPath: "/tmp/default-factory-session",
-              id: DEFAULT_FACTORY_SESSION_ID,
-              isDefault: true,
-              project: "default-factory-session",
-              target: {
-                kind: "default",
-              },
-            },
-          ],
+          sessions: [defaultFactorySessionSummary],
         });
       }
 
