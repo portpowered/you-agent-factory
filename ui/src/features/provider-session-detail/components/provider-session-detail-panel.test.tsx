@@ -387,6 +387,12 @@ describe("ProviderSessionDetailPanel", () => {
 
     expect(screen.getByText("Summarize the rollout state for this work item.")).toBeTruthy();
     expect(screen.getByText("The failing edge is in provider-session parsing.")).toBeTruthy();
+    expect(screen.getAllByText("Encrypted reasoning").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        "Reasoning occurred for this step, but plaintext content is intentionally unavailable.",
+      ),
+    ).toBeTruthy();
     expect(screen.getByText("Encrypted reasoning content only.")).toBeTruthy();
     expect(screen.getByText("read_file")).toBeTruthy();
     expect(screen.getByText("call_tool_1")).toBeTruthy();
@@ -691,7 +697,12 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getAllByText("顺序 3 / 轮次 2").length).toBeGreaterThan(0);
     expect(screen.getByText("调用 ID")).toBeTruthy();
     expect(screen.getAllByText("不可用").length).toBeGreaterThan(0);
-    expect(screen.getByText("仅包含加密的推理内容。")).toBeTruthy();
+    expect(screen.getAllByText("加密推理").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        "此步骤确实发生了推理，但明文内容会被有意隐藏，无法直接查看。",
+      ),
+    ).toBeTruthy();
     expect(screen.getByText("第 3 行")).toBeTruthy();
     expect(screen.getByText("第 2 行的未知事件")).toBeTruthy();
   });

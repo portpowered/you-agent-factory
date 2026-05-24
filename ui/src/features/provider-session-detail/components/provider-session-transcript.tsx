@@ -60,6 +60,37 @@ export function TranscriptSection({
   );
 }
 
+export function EncryptedReasoningNotice({
+  className,
+  locale,
+}: {
+  className?: string;
+  locale?: string;
+}) {
+  const messages = getProviderSessionDetailMessages(locale);
+
+  return (
+    <div
+      className={cn(
+        "grid gap-2 rounded-lg border border-af-info/18 bg-af-info/8 p-3",
+        className,
+      )}
+    >
+      <span
+        className={cn(
+          "inline-flex w-fit rounded-full border border-af-info/24 bg-af-info/12 px-2 py-0.5 text-af-info-ink",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
+        {messages.encryptedReasoningStateLabel}
+      </span>
+      <p className={cn("m-0 text-af-ink/76", DASHBOARD_BODY_TEXT_CLASS)}>
+        {messages.encryptedReasoningDescription}
+      </p>
+    </div>
+  );
+}
+
 function TranscriptEntryCard({
   entry,
   locale,
@@ -142,6 +173,9 @@ function TranscriptEntryBody({
     case "reasoning":
       return (
         <div className="grid gap-2">
+          {entry.encrypted && !entry.text ? (
+            <EncryptedReasoningNotice locale={locale} />
+          ) : null}
           {entry.summary ? (
             <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{entry.summary}</p>
           ) : null}

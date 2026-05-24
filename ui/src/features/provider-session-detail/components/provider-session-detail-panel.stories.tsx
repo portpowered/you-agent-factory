@@ -186,6 +186,7 @@ export const MixedTranscript = {
                   type: "assistant_message",
                 },
                 {
+                  encrypted: true,
                   lineNumber: 3,
                   order: 3,
                   sourceType: "reasoning",
@@ -254,6 +255,12 @@ export const MixedTranscript = {
     ).toHaveLength(1);
     expect(canvas.getAllByText("{\"lines\":128}")).toHaveLength(1);
     expect(canvas.getAllByText("Inspect the parser branch before retrying.")).toHaveLength(1);
+    expect(canvas.getAllByText("Encrypted reasoning").length).toBeGreaterThan(0);
+    expect(
+      canvas.getByText(
+        "Reasoning occurred for this step, but plaintext content is intentionally unavailable.",
+      ),
+    ).toBeTruthy();
   },
   render: TimestampPrefixedSessionSuccess.render,
 };

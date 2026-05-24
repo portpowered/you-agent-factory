@@ -10,7 +10,10 @@ import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import { cn } from "../../../lib/cn";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
-import { TranscriptSection } from "./provider-session-transcript";
+import {
+  EncryptedReasoningNotice,
+  TranscriptSection,
+} from "./provider-session-transcript";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
@@ -450,14 +453,7 @@ function ReasoningSection({
                 </p>
               </div>
               {entry.encrypted ? (
-                <p
-                  className={cn(
-                    "m-0 mt-2 text-af-ink/62",
-                    DASHBOARD_SUPPORTING_TEXT_CLASS,
-                  )}
-                >
-                  {messages.encryptedReasoningOnly}
-                </p>
+                <EncryptedReasoningNotice className="mt-2" locale={locale} />
               ) : null}
             </article>
           ))}

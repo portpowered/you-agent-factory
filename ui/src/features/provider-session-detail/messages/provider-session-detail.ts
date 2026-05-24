@@ -17,6 +17,9 @@ const providerSessionDetailMessagesByLocale = {
       "The selected session file did not contain any Codex event records.",
     emptyTranscriptState:
       "The selected session was parsed, but it did not contain any transcript-visible entries.",
+    encryptedReasoningDescription:
+      "Reasoning occurred for this step, but plaintext content is intentionally unavailable.",
+    encryptedReasoningStateLabel: "Encrypted reasoning",
     encryptedReasoningOnly: "Encrypted reasoning content only.",
     errorPrefix: "Session details could not be loaded.",
     eventCountLabel: "Parsed events",
@@ -92,6 +95,9 @@ const providerSessionDetailMessagesByLocale = {
       "選択したセッションファイルには Codex のイベント記録が含まれていませんでした。",
     emptyTranscriptState:
       "選択したセッションは解析されましたが、文字起こしとして表示できるエントリは含まれていませんでした。",
+    encryptedReasoningDescription:
+      "このステップでは推論が行われましたが、平文の内容は意図的に利用できません。",
+    encryptedReasoningStateLabel: "暗号化された推論",
     encryptedReasoningOnly: "暗号化された推論内容のみです。",
     errorPrefix: "セッション詳細を読み込めませんでした。",
     eventCountLabel: "解析済みイベント数",
@@ -170,6 +176,9 @@ const providerSessionDetailMessagesByLocale = {
       "선택한 세션 파일에 Codex 이벤트 레코드가 포함되어 있지 않습니다.",
     emptyTranscriptState:
       "선택한 세션은 파싱되었지만, 대화 기록으로 표시할 수 있는 항목이 없습니다.",
+    encryptedReasoningDescription:
+      "이 단계에서는 추론이 수행되었지만 일반 텍스트 내용은 의도적으로 제공되지 않습니다.",
+    encryptedReasoningStateLabel: "암호화된 추론",
     encryptedReasoningOnly: "암호화된 추론 내용만 있습니다.",
     errorPrefix: "세션 세부 정보를 불러올 수 없습니다.",
     eventCountLabel: "파싱된 이벤트",
@@ -245,6 +254,9 @@ const providerSessionDetailMessagesByLocale = {
     dispatchLabel: "分派",
     emptyState: "所选会话文件不包含任何 Codex 事件记录。",
     emptyTranscriptState: "所选会话已成功解析，但不包含可显示为会话记录的条目。",
+    encryptedReasoningDescription:
+      "此步骤确实发生了推理，但明文内容会被有意隐藏，无法直接查看。",
+    encryptedReasoningStateLabel: "加密推理",
     encryptedReasoningOnly: "仅包含加密的推理内容。",
     errorPrefix: "无法加载会话详情。",
     eventCountLabel: "已解析事件数",

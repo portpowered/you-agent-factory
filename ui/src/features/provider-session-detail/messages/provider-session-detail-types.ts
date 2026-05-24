@@ -8,6 +8,8 @@ export interface ProviderSessionDetailMessages {
   dispatchLabel: string;
   emptyState: string;
   emptyTranscriptState: string;
+  encryptedReasoningDescription: string;
+  encryptedReasoningStateLabel: string;
   encryptedReasoningOnly: string;
   errorPrefix: string;
   eventCountLabel: string;
