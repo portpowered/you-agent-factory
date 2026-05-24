@@ -9,7 +9,7 @@ import { expect, test } from "vitest";
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(dirname, "..");
 const warningProneTestFiles = [
-  "src/features/work-outcome/components/work-chart.test.tsx",
+  "src/features/work-outcome/components/work-chart-warning-regression.test.tsx",
   "src/features/header/components/tick-slider-control.test.tsx",
 ];
 const blockedWarningFragments = [
