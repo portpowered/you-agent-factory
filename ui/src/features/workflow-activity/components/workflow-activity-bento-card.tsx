@@ -25,6 +25,7 @@ interface WorkflowActivityBentoCardProps {
   ) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
+  widgetInstanceID?: string;
 }
 
 const GRAPH_PANEL_SHELL_CLASS = "relative h-full min-h-0";
@@ -36,6 +37,7 @@ export function WorkflowActivityBentoCard({
   now,
   selection,
   snapshot,
+  widgetInstanceID,
   onSelectWorkID,
   onSelectStateNode,
   onSelectWorkstation,
@@ -76,6 +78,7 @@ export function WorkflowActivityBentoCard({
           selection={toCurrentActivitySelection(selection)}
           showHeaderActions={false}
           snapshot={snapshot}
+          widgetInstanceID={widgetInstanceID}
           onSelectWorkID={onSelectWorkID}
           onSelectStateNode={onSelectStateNode}
           onSelectWorkstation={onSelectWorkstation}

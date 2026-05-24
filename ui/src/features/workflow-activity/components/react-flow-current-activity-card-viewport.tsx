@@ -46,6 +46,7 @@ export function CurrentActivityGraphViewport({
   graphKey,
   handleNodesChange,
   hasPendingChanges,
+  headingID,
   imports,
   initialFitViewKey,
   initialFitViewOptions,
@@ -70,6 +71,7 @@ export function CurrentActivityGraphViewport({
   graphKey: string;
   handleNodesChange: (changes: NodeChange[]) => void;
   hasPendingChanges: boolean;
+  headingID: string;
   imports: CurrentActivityImportController;
   initialFitViewKey: string;
   initialFitViewOptions: FitViewOptions;
@@ -132,7 +134,7 @@ export function CurrentActivityGraphViewport({
         locale={locale}
       />
       <section
-        aria-describedby="workflow-graph-heading"
+        aria-describedby={headingID}
         aria-label={editorMessages.viewportLabel}
         className={cn(
           "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",

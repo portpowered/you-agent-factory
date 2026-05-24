@@ -104,8 +104,10 @@ function createQueryClient(): QueryClient {
 
 function renderWorkflowActivityBentoCard({
   locale = "zh-CN",
+  widgetInstanceID,
 }: {
   locale?: string;
+  widgetInstanceID?: string;
 } = {}) {
   const snapshot = semanticWorkflowDashboardSnapshot;
   const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
@@ -123,10 +125,50 @@ function renderWorkflowActivityBentoCard({
         now={Date.parse("2026-04-08T12:00:04Z")}
         selection={selection}
         snapshot={snapshot}
+        widgetInstanceID={widgetInstanceID}
         onSelectWorkID={vi.fn()}
         onSelectStateNode={vi.fn()}
         onSelectWorkstation={vi.fn()}
       />
+    </QueryClientProvider>,
+  );
+}
+
+function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
+  const queryClient = createQueryClient();
+  const snapshot = semanticWorkflowDashboardSnapshot;
+  const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+  const selection: DashboardSelection = {
+    kind: "node",
+    nodeId: selectedNode.node_id,
+  };
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <div>
+        <WorkflowActivityBentoCard
+          importController={createImportController()}
+          locale={locale}
+          now={Date.parse("2026-04-08T12:00:04Z")}
+          selection={selection}
+          snapshot={snapshot}
+          widgetInstanceID="work-graph::primary"
+          onSelectWorkID={vi.fn()}
+          onSelectStateNode={vi.fn()}
+          onSelectWorkstation={vi.fn()}
+        />
+        <WorkflowActivityBentoCard
+          importController={createImportController()}
+          locale={locale}
+          now={Date.parse("2026-04-08T12:00:04Z")}
+          selection={selection}
+          snapshot={snapshot}
+          widgetInstanceID="work-graph::instance-1"
+          onSelectWorkID={vi.fn()}
+          onSelectStateNode={vi.fn()}
+          onSelectWorkstation={vi.fn()}
+        />
+      </div>
     </QueryClientProvider>,
   );
 }
@@ -221,5 +263,41 @@ describe("WorkflowActivityBentoCard", () => {
     expect(
       headerScope.getByRole("button", { name: editorMessages.modeLeaveEditor }),
     ).toBeTruthy();
+  });
+
+  it("keeps duplicate workflow activity cards on distinct accessibility ids", () => {
+    const locale = "zh-CN";
+    const messages = getWorkflowActivityShellMessages(locale);
+    const { container } = renderDuplicateWorkflowActivityBentoCards(locale);
+
+    const workflowSections = Array.from(
+      container.querySelectorAll<HTMLElement>(
+        'section[aria-labelledby^="workflow-graph-heading-"]',
+      ),
+    );
+    const describedViewports = screen.getAllByRole("region", {
+      name: messages.viewportLabel,
+    });
+
+    expect(workflowSections).toHaveLength(2);
+    expect(describedViewports).toHaveLength(2);
+
+    const headingIDs = workflowSections.map((section) =>
+      section.getAttribute("aria-labelledby"),
+    );
+    const viewportDescriptionIDs = describedViewports.map((region) =>
+      region.getAttribute("aria-describedby"),
+    );
+
+    expect(new Set(headingIDs).size).toBe(2);
+    expect(new Set(viewportDescriptionIDs).size).toBe(2);
+    expect(headingIDs).toEqual(viewportDescriptionIDs);
+
+    for (const headingID of headingIDs) {
+      expect(headingID).toBeTruthy();
+      expect(
+        headingID ? container.ownerDocument.getElementById(headingID) : null,
+      ).toBeTruthy();
+    }
   });
 });

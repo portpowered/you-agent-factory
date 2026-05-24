@@ -18,6 +18,7 @@ export interface WorkflowActivityWidgetProps {
   onSelectWorkstation: (nodeId: string) => void;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
+  widgetInstanceID?: string;
 }
 
 export function WorkflowActivityWidget({
@@ -30,6 +31,7 @@ export function WorkflowActivityWidget({
   onSelectWorkstation,
   selection,
   snapshot,
+  widgetInstanceID,
 }: WorkflowActivityWidgetProps) {
   return (
     <WorkflowActivityBentoCard
@@ -39,6 +41,7 @@ export function WorkflowActivityWidget({
       now={now}
       selection={selection}
       snapshot={snapshot}
+      widgetInstanceID={widgetInstanceID}
       onSelectWorkID={onSelectWorkID}
       onSelectStateNode={onSelectStateNode}
       onSelectWorkstation={onSelectWorkstation}

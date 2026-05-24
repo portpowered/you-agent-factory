@@ -257,6 +257,7 @@ function buildOverviewWidgetCard({
             onSelectWorkstation={currentSelection.selectWorkstation}
             selection={currentSelection.selection}
             snapshot={snapshot}
+            widgetInstanceID={layoutItem.id}
           />
         ),
       };

@@ -199,9 +199,17 @@ vi.mock("../../work-totals/public", () => ({
 vi.mock("../../workflow-activity/public", () => ({
   WorkflowActivityWidget: ({
     headerAction,
+    widgetInstanceID,
   }: {
     headerAction?: React.ReactNode;
-  }) => <section>{headerAction}Workflow activity card</section>,
+    widgetInstanceID?: string;
+  }) => (
+    <section>
+      {headerAction}
+      Workflow activity card
+      {widgetInstanceID ? `:${widgetInstanceID}` : ""}
+    </section>
+  ),
   useCurrentActivityImportController: () => ({
     activationState: { status: "idle" },
     activateImport: vi.fn(),
@@ -343,6 +351,29 @@ describe("DashboardBento", () => {
     );
 
     expect(addDashboardWidget).toHaveBeenCalledWith("work-graph");
+  });
+
+  it("passes stable workflow activity instance ids into duplicate-capable dashboard cards", () => {
+    mockDashboardLayout = [
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      {
+        h: 8,
+        id: "work-graph::instance-1",
+        minH: 6,
+        minW: 5,
+        w: 8,
+        widgetType: "work-graph",
+        x: 0,
+        y: 12,
+      },
+    ];
+
+    render(<DashboardBento />);
+
+    expect(screen.getByText("Workflow activity card:work-graph::primary")).toBeTruthy();
+    expect(
+      screen.getByText("Workflow activity card:work-graph::instance-1"),
+    ).toBeTruthy();
   });
 
   it("renders compact remove controls for removable dashboard cards and routes removal by instance id", () => {

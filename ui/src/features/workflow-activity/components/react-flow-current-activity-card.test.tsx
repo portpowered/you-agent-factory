@@ -89,6 +89,7 @@ interface RenderCurrentActivityOptions {
   readFactoryImportFile?: ReadFactoryImportFile;
   snapshot: DashboardSnapshot;
   selection?: CurrentActivitySelection | null;
+  widgetInstanceID?: string;
 }
 
 const LEGEND_ICON_EXPECTATIONS = [
@@ -376,6 +377,7 @@ function renderCurrentActivity({
   readFactoryImportFile,
   snapshot,
   selection = null,
+  widgetInstanceID,
 }: RenderCurrentActivityOptions) {
   const onSelectWorkID =
     vi.fn<
@@ -398,6 +400,7 @@ function renderCurrentActivity({
       readFactoryImportFile={readFactoryImportFile}
       selection={selection}
       snapshot={snapshot}
+      widgetInstanceID={widgetInstanceID}
     />,
   );
 
@@ -1903,8 +1906,8 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(legend?.className).not.toContain("right-0");
     expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
-    expect(viewport.getAttribute("aria-describedby")).toBe(
-      "workflow-graph-heading",
+    expect(viewport.getAttribute("aria-describedby")).toMatch(
+      /^workflow-graph-heading-/,
     );
   });
 
