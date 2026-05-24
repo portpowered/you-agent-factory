@@ -12,12 +12,24 @@ export async function verifyDashboardSessionTabs(
 
   await expectVisible(tabsNavigation, "Session tabs navigation");
   await expectVisible(
-    page.getByRole("tab", { name: /root \/ default/i }),
+    page.getByRole("tab", { name: "root" }),
     "Default session tab",
   );
   await expectVisible(
-    page.getByRole("tab", { name: /root \/ beta/i }),
-    "Named session tab",
+    page.getByRole("button", { name: "Pause root updates" }),
+    "Active session pause button",
+  );
+  await expectVisible(
+    page.getByRole("tab", { name: "beta" }),
+    "Named beta session tab",
+  );
+  await expectVisible(
+    page.getByRole("button", { name: "Close beta session" }),
+    "Inactive beta close button",
+  );
+  await expectVisible(
+    page.getByRole("button", { name: "Close root session" }),
+    "Active session close button",
   );
   await expectVisible(openButton, "Open another session button");
   await expectNoHorizontalOverflow(

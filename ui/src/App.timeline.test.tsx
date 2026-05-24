@@ -45,12 +45,10 @@ describe("App timeline reconstruction flows", () => {
     expect(slider.disabled).toBe(true);
     expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
     expect(
-      (
-        screen.getByRole("button", {
-          name: "Return to current tick",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
+      screen.queryByRole("button", {
+        name: "Return to current tick",
+      }),
+    ).toBeNull();
     expect(screen.queryByText("Current")).toBeNull();
   });
 
@@ -95,10 +93,11 @@ describe("App timeline reconstruction flows", () => {
       expect(screen.queryByRole("button", { name: "Done Story" })).toBeNull();
     });
     expect(screen.queryByText("Current")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Return to current tick" }),
+    ).toBeNull();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Return to current tick" }),
-    );
+    fireEvent.change(slider, { target: { value: "4" } });
 
     await waitFor(() => {
       expect(slider.value).toBe("4");

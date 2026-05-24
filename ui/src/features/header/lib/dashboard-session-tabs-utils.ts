@@ -1,4 +1,3 @@
-import type { DashboardStreamState } from "../../../api/dashboard/types";
 import {
   type FactorySessionSummary,
   FactorySessionsAPIError,
@@ -6,34 +5,37 @@ import {
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
 export function sessionTabLabel(session: FactorySessionSummary): string {
-  const folderName = basename(session.folderPath) || session.project || "factory";
-  const targetName =
-    session.target.kind === "default" ? "default" : session.target.name || "named";
-  return `${folderName} / ${targetName}`;
+  const namedTarget = session.target.kind === "named" ? session.target.name : "";
+  return (
+    normalizeSessionLabelPart(namedTarget) ||
+    normalizeSessionLabelPart(basename(session.factoryDir)) ||
+    normalizeSessionLabelPart(basename(session.folderPath)) ||
+    normalizeSessionLabelPart(session.project) ||
+    "factory"
+  );
 }
 
 export function sessionCloseLabel(
   session: FactorySessionSummary,
   messages: ReturnType<typeof getHeaderControlsMessages>,
 ): string {
-  return messages.sessionTabCloseLabelTemplate.replace(
-    "{{sessionLabel}}",
-    sessionTabLabel(session),
+  return replaceSessionLabelToken(
+    messages.sessionTabCloseLabelTemplate,
+    session,
   );
 }
 
-export function sessionStreamStatusLabel(
-  status: DashboardStreamState["status"],
+export function sessionStreamToggleLabel(
+  session: FactorySessionSummary,
+  paused: boolean,
   messages: ReturnType<typeof getHeaderControlsMessages>,
 ): string {
-  if (status === "live") {
-    return messages.streamStatusLiveLabel;
-  }
-  if (status === "offline") {
-    return messages.streamStatusOfflineLabel;
-  }
-
-  return messages.streamStatusConnectingLabel;
+  return replaceSessionLabelToken(
+    paused
+      ? messages.resumeSessionStreamLabelTemplate
+      : messages.pauseSessionStreamLabelTemplate,
+    session,
+  );
 }
 
 export function sessionTabID(sessionTabsID: string, sessionID: string): string {
@@ -62,6 +64,17 @@ function basename(path: string): string {
   return segments[segments.length - 1] ?? "";
 }
 
+function normalizeSessionLabelPart(value: string | undefined): string {
+  return value?.trim() ?? "";
+}
+
 function sessionDOMIDFragment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, "-");
+}
+
+function replaceSessionLabelToken(
+  template: string,
+  session: FactorySessionSummary,
+): string {
+  return template.replace("{{sessionLabel}}", sessionTabLabel(session));
 }

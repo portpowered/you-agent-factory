@@ -1,13 +1,20 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { getHeaderControlsMessages } from "../messages/header-controls";
+import { sessionCloseLabel } from "../lib/dashboard-session-tabs-utils";
 
 const listFactorySessions = vi.fn();
 const openFactorySession = vi.fn();
@@ -49,6 +56,7 @@ describe("DashboardSessionTabs", () => {
     closeFactorySession.mockReset();
     vi.unstubAllGlobals();
     useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
       selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
     });
   });
@@ -90,8 +98,8 @@ describe("DashboardSessionTabs", () => {
     });
 
     expect(screen.getByRole("tablist")).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /root \/ default/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /root \/ beta/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "beta" })).toBeTruthy();
     expect(screen.getByRole("tabpanel")).toBeTruthy();
   });
 
@@ -140,9 +148,9 @@ describe("DashboardSessionTabs", () => {
       ).toBeTruthy();
     });
 
-    const rootTab = screen.getByRole("tab", { name: /root \/ default/i });
-    const betaTab = screen.getByRole("tab", { name: /root \/ beta/i });
-    const gammaTab = screen.getByRole("tab", { name: /root \/ gamma/i });
+    const rootTab = screen.getByRole("tab", { name: "root" });
+    const betaTab = screen.getByRole("tab", { name: "beta" });
+    const gammaTab = screen.getByRole("tab", { name: "gamma" });
 
     expect(rootTab.getAttribute("aria-selected")).toBe("true");
     expect(rootTab.getAttribute("tabindex")).toBe("0");
@@ -271,7 +279,7 @@ describe("DashboardSessionTabs", () => {
       });
     });
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /other \/ default/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "other" })).toBeTruthy();
     });
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
       "session-other",
@@ -725,12 +733,12 @@ describe("DashboardSessionTabs", () => {
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);
 
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /root \/ default/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
     });
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Close root / default session",
+        name: "Close root session",
       }),
     );
 
@@ -739,7 +747,7 @@ describe("DashboardSessionTabs", () => {
     });
     await waitFor(() => {
       expect(
-        screen.getByRole("tab", { name: /root \/ beta/i }).getAttribute(
+        screen.getByRole("tab", { name: "beta" }).getAttribute(
           "aria-selected",
         ),
       ).toBe("true");
@@ -747,6 +755,186 @@ describe("DashboardSessionTabs", () => {
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
       "session-beta",
     );
+  });
+
+  it("renders an attached active-session control cluster with pause and close actions", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    const activeTab = await screen.findByRole("tab", { name: "root" });
+    const activeCluster = screen.getByRole("button", {
+      name: "Pause root updates",
+    }).parentElement;
+
+    expect(activeCluster?.className).toContain("border-l");
+    expect(
+      activeCluster?.contains(
+        screen.getByRole("button", { name: "Close root session" }),
+      ),
+    ).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: "Pause beta updates" }),
+    ).toBeNull();
+    expect(activeTab.parentElement?.contains(activeCluster as HTMLElement)).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Close beta session" }).parentElement
+        ?.className,
+    ).not.toContain("border-l");
+  });
+
+  it("keeps inactive-tab close buttons quiet by default and directly operable", async () => {
+    listFactorySessions
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+        {
+          factoryDir: "/workspace/root/beta",
+          folderPath: "/workspace/root",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          target: {
+            kind: "named",
+            name: "beta",
+          },
+        },
+        {
+          factoryDir: "/workspace/root/gamma",
+          folderPath: "/workspace/root",
+          id: "session-gamma",
+          isDefault: false,
+          project: "gamma",
+          target: {
+            kind: "named",
+            name: "gamma",
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+        {
+          factoryDir: "/workspace/root/gamma",
+          folderPath: "/workspace/root",
+          id: "session-gamma",
+          isDefault: false,
+          project: "gamma",
+          target: {
+            kind: "named",
+            name: "gamma",
+          },
+        },
+      ]);
+    closeFactorySession.mockResolvedValue(undefined);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    const betaCloseButton = await screen.findByRole("button", {
+      name: "Close beta session",
+    });
+
+    expect(betaCloseButton.className).toContain("text-af-ink/34");
+    expect(betaCloseButton.className).toContain("group-focus-within:text-af-ink/76");
+    expect(betaCloseButton.className).toContain("focus-visible:text-af-ink");
+
+    betaCloseButton.focus();
+    expect(document.activeElement).toBe(betaCloseButton);
+    expect(
+      screen.getByRole("tab", { name: "root" }).getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("tab", { name: "beta" }).getAttribute("aria-selected"),
+    ).toBe("false");
+
+    fireEvent.click(betaCloseButton);
+
+    await waitFor(() => {
+      expect(closeFactorySession).toHaveBeenCalledWith("session-beta");
+    });
+    expect(
+      screen.getByRole("tab", { name: "root" }).getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(screen.queryByRole("tab", { name: "beta" })).toBeNull();
+  });
+
+  it("toggles the active session stream control between pause and resume labels", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    const pauseButton = await screen.findByRole("button", {
+      name: "Pause root updates",
+    });
+    expect(pauseButton.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(pauseButton);
+
+    const resumeButton = await screen.findByRole("button", {
+      name: "Resume root updates",
+    });
+    expect(resumeButton.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      useDashboardSessionStore.getState().pausedSessionIDs,
+    ).toContain(DEFAULT_FACTORY_SESSION_ID);
+
+    fireEvent.click(resumeButton);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Pause root updates" }),
+      ).toBeTruthy();
+    });
+    expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([]);
   });
 
   it("keeps the open-session affordance available when the last session is closed", async () => {
@@ -770,12 +958,12 @@ describe("DashboardSessionTabs", () => {
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);
 
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /root \/ default/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
     });
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Close root / default session",
+        name: "Close root session",
       }),
     );
 
@@ -786,6 +974,97 @@ describe("DashboardSessionTabs", () => {
     expect(
       screen.getByRole("button", { name: messages.openSessionButtonLabel }),
     ).toBeTruthy();
+  });
+
+  it("keeps close actions icon-only while a session close request is pending", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+    ]);
+    closeFactorySession.mockImplementation(
+      () => new Promise<void>(() => undefined),
+    );
+
+    renderWithQueryClient(<DashboardSessionTabs locale="ja" />);
+    const messages = getHeaderControlsMessages("ja");
+    const rootSession = {
+      factoryDir: "/workspace/root",
+      folderPath: "/workspace/root",
+      id: "~default",
+      isDefault: true,
+      project: "root",
+      target: {
+        kind: "default" as const,
+      },
+    };
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: sessionCloseLabel(rootSession, messages),
+      }),
+    );
+
+    const pendingCloseButton = await screen.findByRole("button", {
+      name: messages.closingSessionButtonLabel,
+    });
+
+    expect(
+      (pendingCloseButton as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(pendingCloseButton.textContent?.trim()).toBe("");
+    expect(screen.queryByText(messages.closingSessionButtonLabel)).toBeNull();
+  });
+
+  it("uses short factory-first labels without rendering redundant visible subtitle copy", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "workspace root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/catalog/review",
+        folderPath: "/workspace/catalog",
+        id: "session-review",
+        isDefault: false,
+        project: "catalog",
+        target: {
+          kind: "named",
+          name: "review",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
+    });
+
+    const rootTab = screen.getByRole("tab", { name: "root" });
+    const reviewTab = screen.getByRole("tab", { name: "review" });
+
+    expect(rootTab.textContent).toBe("root");
+    expect(reviewTab.textContent).toBe("review");
+    expect(screen.queryByText("workspace root")).toBeNull();
+    expect(screen.queryByText("catalog")).toBeNull();
   });
 });
 

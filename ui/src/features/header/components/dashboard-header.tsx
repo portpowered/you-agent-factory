@@ -38,10 +38,11 @@ const DASHBOARD_PRIMARY_ROW_CLASS = cn(
   "flex min-w-0 flex-wrap items-start gap-2",
   "max-md:items-stretch",
 );
+const DASHBOARD_SESSION_STRIP_CLASS = "flex min-w-0 flex-1 items-start";
 const DASHBOARD_SECONDARY_ROW_CLASS = "w-full border-t border-af-overlay/10 pt-2";
 const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
 const DASHBOARD_CONTROLS_CLASS = cn(
-  "ml-auto flex shrink-0 items-center gap-2",
+  "ml-auto flex shrink-0 items-center gap-1.5 rounded-2xl border border-af-overlay/12 bg-af-overlay/6 p-1 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]",
   "max-md:ml-0 max-md:w-full max-md:justify-end",
 );
 const LOCALE_MENU_PANEL_CLASS =
@@ -85,11 +86,13 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
             wordmarkClassName="truncate"
           />
         </h1>
-        <DashboardSessionTabs
-          hideOpenButton
-          locale={resolvedLocale}
-          state={sessionTabsState}
-        />
+        <div className={DASHBOARD_SESSION_STRIP_CLASS}>
+          <DashboardSessionTabs
+            hideOpenButton
+            locale={resolvedLocale}
+            state={sessionTabsState}
+          />
+        </div>
         <p
           aria-label={streamStatusLabel(streamStatus, headerMessages)}
           className={cn(
@@ -101,7 +104,10 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
         >
           {streamStatusLabel(streamStatus, headerMessages)}
         </p>
-        <div className={DASHBOARD_CONTROLS_CLASS}>
+        <fieldset
+          aria-label={headerMessages.globalHeaderActionsLabel}
+          className={DASHBOARD_CONTROLS_CLASS}
+        >
           <DashboardHeaderActionButton
             aria-haspopup="dialog"
             aria-label={headerMessages.openSessionButtonLabel}
@@ -139,7 +145,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
             locale={resolvedLocale}
             onChangeLocale={setLocale}
           />
-        </div>
+        </fieldset>
       </div>
       <div className={DASHBOARD_SECONDARY_ROW_CLASS}>
         <TickSliderControl locale={resolvedLocale} />

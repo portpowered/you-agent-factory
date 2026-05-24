@@ -39,33 +39,36 @@ export async function ensureStorybookServer({
   waitReady = waitForStorybookReady,
 } = {}) {
   try {
-    await verifyIndex();
+    await verifyIndex({
+      url: `http://${host}:${port}/index.json`,
+    });
+
     return {
       startedServer: false,
       stop: async () => {},
     };
   } catch {
     await assertAvailable(host, port);
-
-    const server = spawnProcess([
-      "x",
-      "--no-install",
-      "http-server",
-      "storybook-static",
-      "-p",
-      port,
-      "-a",
-      host,
-      "-s",
-    ]);
-
-    await waitReady({ serverExit: createServerExitPromise(server) });
-
-    return {
-      startedServer: true,
-      stop: async (stopProcess = stopServer) => stopProcess(server),
-    };
   }
+
+  const server = spawnProcess([
+    "x",
+    "--no-install",
+    "http-server",
+    "storybook-static",
+    "-p",
+    port,
+    "-a",
+    host,
+    "-s",
+  ]);
+
+  await waitReady({ serverExit: createServerExitPromise(server) });
+
+  return {
+    startedServer: true,
+    stop: async (stopProcess = stopServer) => stopProcess(server),
+  };
 }
 
 export async function main({

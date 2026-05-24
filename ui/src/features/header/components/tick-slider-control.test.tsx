@@ -82,15 +82,15 @@ describe("TickSliderControl", () => {
       }).disabled,
     ).toBe(true);
     expect(screen.getByText(messages.waitingForMoreTicks)).toBeTruthy();
-    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
-      name: messages.returnToCurrentTickLabel,
-    });
-
-    expect(currentButton.disabled).toBe(true);
+    expect(
+      screen.queryByRole("button", {
+        name: messages.returnToCurrentTickLabel,
+      }),
+    ).toBeNull();
     expect(screen.queryByText("Current")).toBeNull();
   });
 
-  it("switches between fixed and current mode through the rendered controls", async () => {
+  it("switches between fixed and current mode through scrubber interaction", async () => {
     useFactoryTimelineStore
       .getState()
       .replaceEvents(graphStateSmokeTimelineEvents);
@@ -102,40 +102,41 @@ describe("TickSliderControl", () => {
     const slider = screen.getByRole<HTMLInputElement>("slider", {
       name: messages.sliderAriaLabel,
     });
-    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
-      name: messages.returnToCurrentTickLabel,
-    });
     const sliderShell = slider.closest("div");
-    const metaGroup = currentButton.parentElement;
+    const metaGroup = screen.getByText("9/9").parentElement;
+    const statusText = screen.getByText("9/9");
 
     expect(slider.value).toBe("9");
-    expect(screen.getByText("9/9")).toBeTruthy();
-    expect(currentButton.disabled).toBe(true);
-    expect(currentButton.className).toContain("opacity-75");
+    expect(statusText).toBeTruthy();
+    expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
+    expect(slider.getAttribute("aria-valuetext")).toBe("9/9");
     expect(sliderShell?.className).toContain("gap-1.5");
     expect(sliderShell?.className).toContain("px-2.5");
-    expect(metaGroup?.className).toContain("justify-between");
     expect(screen.queryByText("Current")).toBeNull();
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
+    expect(
+      screen.queryByRole("button", {
+        name: messages.returnToCurrentTickLabel,
+      }),
+    ).toBeNull();
 
     fireEvent.change(slider, { target: { value: "2" } });
 
     await waitFor(() => {
       expect(screen.getByText("2/9")).toBeTruthy();
     });
-    expect(currentButton.disabled).toBe(false);
-    expect(currentButton.className).not.toContain("opacity-75");
+    expect(slider.getAttribute("aria-valuetext")).toBe("2/9");
     expect(useFactoryTimelineStore.getState().mode).toBe("fixed");
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(2);
 
-    fireEvent.click(currentButton);
+    fireEvent.change(slider, { target: { value: "9" } });
 
     await waitFor(() => {
       expect(screen.getByText("9/9")).toBeTruthy();
     });
-    expect(currentButton.disabled).toBe(true);
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(9);
+    expect(metaGroup?.className).toContain("items-center");
   });
 
   it("falls back to zero bounds when no timeline ticks are available", () => {
@@ -154,16 +155,20 @@ describe("TickSliderControl", () => {
     const slider = screen.getByRole<HTMLInputElement>("slider", {
       name: messages.sliderAriaLabel,
     });
-    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
-      name: messages.returnToCurrentTickLabel,
-    });
 
     expect(slider.disabled).toBe(true);
     expect(slider.min).toBe("0");
     expect(slider.max).toBe("0");
     expect(slider.value).toBe("0");
+    expect(slider.getAttribute("aria-valuetext")).toBe(
+      messages.waitingForMoreTicks,
+    );
     expect(screen.getByText(messages.waitingForMoreTicks)).toBeTruthy();
-    expect(currentButton.disabled).toBe(true);
+    expect(
+      screen.queryByRole("button", {
+        name: messages.returnToCurrentTickLabel,
+      }),
+    ).toBeNull();
   });
 
   it("ignores non-numeric cached ticks and clamps the selected tick to cached bounds", () => {
@@ -186,17 +191,13 @@ describe("TickSliderControl", () => {
     const slider = screen.getByRole<HTMLInputElement>("slider", {
       name: messages.sliderAriaLabel,
     });
-    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
-      name: messages.returnToCurrentTickLabel,
-    });
 
     expect(slider.disabled).toBe(false);
     expect(slider.min).toBe("2");
     expect(slider.max).toBe("4");
     expect(slider.value).toBe("4");
     expect(screen.getByText("4/4")).toBeTruthy();
-    expect(currentButton.disabled).toBe(false);
-    expect(currentButton.className).not.toContain("opacity-75");
+    expect(useFactoryTimelineStore.getState().mode).toBe("fixed");
   });
 
   it("renders the slider copy from the requested locale catalog", async () => {
@@ -211,15 +212,11 @@ describe("TickSliderControl", () => {
     const slider = screen.getByRole<HTMLInputElement>("slider", {
       name: messages.sliderAriaLabel,
     });
-    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
-      name: messages.returnToCurrentTickLabel,
-    });
 
     expect(screen.getByText(messages.sliderLabel).className).toContain(
       "sr-only",
     );
     expect(screen.getByText(currentTickStatus("ja", 9, 9))).toBeTruthy();
-    expect(currentButton.disabled).toBe(true);
 
     fireEvent.change(slider, { target: { value: "3" } });
 
@@ -247,7 +244,7 @@ describe("TickSliderControl", () => {
     );
   });
 
-  it("keeps the tick status and return-to-current action in one compact cluster", () => {
+  it("keeps the slider status semantically attached and focus-visible without extra visible copy", () => {
     act(() => {
       useFactoryTimelineStore
         .getState()
@@ -261,15 +258,34 @@ describe("TickSliderControl", () => {
     const slider = screen.getByRole<HTMLInputElement>("slider", {
       name: messages.sliderAriaLabel,
     });
-    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
-      name: messages.returnToCurrentTickLabel,
+    const statusText = screen.getByText("9/9");
+
+    expect(slider.className).toContain("focus-visible:ring-2");
+    expect(slider.className).toContain("focus-visible:ring-af-accent/25");
+    expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
+    expect(statusText.tagName).toBe("OUTPUT");
+    expect(screen.queryByText("Current")).toBeNull();
+  });
+
+  it("keeps the tick status in one compact cluster beside the scrubber", () => {
+    act(() => {
+      useFactoryTimelineStore
+        .getState()
+        .replaceEvents(graphStateSmokeTimelineEvents);
+    });
+
+    const messages = getHeaderControlsMessages("en");
+
+    render(<TickSliderControl />);
+
+    const slider = screen.getByRole<HTMLInputElement>("slider", {
+      name: messages.sliderAriaLabel,
     });
     const statusText = screen.getByText("9/9");
-    const metaGroup = currentButton.parentElement;
+    const metaGroup = statusText.parentElement;
 
     expect(metaGroup).toBeTruthy();
     expect(metaGroup?.contains(statusText)).toBe(true);
-    expect(metaGroup?.className).toContain("gap-1.5");
     expect(statusText.className).toContain("tabular-nums");
     expect(slider.compareDocumentPosition(metaGroup as Node)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
@@ -310,9 +326,9 @@ describe("TickSliderControl", () => {
     ).toBe(true);
     expect(screen.getByText(messages.waitingForMoreTicks)).toBeTruthy();
     expect(
-      screen.getByRole<HTMLButtonElement>("button", {
+      screen.queryByRole("button", {
         name: messages.returnToCurrentTickLabel,
-      }).disabled,
-    ).toBe(true);
+      }),
+    ).toBeNull();
   });
 });

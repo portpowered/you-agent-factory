@@ -9,9 +9,10 @@ function createCurrentTickLocator() {
 }
 
 function createPage({
-  currentTick = createCurrentTickLocator(),
+  timelineStatus = createCurrentTickLocator(),
   headingWordmarkClassName = "sr-only",
   isDesktop = false,
+  returnToCurrentVisible = false,
 } = {}) {
   const heading = {
     ...(isDesktop
@@ -38,6 +39,28 @@ function createPage({
     focus: vi.fn().mockResolvedValue(undefined),
     isVisible: vi.fn().mockResolvedValue(true),
   };
+  const sessionTabs = {
+    ...(isDesktop
+      ? {
+          boundingBox: vi
+            .fn()
+            .mockResolvedValue({ height: 20, width: 340, x: 150, y: 0 }),
+        }
+      : {}),
+    isVisible: vi.fn().mockResolvedValue(true),
+  };
+  const rootTab = {
+    isVisible: vi.fn().mockResolvedValue(true),
+  };
+  const allTabs = {
+    count: vi.fn().mockResolvedValue(3),
+  };
+  const pauseButton = {
+    isVisible: vi.fn().mockResolvedValue(true),
+  };
+  const closeSelectedSessionButton = {
+    isVisible: vi.fn().mockResolvedValue(true),
+  };
   const languageButton = {
     ...(isDesktop
       ? {
@@ -59,8 +82,7 @@ function createPage({
     isVisible: vi.fn().mockResolvedValue(true),
   };
   const currentButton = {
-    focus: vi.fn().mockResolvedValue(undefined),
-    isVisible: vi.fn().mockResolvedValue(true),
+    isVisible: vi.fn().mockResolvedValue(returnToCurrentVisible),
   };
   const exportButton = {
     ...(isDesktop
@@ -70,6 +92,9 @@ function createPage({
             .mockResolvedValue({ height: 20, width: 120, x: 520, y: 0 }),
         }
       : {}),
+    isVisible: vi.fn().mockResolvedValue(true),
+  };
+  const globalActions = {
     isVisible: vi.fn().mockResolvedValue(true),
   };
   const page = {
@@ -85,20 +110,30 @@ function createPage({
     getByRole: vi.fn((role, options) => {
       if (role === "heading") return heading;
       if (role === "slider") return slider;
+      if (role === "navigation") return sessionTabs;
+      if (role === "tab" && options == null) return allTabs;
+      if (role === "tab" && options?.name === "root") return rootTab;
+      if (role === "button" && options?.name === "Pause root updates") {
+        return pauseButton;
+      }
+      if (role === "button" && options?.name === "Close root session") {
+        return closeSelectedSessionButton;
+      }
       if (options?.name === "Change language") return languageButton;
       if (role === "status") return streamStatus;
+      if (role === "group") return globalActions;
       if (options?.name === "Return to current tick") return currentButton;
       return exportButton;
     }),
     getByText: vi.fn((text) => {
-      if (text instanceof RegExp && text.test("Waiting for more ticks")) {
+      if (text instanceof RegExp && text.test("5/5")) {
         return {
-          first: vi.fn().mockReturnValue(currentTick),
+          first: vi.fn().mockReturnValue(timelineStatus),
           isVisible: vi.fn().mockResolvedValue(true),
         };
       }
       return {
-        first: vi.fn().mockReturnValue(currentTick),
+        first: vi.fn().mockReturnValue(timelineStatus),
         isVisible: vi.fn().mockResolvedValue(true),
       };
     }),
@@ -109,8 +144,8 @@ function createPage({
 
 describe("verifyDashboardHeader", () => {
   test("verifyDashboardHeader exercises keyboard and desktop ordering checks", async () => {
-    const currentTick = createCurrentTickLocator();
-    const page = createPage({ currentTick, isDesktop: true });
+    const timelineStatus = createCurrentTickLocator();
+    const page = createPage({ timelineStatus, isDesktop: true });
 
     await verifyDashboardHeader(page, null, {
       height: 900,
@@ -120,7 +155,6 @@ describe("verifyDashboardHeader", () => {
 
     expect(page.heading.getByText).toHaveBeenCalledWith("you-agent-factory");
     expect(page.slider.focus).not.toHaveBeenCalled();
-    expect(page.currentButton.focus).not.toHaveBeenCalled();
     expect(page.keyboard.press).not.toHaveBeenCalled();
   });
 
@@ -137,6 +171,20 @@ describe("verifyDashboardHeader", () => {
       "Dashboard heading wordmark was not hidden with sr-only styling.",
     );
   });
+
+  test("verifyDashboardHeader rejects the retired return-to-current button when it is still visible", async () => {
+    const page = createPage({ returnToCurrentVisible: true });
+
+    await expect(
+      verifyDashboardHeader(page, null, {
+        height: 844,
+        label: "mobile",
+        width: 390,
+      }),
+    ).rejects.toThrow(
+      "Dashboard header still rendered the retired return-to-current button.",
+    );
+  });
 });
 
 describe("verifyDashboardSessionTabs", () => {
@@ -145,44 +193,19 @@ describe("verifyDashboardSessionTabs", () => {
       getAttribute: vi.fn().mockResolvedValue("true"),
       isVisible: vi.fn().mockResolvedValue(true),
     };
-    const reviewTab = {
-      getAttribute: vi.fn().mockResolvedValue("true"),
+    const betaTab = {
       isVisible: vi.fn().mockResolvedValue(true),
     };
-    const targetButton = {
-      click: vi.fn().mockResolvedValue(undefined),
-    };
-    const targetPicker = {
-      getByRole: vi.fn().mockReturnValue(targetButton),
-      getByText: vi.fn().mockReturnValue({
-        isVisible: vi.fn().mockResolvedValue(true),
-      }),
+    const pauseButton = {
       isVisible: vi.fn().mockResolvedValue(true),
     };
-    const folderField = {
-      fill: vi.fn().mockResolvedValue(undefined),
-    };
-    const inspectButton = {
-      click: vi.fn().mockResolvedValue(undefined),
-    };
-    const dialog = {
-      getByRole: vi.fn((role, options) => {
-        if (role === "textbox") {
-          return folderField;
-        }
-        if (role === "button" && options?.name === "Inspect folder") {
-          return inspectButton;
-        }
-        throw new Error(`unexpected dialog role ${role}`);
-      }),
-      waitFor: vi.fn().mockResolvedValue(undefined),
+    const closeRootButton = {
+      isVisible: vi.fn().mockResolvedValue(true),
     };
     const openButton = {
-      click: vi.fn().mockResolvedValue(undefined),
       isVisible: vi.fn().mockResolvedValue(true),
     };
-    const closeReviewButton = {
-      click: vi.fn().mockResolvedValue(undefined),
+    const closeBetaButton = {
       isVisible: vi.fn().mockResolvedValue(true),
     };
     const page = {
@@ -191,40 +214,25 @@ describe("verifyDashboardSessionTabs", () => {
         if (role === "navigation") {
           return { isVisible: vi.fn().mockResolvedValue(true) };
         }
+        if (role === "tab" && options?.name === "root") {
+          return defaultTab;
+        }
+        if (role === "tab" && options?.name === "beta") {
+          return betaTab;
+        }
+        if (role === "button" && options?.name === "Pause root updates") {
+          return pauseButton;
+        }
+        if (role === "button" && options?.name === "Close root session") {
+          return closeRootButton;
+        }
         if (role === "button" && options?.name === "Open another session") {
           return openButton;
         }
-        if (role === "dialog") {
-          return dialog;
-        }
-        if (role === "region") {
-          return targetPicker;
-        }
-        if (
-          role === "tab" &&
-          options?.name instanceof RegExp &&
-          options.name.test("root / default")
-        ) {
-          return defaultTab;
-        }
-        if (
-          role === "tab" &&
-          options?.name instanceof RegExp &&
-          options.name.test("catalog / review")
-        ) {
-          return reviewTab;
-        }
-        if (
-          role === "button" &&
-          options?.name instanceof RegExp &&
-          options.name.test("Close catalog / review session")
-        ) {
-          return closeReviewButton;
+        if (role === "button" && options?.name === "Close beta session") {
+          return closeBetaButton;
         }
         return { isVisible: vi.fn().mockResolvedValue(true) };
-      }),
-      getByText: vi.fn().mockReturnValue({
-        isVisible: vi.fn().mockResolvedValue(true),
       }),
     };
 
@@ -240,7 +248,6 @@ describe("verifyDashboardSessionTabs", () => {
             throw new Error("Locator was not visible.");
           }
         },
-        waitForDialog: async () => dialog,
       },
       page,
       {
@@ -250,11 +257,17 @@ describe("verifyDashboardSessionTabs", () => {
       },
     );
 
-    expect(openButton.click).not.toHaveBeenCalled();
-    expect(folderField.fill).not.toHaveBeenCalled();
-    expect(inspectButton.click).not.toHaveBeenCalled();
-    expect(targetPicker.getByRole).not.toHaveBeenCalled();
-    expect(targetButton.click).not.toHaveBeenCalled();
+    expect(page.getByRole).toHaveBeenCalledWith("tab", { name: "root" });
+    expect(page.getByRole).toHaveBeenCalledWith("tab", { name: "beta" });
+    expect(page.getByRole).toHaveBeenCalledWith("button", {
+      name: "Pause root updates",
+    });
+    expect(page.getByRole).toHaveBeenCalledWith("button", {
+      name: "Close root session",
+    });
+    expect(page.getByRole).toHaveBeenCalledWith("button", {
+      name: "Close beta session",
+    });
   });
 });
 
@@ -273,7 +286,7 @@ describe("verifyDashboardSessionSwitching", () => {
     const page = {
       evaluate: vi.fn().mockResolvedValue({ clientWidth: 1440, scrollWidth: 1440 }),
       getByRole: vi.fn((role, options) => {
-        if (role === "tab" && options?.name === "root / beta beta") {
+        if (role === "tab" && options?.name === "beta") {
           return betaTab;
         }
         if (role === "button" && String(options?.name) === String(/Active Story/)) {
