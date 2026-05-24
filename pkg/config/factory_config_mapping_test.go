@@ -433,6 +433,54 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 	}
 }
 
+func TestFactoryConfigMapper_FlattenMergesWorkstationStopWordsAndDetachesSlices(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	cfg := &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:             "execute-story",
+			StopWords:        []string{"CANONICAL", "SHARED"},
+			RuntimeStopWords: []string{"RUNTIME", "SHARED", "TAIL"},
+		}},
+	}
+
+	flattened, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+
+	payload := mustDecodeFactoryPayload(t, flattened)
+	workstationPayload := payload["workstations"].([]any)[0].(map[string]any)
+	gotAny, ok := workstationPayload["stopWords"].([]any)
+	if !ok {
+		t.Fatalf("expected flattened stopWords array, got %#v", workstationPayload["stopWords"])
+	}
+	got := make([]string, len(gotAny))
+	for i, value := range gotAny {
+		got[i], ok = value.(string)
+		if !ok {
+			t.Fatalf("expected stopWords[%d] to be a string, got %#v", i, value)
+		}
+	}
+
+	want := []string{"CANONICAL", "SHARED", "RUNTIME", "TAIL"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("flattened stopWords mismatch\n got: %#v\nwant: %#v", got, want)
+	}
+
+	cfg.Workstations[0].StopWords[0] = "CHANGED-CANONICAL"
+	cfg.Workstations[0].RuntimeStopWords[0] = "CHANGED-RUNTIME"
+
+	gotAny = workstationPayload["stopWords"].([]any)
+	got = make([]string, len(gotAny))
+	for i, value := range gotAny {
+		got[i] = value.(string)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("flattened stopWords should be detached from source slices\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
 func TestFactoryConfigMapper_ExpandReportsCanonicalRouteArrayFieldPath(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 
