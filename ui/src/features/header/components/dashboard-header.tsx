@@ -97,7 +97,6 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
           </h1>
           <div className={DASHBOARD_TAB_STRIP_CLASS}>
             <DashboardSessionTabs
-              hideOpenButton
               locale={resolvedLocale}
               state={sessionTabsState}
             />
@@ -109,10 +108,9 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
           >
             {streamStatusLabel(streamStatus, headerMessages)}
           </p>
-          <div
+          <fieldset
             aria-label={headerMessages.globalHeaderActionsLabel}
             className={DASHBOARD_CONTROLS_CLASS}
-            role="group"
           >
             <DashboardHeaderActionButton
               aria-label={exportMessages.triggerLabel}
@@ -141,7 +139,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
               locale={resolvedLocale}
               onChangeLocale={setLocale}
             />
-          </div>
+          </fieldset>
         </div>
         <div className={DASHBOARD_SECONDARY_ROW_CLASS}>
           <div className={DASHBOARD_TIMELINE_ROW_CLASS}>
