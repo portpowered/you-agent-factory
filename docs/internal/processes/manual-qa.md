@@ -38,6 +38,28 @@ Use the public [Authoring Factories](../../reference/authoring-factories.md)
 guide for command usage details, mock-worker setup expectations, and related
 runtime options instead of duplicating that setup documentation here.
 
+During live runs, verify these reusable runtime outcomes before closing the
+feature-specific checklist:
+
+- Routing reaches the expected workstation or terminal outcome for the scenario
+  you triggered, and the visible status, logs, or emitted artifacts match that
+  path instead of silently falling back to a different branch.
+- Rejection and retry-loop paths behave as intended for the exercised case,
+  including whether work requeues, stops, or surfaces an explicit rejected
+  outcome when a mock worker returns that result.
+- Failure handling stays observable to maintainers, including any surfaced
+  errors, preserved failure state, or recovery path that the runtime exposes
+  after a worker, script, or downstream step fails.
+- Script side effects that matter to the scenario actually happen, such as
+  expected files, outputs, or state transitions appearing once the run
+  completes, instead of only assuming the script was invoked.
+
+Feature-specific mock-worker checklists can add narrower scenarios or
+domain-owned assertions, but they should extend this baseline instead of
+replacing it. Keep branch-owned deep dives, such as the open-session checklist,
+in their feature-specific docs rather than absorbing them into this generic
+section.
+
 ## Dashboard UI Checklist
 
 Use this checklist for the shadcn primitive migration lane and similar dashboard-control changes.
