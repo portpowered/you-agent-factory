@@ -655,21 +655,46 @@ func assertLocalModelCloneCoverageWorker(t *testing.T, worker *interfaces.Worker
 	if worker == nil {
 		t.Fatal("expected cloned worker, got nil")
 	}
+	assertLocalModelCloneCoverageArgs(t, worker)
+	assertLocalModelCloneCoverageResources(t, worker)
+	assertLocalModelCloneCoverageOperations(t, worker)
+	assertLocalModelCloneCoverageAuth(t, worker)
+	assertLocalModelCloneCoverageLinear(t, worker)
+}
+
+func assertLocalModelCloneCoverageArgs(t *testing.T, worker *interfaces.WorkerConfig) {
+	t.Helper()
 	if len(worker.Args) != 2 || worker.Args[0] != "--voice" || worker.Args[1] != "alloy" {
 		t.Fatalf("worker args = %#v, want [--voice alloy]", worker.Args)
 	}
+}
+
+func assertLocalModelCloneCoverageResources(t *testing.T, worker *interfaces.WorkerConfig) {
+	t.Helper()
 	if len(worker.Resources) != 1 || worker.Resources[0].Name != "omnivoice-cache" || worker.Resources[0].Capacity != 1 {
 		t.Fatalf("worker resources = %#v, want omnivoice-cache capacity 1", worker.Resources)
 	}
+}
+
+func assertLocalModelCloneCoverageOperations(t *testing.T, worker *interfaces.WorkerConfig) {
+	t.Helper()
 	if len(worker.Operations) != 1 || len(worker.Operations[0].Inputs) != 1 || len(worker.Operations[0].Inputs[0].ContentTypes) != 1 || worker.Operations[0].Inputs[0].ContentTypes[0] != interfaces.ModelOperationContentTypeText {
 		t.Fatalf("worker input operations = %#v, want text input content type", worker.Operations)
 	}
 	if len(worker.Operations[0].Outputs) != 1 || len(worker.Operations[0].Outputs[0].ContentTypes) != 1 || worker.Operations[0].Outputs[0].ContentTypes[0] != interfaces.ModelOperationContentTypeAudio {
 		t.Fatalf("worker output operations = %#v, want audio output content type", worker.Operations)
 	}
+}
+
+func assertLocalModelCloneCoverageAuth(t *testing.T, worker *interfaces.WorkerConfig) {
+	t.Helper()
 	if worker.Auth == nil || worker.Auth.SecretRef != "secret/local-model" {
 		t.Fatalf("worker auth = %#v, want secret/local-model", worker.Auth)
 	}
+}
+
+func assertLocalModelCloneCoverageLinear(t *testing.T, worker *interfaces.WorkerConfig) {
+	t.Helper()
 	if worker.Linear == nil {
 		t.Fatal("worker linear config = nil, want values")
 	}
