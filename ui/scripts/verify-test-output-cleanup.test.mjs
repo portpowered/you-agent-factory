@@ -8,13 +8,19 @@ import { expect, test } from "vitest";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(dirname, "..");
-const warningProneTestFiles = [
-  "src/features/work-outcome/components/work-chart-warning-regression.test.tsx",
-  "src/features/header/components/tick-slider-control.test.tsx",
-];
 const blockedWarningFragments = [
   "The width(-1) and height(-1) of chart should be greater than 0",
   "not wrapped in act",
+];
+const warningCleanupLanes = [
+  {
+    file: "src/features/work-outcome/components/work-chart-warning-regression.test.tsx",
+    timeoutMs: 45_000,
+  },
+  {
+    file: "src/features/header/components/tick-slider-control.test.tsx",
+    timeoutMs: 45_000,
+  },
 ];
 
 function bunCommand() {
@@ -34,16 +40,16 @@ function hasBun() {
   return result.status === 0;
 }
 
-function resolveRuntimeCommand() {
+function resolveRuntimeCommand(testFile) {
   if (hasBun()) {
     return {
-      args: ["x", "vitest", "run", ...warningProneTestFiles],
+      args: ["x", "vitest", "run", testFile],
       command: bunCommand(),
     };
   }
 
   return {
-    args: ["exec", "--", "vitest", "run", ...warningProneTestFiles],
+    args: ["exec", "--", "vitest", "run", testFile],
     command: npmCommand(),
   };
 }
@@ -63,8 +69,8 @@ function createChildEnv() {
   return env;
 }
 
-async function runWarningCleanupLane() {
-  const runtime = resolveRuntimeCommand();
+async function runWarningCleanupLane(testFile) {
+  const runtime = resolveRuntimeCommand(testFile);
   const child = spawn(runtime.command, runtime.args, {
     cwd: packageRoot,
     env: createChildEnv(),
@@ -94,16 +100,18 @@ async function runWarningCleanupLane() {
   };
 }
 
-test(
-  "warning-prone UI regression lane stays quiet in a real Vitest run",
-  async () => {
-    const result = await runWarningCleanupLane();
-    const combinedOutput = `${result.stdout}\n${result.stderr}`;
+for (const lane of warningCleanupLanes) {
+  test(
+    `warning-prone UI regression lane stays quiet for ${lane.file}`,
+    async () => {
+      const result = await runWarningCleanupLane(lane.file);
+      const combinedOutput = `${result.stdout}\n${result.stderr}`;
 
-    expect(result.exitCode).toBe(0);
-    for (const blockedWarningFragment of blockedWarningFragments) {
-      expect(combinedOutput).not.toContain(blockedWarningFragment);
-    }
-  },
-  30_000,
-);
+      expect(result.exitCode).toBe(0);
+      for (const blockedWarningFragment of blockedWarningFragments) {
+        expect(combinedOutput).not.toContain(blockedWarningFragment);
+      }
+    },
+    lane.timeoutMs,
+  );
+}
