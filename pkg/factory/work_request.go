@@ -205,8 +205,8 @@ func WorkRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfac
 			PreviousChainingTraceIDs: append([]string(nil), req.PreviousChainingTraceIDs...),
 			TraceID:                  req.TraceID,
 			Content:                  append([]interfaces.WorkContentPart(nil), req.Content...),
-			Payload:                  append([]byte(nil), req.Payload...),
-			Tags:                     maps.Clone(req.Tags),
+			Payload:                  CloneRuntimePayload(req.Payload),
+			Tags:                     CloneRuntimeTags(req.Tags),
 			ExecutionID:              req.ExecutionID,
 			RuntimeRelations:         CloneRuntimeRelations(req.Relations),
 		})
