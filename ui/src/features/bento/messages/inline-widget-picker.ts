@@ -4,6 +4,7 @@ import {
 } from "../../../i18n";
 import {
   DASHBOARD_WIDGET_PICKER_WIDGET_TYPES,
+  type DashboardWidgetPickerAvailability,
   type DashboardWidgetPickerWidgetType,
 } from "../lib/dashboard-widget-picker";
 
@@ -13,23 +14,29 @@ interface InlineWidgetPickerOptionMessages {
 }
 
 export interface InlineWidgetPickerMessages {
+  addedState: string;
   closeLabel: string;
   description: string;
   dismissAction: string;
+  duplicateBadge: string;
+  enabledState: string;
   openAction: string;
   options: Record<
     DashboardWidgetPickerWidgetType,
     InlineWidgetPickerOptionMessages
   >;
-  phaseHint: string;
+  selectionHint: string;
   title: string;
 }
 
 const inlineWidgetPickerMessagesByLocale = {
   en: {
+    addedState: "Already on dashboard",
     closeLabel: "Close widget picker",
     description: "Choose from the dashboard widgets available for inline management.",
     dismissAction: "Close",
+    duplicateBadge: "Duplicate allowed",
+    enabledState: "Add widget",
     openAction: "Browse widgets",
     options: {
       "current-selection": {
@@ -65,13 +72,16 @@ const inlineWidgetPickerMessagesByLocale = {
         title: "Work totals",
       },
     },
-    phaseHint: "Widget insertion activates in the next story. This picker now exposes the available catalog and dismissal flow.",
+    selectionHint: "Choose a widget to add it immediately to the grid.",
     title: "Add dashboard widget",
   },
   "zh-CN": {
+    addedState: "已在仪表板中",
     closeLabel: "关闭小组件选择器",
     description: "从当前可用于内联管理的仪表板小组件中进行选择。",
     dismissAction: "关闭",
+    duplicateBadge: "允许重复",
+    enabledState: "添加小组件",
     openAction: "浏览小组件",
     options: {
       "current-selection": {
@@ -107,7 +117,7 @@ const inlineWidgetPickerMessagesByLocale = {
         title: "工作总览",
       },
     },
-    phaseHint: "下一条故事会启用真正的小组件插入。当前选择器先提供可用目录与关闭流程。",
+    selectionHint: "选择一个小组件即可立即将其加入网格。",
     title: "添加仪表板小组件",
   },
 } satisfies LocalizedMessageCatalog<InlineWidgetPickerMessages>;
@@ -130,6 +140,22 @@ export function getInlineWidgetPickerOptions(locale?: string | null): Array<{
     title: messages.options[widgetType].title,
     widgetType,
   }));
+}
+
+export function getInlineWidgetPickerStatus(
+  availability: DashboardWidgetPickerAvailability,
+  locale?: string | null,
+): string {
+  const messages = getInlineWidgetPickerMessages(locale);
+  if (availability.enabled) {
+    return availability.duplicateCapable
+      ? messages.duplicateBadge
+      : messages.enabledState;
+  }
+
+  return availability.duplicateCapable
+    ? messages.duplicateBadge
+    : messages.addedState;
 }
 
 export { inlineWidgetPickerMessagesByLocale };

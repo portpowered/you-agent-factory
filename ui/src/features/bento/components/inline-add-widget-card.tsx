@@ -10,6 +10,7 @@ import {
 import { cn } from "../../../lib/cn";
 import { AgentBentoDragHandle } from "./agent-bento";
 import { InlineWidgetPicker } from "./inline-widget-picker";
+import type { DashboardWidgetPickerAvailability } from "../lib/dashboard-widget-picker";
 import { getInlineAddWidgetMessages } from "../messages/inline-add-widget";
 
 const INLINE_ADD_WIDGET_CARD_CLASS =
@@ -42,14 +43,20 @@ const INLINE_ADD_WIDGET_ICON_CLASS =
   "grid size-11 place-items-center rounded-2xl border border-af-overlay/16 bg-af-base/80 text-af-ink/82 shadow-sm";
 
 export interface InlineAddWidgetCardProps {
+  pickerAvailability?: DashboardWidgetPickerAvailability[];
   onPickerOpenChange?: (open: boolean) => void;
+  onSelectWidget?: (
+    widgetType: DashboardWidgetPickerAvailability["widgetType"],
+  ) => void;
   pickerOpen?: boolean;
   locale?: string;
 }
 
 export function InlineAddWidgetCard({
   locale,
+  onSelectWidget,
   onPickerOpenChange,
+  pickerAvailability = [],
   pickerOpen = false,
 }: InlineAddWidgetCardProps): ReactElement {
   const messages = getInlineAddWidgetMessages(locale);
@@ -108,9 +115,13 @@ export function InlineAddWidgetCard({
       </DashboardPanelShell>
       {pickerOpen ? (
         <InlineWidgetPicker
+          availability={pickerAvailability}
           locale={locale}
           onDismiss={() => {
             onPickerOpenChange?.(false);
+          }}
+          onSelectWidget={(widgetType) => {
+            onSelectWidget?.(widgetType);
           }}
         />
       ) : null}

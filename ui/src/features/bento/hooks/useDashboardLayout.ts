@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
 import type { AgentBentoLayoutItem } from "../../../components/ui";
+import type { DashboardWidgetPickerWidgetType } from "../lib/dashboard-widget-picker";
+import { addDashboardWidgetToLayout } from "./dashboardLayoutMutations";
 import {
   mergeDashboardLayout,
   readStoredDashboardLayout,
@@ -18,16 +20,25 @@ export {
 } from "./dashboardLayoutSchema";
 
 export interface UseDashboardLayoutResult {
+  addDashboardWidget: (widgetType: DashboardWidgetPickerWidgetType) => void;
   dashboardLayout: AgentBentoLayoutItem[];
   persistDashboardLayout: (layout: AgentBentoLayoutItem[]) => void;
 }
 
 interface DashboardLayoutStoreState {
+  addDashboardWidget: (widgetType: DashboardWidgetPickerWidgetType) => void;
   dashboardLayout: AgentBentoLayoutItem[];
   persistDashboardLayout: (layout: AgentBentoLayoutItem[]) => void;
 }
 
 const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
+  addDashboardWidget: (widgetType) => {
+    set((state) => {
+      const nextLayout = addDashboardWidgetToLayout(state.dashboardLayout, widgetType);
+      writeStoredDashboardLayout(nextLayout);
+      return { dashboardLayout: nextLayout };
+    });
+  },
   dashboardLayout: readStoredDashboardLayout(),
   persistDashboardLayout: (layout) => {
     set((state) => {
@@ -39,10 +50,11 @@ const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
 }));
 
 export function useDashboardLayout(): UseDashboardLayoutResult {
+  const addDashboardWidget = useDashboardLayoutStore((state) => state.addDashboardWidget);
   const dashboardLayout = useDashboardLayoutStore((state) => state.dashboardLayout);
   const persistDashboardLayout = useDashboardLayoutStore((state) => state.persistDashboardLayout);
 
-  return { dashboardLayout, persistDashboardLayout };
+  return { addDashboardWidget, dashboardLayout, persistDashboardLayout };
 }
 
 export function reloadDashboardLayoutFromStorage(): void {

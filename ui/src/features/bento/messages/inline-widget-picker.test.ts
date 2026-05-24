@@ -6,13 +6,15 @@ import {
 describe("getInlineWidgetPickerMessages", () => {
   it("returns the English catalog by default", () => {
     expect(getInlineWidgetPickerMessages()).toMatchObject({
+      addedState: "Already on dashboard",
       closeLabel: "Close widget picker",
       description:
         "Choose from the dashboard widgets available for inline management.",
       dismissAction: "Close",
+      duplicateBadge: "Duplicate allowed",
+      enabledState: "Add widget",
       openAction: "Browse widgets",
-      phaseHint:
-        "Widget insertion activates in the next story. This picker now exposes the available catalog and dismissal flow.",
+      selectionHint: "Choose a widget to add it immediately to the grid.",
       title: "Add dashboard widget",
     });
     expect(getInlineWidgetPickerMessages().options["work-graph"]).toEqual({
@@ -24,8 +26,10 @@ describe("getInlineWidgetPickerMessages", () => {
 
   it("returns localized picker copy when available", () => {
     expect(getInlineWidgetPickerMessages("zh-CN")).toMatchObject({
+      addedState: "已在仪表板中",
       closeLabel: "关闭小组件选择器",
       dismissAction: "关闭",
+      duplicateBadge: "允许重复",
       openAction: "浏览小组件",
       title: "添加仪表板小组件",
     });

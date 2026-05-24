@@ -1,7 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/public";
 
+import { DEFAULT_DASHBOARD_LAYOUT } from "../hooks/dashboardLayoutSchema";
+
 import { DashboardBento } from "./dashboard-bento";
+
+const addDashboardWidget = vi.fn();
 
 const currentSelectionState = {
   canRedoSelection: false,
@@ -195,16 +199,6 @@ vi.mock("../state/dashboardBentoStore", () => ({
 
 vi.mock("../hooks/useDashboardLayout", () => ({
   DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID: "add-widget::inline-add",
-  DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS: {
-    currentSelection: "current-selection",
-    providerSession: "provider-session",
-    submitWork: "submit-work",
-    terminalWork: "terminal-work",
-    trace: "trace",
-    workGraph: "work-graph",
-    workOutcomeChart: "work-outcome-chart",
-    workTotals: "work-totals",
-  },
   DASHBOARD_WIDGET_IDS: {
     addWidget: "add-widget",
     currentSelection: "current-selection",
@@ -218,7 +212,8 @@ vi.mock("../hooks/useDashboardLayout", () => ({
   },
   getRenderableDashboardLayout: (layout: unknown) => layout,
   useDashboardLayout: () => ({
-    dashboardLayout: [],
+    addDashboardWidget,
+    dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
     persistDashboardLayout: vi.fn(),
   }),
 }));
@@ -244,10 +239,25 @@ vi.mock("./agent-bento", () => ({
 }));
 
 vi.mock("./inline-add-widget-card", () => ({
-  InlineAddWidgetCard: () => <section>Add widget card</section>,
+  InlineAddWidgetCard: ({
+    onSelectWidget,
+  }: {
+    onSelectWidget?: (widgetType: string) => void;
+  }) => (
+    <section>
+      Add widget card
+      <button onClick={() => onSelectWidget?.("work-graph")} type="button">
+        Add workflow activity widget
+      </button>
+    </section>
+  ),
 }));
 
 describe("DashboardBento", () => {
+  beforeEach(() => {
+    addDashboardWidget.mockReset();
+  });
+
   it("registers the provider-session card alongside current selection", () => {
     render(<DashboardBento />);
 
@@ -276,5 +286,15 @@ describe("DashboardBento", () => {
     expect(screen.getByTestId("provider-session").textContent).toContain(
       SHARED_SELECTED_SESSION.id,
     );
+  });
+
+  it("adds a widget instance through the inline picker selection seam", () => {
+    render(<DashboardBento />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add workflow activity widget" }),
+    );
+
+    expect(addDashboardWidget).toHaveBeenCalledWith("work-graph");
   });
 });

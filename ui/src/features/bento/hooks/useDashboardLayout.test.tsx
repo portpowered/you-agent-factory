@@ -165,4 +165,50 @@ describe("useDashboardLayout inline add-widget persistence", () => {
       y: 24,
     });
   });
+
+  it("adds duplicate-capable widgets with stable instance ids and keeps one add-widget card", () => {
+    const { result } = renderHook(() => useDashboardLayout());
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workOutcomeChart);
+    });
+
+    const nextLayout = result.current.dashboardLayout;
+    const workOutcomeCards = nextLayout.filter(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workOutcomeChart,
+    );
+    const addWidgetCards = nextLayout.filter(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.addWidget,
+    );
+
+    expect(workOutcomeCards).toHaveLength(2);
+    expect(workOutcomeCards.map((item) => item.id)).toEqual(
+      expect.arrayContaining([
+        DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
+        "work-outcome-chart::instance-1",
+      ]),
+    );
+    expect(addWidgetCards).toHaveLength(1);
+    expect(
+      new Set(
+        workOutcomeCards.map((item) => `${item.x}:${item.y}:${item.w}:${item.h}`),
+      ).size,
+    ).toBe(2);
+  });
+
+  it("does not add a second copy of a non-duplicate widget type", () => {
+    const { result } = renderHook(() => useDashboardLayout());
+    const initialLayout = result.current.dashboardLayout;
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.currentSelection);
+    });
+
+    expect(result.current.dashboardLayout).toEqual(initialLayout);
+    expect(
+      result.current.dashboardLayout.filter(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.currentSelection,
+      ),
+    ).toHaveLength(1);
+  });
 });
