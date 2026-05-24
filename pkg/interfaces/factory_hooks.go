@@ -43,15 +43,3 @@ type SubmissionHookResult struct {
 	ContinuationState map[string]string
 	KeepAlive         bool
 }
-
-// DispatchResultHookContext is the input passed to dispatch/result hooks once
-// per logical tick.
-type DispatchResultHookContext[TSnapshot any] struct {
-	Snapshot TSnapshot
-}
-
-// DispatchResultHookResult contains worker completions made visible to the
-// engine at one logical tick.
-type DispatchResultHookResult struct {
-	Results []WorkResult
-}

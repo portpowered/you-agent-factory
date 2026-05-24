@@ -110,19 +110,15 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerExecutesSynchrono
 		t.Fatalf("executor dispatch ID = %q, want %q", executor.calls[0].DispatchID, dispatch.DispatchID)
 	}
 
-	result, err := hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
-		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			TickCount: 0,
-		},
-	})
+	result, err := hook.OnTick(context.Background(), interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{TickCount: 0})
 	if err != nil {
 		t.Fatalf("OnTick: %v", err)
 	}
-	if len(result.Results) != 1 {
-		t.Fatalf("hook result count = %d, want 1", len(result.Results))
+	if len(result) != 1 {
+		t.Fatalf("hook result count = %d, want 1", len(result))
 	}
-	if result.Results[0].Output != "executor-output" {
-		t.Fatalf("hook result output = %q, want executor-output", result.Results[0].Output)
+	if result[0].Output != "executor-output" {
+		t.Fatalf("hook result output = %q, want executor-output", result[0].Output)
 	}
 }
 
@@ -145,31 +141,23 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerDelaysDeliveryUnt
 		t.Fatalf("SubmitDispatch: %v", err)
 	}
 
-	result, err := hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
-		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			TickCount: 2,
-		},
-	})
+	result, err := hook.OnTick(context.Background(), interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{TickCount: 2})
 	if err != nil {
 		t.Fatalf("OnTick before due tick: %v", err)
 	}
-	if len(result.Results) != 0 {
-		t.Fatalf("hook result count before due tick = %d, want 0", len(result.Results))
+	if len(result) != 0 {
+		t.Fatalf("hook result count before due tick = %d, want 0", len(result))
 	}
 
-	result, err = hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
-		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			TickCount: 3,
-		},
-	})
+	result, err = hook.OnTick(context.Background(), interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{TickCount: 3})
 	if err != nil {
 		t.Fatalf("OnTick at due tick: %v", err)
 	}
-	if len(result.Results) != 1 {
-		t.Fatalf("hook result count at due tick = %d, want 1", len(result.Results))
+	if len(result) != 1 {
+		t.Fatalf("hook result count at due tick = %d, want 1", len(result))
 	}
-	if result.Results[0].Output != "executor-output" {
-		t.Fatalf("hook result output at due tick = %q, want executor-output", result.Results[0].Output)
+	if result[0].Output != "executor-output" {
+		t.Fatalf("hook result output at due tick = %q, want executor-output", result[0].Output)
 	}
 }
 
@@ -201,19 +189,15 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerUsesPlannedResult
 		t.Fatalf("executor call count = %d, want 1", len(executor.calls))
 	}
 
-	result, err := hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
-		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			TickCount: 0,
-		},
-	})
+	result, err := hook.OnTick(context.Background(), interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{TickCount: 0})
 	if err != nil {
 		t.Fatalf("OnTick: %v", err)
 	}
-	if len(result.Results) != 1 {
-		t.Fatalf("hook result count = %d, want 1", len(result.Results))
+	if len(result) != 1 {
+		t.Fatalf("hook result count = %d, want 1", len(result))
 	}
-	if result.Results[0].Output != "planned-output" {
-		t.Fatalf("hook result output = %q, want planned-output", result.Results[0].Output)
+	if result[0].Output != "planned-output" {
+		t.Fatalf("hook result output = %q, want planned-output", result[0].Output)
 	}
 }
 
@@ -228,11 +212,7 @@ func TestWorkerPoolDispatchResultHook_OnTickValidatesReplayTick(t *testing.T) {
 		planner,
 	)
 
-	_, err := hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
-		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			TickCount: 7,
-		},
-	})
+	_, err := hook.OnTick(context.Background(), interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{TickCount: 7})
 	if err != nil {
 		t.Fatalf("OnTick: %v", err)
 	}
@@ -242,11 +222,7 @@ func TestWorkerPoolDispatchResultHook_OnTickValidatesReplayTick(t *testing.T) {
 
 	expectedErr := errors.New("replay tick mismatch")
 	planner.validateErr = expectedErr
-	_, err = hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
-		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			TickCount: 8,
-		},
-	})
+	_, err = hook.OnTick(context.Background(), interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{TickCount: 8})
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("OnTick error = %v, want %v", err, expectedErr)
 	}
@@ -295,16 +271,12 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithoutPlannerUsesWorkerPool
 		t.Fatal("timed out waiting for worker-pool executor to start")
 	}
 
-	result, err := hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
-		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			TickCount: 0,
-		},
-	})
+	result, err := hook.OnTick(context.Background(), interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{TickCount: 0})
 	if err != nil {
 		t.Fatalf("OnTick before release: %v", err)
 	}
-	if len(result.Results) != 0 {
-		t.Fatalf("hook result count before worker completion = %d, want 0", len(result.Results))
+	if len(result) != 0 {
+		t.Fatalf("hook result count before worker completion = %d, want 0", len(result))
 	}
 
 	close(executor.release)
@@ -315,19 +287,15 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithoutPlannerUsesWorkerPool
 		t.Fatal("timed out waiting for async worker-pool completion signal")
 	}
 
-	result, err = hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
-		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			TickCount: 0,
-		},
-	})
+	result, err = hook.OnTick(context.Background(), interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{TickCount: 0})
 	if err != nil {
 		t.Fatalf("OnTick after release: %v", err)
 	}
-	if len(result.Results) != 1 {
-		t.Fatalf("hook result count after worker completion = %d, want 1", len(result.Results))
+	if len(result) != 1 {
+		t.Fatalf("hook result count after worker completion = %d, want 1", len(result))
 	}
-	if result.Results[0].Output != "async-executor-output" {
-		t.Fatalf("hook result output = %q, want async-executor-output", result.Results[0].Output)
+	if result[0].Output != "async-executor-output" {
+		t.Fatalf("hook result output = %q, want async-executor-output", result[0].Output)
 	}
 }
 

@@ -654,16 +654,14 @@ func (e *FactoryEngine) invokeDispatchResultHook(ctx context.Context) (int, erro
 		return 0, nil
 	}
 
-	result, err := e.dispatchHook.OnTick(ctx, interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
-		Snapshot: e.runtimeState.Snapshot(),
-	})
+	result, err := e.dispatchHook.OnTick(ctx, e.runtimeState.Snapshot())
 	if err != nil {
 		return 0, fmt.Errorf("dispatch/result hook: %w", err)
 	}
-	for _, workResult := range result.Results {
+	for _, workResult := range result {
 		e.appendObservedResult(workResult)
 	}
-	return len(result.Results), nil
+	return len(result), nil
 }
 
 func (e *FactoryEngine) invokeSubmissionHooks(ctx context.Context) (int, bool, error) {
