@@ -22,6 +22,9 @@ vi.mock("./dashboard-session-tabs", () => ({
   DashboardSessionTabs: ({ locale }: { locale: string }) => (
     <div data-testid={`dashboard-session-tabs-${locale}`}>
       <div>Dashboard session tabs {locale}</div>
+      <button aria-label={getHeaderControlsMessages(locale).openSessionButtonLabel} type="button">
+        +
+      </button>
       <div role="status">{getHeaderControlsMessages(locale).streamStatusConnectingLabel}</div>
     </div>
   ),
@@ -134,7 +137,6 @@ describe("DashboardHeader", () => {
     const exportButton = screen.getByRole<HTMLButtonElement>("button", {
       name: messages.triggerLabel,
     });
-    expect(openSessionButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(exportButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
     expect(exportButton.getAttribute("aria-expanded")).toBe("false");
@@ -143,23 +145,34 @@ describe("DashboardHeader", () => {
     expect(toolbar.className).toContain("mb-3");
     expect(toolbar.className).toContain("gap-2");
     expect(toolbar.className).toContain("p-2");
-    expect(toolbar.firstElementChild?.className).toContain("flex-wrap");
-    expect(toolbar.firstElementChild?.className).toContain("max-md:items-stretch");
+    expect(toolbar.firstElementChild?.className).toContain("flex-col");
+    expect(toolbar.firstElementChild?.className).toContain("gap-0");
+    expect(toolbar.firstElementChild?.firstElementChild?.className).toContain(
+      "items-stretch",
+    );
     expect(heading.textContent).toContain("∞");
     expect(heading.textContent).toContain("U");
-    expect(toolbar.firstElementChild?.firstElementChild).toBe(heading);
+    expect(toolbar.firstElementChild?.firstElementChild?.firstElementChild).toBe(
+      heading,
+    );
+    expect(heading.className).toContain("pb-2");
     expect(heading.firstElementChild?.className).toContain("gap-3");
-    expect(globalActions.className).toContain("rounded-2xl");
-    expect(globalActions.className).toContain("border");
-    expect(globalActions.className).toContain("bg-af-overlay/6");
+    expect(globalActions.className).not.toContain("rounded-2xl");
+    expect(globalActions.className).not.toContain("border");
+    expect(globalActions.className).not.toContain("bg-af-overlay/6");
+    expect(globalActions.className).toContain("self-end");
     expect(globalActions.className).toContain("max-md:w-full");
     expect(globalActions.className).toContain("max-md:justify-end");
     expect(
       heading.querySelector('[aria-hidden="true"]')?.className,
     ).toContain("h-12");
-    expect(slider.closest("div")?.parentElement?.className).toContain("border-t");
+    expect(slider.closest("div")?.parentElement?.className).toContain(
+      "rounded-t-2xl",
+    );
+    expect(slider.closest("div")?.parentElement?.className).toContain("bg-af-surface/72");
+    expect(slider.closest("div")?.parentElement?.className).toContain("w-full");
     expect(slider.closest("div")?.className).toContain("md:flex-nowrap");
-    expect(slider.closest("div")?.className).toContain("md:min-w-72");
+    expect(slider.closest("div")?.className).toContain("w-full");
     const controls = Array.from(
       toolbar.querySelectorAll(
         `[aria-label="${headerMessages.sliderAriaLabel}"], [aria-label="${headerMessages.openSessionButtonLabel}"], [aria-label="${headerMessages.languageMenuButtonLabel}"], [aria-label="${messages.triggerLabel}"]`,
@@ -167,21 +180,19 @@ describe("DashboardHeader", () => {
     );
     expect(controls).toHaveLength(4);
     expect(controls[0]).toBe(openSessionButton);
-    expect(controls[1]).toBe(exportButton);
-    expect(controls[2]).toBe(languageButton);
-    expect(controls[3]).toBe(slider);
-    expect(globalActions.contains(openSessionButton)).toBe(true);
-    expect(globalActions.contains(exportButton)).toBe(true);
+    expect(controls[1]).toBe(languageButton);
+    expect(controls[2]).toBe(slider);
+    expect(controls[3]).toBe(exportButton);
     expect(globalActions.contains(languageButton)).toBe(true);
-    expect(openSessionButton.closest("fieldset")).toBe(globalActions);
+    expect(globalActions.contains(openSessionButton)).toBe(false);
+    expect(globalActions.contains(exportButton)).toBe(false);
     expect(globalActions.compareDocumentPosition(slider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");
     expect(languageButton.getAttribute("aria-expanded")).toBe("false");
     expect(languageButton.className).toContain("h-10");
     expect(languageButton.className).toContain("w-10");
-    expect(openSessionButton.className).toContain("h-10");
-    expect(openSessionButton.className).toContain("w-10");
+    expect(openSessionButton.textContent).toBe("+");
     expect(exportButton.className).toContain("h-10");
     expect(exportButton.className).toContain("w-10");
     expect(screen.getByText("Dashboard session tabs en")).toBeTruthy();

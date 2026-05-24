@@ -8,8 +8,8 @@ import {
 } from "../messages/header-controls";
 
 const TICK_SLIDER_SHELL_CLASS = cn(
-  "flex min-w-0 w-full flex-wrap items-center gap-1.5 rounded-lg border border-af-overlay/14 bg-af-surface/72 px-2.5 py-1.5",
-  "md:w-auto md:min-w-72 md:max-w-lg md:flex-nowrap",
+  "flex min-w-0 w-full flex-wrap items-center gap-1.5 px-1 py-1",
+  "md:flex-nowrap",
 );
 const TICK_SLIDER_LABEL_CLASS =
   "flex min-w-36 flex-1 flex-col gap-0.5 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-ink/62 md:min-w-52";
