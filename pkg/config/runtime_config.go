@@ -276,25 +276,8 @@ func workerConfigFromInlineConfig(def *interfaces.WorkerConfig) (*interfaces.Wor
 	if strings.TrimSpace(def.Type) == "" {
 		return nil, nil
 	}
-	return &interfaces.WorkerConfig{
-		Name:             def.Name,
-		Type:             def.Type,
-		Provider:         def.Provider,
-		Model:            def.Model,
-		ModelProvider:    def.ModelProvider,
-		ExecutorProvider: def.ExecutorProvider,
-		SessionID:        def.SessionID,
-		Command:          def.Command,
-		Args:             append([]string(nil), def.Args...),
-		Resources:        append([]interfaces.ResourceConfig(nil), def.Resources...),
-		Concurrency:      def.Concurrency,
-		Timeout:          def.Timeout,
-		StopToken:        def.StopToken,
-		SkipPermissions:  def.SkipPermissions,
-		Auth:             cloneHostedWorkerAuthConfig(def.Auth),
-		Linear:           cloneHostedLinearWorkerConfig(def.Linear),
-		Body:             def.Body,
-	}, nil
+	cloned := CloneWorkerConfig(*def)
+	return &cloned, nil
 }
 
 func workstationRuntimeDefinitionFromInline(workstation interfaces.FactoryWorkstationConfig) (*interfaces.FactoryWorkstationConfig, error) {
