@@ -36,13 +36,12 @@ const SESSION_DIALOG_ERROR_CLASS =
   "rounded-xl border border-af-danger-border bg-af-danger-surface px-3 py-2 text-sm text-af-danger-text";
 const SESSION_DIALOG_STATUS_CLASS =
   "rounded-xl border border-af-accent-border bg-af-accent-surface px-3 py-2 text-sm text-af-text";
-const SESSION_TARGET_LIST_CLASS = "grid gap-2 sm:grid-cols-2";
 const SESSION_TARGET_PICKER_CLASS =
   "grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4";
 const SESSION_TARGET_BUTTON_CLASS =
-  "flex min-h-11 flex-col items-start justify-center rounded-xl border border-af-overlay/12 bg-af-overlay/4 px-3 py-2 text-left text-sm text-af-ink/82 transition-colors hover:border-af-accent/30 hover:bg-af-overlay/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
+  "flex min-h-11 flex-col items-start justify-center rounded-xl border border-af-border bg-af-surface-raised px-3 py-2 text-left text-sm text-af-text transition-colors hover:border-af-border-strong hover:bg-af-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_LAUNCH_SUMMARY_CLASS =
-  "grid gap-2 rounded-xl border border-af-overlay/12 bg-af-surface/72 px-3 py-3";
+  "grid gap-2 rounded-xl border border-af-border bg-af-surface px-3 py-3";
 
 export function OpenSessionDialog({
   dialogError,
@@ -142,7 +141,7 @@ export function OpenSessionDialog({
             </Button>
           </div>
           <p
-            className={cn("text-sm text-af-ink/68", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn("text-sm text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
             id={folderHelperTextID}
           >
             {messages.sessionFolderHelperText}
@@ -167,7 +166,7 @@ export function OpenSessionDialog({
             value={manualFactoryName}
           />
           <p
-            className={cn("text-sm text-af-ink/68", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn("text-sm text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
             id={manualFactoryHelperTextID}
           >
             {messages.manualFactoryNameHelperText}
@@ -266,7 +265,7 @@ function SessionTargetPicker({
     >
       <div className="grid gap-1">
         <p className={SESSION_SECTION_LABEL_CLASS}>{messages.targetPickerTitle}</p>
-        <p className={cn("text-sm text-af-ink/72", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p className={cn("text-sm text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
           {messages.targetPickerHint}
         </p>
       </div>
@@ -309,13 +308,13 @@ function SessionTargetPicker({
       {launchTarget ? (
         <div className={SESSION_LAUNCH_SUMMARY_CLASS}>
           <div className={SESSION_TARGET_BUTTON_CLASS}>
-            <span className="font-semibold text-af-ink">{launchTarget.label}</span>
-            <span className="truncate text-xs text-af-ink/58">
+            <span className="font-semibold text-af-text">{launchTarget.label}</span>
+            <span className="truncate text-xs text-af-text-subtle">
               {launchTarget.project || launchTarget.factoryDir}
             </span>
           </div>
           {launchTargetName ? (
-            <p className={cn("text-sm text-af-ink/72", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p className={cn("text-sm text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
               {messages.openSessionLaunchSummaryTemplate
                 .replace("{{folderPath}}", launchTarget.folderPath)
                 .replace("{{factoryName}}", launchTargetName)}
