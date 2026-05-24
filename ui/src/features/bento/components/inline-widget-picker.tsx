@@ -10,31 +10,31 @@ import type { DashboardWidgetPickerAvailability } from "../lib/dashboard-widget-
 import { getInlineWidgetPickerMessages, getInlineWidgetPickerOptions, getInlineWidgetPickerStatus } from "../messages/inline-widget-picker";
 
 const PICKER_CONTENT_CLASS =
-  "grid w-72 max-w-full gap-4 rounded-3xl border-af-overlay/16 bg-af-surface/98 p-4 sm:w-80";
+  "grid w-72 max-w-full gap-4 rounded-3xl border border-af-border bg-af-surface-raised p-4 sm:w-80";
 const PICKER_HEADER_CLASS = "grid gap-2 pr-10";
 const PICKER_LABEL_CLASS = cn(
   "text-xs font-semibold uppercase tracking-[0.12em] text-af-accent",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const PICKER_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
-const PICKER_DESCRIPTION_CLASS = cn("m-0 text-af-ink/76", DASHBOARD_BODY_TEXT_CLASS);
+const PICKER_DESCRIPTION_CLASS = cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS);
 const PICKER_LIST_CLASS = "m-0 grid list-none gap-2 p-0";
 const PICKER_ITEM_CLASS =
-  "grid gap-2 rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-1.5";
+  "grid gap-2 rounded-2xl border border-af-border bg-af-surface-subtle p-1.5";
 const PICKER_ITEM_BUTTON_CLASS =
-  "grid gap-2 rounded-2xl p-3 text-left outline-none transition-colors hover:bg-af-overlay/8 focus-visible:ring-2 focus-visible:ring-af-accent/25 disabled:cursor-not-allowed disabled:opacity-72 disabled:hover:bg-transparent";
+  "grid gap-2 rounded-2xl p-3 text-left outline-none transition-colors hover:bg-af-overlay focus-visible:ring-2 focus-visible:ring-af-focus-ring disabled:cursor-not-allowed disabled:bg-af-surface-subtle disabled:text-af-text-disabled disabled:hover:bg-af-surface-subtle";
 const PICKER_ITEM_HEADER_CLASS = "flex items-start justify-between gap-3";
-const PICKER_ITEM_TITLE_CLASS = cn("m-0 text-sm font-semibold text-af-ink");
+const PICKER_ITEM_TITLE_CLASS = cn("m-0 text-sm font-semibold text-af-text");
 const PICKER_ITEM_DESCRIPTION_CLASS = cn(
-  "m-0 text-sm text-af-ink/72",
+  "m-0 text-sm text-af-text-muted",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 const PICKER_ITEM_BADGE_CLASS = cn(
-  "inline-flex shrink-0 rounded-full border border-af-overlay/12 bg-af-base/88 px-2 py-1 text-[11px] font-medium uppercase tracking-[0.08em] text-af-ink/62",
+  "inline-flex shrink-0 rounded-full border border-af-border bg-af-surface px-2 py-1 text-[11px] font-medium uppercase tracking-[0.08em] text-af-text-subtle",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const PICKER_HINT_CLASS = cn(
-  "m-0 rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-3 text-sm text-af-ink/68",
+  "m-0 rounded-2xl border border-af-border bg-af-surface-subtle p-3 text-sm text-af-text-muted",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 const PICKER_CLOSE_ROW_CLASS = "flex justify-end";

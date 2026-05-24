@@ -354,7 +354,7 @@ describe("DashboardBento", () => {
 
     expect(workTotalsRemoveButton.className).toContain("size-8");
     expect(workTotalsRemoveButton.className).toContain(
-      "focus-visible:outline-2",
+      "focus-visible:ring-2",
     );
     expect(
       screen.queryByRole("button", {

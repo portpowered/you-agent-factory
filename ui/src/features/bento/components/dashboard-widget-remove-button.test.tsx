@@ -17,7 +17,7 @@ describe("DashboardWidgetRemoveButton", () => {
     });
 
     expect(button.className).toContain("size-8");
-    expect(button.className).toContain("focus-visible:outline-2");
+    expect(button.className).toContain("focus-visible:ring-2");
 
     fireEvent.click(button);
 

@@ -4,7 +4,7 @@ import { cn } from "../../../lib/cn";
 import { getAgentBentoMessages } from "../messages/agent-bento";
 
 const REMOVE_BUTTON_CLASS = cn(
-  "inline-grid size-8 shrink-0 place-items-center rounded-md border border-af-overlay/12 bg-transparent text-af-ink/54 outline-af-danger/45 transition-colors hover:border-af-danger/28 hover:bg-af-danger/10 hover:text-af-danger-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+  "inline-grid size-8 shrink-0 place-items-center rounded-md border border-af-border bg-transparent text-af-text-subtle transition-colors hover:border-af-danger-border hover:bg-af-danger-surface hover:text-af-danger-text focus-visible:ring-2 focus-visible:ring-af-focus-ring focus-visible:ring-offset-0",
 );
 
 export interface DashboardWidgetRemoveButtonProps {
