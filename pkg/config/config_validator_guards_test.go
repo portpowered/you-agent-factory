@@ -533,6 +533,19 @@ func TestRuleWorkstationKindAndWorker_ValidConfig(t *testing.T) {
 	}
 }
 
+func TestRuleWorkstationKind_AcceptsPoller(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "poller",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "w1",
+	}}
+
+	if findings := ruleWorkstationKind(cfg); len(findings) != 0 {
+		t.Fatalf("expected no kind findings for poller, got %v", findings)
+	}
+}
+
 func TestRulePollerWorkstations_RejectsUnsupportedWorkerType(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workers = []interfaces.WorkerConfig{{

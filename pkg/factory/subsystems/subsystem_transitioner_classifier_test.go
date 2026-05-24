@@ -69,6 +69,26 @@ func TestTransitioner_ClassifierUnknownLabelFallsThroughFailureWithoutSelectedLa
 	}
 }
 
+func TestTransitioner_ClassifierUnknownLabelUsesImplicitNormalizedFailureArc(t *testing.T) {
+	now := time.Date(2026, time.April, 18, 3, 20, 0, 0, time.UTC)
+	transitioner := newClassifierTransitionerFixtureWithoutExplicitFailure(now)
+	snapshot := newClassifierSnapshot(now, "unknown")
+
+	result, err := transitioner.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if result == nil || len(result.Mutations) != 1 {
+		t.Fatalf("mutations = %#v, want one failure mutation", result)
+	}
+	if result.Mutations[0].ToPlace != "task:failed" {
+		t.Fatalf("failure output place = %q, want task:failed", result.Mutations[0].ToPlace)
+	}
+	if completed := result.CompletedDispatches[0]; completed.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("completed outcome = %s, want FAILED", completed.Outcome)
+	}
+}
+
 func newClassifierTransitionerFixture(now time.Time) *TransitionerSubsystem {
 	net := &state.Net{
 		Places: map[string]*petri.Place{
@@ -78,7 +98,15 @@ func newClassifierTransitionerFixture(now time.Time) *TransitionerSubsystem {
 			"task:failed":   {ID: "task:failed", TypeID: "task", State: "failed"},
 		},
 		WorkTypes: map[string]*state.WorkType{
-			"task": {ID: "task"},
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "approved", Category: state.StateCategoryTerminal},
+					{Value: "review", Category: state.StateCategoryProcessing},
+					{Value: "failed", Category: state.StateCategoryFailed},
+				},
+			},
 		},
 		Transitions: map[string]*petri.Transition{
 			"t1": {
@@ -95,6 +123,48 @@ func newClassifierTransitionerFixture(now time.Time) *TransitionerSubsystem {
 		},
 	}
 
+	return newClassifierTransitionerFromNet(now, net)
+}
+
+func newClassifierTransitionerFixtureWithoutExplicitFailure(now time.Time) *TransitionerSubsystem {
+	net := &state.Net{
+		Places: map[string]*petri.Place{
+			"task:init":     {ID: "task:init", TypeID: "task", State: "init"},
+			"task:approved": {ID: "task:approved", TypeID: "task", State: "approved"},
+			"task:review":   {ID: "task:review", TypeID: "task", State: "review"},
+			"task:failed":   {ID: "task:failed", TypeID: "task", State: "failed"},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "approved", Category: state.StateCategoryTerminal},
+					{Value: "review", Category: state.StateCategoryProcessing},
+					{Value: "failed", Category: state.StateCategoryFailed},
+				},
+			},
+		},
+		Transitions: map[string]*petri.Transition{
+			"t1": {
+				ID:   "t1",
+				Name: "classifier",
+				InputArcs: []petri.Arc{
+					{ID: "in", PlaceID: "task:init", Direction: petri.ArcInput},
+				},
+				OutputArcs: []petri.Arc{
+					{ID: "approved", PlaceID: "task:approved", ClassificationLabel: "approved"},
+					{ID: "needs-review", PlaceID: "task:review", ClassificationLabel: "needs_review"},
+				},
+			},
+		},
+	}
+	state.NormalizeTransitionTopology(net, nil)
+
+	return newClassifierTransitionerFromNet(now, net)
+}
+
+func newClassifierTransitionerFromNet(now time.Time, net *state.Net) *TransitionerSubsystem {
 	return NewTransitioner(
 		net,
 		nil,

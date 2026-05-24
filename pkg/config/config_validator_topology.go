@@ -242,6 +242,7 @@ func ruleWorkstationKind(cfg *interfaces.FactoryConfig) []Finding {
 		interfaces.WorkstationKindStandard: true,
 		interfaces.WorkstationKindRepeater: true,
 		interfaces.WorkstationKindCron:     true,
+		interfaces.WorkstationKindPoller:   true,
 	}
 	for wi, ws := range cfg.Workstations {
 		if ws.Kind == "" {
