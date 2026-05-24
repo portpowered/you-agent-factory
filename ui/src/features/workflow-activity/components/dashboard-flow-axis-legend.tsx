@@ -55,37 +55,37 @@ export function getDefaultDashboardFlowAxisLegendIconItems(
 
   return [
     {
-      iconClassName: "text-af-ink/58",
+      iconClassName: "text-af-text-subtle",
       kind: "queue",
       label: messages.iconLabels.queue,
     },
     {
-      iconClassName: "text-af-info/78",
+      iconClassName: "text-af-info",
       kind: "processing",
       label: messages.iconLabels.processing,
     },
     {
-      iconClassName: "text-af-success-ink/76",
+      iconClassName: "text-af-success",
       kind: "terminal",
       label: messages.iconLabels.terminal,
     },
     {
-      iconClassName: "text-af-danger-ink/78",
+      iconClassName: "text-af-danger",
       kind: "failed",
       label: messages.iconLabels.failed,
     },
     {
-      iconClassName: "text-af-success-ink/76",
+      iconClassName: "text-af-success",
       kind: "resource",
       label: messages.iconLabels.resource,
     },
     {
-      iconClassName: "text-af-info/74",
+      iconClassName: "text-af-info",
       kind: "constraint",
       label: messages.iconLabels.constraint,
     },
     {
-      iconClassName: "text-af-danger-ink/74",
+      iconClassName: "text-af-danger",
       kind: "limit",
       label: messages.iconLabels.limit,
     },
@@ -95,7 +95,7 @@ export function getDefaultDashboardFlowAxisLegendIconItems(
       label: messages.iconLabels[metadata.iconKind],
     })),
     {
-      iconClassName: "text-af-success-ink",
+      iconClassName: "text-af-success",
       kind: "active-work",
       label: messages.iconLabels["active-work"],
     },
@@ -110,13 +110,13 @@ export function getDefaultDashboardFlowAxisLegendIconItems(
 const DEFAULT_CONTAINER_CLASS =
   "pointer-events-none z-10 flex flex-col items-stretch gap-2 md:items-start";
 const TOGGLE_BUTTON_CLASS =
-  "dashboard-eyebrow pointer-events-auto inline-flex items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/92 px-3 py-2 text-af-ink/78 shadow-af-card backdrop-blur-md transition-colors hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/45";
+  "dashboard-eyebrow pointer-events-auto inline-flex items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 text-af-text-muted shadow-af-card backdrop-blur-md transition-colors hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const PANEL_CLASS =
-  "dashboard-body-sm pointer-events-auto w-full rounded-lg border border-af-overlay/8 bg-af-surface/88 px-3 py-3 text-af-ink/78 shadow-af-card backdrop-blur-md md:max-w-md";
+  "dashboard-body-sm pointer-events-auto w-full rounded-lg border border-af-border bg-af-surface-raised px-3 py-3 text-af-text-muted shadow-af-card backdrop-blur-md md:max-w-md";
 const PANEL_HEADER_CLASS = "mb-2 flex items-center justify-between gap-3";
 const PANEL_TITLE_CLASS = "dashboard-eyebrow m-0 text-af-accent";
 const COLLAPSE_BUTTON_CLASS =
-  "dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-af-overlay/12 bg-af-overlay/6 px-3 py-2 text-af-ink/78 transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/45";
+  "dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-af-border bg-af-surface-subtle px-3 py-2 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const ITEMS_LIST_CLASS =
   "m-0 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2";
 
@@ -178,7 +178,7 @@ function DashboardFlowAxisLegendItems({
             )}
             data-legend-flow={item.tone === "active" ? "" : undefined}
           />
-          <span className="dashboard-body-sm min-w-0 text-af-ink/78 [overflow-wrap:anywhere]">
+          <span className="dashboard-body-sm min-w-0 text-af-text-muted [overflow-wrap:anywhere]">
             {item.label}
           </span>
         </li>
@@ -194,7 +194,7 @@ function DashboardFlowAxisLegendItems({
             kind={item.kind}
             label={messages.iconLabel(item.label)}
           />
-          <span className="dashboard-body-sm min-w-0 text-af-ink/78 [overflow-wrap:anywhere]">
+          <span className="dashboard-body-sm min-w-0 text-af-text-muted [overflow-wrap:anywhere]">
             {item.label}
           </span>
         </li>

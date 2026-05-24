@@ -227,7 +227,7 @@ function buildPlaceNode(
     input.storedNodePositions,
   );
   const basePlaceNode = {
-    className: "border-0 bg-transparent p-0 text-af-ink",
+    className: "border-0 bg-transparent p-0 text-af-text",
     draggable: true,
     height: positionedNode.height,
     id: positionedNode.nodeId,
@@ -312,7 +312,7 @@ function buildWorkstationNode(
   );
 
   return {
-    className: "border-0 bg-transparent p-0 text-af-ink",
+    className: "border-0 bg-transparent p-0 text-af-text",
     data: {
       active: executions.length > 0,
       activeFlow: input.activeGraphHighlights.activeWorkstationNodeIds.has(

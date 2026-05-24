@@ -8,17 +8,6 @@ type RunnerExecutionRequest = ProviderInferenceRequest
 // used by standard orchestration flows.
 type RunnerExecutionResult = InferenceResponse
 
-// RunnerSessionMetadata aliases the stable session metadata returned by runner
-// executions.
-type RunnerSessionMetadata = ProviderSessionMetadata
-
-// RunnerFailureMetadata aliases the normalized failure metadata carried on work
-// results after runner execution.
-type RunnerFailureMetadata = ProviderFailureMetadata
-
-// RunnerErrorType aliases the normalized runner failure type contract.
-type RunnerErrorType = ProviderErrorType
-
 // RunnerToolExecutionMode describes whether a runner invocation is expected to
 // permit tool execution during the request lifecycle.
 type RunnerToolExecutionMode string

@@ -16,20 +16,20 @@ type SessionDetail = ProviderSessionDetailResponse;
 type TranscriptEntry = SessionDetail["transcript"][number];
 
 const TRANSCRIPT_ENTRY_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
-  assistant_message: "border-af-overlay/10 bg-af-overlay/4",
-  reasoning: "border-af-info/20 bg-af-info/7",
-  system_event: "border-af-overlay/12 bg-af-overlay/7",
-  tool_call: "border-af-warning/20 bg-af-warning/8",
-  tool_output: "border-af-success/20 bg-af-success/8",
-  user_message: "border-af-accent/18 bg-af-accent/6",
+  assistant_message: "border-af-border bg-af-surface-subtle",
+  reasoning: "border-af-info-border bg-af-info-surface",
+  system_event: "border-af-border bg-af-surface-raised",
+  tool_call: "border-af-warning-border bg-af-warning-surface",
+  tool_output: "border-af-success-border bg-af-success-surface",
+  user_message: "border-af-accent-border bg-af-accent-surface",
 };
 const TRANSCRIPT_BADGE_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
-  assistant_message: "border-af-overlay/12 bg-af-overlay/8 text-af-ink/78",
-  reasoning: "border-af-info/22 bg-af-info/12 text-af-info-ink",
-  system_event: "border-af-overlay/14 bg-af-overlay/10 text-af-ink/72",
-  tool_call: "border-af-warning/22 bg-af-warning/12 text-af-warning-ink",
-  tool_output: "border-af-success/22 bg-af-success/12 text-af-success-ink",
-  user_message: "border-af-accent/22 bg-af-accent/10 text-af-accent-ink",
+  assistant_message: "border-af-border bg-af-surface-raised text-af-text-muted",
+  reasoning: "border-af-info-border bg-af-info-surface text-af-info-text",
+  system_event: "border-af-border bg-af-surface-raised text-af-text-subtle",
+  tool_call: "border-af-warning-border bg-af-warning-surface text-af-warning-text",
+  tool_output: "border-af-success-border bg-af-success-surface text-af-success-text",
+  user_message: "border-af-accent-border bg-af-accent-surface text-af-text",
 };
 
 export function TranscriptSection({
@@ -46,7 +46,7 @@ export function TranscriptSection({
   return (
     <section
       className={cn(
-        "grid gap-3 rounded-xl border border-af-accent/14 bg-af-accent/6 p-4",
+        "grid gap-3 rounded-xl border border-af-accent-border bg-af-accent-surface p-4",
         className,
       )}
     >
@@ -72,19 +72,19 @@ export function EncryptedReasoningNotice({
   return (
     <div
       className={cn(
-        "grid gap-2 rounded-lg border border-af-info/18 bg-af-info/8 p-3",
+        "grid gap-2 rounded-lg border border-af-info-border bg-af-info-surface p-3",
         className,
       )}
     >
       <span
         className={cn(
-          "inline-flex w-fit rounded-full border border-af-info/24 bg-af-info/12 px-2 py-0.5 text-af-info-ink",
+          "inline-flex w-fit rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info-text",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >
         {messages.encryptedReasoningStateLabel}
       </span>
-      <p className={cn("m-0 text-af-ink/76", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
         {messages.encryptedReasoningDescription}
       </p>
     </div>
@@ -135,7 +135,7 @@ function TranscriptEntryCard({
             {entry.status ? (
               <span
                 className={cn(
-                  "inline-flex rounded-full border border-af-overlay/12 bg-af-overlay/6 px-2 py-0.5 text-af-ink/72",
+                  "inline-flex rounded-full border border-af-border bg-af-surface-raised px-2 py-0.5 text-af-text-subtle",
                   DASHBOARD_SUPPORTING_TEXT_CLASS,
                 )}
               >
@@ -147,7 +147,7 @@ function TranscriptEntryCard({
             <div className="grid gap-1">
               <div
                 className={cn(
-                  "flex flex-wrap items-center gap-x-2 gap-y-1 text-af-ink/62",
+                  "flex flex-wrap items-center gap-x-2 gap-y-1 text-af-text-subtle",
                   DASHBOARD_SUPPORTING_TEXT_CLASS,
                 )}
               >
@@ -198,7 +198,7 @@ function TimestampDetails({
     <details className="grid gap-1">
       <summary
         className={cn(
-          "w-fit cursor-pointer text-af-ink/62 underline decoration-dotted underline-offset-2",
+          "w-fit cursor-pointer text-af-text-subtle underline decoration-dotted underline-offset-2",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >
@@ -206,7 +206,7 @@ function TimestampDetails({
       </summary>
       <code
         className={cn(
-          "w-fit rounded-md border border-af-overlay/10 bg-af-overlay/4 px-2 py-1",
+          "w-fit rounded-md border border-af-border bg-af-surface-subtle px-2 py-1",
           DASHBOARD_BODY_CODE_CLASS,
         )}
         title={title ?? timestamp}
@@ -241,7 +241,7 @@ function TranscriptEntryBody({
           ) : null}
           {entry.text ? <CodePanel value={entry.text} /> : null}
           {entry.encrypted && !entry.text ? (
-            <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+            <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
               {messages.encryptedReasoningOnly}
             </p>
           ) : null}

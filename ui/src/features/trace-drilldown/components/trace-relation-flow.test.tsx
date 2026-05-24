@@ -182,7 +182,7 @@ describe("TraceRelationFlow", () => {
       screen
         .getByTestId("trace-relation-flow-controls")
         .getAttribute("data-controls-style"),
-    ).toContain("\"backgroundColor\":\"rgb(from var(--color-af-surface) r g b / 0.88)\"");
+    ).toContain("\"backgroundColor\":\"var(--color-af-graph-controls-surface)\"");
     expect(
       screen
         .getByTestId("trace-relation-flow-controls")
@@ -192,7 +192,8 @@ describe("TraceRelationFlow", () => {
     const implementButton = screen.getByRole("button", {
       name: "Implement story",
     });
-    expect(implementButton.className).toContain("border-af-success/20");
+    expect(implementButton.className).toContain("border-af-success-border");
+    expect(implementButton.className).toContain("bg-af-success-surface");
     expect(within(implementButton).getByText("PARENT CHILD")).toBeTruthy();
     expect(within(implementButton).getByText("DONE")).toBeTruthy();
     expect(screen.getByText("FAILED")).toBeTruthy();
@@ -201,8 +202,12 @@ describe("TraceRelationFlow", () => {
     expect(onSelectWorkID).toHaveBeenCalledWith("work-implement");
   });
 
-  it("renders semantic edge labels and tones for comparable relation states", () => {
+  it("renders semantic edge labels and tones for comparable relation states", async () => {
     render(<TraceRelationFlow relations={RELATIONS} />);
+
+    await waitFor(() => {
+      expect(renderedEdges()).toHaveLength(2);
+    });
 
     const edges = renderedEdges();
     expect(edges[0]?.ariaLabel).toBe(
@@ -210,6 +215,6 @@ describe("TraceRelationFlow", () => {
     );
     expect(edges[0]?.style?.stroke).toBe("var(--color-af-success)");
     expect(edges[0]?.style?.strokeDasharray).toBe("7 5");
-    expect(edges[1]?.style?.stroke).toBe("var(--color-af-danger-ink)");
+    expect(edges[1]?.style?.stroke).toBe("var(--color-af-danger-text)");
   });
 });

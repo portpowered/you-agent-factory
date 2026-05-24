@@ -111,6 +111,12 @@ describe("ExportFactoryDialog", () => {
 
     expect(screen.getByText(messages.hint)).toBeTruthy();
     expect(screen.getByText(messages.nameDescription)).toBeTruthy();
+    expect(screen.getByLabelText(messages.imageLabel).className).toContain(
+      "border-af-border-strong",
+    );
+    expect(screen.getByLabelText(messages.imageLabel).className).toContain(
+      "bg-af-surface-subtle",
+    );
   });
 
   it("exports the selected image with the trimmed factory name and shows a visible success state", async () => {
@@ -216,6 +222,8 @@ describe("ExportFactoryDialog", () => {
 
     const errorPanel = await screen.findByRole("alert");
     expect(errorPanel.textContent).toContain("PNG encoding failed");
+    expect(errorPanel.className).toContain("border-af-danger-border");
+    expect(errorPanel.className).toContain("bg-af-danger-surface");
     expect(screen.getByRole("dialog", { name: messages.title })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: messages.cancelAction }),

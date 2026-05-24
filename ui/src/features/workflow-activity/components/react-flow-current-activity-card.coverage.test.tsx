@@ -336,6 +336,12 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         "The factory has not published any workstation graph yet.",
       ),
     ).toBeTruthy();
+    expect(
+      screen.getByText("No workflow topology loaded").parentElement?.className,
+    ).toContain("border-af-border-strong");
+    expect(
+      screen.getByText("No workflow topology loaded").parentElement?.className,
+    ).toContain("bg-af-surface-subtle");
     expect(screen.queryByTestId("mock-react-flow")).toBeNull();
   });
 
@@ -437,7 +443,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     ).toBe("1");
     expect(
       screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
-    ).toContain("\"backgroundColor\":\"rgb(from var(--color-af-surface) r g b / 0.88)\"");
+    ).toContain("\"backgroundColor\":\"var(--color-af-graph-controls-surface)\"");
     expect(
       screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
     ).toContain("\"borderRadius\":8");

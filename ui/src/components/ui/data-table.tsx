@@ -63,7 +63,7 @@ export function DataTable<Row>({
           ))
         ) : (
           <TableRow>
-            <TableCell className="text-af-ink/58" colSpan={columns.length}>
+            <TableCell className="text-af-text-subtle" colSpan={columns.length}>
               {emptyMessage}
             </TableCell>
           </TableRow>
@@ -72,4 +72,3 @@ export function DataTable<Row>({
     </Table>
   );
 }
-

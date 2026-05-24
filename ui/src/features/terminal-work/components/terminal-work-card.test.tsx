@@ -83,7 +83,7 @@ describe("CompletedFailedWorkstationCard", () => {
           name: messages.iconLabel("completed"),
         })
         .getAttribute("class"),
-    ).toContain("text-on-foreground");
+    ).toContain("text-af-on-info");
     expect(
       within(failedTitle as HTMLElement)
         .getByRole("img", { name: messages.iconLabel("failed") })
@@ -95,17 +95,17 @@ describe("CompletedFailedWorkstationCard", () => {
           name: messages.iconLabel("failed"),
         })
         .getAttribute("class"),
-    ).toContain("text-on-foreground");
+    ).toContain("text-af-on-danger");
     const doneStoryButton = screen.getByRole("button", { name: /Done Story/ });
     expect(doneStoryButton.getAttribute("aria-label")).toBe("Done Story");
     expect(doneStoryButton.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
-    expect(doneStoryButton.className).toContain("text-on-foreground");
+    expect(doneStoryButton.className).toContain("text-af-on-info");
     expect(doneStoryButton).toBeTruthy();
     const failedStoryButton = screen.getByRole("button", {
       name: /Failed Story/,
     });
     expect(failedStoryButton.getAttribute("aria-label")).toBe("Failed Story");
-    expect(failedStoryButton.className).toContain("text-on-foreground");
+    expect(failedStoryButton.className).toContain("text-af-on-danger");
     expect(failedStoryButton).toBeTruthy();
     const failedMeta = screen.getByText("Failed at setup-workspace");
     expect(failedMeta.className).toContain(DASHBOARD_SUPPORTING_TEXT_CLASS);
@@ -242,10 +242,10 @@ describe("CompletedFailedWorkstationCard", () => {
     ).toBe("true");
     expect(
       screen.getByRole("button", { name: /Failed Story/ }).className,
-    ).toContain("text-on-foreground");
+    ).toContain("text-af-text");
     expect(
       screen.getByRole("button", { name: /Failed Story/ }).className,
-    ).toContain("border-on-foreground");
+    ).toContain("border-af-accent-border");
     expect(
       screen
         .getByRole("button", { name: /Done Story/ })

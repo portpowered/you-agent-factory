@@ -69,7 +69,7 @@ function LoadedProviderSessionDetailPanel({
     <section
       aria-label={messages.selectedSessionHeading}
       className={cn(
-        "mt-4 grid gap-3 border-t border-af-overlay/8 pt-4",
+        "mt-4 grid gap-3 border-t border-af-border pt-4",
         PROVIDER_SESSION_SANS_CLASS,
       )}
     >
@@ -214,8 +214,8 @@ function StatusNotice({
       className={cn(
         "m-0 rounded-lg border px-3 py-2.5",
         tone === "error"
-          ? "border-af-danger/25 bg-af-danger/8 text-af-danger-ink"
-          : "border-af-overlay/10 bg-af-overlay/4 text-af-ink/82",
+          ? "border-af-danger-border bg-af-danger-surface text-af-danger-text"
+          : "border-af-border bg-af-surface-subtle text-af-text-muted",
         DASHBOARD_BODY_TEXT_CLASS,
       )}
       role={tone === "error" ? "alert" : "status"}
@@ -336,7 +336,7 @@ function TurnsSection({
                 <strong>{messages.turnLabel({ index: turn.index })}</strong>
                 <div
                   className={cn(
-                    "text-af-ink/62",
+                    "text-af-text-subtle",
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
                 >
@@ -398,7 +398,7 @@ function FunctionCallsSection({
                   <strong>{call.name ?? call.type}</strong>
                   <p
                     className={cn(
-                      "m-0 text-af-ink/62",
+                      "m-0 text-af-text-subtle",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
@@ -411,7 +411,7 @@ function FunctionCallsSection({
                 {call.status ? (
                   <span
                     className={cn(
-                      "inline-flex w-fit rounded-full border border-af-overlay/12 bg-af-overlay/6 px-2 py-0.5",
+                      "inline-flex w-fit rounded-full border border-af-border bg-af-surface-raised px-2 py-0.5 text-af-text-subtle",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
@@ -461,7 +461,7 @@ function ReasoningSection({
                 <strong>{entry.sourceType}</strong>
                 <p
                   className={cn(
-                    "m-0 text-af-ink/62",
+                    "m-0 text-af-text-subtle",
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
                 >
@@ -531,7 +531,7 @@ function ParseDiagnosticsSection({
               </strong>
               <p
                 className={cn(
-                  "m-0 mt-1.5 text-af-ink/62",
+                  "m-0 mt-1.5 text-af-text-subtle",
                   DASHBOARD_SUPPORTING_TEXT_CLASS,
                 )}
               >
@@ -560,10 +560,10 @@ function SecondarySection({
   heading: string;
 }) {
   return (
-    <section className="grid gap-4 rounded-xl border border-af-overlay/10 bg-af-overlay/3 p-4">
+    <section className="grid gap-4 rounded-xl border border-af-border bg-af-surface-subtle p-4">
       <div className="grid gap-1">
         <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{heading}</h5>
-        <p className={cn("m-0 text-af-ink/68", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
           {description}
         </p>
       </div>
@@ -626,7 +626,7 @@ function TimestampMetricValue({
       <details className="grid gap-1">
         <summary
           className={cn(
-            "w-fit cursor-pointer text-af-ink/62 underline decoration-dotted underline-offset-2",
+            "w-fit cursor-pointer text-af-text-subtle underline decoration-dotted underline-offset-2",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
         >
@@ -634,7 +634,7 @@ function TimestampMetricValue({
         </summary>
         <code
           className={cn(
-            "w-fit rounded-md border border-af-overlay/10 bg-af-overlay/4 px-2 py-1",
+            "w-fit rounded-md border border-af-border bg-af-surface-subtle px-2 py-1",
             DASHBOARD_BODY_CODE_CLASS,
           )}
         >

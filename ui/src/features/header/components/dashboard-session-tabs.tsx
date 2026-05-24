@@ -1,4 +1,5 @@
 import {
+  type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useId,
   useRef,
@@ -11,12 +12,13 @@ import { cn } from "../../../lib/cn";
 import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
-import { SessionTabButton } from "./dashboard-session-tab-button";
 import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
 import {
   normalizeFactorySessionsError,
+  sessionCloseLabel,
   sessionPanelID,
   sessionTabID,
+  sessionTabLabel,
 } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import {
@@ -27,8 +29,18 @@ import {
 const SESSION_TABS_SHELL_CLASS = "grid min-w-0 flex-1 gap-2";
 const SESSION_TABS_ROW_CLASS = "flex min-w-0 items-center gap-1.5";
 const SESSION_TAB_LIST_CLASS = "flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pb-1";
+const SESSION_TAB_ITEM_CLASS =
+  "group relative flex min-w-0 shrink-0 items-stretch rounded-t-xl rounded-b-md border border-b-0 transition-colors";
+const SESSION_TAB_BUTTON_CLASS =
+  "min-w-0 flex-1 rounded-bl-md rounded-tl-xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+const SESSION_TAB_CLOSE_BUTTON_CLASS =
+  "rounded-br-md rounded-tr-xl px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+const SESSION_TAB_ACTIVE_CLASS =
+  "z-10 border-af-border-strong bg-af-surface-raised text-af-text shadow-af-card";
+const SESSION_TAB_INACTIVE_CLASS =
+  "border-af-border bg-af-surface-subtle text-af-text-muted hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
 const SESSION_DIALOG_ERROR_CLASS =
-  "rounded-xl border border-af-danger/32 bg-af-danger/8 px-3 py-2 text-sm text-af-ink";
+  "rounded-xl border border-af-danger-border bg-af-danger-surface px-3 py-2 text-sm text-af-danger-text";
 
 export function DashboardSessionTabs({
   hideOpenButton = false,
@@ -217,7 +229,7 @@ function SessionTabsContent({
 
   if (isPending) {
     return (
-      <p className={cn("text-sm text-af-ink/68", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cn("text-sm text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
         {messages.loadingSessionsLabel}
       </p>
     );
@@ -238,7 +250,7 @@ function SessionTabsContent({
   }
   if (sessions.length === 0) {
     return (
-      <p className={cn("text-sm text-af-ink/76", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cn("text-sm text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
         {messages.sessionsEmptyTitle}
       </p>
     );
@@ -342,12 +354,106 @@ function SessionErrorState({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <p className={cn("text-sm text-af-ink/76", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cn("text-sm text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
         {label}
       </p>
       <Button onClick={onRetry} size="sm" tone="outline">
         {messages.retrySessionsLabel}
       </Button>
     </div>
+  );
+}
+function SessionTabButton({
+  active,
+  buttonRef,
+  closeDisabled,
+  controlsID,
+  messages,
+  onClick,
+  onClose,
+  onKeyDown,
+  session,
+  streamStatus,
+  tabID,
+}: {
+  active: boolean;
+  buttonRef: (element: HTMLButtonElement | null) => void;
+  closeDisabled: boolean;
+  controlsID: string;
+  messages: ReturnType<typeof getHeaderControlsMessages>;
+  onClick: () => void;
+  onClose: () => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  session: FactorySessionSummary;
+  streamStatus: DashboardStreamState["status"];
+  tabID: string;
+}) {
+  const label = sessionTabLabel(session);
+  return (
+    <div
+      className={cn(
+        SESSION_TAB_ITEM_CLASS,
+        active ? SESSION_TAB_ACTIVE_CLASS : SESSION_TAB_INACTIVE_CLASS,
+      )}
+      title={`${session.folderPath} (${session.id})`}
+    >
+      <button
+        aria-controls={controlsID}
+        aria-label={label}
+        aria-selected={active}
+        className={SESSION_TAB_BUTTON_CLASS}
+        id={tabID}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+        ref={buttonRef}
+        role="tab"
+        tabIndex={active ? 0 : -1}
+        type="button"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <SessionTabStatusIndicator status={streamStatus} />
+          <span className="truncate text-sm font-semibold">{label}</span>
+        </span>
+        <span className="block truncate text-[11px] text-af-text-subtle">
+          {session.project || session.folderPath}
+        </span>
+      </button>
+      <button
+        aria-label={sessionCloseLabel(session, messages)}
+        className={cn(
+          SESSION_TAB_CLOSE_BUTTON_CLASS,
+          active
+            ? "text-af-text-subtle hover:text-af-text"
+            : "text-af-text-disabled group-hover:text-af-text-muted",
+        )}
+        disabled={closeDisabled}
+        onClick={onClose}
+        type="button"
+      >
+        {closeDisabled ? messages.closingSessionButtonLabel : "×"}
+      </button>
+    </div>
+  );
+}
+
+function SessionTabStatusIndicator({
+  status,
+}: {
+  status: DashboardStreamState["status"];
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "relative inline-flex size-2.5 shrink-0 rounded-full",
+        status === "live" && "bg-af-success",
+        status === "connecting" && "bg-af-accent",
+        status === "offline" && "bg-af-danger",
+      )}
+    >
+      {status === "live" ? (
+        <span className="absolute inset-0 animate-ping rounded-full bg-af-success-surface" />
+      ) : null}
+    </span>
   );
 }

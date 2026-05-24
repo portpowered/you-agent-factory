@@ -57,7 +57,10 @@ describe("factory graph editor toolbar controls", () => {
     expect(
       within(menu).getByRole("button", { name: "Workstation" }),
     ).toBeTruthy();
-    expect(screen.getByText("Draft changes pending")).toBeTruthy();
+    const pendingPill = screen.getByText("Draft changes pending");
+    expect(pendingPill).toBeTruthy();
+    expect(pendingPill.className).toContain("border-af-warning-border");
+    expect(pendingPill.className).toContain("bg-af-warning-surface");
     expect(
       screen.queryByRole("button", {
         name: "Add",
@@ -125,11 +128,13 @@ describe("factory graph editor toolbar controls", () => {
     await user.hover(
       screen.getByRole("button", { name: "Enter factory graph editor" }),
     );
-    expect(
-      await screen.findByRole("tooltip", {
-        name: "Enter factory graph editor",
-      }),
-    ).toBeTruthy();
+    const tooltip = await screen.findByRole("tooltip", {
+      name: "Enter factory graph editor",
+    });
+    expect(tooltip).toBeTruthy();
+    expect(tooltip.className).toContain("border-af-border-strong");
+    expect(tooltip.className).toContain("bg-af-surface-raised");
+    expect(tooltip.className).toContain("text-af-text");
   });
 });
 

@@ -39,7 +39,7 @@ export function FriendlyExecCommandOutput({
   return (
     <div className="grid gap-3">
       {text ? <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{text}</p> : null}
-      <section className="grid gap-2 rounded-lg border border-af-success/18 bg-af-success/6 p-3">
+      <section className="grid gap-2 rounded-lg border border-af-success-border bg-af-success-surface p-3">
         <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
           {messages.execCommandResultHeading}
         </span>

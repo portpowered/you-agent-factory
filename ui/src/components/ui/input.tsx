@@ -5,7 +5,7 @@ import { cn } from "../../lib/cn";
 export type InputProps = InputHTMLAttributes<HTMLInputElement>;
 
 export const INPUT_CLASS =
-  "flex min-h-11 w-full rounded-xl border border-af-overlay/14 bg-af-canvas/82 px-3 py-2.5 text-sm text-af-ink outline-none transition-colors placeholder:text-af-ink/42 focus-visible:border-af-accent focus-visible:ring-2 focus-visible:ring-af-accent/25 disabled:cursor-not-allowed disabled:border-af-overlay/10 disabled:bg-af-overlay/6 disabled:text-af-ink/48";
+  "flex min-h-11 w-full rounded-xl border border-af-border bg-af-surface-raised px-3 py-2.5 text-sm text-af-text outline-none transition-colors placeholder:text-af-text-disabled focus-visible:border-af-border-strong focus-visible:ring-2 focus-visible:ring-af-focus-ring disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { className, type = "text", ...props },

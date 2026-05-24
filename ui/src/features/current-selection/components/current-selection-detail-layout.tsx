@@ -8,7 +8,7 @@ import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 
 const SELECTION_HISTORY_ACTIONS_CLASS = "flex items-center gap-2";
 const SELECTION_HISTORY_BUTTON_CLASS = cn(
-  "inline-flex h-9 items-center justify-center rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-3 text-af-ink/78 transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
+  "inline-flex h-9 items-center justify-center rounded-lg border border-af-border bg-af-surface-subtle px-3 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-focus-ring disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 

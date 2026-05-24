@@ -160,7 +160,7 @@ function StatePositionWorkListItem({
       <li>
         <button
           aria-label={messages.selectWorkItemLabel(workLabel)}
-          className="grid w-full min-w-0 cursor-pointer gap-2 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2 text-left outline-af-accent transition hover:bg-af-overlay/8 focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="grid w-full min-w-0 cursor-pointer gap-2 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2 text-left outline-af-focus-ring transition hover:bg-af-overlay focus-visible:outline-2 focus-visible:outline-offset-2"
           onClick={() => onSelectWorkItem(workItem)}
           type="button"
         >
@@ -171,7 +171,7 @@ function StatePositionWorkListItem({
   }
 
   return (
-    <li className="grid min-w-0 gap-2 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2 text-sm">
+    <li className="grid min-w-0 gap-2 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2 text-sm">
       {content}
     </li>
   );

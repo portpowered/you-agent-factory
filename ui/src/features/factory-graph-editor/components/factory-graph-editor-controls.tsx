@@ -38,18 +38,18 @@ export interface FactoryGraphEditorVisibilityPresetOption {
 }
 
 const TOOLBAR_SHELL_CLASS =
-  "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0";
+  "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:translate-x-0 max-md:justify-between";
 const MENU_LIST_CLASS = "grid gap-1";
 const MENU_ACTION_CLASS =
-  "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent/20 hover:bg-af-overlay/6 focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:opacity-55";
-const MENU_ACTION_LABEL_CLASS = "text-sm font-semibold text-af-ink";
-const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-ink/68";
+  "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent-border hover:bg-af-accent-surface focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
+const MENU_ACTION_LABEL_CLASS = "text-sm font-semibold text-af-text";
+const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-text-muted";
 const VISIBILITY_PANEL_CLASS =
-  "pointer-events-auto absolute right-7 top-7 z-20 flex flex-wrap items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-2 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4";
+  "pointer-events-auto absolute right-7 top-7 z-20 flex flex-wrap items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-2 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4";
 const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
-  danger: "border-af-danger/28 bg-af-danger/8 text-af-danger-ink",
-  neutral: "border-af-overlay/14 bg-af-overlay/6 text-af-ink/82",
-  warning: "border-af-warning/30 bg-af-warning/10 text-af-warning-ink",
+  danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
+  neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
+  warning: "border-af-warning-border bg-af-warning-surface text-af-warning-text",
 };
 
 const STATUS_PILL_CLASS =
@@ -121,8 +121,8 @@ export function FactoryGraphEditorToolbar({
         className={cn(
           STATUS_PILL_CLASS,
           hasPendingChanges
-            ? "border-af-warning/30 bg-af-warning/10 text-af-warning-ink"
-            : "border-af-overlay/12 bg-af-overlay/4 text-af-ink/70",
+            ? "border-af-warning-border bg-af-warning-surface text-af-warning-text"
+            : "border-af-border bg-af-surface-subtle text-af-text-muted",
         )}
       >
         {hasPendingChanges
@@ -252,10 +252,10 @@ function FactoryGraphEditorAddMenu({
         className="grid gap-2"
       >
         <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-af-ink">
+          <p className="m-0 text-sm font-semibold text-af-text">
             {messages.toolbarVisibilityMenuTitle}
           </p>
-          <p className="m-0 text-xs leading-5 text-af-ink/68">
+          <p className="m-0 text-xs leading-5 text-af-text-muted">
             {messages.toolbarVisibilityMenuDescription}
           </p>
         </div>
@@ -349,9 +349,9 @@ export function FactoryGraphEditorActionPopover({
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent align="start" className="grid gap-3" sideOffset={12}>
         <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-af-ink">{title}</p>
+          <p className="m-0 text-sm font-semibold text-af-text">{title}</p>
           {description ? (
-            <p className="m-0 text-xs leading-5 text-af-ink/68">
+            <p className="m-0 text-xs leading-5 text-af-text-muted">
               {description}
             </p>
           ) : null}

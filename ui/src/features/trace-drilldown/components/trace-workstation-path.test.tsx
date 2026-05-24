@@ -52,17 +52,27 @@ vi.mock("@xyflow/react", async () => {
     ReactFlow: ({
       children,
       edges,
+      nodeTypes,
       nodes,
     }: {
       children?: ReactNode;
       edges: Array<{ id: string; source: string; target: string }>;
-      nodes: Array<{ id: string }>;
+      nodeTypes: Record<string, (props: { data: Record<string, unknown> }) => ReactNode>;
+      nodes: Array<{ data: Record<string, unknown>; id: string; type: string }>;
     }) => (
       <div
         data-edges={JSON.stringify(edges)}
         data-node-ids={JSON.stringify(nodes.map((node) => node.id))}
         data-testid="trace-react-flow"
       >
+        {nodes.map((node) => {
+          const NodeView = nodeTypes[node.type];
+          return (
+            <div key={node.id}>
+              <NodeView data={node.data} />
+            </div>
+          );
+        })}
         {children}
       </div>
     ),
@@ -112,7 +122,7 @@ function renderedEdgePairs(): string[] {
     .sort();
 }
 
-describe("TraceWorkstationPath", () => {
+describe("TraceWorkstationPath lineage", () => {
   afterEach(() => {
     cleanup();
   });
@@ -187,7 +197,7 @@ describe("TraceWorkstationPath", () => {
       screen
         .getByTestId("trace-react-flow-controls")
         .getAttribute("data-controls-style"),
-    ).toContain("\"backgroundColor\":\"rgb(from var(--color-af-surface) r g b / 0.88)\"");
+    ).toContain("\"backgroundColor\":\"var(--color-af-graph-controls-surface)\"");
     expect(
       screen
         .getByTestId("trace-react-flow-controls")
@@ -233,5 +243,46 @@ describe("TraceWorkstationPath", () => {
         "dispatch-review->dispatch-implement",
       ]);
     });
+  });
+});
+
+describe("TraceWorkstationPath semantics", () => {
+  it("renders semantic workstation path tones and muted supporting copy", async () => {
+    render(
+      <TraceWorkstationPath
+        dispatches={[
+          buildDispatch("dispatch-plan", {
+            input_items: [buildWorkItem("work-input")],
+            output_items: [buildWorkItem("work-output")],
+          }),
+          buildDispatch("dispatch-repair", {
+            input_items: [buildWorkItem("work-output")],
+            outcome: "FAILED",
+            output_items: [buildWorkItem("work-fixed")],
+          }),
+        ]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("dispatch-plan")).toBeTruthy();
+    });
+
+    const acceptedNode = screen.getByText("dispatch-plan").closest("article");
+    if (!acceptedNode) {
+      throw new Error("Expected accepted workstation node to render.");
+    }
+    expect(acceptedNode.className).toContain("border-af-success-border");
+    expect(acceptedNode.className).toContain("bg-af-success-surface");
+
+    const failedNode = screen.getByText("dispatch-repair").closest("article");
+    if (!failedNode) {
+      throw new Error("Expected failed workstation node to render.");
+    }
+    expect(failedNode.className).toContain("border-af-danger-border");
+    expect(failedNode.className).toContain("bg-af-danger-surface");
+
+    const inputSummary = screen.getAllByText(/^In:/)[0];
+    expect(inputSummary.className).toContain("text-af-text-muted");
   });
 });

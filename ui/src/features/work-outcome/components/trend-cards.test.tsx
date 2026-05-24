@@ -174,11 +174,22 @@ describe("dashboard trend cards", () => {
     expect(summary?.className).toContain(
       DASHBOARD_SUPPORTING_LABELS_CLASS,
     );
+    expect(summary?.className).toContain("border-af-border");
+    expect(summary?.className).toContain("bg-af-surface-subtle");
     expect(
       failureScope.getByText("Failed in range").closest("div")?.querySelector("dd")?.className,
     ).toContain(DASHBOARD_WIDGET_SUBTITLE_CLASS);
     expect(failureScope.getByText("Work type: story").className).toContain(
       DASHBOARD_BODY_TEXT_CLASS,
+    );
+    expect(failureScope.getByText("Work type: story").className).toContain(
+      "text-af-text-muted",
+    );
+    expect(failureScope.getByLabelText("Time range").className).toContain(
+      "border-af-accent-border",
+    );
+    expect(failureScope.getByLabelText("Time range").className).toContain(
+      "bg-af-surface-raised",
     );
 
     expect(reworkScope.getByText("work-active-story").className).toContain(

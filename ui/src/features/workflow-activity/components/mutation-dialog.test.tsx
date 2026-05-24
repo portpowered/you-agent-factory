@@ -78,5 +78,8 @@ describe("DashboardMutationDialog", () => {
     expect(
       screen.getAllByRole("button", { name: englishMessages.dialogCloseLabel }),
     ).toHaveLength(2);
+    const importDialog = screen.getByRole("dialog", { name: "Review factory import" });
+    expect(importDialog.className).toContain("border-af-border");
+    expect(importDialog.className).toContain("bg-af-surface-raised");
   });
 });

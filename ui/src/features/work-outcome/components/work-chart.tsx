@@ -306,7 +306,7 @@ function ReadyWorkChart({
                   : (props.payload?.[0]?.payload?.label ?? props.label);
               return <ChartTooltipContent {...props} label={label} />;
             }}
-            cursor={{ stroke: "rgb(from var(--color-af-overlay) r g b / 0.16)" }}
+            cursor={{ stroke: "var(--color-af-chart-cursor)" }}
           />
           <ChartLegend content={<ChartLegendContent />} />
           <WorkChartSelectionArea selectionRange={selectionRange} />
@@ -331,8 +331,8 @@ function WorkChartSelectionArea({
 
   return (
     <ReferenceArea
-      fill="rgb(from var(--color-af-accent) r g b / 0.12)"
-      stroke="rgb(from var(--color-af-accent) r g b / 0.42)"
+      fill="var(--color-af-chart-selection-fill)"
+      stroke="var(--color-af-chart-selection-stroke)"
       x1={selectionRange.startTick}
       x2={selectionRange.endTick}
     />
@@ -351,7 +351,7 @@ function WorkChartLines({
         className: seriesData.pointClassName,
         fill: seriesData.lineColor,
         r: seriesData.pointRadius,
-        stroke: "rgb(from var(--color-af-canvas) r g b / 0.88)",
+        stroke: "var(--color-af-chart-active-dot-stroke)",
         strokeWidth: 1.5,
       }}
       className={seriesData.lineClassName}

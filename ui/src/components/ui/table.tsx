@@ -7,7 +7,7 @@ export const Table = forwardRef<HTMLTableElement, TableHTMLAttributes<HTMLTableE
   ref,
 ) {
   return (
-    <div className="w-full overflow-x-auto rounded-2xl border border-af-overlay/10 bg-af-surface/56">
+    <div className="w-full overflow-x-auto rounded-2xl border border-af-border bg-af-surface-subtle">
       <table className={cn("w-full caption-bottom text-sm", className)} ref={ref} {...props} />
     </div>
   );
@@ -15,7 +15,7 @@ export const Table = forwardRef<HTMLTableElement, TableHTMLAttributes<HTMLTableE
 
 export const TableHeader = forwardRef<HTMLTableSectionElement, HTMLAttributes<HTMLTableSectionElement>>(
   function TableHeader({ className, ...props }, ref) {
-    return <thead className={cn("[&_tr]:border-b [&_tr]:border-af-overlay/10", className)} ref={ref} {...props} />;
+    return <thead className={cn("[&_tr]:border-b [&_tr]:border-af-border", className)} ref={ref} {...props} />;
   },
 );
 
@@ -23,7 +23,7 @@ export const TableBody = forwardRef<HTMLTableSectionElement, HTMLAttributes<HTML
   function TableBody({ className, ...props }, ref) {
     return (
       <tbody
-        className={cn("[&_tr:last-child]:border-0 [&_tr]:border-b [&_tr]:border-af-overlay/8", className)}
+        className={cn("[&_tr:last-child]:border-0 [&_tr]:border-b [&_tr]:border-af-border", className)}
         ref={ref}
         {...props}
       />
@@ -37,7 +37,7 @@ export const TableRow = forwardRef<HTMLTableRowElement, HTMLAttributes<HTMLTable
 ) {
   return (
     <tr
-      className={cn("transition-colors hover:bg-af-overlay/6 data-[state=selected]:bg-af-accent/10", className)}
+      className={cn("transition-colors hover:bg-af-overlay data-[state=selected]:bg-af-overlay", className)}
       ref={ref}
       {...props}
     />
@@ -49,7 +49,7 @@ export const TableHead = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLT
     return (
       <th
         className={cn(
-          "h-11 px-4 text-left align-middle text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58",
+          "h-11 px-4 text-left align-middle text-xs font-bold uppercase tracking-[0.08em] text-af-text-subtle",
           className,
         )}
         ref={ref}
@@ -61,13 +61,12 @@ export const TableHead = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLT
 
 export const TableCell = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLTableCellElement>>(
   function TableCell({ className, ...props }, ref) {
-    return <td className={cn("px-4 py-3 align-middle text-af-ink/82", className)} ref={ref} {...props} />;
+    return <td className={cn("px-4 py-3 align-middle text-af-text", className)} ref={ref} {...props} />;
   },
 );
 
 export const TableCaption = forwardRef<HTMLTableCaptionElement, HTMLAttributes<HTMLTableCaptionElement>>(
   function TableCaption({ className, ...props }, ref) {
-    return <caption className={cn("mt-4 text-sm text-af-ink/58", className)} ref={ref} {...props} />;
+    return <caption className={cn("mt-4 text-sm text-af-text-subtle", className)} ref={ref} {...props} />;
   },
 );
-

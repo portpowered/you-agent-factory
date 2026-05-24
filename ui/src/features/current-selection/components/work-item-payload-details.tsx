@@ -56,7 +56,7 @@ export function WorkItemPayloadList({
 
           return (
             <article
-              className="grid gap-2 rounded-lg border border-af-overlay/8 bg-af-overlay/4 p-3"
+              className="grid gap-2 rounded-lg border border-af-border bg-af-surface-subtle p-3"
               key={workItem.work_id}
             >
               <div className="flex flex-wrap items-center gap-2">
@@ -66,7 +66,7 @@ export function WorkItemPayloadList({
                   className={cn(
                     WORK_SELECTION_BUTTON_CLASS,
                     isSelected &&
-                      "border-af-accent/35 bg-af-accent/10 text-af-accent",
+                      "border-af-accent-border bg-af-accent-surface text-af-accent",
                   )}
                   onClick={() => onSelectWorkID?.(workItem.work_id)}
                   type="button"
@@ -76,7 +76,7 @@ export function WorkItemPayloadList({
                 {workItem.state ? (
                   <span
                     className={cn(
-                      "text-af-ink/68",
+                      "text-af-text-muted",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
@@ -86,7 +86,7 @@ export function WorkItemPayloadList({
                 {resolveWorkTypeID(workItem) ? (
                   <span
                     className={cn(
-                      "text-af-ink/68",
+                      "text-af-text-muted",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
@@ -127,7 +127,7 @@ function WorkItemPayloadDetails({
       body = (
         <p
           className={cn(
-            "m-0 text-af-warning-ink",
+            "m-0 text-af-warning-text",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
         >
@@ -139,7 +139,7 @@ function WorkItemPayloadDetails({
     case "LOADING":
       body = (
         <p
-          className={cn("m-0 text-af-ink/68", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+          className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}
         >
           {messages.consumedPayloadLoading}
         </p>
@@ -149,7 +149,7 @@ function WorkItemPayloadDetails({
       body = (
         <p
           className={cn(
-            "m-0 text-af-warning-ink",
+            "m-0 text-af-warning-text",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
         >
@@ -163,7 +163,7 @@ function WorkItemPayloadDetails({
         body = (
           <p
             className={cn(
-              "m-0 text-af-ink/68",
+              "m-0 text-af-text-muted",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
           >
@@ -216,9 +216,9 @@ function renderContentPart(
   }
 
   return (
-    <div
-      className={cn(
-        "rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 text-af-ink/72",
+      <div
+        className={cn(
+        "rounded-lg border border-af-border bg-af-surface-raised p-3 text-af-text-muted",
         DASHBOARD_SUPPORTING_TEXT_CLASS,
       )}
       key={`content-${index}`}
