@@ -167,6 +167,8 @@ make lint
 
 Use `make ui-storybook` followed by `make ui-test-storybook` when dashboard Storybook stories, play functions, runtime mocks, or the package-local Storybook runner change. `ui-storybook` builds `ui/storybook-static`; `ui-test-storybook` serves that static build on the dashboard-owned runner port and executes the dashboard Storybook interaction tests through the UI package's `test-storybook` script.
 
+Use `make ui-integration-test` as the canonical browser-backed dashboard lane. It runs the real-browser scenarios under `ui/integration/` without pulling in the jsdom-focused `ui/src` suite, keeps replay coverage as one member of that lane rather than a one-off exception, and should stay deterministic by preferring checked-in fixtures plus the shared browser harness seams over operating-system-native dialogs or timing-sensitive interactions.
+
 ## API Contract Generation
 
 The authored JSON API contract source is `api/openapi-main.yaml` plus referenced fragments under `api/components/schemas/`. Keep the public event envelope, event enums, and event payload fragments under `api/components/schemas/events/`; keep reusable domain objects under `api/components/schemas/data-models/`; keep HTTP-facing request, response, status, token, and pagination contracts under `api/components/schemas/api/`; keep compatibility dashboard read-model schemas under `api/components/schemas/factory-world/`; and keep small cross-surface helpers under `api/components/schemas/shared/`. The checked-in `api/openapi.yaml` remains the bundled published artifact consumed by code generation, tests, and downstream readers. This standardization pass preserves the existing runtime API behavior; future route removals, renamed fields, pagination redesigns, or response fields changes need separate PRD/story scope before editing handlers or generated contracts for that redesign.
@@ -236,9 +238,10 @@ projections, or export-only field aliases.
 5. Run `make current-factory-watcher-switch-smoke` after changing current-factory activation, watched-input listener ownership, or service-mode watcher handoff behavior. The target runs the focused named-factory smoke that proves watched input moves to the activated factory, the previous factory stops receiving watched work, and the handoff leaves only one completed dispatch for the new watched file.
 6. Run `make dashboard-verify` after dashboard UI source changes or embedded asset changes.
 7. Run `make ui-test` for focused dashboard UI behavior.
-8. Run `make ui-storybook` when Storybook fixtures, visual states, or dashboard component stories change.
-9. Run `make ui-test-storybook` after `make ui-storybook` when Storybook play functions, dashboard Storybook runtime mocks, or browser-backed interaction behavior change.
-10. Run replay-focused smoke tests when changing `pkg/replay`, record/replay CLI flags, worker side-effect matching, or artifact promotion behavior.
+8. Run `make ui-integration-test` when changing browser-backed dashboard workflows, files under `ui/integration/`, shared browser harness seams, or fixture-driven session and graph-editor journeys that must be verified in Chromium.
+9. Run `make ui-storybook` when Storybook fixtures, visual states, or dashboard component stories change.
+10. Run `make ui-test-storybook` after `make ui-storybook` when Storybook play functions, dashboard Storybook runtime mocks, or browser-backed interaction behavior change.
+11. Run replay-focused smoke tests when changing `pkg/replay`, record/replay CLI flags, worker side-effect matching, or artifact promotion behavior.
 
 ### Cron Workstation Changes
 
