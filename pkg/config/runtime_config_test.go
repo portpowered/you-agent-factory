@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -155,6 +156,131 @@ Process.
 	guard := loaded.FactoryConfig().Guards[0]
 	if guard.Type != interfaces.GuardTypeInferenceThrottle || guard.ModelProvider != "claude" || guard.Model != "claude-sonnet-4-5-20250514" || guard.RefreshWindow != "3s" {
 		t.Fatalf("preserved factory guard = %#v", guard)
+	}
+}
+
+func TestLoadRuntimeConfig_DetachesInlineWorkerMutableNestedFields(t *testing.T) {
+	source := &interfaces.FactoryConfig{
+		Workers: []interfaces.WorkerConfig{{
+			Name:             "executor",
+			Type:             interfaces.WorkerTypeModel,
+			Provider:         "anthropic",
+			Model:            "claude-sonnet-4-20250514",
+			ModelProvider:    "CLAUDE",
+			ExecutorProvider: "codex",
+			Command:          "run-worker",
+			Args:             []string{"--mode", "inline"},
+			Resources: []interfaces.ResourceConfig{{
+				Name:     "agent-slot",
+				Type:     interfaces.ResourceTypeInvocationSlot,
+				Capacity: 2,
+				Provider: "shared",
+			}},
+			Timeout:         "45s",
+			StopToken:       "COMPLETE",
+			SkipPermissions: true,
+			Auth:            &interfaces.HostedWorkerAuthConfig{SecretRef: "linear-token"},
+			Linear: &interfaces.HostedLinearWorkerConfig{
+				PollInterval: "30s",
+				TeamIDs:      []string{"team-a"},
+				StateIDs:     []string{"state-a"},
+				Mapping: interfaces.HostedLinearWorkerMappingConfig{
+					WorkType: "story",
+					State:    "ready",
+				},
+				Claim: &interfaces.HostedLinearWorkerClaimConfig{
+					AssigneeField: "owner",
+				},
+			},
+			Body: "You are the inline executor.",
+			Operations: []interfaces.ModelOperation{{
+				Name: "TTS",
+				Inputs: []interfaces.ModelOperationSlot{{
+					Name:         "text",
+					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					Required:     true,
+				}},
+				Outputs: []interfaces.ModelOperationSlot{{
+					Name:         "audio",
+					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				}},
+			}},
+		}},
+	}
+
+	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(t.TempDir(), source, InlineRuntimeDefinitionOptions{})
+	if err != nil {
+		t.Fatalf("loadRuntimeDefinitionLookupMapsFromFactoryConfig: %v", err)
+	}
+
+	loaded, err := NewLoadedFactoryConfig("factory-dir", source, runtimeDefs)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+
+	workerDef, ok := loaded.Worker("executor")
+	if !ok {
+		t.Fatal("expected inline executor worker definition")
+	}
+
+	sourceWorker := &source.Workers[0]
+	sourceWorker.Args[0] = "--mutated"
+	sourceWorker.Resources[0].Name = "mutated-slot"
+	sourceWorker.Resources[0].Capacity = 9
+	sourceWorker.Auth.SecretRef = "mutated-secret"
+	sourceWorker.Linear.TeamIDs[0] = "team-b"
+	sourceWorker.Linear.StateIDs[0] = "state-b"
+	sourceWorker.Linear.Mapping.WorkType = "bug"
+	sourceWorker.Linear.Mapping.State = "triage"
+	sourceWorker.Linear.Claim.AssigneeField = "reviewer"
+	sourceWorker.Operations[0].Inputs[0].Name = "mutated-input"
+	sourceWorker.Operations[0].Inputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeJSON
+	sourceWorker.Operations[0].Outputs[0].Name = "mutated-output"
+	sourceWorker.Operations[0].Outputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeBinary
+
+	if !reflect.DeepEqual(workerDef.Args, []string{"--mode", "inline"}) {
+		t.Fatalf("expected inline worker args to stay detached, got %#v", workerDef.Args)
+	}
+	if !reflect.DeepEqual(workerDef.Resources, []interfaces.ResourceConfig{{
+		Name:     "agent-slot",
+		Type:     interfaces.ResourceTypeInvocationSlot,
+		Capacity: 2,
+		Provider: "shared",
+	}}) {
+		t.Fatalf("expected inline worker resources to stay detached, got %#v", workerDef.Resources)
+	}
+	if workerDef.Auth == nil || workerDef.Auth.SecretRef != "linear-token" {
+		t.Fatalf("expected inline worker auth to stay detached, got %#v", workerDef.Auth)
+	}
+	if workerDef.Linear == nil {
+		t.Fatal("expected inline worker linear config")
+	}
+	if !reflect.DeepEqual(workerDef.Linear.TeamIDs, []string{"team-a"}) {
+		t.Fatalf("expected inline worker linear team ids to stay detached, got %#v", workerDef.Linear.TeamIDs)
+	}
+	if !reflect.DeepEqual(workerDef.Linear.StateIDs, []string{"state-a"}) {
+		t.Fatalf("expected inline worker linear state ids to stay detached, got %#v", workerDef.Linear.StateIDs)
+	}
+	if workerDef.Linear.Mapping.WorkType != "story" || workerDef.Linear.Mapping.State != "ready" {
+		t.Fatalf("expected inline worker linear mapping to stay detached, got %#v", workerDef.Linear.Mapping)
+	}
+	if workerDef.Linear.Claim == nil || workerDef.Linear.Claim.AssigneeField != "owner" {
+		t.Fatalf("expected inline worker linear claim to stay detached, got %#v", workerDef.Linear.Claim)
+	}
+	if len(workerDef.Operations) != 1 {
+		t.Fatalf("expected one inline operation, got %#v", workerDef.Operations)
+	}
+	if workerDef.Operations[0].Inputs[0].Name != "text" {
+		t.Fatalf("expected inline worker operation input name to stay detached, got %#v", workerDef.Operations[0].Inputs)
+	}
+	if !reflect.DeepEqual(workerDef.Operations[0].Inputs[0].ContentTypes, []string{interfaces.ModelOperationContentTypeText}) {
+		t.Fatalf("expected inline worker operation input content types to stay detached, got %#v", workerDef.Operations[0].Inputs[0].ContentTypes)
+	}
+	if workerDef.Operations[0].Outputs[0].Name != "audio" {
+		t.Fatalf("expected inline worker operation output name to stay detached, got %#v", workerDef.Operations[0].Outputs)
+	}
+	if !reflect.DeepEqual(workerDef.Operations[0].Outputs[0].ContentTypes, []string{interfaces.ModelOperationContentTypeAudio}) {
+		t.Fatalf("expected inline worker operation output content types to stay detached, got %#v", workerDef.Operations[0].Outputs[0].ContentTypes)
 	}
 }
 
