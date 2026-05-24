@@ -757,7 +757,7 @@ describe("DashboardSessionTabs", () => {
     );
   });
 
-  it("renders an attached active-session control cluster with pause and close actions", async () => {
+  it("keeps the active session close control attached to the active tab", async () => {
     listFactorySessions.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
@@ -786,23 +786,16 @@ describe("DashboardSessionTabs", () => {
 
     const activeTab = await screen.findByRole("tab", { name: "root" });
     const activeCluster = screen.getByRole("button", {
-      name: "Pause root updates",
+      name: "Close root session",
     }).parentElement;
 
-    expect(activeCluster?.className).toContain("border-l");
     expect(
       activeCluster?.contains(
         screen.getByRole("button", { name: "Close root session" }),
       ),
     ).toBe(true);
-    expect(
-      screen.queryByRole("button", { name: "Pause beta updates" }),
-    ).toBeNull();
     expect(activeTab.parentElement?.contains(activeCluster as HTMLElement)).toBe(true);
-    expect(
-      screen.getByRole("button", { name: "Close beta session" }).parentElement
-        ?.className,
-    ).not.toContain("border-l");
+    expect(screen.getByRole("button", { name: "Close beta session" })).toBeTruthy();
   });
 
   it("keeps inactive-tab close buttons quiet by default and directly operable", async () => {
@@ -894,47 +887,6 @@ describe("DashboardSessionTabs", () => {
       screen.getByRole("tab", { name: "root" }).getAttribute("aria-selected"),
     ).toBe("true");
     expect(screen.queryByRole("tab", { name: "beta" })).toBeNull();
-  });
-
-  it("toggles the active session stream control between pause and resume labels", async () => {
-    listFactorySessions.mockResolvedValue([
-      {
-        factoryDir: "/workspace/root",
-        folderPath: "/workspace/root",
-        id: "~default",
-        isDefault: true,
-        project: "root",
-        target: {
-          kind: "default",
-        },
-      },
-    ]);
-
-    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
-
-    const pauseButton = await screen.findByRole("button", {
-      name: "Pause root updates",
-    });
-    expect(pauseButton.getAttribute("aria-pressed")).toBe("false");
-
-    fireEvent.click(pauseButton);
-
-    const resumeButton = await screen.findByRole("button", {
-      name: "Resume root updates",
-    });
-    expect(resumeButton.getAttribute("aria-pressed")).toBe("true");
-    expect(
-      useDashboardSessionStore.getState().pausedSessionIDs,
-    ).toContain(DEFAULT_FACTORY_SESSION_ID);
-
-    fireEvent.click(resumeButton);
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Pause root updates" }),
-      ).toBeTruthy();
-    });
-    expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([]);
   });
 
   it("keeps the open-session affordance available when the last session is closed", async () => {

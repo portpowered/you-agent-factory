@@ -10,7 +10,6 @@ import { Button, Dialog } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
-import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { SessionTabButton } from "./dashboard-session-tab-button";
 import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
 import {
@@ -23,18 +22,22 @@ import {
   type DashboardSessionTabsState,
   useDashboardSessionTabsState,
 } from "../hooks/use-dashboard-session-tabs-state";
-const SESSION_TABS_SHELL_CLASS = "grid min-w-0 flex-1 gap-2";
-const SESSION_TABS_ROW_CLASS = "flex min-w-0 items-center gap-1.5";
-const SESSION_TAB_LIST_CLASS = "flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pb-1";
+const SESSION_TABS_SHELL_CLASS = "grid min-h-0 min-w-0 h-full flex-1 gap-2";
+const SESSION_TABS_ROW_CLASS = "flex min-h-0 min-w-0 h-full w-full items-stretch gap-1.5";
+const SESSION_TAB_LIST_CLASS =
+  "flex min-h-0 min-w-0 h-full flex-1 items-stretch gap-1 overflow-x-auto overflow-y-visible px-3";
+const OPEN_SESSION_TAB_BUTTON_CLASS = cn(
+  "flex h-full shrink-0 items-center rounded-t-xl bg-transparent px-3 py-2 text-af-ink/58 transition-colors",
+  "hover:bg-af-overlay/4 hover:text-af-ink",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25",
+);
 const SESSION_DIALOG_ERROR_CLASS =
   "rounded-xl border border-af-danger/32 bg-af-danger/8 px-3 py-2 text-sm text-af-ink";
 
 export function DashboardSessionTabs({
-  hideOpenButton = false,
   locale,
   state,
 }: {
-  hideOpenButton?: boolean;
   locale: string;
   state?: DashboardSessionTabsState;
 }) {
@@ -43,7 +46,6 @@ export function DashboardSessionTabs({
 
   return (
     <DashboardSessionTabsView
-      hideOpenButton={hideOpenButton}
       locale={locale}
       state={sessionTabsState}
     />
@@ -51,11 +53,9 @@ export function DashboardSessionTabs({
 }
 
 function DashboardSessionTabsView({
-  hideOpenButton,
   locale,
   state,
 }: {
-  hideOpenButton: boolean;
   locale: string;
   state: DashboardSessionTabsState;
 }) {
@@ -82,7 +82,6 @@ function DashboardSessionTabsView({
     setActiveSessionID,
     setDialogOpen,
     setFolderPath,
-    toggleSessionStreamPaused,
   } = state;
 
   useEffect(() => {
@@ -113,20 +112,13 @@ function DashboardSessionTabsView({
             onRetry={() => {
               void sessionsQuery.refetch();
             }}
+            onOpenSession={() => {
+              setDialogOpen(true);
+            }}
             onSelectSession={setActiveSessionID}
             sessions={sessions}
-            isSessionStreamPaused={state.isSessionStreamPaused}
-            onToggleSessionStreamPaused={toggleSessionStreamPaused}
             streamStatus={streamStatus}
           />
-          {hideOpenButton ? null : (
-            <OpenSessionButton
-              label={messages.openSessionButtonLabel}
-              onClick={() => {
-                setDialogOpen(true);
-              }}
-            />
-          )}
         </div>
         {closeError ? (
           <p className={SESSION_DIALOG_ERROR_CLASS} role="alert">
@@ -158,26 +150,6 @@ function DashboardSessionTabsView({
   );
 }
 
-function OpenSessionButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <DashboardHeaderActionButton
-      aria-haspopup="dialog"
-      aria-label={label}
-      className="self-center"
-      compact
-      onClick={onClick}
-    >
-      <span aria-hidden="true" className="text-lg leading-none">+</span>
-    </DashboardHeaderActionButton>
-  );
-}
-
 function SessionTabsContent({
   activeSession,
   closingSessionID,
@@ -185,11 +157,10 @@ function SessionTabsContent({
   isPending,
   messages,
   onCloseSession,
+  onOpenSession,
   onRetry,
   onSelectSession,
   sessions,
-  isSessionStreamPaused,
-  onToggleSessionStreamPaused,
   streamStatus,
 }: {
   activeSession: FactorySessionSummary | null;
@@ -198,11 +169,10 @@ function SessionTabsContent({
   isPending: boolean;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onCloseSession: (sessionID: string) => void;
+  onOpenSession: () => void;
   onRetry: () => void;
   onSelectSession: (sessionID: string) => void;
   sessions: FactorySessionSummary[];
-  isSessionStreamPaused: (sessionID: string) => boolean;
-  onToggleSessionStreamPaused: (sessionID: string) => void;
   streamStatus: DashboardStreamState["status"];
 }) {
   const sessionButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -231,9 +201,20 @@ function SessionTabsContent({
   }
   if (sessions.length === 0) {
     return (
-      <p className={cn("text-sm text-af-ink/76", DASHBOARD_BODY_TEXT_CLASS)}>
-        {messages.sessionsEmptyTitle}
-      </p>
+      <>
+        <p className={cn("text-sm text-af-ink/76", DASHBOARD_BODY_TEXT_CLASS)}>
+          {messages.sessionsEmptyTitle}
+        </p>
+        <button
+          aria-haspopup="dialog"
+          aria-label={messages.openSessionButtonLabel}
+          className={OPEN_SESSION_TAB_BUTTON_CLASS}
+          onClick={onOpenSession}
+          type="button"
+        >
+          <span aria-hidden="true" className="text-lg leading-none">+</span>
+        </button>
+      </>
     );
   }
 
@@ -302,16 +283,21 @@ function SessionTabsContent({
                 onCloseSession(session.id);
               }}
               closeDisabled={closingSessionID === session.id}
-              isStreamPaused={isSessionStreamPaused(session.id)}
               messages={messages}
               session={session}
-              onToggleStreamPaused={() => {
-                onToggleSessionStreamPaused(session.id);
-              }}
               streamStatus={streamStatus}
               tabID={sessionTabID(sessionTabsID, session.id)}
             />
           ))}
+          <button
+            aria-haspopup="dialog"
+            aria-label={messages.openSessionButtonLabel}
+            className={OPEN_SESSION_TAB_BUTTON_CLASS}
+            onClick={onOpenSession}
+            type="button"
+          >
+            <span aria-hidden="true" className="text-lg leading-none">+</span>
+          </button>
         </div>
       </nav>
       {activeSession ? (
