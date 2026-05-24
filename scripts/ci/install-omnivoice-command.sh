@@ -107,7 +107,10 @@ else
       git submodule sync --recursive
       git submodule update --init --recursive --depth 1
       rm -rf build
-      cmake -B build
+      # Keep cached backends portable across GitHub-hosted runners instead of
+      # embedding host-native CPU tuning into artifacts that may restore on a
+      # different machine generation later.
+      cmake -B build -DGGML_NATIVE=OFF
       cmake --build build --config Release -j "$(cpu_count)"
     )
     local candidate

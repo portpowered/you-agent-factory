@@ -42,22 +42,16 @@ describe("verifyEditorGraphParity", () => {
       }),
     };
     const page = {
-      getByRole: vi.fn((role, options) => {
-        if (
-          role === "region" &&
-          options?.name === "Factory graph visibility presets"
-        ) {
+      locator: vi.fn((selector) => {
+        if (selector === '[aria-label="Factory graph visibility presets"]') {
           return visibilityPresets;
         }
-        throw new Error(`Unexpected role query ${role}:${options?.name}`);
-      }),
-      getByTestId: vi.fn((value) => {
-        if (value === "rf__node-workstation:review") {
-          return reviewWorkstationNode;
-        }
-        throw new Error(`Unexpected test id query ${String(value)}`);
+        throw new Error(`Unexpected locator query ${selector}`);
       }),
       getByTitle: vi.fn((value) => {
+        if (String(value) === String(/^review$/)) {
+          return reviewWorkstationNode;
+        }
         if (value === "gpu") {
           return gpuNode;
         }
@@ -73,7 +67,7 @@ describe("verifyEditorGraphParity", () => {
       { height: 900, label: "desktop", width: 1440 },
     );
 
-    expect(page.getByTestId).toHaveBeenCalledWith("rf__node-workstation:review");
+    expect(page.getByTitle).toHaveBeenCalledWith(/^review$/);
     expect(expectVisible).toHaveBeenCalledWith(
       reviewWorkstationNode,
       "Editor workstation node",

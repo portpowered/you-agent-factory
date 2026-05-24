@@ -7,17 +7,13 @@ export async function verifyDashboardSessionTabs(
     name: "factory sessions",
   });
   const openButton = page.getByRole("button", {
-    name: "Open another session",
+    name: "Open factory folder",
   });
 
   await expectVisible(tabsNavigation, "Session tabs navigation");
   await expectVisible(
     page.getByRole("tab", { name: "root" }),
     "Default session tab",
-  );
-  await expectVisible(
-    page.getByRole("button", { name: "Pause root updates" }),
-    "Active session pause button",
   );
   await expectVisible(
     page.getByRole("tab", { name: "beta" }),
@@ -32,10 +28,6 @@ export async function verifyDashboardSessionTabs(
     "Active session close button",
   );
   await expectVisible(openButton, "Open another session button");
-  await expectVisible(
-    page.getByText("/workspace/root"),
-    "Default session folder label",
-  );
   await expectNoHorizontalOverflow(
     page,
     `Dashboard session tabs at ${viewport.label}`,

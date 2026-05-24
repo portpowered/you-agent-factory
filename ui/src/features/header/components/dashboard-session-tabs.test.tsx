@@ -26,6 +26,7 @@ vi.mock("../../../api/factory-sessions", () => ({
     public readonly responseBody?: unknown;
     public readonly status?: number;
     public readonly statusText?: string;
+    public readonly targets?: unknown[];
 
     public constructor(
       message: string,
@@ -34,6 +35,7 @@ vi.mock("../../../api/factory-sessions", () => ({
         responseBody?: unknown;
         status?: number;
         statusText?: string;
+        targets?: unknown[];
       },
     ) {
       super(message);
@@ -42,6 +44,7 @@ vi.mock("../../../api/factory-sessions", () => ({
       this.responseBody = details.responseBody;
       this.status = details.status;
       this.statusText = details.statusText;
+      this.targets = details.targets;
     }
   },
   listFactorySessions: (...args: unknown[]) => listFactorySessions(...args),
@@ -203,7 +206,7 @@ describe("DashboardSessionTabs", () => {
     });
   });
 
-  it("opens a folder and auto-activates the created session when one target exists", async () => {
+  it("validates a folder inline and opens the only runnable target after confirmation", async () => {
     listFactorySessions
       .mockResolvedValueOnce([
         {
@@ -239,18 +242,32 @@ describe("DashboardSessionTabs", () => {
           },
         },
       ]);
-    openFactorySession.mockResolvedValue({
-      session: {
-        factoryDir: "/workspace/other",
-        folderPath: "/workspace/other",
-        id: "session-other",
-        isDefault: false,
-        project: "other",
-        target: {
-          kind: "default",
+    openFactorySession
+      .mockResolvedValueOnce({
+        targets: [
+          {
+            factoryDir: "/workspace/other",
+            folderPath: "/workspace/other",
+            label: "default",
+            project: "other",
+            ref: {
+              kind: "default",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        session: {
+          factoryDir: "/workspace/other",
+          folderPath: "/workspace/other",
+          id: "session-other",
+          isDefault: false,
+          project: "other",
+          target: {
+            kind: "default",
+          },
         },
-      },
-    });
+      });
 
     renderWithQueryClient(<DashboardSessionTabs locale="en" />);
     const messages = getHeaderControlsMessages("en");
@@ -264,18 +281,56 @@ describe("DashboardSessionTabs", () => {
     fireEvent.click(
       screen.getByRole("button", { name: messages.openSessionButtonLabel }),
     );
-    fireEvent.change(screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder), {
-      target: { value: "/workspace/other" },
+    expect(screen.getByText(messages.openSessionDialogDescription)).toBeTruthy();
+    const folderField = screen.getByRole("textbox", {
+      name: messages.sessionFolderFieldLabel,
     });
+    const inspectFolderButton = screen.getByRole("button", {
+      name: messages.openSessionSubmitLabel,
+    });
+    expect(inspectFolderButton.getAttribute("disabled")).not.toBeNull();
+    expect(folderField.getAttribute("aria-describedby")).toBeTruthy();
+    expect(screen.getByText(messages.sessionFolderHelperText)).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: "/workspace/other" },
+      },
+    );
+    expect(inspectFolderButton.getAttribute("disabled")).toBeNull();
     fireEvent.submit(
-      screen
-        .getByRole("button", { name: messages.openSessionSubmitLabel })
-        .closest("form") as HTMLFormElement,
+      inspectFolderButton.closest("form") as HTMLFormElement,
     );
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
         folderPath: "/workspace/other",
+        validateOnly: true,
+      });
+    });
+    expect(
+      screen.getByText(messages.openSessionLaunchReadySingleTarget),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("combobox", {
+        name: messages.selectSessionTargetLabel,
+      }),
+    ).toBeNull();
+    expect(
+      within(
+        screen.getByRole("region", { name: messages.targetPickerTitle }),
+      ).getByText("default"),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
+    );
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+        folderPath: "/workspace/other",
+        target: {
+          kind: "default",
+        },
       });
     });
     await waitFor(() => {
@@ -284,6 +339,118 @@ describe("DashboardSessionTabs", () => {
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
       "session-other",
     );
+  });
+
+  it("reuses the validated resolved folder path when the customer entered a tilde path", async () => {
+    listFactorySessions
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: "~default",
+          isDefault: true,
+          project: "root",
+          target: {
+            kind: "default",
+          },
+        },
+        {
+          factoryDir: "/Users/tester/factory-root/alpha",
+          folderPath: "/Users/tester/factory-root",
+          id: "session-alpha",
+          isDefault: false,
+          project: "alpha",
+          target: {
+            kind: "named",
+            name: "alpha",
+          },
+        },
+      ]);
+    openFactorySession
+      .mockResolvedValueOnce({
+        targets: [
+          {
+            factoryDir: "/Users/tester/factory-root/alpha",
+            folderPath: "/Users/tester/factory-root",
+            label: "alpha",
+            project: "alpha",
+            ref: {
+              kind: "named",
+              name: "alpha",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        session: {
+          factoryDir: "/Users/tester/factory-root/alpha",
+          folderPath: "/Users/tester/factory-root",
+          id: "session-alpha",
+          isDefault: false,
+          project: "alpha",
+          target: {
+            kind: "named",
+            name: "alpha",
+          },
+        },
+      });
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: "~/factory-root" },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: messages.openSessionSubmitLabel })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+        folderPath: "~/factory-root",
+        validateOnly: true,
+      });
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
+    );
+
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
+        folderPath: "/Users/tester/factory-root",
+        target: {
+          kind: "named",
+          name: "alpha",
+        },
+      });
+    });
   });
 
   it("populates the folder field from the browser directory picker before opening a session", async () => {
@@ -380,6 +547,7 @@ describe("DashboardSessionTabs", () => {
     await waitFor(() => {
       expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
         folderPath: "/workspace/fleet",
+        validateOnly: true,
       });
     });
   });
@@ -486,6 +654,7 @@ describe("DashboardSessionTabs", () => {
     await waitFor(() => {
       expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
         folderPath: "/workspace/fleet",
+        validateOnly: true,
       });
     });
   });
@@ -672,12 +841,44 @@ describe("DashboardSessionTabs", () => {
         .closest("form") as HTMLFormElement,
     );
 
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+        folderPath: "/workspace/fleet",
+        validateOnly: true,
+      });
+    });
+    expect(
+      screen.getByText(messages.openSessionLaunchReadyMultipleTargets),
+    ).toBeTruthy();
+
     const targetPicker = await screen.findByRole("region", {
       name: messages.targetPickerTitle,
     });
     const picker = within(targetPicker);
+    const targetSelect = picker.getByRole("combobox", {
+      name: messages.selectSessionTargetLabel,
+    });
+    expect(
+      picker.getByText(
+        messages.selectSessionTargetPrompt,
+      ),
+    ).toBeTruthy();
 
-    fireEvent.click(picker.getByRole("button", { name: /beta/i }));
+    expect(
+      picker
+        .getByRole("button", { name: messages.openSessionTargetLabel })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
+
+    fireEvent.change(targetSelect, { target: { value: "named:beta" } });
+    expect(
+      picker.getByText(
+        "Launch will use folder /workspace/fleet and factory beta.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(
+      picker.getByRole("button", { name: messages.openSessionTargetLabel }),
+    );
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
@@ -688,6 +889,134 @@ describe("DashboardSessionTabs", () => {
         },
       });
     });
+  });
+
+  it("shows recovery-oriented inline validation feedback for invalid folders", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+    ]);
+    openFactorySession
+      .mockRejectedValueOnce(
+        new FactorySessionsAPIError("folder validation failed", {
+          code: "BAD_REQUEST",
+          targets: [
+            {
+              field: "folderPath",
+              id: "missing",
+              kind: "factory-session-validation",
+            },
+          ],
+        }),
+      )
+      .mockRejectedValueOnce(
+        new FactorySessionsAPIError("folder validation failed", {
+          code: "BAD_REQUEST",
+          targets: [
+            {
+              field: "folderPath",
+              id: "not_directory",
+              kind: "factory-session-validation",
+            },
+          ],
+        }),
+      )
+      .mockRejectedValueOnce(
+        new FactorySessionsAPIError("folder validation failed", {
+          code: "BAD_REQUEST",
+          targets: [
+            {
+              field: "folderPath",
+              id: "unreadable",
+              kind: "factory-session-validation",
+            },
+          ],
+        }),
+      )
+      .mockRejectedValueOnce(
+        new FactorySessionsAPIError("folder validation failed", {
+          code: "BAD_REQUEST",
+          targets: [
+            {
+              field: "folderPath",
+              id: "not_runnable",
+              kind: "factory-session-validation",
+            },
+          ],
+        }),
+      );
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
+
+    const folderField = screen.getByRole("textbox", {
+      name: messages.sessionFolderFieldLabel,
+    });
+    const form = screen
+      .getByRole("button", { name: messages.openSessionSubmitLabel })
+      .closest("form") as HTMLFormElement;
+
+    fireEvent.change(folderField, { target: { value: "/workspace/missing" } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "This folder does not exist yet. Check the path and choose an existing local factory folder.",
+        ),
+      ).toBeTruthy();
+    });
+
+    fireEvent.change(folderField, {
+      target: { value: "/workspace/factory.yaml" },
+    });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "This path points to a file instead of a folder. Choose a local factory folder that contains a runnable factory.",
+        ),
+      ).toBeTruthy();
+    });
+
+    fireEvent.change(folderField, { target: { value: "/workspace/private" } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "This folder could not be read from this machine. Check its permissions, then choose a readable local factory folder.",
+        ),
+      ).toBeTruthy();
+    });
+
+    fireEvent.change(folderField, { target: { value: "/workspace/empty" } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "This folder was found, but it does not contain a runnable factory. Choose a folder with a runnable factory and try again.",
+        ),
+      ).toBeTruthy();
+    });
+    expect(openFactorySession).toHaveBeenCalledTimes(4);
+    expect(screen.queryByRole("region", { name: messages.targetPickerTitle })).toBeNull();
   });
 
   it("closes the active session tab and selects the remaining session deterministically", async () => {

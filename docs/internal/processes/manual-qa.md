@@ -93,6 +93,27 @@ Use this checklist for the shadcn primitive migration lane and similar dashboard
 - Dashboard header: icon-only branding keeps the accessible `you-agent-factory` name, the timeline slider cluster stays keyboard-operable, and the header toolbar remains unclipped at mobile, tablet, and desktop widths with desktop controls ordered brand -> slider -> stream status -> export action.
 - Dashboard shared shell: the header and representative grid-card shell use the same computed border, radius, background, and shadow at mobile, tablet, and desktop widths while header and card controls keep their accessible names.
 - Current-selection prompt editor: the prompt variable help toggle stays keyboard-operable, available-variable examples remain readable in-context, invalid template references render inline squiggle diagnostics, and the editor stays unclipped at mobile, tablet, and desktop widths.
+- Open factory session flow: the dialog stays folder-first, invalid folder states render inline recovery copy for missing/file/unreadable/no-runnable cases, `~` home-directory input resolves to the same ready state as the equivalent absolute folder, detected factory choices stay selectable after validation, and manual override validation blocks launch when the requested named factory is missing.
+
+## Open Factory Session Mock-Worker Checklist
+
+Use this checklist when the open-session flow changes and reviewers need proof against a live service instead of Storybook-only mocks.
+
+1. Build the local CLI: `go build -o bin/you ./cmd/factory`.
+2. Create a disposable factory root under the current user home directory so `~` expansion is observable. Copy the repo-owned `factory/` scaffold into the root plus named child folders such as `review/` and `plan/`, then create `empty/`, `unreadable/`, and `not-a-dir.txt` failure fixtures.
+3. Start the live service with mock workers and a fixed port: `bin/you run --dir "$OPEN_SESSION_ROOT" --with-mock-workers --continuously --quiet --port 7545`.
+4. In the dashboard at `http://127.0.0.1:7545/dashboard/ui`, open the session dialog and check the inline UI states:
+   `missing/` path shows the missing-folder recovery copy.
+   `not-a-dir.txt` shows the non-directory recovery copy.
+   `unreadable/` shows the unreadable-directory recovery copy.
+   `empty/` shows the no-runnable-factory recovery copy.
+   `~/...` resolves to the same validated folder as the absolute home-directory path.
+5. With the same live service, verify the launch-target contract over the same `/factory-sessions` API the UI calls:
+   `POST /factory-sessions` with `{"folderPath":"$OPEN_SESSION_ROOT","validateOnly":true}` returns default plus named targets from that folder.
+   `POST /factory-sessions` with `{"folderPath":"~/...","validateOnly":true}` returns the same resolved `folderPath` and targets.
+   `POST /factory-sessions` with `{"folderPath":"$OPEN_SESSION_ROOT","validateOnly":true,"target":{"kind":"named","name":"review"}}` succeeds, while the same request with `name:"missing"` fails with `400`.
+   `POST /factory-sessions` with `{"folderPath":"$OPEN_SESSION_ROOT","target":{"kind":"named","name":"review"}}` returns a non-default session whose `factoryDir` points at `$OPEN_SESSION_ROOT/review`.
+   `GET /factory-sessions` after launch shows the newly opened named session and preserves its `target.kind:"named"` and `target.name:"review"` instead of falling back to `~default`.
 
 ## Latest Evidence
 
@@ -143,3 +164,11 @@ Date: `2026-05-23`
 - `cd ui && bun run build` passed.
 - `cd ui && bun run build-storybook` passed.
 - `cd ui && bun run storybook:responsive-check` passed after narrowing two brittle pre-existing responsive assertions in the shared dashboard session-tab/header verifiers and adding the new observer/editor graph parity stories, confirming visible graph controls and no horizontal overflow at mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) widths.
+- `cd ui && bun x vitest run --config vitest.storybook.config.ts --project=storybook src/features/header/dashboard-session-tabs.stories.tsx` passed in a browser-backed runner after aligning the story with the current folder-check and target-select flow, confirming the localized open-session labels, multi-target select control, launch summary, and newly opened session tab activation.
+- `make typecheck` passed.
+- `cd ui && bun x vitest run --config vitest.storybook.config.ts --project=storybook src/features/header/dashboard-session-tabs.stories.tsx` passed again while closing out manual verification, confirming the folder-first dialog, target-selection step, launch summary, and newly opened session tab activation still hold in the browser-backed Storybook runner.
+- Live mock-worker verification passed against `bin/you run --dir /Users/abdifamily/open-session-qa-valid-98917 --with-mock-workers --continuously --quiet --port 7545` using the repo-owned `factory/` scaffold copied into a disposable home-directory root with named `review/` and `plan/` children plus `empty/`, `unreadable/`, and `not-a-dir.txt` failure fixtures.
+- `curl http://127.0.0.1:7545/factory-sessions` initially returned only the default live session for `/Users/abdifamily/open-session-qa-valid-98917`, then returned both the default session and a named `review` session after launch.
+- `curl -X POST http://127.0.0.1:7545/factory-sessions -H 'Content-Type: application/json' --data '{"folderPath":"/Users/abdifamily/open-session-qa-valid-98917","validateOnly":true}'` returned the expected `default`, `plan`, and `review` targets, and the same request with `folderPath:"~/open-session-qa-valid-98917"` returned the same resolved folder and targets.
+- Failure-path verification passed over the live API: `missing/` returned `400` with a missing-folder error, `not-a-dir.txt` returned `400` with the non-directory error, `unreadable/` returned `400` with the unreadable-directory error, `empty/` returned `400` with the no-runnable-factory error, and `target.name:"missing"` returned `400` with `factory session target "missing" was not found`.
+- Explicit named-target launch passed over the live API: `POST /factory-sessions` with `{"folderPath":"/Users/abdifamily/open-session-qa-valid-98917","target":{"kind":"named","name":"review"}}` returned a non-default session whose `factoryDir` was `/Users/abdifamily/open-session-qa-valid-98917/review`, confirming the launch path did not silently fall back to the default factory.
