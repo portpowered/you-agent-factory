@@ -163,7 +163,7 @@ func assertUnifiedEventLogRecording(t *testing.T, liveEvents []factoryapi.Factor
 	t.Helper()
 
 	assertUnifiedSmokeCanonicalEventCoverage(t, liveEvents, fixture.traceID, fixture.requestID)
-	artifact := testutil.LoadReplayArtifact(t, fixture.artifactPath)
+	artifact := waitForUnifiedSmokeRecordedArtifact(t, fixture.artifactPath, 5*time.Second)
 	assertUnifiedSmokeCanonicalEventCoverage(t, artifact.Events, fixture.traceID, fixture.requestID)
 	assertUnifiedSmokeArtifactHasEventTypes(t, artifact, []factoryapi.FactoryEventType{
 		factoryapi.FactoryEventTypeRunRequest,
@@ -268,6 +268,40 @@ func nextUnifiedSmokeEvent(t *testing.T, stream *factoryEventHTTPStream, timeout
 func stopFunctionalServerForRecording(t *testing.T, server *functionalAPIServer) {
 	t.Helper()
 	server.Stop(t)
+	waitForUnifiedSmokeRunResponseInHistory(t, server, 5*time.Second)
+}
+
+func waitForUnifiedSmokeRunResponseInHistory(t *testing.T, server *functionalAPIServer, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		events := server.GetFactoryEvents(t)
+		if lastIndexOfFunctionalEventType(events, factoryapi.FactoryEventTypeRunResponse) >= 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	events := server.GetFactoryEvents(t)
+	t.Fatalf("timed out waiting for RUN_RESPONSE in service event history: %#v", functionalEventTypes(events))
+}
+
+func waitForUnifiedSmokeRecordedArtifact(t *testing.T, artifactPath string, timeout time.Duration) *interfaces.ReplayArtifact {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		artifact := testutil.LoadReplayArtifact(t, artifactPath)
+		if lastIndexOfFunctionalEventType(artifact.Events, factoryapi.FactoryEventTypeRunResponse) >= 0 {
+			return artifact
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	artifact := testutil.LoadReplayArtifact(t, artifactPath)
+	t.Fatalf("timed out waiting for RUN_RESPONSE in recorded artifact: %#v", functionalEventTypes(artifact.Events))
+	return nil
 }
 
 func assertUnifiedSmokeArtifactHasEventTypes(t *testing.T, artifact *interfaces.ReplayArtifact, wantSubsequence []factoryapi.FactoryEventType) {

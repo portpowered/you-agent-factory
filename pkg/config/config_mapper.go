@@ -100,7 +100,12 @@ func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interface
 	appendResources := func(resources []interfaces.ResourceConfig) {
 		for _, resource := range resources {
 			if existing, ok := combined[resource.Name]; ok {
-				existing.Capacity += resource.Capacity
+				// Worker-level resources may repeat the same shared pool metadata as
+				// the workstation. Keep the stronger requirement without turning the
+				// duplicate declaration into extra concurrent-slot consumption.
+				if resource.Capacity > existing.Capacity {
+					existing.Capacity = resource.Capacity
+				}
 				combined[resource.Name] = existing
 				continue
 			}

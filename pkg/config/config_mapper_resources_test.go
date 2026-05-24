@@ -307,3 +307,50 @@ func TestConfigMapping_WorkerResourcesBecomeEnforcedTransitionRequirements(t *te
 		t.Fatalf("worker resource consume count = %d, want 1", got)
 	}
 }
+
+func TestConfigMapping_DeduplicatesMatchingWorkerAndWorkstationResources(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Resources: []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 1}},
+		Workers: []interfaces.WorkerConfig{{
+			Name:      "reviewer",
+			Resources: []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 1}},
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review-task",
+			WorkerTypeName: "reviewer",
+			Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+			Resources:      []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 1}},
+		}},
+	}
+
+	mapper := ConfigMapper{}
+	outputNet, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("failed to map config: %v", err)
+	}
+
+	tr := outputNet.Transitions["review-task"]
+	if tr == nil {
+		t.Fatal("expected transition 'review-task' to exist")
+	}
+	if len(tr.InputArcs) != 2 {
+		t.Fatalf("expected one work input and one resource consume arc, got %d input arcs", len(tr.InputArcs))
+	}
+	if len(tr.OutputArcs) != 2 {
+		t.Fatalf("expected one work output and one resource release arc, got %d output arcs", len(tr.OutputArcs))
+	}
+	if got := tr.InputArcs[1].Cardinality.Count; got != 1 {
+		t.Fatalf("deduplicated resource consume count = %d, want 1", got)
+	}
+	if got := tr.OutputArcs[1].Cardinality.Count; got != 1 {
+		t.Fatalf("deduplicated resource release count = %d, want 1", got)
+	}
+}
