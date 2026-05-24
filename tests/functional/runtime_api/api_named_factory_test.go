@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -167,6 +168,45 @@ func TestNamedFactoryAPI_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFacto
 	}
 }
 
+func TestNamedFactoryAPI_SaveCurrentFactoryReturnsCanonicalTopologyValidationTargets(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+
+	server := startFunctionalServerWithConfig(t, rootDir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.Logger = zap.NewNop()
+	})
+
+	current := getNamedFactoryCurrent(t, server.URL())
+	if current.Version == nil {
+		t.Fatal("current factory version = nil, want version metadata for save")
+	}
+
+	body := `{
+		"name":"alpha",
+		"version":{"physical":"` + current.Version.Physical.UTC().Format(time.RFC3339Nano) + `","logical":` + strconv.FormatInt(current.Version.Logical, 10) + `},
+		"workTypes":[{"name":"story","states":[{"name":"queued","type":"INITIAL"}]}],
+		"workers":[{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}],
+		"workstations":[{"name":"process","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"worker-a","inputs":[{"workType":"story","state":"queued"}],"outputs":[{"workType":"story","state":"missing-state"}]}]
+	}`
+
+	resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), body, http.StatusBadRequest)
+	var errResp factoryapi.ErrorResponse
+	decodeNamedFactoryJSONResponse(t, resp, &errResp, "decode invalid current factory save response")
+	if errResp.Code != factoryapi.INVALIDFACTORY {
+		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
+	}
+	if errResp.Targets == nil || len(*errResp.Targets) == 0 {
+		t.Fatalf("error targets = %#v, want canonical topology validation targets", errResp.Targets)
+	}
+	if !hasRuntimeAPIErrorField(*errResp.Targets, "factory.workstations[0].outputs[0]") {
+		t.Fatalf("error targets = %#v, want canonical factory field target", errResp.Targets)
+	}
+	if hasRuntimeAPIErrorField(*errResp.Targets, "factoryDefinition.workstations[0].outputs[0]") {
+		t.Fatalf("error targets = %#v, should not expose retired factoryDefinition field targets", errResp.Targets)
+	}
+}
+
 func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
 	t.Helper()
 	if _, err := config.PersistNamedFactory(rootDir, name, functionalNamedFactoryPayloadWithWorkType(t, name, workType)); err != nil {
@@ -210,6 +250,15 @@ func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.Factory {
 func saveCurrentFactoryDefinition(t *testing.T, serverURL, body string) factoryapi.Factory {
 	t.Helper()
 
+	resp := saveCurrentFactoryDefinitionExpectStatus(t, serverURL, body, http.StatusOK)
+	var saved factoryapi.Factory
+	decodeNamedFactoryJSONResponse(t, resp, &saved, "decode current factory save response")
+	return saved
+}
+
+func saveCurrentFactoryDefinitionExpectStatus(t *testing.T, serverURL, body string, wantStatus int) *http.Response {
+	t.Helper()
+
 	req, err := http.NewRequest(http.MethodPut, serverURL+"/factory-sessions/~default/factory", bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatalf("new current factory request: %v", err)
@@ -220,14 +269,11 @@ func saveCurrentFactoryDefinition(t *testing.T, serverURL, body string) factorya
 	if err != nil {
 		t.Fatalf("PUT /factory-sessions/~default/factory: %v", err)
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != wantStatus {
 		resp.Body.Close()
-		t.Fatalf("PUT /factory-sessions/~default/factory status = %d, want 200", resp.StatusCode)
+		t.Fatalf("PUT /factory-sessions/~default/factory status = %d, want %d", resp.StatusCode, wantStatus)
 	}
-
-	var saved factoryapi.Factory
-	decodeNamedFactoryJSONResponse(t, resp, &saved, "decode current factory save response")
-	return saved
+	return resp
 }
 
 func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {
@@ -249,6 +295,15 @@ func decodeNamedFactoryJSONResponse(t *testing.T, resp *http.Response, target an
 	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
 		t.Fatalf("%s: %v", message, err)
 	}
+}
+
+func hasRuntimeAPIErrorField(targets []factoryapi.ErrorTarget, want string) bool {
+	for _, target := range targets {
+		if target.Field != nil && *target.Field == want {
+			return true
+		}
+	}
+	return false
 }
 
 func assertNamedFactoryCurrentPointer(t *testing.T, rootDir, want string) {

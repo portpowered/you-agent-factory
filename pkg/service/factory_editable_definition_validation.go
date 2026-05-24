@@ -13,6 +13,8 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 )
 
+const canonicalFactoryValidationRoot = "factory"
+
 func (fs *FactoryService) prepareEditableFactoryDefinitionSave(
 	sessionRootDir string,
 	current factoryapi.Factory,
@@ -160,14 +162,14 @@ func duplicateNameTargets(collection string, names []string, kind string) []fact
 	seen := make(map[string]int, len(names))
 	var targets []factoryapi.ErrorTarget
 	for index, name := range names {
-		field := fmt.Sprintf("factoryDefinition.%s[%d].name", collection, index)
+		field := fmt.Sprintf("%s.%s[%d].name", canonicalFactoryValidationRoot, collection, index)
 		if strings.TrimSpace(name) == "" {
 			targets = append(targets, editableFactoryErrorTarget("field", "", field))
 			continue
 		}
 		if firstIndex, ok := seen[name]; ok {
 			targets = append(targets,
-				editableFactoryErrorTarget(kind, name, fmt.Sprintf("factoryDefinition.%s[%d].name", collection, firstIndex)),
+				editableFactoryErrorTarget(kind, name, fmt.Sprintf("%s.%s[%d].name", canonicalFactoryValidationRoot, collection, firstIndex)),
 				editableFactoryErrorTarget(kind, name, field),
 			)
 			continue
@@ -185,7 +187,7 @@ func duplicateWorkStateTargets(workTypes *[]factoryapi.WorkType) []factoryapi.Er
 	for workTypeIndex, workType := range *workTypes {
 		seen := make(map[string]int, len(workType.States))
 		for stateIndex, state := range workType.States {
-			field := fmt.Sprintf("factoryDefinition.workTypes[%d].states[%d].name", workTypeIndex, stateIndex)
+			field := fmt.Sprintf("%s.workTypes[%d].states[%d].name", canonicalFactoryValidationRoot, workTypeIndex, stateIndex)
 			if strings.TrimSpace(state.Name) == "" {
 				targets = append(targets, editableFactoryErrorTarget("field", workType.Name, field))
 				continue
@@ -193,7 +195,7 @@ func duplicateWorkStateTargets(workTypes *[]factoryapi.WorkType) []factoryapi.Er
 			if firstIndex, ok := seen[state.Name]; ok {
 				id := workType.Name + ":" + state.Name
 				targets = append(targets,
-					editableFactoryErrorTarget("node", id, fmt.Sprintf("factoryDefinition.workTypes[%d].states[%d].name", workTypeIndex, firstIndex)),
+					editableFactoryErrorTarget("node", id, fmt.Sprintf("%s.workTypes[%d].states[%d].name", canonicalFactoryValidationRoot, workTypeIndex, firstIndex)),
 					editableFactoryErrorTarget("node", id, field),
 				)
 				continue
@@ -214,25 +216,25 @@ func danglingFactoryReferenceTargets(factory factoryapi.Factory) []factoryapi.Er
 	}
 	for workstationIndex, workstation := range *factory.Workstations {
 		if strings.TrimSpace(workstation.Worker) == "" || !workers[workstation.Worker] {
-			targets = append(targets, editableFactoryErrorTarget("field", workstation.Name, fmt.Sprintf("factoryDefinition.workstations[%d].worker", workstationIndex)))
+			targets = append(targets, editableFactoryErrorTarget("field", workstation.Name, fmt.Sprintf("%s.workstations[%d].worker", canonicalFactoryValidationRoot, workstationIndex)))
 		}
-		targets = append(targets, danglingIOTargets(workstation.Name, workstation.Inputs, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].inputs", workstationIndex))...)
+		targets = append(targets, danglingIOTargets(workstation.Name, workstation.Inputs, workStates, fmt.Sprintf("%s.workstations[%d].inputs", canonicalFactoryValidationRoot, workstationIndex))...)
 		if workstation.Outputs != nil {
-			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.Outputs, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].outputs", workstationIndex))...)
+			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.Outputs, workStates, fmt.Sprintf("%s.workstations[%d].outputs", canonicalFactoryValidationRoot, workstationIndex))...)
 		}
 		if workstation.OnContinue != nil {
-			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnContinue, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].onContinue", workstationIndex))...)
+			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnContinue, workStates, fmt.Sprintf("%s.workstations[%d].onContinue", canonicalFactoryValidationRoot, workstationIndex))...)
 		}
 		if workstation.OnFailure != nil {
-			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnFailure, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].onFailure", workstationIndex))...)
+			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnFailure, workStates, fmt.Sprintf("%s.workstations[%d].onFailure", canonicalFactoryValidationRoot, workstationIndex))...)
 		}
 		if workstation.OnRejection != nil {
-			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnRejection, workStates, fmt.Sprintf("factoryDefinition.workstations[%d].onRejection", workstationIndex))...)
+			targets = append(targets, danglingIOTargets(workstation.Name, *workstation.OnRejection, workStates, fmt.Sprintf("%s.workstations[%d].onRejection", canonicalFactoryValidationRoot, workstationIndex))...)
 		}
 		if workstation.Resources != nil {
 			for resourceIndex, resource := range *workstation.Resources {
 				if strings.TrimSpace(resource.Name) == "" || !resources[resource.Name] {
-					targets = append(targets, editableFactoryErrorTarget("edge", workstation.Name+"->"+resource.Name, fmt.Sprintf("factoryDefinition.workstations[%d].resources[%d].name", workstationIndex, resourceIndex)))
+					targets = append(targets, editableFactoryErrorTarget("edge", workstation.Name+"->"+resource.Name, fmt.Sprintf("%s.workstations[%d].resources[%d].name", canonicalFactoryValidationRoot, workstationIndex, resourceIndex)))
 				}
 			}
 		}

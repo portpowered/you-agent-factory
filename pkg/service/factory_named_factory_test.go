@@ -779,6 +779,12 @@ func TestFactoryService_SaveCurrentFactory_RejectsDuplicateAndDanglingTopology(t
 	if !hasServiceErrorTarget(topologyErr.Targets, "edge", "process->story:missing-state") {
 		t.Fatalf("topology targets = %#v, want dangling output edge target", topologyErr.Targets)
 	}
+	if !hasServiceErrorField(topologyErr.Targets, "factory.workstations[0].worker") {
+		t.Fatalf("topology targets = %#v, want canonical factory field target", topologyErr.Targets)
+	}
+	if hasServiceErrorField(topologyErr.Targets, "factoryDefinition.workstations[0].worker") {
+		t.Fatalf("topology targets = %#v, should not use retired factoryDefinition field prefix", topologyErr.Targets)
+	}
 
 	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
@@ -792,6 +798,15 @@ func TestFactoryService_SaveCurrentFactory_RejectsDuplicateAndDanglingTopology(t
 func hasServiceErrorTarget(targets []factoryapi.ErrorTarget, kind, id string) bool {
 	for _, target := range targets {
 		if target.Kind == kind && target.Id != nil && *target.Id == id {
+			return true
+		}
+	}
+	return false
+}
+
+func hasServiceErrorField(targets []factoryapi.ErrorTarget, field string) bool {
+	for _, target := range targets {
+		if target.Field != nil && *target.Field == field {
 			return true
 		}
 	}
