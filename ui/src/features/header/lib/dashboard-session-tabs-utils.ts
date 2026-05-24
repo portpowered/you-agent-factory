@@ -43,19 +43,6 @@ export function sessionCloseLabel(
   );
 }
 
-export function sessionStreamToggleLabel(
-  session: FactorySessionSummary,
-  paused: boolean,
-  messages: ReturnType<typeof getHeaderControlsMessages>,
-): string {
-  return replaceSessionLabelToken(
-    paused
-      ? messages.resumeSessionStreamLabelTemplate
-      : messages.pauseSessionStreamLabelTemplate,
-    session,
-  );
-}
-
 export function sessionTabID(sessionTabsID: string, sessionID: string): string {
   return `${sessionTabsID}-tab-${sessionDOMIDFragment(sessionID)}`;
 }
