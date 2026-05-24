@@ -74,6 +74,149 @@ const exportFactoryDefinition = {
   ],
 };
 
+const editableGraphFactoryDefinition = {
+  metadata: {
+    owner: "operations",
+  },
+  name: "Current Factory",
+  resources: [
+    {
+      capacity: 2,
+      name: "gpu",
+    },
+  ],
+  workers: [
+    {
+      model: "gpt-5",
+      name: "writer",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        {
+          name: "queued",
+          type: "INITIAL",
+        },
+        {
+          name: "done",
+          type: "TERMINAL",
+        },
+      ],
+    },
+  ],
+  workstations: [
+    {
+      body: "Draft the story.",
+      inputs: [
+        {
+          state: "queued",
+          workType: "story",
+        },
+      ],
+      name: "draft",
+      outputs: [
+        {
+          state: "done",
+          workType: "story",
+        },
+      ],
+      resources: [
+        {
+          capacity: 2,
+          name: "gpu",
+        },
+      ],
+      type: "MODEL_WORKSTATION",
+      worker: "writer",
+    },
+  ],
+};
+
+const editableGraphFactoryReplayLines = [
+  JSON.stringify({
+    context: {
+      eventTime: "2026-05-19T15:00:00Z",
+      sequence: 1,
+      tick: 1,
+    },
+    id: "editable-graph-1",
+    payload: {
+      factory: {
+        resources: [
+          {
+            capacity: 2,
+            name: "gpu",
+          },
+        ],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              {
+                name: "queued",
+                type: "INITIAL",
+              },
+              {
+                name: "done",
+                type: "TERMINAL",
+              },
+            ],
+          },
+        ],
+        workers: [
+          {
+            model: "gpt-5",
+            name: "writer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [
+          {
+            inputs: [
+              {
+                state: "queued",
+                workType: "story",
+              },
+            ],
+            name: "draft",
+            outputs: [
+              {
+                state: "done",
+                workType: "story",
+              },
+            ],
+            resources: [
+              {
+                capacity: 2,
+                name: "gpu",
+              },
+            ],
+            worker: "writer",
+          },
+        ],
+      },
+    },
+    type: "INITIAL_STRUCTURE_REQUEST",
+  }),
+  JSON.stringify({
+    context: {
+      eventTime: "2026-05-19T15:00:01Z",
+      sequence: 2,
+      tick: 2,
+    },
+    id: "editable-graph-2",
+    payload: {
+      previousState: "RUNNING",
+      reason: "fixture ready",
+      state: "FINISHED",
+    },
+    type: "FACTORY_STATE_RESPONSE",
+  }),
+];
+
 describe.sequential("factory graph editor browser integration", () => {
   let preview = null;
 
@@ -361,6 +504,164 @@ describe.sequential("factory graph editor browser integration", () => {
         );
       } finally {
         await rm(downloadDirectory, { force: true, recursive: true });
+        await server.stop();
+        await browserPage.close();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
+
+  it(
+    "creates a workstation, links it through labeled graph anchors, and saves the topology payload",
+    async () => {
+      const saveRequests = [];
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: editableGraphFactoryDefinition,
+        eventLines: editableGraphFactoryReplayLines,
+        onSaveCurrentFactory: async (value) => {
+          saveRequests.push(value);
+        },
+      });
+      const browserPage = await openBrowserPage();
+
+      try {
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+        await server.replayCompleted;
+
+        await browserPage.page
+          .getByRole("button", { name: "Enter factory graph editor" })
+          .click();
+
+        const toolbar = browserPage.page.getByRole("region", {
+          name: "Factory graph editor tools",
+        });
+        await toolbar.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+
+        await toolbar
+          .getByRole("button", { name: "Open add entity menu" })
+          .click();
+        await browserPage.page
+          .getByLabel("Add graph entity menu")
+          .getByRole("button", { name: "Workstation" })
+          .click();
+
+        const addDialog = browserPage.page.getByRole("dialog", {
+          name: "Add workstation",
+        });
+        await addDialog.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await addDialog.getByLabel("Identifier").fill("review");
+        await addDialog.getByLabel("Prompt body").fill("Review the drafted story.");
+        await addDialog
+          .getByRole("button", { name: "Add entity" })
+          .click();
+
+        const draftActions = browserPage.page.getByRole("region", {
+          name: "Pending graph changes",
+        });
+        await draftActions.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await draftActions
+          .getByText("This save will apply 1 created entity.", { exact: true })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        await toolbar.getByRole("button", { name: "Connect" }).click();
+        await browserPage.page
+          .getByRole("button", { name: "Connect: story:done Input" })
+          .click();
+        await browserPage.page
+          .getByRole("button", { name: "Connect: review Input" })
+          .click();
+
+        await draftActions
+          .getByText(
+            "This save will apply 1 created entity and 1 changed edge.",
+            { exact: true },
+          )
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await expect
+          .poll(
+            async () =>
+              await draftActions
+                .getByRole("button", { name: "Save changes" })
+                .isEnabled(),
+            {
+              timeout: uiInteractionTimeoutMs,
+            },
+          )
+          .toBe(true);
+
+        const saveChangesButton = draftActions.getByRole("button", {
+          name: "Save changes",
+        });
+        await saveChangesButton.focus();
+        await saveChangesButton.press("Enter");
+        const saveDialog = browserPage.page.getByRole("dialog", {
+          name: "Save factory graph changes?",
+        });
+        await saveDialog.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await saveDialog
+          .getByText(
+            "This save will apply 1 created entity and 1 changed edge.",
+            { exact: true },
+          )
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await saveDialog
+          .getByRole("button", { name: "Save topology" })
+          .click();
+
+        await expect
+          .poll(() => saveRequests.length, {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe(1);
+        await browserPage.page
+          .getByText("Topology saved", { exact: true })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        expect(saveRequests).toEqual([
+          {
+            body: {
+              ...editableGraphFactoryDefinition,
+              version: initialEditableFactoryDefinitionVersion,
+              workstations: [
+                editableGraphFactoryDefinition.workstations[0],
+                {
+                  body: "Review the drafted story.",
+                  inputs: [
+                    {
+                      state: "done",
+                      workType: "story",
+                    },
+                  ],
+                  name: "review",
+                  type: "MODEL_WORKSTATION",
+                  worker: "writer",
+                },
+              ],
+            },
+            sessionID: "~default",
+          },
+        ]);
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
         await server.stop();
         await browserPage.close();
       }
