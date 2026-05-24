@@ -132,6 +132,18 @@
     }
   }
 
+  .af-provider-session-sans {
+    font-family:
+      "Inter",
+      "Noto Sans",
+      "Noto Sans SC",
+      "Noto Sans TC",
+      "Noto Sans JP",
+      "Noto Sans KR",
+      "Segoe UI",
+      sans-serif;
+  }
+
   [data-current-activity-flow] .react-flow {
     @apply rounded-lg border border-af-overlay/6 bg-af-canvas/32;
     --xy-controls-box-shadow: none;

@@ -25,6 +25,7 @@ export interface ProviderSessionDetailPanelProps {
 }
 
 type SessionDetail = ProviderSessionDetailResponse;
+const PROVIDER_SESSION_SANS_CLASS = "af-provider-session-sans";
 
 export function ProviderSessionDetailPanel({
   locale,
@@ -67,7 +68,10 @@ function LoadedProviderSessionDetailPanel({
   return (
     <section
       aria-label={messages.selectedSessionHeading}
-      className="mt-4 grid gap-3 border-t border-af-overlay/8 pt-4"
+      className={cn(
+        "mt-4 grid gap-3 border-t border-af-overlay/8 pt-4",
+        PROVIDER_SESSION_SANS_CLASS,
+      )}
     >
       <div className="grid gap-3">
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>

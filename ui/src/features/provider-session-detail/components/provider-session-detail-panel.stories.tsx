@@ -258,6 +258,11 @@ export const MixedTranscript = {
     expect(canvas.getAllByText("{\"lines\":128}")).toHaveLength(1);
     expect(canvas.getAllByText("Inspect the parser branch before retrying.")).toHaveLength(1);
     expect(canvas.getAllByText("Encrypted reasoning").length).toBeGreaterThan(0);
+    const panel = canvas.getByLabelText("Selected session details");
+    expect(panel.className).toContain("af-provider-session-sans");
+
+    const rawToolOutput = canvas.getByText("{\"lines\":128}");
+    expect(rawToolOutput.className).toContain("af-dashboard-body-code");
     expect(
       canvas.getByText(
         "Reasoning occurred for this step, but plaintext content is intentionally unavailable.",
@@ -289,6 +294,9 @@ export const ZhCnLocalizedChrome = {
     expect(canvas.getAllByText("用户").length).toBeGreaterThan(0);
     expect(canvas.getAllByText("助手").length).toBeGreaterThan(0);
     expect(canvas.getByRole("heading", { name: "令牌用量" })).toBeTruthy();
+    expect(canvas.getByLabelText("已选会话详情").className).toContain(
+      "af-provider-session-sans",
+    );
   },
   render: ({ locale }: { locale?: string }) => {
     const queryClient = new QueryClient({

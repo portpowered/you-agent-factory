@@ -430,6 +430,48 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText(longOutput)).toBeTruthy();
   });
 
+  it("uses the provider-session sans stack for customer-facing content while preserving monospace raw blocks", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          transcript: [
+            {
+              arguments: "{\"path\":\"pkg/api/provider_session_details.go\"}",
+              callId: "call_tool_1",
+              lineNumber: 1,
+              name: "read_file",
+              order: 1,
+              status: "completed",
+              timestamp: "2026-05-18T14:10:04Z",
+              turnIndex: 1,
+              type: "tool_call",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
+    });
+
+    const panel = screen.getByLabelText("Selected session details");
+    expect(panel.className).toContain("af-provider-session-sans");
+
+    const transcriptHeading = screen.getByRole("heading", { name: "Transcript" });
+    expect(panel.contains(transcriptHeading)).toBe(true);
+
+    const rawArguments = screen.getByText(
+      "{\"path\":\"pkg/api/provider_session_details.go\"}",
+    );
+    expect(rawArguments.tagName).toBe("PRE");
+    expect(rawArguments.className).toContain("af-dashboard-body-code");
+  });
+
   it("formats source, transcript, and turn timestamps in the local timezone while preserving raw ISO access", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse(
@@ -823,6 +865,35 @@ describe("ProviderSessionDetailPanel", () => {
     ).toBeTruthy();
     expect(screen.getByText("第 3 行")).toBeTruthy();
     expect(screen.getByText("第 2 行的未知事件")).toBeTruthy();
+  });
+
+  it("keeps zh-CN transcript prose on the provider-session sans stack", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              text: "请总结当前状态。",
+              timestamp: "2026-05-18T14:10:01Z",
+              turnIndex: 1,
+              type: "user_message",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel
+        locale="zh-CN"
+        selectedProviderSession={SELECTED_SESSION}
+      />,
+    );
+
+    const panel = await screen.findByLabelText("已选会话详情");
+    expect(panel.className).toContain("af-provider-session-sans");
   });
 });
 
