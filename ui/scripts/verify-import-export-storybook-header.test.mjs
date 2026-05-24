@@ -321,12 +321,16 @@ describe("verifyDashboardSessionSwitching", () => {
     const betaTab = {
       isVisible: vi.fn().mockResolvedValue(true),
       click: vi.fn().mockResolvedValue(undefined),
+      getAttribute: vi.fn().mockResolvedValue("true"),
     };
     const rootPanel = {
       isVisible: vi.fn().mockResolvedValue(true),
     };
     const betaPanel = {
       isVisible: vi.fn().mockResolvedValue(true),
+    };
+    const activeStoryButton = {
+      count: vi.fn().mockResolvedValue(0),
     };
     const page = {
       getByRole: vi.fn((role, options) => {
@@ -342,12 +346,17 @@ describe("verifyDashboardSessionSwitching", () => {
         if (role === "tabpanel" && options?.name === "beta") {
           return betaPanel;
         }
+        if (role === "button" && String(options?.name) === "/Active Story/") {
+          return activeStoryButton;
+        }
         return createLocator();
       }),
     };
+    const expectNoHorizontalOverflow = vi.fn().mockResolvedValue(undefined);
 
     await verifyDashboardSessionSwitching(
       {
+        expectNoHorizontalOverflow,
         expectVisible: async (locator) => {
           if (!(await locator.isVisible())) {
             throw new Error("Locator was not visible.");
@@ -355,9 +364,14 @@ describe("verifyDashboardSessionSwitching", () => {
         },
       },
       page,
+      { label: "desktop" },
     );
 
-    expect(rootTab.click).toHaveBeenCalledTimes(1);
+    expect(rootTab.click).not.toHaveBeenCalled();
     expect(betaTab.click).toHaveBeenCalledTimes(1);
+    expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
+      page,
+      "Dashboard session switching at desktop",
+    );
   });
 });
