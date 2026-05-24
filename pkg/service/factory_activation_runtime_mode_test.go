@@ -26,6 +26,7 @@ func TestBuildReplacementFactoryRuntime_ServiceModeStaysRunningUntilCanceled(t *
 		RuntimeMode:       interfaces.RuntimeModeService,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
+		RuntimeLogDir:     t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
