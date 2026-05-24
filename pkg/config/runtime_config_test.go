@@ -160,7 +160,29 @@ Process.
 }
 
 func TestLoadRuntimeConfig_DetachesInlineWorkerMutableNestedFields(t *testing.T) {
-	source := &interfaces.FactoryConfig{
+	source := inlineWorkerDetachmentSourceConfig()
+
+	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(t.TempDir(), source, InlineRuntimeDefinitionOptions{})
+	if err != nil {
+		t.Fatalf("loadRuntimeDefinitionLookupMapsFromFactoryConfig: %v", err)
+	}
+
+	loaded, err := NewLoadedFactoryConfig("factory-dir", source, runtimeDefs)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+
+	workerDef, ok := loaded.Worker("executor")
+	if !ok {
+		t.Fatal("expected inline executor worker definition")
+	}
+
+	mutateInlineWorkerMutableNestedFields(&source.Workers[0])
+	assertDetachedInlineWorkerMutableNestedFields(t, workerDef)
+}
+
+func inlineWorkerDetachmentSourceConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
 		Workers: []interfaces.WorkerConfig{{
 			Name:             "executor",
 			Type:             interfaces.WorkerTypeModel,
@@ -207,23 +229,9 @@ func TestLoadRuntimeConfig_DetachesInlineWorkerMutableNestedFields(t *testing.T)
 			}},
 		}},
 	}
+}
 
-	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(t.TempDir(), source, InlineRuntimeDefinitionOptions{})
-	if err != nil {
-		t.Fatalf("loadRuntimeDefinitionLookupMapsFromFactoryConfig: %v", err)
-	}
-
-	loaded, err := NewLoadedFactoryConfig("factory-dir", source, runtimeDefs)
-	if err != nil {
-		t.Fatalf("NewLoadedFactoryConfig: %v", err)
-	}
-
-	workerDef, ok := loaded.Worker("executor")
-	if !ok {
-		t.Fatal("expected inline executor worker definition")
-	}
-
-	sourceWorker := &source.Workers[0]
+func mutateInlineWorkerMutableNestedFields(sourceWorker *interfaces.WorkerConfig) {
 	sourceWorker.Args[0] = "--mutated"
 	sourceWorker.Resources[0].Name = "mutated-slot"
 	sourceWorker.Resources[0].Capacity = 9
@@ -237,6 +245,10 @@ func TestLoadRuntimeConfig_DetachesInlineWorkerMutableNestedFields(t *testing.T)
 	sourceWorker.Operations[0].Inputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeJSON
 	sourceWorker.Operations[0].Outputs[0].Name = "mutated-output"
 	sourceWorker.Operations[0].Outputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeBinary
+}
+
+func assertDetachedInlineWorkerMutableNestedFields(t *testing.T, workerDef *interfaces.WorkerConfig) {
+	t.Helper()
 
 	if !reflect.DeepEqual(workerDef.Args, []string{"--mode", "inline"}) {
 		t.Fatalf("expected inline worker args to stay detached, got %#v", workerDef.Args)
