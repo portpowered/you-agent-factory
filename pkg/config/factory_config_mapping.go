@@ -748,7 +748,11 @@ func stringSlicePtr(values []string) *[]string {
 }
 
 func stringMapPtr(values map[string]string) *factoryapi.StringMap {
-	return optional.CopiedStringMapPtr(values)
+	if len(values) == 0 {
+		return nil
+	}
+	copied := factoryapi.StringMap(cloneStringMap(values))
+	return &copied
 }
 
 func intPtrIfNonZero(value int) *int {
