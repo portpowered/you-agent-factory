@@ -4,6 +4,7 @@ import { afterEach, beforeEach, vi, type Mock } from "vitest";
 import { App } from "../App";
 import type {
   DashboardSnapshot,
+  DashboardTopology,
   DashboardTrace,
   DashboardWorkstationRequest,
 } from "../api/dashboard";
@@ -28,6 +29,17 @@ import { useExportDialogStore } from "../features/export/state";
 import type { FactoryPngImportValue } from "../features/import/public";
 import type { WorldState } from "../features/timeline/state";
 import { useFactoryTimelineStore } from "../features/timeline/state";
+import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
+
+vi.mock("../features/flowchart/lib/layout", async () => {
+  const actual = await vi.importActual("../features/flowchart/lib/layout");
+
+  return {
+    ...actual,
+    buildGraphLayout: async (topology: DashboardTopology) =>
+      buildDashboardTestGraphLayout(topology),
+  };
+});
 
 vi.mock("../features/current-factory-definition/public", async () => {
   const actual = await vi.importActual(
@@ -274,6 +286,23 @@ export function renderApp({
           : input instanceof URL
             ? `${input.pathname}${input.search}`
             : input.url;
+
+      if (path === "/factory-sessions") {
+        return jsonResponse({
+          sessions: [
+            {
+              factoryDir: "/tmp/default-factory-session",
+              folderPath: "/tmp/default-factory-session",
+              id: DEFAULT_FACTORY_SESSION_ID,
+              isDefault: true,
+              project: "default-factory-session",
+              target: {
+                kind: "default",
+              },
+            },
+          ],
+        });
+      }
 
       throw new Error(`unexpected fetch for ${path}`);
     });

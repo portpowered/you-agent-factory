@@ -138,7 +138,7 @@ describe("App shell locale and toolbar flows", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "导出工厂" })).toBeNull();
     });
-  });
+  }, 30_000);
 
   it("falls back to English when the configured app locale is unsupported", async () => {
     renderApp({

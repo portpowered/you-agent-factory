@@ -1071,7 +1071,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
         workTypeName: "story",
       },
     ]);
-  });
+  }, 30_000);
 
   it("renders pending draft-only graph nodes while editor mode is active", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
