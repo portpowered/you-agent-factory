@@ -111,7 +111,7 @@ test-ui-coverage:
 
 test-ui-browser-integration:
 ifeq ($(BUN_BIN),)
-	cd ui && $(NPM) exec vitest run integration/event-stream-replay.integration.test.mjs
+	cd ui && $(NPM) run test:integration
 else
 	cd ui && $(UI_SCRIPT) test:integration
 endif
@@ -182,9 +182,18 @@ verify-build-contracts:
 	$(MAKE) api-smoke
 
 verify-tests:
+<<<<<<< HEAD
 	$(MAKE) test-ui-coverage
 	$(MAKE) test-ui-browser-integration
 	$(MAKE) test-backend-verification
+=======
+	$(MAKE) ui-test
+	$(MAKE) ui-integration-test
+	$(MAKE) ui-test-coverage
+	$(MAKE) ui-replay-coverage-check
+	$(MAKE) test-coverage-go
+	$(MAKE) test-functional
+>>>>>>> cc78ee91 (feat: [prd-ui-integration-test-operation-002] - [Wire the dedicated integration target into the required CI verification lane])
 
 verify:
 	$(MAKE) verify-build-contracts
@@ -212,9 +221,18 @@ ci-verify-build-contracts: ci-typecheck
 
 ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) ui-install-playwright
+<<<<<<< HEAD
 	$(MAKE) test-ui-coverage
 	$(MAKE) test-ui-browser-integration
 	$(MAKE) test-backend-verification
+=======
+	$(MAKE) ui-test
+	$(MAKE) ui-integration-test
+	$(MAKE) ui-test-coverage
+	$(MAKE) ui-replay-coverage-check
+	$(MAKE) test-coverage-go
+	$(MAKE) test-functional
+>>>>>>> cc78ee91 (feat: [prd-ui-integration-test-operation-002] - [Wire the dedicated integration target into the required CI verification lane])
 
 release:
 	$(GO) run ./cmd/releaseprep -version $(VERSION)

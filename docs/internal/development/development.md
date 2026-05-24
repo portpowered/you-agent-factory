@@ -51,6 +51,7 @@ make release VERSION=v1.2.3
 make ui-deps
 make ui-build
 make ui-test
+make ui-integration-test
 make ui-storybook
 make ui-test-storybook
 ```
@@ -68,6 +69,8 @@ The workflow currently executes these repository-owned commands through one prer
 3. `make verify-build-contracts`
 4. `make test-ui-coverage`
 5. `cd ui && bunx playwright install chromium`
+6. `make ui-integration-test`
+7. `make test-backend-verification`
 6. `make test-ui-browser-integration`
 7. `make test-backend-verification`
 
@@ -98,17 +101,17 @@ Treat those lanes as the stable contributor mental model:
 | CI lane | Owned checks | Local rerun command | Why this lane stays separate |
 | --- | --- | --- | --- |
 | `UI Coverage` | jsdom-oriented Vitest coverage run plus the trailing non-covered `ui/scripts/dashboard-shell-storybook-responsive.test.mjs` check and the replay metadata guard | `make test-ui-coverage` | Keeps unit and app-shell regressions, coverage thresholds, and replay fixture coverage in one dashboard-only lane without rerunning browser-backed integration. |
-| `UI Browser Integration` | `ui/integration/event-stream-replay.integration.test.mjs` with Playwright provisioning, `bun run build`, and `vite preview` owned by the replay harness | `make test-ui-browser-integration` | Keeps the browser-backed replay workflow isolated so failures map cleanly to preview startup, API-origin wiring, or browser-visible behavior instead of the jsdom suite. |
+| `UI Browser Integration` | the canonical browser-backed `ui/integration/*.integration.test.mjs` lane with Playwright provisioning plus build and preview owned by the shared browser harness | `make ui-integration-test` | Keeps real-browser dashboard workflows isolated so failures map cleanly to preview startup, API-origin wiring, or browser-visible behavior instead of the jsdom suite. |
 | `Backend Verification` | `cmd/gocoveragecheck` over `./cmd/factory`, maintained backend `./pkg/...` packages, and the maintained short functional packages under `tests/functional/...` | `make test-backend-verification` | Merges backend coverage with the maintained short functional corpus because the covered command already executes the same supported backend packages and short functional packages in one lane. |
 
 The backend lane is intentionally merged. `make test-backend-verification` shells through `cmd/gocoveragecheck`, and that command's default package discovery already executes the maintained short functional packages under `tests/functional/...` in the same covered `go test` invocation as `./cmd/factory` and backend-owned `./pkg/...` packages. Because that coverage lane already includes `tests/functional/bootstrap_portability`, `guards_batch`, `providers`, `replay_contracts`, `runtime_api`, `smoke`, and `workflow` while excluding only the internal support helper package, a separate required `make test-backend-functional` lane would only rerun the same short functional corpus without adding pull-request confidence. Keep `make test-backend-functional` as a compatibility alias for ad hoc local usage, but treat `make test-backend-verification` as the required PR backend lane.
 
-The browser-backed lane remains self-building for the same reason: `make test-ui-browser-integration` delegates into the replay harness that runs `bun run build` with a test-owned API origin and serves that exact build with `vite preview`. Treat that build plus preview startup as part of the lane's owned runtime contract instead of uploading `ui/dist` from another job.
+The browser-backed lane remains self-building for the same reason: `make ui-integration-test` delegates into the shared browser harness that runs `bun run build` with a test-owned API origin and serves that exact build with `vite preview`. Treat that build plus preview startup as part of the lane's owned runtime contract instead of uploading `ui/dist` from another job.
 
 Use the lane-specific targets below when you need to rerun one required CI lane locally without replaying the full suite:
 
 - `make test-ui-coverage` for the jsdom-oriented dashboard coverage lane.
-- `make test-ui-browser-integration` for the browser-backed dashboard integration lane.
+- `make ui-integration-test` for the browser-backed dashboard integration lane.
 - `make test-backend-verification` for the merged backend coverage plus maintained short functional lane.
 
 `make verify` composes both aggregate lanes for a full review-ready local pass once dependencies and browser prerequisites are already installed. It does not install packages or browsers itself, so routine verification stays network-free after setup.
