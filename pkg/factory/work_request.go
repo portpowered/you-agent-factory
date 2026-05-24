@@ -79,7 +79,7 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 			TargetState:              work.State,
 			ExecutionID:              work.ExecutionID,
 			Relations: appendUniquePetriRelations(
-				clonePetriRelations(relIndex[work.Name]),
+				CloneRuntimeRelations(relIndex[work.Name]),
 				work.RuntimeRelations,
 			),
 		})
@@ -169,7 +169,7 @@ func applyGeneratedSubmissionOverrides(next interfaces.SubmitRequest, submitted 
 		maps.Copy(next.Tags, submitted.Tags)
 	}
 	if len(submitted.Relations) > 0 {
-		next.Relations = appendUniquePetriRelations(clonePetriRelations(submitted.Relations), next.Relations)
+		next.Relations = appendUniquePetriRelations(CloneRuntimeRelations(submitted.Relations), next.Relations)
 	}
 	if len(submitted.PreviousChainingTraceIDs) > 0 {
 		next.PreviousChainingTraceIDs = interfaces.CanonicalChainingTraceIDs(submitted.PreviousChainingTraceIDs)
@@ -208,7 +208,7 @@ func WorkRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfac
 			Payload:                  append([]byte(nil), req.Payload...),
 			Tags:                     maps.Clone(req.Tags),
 			ExecutionID:              req.ExecutionID,
-			RuntimeRelations:         clonePetriRelations(req.Relations),
+			RuntimeRelations:         CloneRuntimeRelations(req.Relations),
 		})
 	}
 
@@ -641,15 +641,6 @@ func normalizeSubmitChainingTraceDepth(depth int, currentChainingTraceID string,
 		return 1
 	}
 	return 0
-}
-
-func clonePetriRelations(relations []interfaces.Relation) []interfaces.Relation {
-	if relations == nil {
-		return nil
-	}
-	out := make([]interfaces.Relation, len(relations))
-	copy(out, relations)
-	return out
 }
 
 func appendUniquePetriRelations(base []interfaces.Relation, extra []interfaces.Relation) []interfaces.Relation {
