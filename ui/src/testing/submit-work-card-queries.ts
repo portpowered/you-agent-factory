@@ -9,6 +9,13 @@ export type SyncRoleQuery = {
   ) => T;
 };
 
+export type AsyncRoleQuery = SyncRoleQuery & {
+  findByRole: <T extends HTMLElement = HTMLElement>(
+    role: string,
+    options?: RoleQueryOptions,
+  ) => Promise<T>;
+};
+
 export const submitWorkCardQueryContract = {
   dashboardRegionName: "you-agent-factory bento board",
   requestNameFieldName: "Request name",
@@ -22,6 +29,14 @@ export function getSubmitWorkCard<QueryScope extends SyncRoleQuery>(
   dashboardScope: QueryScope,
 ): HTMLElement {
   return dashboardScope.getByRole("article", {
+    name: submitWorkCardQueryContract.submitWorkCardName,
+  });
+}
+
+export function findSubmitWorkCard<QueryScope extends AsyncRoleQuery>(
+  dashboardScope: QueryScope,
+): Promise<HTMLElement> {
+  return dashboardScope.findByRole("article", {
     name: submitWorkCardQueryContract.submitWorkCardName,
   });
 }
