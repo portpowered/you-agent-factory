@@ -259,6 +259,37 @@ function buildSessionMap(sessions, currentFactory, currentFactoryBySessionID) {
   };
 }
 
+function ensureSessionState(
+  sessionRegistry,
+  session,
+  currentFactory,
+  currentFactoryBySessionID,
+) {
+  const existingState = sessionRegistry.state.get(session.id);
+  if (existingState) {
+    existingState.session = session;
+  } else {
+    const sessionFactory =
+      currentFactoryBySessionID[session.id] ??
+      (session.id === defaultFactorySessionID ? currentFactory : null);
+    sessionRegistry.state.set(session.id, {
+      currentFactory: sessionFactory,
+      eventLines: [],
+      session,
+      version: cloneVersion(initialEditableFactoryDefinitionVersion),
+    });
+  }
+
+  if (!sessionRegistry.sessions.some((existingSession) => existingSession.id === session.id)) {
+    sessionRegistry.sessions = [...sessionRegistry.sessions, session];
+    return;
+  }
+
+  sessionRegistry.sessions = sessionRegistry.sessions.map((existingSession) =>
+    existingSession.id === session.id ? session : existingSession,
+  );
+}
+
 export async function startBrowserPreview() {
   const apiPort = sharedApiPort;
   const previewPort = sharedPreviewPort;
@@ -478,6 +509,19 @@ export async function startFactoryApiServer({
               session: null,
               targets: [],
             };
+
+        if (result?.session) {
+          ensureSessionState(
+            sessionRegistry,
+            result.session,
+            currentFactory,
+            currentFactoryBySessionID,
+          );
+          const openedSessionState = sessionRegistry.state.get(result.session.id);
+          if (openedSessionState) {
+            openedSessionState.eventLines = eventLinesBySessionID[result.session.id] ?? [];
+          }
+        }
 
         response.writeHead(200, {
           "Access-Control-Allow-Origin": "*",
