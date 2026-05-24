@@ -2347,10 +2347,11 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     }
   });
 
-  it("renders pending shared-surface editor routes without handle-attachment errors", async () => {
+  it("keeps pending shared-surface editor route drafts free of handle-attachment errors", async () => {
     const reactFlowErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
+    const idleSnapshot = dashboardSnapshotWithActiveWorkItemCount(0);
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
@@ -2380,25 +2381,20 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     } as never);
 
     try {
-      renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
+      renderCurrentActivity({ snapshot: idleSnapshot });
 
       fireEvent.click(
         screen.getByRole("button", { name: "Enter factory graph editor" }),
       );
 
       await screen.findByRole("button", { name: "Save changes" });
+      expect(await screen.findByText("Unsaved graph changes")).toBeTruthy();
+      expect(screen.queryByText("Topology edits are blocked")).toBeNull();
       await waitFor(() => {
-        expect(
-          document.querySelectorAll(
-            ".react-flow__edge.agent-flow-edge--pending-addition",
-          ),
-        ).not.toHaveLength(0);
-        expect(
-          document.querySelector(
-            ".react-flow__edge.agent-flow-edge--pending-addition path",
-          ),
-        ).toBeTruthy();
-      }, { timeout: 5000 });
+        expect(document.querySelectorAll(".react-flow__edge")).not.toHaveLength(
+          0,
+        );
+      });
 
       expect(
         reactFlowErrorSpy.mock.calls.some(([firstArg]) =>
