@@ -124,23 +124,20 @@ describe.sequential("dashboard session tabs browser integration", () => {
           .click();
 
         const dialog = browserPage.page.getByRole("dialog", {
-          name: "Open factory session",
+          name: "Open a factory folder",
         });
         await dialog.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await dialog.getByLabel("Factory folder").fill("/workspace/project");
-        await dialog.getByRole("button", { name: "Inspect folder" }).click();
+        await dialog.getByRole("button", { name: "Check folder" }).click();
 
         await dialog
           .getByRole("region", { name: "Pick a runnable target" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await dialog
-          .getByText("Choose one runnable target from this folder.")
+          .getByRole("button", { name: "Open selected target" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await dialog
-          .getByRole("button", { name: /Review factory/ })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-        await dialog
-          .getByRole("button", { name: /Review factory/ })
+          .getByRole("button", { name: "Open selected target" })
           .click();
 
         await dialog.waitFor({
@@ -169,6 +166,7 @@ describe.sequential("dashboard session tabs browser integration", () => {
         expect(openSessionRequests).toEqual([
           {
             folderPath: "/workspace/project",
+            validateOnly: true,
           },
           {
             folderPath: "/workspace/project",

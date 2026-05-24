@@ -90,6 +90,11 @@ function npmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
+function localPackageBinaryCommand(name) {
+  const suffix = process.platform === "win32" ? ".cmd" : "";
+  return path.join(packageRoot, "node_modules", ".bin", `${name}${suffix}`);
+}
+
 function hasBun() {
   const result = spawnSync(bunCommand(), ["--version"], {
     shell: false,
@@ -114,9 +119,10 @@ function resolveRuntimeCommand(args) {
   }
 
   if (args[0] === "x") {
+    const [_, binaryName, ...binaryArgs] = args;
     return {
-      args: ["exec", "--", ...args.slice(1)],
-      command: npmCommand(),
+      args: binaryArgs,
+      command: localPackageBinaryCommand(binaryName),
     };
   }
 
