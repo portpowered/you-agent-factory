@@ -111,7 +111,7 @@ export const replayFixtureCatalog = {
   baseline: {
     browserIntegration: {
       finalTick: 2,
-      headingName: "you-agent-factory",
+      headingName: "You Agent Factory",
       historicalHiddenButtonName: /^work-1/i,
       name: "baseline replay",
       requiresWorkItemSelection: true,
@@ -142,7 +142,7 @@ export const replayFixtureCatalog = {
   runtimeConfigInterfaceConsolidation: {
     browserIntegration: {
       finalTick: 8,
-      headingName: "you-agent-factory",
+      headingName: "You Agent Factory",
       historicalHiddenButtonName: /^work-1/i,
       inFlightSelectionTick: 7,
       name: "captured replay 2",
