@@ -316,7 +316,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
 
   if (viewport.label === "desktop") {
     await expectOrderedLeftEdges(
-      [heading, exportButton, languageButton],
+      [heading, sessionTabs, languageButton],
       "Dashboard header desktop primary-row controls",
     );
     await expectOrderedLeftEdges(

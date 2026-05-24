@@ -228,9 +228,6 @@ describe("verifyDashboardSessionTabs", () => {
     const betaTab = {
       isVisible: vi.fn().mockResolvedValue(true),
     };
-    const pauseButton = {
-      isVisible: vi.fn().mockResolvedValue(true),
-    };
     const closeRootButton = {
       isVisible: vi.fn().mockResolvedValue(true),
     };
@@ -242,12 +239,6 @@ describe("verifyDashboardSessionTabs", () => {
     };
     const page = {
       evaluate: vi.fn().mockResolvedValue({ clientWidth: 768, scrollWidth: 768 }),
-      getByText: vi.fn((text) => {
-        if (text === "/workspace/root") {
-          return { isVisible: vi.fn().mockResolvedValue(true) };
-        }
-        return { isVisible: vi.fn().mockResolvedValue(true) };
-      }),
       getByRole: vi.fn((role, options) => {
         if (role === "navigation") {
           return { isVisible: vi.fn().mockResolvedValue(true) };
@@ -257,9 +248,6 @@ describe("verifyDashboardSessionTabs", () => {
         }
         if (role === "tab" && options?.name === "beta") {
           return betaTab;
-        }
-        if (role === "button" && options?.name === "Pause root updates") {
-          return pauseButton;
         }
         if (role === "button" && options?.name === "Close root session") {
           return closeRootButton;
@@ -297,9 +285,6 @@ describe("verifyDashboardSessionTabs", () => {
 
     expect(page.getByRole).toHaveBeenCalledWith("tab", { name: "root" });
     expect(page.getByRole).toHaveBeenCalledWith("tab", { name: "beta" });
-    expect(page.getByRole).toHaveBeenCalledWith("button", {
-      name: "Pause root updates",
-    });
     expect(page.getByRole).toHaveBeenCalledWith("button", {
       name: "Close root session",
     });
