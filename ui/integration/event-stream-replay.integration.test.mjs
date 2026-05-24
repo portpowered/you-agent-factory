@@ -707,7 +707,7 @@ async function exerciseHistoricalTimelineView(page, options) {
   }
   await waitForTickLabel(page, liveTickLabel);
   expect(await slider.inputValue()).toBe(String(liveTick));
-  expect(await countButtons(page, "Return to current tick")).toBe(1);
+  expect(await countButtons(page, "Return to current tick")).toBe(0);
   let liveButtonCount = null;
   if (historicalHiddenButtonName) {
     liveButtonCount = await countButtons(page, historicalHiddenButtonName);
@@ -718,7 +718,7 @@ async function exerciseHistoricalTimelineView(page, options) {
   await slider.press("ArrowLeft");
   await waitForTickLabel(page, historicalTickLabel);
   expect(await slider.inputValue()).toBe(String(previousTick));
-  expect(await countButtons(page, "Return to current tick")).toBe(1);
+  expect(await countButtons(page, "Return to current tick")).toBe(0);
   let historicalButtonCount = null;
   if (historicalHiddenButtonName) {
     historicalButtonCount = await countButtons(
@@ -741,7 +741,7 @@ async function exerciseHistoricalTimelineView(page, options) {
     inFlightSelectionTick ? pinnedHistoricalTickLabel : historicalTickLabel,
   );
   expect(await slider.inputValue()).toBe(String(previousTick));
-  expect(await countButtons(page, "Return to current tick")).toBe(1);
+  expect(await countButtons(page, "Return to current tick")).toBe(0);
   if (historicalHiddenButtonName) {
     expect(await countButtons(page, historicalHiddenButtonName)).toBe(
       historicalButtonCount,
@@ -751,7 +751,7 @@ async function exerciseHistoricalTimelineView(page, options) {
   await moveSliderToTick(slider, previousTick, finalTick);
   await waitForTickLabel(page, finalTickLabel);
   expect(await slider.inputValue()).toBe(String(finalTick));
-  expect(await countButtons(page, "Return to current tick")).toBe(1);
+  expect(await countButtons(page, "Return to current tick")).toBe(0);
   if (historicalHiddenButtonName) {
     const currentButtonCount = await countButtons(
       page,

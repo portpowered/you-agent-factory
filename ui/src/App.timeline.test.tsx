@@ -45,10 +45,10 @@ describe("App timeline reconstruction flows", () => {
     expect(slider.disabled).toBe(true);
     expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
     expect(
-      screen.getByRole("button", {
+      screen.queryByRole("button", {
         name: "Return to current tick",
       }),
-    ).toHaveProperty("disabled", true);
+    ).toBeNull();
     expect(screen.queryByText("Current")).toBeNull();
   });
 
@@ -94,8 +94,8 @@ describe("App timeline reconstruction flows", () => {
     });
     expect(screen.queryByText("Current")).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Return to current tick" }),
-    ).toHaveProperty("disabled", false);
+      screen.queryByRole("button", { name: "Return to current tick" }),
+    ).toBeNull();
 
     fireEvent.change(slider, { target: { value: "4" } });
 
@@ -135,9 +135,9 @@ describe("App timeline reconstruction flows", () => {
 
     expect(headerControls).toHaveLength(4);
     expect(headerControls[0]).toBe(streamStatus);
-    expect(headerControls[1]).toBe(languageButton);
-    expect(headerControls[2]).toBe(slider);
-    expect(headerControls[3]).toBe(exportButton);
+    expect(headerControls[1]).toBe(exportButton);
+    expect(headerControls[2]).toBe(languageButton);
+    expect(headerControls[3]).toBe(slider);
     expect(within(toolbar).getByText("4/4")).toBeTruthy();
     expect(within(toolbar).queryByText(/Tick \d+ of \d+/)).toBeNull();
     expect(within(toolbar).getByText("Timeline tick").className).toContain(

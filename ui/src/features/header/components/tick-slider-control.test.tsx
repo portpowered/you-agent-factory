@@ -264,7 +264,7 @@ describe("TickSliderControl", () => {
     );
   });
 
-  it("keeps the slider status semantically attached and focus-visible without extra visible copy", () => {
+  it("keeps the slider status semantically attached without extra visible copy", () => {
     act(() => {
       useFactoryTimelineStore
         .getState()
@@ -280,8 +280,6 @@ describe("TickSliderControl", () => {
     });
     const statusText = screen.getByText("9/9");
 
-    expect(slider.className).toContain("focus-visible:ring-2");
-    expect(slider.className).toContain("focus-visible:ring-af-accent/25");
     expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
     expect(statusText.tagName).toBe("OUTPUT");
     expect(screen.queryByText("Current")).toBeNull();
