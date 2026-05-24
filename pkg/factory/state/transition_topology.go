@@ -97,36 +97,48 @@ func ensureDefaultFailureArcs(net *Net, transition *petri.Transition) {
 	}
 
 	seen := make(map[string]struct{})
-	for _, inputArc := range transition.InputArcs {
-		place, ok := net.Places[inputArc.PlaceID]
-		if !ok {
-			continue
-		}
-		workType, ok := net.WorkTypes[place.TypeID]
-		if !ok {
-			continue
-		}
-
-		failedPlaceID := failedPlaceIDForWorkType(workType)
-		if failedPlaceID == "" {
-			continue
-		}
-		if _, exists := seen[failedPlaceID]; exists {
-			continue
-		}
-		seen[failedPlaceID] = struct{}{}
-
-		transition.FailureArcs = append(transition.FailureArcs, petri.Arc{
-			ID:           fmt.Sprintf("%s:auto-failure:%s", transition.ID, failedPlaceID),
-			Name:         fmt.Sprintf("%s:auto-failure:%s", transition.ID, failedPlaceID),
-			PlaceID:      failedPlaceID,
-			TransitionID: transition.ID,
-			Direction:    petri.ArcOutput,
-			Cardinality: petri.ArcCardinality{
-				Mode: petri.CardinalityOne,
-			},
-		})
+	appendDefaultFailureArcsForPlaces(net, transition, transition.InputArcs, seen)
+	if len(transition.FailureArcs) > 0 || transition.WorkerType == "" {
+		return
 	}
+	appendDefaultFailureArcsForPlaces(net, transition, transition.OutputArcs, seen)
+}
+
+func appendDefaultFailureArcsForPlaces(net *Net, transition *petri.Transition, arcs []petri.Arc, seen map[string]struct{}) {
+	for _, arc := range arcs {
+		appendDefaultFailureArcForPlace(net, transition, arc.PlaceID, seen)
+	}
+}
+
+func appendDefaultFailureArcForPlace(net *Net, transition *petri.Transition, placeID string, seen map[string]struct{}) {
+	place, ok := net.Places[placeID]
+	if !ok {
+		return
+	}
+	workType, ok := net.WorkTypes[place.TypeID]
+	if !ok {
+		return
+	}
+
+	failedPlaceID := failedPlaceIDForWorkType(workType)
+	if failedPlaceID == "" {
+		return
+	}
+	if _, exists := seen[failedPlaceID]; exists {
+		return
+	}
+	seen[failedPlaceID] = struct{}{}
+
+	transition.FailureArcs = append(transition.FailureArcs, petri.Arc{
+		ID:           fmt.Sprintf("%s:auto-failure:%s", transition.ID, failedPlaceID),
+		Name:         fmt.Sprintf("%s:auto-failure:%s", transition.ID, failedPlaceID),
+		PlaceID:      failedPlaceID,
+		TransitionID: transition.ID,
+		Direction:    petri.ArcOutput,
+		Cardinality: petri.ArcCardinality{
+			Mode: petri.CardinalityOne,
+		},
+	})
 }
 
 func failedPlaceIDForWorkType(workType *WorkType) string {

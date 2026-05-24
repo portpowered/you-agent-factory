@@ -55,6 +55,11 @@ environment, and routing.
 - Route accepted results through `outputs`, ordinary partial-progress results
   through `onContinue`, rejected results through `onRejection`, and failed or
   timed-out results through `onFailure`.
+- Worker-backed workstations that omit `onFailure` still map an explicit
+  failure lane to each emitted work type's `FAILED` state. This implicit
+  expansion applies to `STANDARD`, `REPEATER`, `CRON`, `POLLER`,
+  `MODEL_WORKSTATION`, `MODEL_INVOKE`, and `CLASSIFIER_WORKSTATION`.
+  `LOGICAL_MOVE` stays explicit.
 - `CLASSIFIER_WORKSTATION` returns one plain string label. Leading and trailing
   whitespace are trimmed before matching, matching stays exact and
   case-sensitive, and empty or non-string outputs fail instead of routing
@@ -137,12 +142,50 @@ execute:
 | `outputs` | Usually | IO places produced when the worker returns accepted. Cron workstations require at least one output. |
 | `onContinue` | No | IO place produced when the worker reports ordinary partial progress and the work should iterate without being classified as rejection. |
 | `onRejection` | No | IO place produced when the worker returns rejected. |
-| `onFailure` | Recommended | IO place produced when execution fails or times out. |
+| `onFailure` | No | IO place produced when execution fails or times out. When omitted on a worker-backed workstation, config mapping adds explicit failure arcs to each emitted work type's `FAILED` state. |
 | `resources` | No | Resource capacity consumed while the workstation runs. |
 | `guards` | No | Workstation-level visit-count guards. Parent fan-in and same-name matching belong on per-input guards. |
 | `cron` | Cron only | Trigger timing for `behavior: "CRON"`. |
 | `operation` | `MODEL_INVOKE` only | Uppercase provider-agnostic operation such as `TTS`. |
 | `operationBindings` | `MODEL_INVOKE` only | Deterministic slot bindings from runtime input content, static config content, defaults, or omission. |
+
+## Implicit Failure Routing
+
+Config mapping normalizes omitted `onFailure` routes for worker-backed
+workstations into explicit Petri arcs. The runtime, topology projections, and
+event-history structure all use that normalized graph.
+
+- If a worker-backed workstation omits `onFailure`, each emitted work type gets
+  a failure arc to its own `FAILED` place.
+- Explicit authored `onFailure` routes win and are preserved unchanged.
+- Accepted success routing stays explicit: use `outputs` for ordinary
+  workstations and `classificationRoutes` for classifiers.
+- Existing repeater rejection behavior stays explicit too; implicit failure
+  routing does not add new rejection routes.
+- `LOGICAL_MOVE` does not participate because it does not dispatch a worker and
+  should keep every route authored explicitly.
+
+Example:
+
+```json
+{
+  "name": "poll-inbox",
+  "behavior": "CRON",
+  "type": "MODEL_WORKSTATION",
+  "worker": "ingest",
+  "cron": { "schedule": "*/5 * * * *" },
+  "outputs": [{ "workType": "task", "state": "queued" }]
+}
+```
+
+That config omits `onFailure`, but the mapped graph still includes an explicit
+failure route equivalent to:
+
+```json
+{
+  "onFailure": [{ "workType": "task", "state": "failed" }]
+}
+```
 
 ## `behavior` Versus `type`
 
@@ -152,6 +195,8 @@ execute:
 - `REPEATER` re-runs after continue results until the work is accepted or
   fails.
 - `CRON` runs on a schedule in service mode.
+- `POLLER` keeps an external ingress loop active in service mode and submits
+  new work through the bound worker.
 
 `type` answers "what runtime implementation handles the step?"
 
@@ -230,9 +275,11 @@ Invalid classifier results fail through the ordinary `FAILED` lane:
 - Parse failures, execution errors, and timeouts fail.
 
 When `onFailure` is configured, those failures use it exactly as other
-workstation failures do. Successful classifier dispatches preserve the selected
-label in runtime evidence, replay, and projections; failed classifier attempts
-keep ordinary failure details and do not invent a selected label.
+workstation failures do. When `onFailure` is omitted, classifier failures still
+follow the same implicit failed-state routing as other worker-backed
+workstations. Successful classifier dispatches preserve the selected label in
+runtime evidence, replay, and projections; failed classifier attempts keep
+ordinary failure details and do not invent a selected label.
 
 ## Minimal Standard Step
 

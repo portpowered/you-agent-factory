@@ -1,10 +1,12 @@
 package projections
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
 
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 
@@ -113,6 +115,45 @@ func TestProjectInitialStructure_NetOnlyTopology_PreservesNonSuccessRouteArrayOr
 	if !reflect.DeepEqual(workstation.FailurePlaceIDs, []string{"story:failed", "story:abandoned"}) {
 		t.Fatalf("failure routes = %#v, want authored order", workstation.FailurePlaceIDs)
 	}
+}
+
+func TestProjectInitialStructure_ConfigMappedCronImplicitFailureRoutesAppearInTopology(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "queued", Type: interfaces.StateTypeInitial},
+				{Name: "done", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "cron-worker"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "poll-for-work",
+			Kind:           interfaces.WorkstationKindCron,
+			WorkerTypeName: "cron-worker",
+			Cron:           &interfaces.CronConfig{Schedule: "* * * * *", TriggerAtStart: true},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		}},
+	}
+
+	mapper := &factoryconfig.ConfigMapper{}
+	net, err := mapper.Map(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Map: %v", err)
+	}
+
+	got := ProjectInitialStructure(net)
+	for _, workstation := range got.Workstations {
+		if workstation.ID != "poll-for-work" {
+			continue
+		}
+		if !reflect.DeepEqual(workstation.FailurePlaceIDs, []string{"task:failed"}) {
+			t.Fatalf("failure routes = %#v, want implicit failed-state route", workstation.FailurePlaceIDs)
+		}
+		return
+	}
+	t.Fatalf("workstations = %#v, want projected cron workstation", got.Workstations)
 }
 
 func TestProjectInitialStructure_NetOnlyTopology_OrdersMapDerivedOutputDeterministically(t *testing.T) {

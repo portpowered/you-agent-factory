@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
@@ -138,6 +138,143 @@ func TestConfigMapping_WorkstationTypeRepeater(t *testing.T) {
 	}
 }
 
+func TestConfigMapping_WorkstationKindPollerUsesImplicitFailureRouting(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{
+			Name: "poller-worker",
+			Type: interfaces.WorkerTypeScript,
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "poll-task",
+			Kind:           interfaces.WorkstationKindPoller,
+			Type:           interfaces.WorkstationTypeModel,
+			WorkerTypeName: "poller-worker",
+			Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+		}},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tr := net.Transitions["poll-task"]
+	if tr == nil {
+		t.Fatal("expected mapped transition for poll-task")
+	}
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("poller rejection arcs = %+v, want default failed-state routing", tr.RejectionArcs)
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("poller failure arcs = %+v, want default failed-state routing", tr.FailureArcs)
+	}
+}
+
+func TestConfigMapping_CronWithoutRequiredInputsUsesOutputWorkTypeForImplicitFailureRouting(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{
+			Name: "cron-worker",
+			Type: interfaces.WorkerTypeModel,
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "poll-for-work",
+			Kind:           interfaces.WorkstationKindCron,
+			WorkerTypeName: "cron-worker",
+			Cron:           &interfaces.CronConfig{Schedule: "* * * * *", TriggerAtStart: true},
+			Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+		}},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tr := net.Transitions["poll-for-work"]
+	if tr == nil {
+		t.Fatal("expected mapped transition for poll-for-work")
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("cron failure arcs = %+v, want output-derived failed-state routing", tr.FailureArcs)
+	}
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("cron rejection arcs = %+v, want cloned failed-state routing", tr.RejectionArcs)
+	}
+}
+
+func TestConfigMapping_ModelInvokeWorkstationUsesImplicitFailureRouting(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{
+			Name: "tts-worker",
+			Type: interfaces.WorkerTypeModel,
+			Operations: []interfaces.ModelOperation{{
+				Name: "TTS",
+				Inputs: []interfaces.ModelOperationSlot{{
+					Name:         "text",
+					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					Required:     true,
+				}},
+				Outputs: []interfaces.ModelOperationSlot{{
+					Name:         "audio",
+					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				}},
+			}},
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "speak-task",
+			Type:           interfaces.WorkstationTypeInvoke,
+			WorkerTypeName: "tts-worker",
+			Operation:      "TTS",
+			Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+		}},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tr := net.Transitions["speak-task"]
+	if tr == nil {
+		t.Fatal("expected mapped transition for speak-task")
+	}
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("model invoke rejection arcs = %+v, want default failed-state routing", tr.RejectionArcs)
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("model invoke failure arcs = %+v, want default failed-state routing", tr.FailureArcs)
+	}
+}
+
 func TestConfigMapping_ClassifierRoutesBecomeLabeledAcceptedArcs(t *testing.T) {
 	input := &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{{
@@ -184,6 +321,48 @@ func TestConfigMapping_ClassifierRoutesBecomeLabeledAcceptedArcs(t *testing.T) {
 	}
 	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
 		t.Fatalf("classifier rejection arcs = %#v, want default failure routing only", tr.RejectionArcs)
+	}
+}
+
+func TestConfigMapping_ClassifierWithoutOnFailureGetsImplicitFailureArc(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "approved", Type: interfaces.StateTypeTerminal},
+				{Name: "review", Type: interfaces.StateTypeProcessing},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "classifier"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "classify-task",
+			Type:           interfaces.WorkstationTypeClassify,
+			WorkerTypeName: "classifier",
+			Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+				{Label: "approved", Outputs: []interfaces.IOConfig{{StateName: "approved", WorkTypeName: "task"}}},
+				{Label: "needs_review", Outputs: []interfaces.IOConfig{{StateName: "review", WorkTypeName: "task"}}},
+			},
+		}},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tr := net.Transitions["classify-task"]
+	if tr == nil {
+		t.Fatal("expected mapped transition for classify-task")
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("classifier failure arcs = %#v, want implicit failed-state routing", tr.FailureArcs)
+	}
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("classifier rejection arcs = %#v, want implicit failed-state routing", tr.RejectionArcs)
 	}
 }
 
