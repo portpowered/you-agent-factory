@@ -33,16 +33,23 @@ const TRANSCRIPT_BADGE_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
 };
 
 export function TranscriptSection({
+  className,
   detail,
   locale,
 }: {
+  className?: string;
   detail: SessionDetail;
   locale?: string;
 }) {
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section className="grid gap-2.5">
+    <section
+      className={cn(
+        "grid gap-3 rounded-xl border border-af-accent/14 bg-af-accent/6 p-4",
+        className,
+      )}
+    >
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.transcriptHeading}</h5>
       <div className="grid gap-3">
         {detail.transcript.map((entry) => (

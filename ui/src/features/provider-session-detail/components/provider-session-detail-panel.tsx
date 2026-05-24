@@ -111,7 +111,8 @@ function LoadedProviderSessionDetailPanel({
       {detail ? (
         <>
           <SourceFileSection detail={detail} locale={locale} />
-          {detailState.status !== "empty" ? (
+          {detailState.status !== "empty" &&
+          detailState.status !== "success" ? (
             <>
               <ParseOverview detail={detail} locale={locale} />
               <TokenUsageSection detail={detail} locale={locale} />
@@ -135,9 +136,13 @@ function LoadedProviderSessionDetailPanel({
           {detailState.status === "success" ? (
             <>
               <TranscriptSection detail={detail} locale={locale} />
-              <TurnsSection detail={detail} locale={locale} />
-              <FunctionCallsSection detail={detail} locale={locale} />
-              <ReasoningSection detail={detail} locale={locale} />
+              <div className="grid gap-4 rounded-xl border border-af-overlay/8 bg-af-overlay/3 p-4">
+                <ParseOverview detail={detail} locale={locale} />
+                <TokenUsageSection detail={detail} locale={locale} />
+                <TurnsSection detail={detail} locale={locale} />
+                <FunctionCallsSection detail={detail} locale={locale} />
+                <ReasoningSection detail={detail} locale={locale} />
+              </div>
               <ParseDiagnosticsSection detail={detail} locale={locale} />
             </>
           ) : null}

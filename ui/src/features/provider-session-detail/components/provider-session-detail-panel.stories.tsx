@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { expect, within } from "storybook/test";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
@@ -102,6 +103,7 @@ export const TimestampPrefixedSessionSuccess = {
 };
 
 export const MixedTranscript = {
+  tags: ["test"],
   parameters: {
     dashboardApi: {
       fetchMocks: [
@@ -229,6 +231,23 @@ export const MixedTranscript = {
       ],
       snapshot: semanticWorkflowDashboardSnapshot,
     },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole("heading", { name: "Transcript" });
+    const headingNames = (await canvas.findAllByRole("heading")).map(
+      (heading) => heading.textContent ?? "",
+    );
+    const transcriptIndex = headingNames.indexOf("Transcript");
+
+    expect(transcriptIndex).toBeGreaterThan(-1);
+
+    for (const headingName of ["Token usage", "Turns", "Function calls", "Reasoning"]) {
+      const headingIndex = headingNames.indexOf(headingName);
+      if (headingIndex !== -1) {
+        expect(transcriptIndex).toBeLessThan(headingIndex);
+      }
+    }
   },
   render: TimestampPrefixedSessionSuccess.render,
 };

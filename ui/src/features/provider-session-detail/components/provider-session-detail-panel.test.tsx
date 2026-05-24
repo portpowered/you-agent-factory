@@ -414,6 +414,88 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText(longOutput)).toBeTruthy();
   });
 
+  it("renders the transcript before summary sections in the success state", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 4,
+            functionCalls: [
+              {
+                arguments: "{\"path\":\"pkg/api\"}",
+                callId: "call_1",
+                name: "list_dir",
+                order: 3,
+                output: "{\"entries\":3}",
+                status: "completed",
+                turnIndex: 1,
+                type: "function_call",
+              },
+            ],
+            lineCount: 4,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [
+              {
+                order: 2,
+                sourceType: "reasoning",
+                summary: "Trace the transcript chronology first.",
+                turnIndex: 1,
+              },
+            ],
+            tokenUsage: {
+              cachedInputTokens: 0,
+              inputTokens: 12,
+              outputTokens: 8,
+              reasoningOutputTokens: 2,
+              totalTokens: 22,
+            },
+            turns: [
+              {
+                eventCount: 4,
+                functionCallCount: 1,
+                index: 1,
+                reasoningCount: 1,
+                responseItemCount: 3,
+                startedAt: "2026-05-18T14:10:00Z",
+              },
+            ],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
+    });
+
+    const headingNames = screen
+      .getAllByRole("heading")
+      .map((heading) => heading.textContent ?? "");
+    const transcriptIndex = headingNames.indexOf("Transcript");
+    const supportingHeadings = [
+      "Token usage",
+      "Turns",
+      "Function calls",
+      "Reasoning",
+      "Parse diagnostics",
+    ];
+
+    expect(transcriptIndex).toBeGreaterThan(-1);
+    for (const headingName of supportingHeadings) {
+      const headingIndex = headingNames.indexOf(headingName);
+      if (headingIndex !== -1) {
+        expect(transcriptIndex).toBeLessThan(headingIndex);
+      }
+    }
+  });
+
   it("renders provider-session detail labels and templates from the zh-CN catalog", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse(
