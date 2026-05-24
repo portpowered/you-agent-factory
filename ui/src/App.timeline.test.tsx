@@ -45,10 +45,10 @@ describe("App timeline reconstruction flows", () => {
     expect(slider.disabled).toBe(true);
     expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
     expect(
-      screen.queryByRole("button", {
+      screen.getByRole("button", {
         name: "Return to current tick",
       }),
-    ).toBeNull();
+    ).toHaveProperty("disabled", true);
     expect(screen.queryByText("Current")).toBeNull();
   });
 
@@ -94,8 +94,8 @@ describe("App timeline reconstruction flows", () => {
     });
     expect(screen.queryByText("Current")).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Return to current tick" }),
-    ).toBeNull();
+      screen.getByRole("button", { name: "Return to current tick" }),
+    ).toHaveProperty("disabled", false);
 
     fireEvent.change(slider, { target: { value: "4" } });
 
