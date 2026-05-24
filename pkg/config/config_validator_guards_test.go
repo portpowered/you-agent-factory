@@ -261,6 +261,22 @@ func TestRuleClassifierWorkstations_RejectsNonClassifierWithoutOutputs(t *testin
 	assertFindingExists(t, findings, "workstation-outputs")
 }
 
+func TestRuleClassifierWorkstations_AllowsNonClassifierWithoutOnFailureWhenOutputsPresent(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "process-task",
+		Type:           interfaces.WorkstationTypeModel,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
 func TestRuleClassifierWorkstations_RejectsNonClassifierClassificationRoutes(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
@@ -335,6 +351,25 @@ func TestRuleClassifierWorkstations_AllowsValidClassifierTopology(t *testing.T) 
 	findings := ruleClassifierWorkstations(cfg)
 	if len(findings) != 0 {
 		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestRuleClassifierWorkstations_AllowsClassifierWithoutOnFailureWhenRoutesPresent(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "classify-story",
+		Type:           interfaces.WorkstationTypeClassify,
+		WorkerTypeName: "w1",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+			{Label: "needs_review", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+		},
+	}}
+
+	findings := ruleClassifierWorkstations(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
 	}
 }
 

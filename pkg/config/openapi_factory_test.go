@@ -133,6 +133,31 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsNonClassifierWithoutOutputsDuringVa
 	}
 }
 
+func TestFactoryConfigFromOpenAPIJSON_AllowsMissingOnFailureWhenSuccessRoutingIsExplicit(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"implicit-failure-factory",
+		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers": [{"name":"executor","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"name":"process-task",
+			"type":"MODEL_WORKSTATION",
+			"worker":"executor",
+			"inputs":[{"workType":"task","state":"init"}],
+			"outputs":[{"workType":"task","state":"done"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	result := NewConfigValidator().Validate(cfg)
+	if result.HasErrors() {
+		t.Fatalf("expected validator to allow omitted onFailure when success routing is explicit, got %#v", result.Findings)
+	}
+}
+
 func TestFactoryConfigFromOpenAPIJSON_RejectsNonClassifierClassificationRoutesDuringValidation(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"invalid-routes-factory",
