@@ -8,6 +8,7 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { cn } from "../../../lib/cn";
+import { formatDateTime } from "../../../i18n/formatters";
 import { AuthoredBodyText, PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 
@@ -105,13 +106,11 @@ function TranscriptEntryCard({
       order: entry.order,
       turnIndex: entry.turnIndex,
     }),
-    entry.timestamp
-      ? messages.transcriptTimestampLabel({ timestamp: entry.timestamp })
-      : null,
     entry.lineNumber
       ? messages.transcriptLineNumberLabel({ lineNumber: entry.lineNumber })
       : null,
   ].filter(Boolean);
+  const formattedTimestamp = formatTranscriptTimestamp(entry.timestamp, locale);
 
   return (
     <article
@@ -145,15 +144,77 @@ function TranscriptEntryCard({
               </span>
             ) : null}
           </div>
-          {metadata.length > 0 ? (
-            <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-              {metadata.join(messages.transcriptMetadataSeparator)}
-            </p>
+          {metadata.length > 0 || formattedTimestamp ? (
+            <div className="grid gap-1">
+              <div
+                className={cn(
+                  "flex flex-wrap items-center gap-x-2 gap-y-1 text-af-ink/62",
+                  DASHBOARD_SUPPORTING_TEXT_CLASS,
+                )}
+              >
+                {metadata.map((item) => (
+                  <span key={item}>{item}</span>
+                ))}
+                {formattedTimestamp ? (
+                  <span title={entry.timestamp}>{formattedTimestamp}</span>
+                ) : null}
+              </div>
+              {entry.timestamp ? (
+                <TimestampDetails
+                  locale={locale}
+                  timestamp={entry.timestamp}
+                  title={formattedTimestamp}
+                />
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>
       <TranscriptEntryBody entry={entry} locale={locale} />
     </article>
+  );
+}
+
+function formatTranscriptTimestamp(timestamp: string | undefined, locale?: string) {
+  if (!timestamp) {
+    return null;
+  }
+
+  return formatDateTime(timestamp, locale, {
+  });
+}
+
+function TimestampDetails({
+  locale,
+  timestamp,
+  title,
+}: {
+  locale?: string;
+  timestamp: string;
+  title: string | null;
+}) {
+  const messages = getProviderSessionDetailMessages(locale);
+
+  return (
+    <details className="grid gap-1">
+      <summary
+        className={cn(
+          "w-fit cursor-pointer text-af-ink/62 underline decoration-dotted underline-offset-2",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
+        <span title={timestamp}>{messages.rawTimestampDetailsLabel}</span>
+      </summary>
+      <code
+        className={cn(
+          "w-fit rounded-md border border-af-overlay/10 bg-af-overlay/4 px-2 py-1",
+          DASHBOARD_BODY_CODE_CLASS,
+        )}
+        title={title ?? timestamp}
+      >
+        {timestamp}
+      </code>
+    </details>
   );
 }
 

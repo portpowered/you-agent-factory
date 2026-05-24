@@ -7,6 +7,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
+import { formatDateTime } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
@@ -178,7 +179,13 @@ function SourceFileSection({
         />
         <DetailMetric
           label={messages.modifiedAtLabel}
-          value={detail.source.modifiedAt ?? messages.unavailableValue}
+          value={
+            <TimestampMetricValue
+              locale={locale}
+              timestamp={detail.source.modifiedAt}
+              unavailableLabel={messages.unavailableValue}
+            />
+          }
         />
       </div>
     </section>
@@ -325,7 +332,11 @@ function TurnsSection({
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
                 >
-                  {turn.startedAt ?? messages.noTimestamp}
+                  <TimestampMetricValue
+                    locale={locale}
+                    timestamp={turn.startedAt}
+                    unavailableLabel={messages.noTimestamp}
+                  />
                 </p>
               </div>
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
@@ -533,7 +544,7 @@ function DetailMetric({
 }: {
   code?: boolean;
   label: string;
-  value: number | string;
+  value: number | string | ReactNode;
 }) {
   return (
     <div className={PROVIDER_SESSION_CARD_CLASS}>
@@ -542,5 +553,48 @@ function DetailMetric({
         {code ? <code className={DASHBOARD_BODY_CODE_CLASS}>{value}</code> : value}
       </p>
     </div>
+  );
+}
+
+function TimestampMetricValue({
+  locale,
+  timestamp,
+  unavailableLabel,
+}: {
+  locale?: string;
+  timestamp?: string | null;
+  unavailableLabel: string;
+}) {
+  const messages = getProviderSessionDetailMessages(locale);
+
+  if (!timestamp) {
+    return unavailableLabel;
+  }
+
+  const formattedTimestamp = formatDateTime(timestamp, locale, {
+  });
+
+  return (
+    <span className="grid gap-1">
+      <span title={timestamp}>{formattedTimestamp}</span>
+      <details className="grid gap-1">
+        <summary
+          className={cn(
+            "w-fit cursor-pointer text-af-ink/62 underline decoration-dotted underline-offset-2",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+        >
+          {messages.rawTimestampDetailsLabel}
+        </summary>
+        <code
+          className={cn(
+            "w-fit rounded-md border border-af-overlay/10 bg-af-overlay/4 px-2 py-1",
+            DASHBOARD_BODY_CODE_CLASS,
+          )}
+        >
+          {timestamp}
+        </code>
+      </details>
+    </span>
   );
 }

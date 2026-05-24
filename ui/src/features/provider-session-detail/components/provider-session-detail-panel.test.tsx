@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
+import { formatDateTime } from "../../../i18n/formatters";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 
 const SELECTED_SESSION = {
@@ -385,6 +386,8 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
     });
 
+    const transcriptTimestamp = formatDateTime("2026-05-18T14:10:04Z");
+
     expect(screen.getByText("Summarize the rollout state for this work item.")).toBeTruthy();
     expect(screen.getByText("The failing edge is in provider-session parsing.")).toBeTruthy();
     expect(screen.getAllByText("Encrypted reasoning").length).toBeGreaterThan(0);
@@ -397,9 +400,18 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("read_file")).toBeTruthy();
     expect(screen.getByText("call_tool_1")).toBeTruthy();
     expect(screen.getByText("Retry attempt scheduled.")).toBeTruthy();
+    expect(screen.getByText("Order 4 / Turn 1")).toBeTruthy();
+    expect(screen.getByText("Session line 4")).toBeTruthy();
     expect(
-      screen.getByText("Order 4 / Turn 1 / 2026-05-18T14:10:04Z / Session line 4"),
-    ).toBeTruthy();
+      screen
+        .getAllByTitle("2026-05-18T14:10:04Z")
+        .some((element) => element.textContent === transcriptTimestamp),
+    ).toBe(
+      true,
+    );
+    expect(
+      screen.getAllByText("Raw ISO timestamp").length,
+    ).toBeGreaterThan(0);
 
     const expandArguments = screen.getByRole("button", {
       name: "Expand Arguments",
@@ -416,6 +428,88 @@ describe("ProviderSessionDetailPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Output" }));
     expect(screen.getByText(longOutput)).toBeTruthy();
+  });
+
+  it("formats source, transcript, and turn timestamps in the local timezone while preserving raw ISO access", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 2,
+            functionCalls: [],
+            lineCount: 2,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [],
+            turns: [
+              {
+                eventCount: 2,
+                functionCallCount: 0,
+                index: 1,
+                reasoningCount: 0,
+                responseItemCount: 2,
+                startedAt: "2026-05-18T14:10:00Z",
+              },
+            ],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+          source: {
+            modifiedAt: "2026-05-18T14:09:59Z",
+            relativePath: "2026/05/18/rollout-sess_active.jsonl",
+            sizeBytes: 2048,
+          },
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              text: "Summarize the rollout state for this work item.",
+              timestamp: "2026-05-18T14:10:01Z",
+              turnIndex: 1,
+              type: "user_message",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
+    });
+
+    const modifiedAt = formatDateTime("2026-05-18T14:09:59Z");
+    const turnStartedAt = formatDateTime("2026-05-18T14:10:00Z");
+    const transcriptTimestamp = formatDateTime("2026-05-18T14:10:01Z");
+
+    expect(
+      screen
+        .getAllByTitle("2026-05-18T14:09:59Z")
+        .some((element) => element.textContent === modifiedAt),
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByTitle("2026-05-18T14:10:00Z")
+        .some((element) => element.textContent === turnStartedAt),
+    ).toBe(
+      true,
+    );
+    expect(
+      screen
+        .getAllByTitle("2026-05-18T14:10:01Z")
+        .some((element) => element.textContent === transcriptTimestamp),
+    ).toBe(
+      true,
+    );
+
+    fireEvent.click(screen.getAllByText("Raw ISO timestamp")[0]);
+
+    expect(screen.getByText("2026-05-18T14:09:59Z")).toBeTruthy();
+    expect(screen.getByText("2026-05-18T14:10:00Z")).toBeTruthy();
+    expect(screen.getByText("2026-05-18T14:10:01Z")).toBeTruthy();
   });
 
   it("renders the transcript before summary sections in the success state", async () => {

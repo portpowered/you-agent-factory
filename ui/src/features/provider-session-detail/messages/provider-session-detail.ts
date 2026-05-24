@@ -38,6 +38,7 @@ const providerSessionDetailMessagesByLocale = {
       "The selected provider-session file could not be found under the configured Codex sessions directory.",
     modifiedAtLabel: "Modified at",
     providerLabel: "Provider",
+    rawTimestampDetailsLabel: "Raw ISO timestamp",
     noTimestamp: "No timestamp",
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `Order ${order} / Turn ${turnIndex}` : `Order ${order}`,
@@ -117,6 +118,7 @@ const providerSessionDetailMessagesByLocale = {
       "選択した provider-session ファイルは、設定済み Codex sessions ディレクトリ配下に見つかりませんでした。",
     modifiedAtLabel: "更新日時",
     providerLabel: "Provider",
+    rawTimestampDetailsLabel: "ISO タイムスタンプ",
     noTimestamp: "タイムスタンプなし",
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `順序 ${order} / ターン ${turnIndex}` : `順序 ${order}`,
@@ -198,6 +200,7 @@ const providerSessionDetailMessagesByLocale = {
       "선택한 provider-session 파일을 구성된 Codex sessions 디렉터리 아래에서 찾을 수 없습니다.",
     modifiedAtLabel: "수정 시각",
     providerLabel: "Provider",
+    rawTimestampDetailsLabel: "원시 ISO 타임스탬프",
     noTimestamp: "타임스탬프 없음",
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `순서 ${order} / 턴 ${turnIndex}` : `순서 ${order}`,
@@ -275,6 +278,7 @@ const providerSessionDetailMessagesByLocale = {
       "无法在已配置的 Codex sessions 目录下找到所选 provider-session 文件。",
     modifiedAtLabel: "修改时间",
     providerLabel: "Provider",
+    rawTimestampDetailsLabel: "原始 ISO 时间戳",
     noTimestamp: "无时间戳",
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `顺序 ${order} / 轮次 ${turnIndex}` : `顺序 ${order}`,

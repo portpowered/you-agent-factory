@@ -27,6 +27,7 @@ export interface ProviderSessionDetailMessages {
   missingState: string;
   modifiedAtLabel: string;
   providerLabel: string;
+  rawTimestampDetailsLabel: string;
   noTimestamp: string;
   orderLabel: (params: { order: number; turnIndex?: number | null }) => string;
   outputLabel: string;

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { expect, within } from "storybook/test";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { formatDateTime } from "../../../i18n/formatters";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 
 const providerSessionVerificationSessionID =
@@ -236,6 +237,7 @@ export const MixedTranscript = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole("heading", { name: "Transcript" });
+    const expectedTranscriptTimestamp = formatDateTime("2026-05-20T17:35:27Z");
     const headingNames = (await canvas.findAllByRole("heading")).map(
       (heading) => heading.textContent ?? "",
     );
@@ -261,6 +263,11 @@ export const MixedTranscript = {
         "Reasoning occurred for this step, but plaintext content is intentionally unavailable.",
       ),
     ).toBeTruthy();
+    expect(
+      canvas
+        .getAllByTitle("2026-05-20T17:35:27Z")
+        .some((element) => element.textContent === expectedTranscriptTimestamp),
+    ).toBe(true);
   },
   render: TimestampPrefixedSessionSuccess.render,
 };
