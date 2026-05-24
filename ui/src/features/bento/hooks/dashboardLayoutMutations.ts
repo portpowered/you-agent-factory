@@ -31,7 +31,9 @@ export function addDashboardWidgetToLayout(
   }
 
   const retainedItems = layout.filter(
-    (item) => item.id !== DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+    (item) =>
+      item.id !== DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID &&
+      !(item.hidden && item.widgetType === widgetType),
   );
   const nextWidgetLayout = {
     ...widgetDefaultLayout,
@@ -68,6 +70,18 @@ export function removeDashboardWidgetFromLayout(
     return layout;
   }
 
+  const removedItem = layout.find((item) => item.id === widgetInstanceID);
+  if (!removedItem) {
+    return layout;
+  }
+
+  const primaryInstanceID = getPrimaryInstanceIDForWidgetType(removedItem.widgetType);
+  if (widgetInstanceID === primaryInstanceID) {
+    return layout.map((item) =>
+      item.id === widgetInstanceID ? { ...item, hidden: true } : item,
+    );
+  }
+
   return layout.filter((item) => item.id !== widgetInstanceID);
 }
 
@@ -76,7 +90,7 @@ function getNextDashboardWidgetInstanceID(
   widgetType: string,
 ): string {
   const primaryInstanceID = getPrimaryInstanceIDForWidgetType(widgetType);
-  if (!layout.some((item) => item.id === primaryInstanceID)) {
+  if (!layout.some((item) => item.id === primaryInstanceID && !item.hidden)) {
     return primaryInstanceID;
   }
 

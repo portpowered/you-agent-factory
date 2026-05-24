@@ -104,6 +104,10 @@ export function buildDashboardCards({
   const pickerAvailability = getDashboardWidgetPickerAvailability(dashboardLayout);
 
   return dashboardLayout.flatMap((layoutItem) => {
+    if (layoutItem.hidden) {
+      return [];
+    }
+
     if (layoutItem.widgetType === DASHBOARD_WIDGET_IDS.addWidget) {
       return [
         {

@@ -177,7 +177,9 @@ export function getRenderableDashboardLayout(
   renderableWidgetTypes: readonly string[],
 ): AgentBentoLayoutItem[] {
   const renderableWidgetTypeSet = new Set(renderableWidgetTypes);
-  return layout.filter((item) => renderableWidgetTypeSet.has(item.widgetType));
+  return layout.filter(
+    (item) => !item.hidden && renderableWidgetTypeSet.has(item.widgetType),
+  );
 }
 
 export function getDefaultInlineAddWidgetLayout(): AgentBentoLayoutItem {

@@ -82,6 +82,7 @@ function normalizeDashboardLayoutItem(value: unknown): AgentBentoLayoutItem | nu
   return {
     ...defaultItem,
     h: isFiniteNumber(candidate.h) ? candidate.h : defaultItem.h,
+    hidden: candidate.hidden === true ? true : undefined,
     id,
     maxH: isFiniteNumber(candidate.maxH) ? candidate.maxH : defaultItem.maxH,
     maxW: isFiniteNumber(candidate.maxW) ? candidate.maxW : defaultItem.maxW,
@@ -160,6 +161,7 @@ function mergeDashboardLayoutItem(
   return {
     ...baseItem,
     h: isFiniteNumber(item.h) ? item.h : baseItem.h,
+    hidden: item.hidden === true ? true : undefined,
     maxH: isFiniteNumber(item.maxH) ? item.maxH : baseItem.maxH,
     maxW: isFiniteNumber(item.maxW) ? item.maxW : baseItem.maxW,
     minH: isFiniteNumber(item.minH) ? item.minH : baseItem.minH,
@@ -288,27 +290,5 @@ function migrateTraceLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutIte
 }
 
 function migrateWorkOutcomeLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {
-  const retainedItems: AgentBentoLayoutItem[] = [];
-  let migratedWorkOutcomeItem: AgentBentoLayoutItem | null = null;
-
-  for (const item of layout) {
-    if (item.widgetType !== DASHBOARD_WIDGET_IDS.workOutcomeChart) {
-      retainedItems.push(item);
-      continue;
-    }
-
-    if (migratedWorkOutcomeItem === null) {
-      migratedWorkOutcomeItem = {
-        ...item,
-        id: getPrimaryInstanceIDForWidgetType(DASHBOARD_WIDGET_IDS.workOutcomeChart),
-        widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
-      };
-    }
-  }
-
-  if (migratedWorkOutcomeItem) {
-    retainedItems.push(migratedWorkOutcomeItem);
-  }
-
-  return retainedItems;
+  return layout;
 }

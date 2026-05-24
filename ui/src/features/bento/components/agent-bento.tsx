@@ -15,6 +15,7 @@ import { getAgentBentoMessages } from "../messages/agent-bento";
 
 export interface AgentBentoLayoutItem {
   h: number;
+  hidden?: boolean;
   id: string;
   maxH?: number;
   maxW?: number;

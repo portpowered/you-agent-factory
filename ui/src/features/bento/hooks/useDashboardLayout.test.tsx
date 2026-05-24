@@ -245,4 +245,78 @@ describe("useDashboardLayout inline add-widget persistence", () => {
       ),
     ).toBeDefined();
   });
+
+});
+
+describe("useDashboardLayout reload persistence", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("restores added, removed, moved, and resized widget instances from local storage on reload", () => {
+    const { result } = renderHook(() => useDashboardLayout());
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workOutcomeChart);
+    });
+
+    act(() => {
+      result.current.persistDashboardLayout(
+        result.current.dashboardLayout.map((item) => {
+          if (item.id === "work-outcome-chart::instance-1") {
+            return { ...item, h: 8, w: 6, x: 2, y: 28 };
+          }
+
+          if (item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID) {
+            return { ...item, h: 3, w: 3, x: 9, y: 28 };
+          }
+
+          return item;
+        }),
+      );
+      result.current.removeDashboardWidget(
+        DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
+      );
+      reloadDashboardLayoutFromStorage();
+    });
+
+    const reloadedLayout = result.current.dashboardLayout;
+
+    expect(
+      reloadedLayout.find(
+        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
+      ),
+    ).toMatchObject({
+      hidden: true,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
+      widgetType: DASHBOARD_WIDGET_IDS.currentSelection,
+    });
+    expect(
+      reloadedLayout.filter(
+        (item) =>
+          item.widgetType === DASHBOARD_WIDGET_IDS.currentSelection && !item.hidden,
+      ),
+    ).toHaveLength(0);
+    expect(
+      reloadedLayout.find((item) => item.id === "work-outcome-chart::instance-1"),
+    ).toMatchObject({
+      h: 8,
+      id: "work-outcome-chart::instance-1",
+      w: 6,
+      widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      x: 2,
+      y: 28,
+    });
+    expect(
+      reloadedLayout.filter((item) => item.widgetType === DASHBOARD_WIDGET_IDS.addWidget),
+    ).toHaveLength(1);
+    expect(
+      reloadedLayout.find((item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID),
+    ).toMatchObject({
+      h: 3,
+      id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+      w: 3,
+      widgetType: DASHBOARD_WIDGET_IDS.addWidget,
+      x: 9,
+      y: 28,
+    });
+  });
 });

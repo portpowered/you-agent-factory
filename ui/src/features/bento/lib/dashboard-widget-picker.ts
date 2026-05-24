@@ -29,7 +29,7 @@ export interface DashboardWidgetPickerAvailability {
 }
 
 export function isDuplicateCapableDashboardWidgetType(
-  widgetType: DashboardWidgetPickerWidgetType,
+  widgetType: string,
 ): boolean {
   return (DUPLICATE_CAPABLE_DASHBOARD_WIDGET_TYPES as readonly string[]).includes(
     widgetType,
@@ -44,7 +44,7 @@ export function canAddDashboardWidgetType(
     return true;
   }
 
-  return !layout.some((item) => item.widgetType === widgetType);
+  return !layout.some((item) => item.widgetType === widgetType && !item.hidden);
 }
 
 export function getDashboardWidgetPickerAvailability(
