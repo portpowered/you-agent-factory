@@ -186,29 +186,8 @@ func (m *managedLocalModelManager) entry(key string) *managedLocalModelEntry {
 }
 
 func localModelRuntimeResource(factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.WorkerConfig) (interfaces.ResourceConfig, string, bool) {
-	if factoryCfg == nil || workerDef == nil || workerDef.ModelLocality != interfaces.ModelLocalityLocal {
-		return interfaces.ResourceConfig{}, "", false
-	}
-	if len(workerDef.Resources) == 0 {
-		return interfaces.ResourceConfig{}, "", false
-	}
-	resourcesByName := make(map[string]interfaces.ResourceConfig, len(factoryCfg.Resources))
-	for _, resource := range factoryCfg.Resources {
-		resourcesByName[resource.Name] = resource
-	}
-	for _, requirement := range workerDef.Resources {
-		resource, ok := resourcesByName[requirement.Name]
-		if !ok || !isProcessScopedLocalModelResource(resource) {
-			continue
-		}
-		if canonicalModelName(resource.Model) != canonicalModelName(workerDef.Model) {
-			continue
-		}
-		key := localModelResourceKey(resource)
-		if key == "" {
-			continue
-		}
-		return resource, key, true
+	for _, match := range eligibleLocalModelResourceMatches(factoryCfg, workerDef) {
+		return match.resource, match.key, true
 	}
 	return interfaces.ResourceConfig{}, "", false
 }

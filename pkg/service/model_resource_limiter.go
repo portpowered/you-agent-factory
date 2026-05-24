@@ -67,37 +67,23 @@ func (l *localModelResourceLimiter) wrapRunner(
 }
 
 func localModelResourceReservations(factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.WorkerConfig) []localModelResourceReservation {
-	if factoryCfg == nil || workerDef == nil || workerDef.ModelLocality != interfaces.ModelLocalityLocal {
-		return nil
-	}
-
-	resourcesByName := make(map[string]interfaces.ResourceConfig, len(factoryCfg.Resources))
-	for _, resource := range factoryCfg.Resources {
-		resourcesByName[resource.Name] = resource
-	}
-
 	combined := make(map[string]localModelResourceReservation)
 	order := make([]string, 0, len(workerDef.Resources))
-	for _, requirement := range workerDef.Resources {
-		resource, ok := resourcesByName[requirement.Name]
-		if !ok || !isProcessScopedLocalModelResource(resource) || requirement.Capacity <= 0 {
+	for _, match := range eligibleLocalModelResourceMatches(factoryCfg, workerDef) {
+		if match.requirement.Capacity <= 0 {
 			continue
 		}
-		key := localModelResourceKey(resource)
-		if key == "" {
+		if existing, ok := combined[match.key]; ok {
+			existing.count += match.requirement.Capacity
+			combined[match.key] = existing
 			continue
 		}
-		if existing, ok := combined[key]; ok {
-			existing.count += requirement.Capacity
-			combined[key] = existing
-			continue
+		combined[match.key] = localModelResourceReservation{
+			key:      match.key,
+			count:    match.requirement.Capacity,
+			capacity: match.resource.Capacity,
 		}
-		combined[key] = localModelResourceReservation{
-			key:      key,
-			count:    requirement.Capacity,
-			capacity: resource.Capacity,
-		}
-		order = append(order, key)
+		order = append(order, match.key)
 	}
 
 	if len(order) == 0 {

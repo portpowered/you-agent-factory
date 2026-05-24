@@ -61,6 +61,7 @@ func TestLocalModelResourceLimiter_BoundsSharedLocalModelConcurrencyAcrossSessio
 	}
 	workerDef := &interfaces.WorkerConfig{
 		Name:          "tts-worker",
+		Model:         "OMNIVOICE_Q4_K_M",
 		ModelLocality: interfaces.ModelLocalityLocal,
 		Resources:     []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}},
 	}
@@ -109,5 +110,49 @@ func TestLocalModelResourceLimiter_BoundsSharedLocalModelConcurrencyAcrossSessio
 
 	if got := inner.MaxObserved(); got != 1 {
 		t.Fatalf("max observed local-model concurrency = %d, want 1", got)
+	}
+}
+
+func TestLocalModelResourceReservations_CombineEligibleMatchingResourcesByCanonicalKey(t *testing.T) {
+	factoryCfg := &interfaces.FactoryConfig{
+		Resources: []interfaces.ResourceConfig{
+			{
+				Name:       "omnivoice-cache",
+				Type:       interfaces.ResourceTypeModel,
+				Capacity:   2,
+				Model:      "omnivoice_q4_k_m",
+				Backend:    "llamacpp",
+				LoadPolicy: "on_demand",
+			},
+			{
+				Name:       "omnivoice-cache-duplicate",
+				Type:       interfaces.ResourceTypeModel,
+				Capacity:   9,
+				Model:      "OMNIVOICE_Q4_K_M",
+				Backend:    "LLAMACPP",
+				LoadPolicy: "ON_DEMAND",
+			},
+		},
+	}
+	workerDef := &interfaces.WorkerConfig{
+		ModelLocality: interfaces.ModelLocalityLocal,
+		Model:         "OMNIVOICE_Q4_K_M",
+		Resources: []interfaces.ResourceConfig{
+			{Name: "omnivoice-cache", Capacity: 1},
+			{Name: "omnivoice-cache-duplicate", Capacity: 2},
+		},
+	}
+
+	got := localModelResourceReservations(factoryCfg, workerDef)
+	want := []localModelResourceReservation{{
+		key:      "OMNIVOICE_Q4_K_M|LLAMACPP|ON_DEMAND",
+		count:    3,
+		capacity: 2,
+	}}
+	if len(got) != len(want) {
+		t.Fatalf("reservation count = %d, want %d (%#v)", len(got), len(want), got)
+	}
+	if got[0] != want[0] {
+		t.Fatalf("reservations = %#v, want %#v", got, want)
 	}
 }
