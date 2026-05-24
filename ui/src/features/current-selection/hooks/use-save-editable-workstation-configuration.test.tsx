@@ -2,22 +2,23 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import { createFactory } from "../../../api/named-factory";
+import * as currentFactoryFeature from "../../current-factory-definition/public";
+import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkstationConfigurationState } from "../components/detail-card-types";
 import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 
-vi.mock("../../../api/named-factory", async () => {
-  const actual = await vi.importActual("../../../api/named-factory");
-
-  return {
-    ...actual,
-    createFactory: vi.fn(),
-  };
-});
-
 describe("useSaveEditableWorkstationConfiguration", () => {
+  beforeEach(() => {
+    useDashboardSessionStore.setState({ selectedSessionID: "~default" });
+    vi.restoreAllMocks();
+  });
+
   it("uses localized fallback copy for unknown save errors", async () => {
-    vi.mocked(createFactory).mockRejectedValue("network unavailable");
+    const mutateAsync = vi.fn().mockRejectedValue("network unavailable");
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    } as never);
 
     const { result } = renderHook(
       () =>
@@ -43,6 +44,17 @@ describe("useSaveEditableWorkstationConfiguration", () => {
         status: "error",
       });
     });
+    expect(mutateAsync).toHaveBeenCalledWith({
+      baseVersion: {
+        logical: 7,
+        physical: "2026-05-23T15:52:00Z",
+      },
+      factoryDefinition: {
+        name: "Current Factory",
+        workers: [],
+        workstations: [],
+      },
+    });
   });
 
   it("allows empty-body pollers to stay saveable", () => {
@@ -61,6 +73,72 @@ describe("useSaveEditableWorkstationConfiguration", () => {
     expect(result.current.canSave).toBe(true);
     expect(result.current.saveState).toEqual({ status: "idle" });
   });
+
+  it("saves workstation edits through the selected session current-factory route", async () => {
+    useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Current Factory",
+          version: {
+            logical: 7,
+            physical: "2026-05-23T15:52:00Z",
+          },
+          workers: [],
+          workstations: [],
+        }),
+        {
+          headers: {
+            "content-type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    const markChangesSaved = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            markChangesSaved,
+            prompt: "Save into the selected session.",
+          }),
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    act(() => {
+      result.current.beginSaveConfirmation();
+    });
+
+    await act(async () => {
+      await result.current.confirmSave();
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/factory-sessions/session-beta/factory",
+        expect.objectContaining({
+          body: JSON.stringify({
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            version: {
+              logical: 7,
+              physical: "2026-05-23T15:52:00Z",
+            },
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "PUT",
+        }),
+      );
+    });
+    expect(markChangesSaved).toHaveBeenCalledTimes(1);
+  });
 });
 
 function createQueryClientWrapper() {
@@ -77,6 +155,7 @@ function createQueryClientWrapper() {
 
 function buildReadyEditableConfigurationState(overrides?: {
   behavior?: "STANDARD" | "REPEATER" | "POLLER";
+  markChangesSaved?: () => void;
   prompt?: string;
 }): EditableWorkstationConfigurationState {
   return {
@@ -103,7 +182,11 @@ function buildReadyEditableConfigurationState(overrides?: {
       workstationName: "Review",
     },
     isDirty: true,
-    markChangesSaved: vi.fn(),
+    markChangesSaved: overrides?.markChangesSaved ?? vi.fn(),
+    baseVersion: {
+      logical: 7,
+      physical: "2026-05-23T15:52:00Z",
+    },
     onBehaviorChange: vi.fn(),
     onPromptChange: vi.fn(),
     onRunnerChange: vi.fn(),

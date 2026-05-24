@@ -247,6 +247,7 @@ export async function expectTimelineToolbarAlignment(
   const sliderInputRect = slider.getBoundingClientRect();
   const progressTextRect = progressText.getBoundingClientRect();
   const languageButtonRect = languageButton.getBoundingClientRect();
+  const streamStatusRect = streamStatus.getBoundingClientRect();
   const exportButtonRect = exportButton.getBoundingClientRect();
   const headerControls = Array.from(
     toolbar.querySelectorAll(
@@ -275,6 +276,9 @@ export async function expectTimelineToolbarAlignment(
   expect(languageButtonRect.left).toBeGreaterThanOrEqual(
     exportButtonRect.right - 1,
   );
+  expect(streamStatus.className).toContain("sr-only");
+  expect(streamStatusRect.width).toBeLessThanOrEqual(1);
+  expect(streamStatusRect.height).toBeLessThanOrEqual(1);
 }
 
 export async function selectWorkstationRequest(

@@ -37,9 +37,11 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
       buildCurrentWorkstationPromptTemplateValidationQueryKey(
         "Review",
         "Use {{ .Prompt }}",
+        null,
       ),
     ).toEqual([
       "current-workstation-prompt-template-validation",
+      "~default",
       "Review",
       "Use {{ .Prompt }}",
     ]);
@@ -107,6 +109,7 @@ describe("useCurrentWorkstationPromptTemplateValidation", () => {
     expect(validateCurrentFactoryWorkstationPromptTemplate).toHaveBeenCalledWith(
       "Review",
       "Use {{ .Prompt }}",
+      { sessionID: "~default" },
     );
   });
 

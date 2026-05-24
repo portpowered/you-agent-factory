@@ -142,9 +142,9 @@ describe("App follow-up submit and dashboard shell flows", () => {
 
     expect(await submitWorkScope.findByText("work_type_name is required")).toBeTruthy();
     expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
-      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
-      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
-      `/factories/${DEFAULT_FACTORY_SESSION_ID}/work`,
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
     ]);
     expect(workType.value).toBe("story");
     expect(requestName.value).toBe("Retry dashboard request");

@@ -166,7 +166,7 @@ const (
 
 // Defines values for LoadableProviderSessionKind.
 const (
-	SessionID LoadableProviderSessionKind = "session_id"
+	LoadableProviderSessionKindSessionID LoadableProviderSessionKind = "session_id"
 )
 
 // Defines values for LoadableProviderSessionProvider.
@@ -353,9 +353,9 @@ const (
 	SortByStateType SortBy = "state.type"
 )
 
-// Defines values for ListWorkByFactoryIdParamsSortBy.
+// Defines values for ListWorkBySessionIdParamsSortBy.
 const (
-	ListWorkByFactoryIdParamsSortByStateType ListWorkByFactoryIdParamsSortBy = "state.type"
+	ListWorkBySessionIdParamsSortByStateType ListWorkBySessionIdParamsSortBy = "state.type"
 )
 
 // Defines values for ListWorkParamsSortBy.
@@ -661,13 +661,6 @@ type DispatchResponseEventPayload struct {
 	TransitionId                string                   `json:"transitionId"`
 }
 
-// EditableFactoryDefinition defines model for EditableFactoryDefinition.
-type EditableFactoryDefinition struct {
-	// FactoryDefinition Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	FactoryDefinition Factory                `json:"factoryDefinition"`
-	Version           HybridLogicalTimestamp `json:"version"`
-}
-
 // ErrorFamily Stable machine-readable error family for broader client grouping.
 type ErrorFamily string
 
@@ -714,7 +707,7 @@ type Factory struct {
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
 	Metadata   *StringMap   `json:"metadata,omitempty"`
 
-	// Name Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+	// Name Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 	Name FactoryName `json:"name"`
 
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
@@ -727,7 +720,8 @@ type Factory struct {
 	SourceDirectory *string `json:"sourceDirectory,omitempty"`
 
 	// SupportingFiles Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
-	SupportingFiles *ResourceManifest `json:"supportingFiles,omitempty"`
+	SupportingFiles *ResourceManifest       `json:"supportingFiles,omitempty"`
+	Version         *HybridLogicalTimestamp `json:"version,omitempty"`
 
 	// WorkTypes Customer-authored work item categories and the lifecycle states each one can occupy.
 	WorkTypes *[]WorkType `json:"workTypes,omitempty"`
@@ -821,7 +815,7 @@ type FactoryGuard struct {
 	Type GuardType `json:"type"`
 }
 
-// FactoryName Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+// FactoryName Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string
 
 // FactorySessionSummary defines model for FactorySessionSummary.
@@ -1824,14 +1818,6 @@ type SafeWorkDiagnostics struct {
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
 
-// SaveEditableFactoryDefinitionRequest defines model for SaveEditableFactoryDefinitionRequest.
-type SaveEditableFactoryDefinitionRequest struct {
-	BaseVersion *HybridLogicalTimestamp `json:"baseVersion,omitempty"`
-
-	// FactoryDefinition Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	FactoryDefinition Factory `json:"factoryDefinition"`
-}
-
 // ScriptExecutionOutcome Result category returned by one public script execution boundary.
 type ScriptExecutionOutcome string
 
@@ -2484,14 +2470,14 @@ type WorkstationOperationBindingSelector struct {
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.
 type WorkstationType string
 
-// FactoryID defines model for FactoryID.
-type FactoryID = string
-
 // MaxResults defines model for MaxResults.
 type MaxResults = int
 
 // NextToken defines model for NextToken.
 type NextToken = string
+
+// SessionID defines model for SessionID.
+type SessionID = string
 
 // SortBy defines model for SortBy.
 type SortBy string
@@ -2523,14 +2509,14 @@ type InternalError = ErrorResponse
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
 
-// SaveEditableFactoryDefinitionBadRequest defines model for SaveEditableFactoryDefinitionBadRequest.
-type SaveEditableFactoryDefinitionBadRequest = ErrorResponse
+// SaveCurrentFactoryBadRequest defines model for SaveCurrentFactoryBadRequest.
+type SaveCurrentFactoryBadRequest = ErrorResponse
 
-// SaveEditableFactoryDefinitionConflict defines model for SaveEditableFactoryDefinitionConflict.
-type SaveEditableFactoryDefinitionConflict = ErrorResponse
+// SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
+type SaveCurrentFactoryConflict = ErrorResponse
 
-// ListWorkByFactoryIdParams defines parameters for ListWorkByFactoryId.
-type ListWorkByFactoryIdParams struct {
+// ListWorkBySessionIdParams defines parameters for ListWorkBySessionId.
+type ListWorkBySessionIdParams struct {
 	// MaxResults Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
 	MaxResults *MaxResults `form:"maxResults,omitempty" json:"maxResults,omitempty"`
 
@@ -2544,11 +2530,11 @@ type ListWorkByFactoryIdParams struct {
 	StateType *StateType `form:"state.type,omitempty" json:"state.type,omitempty"`
 
 	// SortBy Optional list-work sort field. Use state.type to order by current work state type.
-	SortBy *ListWorkByFactoryIdParamsSortBy `form:"sortBy,omitempty" json:"sortBy,omitempty"`
+	SortBy *ListWorkBySessionIdParamsSortBy `form:"sortBy,omitempty" json:"sortBy,omitempty"`
 }
 
-// ListWorkByFactoryIdParamsSortBy defines parameters for ListWorkByFactoryId.
-type ListWorkByFactoryIdParamsSortBy string
+// ListWorkBySessionIdParamsSortBy defines parameters for ListWorkBySessionId.
+type ListWorkBySessionIdParamsSortBy string
 
 // GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
 type GetProviderSessionDetailsParams struct {
@@ -2583,26 +2569,23 @@ type ListWorkParams struct {
 // ListWorkParamsSortBy defines parameters for ListWork.
 type ListWorkParamsSortBy string
 
-// SaveEditableCurrentFactoryDefinitionByFactoryIdJSONRequestBody defines body for SaveEditableCurrentFactoryDefinitionByFactoryId for application/json ContentType.
-type SaveEditableCurrentFactoryDefinitionByFactoryIdJSONRequestBody = SaveEditableFactoryDefinitionRequest
-
-// SubmitWorkByFactoryIdJSONRequestBody defines body for SubmitWorkByFactoryId for application/json ContentType.
-type SubmitWorkByFactoryIdJSONRequestBody = SubmitWorkRequest
-
-// UpsertWorkRequestByFactoryIdJSONRequestBody defines body for UpsertWorkRequestByFactoryId for application/json ContentType.
-type UpsertWorkRequestByFactoryIdJSONRequestBody = WorkRequest
-
 // CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
 type CreateFactoryJSONRequestBody = Factory
 
 // OpenFactorySessionJSONRequestBody defines body for OpenFactorySession for application/json ContentType.
 type OpenFactorySessionJSONRequestBody = OpenFactorySessionRequest
 
-// SaveEditableCurrentFactoryDefinitionJSONRequestBody defines body for SaveEditableCurrentFactoryDefinition for application/json ContentType.
-type SaveEditableCurrentFactoryDefinitionJSONRequestBody = SaveEditableFactoryDefinitionRequest
+// SaveCurrentFactoryBySessionIdJSONRequestBody defines body for SaveCurrentFactoryBySessionId for application/json ContentType.
+type SaveCurrentFactoryBySessionIdJSONRequestBody = Factory
 
-// ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplate for application/json ContentType.
-type ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody = PromptTemplateValidationRequest
+// ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplateBySessionId for application/json ContentType.
+type ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody = PromptTemplateValidationRequest
+
+// SubmitWorkBySessionIdJSONRequestBody defines body for SubmitWorkBySessionId for application/json ContentType.
+type SubmitWorkBySessionIdJSONRequestBody = SubmitWorkRequest
+
+// UpsertWorkRequestBySessionIdJSONRequestBody defines body for UpsertWorkRequestBySessionId for application/json ContentType.
+type UpsertWorkRequestBySessionIdJSONRequestBody = WorkRequest
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
@@ -3158,35 +3141,8 @@ type ServerInterface interface {
 	// Stream factory events
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
-	// Stream factory events for one session
-	// (GET /factories/{factory_id}/events)
-	GetEventsByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID)
-	// Get current factory for one session
-	// (GET /factories/{factory_id}/factory/~current)
-	GetCurrentFactoryByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID)
-	// Get editable current factory definition for one session
-	// (GET /factories/{factory_id}/factory/~current/editable-definition)
-	GetEditableCurrentFactoryDefinitionByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID)
-	// Save editable current factory definition for one session
-	// (PUT /factories/{factory_id}/factory/~current/editable-definition)
-	SaveEditableCurrentFactoryDefinitionByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID)
-	// Get runtime status for one session
-	// (GET /factories/{factory_id}/status)
-	GetStatusByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID)
-	// List work for one session
-	// (GET /factories/{factory_id}/work)
-	ListWorkByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID, params ListWorkByFactoryIdParams)
-	// Submit work for one session
-	// (POST /factories/{factory_id}/work)
-	SubmitWorkByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID)
-	// Upsert work request for one session
-	// (PUT /factories/{factory_id}/work-requests/{request_id})
-	UpsertWorkRequestByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID, requestId string)
-	// Get work token for one session
-	// (GET /factories/{factory_id}/work/{id})
-	GetWorkByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID, id WorkOrTokenID)
 	// Create factory
-	// (POST /factory)
+	// (POST /factories)
 	CreateFactory(w http.ResponseWriter, r *http.Request)
 	// List live factory sessions
 	// (GET /factory-sessions)
@@ -3197,21 +3153,36 @@ type ServerInterface interface {
 	// Close one live factory session
 	// (DELETE /factory-sessions/{session_id})
 	CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionId string)
-	// Get current factory
-	// (GET /factory/~current)
-	GetCurrentFactory(w http.ResponseWriter, r *http.Request)
-	// Get editable current factory definition
-	// (GET /factory/~current/editable-definition)
-	GetEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request)
-	// Save editable current factory definition
-	// (PUT /factory/~current/editable-definition)
-	SaveEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request)
+	// Stream factory events for one session
+	// (GET /factory-sessions/{session_id}/events)
+	GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Get current factory for one session
+	// (GET /factory-sessions/{session_id}/factory)
+	GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Save current factory for one session
+	// (PUT /factory-sessions/{session_id}/factory)
+	SaveCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get workstation prompt-template contract
-	// (GET /factory/~current/workstations/{workstation_name}/prompt-template-contract)
-	GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request, workstationName string)
+	// (GET /factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract)
+	GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workstationName string)
 	// Validate workstation prompt template
-	// (POST /factory/~current/workstations/{workstation_name}/prompt-template-validation)
-	ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request, workstationName string)
+	// (POST /factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation)
+	ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workstationName string)
+	// Get runtime status for one session
+	// (GET /factory-sessions/{session_id}/status)
+	GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// List work for one session
+	// (GET /factory-sessions/{session_id}/work)
+	ListWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params ListWorkBySessionIdParams)
+	// Submit work for one session
+	// (POST /factory-sessions/{session_id}/work)
+	SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Upsert work request for one session
+	// (PUT /factory-sessions/{session_id}/work-requests/{request_id})
+	UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, requestId string)
+	// Get work token for one session
+	// (GET /factory-sessions/{session_id}/work/{id})
+	GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, id WorkOrTokenID)
 	// List discovered models
 	// (GET /models)
 	ListModels(w http.ResponseWriter, r *http.Request)
@@ -3258,292 +3229,6 @@ func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetEvents(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetEventsByFactoryId operation middleware
-func (siw *ServerInterfaceWrapper) GetEventsByFactoryId(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "factory_id" -------------
-	var factoryId FactoryID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory_id", mux.Vars(r)["factory_id"], &factoryId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEventsByFactoryId(w, r, factoryId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetCurrentFactoryByFactoryId operation middleware
-func (siw *ServerInterfaceWrapper) GetCurrentFactoryByFactoryId(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "factory_id" -------------
-	var factoryId FactoryID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory_id", mux.Vars(r)["factory_id"], &factoryId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetCurrentFactoryByFactoryId(w, r, factoryId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetEditableCurrentFactoryDefinitionByFactoryId operation middleware
-func (siw *ServerInterfaceWrapper) GetEditableCurrentFactoryDefinitionByFactoryId(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "factory_id" -------------
-	var factoryId FactoryID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory_id", mux.Vars(r)["factory_id"], &factoryId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEditableCurrentFactoryDefinitionByFactoryId(w, r, factoryId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SaveEditableCurrentFactoryDefinitionByFactoryId operation middleware
-func (siw *ServerInterfaceWrapper) SaveEditableCurrentFactoryDefinitionByFactoryId(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "factory_id" -------------
-	var factoryId FactoryID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory_id", mux.Vars(r)["factory_id"], &factoryId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SaveEditableCurrentFactoryDefinitionByFactoryId(w, r, factoryId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetStatusByFactoryId operation middleware
-func (siw *ServerInterfaceWrapper) GetStatusByFactoryId(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "factory_id" -------------
-	var factoryId FactoryID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory_id", mux.Vars(r)["factory_id"], &factoryId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetStatusByFactoryId(w, r, factoryId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListWorkByFactoryId operation middleware
-func (siw *ServerInterfaceWrapper) ListWorkByFactoryId(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "factory_id" -------------
-	var factoryId FactoryID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory_id", mux.Vars(r)["factory_id"], &factoryId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory_id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListWorkByFactoryIdParams
-
-	// ------------- Optional query parameter "maxResults" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "maxResults", r.URL.Query(), &params.MaxResults)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maxResults", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "nextToken" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "nextToken", r.URL.Query(), &params.NextToken)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nextToken", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "state.name" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "state.name", r.URL.Query(), &params.StateName)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state.name", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "state.type" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "state.type", r.URL.Query(), &params.StateType)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state.type", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "sortBy" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "sortBy", r.URL.Query(), &params.SortBy)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sortBy", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListWorkByFactoryId(w, r, factoryId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SubmitWorkByFactoryId operation middleware
-func (siw *ServerInterfaceWrapper) SubmitWorkByFactoryId(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "factory_id" -------------
-	var factoryId FactoryID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory_id", mux.Vars(r)["factory_id"], &factoryId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SubmitWorkByFactoryId(w, r, factoryId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpsertWorkRequestByFactoryId operation middleware
-func (siw *ServerInterfaceWrapper) UpsertWorkRequestByFactoryId(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "factory_id" -------------
-	var factoryId FactoryID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory_id", mux.Vars(r)["factory_id"], &factoryId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory_id", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "request_id" -------------
-	var requestId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "request_id", mux.Vars(r)["request_id"], &requestId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "request_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpsertWorkRequestByFactoryId(w, r, factoryId, requestId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetWorkByFactoryId operation middleware
-func (siw *ServerInterfaceWrapper) GetWorkByFactoryId(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "factory_id" -------------
-	var factoryId FactoryID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory_id", mux.Vars(r)["factory_id"], &factoryId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory_id", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "id" -------------
-	var id WorkOrTokenID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", mux.Vars(r)["id"], &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetWorkByFactoryId(w, r, factoryId, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3620,52 +3305,94 @@ func (siw *ServerInterfaceWrapper) CloseFactorySession(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
-// GetCurrentFactory operation middleware
-func (siw *ServerInterfaceWrapper) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetCurrentFactory(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetEditableCurrentFactoryDefinition operation middleware
-func (siw *ServerInterfaceWrapper) GetEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEditableCurrentFactoryDefinition(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SaveEditableCurrentFactoryDefinition operation middleware
-func (siw *ServerInterfaceWrapper) SaveEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SaveEditableCurrentFactoryDefinition(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetCurrentFactoryWorkstationPromptTemplateContract operation middleware
-func (siw *ServerInterfaceWrapper) GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request) {
+// GetEventsBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetEventsBySessionId(w http.ResponseWriter, r *http.Request) {
 
 	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEventsBySessionId(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCurrentFactoryBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCurrentFactoryBySessionId(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SaveCurrentFactoryBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) SaveCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SaveCurrentFactoryBySessionId(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCurrentFactoryWorkstationPromptTemplateContractBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
 
 	// ------------- Path parameter "workstation_name" -------------
 	var workstationName string
@@ -3677,7 +3404,7 @@ func (siw *ServerInterfaceWrapper) GetCurrentFactoryWorkstationPromptTemplateCon
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetCurrentFactoryWorkstationPromptTemplateContract(w, r, workstationName)
+		siw.Handler.GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w, r, sessionId, workstationName)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3687,10 +3414,19 @@ func (siw *ServerInterfaceWrapper) GetCurrentFactoryWorkstationPromptTemplateCon
 	handler.ServeHTTP(w, r)
 }
 
-// ValidateCurrentFactoryWorkstationPromptTemplate operation middleware
-func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request) {
+// ValidateCurrentFactoryWorkstationPromptTemplateBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w http.ResponseWriter, r *http.Request) {
 
 	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
 
 	// ------------- Path parameter "workstation_name" -------------
 	var workstationName string
@@ -3702,7 +3438,193 @@ func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTempla
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ValidateCurrentFactoryWorkstationPromptTemplate(w, r, workstationName)
+		siw.Handler.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w, r, sessionId, workstationName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStatusBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetStatusBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStatusBySessionId(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWorkBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWorkBySessionIdParams
+
+	// ------------- Optional query parameter "maxResults" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "maxResults", r.URL.Query(), &params.MaxResults)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maxResults", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "nextToken" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "nextToken", r.URL.Query(), &params.NextToken)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nextToken", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "state.name" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "state.name", r.URL.Query(), &params.StateName)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state.name", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "state.type" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "state.type", r.URL.Query(), &params.StateType)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state.type", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sortBy" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sortBy", r.URL.Query(), &params.SortBy)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sortBy", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkBySessionId(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SubmitWorkBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SubmitWorkBySessionId(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpsertWorkRequestBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "request_id" -------------
+	var requestId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "request_id", mux.Vars(r)["request_id"], &requestId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "request_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpsertWorkRequestBySessionId(w, r, sessionId, requestId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetWorkBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id WorkOrTokenID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", mux.Vars(r)["id"], &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkBySessionId(w, r, sessionId, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4117,25 +4039,7 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/events", wrapper.GetEvents).Methods("GET")
 
-	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/events", wrapper.GetEventsByFactoryId).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/factory/~current", wrapper.GetCurrentFactoryByFactoryId).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/factory/~current/editable-definition", wrapper.GetEditableCurrentFactoryDefinitionByFactoryId).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/factory/~current/editable-definition", wrapper.SaveEditableCurrentFactoryDefinitionByFactoryId).Methods("PUT")
-
-	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/status", wrapper.GetStatusByFactoryId).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/work", wrapper.ListWorkByFactoryId).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/work", wrapper.SubmitWorkByFactoryId).Methods("POST")
-
-	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/work-requests/{request_id}", wrapper.UpsertWorkRequestByFactoryId).Methods("PUT")
-
-	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/work/{id}", wrapper.GetWorkByFactoryId).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/factory", wrapper.CreateFactory).Methods("POST")
+	r.HandleFunc(options.BaseURL+"/factories", wrapper.CreateFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.ListFactorySessions).Methods("GET")
 
@@ -4143,15 +4047,25 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}", wrapper.CloseFactorySession).Methods("DELETE")
 
-	r.HandleFunc(options.BaseURL+"/factory/~current", wrapper.GetCurrentFactory).Methods("GET")
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/events", wrapper.GetEventsBySessionId).Methods("GET")
 
-	r.HandleFunc(options.BaseURL+"/factory/~current/editable-definition", wrapper.GetEditableCurrentFactoryDefinition).Methods("GET")
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory", wrapper.GetCurrentFactoryBySessionId).Methods("GET")
 
-	r.HandleFunc(options.BaseURL+"/factory/~current/editable-definition", wrapper.SaveEditableCurrentFactoryDefinition).Methods("PUT")
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory", wrapper.SaveCurrentFactoryBySessionId).Methods("PUT")
 
-	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-contract", wrapper.GetCurrentFactoryWorkstationPromptTemplateContract).Methods("GET")
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract", wrapper.GetCurrentFactoryWorkstationPromptTemplateContractBySessionId).Methods("GET")
 
-	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplate).Methods("POST")
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/status", wrapper.GetStatusBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work", wrapper.ListWorkBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work", wrapper.SubmitWorkBySessionId).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work-requests/{request_id}", wrapper.UpsertWorkRequestBySessionId).Methods("PUT")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work/{id}", wrapper.GetWorkBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/models", wrapper.ListModels).Methods("GET")
 

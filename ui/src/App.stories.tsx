@@ -90,7 +90,7 @@ function buildEditableConfigurationDocument(
   factoryDefinition: FactoryValue = editableConfigurationFactoryDefinition,
 ) {
   return {
-    factoryDefinition,
+    ...factoryDefinition,
     version: {
       logical: 7,
       physical: "2026-05-20T10:00:00Z",
@@ -106,17 +106,17 @@ function submittedFactoryDefinitionBody(init?: RequestInit): FactoryValue {
     });
   }
 
-  const requestBody = JSON.parse(init.body) as {
-    factoryDefinition?: FactoryValue;
-  };
+  const requestBody = JSON.parse(init.body) as Record<string, unknown>;
+  const { version: _ignoredVersion, ...factoryDefinition } = requestBody;
 
-  return (
-    requestBody.factoryDefinition ??
-    buildEditableConfigurationFactoryDefinition({
-      prompt: "Browser verified prompt update.",
-      workerName: "planner",
-    })
-  );
+  if (typeof factoryDefinition.name === "string") {
+    return factoryDefinition as FactoryValue;
+  }
+
+  return buildEditableConfigurationFactoryDefinition({
+    prompt: "Browser verified prompt update.",
+    workerName: "planner",
+  });
 }
 
 function promptTemplateValidationResponse(init?: RequestInit) {
@@ -773,19 +773,19 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factories/~default/factory/~current/editable-definition",
+          path: "/factory-sessions/~default/factory",
           response: {
             body: editableConfigurationDocument,
           },
         },
         {
           method: "POST",
-          path: "/factory/~current/workstations/Review/prompt-template-validation",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
           response: delayedValidPromptTemplateValidationMock,
         },
         {
           method: "POST",
-          path: "/factory",
+          path: "/factories",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
             body: submittedFactoryDefinitionBody(init),
             status: 201,
@@ -813,19 +813,19 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factories/~default/factory/~current/editable-definition",
+          path: "/factory-sessions/~default/factory",
           response: {
             body: editableConfigurationDocument,
           },
         },
         {
           method: "POST",
-          path: "/factory/~current/workstations/Review/prompt-template-validation",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
           response: delayedValidPromptTemplateValidationMock,
         },
         {
           method: "POST",
-          path: "/factory",
+          path: "/factories",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
             body: submittedFactoryDefinitionBody(init),
             status: 201,
@@ -854,21 +854,21 @@ export const CurrentSelectionPromptHintVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factories/~default/factory/~current/editable-definition",
+          path: "/factory-sessions/~default/factory",
           response: {
             body: editableConfigurationDocument,
           },
         },
         {
           method: "GET",
-          path: "/factory/~current/workstations/Review/prompt-template-contract",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-contract",
           response: {
             body: promptTemplateContractResponse,
           },
         },
         {
           method: "POST",
-          path: "/factory/~current/workstations/Review/prompt-template-validation",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
             body: promptTemplateValidationResponse(init),
             status: 200,
@@ -876,7 +876,7 @@ export const CurrentSelectionPromptHintVerification = {
         },
         {
           method: "POST",
-          path: "/factory",
+          path: "/factories",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
             body: submittedFactoryDefinitionBody(init),
             status: 201,
@@ -904,7 +904,7 @@ export const DashboardSubmitWorkIntegrationSmoke = {
       fetchMocks: [
         {
           method: "POST",
-          path: "/factories/~default/work",
+          path: "/factory-sessions/~default/work",
           response: {
             body: {
               traceId: "trace-submit-story",
@@ -969,7 +969,7 @@ export const DashboardSubmitWorkRetryableFailure = {
       fetchMocks: [
         {
           method: "POST",
-          path: "/factories/~default/work",
+          path: "/factory-sessions/~default/work",
           response: {
             body: {
               code: "BAD_REQUEST",

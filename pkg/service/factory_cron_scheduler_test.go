@@ -853,18 +853,6 @@ func waitForTokenInPlaceByParent(t *testing.T, svc *FactoryService, placeID stri
 	return interfaces.Token{}
 }
 
-func waitForTokenInPlace(t *testing.T, svc *FactoryService, placeID string, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if tokens := matchedTokenSnapshotTokensInPlace(t, svc, placeID); len(tokens) > 0 {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for any token in %s", placeID)
-}
-
 func TestFactoryService_CronTickTargetsInternalTimePlaceDespiteConfiguredOutputState(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)

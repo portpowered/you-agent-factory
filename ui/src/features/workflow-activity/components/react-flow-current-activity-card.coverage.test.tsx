@@ -15,11 +15,11 @@ import {
 } from "../../../components/dashboard/test-fixtures";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import {
-  useCurrentEditableFactoryDefinitionDocument,
-  useSaveCurrentEditableFactoryDefinition,
+  useCurrentFactoryDocument,
+  useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
 import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/public";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
 import {
   ReactFlowCurrentActivityCard,
   useCurrentActivityGraphViewModel,
@@ -206,8 +206,8 @@ vi.mock("../../current-factory-definition/public", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinitionDocument: vi.fn(),
-    useSaveCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDocument: vi.fn(),
+    useSaveCurrentFactory: vi.fn(),
   };
 });
 
@@ -302,12 +302,12 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
   beforeEach(() => {
     mockBuildGraphLayout.mockReset();
     mockSetStoredNodePosition.mockReset();
-    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: undefined,
       error: null,
       status: "pending",
     } as never);
-    vi.mocked(useSaveCurrentEditableFactoryDefinition).mockReturnValue({
+    vi.mocked(useSaveCurrentFactory).mockReturnValue({
       mutateAsync: vi.fn(),
       reset: vi.fn(),
       status: "idle",

@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition/public";
+import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
@@ -17,7 +17,7 @@ vi.mock("../../current-factory-definition/public", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDefinition: vi.fn(),
   };
 });
 
@@ -132,7 +132,7 @@ describe("CurrentSelectionWidget localization", () => {
       isSuccess: true,
       status: "success",
     } as never);
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
       data: undefined,
       isPending: true,
       status: "pending",

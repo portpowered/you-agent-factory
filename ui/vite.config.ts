@@ -22,27 +22,28 @@ const storybookInteropDeps = [
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
 ] as const;
+const currentFactoryPromptTemplateProxyPaths = [
+  "^/factory-sessions/[^/]+/factory/workstations/[^/]+/prompt-template-contract$",
+  "^/factory-sessions/[^/]+/factory/workstations/[^/]+/prompt-template-validation$",
+] as const;
 const proxiedAPIPaths = [
   "/work",
-  "^/factories/[^/]+/work$",
+  "^/factory-sessions/[^/]+/work$",
   "^/work-requests/[^/]+$",
-  "^/factories/[^/]+/work-requests/[^/]+$",
+  "^/factory-sessions/[^/]+/work-requests/[^/]+$",
   "^/work/[^/]+$",
-  "^/factories/[^/]+/work/[^/]+$",
+  "^/factory-sessions/[^/]+/work/[^/]+$",
   "/events",
-  "^/factories/[^/]+/events$",
+  "^/factory-sessions/[^/]+/events$",
   "/status",
-  "^/factories/[^/]+/status$",
+  "^/factory-sessions/[^/]+/status$",
   "/provider-sessions/detail",
-  "/factory",
+  "/factories",
   "/factory-sessions",
   "^/factory-sessions/[^/]+$",
-  "/factory/~current",
-  "^/factories/[^/]+/factory/~current$",
-  "^/factories/[^/]+/factory/~current/editable-definition$",
-  "^/factory/~current/workstations/[^/]+/prompt-template-contract$",
-  "/factory/~current/editable-definition",
-  "^/factory/~current/workstations/[^/]+/prompt-template-validation$",
+  "/factory-sessions/~default/factory",
+  "^/factory-sessions/[^/]+/factory$",
+  ...currentFactoryPromptTemplateProxyPaths,
 ] as const;
 const apiProxy = Object.fromEntries(
   proxiedAPIPaths.map((path) => [

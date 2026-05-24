@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -299,17 +298,17 @@ func TestFactoryService_SessionRuntimeSurfaceTargetsExplicitSessionID(t *testing
 	waitForSessionEventsToContain(t, harness.requireSession(t, betaSessionID), "beta-session-targeted-work", time.Second)
 	assertSessionEventsDoNotContain(t, harness.requireSession(t, defaultFactorySessionID), "beta-session-targeted-work")
 
-	betaCurrent, err := harness.svc.GetCurrentNamedFactoryForSession(context.Background(), betaSessionID)
+	betaCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), betaSessionID)
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactoryForSession(beta): %v", err)
+		t.Fatalf("GetCurrentFactoryForSession(beta): %v", err)
 	}
 	if betaCurrent.Name != "beta" {
 		t.Fatalf("beta current factory name = %q, want beta", betaCurrent.Name)
 	}
 
-	defaultCurrent, err := harness.svc.GetCurrentNamedFactoryForSession(context.Background(), defaultFactorySessionID)
+	defaultCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), defaultFactorySessionID)
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactoryForSession(default): %v", err)
+		t.Fatalf("GetCurrentFactoryForSession(default): %v", err)
 	}
 	if defaultCurrent.Name != "alpha" {
 		t.Fatalf("default current factory name = %q, want alpha", defaultCurrent.Name)
@@ -345,7 +344,7 @@ func TestFactoryService_Run_RestartsOnlyDefaultSession(t *testing.T) {
 	}
 }
 
-func TestFactoryService_SaveEditableFactoryDefinitionForSession_ReplacesOnlyTargetedSession(t *testing.T) {
+func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		defaultFactory: "alpha",
 		namedFactories: []string{"alpha", "beta"},
@@ -355,56 +354,54 @@ func TestFactoryService_SaveEditableFactoryDefinitionForSession_ReplacesOnlyTarg
 	betaSessionID := harness.openFactorySession(t, "beta")
 	harness.waitIdle(t, betaSessionID, "beta runtime")
 
-	editable, err := harness.svc.GetEditableFactoryDefinitionForSession(context.Background(), betaSessionID)
+	current, err := harness.svc.GetCurrentFactoryForSession(context.Background(), betaSessionID)
 	if err != nil {
-		t.Fatalf("GetEditableFactoryDefinitionForSession(beta): %v", err)
+		t.Fatalf("GetCurrentFactoryForSession(beta): %v", err)
 	}
-	if editable.FactoryDefinition.Name != "beta" {
-		t.Fatalf("beta editable factory name = %q, want beta", editable.FactoryDefinition.Name)
+	assertFactoryName(t, current.Name, "beta", "beta current factory name")
+	if current.Version == nil {
+		t.Fatal("expected beta current factory version metadata")
 	}
 
-	saved, err := harness.svc.SaveEditableFactoryDefinitionForSession(context.Background(), betaSessionID, factoryapi.SaveEditableFactoryDefinitionRequest{
-		BaseVersion:       &editable.Version,
-		FactoryDefinition: serviceNamedFactoryContractWithWorkType(t, "beta", "story"),
-	})
+	replacement := serviceNamedFactoryContractWithWorkType(t, "beta", "story")
+	replacement.Version = current.Version
+	saved, err := harness.svc.SaveCurrentFactoryForSession(context.Background(), betaSessionID, replacement)
 	if err != nil {
-		t.Fatalf("SaveEditableFactoryDefinitionForSession(beta): %v", err)
+		t.Fatalf("SaveCurrentFactoryForSession(beta): %v", err)
 	}
-	assertFactoryWorkType(t, saved.FactoryDefinition.WorkTypes, "story", "saved beta work types")
+	assertFactoryWorkType(t, saved.WorkTypes, "story", "saved beta work types")
 
-	betaCurrent, err := harness.svc.GetCurrentNamedFactoryForSession(context.Background(), betaSessionID)
+	betaCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), betaSessionID)
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactoryForSession(beta) after save: %v", err)
+		t.Fatalf("GetCurrentFactoryForSession(beta) after save: %v", err)
 	}
 	assertFactoryWorkType(t, betaCurrent.WorkTypes, "story", "beta current work types after save")
 
-	defaultCurrent, err := harness.svc.GetCurrentNamedFactoryForSession(context.Background(), defaultFactorySessionID)
+	defaultCurrent, err := harness.svc.GetCurrentFactoryForSession(context.Background(), defaultFactorySessionID)
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactoryForSession(default) after beta save: %v", err)
+		t.Fatalf("GetCurrentFactoryForSession(default) after beta save: %v", err)
 	}
-	if defaultCurrent.Name != "alpha" {
-		t.Fatalf("default current factory name after beta save = %q, want alpha", defaultCurrent.Name)
-	}
+	assertFactoryName(t, defaultCurrent.Name, "alpha", "default current factory name after beta save")
 	assertFactoryWorkType(t, defaultCurrent.WorkTypes, "task", "default current work types after beta save")
 
-	assertCurrentFactoryPointer(t, harness.rootDir, "alpha", "default session pointer after beta editable save")
+	assertCurrentFactoryPointer(t, harness.rootDir, "alpha", "default session pointer after beta current-factory save")
 	betaConfig, err := config.LoadRuntimeConfig(harness.factoryDirs["beta"], nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(beta) after save: %v", err)
 	}
-	if got := betaConfig.FactoryConfig().WorkTypes; len(got) != 1 || got[0].Name != "story" {
-		t.Fatalf("persisted beta work types after save = %#v, want story", got)
+	assertPersistedFactoryWorkType(t, betaConfig.FactoryConfig().WorkTypes, "story", "persisted beta work types after save")
+	if betaConfig.FactoryConfig().Version == nil || betaCurrent.Version == nil {
+		t.Fatal("expected persisted and returned beta version metadata")
 	}
+	assertPersistedFactoryVersionMatchesAPI(t, betaConfig.FactoryConfig().Version, betaCurrent.Version, "persisted beta version after save")
 
-	legacyCurrent, err := harness.svc.GetCurrentNamedFactory(context.Background())
+	legacyCurrent, err := harness.svc.GetCurrentFactory(context.Background())
 	if err != nil {
-		t.Fatalf("GetCurrentNamedFactory after beta save: %v", err)
+		t.Fatalf("GetCurrentFactory after beta save: %v", err)
 	}
-	if legacyCurrent.Name != "alpha" {
-		t.Fatalf("legacy current factory name after beta save = %q, want alpha", legacyCurrent.Name)
-	}
-	if _, err := harness.svc.GetEditableFactoryDefinitionForSession(context.Background(), "missing-session"); !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-		t.Fatalf("GetEditableFactoryDefinitionForSession(missing) error = %v, want factory session not found", err)
+	assertFactoryName(t, legacyCurrent.Name, "alpha", "legacy current factory name after beta save")
+	if _, err := harness.svc.GetCurrentFactoryForSession(context.Background(), "missing-session"); !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("GetCurrentFactoryForSession(missing) error = %v, want factory session not found", err)
 	}
 }
 

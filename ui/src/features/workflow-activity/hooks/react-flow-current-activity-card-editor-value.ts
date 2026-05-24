@@ -1,10 +1,10 @@
-import type { useCurrentEditableFactoryDefinitionDocument } from "../../current-factory-definition/public";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { useCurrentFactoryDocument } from "../../current-factory-definition/public";
 import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
-import type { useSaveCurrentEditableFactoryDefinition } from "../../current-factory-definition/public";
+import type { useSaveCurrentFactory } from "../../current-factory-definition/public";
 import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
@@ -20,7 +20,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   editableDefinitionQuery: ReturnType<
-    typeof useCurrentEditableFactoryDefinitionDocument
+    typeof useCurrentFactoryDocument
   >;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
@@ -50,7 +50,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   >["pendingRemovalIntent"];
   saveBlockedReason?: string;
   saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentEditableFactoryDefinition
+    typeof useSaveCurrentFactory
   >;
   saveSummary: ReturnType<typeof buildFactoryGraphSaveSummary>;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;

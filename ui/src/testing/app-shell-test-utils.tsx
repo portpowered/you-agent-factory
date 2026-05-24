@@ -17,7 +17,7 @@ import { installDashboardBrowserTestShims } from "../components/dashboard/test-b
 import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { reloadDashboardLayoutFromStorage } from "../features/bento/public";
 import { useDashboardBentoStore } from "../features/bento/state";
-import { useCurrentEditableFactoryDefinition } from "../features/current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
 import { resetSelectionHistoryStore } from "../features/current-selection/state";
 import {
   createDefaultDashboardStreamState,
@@ -36,7 +36,7 @@ vi.mock("../features/current-factory-definition/public", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDocument: vi.fn(),
   };
 });
 
@@ -98,9 +98,7 @@ interface RenderAppResult extends ReturnType<typeof render> {
   fetchMock: FetchMock;
 }
 
-type CurrentEditableFactoryDefinitionResult = ReturnType<
-  typeof useCurrentEditableFactoryDefinition
->;
+type CurrentFactoryDocumentResult = ReturnType<typeof useCurrentFactoryDocument>;
 
 const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
 const queryClients: QueryClient[] = [];
@@ -373,12 +371,10 @@ export function createFileDropTransfer(files: File[]): {
   };
 }
 
-export function mockCurrentEditableFactoryDefinition(
-  result: CurrentEditableFactoryDefinitionResult,
+export function mockCurrentFactoryDocument(
+  result: CurrentFactoryDocumentResult,
 ): void {
-  vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
-    result as never,
-  );
+  vi.mocked(useCurrentFactoryDocument).mockReturnValue(result as never);
 }
 
 export function registerAppDashboardTestLifecycle(): void {
@@ -390,7 +386,7 @@ export function registerAppDashboardTestLifecycle(): void {
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });
-    mockCurrentEditableFactoryDefinition({
+    mockCurrentFactoryDocument({
       data: undefined,
       error: null,
       failureCount: 0,

@@ -1,11 +1,11 @@
 import {
-  CurrentEditableFactoryDefinitionError,
-  getCurrentEditableFactoryDefinition,
-  getCurrentEditableFactoryDefinitionDocument,
-  saveCurrentEditableFactoryDefinitionDocument,
+  CurrentFactoryDefinitionError,
+  getCurrentFactoryDefinition,
+  getCurrentFactoryDocument,
+  saveCurrentFactoryDocument,
 } from "./api";
 
-describe("getCurrentEditableFactoryDefinition", () => {
+describe("getCurrentFactoryDefinition", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -14,39 +14,37 @@ describe("getCurrentEditableFactoryDefinition", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          factoryDefinition: {
-            id: "factory-current",
-            name: "Current Factory",
-            workers: [
-              {
-                model: "gpt-5",
-                name: "writer",
-                type: "MODEL_WORKER",
-              },
-            ],
-            workstations: [
-              {
-                body: "Summarize the work item before review.",
-                inputs: [
-                  {
-                    state: "queued",
-                    workType: "task",
-                  },
-                ],
-                name: "Draft",
-                outputs: [
-                  {
-                    state: "reviewed",
-                    workType: "task",
-                  },
-                ],
-                promptFile: "prompts/draft.md",
-                type: "MODEL_WORKSTATION",
-                worker: "writer",
-              },
-            ],
-            workTypes: [],
-          },
+          id: "factory-current",
+          name: "Current Factory",
+          workers: [
+            {
+              model: "gpt-5",
+              name: "writer",
+              type: "MODEL_WORKER",
+            },
+          ],
+          workstations: [
+            {
+              body: "Summarize the work item before review.",
+              inputs: [
+                {
+                  state: "queued",
+                  workType: "task",
+                },
+              ],
+              name: "Draft",
+              outputs: [
+                {
+                  state: "reviewed",
+                  workType: "task",
+                },
+              ],
+              promptFile: "prompts/draft.md",
+              type: "MODEL_WORKSTATION",
+              worker: "writer",
+            },
+          ],
+          workTypes: [],
           version: {
             logical: 7,
             physical: "2026-05-18T14:22:00Z",
@@ -62,13 +60,17 @@ describe("getCurrentEditableFactoryDefinition", () => {
       ),
     );
 
-    const factoryDefinition = await getCurrentEditableFactoryDefinition({
+    const factoryDefinition = await getCurrentFactoryDefinition({
       fetch: fetchMock,
     });
 
     expect(factoryDefinition).toEqual({
       id: "factory-current",
       name: "Current Factory",
+      version: {
+        logical: 7,
+        physical: "2026-05-18T14:22:00Z",
+      },
       workers: [
         {
           model: "gpt-5",
@@ -100,7 +102,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
       workTypes: [],
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/factories/~default/factory/~current/editable-definition",
+      "/factory-sessions/~default/factory",
       {
         method: "GET",
       },
@@ -108,16 +110,14 @@ describe("getCurrentEditableFactoryDefinition", () => {
   });
 
   it("returns version metadata together with the editable current factory definition document", async () => {
-    const document = await getCurrentEditableFactoryDefinitionDocument({
+    const document = await getCurrentFactoryDocument({
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
-            factoryDefinition: {
-              name: "Current Factory",
-              workers: [],
-              workstations: [],
-              workTypes: [],
-            },
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
             version: {
               logical: 9,
               physical: "2026-05-18T14:25:00Z",
@@ -135,12 +135,10 @@ describe("getCurrentEditableFactoryDefinition", () => {
     });
 
     expect(document).toEqual({
-      factoryDefinition: {
-        name: "Current Factory",
-        workers: [],
-        workstations: [],
-        workTypes: [],
-      },
+      name: "Current Factory",
+      workers: [],
+      workstations: [],
+      workTypes: [],
       version: {
         logical: 9,
         physical: "2026-05-18T14:25:00Z",
@@ -152,12 +150,10 @@ describe("getCurrentEditableFactoryDefinition", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          factoryDefinition: {
-            name: "Scoped Factory",
-            workers: [],
-            workstations: [],
-            workTypes: [],
-          },
+          name: "Scoped Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
           version: {
             logical: 3,
             physical: "2026-05-18T14:24:00Z",
@@ -173,13 +169,13 @@ describe("getCurrentEditableFactoryDefinition", () => {
       ),
     );
 
-    await getCurrentEditableFactoryDefinitionDocument({
+    await getCurrentFactoryDocument({
       fetch,
       sessionID: "session-2",
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "/factories/session-2/factory/~current/editable-definition",
+      "/factory-sessions/session-2/factory",
       {
         method: "GET",
       },
@@ -188,7 +184,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("surfaces current-factory transport failures with the original API error code", async () => {
     await expect(
-      getCurrentEditableFactoryDefinition({
+      getCurrentFactoryDefinition({
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
@@ -208,7 +204,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
     ).rejects.toMatchObject({
       code: "NOT_FOUND",
       message: "Current factory definition not found.",
-      name: "CurrentEditableFactoryDefinitionError",
+      name: "CurrentFactoryDefinitionError",
       status: 404,
       statusText: "Not Found",
     });
@@ -218,31 +214,31 @@ describe("getCurrentEditableFactoryDefinition", () => {
     vi.stubGlobal("fetch", undefined);
 
     await expect(
-      getCurrentEditableFactoryDefinitionDocument(),
+      getCurrentFactoryDocument(),
     ).rejects.toMatchObject({
       code: "NETWORK_ERROR",
       message: "Current factory editing is unavailable in this environment.",
-      name: "CurrentEditableFactoryDefinitionError",
+      name: "CurrentFactoryDefinitionError",
     });
   });
 
   it("surfaces the existing network fallback when the editable-definition load request throws", async () => {
     await expect(
-      getCurrentEditableFactoryDefinitionDocument({
+      getCurrentFactoryDocument({
         fetch: vi.fn().mockRejectedValue(new Error("socket closed")),
       }),
     ).rejects.toMatchObject({
       code: "NETWORK_ERROR",
       message:
         "The dashboard could not reach the current factory editing API.",
-      name: "CurrentEditableFactoryDefinitionError",
+      name: "CurrentFactoryDefinitionError",
       responseBody: expect.any(Error),
     });
   });
 
   it("keeps the existing load rejection fallback when the API does not return a structured error message", async () => {
     await expect(
-      getCurrentEditableFactoryDefinitionDocument({
+      getCurrentFactoryDocument({
         fetch: vi.fn().mockResolvedValue(
           new Response("", {
             status: 500,
@@ -253,7 +249,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
     ).rejects.toMatchObject({
       code: "INTERNAL_ERROR",
       message: "The current factory editing API rejected the request.",
-      name: "CurrentEditableFactoryDefinitionError",
+      name: "CurrentFactoryDefinitionError",
       responseBody: null,
       status: 500,
       statusText: "Internal Server Error",
@@ -262,7 +258,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("normalizes INVALID_FACTORY editable-definition rejections into INVALID_FACTORY_DEFINITION", async () => {
     await expect(
-      getCurrentEditableFactoryDefinitionDocument({
+      getCurrentFactoryDocument({
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
@@ -282,7 +278,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
     ).rejects.toMatchObject({
       code: "INVALID_FACTORY_DEFINITION",
       message: "The editable definition payload is invalid.",
-      name: "CurrentEditableFactoryDefinitionError",
+      name: "CurrentFactoryDefinitionError",
       responseBody: {
         code: "INVALID_FACTORY",
         message: "The editable definition payload is invalid.",
@@ -294,7 +290,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("rejects load success payloads that are not editable-definition documents", async () => {
     await expect(
-      getCurrentEditableFactoryDefinitionDocument({
+      getCurrentFactoryDocument({
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
@@ -316,7 +312,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
     ).rejects.toMatchObject({
       code: "INTERNAL_ERROR",
       message: "The current factory editing API returned an invalid response.",
-      name: "CurrentEditableFactoryDefinitionError",
+      name: "CurrentFactoryDefinitionError",
       responseBody: {
         version: {
           logical: 12,
@@ -332,22 +328,20 @@ describe("getCurrentEditableFactoryDefinition", () => {
     let thrown: unknown;
 
     try {
-      await getCurrentEditableFactoryDefinition({
+      await getCurrentFactoryDefinition({
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
-              factoryDefinition: {
-                name: "Current Factory",
-                workers: [
-                  {
-                    model: 42,
-                    name: "writer",
-                    type: "MODEL_WORKER",
-                  },
-                ],
-                workstations: [],
-                workTypes: [],
-              },
+              name: "Current Factory",
+              workers: [
+                {
+                  model: 42,
+                  name: "writer",
+                  type: "MODEL_WORKER",
+                },
+              ],
+              workstations: [],
+              workTypes: [],
               version: {
                 logical: 12,
                 physical: "2026-05-18T14:30:00Z",
@@ -367,24 +361,22 @@ describe("getCurrentEditableFactoryDefinition", () => {
       thrown = error;
     }
 
-    expect(thrown).toBeInstanceOf(CurrentEditableFactoryDefinitionError);
+    expect(thrown).toBeInstanceOf(CurrentFactoryDefinitionError);
     expect(thrown).toMatchObject({
       code: "INVALID_FACTORY_DEFINITION",
       message:
         "The current factory editing API returned a factory definition the dashboard cannot edit. factory.workers[0].model must be a string.",
       responseBody: {
-        factoryDefinition: {
-          name: "Current Factory",
-          workers: [
-            {
-              model: 42,
-              name: "writer",
-              type: "MODEL_WORKER",
-            },
-          ],
-          workstations: [],
-          workTypes: [],
-        },
+        name: "Current Factory",
+        workers: [
+          {
+            model: 42,
+            name: "writer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [],
+        workTypes: [],
         version: {
           logical: 12,
           physical: "2026-05-18T14:30:00Z",
@@ -394,11 +386,94 @@ describe("getCurrentEditableFactoryDefinition", () => {
   });
 
   it("accepts editable-definition payloads with classifier workstations", async () => {
-    const document = await getCurrentEditableFactoryDefinitionDocument({
+    const document = await getCurrentFactoryDocument({
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
-            factoryDefinition: {
+            name: "Current Factory",
+            workers: [{ name: "classifier" }],
+            workTypes: [
+              {
+                name: "story",
+                states: [
+                  { name: "new", type: "INITIAL" },
+                  { name: "approved", type: "TERMINAL" },
+                  { name: "failed", type: "FAILED" },
+                ],
+              },
+            ],
+            workstations: [
+              {
+                classificationRoutes: [
+                  {
+                    label: "approved",
+                    outputs: [{ state: "approved", workType: "story" }],
+                  },
+                ],
+                inputs: [{ state: "new", workType: "story" }],
+                name: "Classify",
+                onFailure: [{ state: "failed", workType: "story" }],
+                type: "CLASSIFIER_WORKSTATION",
+                worker: "classifier",
+              },
+            ],
+            version: {
+              logical: 12,
+              physical: "2026-05-18T14:30:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          },
+        ),
+      ),
+    });
+
+    expect(document).toEqual({
+      name: "Current Factory",
+      workers: [{ name: "classifier" }],
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "new", type: "INITIAL" },
+            { name: "approved", type: "TERMINAL" },
+            { name: "failed", type: "FAILED" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          classificationRoutes: [
+            {
+              label: "approved",
+              outputs: [{ state: "approved", workType: "story" }],
+            },
+          ],
+          inputs: [{ state: "new", workType: "story" }],
+          name: "Classify",
+          onFailure: [{ state: "failed", workType: "story" }],
+          type: "CLASSIFIER_WORKSTATION",
+          worker: "classifier",
+        },
+      ],
+      version: {
+        logical: 12,
+        physical: "2026-05-18T14:30:00Z",
+      },
+    });
+  });
+
+  it("rejects editable-definition payloads with unexpected classifier-route keys", async () => {
+    await expect(
+      getCurrentFactoryDocument({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
               name: "Current Factory",
               workers: [{ name: "classifier" }],
               workTypes: [
@@ -417,6 +492,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
                     {
                       label: "approved",
                       outputs: [{ state: "approved", workType: "story" }],
+                      unexpected: "x",
                     },
                   ],
                   inputs: [{ state: "new", workType: "story" }],
@@ -426,96 +502,6 @@ describe("getCurrentEditableFactoryDefinition", () => {
                   worker: "classifier",
                 },
               ],
-            },
-            version: {
-              logical: 12,
-              physical: "2026-05-18T14:30:00Z",
-            },
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-            statusText: "OK",
-          },
-        ),
-      ),
-    });
-
-    expect(document).toEqual({
-      factoryDefinition: {
-        name: "Current Factory",
-        workers: [{ name: "classifier" }],
-        workTypes: [
-          {
-            name: "story",
-            states: [
-              { name: "new", type: "INITIAL" },
-              { name: "approved", type: "TERMINAL" },
-              { name: "failed", type: "FAILED" },
-            ],
-          },
-        ],
-        workstations: [
-          {
-            classificationRoutes: [
-              {
-                label: "approved",
-                outputs: [{ state: "approved", workType: "story" }],
-              },
-            ],
-            inputs: [{ state: "new", workType: "story" }],
-            name: "Classify",
-            onFailure: [{ state: "failed", workType: "story" }],
-            type: "CLASSIFIER_WORKSTATION",
-            worker: "classifier",
-          },
-        ],
-      },
-      version: {
-        logical: 12,
-        physical: "2026-05-18T14:30:00Z",
-      },
-    });
-  });
-
-  it("rejects editable-definition payloads with unexpected classifier-route keys", async () => {
-    await expect(
-      getCurrentEditableFactoryDefinitionDocument({
-        fetch: vi.fn().mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              factoryDefinition: {
-                name: "Current Factory",
-                workers: [{ name: "classifier" }],
-                workTypes: [
-                  {
-                    name: "story",
-                    states: [
-                      { name: "new", type: "INITIAL" },
-                      { name: "approved", type: "TERMINAL" },
-                      { name: "failed", type: "FAILED" },
-                    ],
-                  },
-                ],
-                workstations: [
-                  {
-                    classificationRoutes: [
-                      {
-                        label: "approved",
-                        outputs: [{ state: "approved", workType: "story" }],
-                        unexpected: "x",
-                      },
-                    ],
-                    inputs: [{ state: "new", workType: "story" }],
-                    name: "Classify",
-                    onFailure: [{ state: "failed", workType: "story" }],
-                    type: "CLASSIFIER_WORKSTATION",
-                    worker: "classifier",
-                  },
-                ],
-              },
               version: {
                 logical: 12,
                 physical: "2026-05-18T14:30:00Z",
@@ -535,7 +521,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
       code: "INVALID_FACTORY_DEFINITION",
       message:
         "The current factory editing API returned a factory definition the dashboard cannot edit. factory.workstations[0].classificationRoutes[0].unexpected is not allowed by the generated factory contract.",
-      name: "CurrentEditableFactoryDefinitionError",
+      name: "CurrentFactoryDefinitionError",
       status: 200,
       statusText: "OK",
     });
@@ -545,12 +531,10 @@ describe("getCurrentEditableFactoryDefinition", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          factoryDefinition: {
-            name: "Current Factory",
-            workers: [],
-            workstations: [],
-            workTypes: [],
-          },
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
           version: {
             logical: 10,
             physical: "2026-05-18T14:40:00Z",
@@ -566,7 +550,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
       ),
     );
 
-    const document = await saveCurrentEditableFactoryDefinitionDocument(
+    const document = await saveCurrentFactoryDocument(
       {
         baseVersion: {
           logical: 9,
@@ -583,18 +567,16 @@ describe("getCurrentEditableFactoryDefinition", () => {
     );
 
     expect(fetch).toHaveBeenCalledWith(
-      "/factories/~default/factory/~current/editable-definition",
+      "/factory-sessions/~default/factory",
       expect.objectContaining({
         body: JSON.stringify({
-          baseVersion: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
             logical: 9,
             physical: "2026-05-18T14:25:00Z",
-          },
-          factoryDefinition: {
-            name: "Current Factory",
-            workers: [],
-            workstations: [],
-            workTypes: [],
           },
         }),
         headers: {
@@ -610,12 +592,10 @@ describe("getCurrentEditableFactoryDefinition", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          factoryDefinition: {
-            name: "Scoped Factory",
-            workers: [],
-            workstations: [],
-            workTypes: [],
-          },
+          name: "Scoped Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
           version: {
             logical: 11,
             physical: "2026-05-18T14:41:00Z",
@@ -631,7 +611,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
       ),
     );
 
-    await saveCurrentEditableFactoryDefinitionDocument(
+    await saveCurrentFactoryDocument(
       {
         factoryDefinition: {
           name: "Scoped Factory",
@@ -647,7 +627,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
     );
 
     expect(fetch).toHaveBeenCalledWith(
-      "/factories/session-2/factory/~current/editable-definition",
+      "/factory-sessions/session-2/factory",
       expect.objectContaining({
         method: "PUT",
       }),
@@ -656,7 +636,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("preserves structured save error targets when the API rejects a topology edit", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           baseVersion: {
             logical: 9,
@@ -707,7 +687,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("preserves valid structured save error targets from mixed target arrays", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           baseVersion: {
             logical: 9,
@@ -759,7 +739,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("preserves active-work save rejections from the editable current-factory API", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           baseVersion: {
             logical: 9,
@@ -810,7 +790,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("surfaces the existing network fallback when the editable-definition save request throws", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           factoryDefinition: {
             name: "Current Factory",
@@ -827,14 +807,14 @@ describe("getCurrentEditableFactoryDefinition", () => {
       code: "NETWORK_ERROR",
       message:
         "The dashboard could not reach the current factory editing API.",
-      name: "CurrentEditableFactoryDefinitionError",
+      name: "CurrentFactoryDefinitionError",
       responseBody: expect.any(Error),
     });
   });
 
   it("keeps the existing save rejection fallback when the API does not return a structured error message", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           factoryDefinition: {
             name: "Current Factory",
@@ -855,7 +835,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
     ).rejects.toMatchObject({
       code: "INTERNAL_ERROR",
       message: "The current factory editing API rejected the save request.",
-      name: "CurrentEditableFactoryDefinitionError",
+      name: "CurrentFactoryDefinitionError",
       responseBody: null,
       status: 500,
       statusText: "Internal Server Error",
@@ -864,7 +844,7 @@ describe("getCurrentEditableFactoryDefinition", () => {
 
   it("rejects save success payloads whose factory definition cannot be normalized canonically", async () => {
     await expect(
-      saveCurrentEditableFactoryDefinitionDocument(
+      saveCurrentFactoryDocument(
         {
           factoryDefinition: {
             name: "Current Factory",
@@ -877,18 +857,16 @@ describe("getCurrentEditableFactoryDefinition", () => {
           fetch: vi.fn().mockResolvedValue(
             new Response(
               JSON.stringify({
-                factoryDefinition: {
-                  name: "Current Factory",
-                  workers: [
-                    {
-                      model: 42,
-                      name: "writer",
-                      type: "MODEL_WORKER",
-                    },
-                  ],
-                  workstations: [],
-                  workTypes: [],
-                },
+                name: "Current Factory",
+                workers: [
+                  {
+                    model: 42,
+                    name: "writer",
+                    type: "MODEL_WORKER",
+                  },
+                ],
+                workstations: [],
+                workTypes: [],
                 version: {
                   logical: 12,
                   physical: "2026-05-18T14:30:00Z",
@@ -909,20 +887,18 @@ describe("getCurrentEditableFactoryDefinition", () => {
       code: "INVALID_FACTORY_DEFINITION",
       message:
         "The current factory editing API returned a factory definition the dashboard cannot edit. factory.workers[0].model must be a string.",
-      name: "CurrentEditableFactoryDefinitionError",
+      name: "CurrentFactoryDefinitionError",
       responseBody: {
-        factoryDefinition: {
-          name: "Current Factory",
-          workers: [
-            {
-              model: 42,
-              name: "writer",
-              type: "MODEL_WORKER",
-            },
-          ],
-          workstations: [],
-          workTypes: [],
-        },
+        name: "Current Factory",
+        workers: [
+          {
+            model: 42,
+            name: "writer",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workstations: [],
+        workTypes: [],
         version: {
           logical: 12,
           physical: "2026-05-18T14:30:00Z",

@@ -93,7 +93,7 @@ func TestExportImportSmoke_PublicShareImportSurfaceCarriesDetachedStarterWork(t 
 		cfg.Logger = zap.NewNop()
 	})
 
-	exported := getCurrentNamedFactory(t, sourceServer.URL())
+	exported := getCurrentFactory(t, sourceServer.URL())
 	assertStarterBundledFiles(t, exported, sourceSnapshot)
 
 	importRequest := exported
@@ -108,7 +108,7 @@ func TestExportImportSmoke_PublicShareImportSurfaceCarriesDetachedStarterWork(t 
 	imported := createNamedFactory(t, importServer.URL(), importRequest)
 	assertStarterBundledFileTargets(t, imported, sourceSnapshot)
 
-	importedCurrent := getCurrentNamedFactory(t, importServer.URL())
+	importedCurrent := getCurrentFactory(t, importServer.URL())
 	assertStarterBundledFiles(t, importedCurrent, sourceSnapshot)
 
 	sourceUpdatedSnapshot := map[string]string{
@@ -122,8 +122,8 @@ func TestExportImportSmoke_PublicShareImportSurfaceCarriesDetachedStarterWork(t 
 	writeSeededStarterInputs(t, sourceFactoryDir, sourceUpdatedSnapshot)
 	writeSeededStarterInputs(t, filepath.Join(importRootDir, importFactoryName), importedSnapshot)
 
-	assertStarterBundledFiles(t, getCurrentNamedFactory(t, sourceServer.URL()), sourceUpdatedSnapshot)
-	assertStarterBundledFiles(t, getCurrentNamedFactory(t, importServer.URL()), importedSnapshot)
+	assertStarterBundledFiles(t, getCurrentFactory(t, sourceServer.URL()), sourceUpdatedSnapshot)
+	assertStarterBundledFiles(t, getCurrentFactory(t, importServer.URL()), importedSnapshot)
 }
 
 func submitWorkAndExpectStatus(

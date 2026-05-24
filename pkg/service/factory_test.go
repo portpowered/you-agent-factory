@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -15,8 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 const servicePortableBundledScriptBody = "Write-Output 'portable script'\n"
@@ -54,6 +51,11 @@ func minimalFactoryConfig() map[string]any {
 func serviceNamedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()
 	return serviceNamedFactoryPayloadWithWorkType(t, project, "task")
+}
+
+func serviceNamedFactoryPayloadWithVersion(t *testing.T, project string, version factoryapi.HybridLogicalTimestamp) []byte {
+	t.Helper()
+	return withServicePayloadVersion(t, serviceNamedFactoryPayload(t, project), version)
 }
 
 func serviceNamedFactoryPayloadWithWorkType(t *testing.T, project, workType string) []byte {
@@ -188,6 +190,24 @@ func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string
 	return generated
 }
 
+func withServicePayloadVersion(t *testing.T, payload []byte, version factoryapi.HybridLogicalTimestamp) []byte {
+	t.Helper()
+
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("unmarshal service factory payload: %v", err)
+	}
+	decoded["version"] = map[string]any{
+		"logical":  version.Logical,
+		"physical": version.Physical.UTC().Format(time.RFC3339Nano),
+	}
+	updated, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatalf("marshal service factory payload with version: %v", err)
+	}
+	return updated
+}
+
 func submitWorkRequestsToService(ctx context.Context, svc *FactoryService, reqs []interfaces.SubmitRequest) error {
 	workRequest := factory.WorkRequestFromSubmitRequests(reqs)
 	_, err := svc.SubmitWorkRequest(ctx, workRequest)
@@ -202,28 +222,6 @@ func writeWorkRequestFile(t *testing.T, path string, req interfaces.SubmitReques
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write work request file: %v", err)
-	}
-}
-
-func writeWatchedInputRequest(t *testing.T, factoryDir, filename string, req interfaces.SubmitRequest) {
-	t.Helper()
-
-	inputDir := filepath.Join(factoryDir, interfaces.InputsDir, req.WorkTypeID, interfaces.DefaultChannelName)
-	if err := os.MkdirAll(inputDir, 0o755); err != nil {
-		t.Fatalf("create watched input dir: %v", err)
-	}
-	writeWorkRequestFile(t, filepath.Join(inputDir, filename), req)
-}
-
-func assertWatcherDidNotDetectWorkType(t *testing.T, logs *observer.ObservedLogs, workType string, wait time.Duration) {
-	t.Helper()
-
-	deadline := time.Now().Add(wait)
-	for time.Now().Before(deadline) {
-		if logs.FilterMessage("new input detected").FilterField(zap.String("work-type", workType)).Len() > 0 {
-			t.Fatalf("expected no watcher activity for work type %q after activation", workType)
-		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 

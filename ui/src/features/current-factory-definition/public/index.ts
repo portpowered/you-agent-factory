@@ -1,9 +1,10 @@
-export * from "../hooks/useCurrentEditableFactoryDefinition";
+export * from "../hooks/useCurrentFactoryDefinition";
 export * from "../lib/workstation-behavior";
 export * from "../lib/workstation-editable-values";
 export type {
   CanonicalFactoryDefinition,
-  CurrentEditableFactoryDefinitionError,
-  EditableFactoryDefinitionDocument,
-  SaveCurrentEditableFactoryDefinitionInput,
+  CurrentFactoryDefinitionError,
+  CurrentFactoryDocument,
+  CurrentFactoryVersion,
+  SaveCurrentFactoryInput,
 } from "../../../api/current-factory-definition";

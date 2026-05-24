@@ -7,8 +7,8 @@ import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { createReplayHarness } from "../../../testing/replay-harness";
 import {
-  CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
-  CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
+  CURRENT_FACTORY_DOCUMENT_QUERY_KEY,
+  CURRENT_FACTORY_DEFINITION_QUERY_KEY,
 } from "../../current-factory-definition/public";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import { FACTORY_TIMELINE_DEBUG_STORAGE_KEY } from "../../timeline/state/factoryTimelineDebug";
@@ -294,7 +294,7 @@ describe("useDashboardSnapshot", () => {
     expect(result.current.snapshot?.tick_count).toBe(SEEDED_SNAPSHOT.tick_count);
     expect(replayHarness.getStreams()).toHaveLength(1);
     expect(replayHarness.getStreams()[0]?.url).toBe(
-      `/factories/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
 
     act(() => {
@@ -322,7 +322,7 @@ describe("useDashboardSnapshot", () => {
     });
 
     expect(replayHarness.getStreams()[0]?.url).toBe(
-      `/factories/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
 
     act(() => {
@@ -346,7 +346,7 @@ describe("useDashboardSnapshot", () => {
       expect(replayHarness.getStreams()).toHaveLength(2);
     });
     expect(replayHarness.getStreams()[1]?.url).toBe(
-      "/factories/session-beta/events",
+      "/factory-sessions/session-beta/events",
     );
     expect(useFactoryTimelineStore.getState().events).toEqual([]);
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
@@ -395,7 +395,7 @@ describe("useDashboardSnapshot", () => {
       expect(replayHarness.getStreams()).toHaveLength(2);
     });
     expect(replayHarness.getStreams()[1]?.url).toBe(
-      `/factories/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
     expect(useFactoryTimelineStore.getState().events).toEqual(
       CANONICAL_SELECTED_TICK_EVENTS,
@@ -612,13 +612,11 @@ describe("useDashboardSnapshot", () => {
   });
 
   it("updates streamed dashboard topology and the editable current-factory cache from a factory-change event", async () => {
-    queryClient.setQueryData(CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY, {
-      factoryDefinition: {
-        name: "factory",
-        workers: [],
-        workstations: [],
-        workTypes: [],
-      },
+    queryClient.setQueryData(CURRENT_FACTORY_DOCUMENT_QUERY_KEY, {
+      name: "factory",
+      workers: [],
+      workstations: [],
+      workTypes: [],
       version: {
         logical: 7,
         physical: "2026-05-17T14:59:00Z",
@@ -678,7 +676,7 @@ describe("useDashboardSnapshot", () => {
     });
 
     await waitFor(() => {
-      expect(queryClient.getQueryData(CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY)).toMatchObject(
+      expect(queryClient.getQueryData(CURRENT_FACTORY_DEFINITION_QUERY_KEY)).toMatchObject(
         {
           workers: [expect.objectContaining({ model: "gpt-5.6" })],
           workstations: [
@@ -694,7 +692,7 @@ describe("useDashboardSnapshot", () => {
     await waitFor(() => {
       expect(
         queryClient.getQueryState(
-          CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
+          CURRENT_FACTORY_DOCUMENT_QUERY_KEY,
         )?.isInvalidated,
       ).toBe(true);
     });

@@ -31,12 +31,12 @@ type MockFactory struct {
 	EngineStateSnapshotCalls int
 	CreatedFactories         []factoryapi.Factory
 	CreateNamedFactoryErr    error
-	CurrentNamedFactory      *factoryapi.Factory
-	CurrentNamedFactoryErr   error
-	EditableFactoryVersion   factoryapi.HybridLogicalTimestamp
-	EditableFactoryErr       error
-	SavedEditableFactories   []factoryapi.SaveEditableFactoryDefinitionRequest
-	SaveEditableFactoryErr   error
+	CurrentFactory           *factoryapi.Factory
+	CurrentFactoryErr        error
+	FactoryVersion           factoryapi.HybridLogicalTimestamp
+	CurrentFactoryReadErr    error
+	SavedCurrentFactories    []factoryapi.Factory
+	SaveCurrentFactoryErr    error
 	Models                   factoryapi.ListModelsResponse
 	ListModelsErr            error
 	ModelDetails             map[string]factoryapi.ModelDetail
@@ -152,57 +152,44 @@ func (m *MockFactory) CreateNamedFactory(_ context.Context, namedFactory factory
 	}
 	m.CreatedFactories = append(m.CreatedFactories, namedFactory)
 	copied := namedFactory
-	m.CurrentNamedFactory = &copied
+	m.CurrentFactory = &copied
 	return namedFactory, nil
 }
 
-func (m *MockFactory) GetCurrentNamedFactory(_ context.Context) (factoryapi.Factory, error) {
-	if m.CurrentNamedFactoryErr != nil {
-		return factoryapi.Factory{}, m.CurrentNamedFactoryErr
+func (m *MockFactory) GetCurrentFactory(_ context.Context) (factoryapi.Factory, error) {
+	if m.CurrentFactoryErr != nil {
+		return factoryapi.Factory{}, m.CurrentFactoryErr
 	}
-	if m.CurrentNamedFactory == nil {
-		return factoryapi.Factory{}, errors.New("current named factory not found")
+	if m.CurrentFactory == nil {
+		return factoryapi.Factory{}, errors.New("current factory not found")
 	}
-	return *m.CurrentNamedFactory, nil
-}
-
-func (m *MockFactory) GetEditableFactoryDefinition(_ context.Context) (factoryapi.EditableFactoryDefinition, error) {
-	if m.EditableFactoryErr != nil {
-		return factoryapi.EditableFactoryDefinition{}, m.EditableFactoryErr
+	if m.CurrentFactoryReadErr != nil {
+		return factoryapi.Factory{}, m.CurrentFactoryReadErr
 	}
-	if m.CurrentNamedFactoryErr != nil {
-		return factoryapi.EditableFactoryDefinition{}, m.CurrentNamedFactoryErr
-	}
-	if m.CurrentNamedFactory == nil {
-		return factoryapi.EditableFactoryDefinition{}, errors.New("current named factory not found")
-	}
-	version := m.EditableFactoryVersion
+	current := *m.CurrentFactory
+	version := m.FactoryVersion
 	if version.Physical.IsZero() {
 		version.Physical = time.Unix(0, 1).UTC()
 		version.Logical = 1
 	}
-	return factoryapi.EditableFactoryDefinition{
-		FactoryDefinition: *m.CurrentNamedFactory,
-		Version:           version,
-	}, nil
+	current.Version = &version
+	return current, nil
 }
 
-func (m *MockFactory) SaveEditableFactoryDefinition(_ context.Context, request factoryapi.SaveEditableFactoryDefinitionRequest) (factoryapi.EditableFactoryDefinition, error) {
-	if m.SaveEditableFactoryErr != nil {
-		return factoryapi.EditableFactoryDefinition{}, m.SaveEditableFactoryErr
+func (m *MockFactory) SaveCurrentFactory(_ context.Context, request factoryapi.Factory) (factoryapi.Factory, error) {
+	if m.SaveCurrentFactoryErr != nil {
+		return factoryapi.Factory{}, m.SaveCurrentFactoryErr
 	}
-	m.SavedEditableFactories = append(m.SavedEditableFactories, request)
-	copied := request.FactoryDefinition
-	m.CurrentNamedFactory = &copied
-	version := m.EditableFactoryVersion
+	m.SavedCurrentFactories = append(m.SavedCurrentFactories, request)
+	copied := request
+	m.CurrentFactory = &copied
+	version := m.FactoryVersion
 	if version.Physical.IsZero() {
 		version.Physical = time.Unix(0, 2).UTC()
 		version.Logical = 2
 	}
-	return factoryapi.EditableFactoryDefinition{
-		FactoryDefinition: request.FactoryDefinition,
-		Version:           version,
-	}, nil
+	copied.Version = &version
+	return copied, nil
 }
 
 func (m *MockFactory) ListModels(_ context.Context) (factoryapi.ListModelsResponse, error) {
@@ -295,36 +282,40 @@ func (m *MockFactory) GetEngineStateSnapshotForSession(ctx context.Context, sess
 	return session.GetEngineStateSnapshot(ctx)
 }
 
-func (m *MockFactory) GetCurrentNamedFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+func (m *MockFactory) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
 	session, err := m.sessionFactory(sessionID)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	return session.GetCurrentNamedFactory(ctx)
+	return session.GetCurrentFactory(ctx)
 }
 
-func (m *MockFactory) GetEditableFactoryDefinitionForSession(ctx context.Context, sessionID string) (factoryapi.EditableFactoryDefinition, error) {
-	session, err := m.sessionFactory(sessionID)
-	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
-	}
-	return session.GetEditableFactoryDefinition(ctx)
-}
-
-func (m *MockFactory) SaveEditableFactoryDefinitionForSession(
+func (m *MockFactory) SaveCurrentFactoryForSession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.SaveEditableFactoryDefinitionRequest,
-) (factoryapi.EditableFactoryDefinition, error) {
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
 	session, err := m.sessionFactory(sessionID)
 	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
+		return factoryapi.Factory{}, err
 	}
-	return session.SaveEditableFactoryDefinition(ctx, request)
+	return session.SaveCurrentFactory(ctx, request)
 }
 
 func (m *MockFactory) sessionFactory(sessionID string) (*MockFactory, error) {
-	if m == nil || m.SessionFactories == nil {
+	if m == nil {
+		return nil, apisurface.ErrFactorySessionNotFound
+	}
+	if sessionID == "" || sessionID == "~default" {
+		if m.SessionFactories == nil {
+			return m, nil
+		}
+		if session, ok := m.SessionFactories["~default"]; ok && session != nil {
+			return session, nil
+		}
+		return m, nil
+	}
+	if m.SessionFactories == nil {
 		return nil, apisurface.ErrFactorySessionNotFound
 	}
 	session, ok := m.SessionFactories[sessionID]

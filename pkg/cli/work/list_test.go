@@ -57,8 +57,8 @@ func TestList_SendsStateFilters(t *testing.T) {
 	if gotQuery == "" {
 		t.Fatal("expected request query")
 	}
-	if gotPath != "/work" {
-		t.Fatalf("path = %q, want /work", gotPath)
+	if gotPath != "/factory-sessions/~default/work" {
+		t.Fatalf("path = %q, want /factory-sessions/~default/work", gotPath)
 	}
 	if got := out.String(); got != "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\nwork-1\tReview PRD\treview\tPROCESSING\tnone\n" {
 		t.Fatalf("output = %q", got)
@@ -86,8 +86,8 @@ func TestList_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	if gotPath != "/factories/session-beta/work" {
-		t.Fatalf("path = %q, want /factories/session-beta/work", gotPath)
+	if gotPath != "/factory-sessions/session-beta/work" {
+		t.Fatalf("path = %q, want /factory-sessions/session-beta/work", gotPath)
 	}
 	if got := out.String(); got != "No work found.\n" {
 		t.Fatalf("output = %q, want empty-state output", got)

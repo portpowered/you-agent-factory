@@ -1,6 +1,6 @@
 import type { components } from "../generated/openapi";
 import { factoryAPIURL } from "../baseUrl";
-import { factorySessionScopedPath } from "../session-routing";
+import { currentFactorySessionPath } from "../session-routing";
 import {
   extractAPIErrorPayload,
   isAPIRecord,
@@ -35,8 +35,7 @@ export interface GetCurrentFactoryOptions {
   sessionID?: string | null;
 }
 
-const CREATE_NAMED_FACTORY_ENDPOINT = "/factory";
-const GET_CURRENT_NAMED_FACTORY_ENDPOINT = "/factory/~current";
+const CREATE_NAMED_FACTORY_ENDPOINT = "/factories";
 
 export class NamedFactoryAPIError extends Error {
   public readonly code: NamedFactoryAPIErrorCode;
@@ -122,12 +121,7 @@ export async function getCurrentFactory(
   let response: Response;
   try {
     response = await fetchImplementation(
-      factoryAPIURL(
-        factorySessionScopedPath(
-          GET_CURRENT_NAMED_FACTORY_ENDPOINT,
-          options.sessionID,
-        ),
-      ),
+      factoryAPIURL(currentFactorySessionPath(options.sessionID)),
       {
         method: "GET",
       },
@@ -176,6 +170,7 @@ function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFacto
     case "NOT_FOUND":
       return code;
     default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INTERNAL_ERROR";
   }
 }

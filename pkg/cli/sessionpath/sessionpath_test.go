@@ -12,27 +12,27 @@ func TestScopedPath(t *testing.T) {
 		want      string
 	}{
 		{
-			name:   "default legacy path without explicit session",
+			name:   "default path is always explicitly scoped",
 			legacy: "/work",
-			want:   "/work",
+			want:   "/factory-sessions/~default/work",
 		},
 		{
-			name:      "default legacy path with explicit default session",
+			name:      "explicit default session stays scoped",
 			legacy:    "/work",
 			sessionID: DefaultFactorySessionID,
-			want:      "/work",
+			want:      "/factory-sessions/~default/work",
 		},
 		{
 			name:      "non default session scopes path",
 			legacy:    "/work",
 			sessionID: "session-beta",
-			want:      "/factories/session-beta/work",
+			want:      "/factory-sessions/session-beta/work",
 		},
 		{
 			name:      "session id is path escaped",
 			legacy:    "/work",
 			sessionID: "session/beta",
-			want:      "/factories/session%2Fbeta/work",
+			want:      "/factory-sessions/session%2Fbeta/work",
 		},
 	}
 
@@ -43,5 +43,17 @@ func TestScopedPath(t *testing.T) {
 				t.Fatalf("ScopedPath(%q, %q) = %q, want %q", tt.legacy, tt.sessionID, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCurrentFactoryPath(t *testing.T) {
+	t.Parallel()
+
+	if got := CurrentFactoryPath(""); got != "/factory-sessions/~default/factory" {
+		t.Fatalf("CurrentFactoryPath(\"\") = %q, want /factory-sessions/~default/factory", got)
+	}
+
+	if got := CurrentFactoryPath("session/beta"); got != "/factory-sessions/session%2Fbeta/factory" {
+		t.Fatalf("CurrentFactoryPath(\"session/beta\") = %q, want /factory-sessions/session%%2Fbeta/factory", got)
 	}
 }

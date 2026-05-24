@@ -99,6 +99,72 @@ func TestOpenAPIContract_FactoryOperationsPublishMachineReadableErrors(t *testin
 	assertFactoryResponseExamples(t, responses)
 }
 
+func TestOpenAPIContract_PersistedFactoryRoutesUseCanonicalPluralVocabulary(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("paths object is missing")
+	}
+
+	pathItem, ok := paths["/factories"].(map[string]any)
+	if !ok {
+		t.Fatal("paths./factories is missing")
+	}
+	postOperation, ok := pathItem["post"].(map[string]any)
+	if !ok {
+		t.Fatal("paths./factories.post is missing")
+	}
+	if got, _ := postOperation["operationId"].(string); got != "createFactory" {
+		t.Fatalf("paths./factories.post.operationId = %q, want %q", got, "createFactory")
+	}
+	if _, ok := paths["/factory"]; ok {
+		t.Fatal("paths./factory must not be published for persisted factory definitions")
+	}
+}
+
+func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("paths object is missing")
+	}
+
+	requiredOperations := map[string][]string{
+		"/factory-sessions/{session_id}/work":                       {"get", "post"},
+		"/factory-sessions/{session_id}/work-requests/{request_id}": {"put"},
+		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
+		"/factory-sessions/{session_id}/events":                     {"get"},
+		"/factory-sessions/{session_id}/status":                     {"get"},
+		"/factory-sessions/{session_id}/factory":                    {"get", "put"},
+	}
+	for path, methods := range requiredOperations {
+		pathItem, ok := paths[path].(map[string]any)
+		if !ok {
+			t.Fatalf("paths.%s is missing", path)
+		}
+		for _, method := range methods {
+			if _, ok := pathItem[method].(map[string]any); !ok {
+				t.Fatalf("paths.%s.%s operation is missing", path, method)
+			}
+		}
+	}
+
+	for _, retiredPath := range []string{
+		"/factories/{factory_id}/work",
+		"/factories/{factory_id}/work-requests/{request_id}",
+		"/factories/{factory_id}/work/{id}",
+		"/factories/{factory_id}/events",
+		"/factories/{factory_id}/status",
+		"/factories/{factory_id}/factory/~current",
+		"/factories/{factory_id}/factory/~current/editable-definition",
+		"/factory-sessions/{session_id}/factory/editable-definition",
+	} {
+		if _, ok := paths[retiredPath]; ok {
+			t.Fatalf("paths.%s must not be published for session-scoped routes", retiredPath)
+		}
+	}
+}
+
 func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) {
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 	assertWorkstationRequestProjectionSchemasPresent(t, schemas)
@@ -184,8 +250,8 @@ func assertPublishedOperations(t *testing.T, paths map[string]any) {
 		"/models/{model_name}/invocations": {"post"},
 		"/models/{model_name}/pull":        {"post"},
 		"/provider-sessions/detail":        {"get"},
-		"/factory":                         {"post"},
-		"/factory/~current":                {"get"},
+		"/factories":                       {"post"},
+		"/factory-sessions/{session_id}/factory": {"get", "put"},
 	}
 	for path, methods := range requiredOperations {
 		pathItem, ok := paths[path].(map[string]any)
@@ -465,24 +531,21 @@ func assertFactorySchemaDescriptions(t *testing.T, workType, resource, worker, w
 
 func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	t.Helper()
-	createFactory := pathOperation(t, paths, "/factory", "post")
+	createFactory := pathOperation(t, paths, "/factories", "post")
 	assertResponseSchemaRef(t, createFactory, "201", "#/components/schemas/Factory")
 	assertResponseRef(t, createFactory, "400", "#/components/responses/CreateFactoryBadRequest")
 	assertResponseRef(t, createFactory, "409", "#/components/responses/CreateFactoryConflict")
 
-	currentFactory := pathOperation(t, paths, "/factory/~current", "get")
+	currentFactory := pathOperation(t, paths, "/factory-sessions/{session_id}/factory", "get")
 	assertResponseSchemaRef(t, currentFactory, "200", "#/components/schemas/Factory")
-	assertResponseRef(t, currentFactory, "404", "#/components/responses/CurrentFactoryNotFound")
+	assertResponseRef(t, currentFactory, "404", "#/components/responses/NotFound")
 
-	getEditableFactory := pathOperation(t, paths, "/factory/~current/editable-definition", "get")
-	assertResponseSchemaRef(t, getEditableFactory, "200", "#/components/schemas/EditableFactoryDefinition")
-	assertResponseRef(t, getEditableFactory, "404", "#/components/responses/CurrentFactoryNotFound")
-
-	saveEditableFactory := pathOperation(t, paths, "/factory/~current/editable-definition", "put")
-	assertResponseSchemaRef(t, saveEditableFactory, "200", "#/components/schemas/EditableFactoryDefinition")
-	assertResponseRef(t, saveEditableFactory, "400", "#/components/responses/SaveEditableFactoryDefinitionBadRequest")
-	assertResponseRef(t, saveEditableFactory, "409", "#/components/responses/SaveEditableFactoryDefinitionConflict")
-	assertResponseRef(t, saveEditableFactory, "404", "#/components/responses/CurrentFactoryNotFound")
+	saveCurrentFactory := pathOperation(t, paths, "/factory-sessions/{session_id}/factory", "put")
+	assertRequestSchemaRef(t, saveCurrentFactory, "#/components/schemas/Factory")
+	assertResponseSchemaRef(t, saveCurrentFactory, "200", "#/components/schemas/Factory")
+	assertResponseRef(t, saveCurrentFactory, "400", "#/components/responses/SaveCurrentFactoryBadRequest")
+	assertResponseRef(t, saveCurrentFactory, "409", "#/components/responses/SaveCurrentFactoryConflict")
+	assertResponseRef(t, saveCurrentFactory, "404", "#/components/responses/NotFound")
 
 	listModels := pathOperation(t, paths, "/models", "get")
 	assertResponseSchemaRef(t, listModels, "200", "#/components/schemas/ListModelsResponse")
@@ -511,10 +574,11 @@ func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {
 	assertResponseExampleCodeFamilies(t, responses, "CurrentFactoryNotFound", map[string]string{
 		"NOT_FOUND": "NOT_FOUND",
 	})
-	assertResponseExampleCodeFamilies(t, responses, "SaveEditableFactoryDefinitionBadRequest", map[string]string{
+	assertResponseExampleCodeFamilies(t, responses, "SaveCurrentFactoryBadRequest", map[string]string{
 		"INVALID_FACTORY": "BAD_REQUEST",
 	})
-	assertResponseExampleCodeFamilies(t, responses, "SaveEditableFactoryDefinitionConflict", map[string]string{
-		"FACTORY_NOT_IDLE": "CONFLICT",
+	assertResponseExampleCodeFamilies(t, responses, "SaveCurrentFactoryConflict", map[string]string{
+		"FACTORY_NOT_IDLE":      "CONFLICT",
+		"STALE_FACTORY_VERSION": "CONFLICT",
 	})
 }

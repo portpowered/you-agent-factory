@@ -108,7 +108,7 @@ describe("App streamed replay rendering flows", () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
 
     const stream = requireEventStream();
-    expect(stream.url).toBe(`/factories/${DEFAULT_FACTORY_SESSION_ID}/events`);
+    expect(stream.url).toBe(`/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`);
 
     act(() => {
       for (const event of selectedTickTimelineEvents) {

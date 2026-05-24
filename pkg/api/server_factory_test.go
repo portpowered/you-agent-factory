@@ -21,7 +21,7 @@ func TestCreateFactory_ReturnsCreatedFactoryShape(t *testing.T) {
 	mf := &testutil.MockFactory{}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -43,14 +43,14 @@ func TestCreateFactory_ReturnsCreatedFactoryShape(t *testing.T) {
 
 func TestGetCurrentFactory_ReturnsFactoryShape(t *testing.T) {
 	mf := &testutil.MockFactory{
-		CurrentNamedFactory: &factoryapi.Factory{
+		CurrentFactory: &factoryapi.Factory{
 			Name:      factoryapi.FactoryName("beta"),
 			WorkTypes: &[]factoryapi.WorkType{{Name: "beta-task", States: []factoryapi.WorkState{{Name: "init", Type: factoryapi.WorkStateTypeINITIAL}, {Name: "done", Type: factoryapi.WorkStateTypeTERMINAL}}}},
 		},
 	}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodGet, "/factory/~current", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/factory", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -68,11 +68,11 @@ func TestGetCurrentFactory_ReturnsFactoryShape(t *testing.T) {
 
 func TestGetCurrentFactory_AllowsDefaultRuntimeIdentifier(t *testing.T) {
 	mf := &testutil.MockFactory{
-		CurrentNamedFactory: &factoryapi.Factory{Name: apisurface.DefaultCurrentFactoryName, Id: stringPointerForAPITest("root-runtime")},
+		CurrentFactory: &factoryapi.Factory{Name: apisurface.DefaultCurrentFactoryName, Id: stringPointerForAPITest("root-runtime")},
 	}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodGet, "/factory/~current", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/factory", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -277,62 +277,62 @@ func TestPullModel_ReturnsManagedCachePullMetadata(t *testing.T) {
 	}
 }
 
-func TestGetEditableCurrentFactoryDefinition_ReturnsDefinitionAndVersion(t *testing.T) {
+func TestGetCurrentFactory_ReturnsDefinitionAndVersion(t *testing.T) {
 	versionTime := time.Date(2026, 5, 18, 10, 30, 0, 0, time.UTC)
 	mf := &testutil.MockFactory{
-		CurrentNamedFactory: &factoryapi.Factory{
+		CurrentFactory: &factoryapi.Factory{
 			Name:      factoryapi.FactoryName("beta"),
 			WorkTypes: &[]factoryapi.WorkType{{Name: "beta-task", States: []factoryapi.WorkState{{Name: "init", Type: factoryapi.WorkStateTypeINITIAL}, {Name: "done", Type: factoryapi.WorkStateTypeTERMINAL}}}},
 		},
-		EditableFactoryVersion: factoryapi.HybridLogicalTimestamp{Logical: 42, Physical: versionTime},
+		FactoryVersion: factoryapi.HybridLogicalTimestamp{Logical: 42, Physical: versionTime},
 	}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodGet, "/factory/~current/editable-definition", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/factory", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	editable := decodeJSONResponse[factoryapi.EditableFactoryDefinition](t, rec)
-	if editable.FactoryDefinition.Name != factoryapi.FactoryName("beta") || editable.Version.Logical != 42 || !editable.Version.Physical.Equal(versionTime) {
-		t.Fatalf("editable response = %#v, want beta @ logical 42", editable)
+	current := decodeJSONResponse[factoryapi.Factory](t, rec)
+	if current.Name != factoryapi.FactoryName("beta") || current.Version == nil || current.Version.Logical != 42 || !current.Version.Physical.Equal(versionTime) {
+		t.Fatalf("current factory response = %#v, want beta @ logical 42", current)
 	}
 }
 
-func TestSaveEditableCurrentFactoryDefinition_SubmitsCompleteDefinitionAndReturnsVersion(t *testing.T) {
+func TestSaveCurrentFactory_SubmitsCompleteDefinitionAndReturnsVersion(t *testing.T) {
 	versionTime := time.Date(2026, 5, 18, 10, 45, 0, 0, time.UTC)
 	mf := &testutil.MockFactory{
-		CurrentNamedFactory:    &factoryapi.Factory{Name: factoryapi.FactoryName("beta")},
-		EditableFactoryVersion: factoryapi.HybridLogicalTimestamp{Logical: 44, Physical: versionTime},
+		CurrentFactory: &factoryapi.Factory{Name: factoryapi.FactoryName("beta")},
+		FactoryVersion: factoryapi.HybridLogicalTimestamp{Logical: 44, Physical: versionTime},
 	}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta","metadata":{"owner":"graph-editor"},"workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}]}}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(`{"name":"beta","metadata":{"owner":"graph-editor"},"workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}]}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if len(mf.SavedEditableFactories) != 1 {
-		t.Fatalf("saved editable factories = %d, want 1", len(mf.SavedEditableFactories))
+	if len(mf.SavedCurrentFactories) != 1 {
+		t.Fatalf("saved current factories = %d, want 1", len(mf.SavedCurrentFactories))
 	}
-	if saved := mf.SavedEditableFactories[0].FactoryDefinition; saved.Metadata == nil || (*saved.Metadata)["owner"] != "graph-editor" {
+	if saved := mf.SavedCurrentFactories[0]; saved.Metadata == nil || (*saved.Metadata)["owner"] != "graph-editor" {
 		t.Fatalf("saved metadata = %#v, want owner graph-editor", saved.Metadata)
 	}
 
-	editable := decodeJSONResponse[factoryapi.EditableFactoryDefinition](t, rec)
-	if editable.Version.Logical != 44 || !editable.Version.Physical.Equal(versionTime) {
-		t.Fatalf("save editable version = %#v, want logical 44 physical %s", editable.Version, versionTime)
+	saved := decodeJSONResponse[factoryapi.Factory](t, rec)
+	if saved.Version == nil || saved.Version.Logical != 44 || !saved.Version.Physical.Equal(versionTime) {
+		t.Fatalf("save current factory version = %#v, want logical 44 physical %s", saved.Version, versionTime)
 	}
 }
 
-func TestSaveEditableCurrentFactoryDefinition_MapsValidationErrorsToTargets(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{SaveEditableFactoryErr: apisurface.ErrInvalidNamedFactory})
+func TestSaveCurrentFactory_MapsValidationErrorsToTargets(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{SaveCurrentFactoryErr: apisurface.ErrInvalidNamedFactory})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta"}}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(`{"name":"beta"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -341,18 +341,18 @@ func TestSaveEditableCurrentFactoryDefinition_MapsValidationErrorsToTargets(t *t
 	if rec.Code != http.StatusBadRequest || response.Code != factoryapi.ErrorResponseCode("INVALID_FACTORY") || response.Message != "Factory payload is not a valid Agent Factory definition." {
 		t.Fatalf("validation response = %#v status=%d", response, rec.Code)
 	}
-	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Kind != "form" || (*response.Targets)[0].Field == nil || *(*response.Targets)[0].Field != "factoryDefinition" {
-		t.Fatalf("error targets = %#v, want form factoryDefinition target", response.Targets)
+	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Kind != "form" || (*response.Targets)[0].Field == nil || *(*response.Targets)[0].Field != "factory" {
+		t.Fatalf("error targets = %#v, want form factory target", response.Targets)
 	}
 }
 
-func TestSaveEditableCurrentFactoryDefinition_MapsTopologyValidationTargets(t *testing.T) {
-	field := "factoryDefinition.workstations[0].outputs[0]"
+func TestSaveCurrentFactory_MapsTopologyValidationTargets(t *testing.T) {
+	field := "factory.workstations[0].outputs[0]"
 	targetID := "process->story:missing-state"
 	target := factoryapi.ErrorTarget{Kind: "edge", Id: &targetID, Field: &field}
-	srv := newTestServer(&testutil.MockFactory{SaveEditableFactoryErr: apisurface.NewTopologyValidationError("dangling output", []factoryapi.ErrorTarget{target})})
+	srv := newTestServer(&testutil.MockFactory{SaveCurrentFactoryErr: apisurface.NewTopologyValidationError("dangling output", []factoryapi.ErrorTarget{target})})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta"}}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(`{"name":"beta"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -367,10 +367,10 @@ func TestSaveEditableCurrentFactoryDefinition_MapsTopologyValidationTargets(t *t
 	}
 }
 
-func TestSaveEditableCurrentFactoryDefinition_MapsStaleVersion(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{SaveEditableFactoryErr: apisurface.ErrEditableFactoryVersionStale})
+func TestSaveCurrentFactory_MapsStaleVersion(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{SaveCurrentFactoryErr: apisurface.ErrFactoryVersionStale})
 
-	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta"}}`))
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", bytes.NewBufferString(`{"name":"beta"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -383,13 +383,13 @@ func TestSaveEditableCurrentFactoryDefinition_MapsStaleVersion(t *testing.T) {
 
 func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
-		CurrentNamedFactory: &factoryapi.Factory{
+		CurrentFactory: &factoryapi.Factory{
 			Name:         "beta",
 			Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/factory/~current/workstations/Review/prompt-template-contract", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/factory/workstations/Review/prompt-template-contract", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -404,13 +404,13 @@ func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
 
 func TestValidateCurrentFactoryWorkstationPromptTemplate(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
-		CurrentNamedFactory: &factoryapi.Factory{
+		CurrentFactory: &factoryapi.Factory{
 			Name:         "beta",
 			Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/factory/~current/workstations/Review/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ (index .Inputs 1).Payload }}"}`))
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ (index .Inputs 1).Payload }}"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -425,18 +425,18 @@ func TestValidateCurrentFactoryWorkstationPromptTemplate(t *testing.T) {
 }
 
 func TestValidateCurrentFactoryWorkstationPromptTemplate_UnknownWorkstation(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{CurrentNamedFactory: &factoryapi.Factory{Name: "beta"}})
+	srv := newTestServer(&testutil.MockFactory{CurrentFactory: &factoryapi.Factory{Name: "beta"}})
 
-	req := httptest.NewRequest(http.MethodPost, "/factory/~current/workstations/Missing/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ .Context.Project }}"}`))
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/factory/workstations/Missing/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ .Context.Project }}"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "Current named factory workstation not found.")
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "Current factory workstation not found.")
 }
 
 func TestCreateFactory_RejectsDuplicateFactoryName(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{CreateNamedFactoryErr: factoryconfig.ErrNamedFactoryAlreadyExists})
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -445,7 +445,7 @@ func TestCreateFactory_RejectsDuplicateFactoryName(t *testing.T) {
 
 func TestCreateFactory_RejectsInvalidFactoryName(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody("nested/name", "task")))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("nested/name", "task")))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -454,7 +454,7 @@ func TestCreateFactory_RejectsInvalidFactoryName(t *testing.T) {
 
 func TestCreateFactory_RejectsReservedCurrentFactoryName(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody(string(apisurface.DefaultCurrentFactoryName), "task")))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody(string(apisurface.DefaultCurrentFactoryName), "task")))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -464,7 +464,7 @@ func TestCreateFactory_RejectsReservedCurrentFactoryName(t *testing.T) {
 func TestCreateFactory_RejectsInvalidFactoryPayload(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{CreateNamedFactoryErr: apisurface.ErrInvalidNamedFactory})
 	body := `{"name":"beta","workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}],"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"missing-worker","inputs":[{"workType":"beta-task","state":"init"}],"outputs":[{"workType":"beta-task","state":"done"}]}]}`
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -473,12 +473,12 @@ func TestCreateFactory_RejectsInvalidFactoryPayload(t *testing.T) {
 
 func TestCreateFactory_RejectsNonIdleRuntime(t *testing.T) {
 	mf := &testutil.MockFactory{
-		EngineState:            engineStateWithRuntimeStatus(interfaces.RuntimeStatusActive),
-		CreateNamedFactoryErr:  apisurface.ErrFactoryActivationRequiresIdle,
-		CurrentNamedFactoryErr: apisurface.ErrCurrentNamedFactoryNotFound,
+		EngineState:           engineStateWithRuntimeStatus(interfaces.RuntimeStatusActive),
+		CreateNamedFactoryErr: apisurface.ErrFactoryActivationRequiresIdle,
+		CurrentFactoryErr:     apisurface.ErrCurrentFactoryNotFound,
 	}
 	srv := newTestServer(mf)
-	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
+	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(validNamedFactoryBody("beta", "beta-task")))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -486,20 +486,20 @@ func TestCreateFactory_RejectsNonIdleRuntime(t *testing.T) {
 }
 
 func TestGetCurrentFactory_ReturnsNotFoundWithoutStoredNamedFactory(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{CurrentNamedFactoryErr: apisurface.ErrCurrentNamedFactoryNotFound})
-	req := httptest.NewRequest(http.MethodGet, "/factory/~current", nil)
+	srv := newTestServer(&testutil.MockFactory{CurrentFactoryErr: apisurface.ErrCurrentFactoryNotFound})
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/factory", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "Current named factory not found.")
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "Current factory not found.")
 }
 
-func TestCreateFactoryRoute_RemovedFromRouter(t *testing.T) {
+func TestLegacyCreateFactoryRoute_RemovedFromRouter(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	req := httptest.NewRequest(http.MethodPost, "/factories", bytes.NewBufferString(`{}`))
+	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("POST /factories status = %d, want route removed", rec.Code)
+		t.Fatalf("POST /factory status = %d, want route removed", rec.Code)
 	}
 }

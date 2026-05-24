@@ -32,6 +32,10 @@ export async function verifyDashboardSessionTabs(
     "Active session close button",
   );
   await expectVisible(openButton, "Open another session button");
+  await expectVisible(
+    page.getByText("/workspace/root"),
+    "Default session folder label",
+  );
   await expectNoHorizontalOverflow(
     page,
     `Dashboard session tabs at ${viewport.label}`,

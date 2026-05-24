@@ -69,7 +69,7 @@ const baseFactoryDefinition: CanonicalFactoryDefinition = {
 };
 
 const editableDocument = {
-  factoryDefinition: baseFactoryDefinition,
+  ...baseFactoryDefinition,
   version: {
     logical: 4,
     physical: "2026-05-20T03:45:00Z",
@@ -313,7 +313,7 @@ function createDraftState({
     pendingFactoryDefinition: baseFactoryDefinition,
     replaceDraft: vi.fn(),
     resetDraft: vi.fn(),
-    source: "editable-definition" as const,
+    source: "current-factory" as const,
     updateDraft,
     validationErrors: [],
   };

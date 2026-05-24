@@ -83,7 +83,7 @@ describe("current-factory prompt-template API", () => {
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/factory/~current/workstations/Review/prompt-template-validation",
+        "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
       ),
       expect.objectContaining({
         body: JSON.stringify({ prompt: "{{ (index .Inputs 1).Payload }}" }),
@@ -94,6 +94,39 @@ describe("current-factory prompt-template API", () => {
       diagnostics: [{ kind: "UNAVAILABLE_VARIABLE", path: ".Inputs[1]" }],
       valid: false,
     });
+  });
+
+  it("uses the selected session for non-default prompt-template requests", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          availableVariables: [],
+          inputCount: 0,
+          unavailableAccessPatterns: [],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await getCurrentFactoryWorkstationPromptTemplateContract("Review", {
+      fetch,
+      sessionID: "session-beta",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/factory-sessions/session-beta/factory/workstations/Review/prompt-template-contract",
+      ),
+      expect.objectContaining({
+        method: "GET",
+      }),
+    );
   });
 
   it("surfaces typed current-factory prompt-template API errors", async () => {

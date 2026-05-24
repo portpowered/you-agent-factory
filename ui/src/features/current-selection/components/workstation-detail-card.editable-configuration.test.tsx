@@ -118,6 +118,10 @@ function buildReadyEditableConfigurationState(overrides?: {
         overrides?.prompt,
     ),
     markChangesSaved: vi.fn(),
+    baseVersion: {
+      logical: 7,
+      physical: "2026-05-23T15:52:00Z",
+    },
     onBehaviorChange: vi.fn(),
     onPromptChange: vi.fn(),
     onRunnerChange: vi.fn(),

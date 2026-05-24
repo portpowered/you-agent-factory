@@ -38,7 +38,7 @@ func (s *Server) GetProviderSessionDetails(
 	r *http.Request,
 	params factoryapi.GetProviderSessionDetailsParams,
 ) {
-	if params.Provider != factoryapi.Codex || params.Kind != factoryapi.SessionID {
+	if params.Provider != factoryapi.Codex || params.Kind != factoryapi.LoadableProviderSessionKindSessionID {
 		s.writeError(w, http.StatusBadRequest, "invalid request parameter", "BAD_REQUEST")
 		return
 	}

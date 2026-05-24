@@ -117,6 +117,9 @@ properties:
   sourceDirectory:
     type: string
     description: Original source directory for record/replay and drift diagnostics.
+  version:
+    $ref: '../api/HybridLogicalTimestamp.yaml'
+    description: Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology.
   metadata:
     $ref: '../shared/StringMap.yaml'
     description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.

@@ -263,7 +263,7 @@ func (fs *FactoryService) GetEngineStateSnapshotForSession(ctx context.Context, 
 	return snapshot, nil
 }
 
-func (fs *FactoryService) GetCurrentNamedFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
+func (fs *FactoryService) GetCurrentFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return factoryapi.Factory{}, err
@@ -272,78 +272,67 @@ func (fs *FactoryService) GetCurrentNamedFactoryForSession(_ context.Context, se
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	return fs.serializeNamedFactory(sessionFactoryName(sessionFactoryRootDir(fs, session), runtimeCfg), runtimeCfg, true)
+	serialized, err := fs.serializeNamedFactory(sessionFactoryName(sessionFactoryRootDir(fs, session), runtimeCfg), runtimeCfg, true)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return fs.withCurrentFactoryVersion(sessionFactoryRootDir(fs, session), serialized.Name, serialized)
 }
 
-func (fs *FactoryService) GetEditableFactoryDefinitionForSession(ctx context.Context, sessionID string) (factoryapi.EditableFactoryDefinition, error) {
-	session, err := fs.requireSession(sessionID)
-	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
-	}
-	current, err := fs.GetCurrentNamedFactoryForSession(ctx, sessionID)
-	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
-	}
-	version, err := fs.currentFactoryDefinitionVersionAtRoot(sessionFactoryRootDir(fs, session), current.Name)
-	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
-	}
-	return factoryapi.EditableFactoryDefinition{
-		FactoryDefinition: current,
-		Version:           version,
-	}, nil
-}
-
-func (fs *FactoryService) SaveEditableFactoryDefinitionForSession(
+func (fs *FactoryService) SaveCurrentFactoryForSession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.SaveEditableFactoryDefinitionRequest,
-) (factoryapi.EditableFactoryDefinition, error) {
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
 	if fs == nil {
-		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("factory service is required")
+		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
 	}
 
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
+		return factoryapi.Factory{}, err
 	}
-	current, err := fs.GetCurrentNamedFactoryForSession(ctx, sessionID)
+	current, err := fs.GetCurrentFactoryForSession(ctx, sessionID)
 	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
+		return factoryapi.Factory{}, err
 	}
-	sessionRootDir, payload, err := fs.prepareEditableFactoryDefinitionSave(sessionFactoryRootDir(fs, session), current, request)
+	sessionRootDir, sanitized, err := fs.prepareEditableFactoryDefinitionSave(sessionFactoryRootDir(fs, session), current, request)
 	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
+		return factoryapi.Factory{}, err
 	}
 
 	fs.activationMu.Lock()
 	defer fs.activationMu.Unlock()
 
 	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
+		return factoryapi.Factory{}, err
 	}
-	if err := fs.requireFreshEditableFactoryVersionAtRoot(request.BaseVersion, sessionRootDir, current.Name); err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
+	if err := fs.requireFreshEditableFactoryVersionAtRoot(request.Version, sessionRootDir, current.Name); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	nextVersion := nextEditableFactoryVersion(current.Version, factory.EnsureClock(fs.clock).Now().UTC())
+	payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
+	if err != nil {
+		return factoryapi.Factory{}, err
 	}
 
-	factoryDir, err := fs.replaceEditableFactoryDefinition(sessionRootDir, request.FactoryDefinition.Name, payload)
+	factoryDir, err := fs.replaceEditableFactoryDefinition(sessionRootDir, request.Name, payload)
 	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
+		return factoryapi.Factory{}, err
 	}
-	replacement, err := fs.buildSessionEditableFactoryReplacement(ctx, sessionRootDir, factoryDir, sessionID, request.FactoryDefinition.Name)
+	replacement, err := fs.buildSessionEditableFactoryReplacement(ctx, sessionRootDir, factoryDir, sessionID, request.Name)
 	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
+		return factoryapi.Factory{}, err
 	}
 	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
+		return factoryapi.Factory{}, err
 	}
-	if err := fs.replaceSessionRuntime(ctx, session, string(request.FactoryDefinition.Name), replacement); err != nil {
-		return factoryapi.EditableFactoryDefinition{}, err
+	if err := fs.replaceSessionRuntime(ctx, session, string(request.Name), replacement); err != nil {
+		return factoryapi.Factory{}, err
 	}
 
-	return fs.GetEditableFactoryDefinitionForSession(ctx, sessionID)
+	return fs.GetCurrentFactoryForSession(ctx, sessionID)
 }
-
 func (fs *FactoryService) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {
 	if fs == nil || fs.sessions == nil {
 		return factoryapi.ListFactorySessionsResponse{}, nil

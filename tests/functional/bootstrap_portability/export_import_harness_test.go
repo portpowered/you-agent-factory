@@ -74,12 +74,12 @@ func (h exportImportSmokeHarness) Run(t *testing.T) exportImportSmokeHarnessResu
 	})
 	waitForCurrentFactoryRuntimeIdle(t, server.service, 5*time.Second)
 
-	exported := getCurrentNamedFactory(t, server.URL())
+	exported := getCurrentFactory(t, server.URL())
 	importRequest := exported
 	importRequest.Name = factoryapi.FactoryName(h.options.importFactoryName)
 
 	imported := createNamedFactory(t, server.URL(), importRequest)
-	current := getCurrentNamedFactory(t, server.URL())
+	current := getCurrentFactory(t, server.URL())
 	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
 
 	importedDir, err := config.ResolveCurrentFactoryDir(rootDir)
@@ -109,7 +109,7 @@ func (r exportImportSmokeHarnessResult) AssertAPIContractSuccess(t *testing.T, f
 	t.Helper()
 
 	if r.ExportedFactory.Name == "" {
-		t.Fatal("api contract drift: GET /factory/~current returned an empty current factory name")
+		t.Fatal("api contract drift: GET /factory-sessions/~default/factory returned an empty current factory name")
 	}
 	if !reflect.DeepEqual(
 		comparableExportImportFactory(r.ExportedFactory),
@@ -135,7 +135,7 @@ func (r exportImportSmokeHarnessResult) AssertAPIContractSuccess(t *testing.T, f
 		)
 	}
 	if r.CurrentFactory.Name != r.ImportRequest.Name {
-		t.Fatalf("api contract drift: GET /factory/~current after import = %q, want %q", r.CurrentFactory.Name, r.ImportRequest.Name)
+		t.Fatalf("api contract drift: GET /factory-sessions/~default/factory after import = %q, want %q", r.CurrentFactory.Name, r.ImportRequest.Name)
 	}
 	if !reflect.DeepEqual(
 		comparableExportImportFactory(r.CurrentFactory),
@@ -177,14 +177,14 @@ func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.
 		t.Fatalf("marshal create factory request: %v", err)
 	}
 
-	resp, err := http.Post(serverURL+"/factory", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(serverURL+"/factories", "application/json", bytes.NewReader(body))
 	if err != nil {
-		t.Fatalf("POST /factory: %v", err)
+		t.Fatalf("POST /factories: %v", err)
 	}
 	if resp.StatusCode != http.StatusCreated {
 		data, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		t.Fatalf("POST /factory status = %d, want 201: %s", resp.StatusCode, string(data))
+		t.Fatalf("POST /factories status = %d, want 201: %s", resp.StatusCode, string(data))
 	}
 
 	var created factoryapi.Factory
@@ -192,16 +192,16 @@ func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.
 	return created
 }
 
-func getCurrentNamedFactory(t *testing.T, serverURL string) factoryapi.Factory {
+func getCurrentFactory(t *testing.T, serverURL string) factoryapi.Factory {
 	t.Helper()
 
-	resp, err := http.Get(serverURL + "/factory/~current")
+	resp, err := http.Get(serverURL + "/factory-sessions/~default/factory")
 	if err != nil {
-		t.Fatalf("GET /factory/~current: %v", err)
+		t.Fatalf("GET /factory-sessions/~default/factory: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		t.Fatalf("GET /factory/~current status = %d, want 200", resp.StatusCode)
+		t.Fatalf("GET /factory-sessions/~default/factory status = %d, want 200", resp.StatusCode)
 	}
 
 	var current factoryapi.Factory

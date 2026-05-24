@@ -46,7 +46,7 @@ describe("factory events API", () => {
     const stream = openFactoryEventStream(onEvent, onStatusChange);
 
     expect(stream).toBeInstanceOf(MockEventSource);
-    expect(stream?.url).toBe("/factories/~default/events");
+    expect(stream?.url).toBe("/factory-sessions/~default/events");
     expect(onStatusChange).toHaveBeenCalledWith("connecting", "Connecting to factory events...");
 
     stream?.onopen?.(new Event("open"));
@@ -83,6 +83,6 @@ describe("factory events API", () => {
     const stream = openFactoryEventStream(onEvent, onStatusChange, "session-beta");
 
     expect(stream).toBeInstanceOf(MockEventSource);
-    expect(stream?.url).toBe("/factories/session-beta/events");
+    expect(stream?.url).toBe("/factory-sessions/session-beta/events");
   });
 });

@@ -1,6 +1,15 @@
 import process from "node:process";
 import { chromium } from "playwright";
 import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
+import {
+  OVERFLOW_TOLERANCE_PX,
+  expectDialogWithinViewport,
+  expectNoHorizontalOverflow,
+  expectVisible,
+  storyUrl,
+  waitForDialog,
+  waitForStoryRender,
+} from "./storybook-responsive-helpers.mjs";
 import { verifyDashboardSessionTabs as verifyDashboardSessionTabsImpl } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
 import {
   verifyEditorGraphParity as verifyEditorGraphParityImpl,
@@ -22,8 +31,6 @@ import { verifyProviderSessionDetailSuccess as verifyProviderSessionDetailSucces
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
-const OVERFLOW_TOLERANCE_PX = 1;
-const STORY_RENDER_TIMEOUT_MS = 30000;
 
 export const viewportChecks = [
   { height: 844, label: "mobile", width: 390 },
@@ -154,100 +161,14 @@ export const storyChecks = [
   },
 ];
 
-function storyUrl(storyId) {
-  return `${STORYBOOK_URL}/iframe.html?id=${storyId}&viewMode=story`;
-}
-
-export async function waitForStoryRender(page) {
-  await page.waitForSelector("#storybook-root", {
-    state: "attached",
-    timeout: STORY_RENDER_TIMEOUT_MS,
-  });
-  await page.waitForFunction(
-    () => {
-      const root = document.querySelector("#storybook-root");
-      if (!(root instanceof HTMLElement)) {
-        return false;
-      }
-      if (root.childElementCount > 0) {
-        return true;
-      }
-      return Array.from(document.body.children).some((child) => {
-        if (!(child instanceof HTMLElement)) {
-          return false;
-        }
-        if (
-          child.id === "storybook-root" ||
-          child.id === "storybook-docs" ||
-          child.tagName === "SCRIPT" ||
-          child.tagName === "STYLE"
-        ) {
-          return false;
-        }
-
-        return true;
-      });
-    },
-    { timeout: STORY_RENDER_TIMEOUT_MS },
-  );
-}
-
-export async function waitForDialog(page, dialogName) {
-  const dialog = page.getByRole("dialog", { name: dialogName });
-  await dialog.waitFor({ state: "visible" });
-  return dialog;
-}
-
-export async function waitForStoryRegion(page, regionName) {
-  const region = page.getByRole("region", { name: regionName });
-  await region.waitFor({ state: "visible" });
-  return region;
-}
-
-export async function expectNoHorizontalOverflow(page, label) {
-  const metrics = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-
-  if (metrics.scrollWidth > metrics.clientWidth + OVERFLOW_TOLERANCE_PX) {
-    throw new Error(
-      `${label} overflowed horizontally: scrollWidth=${metrics.scrollWidth}, clientWidth=${metrics.clientWidth}.`,
-    );
-  }
-}
-
-export async function expectDialogWithinViewport(dialog, viewport, label) {
-  const box = await dialog.boundingBox();
-  if (!box) {
-    throw new Error(`Could not measure ${label} dialog bounds.`);
-  }
-  const exceedsViewport =
-    box.x < -OVERFLOW_TOLERANCE_PX ||
-    box.y < -OVERFLOW_TOLERANCE_PX ||
-    box.x + box.width > viewport.width + OVERFLOW_TOLERANCE_PX ||
-    box.y + box.height > viewport.height + OVERFLOW_TOLERANCE_PX;
-
-  if (exceedsViewport) {
-    throw new Error(
-      `${label} dialog exceeded the ${viewport.label} viewport (${viewport.width}x${viewport.height}).`,
-    );
-  }
-}
-
-export async function expectVisible(locator, label) {
-  if (typeof locator.waitFor === "function") {
-    await locator.waitFor({
-      state: "visible",
-      timeout: STORY_RENDER_TIMEOUT_MS,
-    });
-    return;
-  }
-
-  if (!(await locator.isVisible())) {
-    throw new Error(`${label} was not visible.`);
-  }
-}
+export {
+  expectDialogWithinViewport,
+  expectNoHorizontalOverflow,
+  expectVisible,
+  waitForDialog,
+  waitForStoryRegion,
+  waitForStoryRender,
+} from "./storybook-responsive-helpers.mjs";
 
 export async function verifyExportDialog(page, dialog, viewport) {
   await expectVisible(
@@ -393,6 +314,16 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
     );
   }
 
+  if (viewport.label === "desktop") {
+    await expectOrderedLeftEdges(
+      [heading, exportButton, languageButton],
+      "Dashboard header desktop primary-row controls",
+    );
+    await expectOrderedLeftEdges(
+      [slider, timelineStatus],
+      "Dashboard header desktop timeline controls",
+    );
+  }
   await expectNoHorizontalOverflow(
     page,
     `Dashboard header at ${viewport.label}`,
@@ -438,7 +369,9 @@ export async function verifyStory(browser, storyCheck, viewport) {
   const page = await context.newPage();
 
   try {
-    await page.goto(storyUrl(storyCheck.id), { waitUntil: "domcontentloaded" });
+    await page.goto(storyUrl(STORYBOOK_URL, storyCheck.id), {
+      waitUntil: "domcontentloaded",
+    });
     await waitForStoryRender(page);
     const dialog = storyCheck.dialogName
       ? await waitForDialog(page, storyCheck.dialogName)

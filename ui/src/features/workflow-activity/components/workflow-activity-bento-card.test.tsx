@@ -5,8 +5,8 @@ import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  useCurrentEditableFactoryDefinitionDocument,
-  useSaveCurrentEditableFactoryDefinition,
+  useCurrentFactoryDocument,
+  useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
@@ -20,8 +20,8 @@ vi.mock("../../current-factory-definition/public", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinitionDocument: vi.fn(),
-    useSaveCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDocument: vi.fn(),
+    useSaveCurrentFactory: vi.fn(),
   };
 });
 
@@ -136,12 +136,12 @@ describe("WorkflowActivityBentoCard", () => {
 
   beforeEach(() => {
     restoreBrowserTestShims = installDashboardBrowserTestShims();
-    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: undefined,
       error: null,
       status: "pending",
     } as never);
-    vi.mocked(useSaveCurrentEditableFactoryDefinition).mockReturnValue({
+    vi.mocked(useSaveCurrentFactory).mockReturnValue({
       mutateAsync: vi.fn(),
       reset: vi.fn(),
       status: "idle",

@@ -5,7 +5,7 @@ import {
 } from "./api";
 
 describe("factory API", () => {
-  it("posts the direct canonical factory payload to /factory and returns the canonical response", async () => {
+  it("posts the direct canonical factory payload to /factories and returns the canonical response", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -37,7 +37,7 @@ describe("factory API", () => {
       workstations: [],
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/factory",
+      "/factories",
       expect.objectContaining({
         body: JSON.stringify({
           name: "Dropped Factory",
@@ -121,7 +121,7 @@ describe("factory API", () => {
       workers: [],
       workstations: [],
     });
-    expect(fetchMock).toHaveBeenCalledWith("/factories/~default/factory/~current", {
+    expect(fetchMock).toHaveBeenCalledWith("/factory-sessions/~default/factory", {
       method: "GET",
     });
   });
@@ -156,7 +156,7 @@ describe("factory API", () => {
       workstations: [],
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/factories/session-2/factory/~current",
+      "/factory-sessions/session-2/factory",
       {
         method: "GET",
       },

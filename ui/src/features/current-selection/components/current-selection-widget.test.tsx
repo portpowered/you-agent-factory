@@ -2,13 +2,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import type {
+  CurrentFactoryDocument,
+} from "../../../api/current-factory-definition";
 import {
   buildDashboardInferenceAttemptFixture,
   buildDashboardWorkstationRequestFixture,
 } from "../../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/public";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
@@ -22,7 +24,7 @@ vi.mock("../../current-factory-definition/public", async () => {
 
   return {
     ...actual,
-    useCurrentEditableFactoryDefinition: vi.fn(),
+    useCurrentFactoryDocument: vi.fn(),
   };
 });
 
@@ -143,7 +145,7 @@ describe("CurrentSelectionWidget", () => {
       isSuccess: true,
       status: "success",
     } as never);
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: undefined,
       error: null,
       failureCount: 0,
@@ -670,7 +672,7 @@ describe("CurrentSelectionWidget", () => {
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
     });
-    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
+    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(
       true,
     );
     expect(
@@ -690,7 +692,7 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
+    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(
       false,
     );
   });
@@ -718,14 +720,14 @@ describe("CurrentSelectionWidget", () => {
     );
 
     expect(
-      vi.mocked(useCurrentEditableFactoryDefinition),
+      vi.mocked(useCurrentFactoryDocument),
     ).toHaveBeenLastCalledWith(true);
   });
 
   it("loads editable workstation inputs when a workstation is already selected on mount", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
@@ -740,7 +742,7 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
+    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(
       true,
     );
 
@@ -757,7 +759,7 @@ describe("CurrentSelectionWidget", () => {
   it("initializes editable workstation inputs from the canonical factory definition and allows worker edits", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
@@ -801,7 +803,7 @@ describe("CurrentSelectionWidget", () => {
   it("preserves unsaved editable workstation input when the server definition refreshes", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
 
@@ -830,7 +832,7 @@ describe("CurrentSelectionWidget", () => {
       target: { value: "Keep my local edit." },
     });
 
-    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           prompt: "Server changed prompt",
@@ -1017,7 +1019,7 @@ describe("CurrentSelectionWidget", () => {
 });
 
 function buildEditableDefinitionResult(
-  data: CanonicalFactoryDefinition | undefined,
+  data: CurrentFactoryDocument | undefined,
 ) {
   return {
     data,
@@ -1079,9 +1081,13 @@ function buildEditableFactoryDefinition(overrides?: {
   prompt?: string;
   workerName?: string;
   workerOptions?: string[];
-}): CanonicalFactoryDefinition {
+}): CurrentFactoryDocument {
   return {
     name: "Current Factory",
+    version: {
+      logical: 7,
+      physical: "2026-05-23T16:22:24Z",
+    },
     workers: (overrides?.workerOptions ?? ["reviewer", "planner"]).map(
       (name, index) => ({
         model: `gpt-5.${index + 5}`,

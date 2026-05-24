@@ -42,8 +42,12 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
 
   it("builds a stable query key for the selected workstation", () => {
     expect(
-      buildCurrentWorkstationPromptTemplateContractQueryKey("Review"),
-    ).toEqual(["current-workstation-prompt-template-contract", "Review"]);
+      buildCurrentWorkstationPromptTemplateContractQueryKey("Review", null),
+    ).toEqual([
+      "current-workstation-prompt-template-contract",
+      "~default",
+      "Review",
+    ]);
   });
 
   it("does not fetch while prompt help is disabled", () => {
@@ -95,6 +99,7 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
 
     expect(getCurrentFactoryWorkstationPromptTemplateContract).toHaveBeenCalledWith(
       "Review",
+      { sessionID: "~default" },
     );
   });
 

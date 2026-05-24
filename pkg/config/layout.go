@@ -169,6 +169,7 @@ func CloneFactoryConfig(cfg *interfaces.FactoryConfig) (*interfaces.FactoryConfi
 	cloned := &interfaces.FactoryConfig{
 		Name:             cfg.Name,
 		Project:          cfg.Project,
+		Version:          cloneFactoryVersion(cfg.Version),
 		Guards:           cloneFactoryGuardConfigs(cfg.Guards),
 		InputTypes:       cloneInputTypeConfigs(cfg.InputTypes),
 		WorkTypes:        cloneWorkTypeConfigs(cfg.WorkTypes),
@@ -178,6 +179,14 @@ func CloneFactoryConfig(cfg *interfaces.FactoryConfig) (*interfaces.FactoryConfi
 		Workstations:     cloneWorkstationConfigs(cfg.Workstations),
 	}
 	return cloned, nil
+}
+
+func cloneFactoryVersion(version *interfaces.FactoryVersion) *interfaces.FactoryVersion {
+	if version == nil {
+		return nil
+	}
+	cloned := *version
+	return &cloned
 }
 
 func cloneFactoryGuardConfigs(configs []interfaces.FactoryGuardConfig) []interfaces.FactoryGuardConfig {

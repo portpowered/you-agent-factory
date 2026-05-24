@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -17,6 +18,10 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 	original := &interfaces.FactoryConfig{
 		Name:    "customer-facing-name",
 		Project: "sample-service",
+		Version: &interfaces.FactoryVersion{
+			Logical:  7,
+			Physical: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC),
+		},
 		WorkTypes: []interfaces.WorkTypeConfig{
 			{
 				Name: "story",
@@ -65,36 +70,47 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 		t.Fatalf("mapper.Expand: %v", err)
 	}
 
+	assertExpandedConfigRoundTrip(t, expanded, original)
+}
+
+func assertExpandedConfigRoundTrip(t *testing.T, expanded, original *interfaces.FactoryConfig) {
+	t.Helper()
+
 	if expanded.Project != original.Project {
 		t.Fatalf("expected project %q, got %q", original.Project, expanded.Project)
 	}
 	if expanded.Name != original.Name {
 		t.Fatalf("expected name %q, got %q", original.Name, expanded.Name)
 	}
-
+	if expanded.Version == nil || expanded.Version.Logical != original.Version.Logical || !expanded.Version.Physical.Equal(original.Version.Physical) {
+		t.Fatalf("expected version %#v, got %#v", original.Version, expanded.Version)
+	}
 	if len(expanded.WorkTypes) != len(original.WorkTypes) {
 		t.Fatalf("expected %d work types, got %d", len(original.WorkTypes), len(expanded.WorkTypes))
 	}
+	assertExpandedWorkstationRoundTrip(t, expanded.Workstations[0], original.Workstations[0])
+}
 
-	if expanded.Workstations[0].Kind != original.Workstations[0].Kind {
-		t.Fatalf("expected workstation kind %q, got %q", original.Workstations[0].Kind, expanded.Workstations[0].Kind)
-	}
+func assertExpandedWorkstationRoundTrip(t *testing.T, got, want interfaces.FactoryWorkstationConfig) {
+	t.Helper()
 
-	if expanded.Workstations[0].ID != original.Workstations[0].ID {
-		t.Fatalf("expected workstation id %q, got %q", original.Workstations[0].ID, expanded.Workstations[0].ID)
+	if got.Kind != want.Kind {
+		t.Fatalf("expected workstation kind %q, got %q", want.Kind, got.Kind)
 	}
-
-	if expanded.Workstations[0].Resources[0].Capacity != original.Workstations[0].Resources[0].Capacity {
-		t.Fatalf("expected resource capacity %d, got %d", original.Workstations[0].Resources[0].Capacity, expanded.Workstations[0].Resources[0].Capacity)
+	if got.ID != want.ID {
+		t.Fatalf("expected workstation id %q, got %q", want.ID, got.ID)
 	}
-	if len(expanded.Workstations[0].Guards) != 1 {
-		t.Fatalf("expected one workstation guard, got %#v", expanded.Workstations[0].Guards)
+	if got.Resources[0].Capacity != want.Resources[0].Capacity {
+		t.Fatalf("expected resource capacity %d, got %d", want.Resources[0].Capacity, got.Resources[0].Capacity)
 	}
-	if expanded.Workstations[0].Guards[0].Type != interfaces.GuardTypeVisitCount {
-		t.Fatalf("expected visit_count guard, got %#v", expanded.Workstations[0].Guards[0])
+	if len(got.Guards) != 1 {
+		t.Fatalf("expected one workstation guard, got %#v", got.Guards)
 	}
-	if expanded.Workstations[0].Guards[0].Workstation != "review-story" || expanded.Workstations[0].Guards[0].MaxVisits != 3 {
-		t.Fatalf("expected visit_count guard details to roundtrip, got %#v", expanded.Workstations[0].Guards[0])
+	if got.Guards[0].Type != interfaces.GuardTypeVisitCount {
+		t.Fatalf("expected visit_count guard, got %#v", got.Guards[0])
+	}
+	if got.Guards[0].Workstation != "review-story" || got.Guards[0].MaxVisits != 3 {
+		t.Fatalf("expected visit_count guard details to roundtrip, got %#v", got.Guards[0])
 	}
 }
 

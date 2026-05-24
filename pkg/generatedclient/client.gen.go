@@ -191,13 +191,6 @@ type ClassificationRoute struct {
 	Outputs []WorkstationIO `json:"outputs"`
 }
 
-// EditableFactoryDefinition defines model for EditableFactoryDefinition.
-type EditableFactoryDefinition struct {
-	// FactoryDefinition Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	FactoryDefinition Factory                `json:"factoryDefinition"`
-	Version           HybridLogicalTimestamp `json:"version"`
-}
-
 // ErrorFamily Stable machine-readable error family for broader client grouping.
 type ErrorFamily string
 
@@ -244,7 +237,7 @@ type Factory struct {
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
 	Metadata   *StringMap   `json:"metadata,omitempty"`
 
-	// Name Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+	// Name Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 	Name FactoryName `json:"name"`
 
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
@@ -257,7 +250,8 @@ type Factory struct {
 	SourceDirectory *string `json:"sourceDirectory,omitempty"`
 
 	// SupportingFiles Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
-	SupportingFiles *ResourceManifest `json:"supportingFiles,omitempty"`
+	SupportingFiles *ResourceManifest       `json:"supportingFiles,omitempty"`
+	Version         *HybridLogicalTimestamp `json:"version,omitempty"`
 
 	// WorkTypes Customer-authored work item categories and the lifecycle states each one can occupy.
 	WorkTypes *[]WorkType `json:"workTypes,omitempty"`
@@ -284,7 +278,7 @@ type FactoryGuard struct {
 	Type GuardType `json:"type"`
 }
 
-// FactoryName Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+// FactoryName Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string
 
 // Guard Shared guard attached either to a workstation as a whole or to one specific workstation input.
@@ -472,14 +466,6 @@ type ResourceType string
 
 // RunnerID Stable built-in runner identifiers supported by factory and workstation runner selection.
 type RunnerID string
-
-// SaveEditableFactoryDefinitionRequest defines model for SaveEditableFactoryDefinitionRequest.
-type SaveEditableFactoryDefinitionRequest struct {
-	BaseVersion *HybridLogicalTimestamp `json:"baseVersion,omitempty"`
-
-	// FactoryDefinition Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	FactoryDefinition Factory `json:"factoryDefinition"`
-}
 
 // StringMap defines model for StringMap.
 type StringMap map[string]string
@@ -888,23 +874,11 @@ type CreateFactoryBadRequest = ErrorResponse
 // CreateFactoryConflict defines model for CreateFactoryConflict.
 type CreateFactoryConflict = ErrorResponse
 
-// CurrentFactoryNotFound defines model for CurrentFactoryNotFound.
-type CurrentFactoryNotFound = ErrorResponse
-
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
 
-// SaveEditableFactoryDefinitionBadRequest defines model for SaveEditableFactoryDefinitionBadRequest.
-type SaveEditableFactoryDefinitionBadRequest = ErrorResponse
-
-// SaveEditableFactoryDefinitionConflict defines model for SaveEditableFactoryDefinitionConflict.
-type SaveEditableFactoryDefinitionConflict = ErrorResponse
-
 // CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
 type CreateFactoryJSONRequestBody = Factory
-
-// SaveEditableCurrentFactoryDefinitionJSONRequestBody defines body for SaveEditableCurrentFactoryDefinition for application/json ContentType.
-type SaveEditableCurrentFactoryDefinitionJSONRequestBody = SaveEditableFactoryDefinitionRequest
 
 // AsWorkTextContentPart returns the union data inside the WorkContentPart as a WorkTextContentPart
 func (t WorkContentPart) AsWorkTextContentPart() (WorkTextContentPart, error) {
@@ -1123,17 +1097,6 @@ type ClientInterface interface {
 	CreateFactoryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	CreateFactory(ctx context.Context, body CreateFactoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetCurrentFactory request
-	GetCurrentFactory(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetEditableCurrentFactoryDefinition request
-	GetEditableCurrentFactoryDefinition(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// SaveEditableCurrentFactoryDefinitionWithBody request with any body
-	SaveEditableCurrentFactoryDefinitionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	SaveEditableCurrentFactoryDefinition(ctx context.Context, body SaveEditableCurrentFactoryDefinitionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) CreateFactoryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1150,54 +1113,6 @@ func (c *Client) CreateFactoryWithBody(ctx context.Context, contentType string, 
 
 func (c *Client) CreateFactory(ctx context.Context, body CreateFactoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateFactoryRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetCurrentFactory(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetCurrentFactoryRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetEditableCurrentFactoryDefinition(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetEditableCurrentFactoryDefinitionRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) SaveEditableCurrentFactoryDefinitionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSaveEditableCurrentFactoryDefinitionRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) SaveEditableCurrentFactoryDefinition(ctx context.Context, body SaveEditableCurrentFactoryDefinitionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSaveEditableCurrentFactoryDefinitionRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1228,7 +1143,7 @@ func NewCreateFactoryRequestWithBody(server string, contentType string, body io.
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/factory")
+	operationPath := fmt.Sprintf("/factories")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1239,100 +1154,6 @@ func NewCreateFactoryRequestWithBody(server string, contentType string, body io.
 	}
 
 	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewGetCurrentFactoryRequest generates requests for GetCurrentFactory
-func NewGetCurrentFactoryRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/factory/~current")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetEditableCurrentFactoryDefinitionRequest generates requests for GetEditableCurrentFactoryDefinition
-func NewGetEditableCurrentFactoryDefinitionRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/factory/~current/editable-definition")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewSaveEditableCurrentFactoryDefinitionRequest calls the generic SaveEditableCurrentFactoryDefinition builder with application/json body
-func NewSaveEditableCurrentFactoryDefinitionRequest(server string, body SaveEditableCurrentFactoryDefinitionJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewSaveEditableCurrentFactoryDefinitionRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewSaveEditableCurrentFactoryDefinitionRequestWithBody generates requests for SaveEditableCurrentFactoryDefinition with any type of body
-func NewSaveEditableCurrentFactoryDefinitionRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/factory/~current/editable-definition")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PUT", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1389,17 +1210,6 @@ type ClientWithResponsesInterface interface {
 	CreateFactoryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateFactoryClientResponse, error)
 
 	CreateFactoryWithResponse(ctx context.Context, body CreateFactoryJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateFactoryClientResponse, error)
-
-	// GetCurrentFactoryWithResponse request
-	GetCurrentFactoryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCurrentFactoryClientResponse, error)
-
-	// GetEditableCurrentFactoryDefinitionWithResponse request
-	GetEditableCurrentFactoryDefinitionWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetEditableCurrentFactoryDefinitionClientResponse, error)
-
-	// SaveEditableCurrentFactoryDefinitionWithBodyWithResponse request with any body
-	SaveEditableCurrentFactoryDefinitionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SaveEditableCurrentFactoryDefinitionClientResponse, error)
-
-	SaveEditableCurrentFactoryDefinitionWithResponse(ctx context.Context, body SaveEditableCurrentFactoryDefinitionJSONRequestBody, reqEditors ...RequestEditorFn) (*SaveEditableCurrentFactoryDefinitionClientResponse, error)
 }
 
 type CreateFactoryClientResponse struct {
@@ -1427,80 +1237,6 @@ func (r CreateFactoryClientResponse) StatusCode() int {
 	return 0
 }
 
-type GetCurrentFactoryClientResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *Factory
-	JSON404      *CurrentFactoryNotFound
-	JSON500      *InternalError
-}
-
-// Status returns HTTPResponse.Status
-func (r GetCurrentFactoryClientResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetCurrentFactoryClientResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetEditableCurrentFactoryDefinitionClientResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *EditableFactoryDefinition
-	JSON404      *CurrentFactoryNotFound
-	JSON500      *InternalError
-}
-
-// Status returns HTTPResponse.Status
-func (r GetEditableCurrentFactoryDefinitionClientResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetEditableCurrentFactoryDefinitionClientResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type SaveEditableCurrentFactoryDefinitionClientResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *EditableFactoryDefinition
-	JSON400      *SaveEditableFactoryDefinitionBadRequest
-	JSON404      *CurrentFactoryNotFound
-	JSON409      *SaveEditableFactoryDefinitionConflict
-	JSON500      *InternalError
-}
-
-// Status returns HTTPResponse.Status
-func (r SaveEditableCurrentFactoryDefinitionClientResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r SaveEditableCurrentFactoryDefinitionClientResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 // CreateFactoryWithBodyWithResponse request with arbitrary body returning *CreateFactoryClientResponse
 func (c *ClientWithResponses) CreateFactoryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateFactoryClientResponse, error) {
 	rsp, err := c.CreateFactoryWithBody(ctx, contentType, body, reqEditors...)
@@ -1516,41 +1252,6 @@ func (c *ClientWithResponses) CreateFactoryWithResponse(ctx context.Context, bod
 		return nil, err
 	}
 	return ParseCreateFactoryClientResponse(rsp)
-}
-
-// GetCurrentFactoryWithResponse request returning *GetCurrentFactoryClientResponse
-func (c *ClientWithResponses) GetCurrentFactoryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCurrentFactoryClientResponse, error) {
-	rsp, err := c.GetCurrentFactory(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetCurrentFactoryClientResponse(rsp)
-}
-
-// GetEditableCurrentFactoryDefinitionWithResponse request returning *GetEditableCurrentFactoryDefinitionClientResponse
-func (c *ClientWithResponses) GetEditableCurrentFactoryDefinitionWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetEditableCurrentFactoryDefinitionClientResponse, error) {
-	rsp, err := c.GetEditableCurrentFactoryDefinition(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetEditableCurrentFactoryDefinitionClientResponse(rsp)
-}
-
-// SaveEditableCurrentFactoryDefinitionWithBodyWithResponse request with arbitrary body returning *SaveEditableCurrentFactoryDefinitionClientResponse
-func (c *ClientWithResponses) SaveEditableCurrentFactoryDefinitionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SaveEditableCurrentFactoryDefinitionClientResponse, error) {
-	rsp, err := c.SaveEditableCurrentFactoryDefinitionWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseSaveEditableCurrentFactoryDefinitionClientResponse(rsp)
-}
-
-func (c *ClientWithResponses) SaveEditableCurrentFactoryDefinitionWithResponse(ctx context.Context, body SaveEditableCurrentFactoryDefinitionJSONRequestBody, reqEditors ...RequestEditorFn) (*SaveEditableCurrentFactoryDefinitionClientResponse, error) {
-	rsp, err := c.SaveEditableCurrentFactoryDefinition(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseSaveEditableCurrentFactoryDefinitionClientResponse(rsp)
 }
 
 // ParseCreateFactoryClientResponse parses an HTTP response from a CreateFactoryWithResponse call
@@ -1583,140 +1284,6 @@ func ParseCreateFactoryClientResponse(rsp *http.Response) (*CreateFactoryClientR
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest CreateFactoryConflict
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetCurrentFactoryClientResponse parses an HTTP response from a GetCurrentFactoryWithResponse call
-func ParseGetCurrentFactoryClientResponse(rsp *http.Response) (*GetCurrentFactoryClientResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetCurrentFactoryClientResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Factory
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest CurrentFactoryNotFound
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetEditableCurrentFactoryDefinitionClientResponse parses an HTTP response from a GetEditableCurrentFactoryDefinitionWithResponse call
-func ParseGetEditableCurrentFactoryDefinitionClientResponse(rsp *http.Response) (*GetEditableCurrentFactoryDefinitionClientResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetEditableCurrentFactoryDefinitionClientResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest EditableFactoryDefinition
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest CurrentFactoryNotFound
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseSaveEditableCurrentFactoryDefinitionClientResponse parses an HTTP response from a SaveEditableCurrentFactoryDefinitionWithResponse call
-func ParseSaveEditableCurrentFactoryDefinitionClientResponse(rsp *http.Response) (*SaveEditableCurrentFactoryDefinitionClientResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &SaveEditableCurrentFactoryDefinitionClientResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest EditableFactoryDefinition
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest SaveEditableFactoryDefinitionBadRequest
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest CurrentFactoryNotFound
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest SaveEditableFactoryDefinitionConflict
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -29,6 +30,46 @@ func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 	}
 	if loaded.FactoryConfig().Project != "alpha" {
 		t.Fatalf("project = %q, want alpha", loaded.FactoryConfig().Project)
+	}
+}
+
+func TestPersistNamedFactory_PreservesVersionMetadataAcrossLoadRoundTrip(t *testing.T) {
+	rootDir := t.TempDir()
+	versionTime := time.Date(2026, 5, 23, 11, 45, 0, 0, time.UTC)
+
+	factoryDir, err := PersistNamedFactory(rootDir, "alpha", withNamedFactoryPayloadVersion(t, namedFactoryPayload(t, "alpha"), 17, versionTime))
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+	if loaded.FactoryConfig().Version == nil {
+		t.Fatal("expected persisted factory version metadata")
+	}
+	if loaded.FactoryConfig().Version.Logical != 17 || !loaded.FactoryConfig().Version.Physical.Equal(versionTime) {
+		t.Fatalf("loaded version = %#v, want logical=17 physical=%s", loaded.FactoryConfig().Version, versionTime)
+	}
+
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(factoryJSON, &payload); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	version, ok := payload["version"].(map[string]any)
+	if !ok {
+		t.Fatalf("persisted version payload = %#v, want object", payload["version"])
+	}
+	if got := version["logical"]; got != float64(17) {
+		t.Fatalf("persisted logical version = %#v, want 17", got)
+	}
+	if got := version["physical"]; got != versionTime.Format(time.RFC3339Nano) {
+		t.Fatalf("persisted physical version = %#v, want %q", got, versionTime.Format(time.RFC3339Nano))
 	}
 }
 
@@ -349,6 +390,24 @@ func TestResolveNamedFactoryDir_RejectsDirectoryWithoutFactoryConfig(t *testing.
 	if got := err.Error(); !containsAll(got, `resolve factory "beta"`, "find factory config") {
 		t.Fatalf("expected missing-config resolution error, got %v", err)
 	}
+}
+
+func withNamedFactoryPayloadVersion(t *testing.T, payload []byte, logical int64, physical time.Time) []byte {
+	t.Helper()
+
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("Unmarshal(namedFactoryPayload): %v", err)
+	}
+	decoded["version"] = map[string]any{
+		"logical":  logical,
+		"physical": physical.UTC().Format(time.RFC3339Nano),
+	}
+	updated, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatalf("Marshal(namedFactoryPayload with version): %v", err)
+	}
+	return updated
 }
 
 func assertPersistedNamedFactoryLayout(t *testing.T, factoryDir, wantDir string) {

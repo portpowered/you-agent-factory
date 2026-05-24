@@ -3,24 +3,24 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import {
-  getCurrentEditableFactoryDefinition,
-  getCurrentEditableFactoryDefinitionDocument,
+  getCurrentFactoryDefinition,
+  getCurrentFactoryDocument,
   type CanonicalFactoryDefinition,
-  type EditableFactoryDefinitionDocument,
+  type CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
-  useCurrentEditableFactoryDefinition,
-  useCurrentEditableFactoryDefinitionDocument,
-} from "./useCurrentEditableFactoryDefinition";
+  useCurrentFactoryDefinition,
+  useCurrentFactoryDocument,
+} from "./useCurrentFactoryDefinition";
 
 vi.mock("../../../api/current-factory-definition", async () => {
   const actual = await vi.importActual("../../../api/current-factory-definition");
 
   return {
     ...actual,
-    getCurrentEditableFactoryDefinition: vi.fn(),
-    getCurrentEditableFactoryDefinitionDocument: vi.fn(),
+    getCurrentFactoryDefinition: vi.fn(),
+    getCurrentFactoryDocument: vi.fn(),
   };
 });
 
@@ -57,19 +57,19 @@ const editableFactoryDefinition: CanonicalFactoryDefinition = {
   workTypes: [],
 };
 
-describe("useCurrentEditableFactoryDefinition", () => {
+describe("useCurrentFactoryDefinition", () => {
   beforeEach(() => {
-    vi.mocked(getCurrentEditableFactoryDefinition).mockReset();
-    vi.mocked(getCurrentEditableFactoryDefinitionDocument).mockReset();
+    vi.mocked(getCurrentFactoryDefinition).mockReset();
+    vi.mocked(getCurrentFactoryDocument).mockReset();
     useDashboardSessionStore.setState({ selectedSessionID: "~default" });
   });
 
   it("does not fetch while workstation editing is disabled", () => {
-    const { result } = renderHook(() => useCurrentEditableFactoryDefinition(false), {
+    const { result } = renderHook(() => useCurrentFactoryDefinition(false), {
       wrapper: createQueryClientWrapper(),
     });
 
-    expect(getCurrentEditableFactoryDefinition).not.toHaveBeenCalled();
+    expect(getCurrentFactoryDefinition).not.toHaveBeenCalled();
     expect(result.current).toMatchObject({
       data: undefined,
       error: null,
@@ -80,9 +80,9 @@ describe("useCurrentEditableFactoryDefinition", () => {
   });
 
   it("returns the validated editable current factory definition on success", async () => {
-    vi.mocked(getCurrentEditableFactoryDefinition).mockResolvedValue(editableFactoryDefinition);
+    vi.mocked(getCurrentFactoryDefinition).mockResolvedValue(editableFactoryDefinition);
 
-    const { result } = renderHook(() => useCurrentEditableFactoryDefinition(), {
+    const { result } = renderHook(() => useCurrentFactoryDefinition(), {
       wrapper: createQueryClientWrapper(),
     });
 
@@ -98,29 +98,29 @@ describe("useCurrentEditableFactoryDefinition", () => {
 
   it("loads the selected non-default session definition instead of the default alias", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
-    vi.mocked(getCurrentEditableFactoryDefinition).mockResolvedValue(
+    vi.mocked(getCurrentFactoryDefinition).mockResolvedValue(
       editableFactoryDefinition,
     );
 
-    renderHook(() => useCurrentEditableFactoryDefinition(), {
+    renderHook(() => useCurrentFactoryDefinition(), {
       wrapper: createQueryClientWrapper(),
     });
 
     await waitFor(() => {
-      expect(getCurrentEditableFactoryDefinition).toHaveBeenCalledWith({
+      expect(getCurrentFactoryDefinition).toHaveBeenCalledWith({
         sessionID: "session-2",
       });
     });
   });
 
   it("exposes actionable typed errors when the current definition is not editable", async () => {
-    vi.mocked(getCurrentEditableFactoryDefinition).mockRejectedValue({
+    vi.mocked(getCurrentFactoryDefinition).mockRejectedValue({
       code: "INVALID_FACTORY_DEFINITION",
       message: "The current factory definition is malformed.",
-      name: "CurrentEditableFactoryDefinitionError",
+      name: "CurrentFactoryDefinitionError",
     });
 
-    const { result } = renderHook(() => useCurrentEditableFactoryDefinition(), {
+    const { result } = renderHook(() => useCurrentFactoryDefinition(), {
       wrapper: createQueryClientWrapper(),
     });
 
@@ -138,20 +138,19 @@ describe("useCurrentEditableFactoryDefinition", () => {
   });
 
   it("returns the editable current-factory document with version metadata", async () => {
-    const editableFactoryDefinitionDocument: EditableFactoryDefinitionDocument =
-      {
-        factoryDefinition: editableFactoryDefinition,
-        version: {
-          logical: 4,
-          physical: "2026-05-18T14:48:00Z",
-        },
-      };
-    vi.mocked(getCurrentEditableFactoryDefinitionDocument).mockResolvedValue(
+    const editableFactoryDefinitionDocument: CurrentFactoryDocument = {
+      ...editableFactoryDefinition,
+      version: {
+        logical: 4,
+        physical: "2026-05-18T14:48:00Z",
+      },
+    };
+    vi.mocked(getCurrentFactoryDocument).mockResolvedValue(
       editableFactoryDefinitionDocument,
     );
 
     const { result } = renderHook(
-      () => useCurrentEditableFactoryDefinitionDocument(),
+      () => useCurrentFactoryDocument(),
       {
         wrapper: createQueryClientWrapper(),
       },
@@ -169,20 +168,20 @@ describe("useCurrentEditableFactoryDefinition", () => {
 
   it("loads the editable document for the selected non-default session", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
-    vi.mocked(getCurrentEditableFactoryDefinitionDocument).mockResolvedValue({
-      factoryDefinition: editableFactoryDefinition,
+    vi.mocked(getCurrentFactoryDocument).mockResolvedValue({
+      ...editableFactoryDefinition,
       version: {
         logical: 5,
         physical: "2026-05-18T14:49:00Z",
       },
     });
 
-    renderHook(() => useCurrentEditableFactoryDefinitionDocument(), {
+    renderHook(() => useCurrentFactoryDocument(), {
       wrapper: createQueryClientWrapper(),
     });
 
     await waitFor(() => {
-      expect(getCurrentEditableFactoryDefinitionDocument).toHaveBeenCalledWith({
+      expect(getCurrentFactoryDocument).toHaveBeenCalledWith({
         sessionID: "session-2",
       });
     });

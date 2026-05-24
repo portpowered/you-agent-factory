@@ -138,6 +138,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 	return factoryapi.Factory{
 		Name:            factoryReferenceName(cfg),
 		Id:              stringPtrIfNotEmpty(cfg.Project),
+		Version:         hybridLogicalTimestampPtr(cfg.Version),
 		Guards:          factoryGuardsAPIFromInternal(cfg.Guards),
 		InputTypes:      inputTypesAPIFromInternal(cfg.InputTypes),
 		WorkTypes:       workTypesAPIFromInternal(cfg.WorkTypes),
@@ -238,6 +239,16 @@ func factoryReferenceName(cfg *interfaces.FactoryConfig) factoryapi.FactoryName 
 // OpenAPI model without passing through normalized on-disk JSON.
 func FactoryConfigToOpenAPI(cfg *interfaces.FactoryConfig) factoryapi.Factory {
 	return factoryAPIFromInternalConfig(cfg)
+}
+
+func hybridLogicalTimestampPtr(version *interfaces.FactoryVersion) *factoryapi.HybridLogicalTimestamp {
+	if version == nil {
+		return nil
+	}
+	return &factoryapi.HybridLogicalTimestamp{
+		Logical:  version.Logical,
+		Physical: version.Physical.UTC(),
+	}
 }
 
 func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig) factoryapi.Workstation {

@@ -5,7 +5,129 @@ import { verifyDashboardSessionSwitching } from "./verify-dashboard-session-swit
 import { verifyDashboardSessionTabs } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
 
 function createCurrentTickLocator() {
-  return { isVisible: vi.fn().mockResolvedValue(true) };
+  return {
+    boundingBox: vi
+      .fn()
+      .mockResolvedValue({ height: 20, width: 40, x: 380, y: 40 }),
+    isVisible: vi.fn().mockResolvedValue(true),
+  };
+}
+
+function createLocator(overrides = {}) {
+  return {
+    isVisible: vi.fn().mockResolvedValue(true),
+    ...overrides,
+  };
+}
+
+function createDesktopLocator(isDesktop, box, overrides = {}) {
+  return createLocator({
+    ...(isDesktop
+      ? {
+          boundingBox: vi.fn().mockResolvedValue(box),
+        }
+      : {}),
+    ...overrides,
+  });
+}
+
+function createHeaderFixture(isDesktop, headingWordmarkClassName) {
+  return {
+    heading: createDesktopLocator(
+      isDesktop,
+      { height: 20, width: 120, x: 10, y: 0 },
+      {
+        getByText: vi.fn().mockReturnValue(
+          createLocator({
+            getAttribute: vi.fn().mockResolvedValue(headingWordmarkClassName),
+          }),
+        ),
+      },
+    ),
+    slider: createDesktopLocator(
+      isDesktop,
+      { height: 20, width: 200, x: 160, y: 0 },
+      { focus: vi.fn().mockResolvedValue(undefined) },
+    ),
+    sessionTabs: createDesktopLocator(isDesktop, {
+      height: 20,
+      width: 340,
+      x: 150,
+      y: 0,
+    }),
+    languageButton: createDesktopLocator(isDesktop, {
+      height: 20,
+      width: 120,
+      x: 660,
+      y: 0,
+    }),
+    streamStatus: createDesktopLocator(isDesktop, {
+      height: 20,
+      width: 120,
+      x: 380,
+      y: 0,
+    }),
+    exportButton: createDesktopLocator(isDesktop, {
+      height: 20,
+      width: 120,
+      x: 520,
+      y: 0,
+    }),
+  };
+}
+
+function createRoleLookup({
+  closeSelectedSessionButton,
+  currentButton,
+  exportButton,
+  globalActions,
+  heading,
+  languageButton,
+  pauseButton,
+  rootTab,
+  sessionTabs,
+  slider,
+  streamStatus,
+}) {
+  return vi.fn((role, options) => {
+    if (role === "heading") return heading;
+    if (role === "slider") return slider;
+    if (role === "navigation") return sessionTabs;
+    if (role === "tab" && options == null) return { count: vi.fn().mockResolvedValue(3) };
+    if (role === "tab" && options?.name === "root") return rootTab;
+    if (role === "button" && options?.name === "Pause root updates") {
+      return pauseButton;
+    }
+    if (role === "button" && options?.name === "Close root session") {
+      return closeSelectedSessionButton;
+    }
+    if (options?.name === "Change language") return languageButton;
+    if (role === "status") return streamStatus;
+    if (role === "group") return globalActions;
+    if (options?.name === "Return to current tick") return currentButton;
+    return exportButton;
+  });
+}
+
+function createTextLookup(timelineStatus) {
+  return vi.fn((text) => {
+    if (text === "/workspace/root") {
+      return createDesktopLocator(true, {
+        height: 20,
+        width: 120,
+        x: 150,
+        y: 0,
+      });
+    }
+    return createDesktopLocator(true, {
+      height: 20,
+      width: 40,
+      x: 380,
+      y: 40,
+    }, {
+      first: vi.fn().mockReturnValue(timelineStatus),
+    });
+  });
 }
 
 function createPage({
@@ -14,89 +136,15 @@ function createPage({
   isDesktop = false,
   returnToCurrentVisible = false,
 } = {}) {
-  const heading = {
-    ...(isDesktop
-      ? {
-          boundingBox: vi
-            .fn()
-            .mockResolvedValue({ height: 20, width: 120, x: 10, y: 0 }),
-        }
-      : {}),
-    getByText: vi.fn().mockReturnValue({
-      getAttribute: vi.fn().mockResolvedValue(headingWordmarkClassName),
-      isVisible: vi.fn().mockResolvedValue(true),
-    }),
-    isVisible: vi.fn().mockResolvedValue(true),
-  };
-  const slider = {
-    ...(isDesktop
-      ? {
-          boundingBox: vi
-            .fn()
-            .mockResolvedValue({ height: 20, width: 200, x: 160, y: 0 }),
-        }
-      : {}),
-    focus: vi.fn().mockResolvedValue(undefined),
-    isVisible: vi.fn().mockResolvedValue(true),
-  };
-  const sessionTabs = {
-    ...(isDesktop
-      ? {
-          boundingBox: vi
-            .fn()
-            .mockResolvedValue({ height: 20, width: 340, x: 150, y: 0 }),
-        }
-      : {}),
-    isVisible: vi.fn().mockResolvedValue(true),
-  };
-  const rootTab = {
-    isVisible: vi.fn().mockResolvedValue(true),
-  };
-  const allTabs = {
-    count: vi.fn().mockResolvedValue(3),
-  };
-  const pauseButton = {
-    isVisible: vi.fn().mockResolvedValue(true),
-  };
-  const closeSelectedSessionButton = {
-    isVisible: vi.fn().mockResolvedValue(true),
-  };
-  const languageButton = {
-    ...(isDesktop
-      ? {
-          boundingBox: vi
-            .fn()
-            .mockResolvedValue({ height: 20, width: 120, x: 660, y: 0 }),
-        }
-      : {}),
-    isVisible: vi.fn().mockResolvedValue(true),
-  };
-  const streamStatus = {
-    ...(isDesktop
-      ? {
-          boundingBox: vi
-            .fn()
-            .mockResolvedValue({ height: 20, width: 120, x: 380, y: 0 }),
-        }
-      : {}),
-    isVisible: vi.fn().mockResolvedValue(true),
-  };
-  const currentButton = {
+  const { exportButton, heading, languageButton, sessionTabs, slider, streamStatus } =
+    createHeaderFixture(isDesktop, headingWordmarkClassName);
+  const rootTab = createLocator();
+  const pauseButton = createLocator();
+  const closeSelectedSessionButton = createLocator();
+  const currentButton = createLocator({
     isVisible: vi.fn().mockResolvedValue(returnToCurrentVisible),
-  };
-  const exportButton = {
-    ...(isDesktop
-      ? {
-          boundingBox: vi
-            .fn()
-            .mockResolvedValue({ height: 20, width: 120, x: 520, y: 0 }),
-        }
-      : {}),
-    isVisible: vi.fn().mockResolvedValue(true),
-  };
-  const globalActions = {
-    isVisible: vi.fn().mockResolvedValue(true),
-  };
+  });
+  const globalActions = createLocator();
   const page = {
     currentButton,
     heading,
@@ -107,36 +155,20 @@ function createPage({
     evaluate: vi
       .fn()
       .mockResolvedValue({ clientWidth: isDesktop ? 1440 : 390, scrollWidth: isDesktop ? 1440 : 390 }),
-    getByRole: vi.fn((role, options) => {
-      if (role === "heading") return heading;
-      if (role === "slider") return slider;
-      if (role === "navigation") return sessionTabs;
-      if (role === "tab" && options == null) return allTabs;
-      if (role === "tab" && options?.name === "root") return rootTab;
-      if (role === "button" && options?.name === "Pause root updates") {
-        return pauseButton;
-      }
-      if (role === "button" && options?.name === "Close root session") {
-        return closeSelectedSessionButton;
-      }
-      if (options?.name === "Change language") return languageButton;
-      if (role === "status") return streamStatus;
-      if (role === "group") return globalActions;
-      if (options?.name === "Return to current tick") return currentButton;
-      return exportButton;
+    getByRole: createRoleLookup({
+      closeSelectedSessionButton,
+      currentButton,
+      exportButton,
+      globalActions,
+      heading,
+      languageButton,
+      pauseButton,
+      rootTab,
+      sessionTabs,
+      slider,
+      streamStatus,
     }),
-    getByText: vi.fn((text) => {
-      if (text instanceof RegExp && text.test("5/5")) {
-        return {
-          first: vi.fn().mockReturnValue(timelineStatus),
-          isVisible: vi.fn().mockResolvedValue(true),
-        };
-      }
-      return {
-        first: vi.fn().mockReturnValue(timelineStatus),
-        isVisible: vi.fn().mockResolvedValue(true),
-      };
-    }),
+    getByText: createTextLookup(timelineStatus),
   };
 
   return page;
@@ -210,6 +242,12 @@ describe("verifyDashboardSessionTabs", () => {
     };
     const page = {
       evaluate: vi.fn().mockResolvedValue({ clientWidth: 768, scrollWidth: 768 }),
+      getByText: vi.fn((text) => {
+        if (text === "/workspace/root") {
+          return { isVisible: vi.fn().mockResolvedValue(true) };
+        }
+        return { isVisible: vi.fn().mockResolvedValue(true) };
+      }),
       getByRole: vi.fn((role, options) => {
         if (role === "navigation") {
           return { isVisible: vi.fn().mockResolvedValue(true) };

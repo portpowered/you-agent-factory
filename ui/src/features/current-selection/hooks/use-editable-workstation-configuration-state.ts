@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
-import { useCurrentEditableFactoryDefinition } from "../../current-factory-definition/public";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/public";
 import {
   applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
@@ -48,8 +48,7 @@ export function useEditableWorkstationConfigurationState(
 ): EditableWorkstationConfigurationState | undefined {
   const isNodeSelection = selection?.kind === "node" && selectedNode != null;
   const messages = getWorkstationDetailMessages(locale);
-  const editableDefinition =
-    useCurrentEditableFactoryDefinition(isNodeSelection);
+  const editableDefinition = useCurrentFactoryDocument(isNodeSelection);
   const promptTemplateContract = useCurrentWorkstationPromptTemplateContract(
     selectedNode?.workstation_name,
     isNodeSelection,
@@ -124,7 +123,7 @@ export function useEditableWorkstationConfigurationState(
 
 function useEditableWorkstationSession(
   editableDefinition: ReturnType<
-    typeof useCurrentEditableFactoryDefinition
+    typeof useCurrentFactoryDocument
   >["data"],
   selectedNode: DashboardWorkstationNode | null,
   selection: DashboardSelection | null,
@@ -294,7 +293,7 @@ function buildReadyEditableWorkstationConfigurationState({
   setSessionState,
 }: {
   editableDefinition: NonNullable<
-    ReturnType<typeof useCurrentEditableFactoryDefinition>["data"]
+    ReturnType<typeof useCurrentFactoryDocument>["data"]
   >;
   messages: WorkstationDetailMessages;
   promptHelpState: EditableWorkstationPromptHelpState;
@@ -322,6 +321,7 @@ function buildReadyEditableWorkstationConfigurationState({
       );
 
   return {
+    baseVersion: editableDefinition.version,
     draft: sessionState.draft,
     hasValidationErrors: hasEditableWorkstationValidationErrors(
       resolvedValidationErrors,

@@ -72,7 +72,7 @@ describe("App shell export dialog flows", () => {
         ).toBeNull();
       });
       expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
-        `/factories/${DEFAULT_FACTORY_SESSION_ID}/factory/~current`,
+        `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`,
       ]);
       expect(exportProbe.getDownloadedBlob()).toBeNull();
       expect(exportProbe.getDownloadedFilename()).toBe("");
@@ -121,7 +121,7 @@ describe("App shell export dialog flows", () => {
 
       if (
         path !==
-        `/factories/${DEFAULT_FACTORY_SESSION_ID}/factory/~current`
+        `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`
       ) {
         throw new Error(`unexpected fetch for ${path}`);
       }

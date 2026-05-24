@@ -5,13 +5,17 @@ import {
   type PromptTemplateValidationResult,
   validateCurrentFactoryWorkstationPromptTemplate,
 } from "../../../api/current-factory-prompt-template";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 
 export function buildCurrentWorkstationPromptTemplateValidationQueryKey(
   workstationName: string,
   prompt: string,
+  sessionID: string | null | undefined,
 ) {
   return [
     "current-workstation-prompt-template-validation",
+    sessionID ?? DEFAULT_FACTORY_SESSION_ID,
     workstationName,
     prompt,
   ] as const;
@@ -22,6 +26,8 @@ export function useCurrentWorkstationPromptTemplateValidation(
   prompt: string | undefined,
   isEnabled = true,
 ) {
+  const sessionID = useDashboardSessionStore((state) => state.selectedSessionID);
+
   return useQuery<
     PromptTemplateValidationResult,
     CurrentFactoryPromptTemplateAPIError
@@ -31,9 +37,11 @@ export function useCurrentWorkstationPromptTemplateValidation(
         ? buildCurrentWorkstationPromptTemplateValidationQueryKey(
             workstationName,
             prompt,
+            sessionID,
           )
         : [
             "current-workstation-prompt-template-validation",
+            sessionID ?? DEFAULT_FACTORY_SESSION_ID,
             "missing-workstation",
             "missing-prompt",
           ],
@@ -48,6 +56,7 @@ export function useCurrentWorkstationPromptTemplateValidation(
       return validateCurrentFactoryWorkstationPromptTemplate(
         workstationName,
         prompt,
+        { sessionID },
       );
     },
     enabled:

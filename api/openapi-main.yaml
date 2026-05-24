@@ -92,15 +92,15 @@ paths:
                 $ref: '#/components/schemas/ListWorkResponse'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/work:
+  /factory-sessions/{session_id}/work:
     post:
       tags:
         - Work
-      operationId: submitWorkByFactoryId
+      operationId: submitWorkBySessionId
       summary: Submit work for one session
       description: Submits one work item to the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
       requestBody:
         required: true
         content:
@@ -123,11 +123,11 @@ paths:
     get:
       tags:
         - Work
-      operationId: listWorkByFactoryId
+      operationId: listWorkBySessionId
       summary: List work for one session
       description: Lists current work tokens from the engine state snapshot owned by the explicitly selected live factory session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/MaxResults'
         - $ref: '#/components/parameters/NextToken'
         - $ref: '#/components/parameters/StateName'
@@ -175,15 +175,15 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/work-requests/{request_id}:
+  /factory-sessions/{session_id}/work-requests/{request_id}:
     put:
       tags:
         - Work
-      operationId: upsertWorkRequestByFactoryId
+      operationId: upsertWorkRequestBySessionId
       summary: Upsert work request for one session
       description: Submits or retries one canonical work request batch against the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
         - name: request_id
           in: path
           required: true
@@ -229,15 +229,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/work/{id}:
+  /factory-sessions/{session_id}/work/{id}:
     get:
       tags:
         - Work
-      operationId: getWorkByFactoryId
+      operationId: getWorkBySessionId
       summary: Get work token for one session
       description: Returns one token by token ID from the current marking owned by the explicitly selected live factory session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/WorkOrTokenID'
       responses:
         '200':
@@ -268,15 +268,15 @@ paths:
               x-event-schema: '#/components/schemas/FactoryEvent'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/events:
+  /factory-sessions/{session_id}/events:
     get:
       tags:
         - Runtime
-      operationId: getEventsByFactoryId
+      operationId: getEventsBySessionId
       summary: Stream factory events for one session
       description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
           description: Factory event stream for the targeted session.
@@ -412,15 +412,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/status:
+  /factory-sessions/{session_id}/status:
     get:
       tags:
         - Runtime
-      operationId: getStatusByFactoryId
+      operationId: getStatusBySessionId
       summary: Get runtime status for one session
       description: Returns the current factory lifecycle status, token category counts, and resource availability from the aggregate engine snapshot owned by the explicitly selected live factory session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
           description: Current runtime status summary for the targeted session.
@@ -471,13 +471,13 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factory:
+  /factories:
     post:
       tags:
         - Factory
       operationId: createFactory
       summary: Create factory
-      description: Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory/~current` readback only and cannot be activated as a customer-named factory.
+      description: Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory-sessions/~default/factory` readback only and cannot be activated as a customer-named factory.
       requestBody:
         required: true
         content:
@@ -557,16 +557,18 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factory/~current:
+  /factory-sessions/{session_id}/factory:
     get:
       tags:
         - Factory
-      operationId: getCurrentFactory
-      summary: Get current factory
-      description: Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
+      operationId: getCurrentFactoryBySessionId
+      summary: Get current factory for one session
+      description: Returns the current factory definition owned by the explicitly selected live session together with server-managed version metadata for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
-          description: Current active factory or the active default root runtime when no current-factory pointer exists yet.
+          description: Current active factory definition and version metadata for the targeted session, or the active default root runtime when the default session has no durable current-factory pointer yet. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
           content:
             application/json:
               schema:
@@ -601,86 +603,47 @@ paths:
                           - workType: task
                             state: done
         '404':
-          $ref: '#/components/responses/CurrentFactoryNotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/factory/~current:
-    get:
-      tags:
-        - Factory
-      operationId: getCurrentFactoryByFactoryId
-      summary: Get current factory for one session
-      description: Returns the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
-      parameters:
-        - $ref: '#/components/parameters/FactoryID'
-      responses:
-        '200':
-          description: Current active factory definition for the targeted session.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Factory'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-  /factories/{factory_id}/factory/~current/editable-definition:
-    get:
-      tags:
-        - Factory
-      operationId: getEditableCurrentFactoryDefinitionByFactoryId
-      summary: Get editable current factory definition for one session
-      description: Returns the complete current factory definition for graph editing together with version metadata for the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
-      parameters:
-        - $ref: '#/components/parameters/FactoryID'
-      responses:
-        '200':
-          description: Editable current factory definition and version metadata for the targeted session.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EditableFactoryDefinition'
-        '404':
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
     put:
       tags:
         - Factory
-      operationId: saveEditableCurrentFactoryDefinitionByFactoryId
-      summary: Save editable current factory definition for one session
-      description: Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      operationId: saveCurrentFactoryBySessionId
+      summary: Save current factory for one session
+      description: Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Clients should echo the server-managed `version` field from the latest current-factory read to enable stale-write detection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
-        - $ref: '#/components/parameters/FactoryID'
+        - $ref: '#/components/parameters/SessionID'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SaveEditableFactoryDefinitionRequest'
+              $ref: '#/components/schemas/Factory'
       responses:
         '200':
-          description: Saved editable factory definition and new version metadata for the targeted session.
+          description: Saved current factory definition and new version metadata for the targeted session.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EditableFactoryDefinition'
+                $ref: '#/components/schemas/Factory'
         '400':
-          $ref: '#/components/responses/SaveEditableFactoryDefinitionBadRequest'
+          $ref: '#/components/responses/SaveCurrentFactoryBadRequest'
         '409':
-          $ref: '#/components/responses/SaveEditableFactoryDefinitionConflict'
+          $ref: '#/components/responses/SaveCurrentFactoryConflict'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factory/~current/workstations/{workstation_name}/prompt-template-contract:
+  /factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract:
     get:
       tags:
         - Factory
-      operationId: getCurrentFactoryWorkstationPromptTemplateContract
+      operationId: getCurrentFactoryWorkstationPromptTemplateContractBySessionId
       summary: Get workstation prompt-template contract
       description: Returns the authoritative prompt-variable reference and unavailable-access patterns for the selected current-factory workstation editing context.
       parameters:
+        - $ref: '#/components/parameters/SessionID'
         - name: workstation_name
           in: path
           required: true
@@ -698,59 +661,15 @@ paths:
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /factory/~current/editable-definition:
-    get:
-      tags:
-        - Factory
-      operationId: getEditableCurrentFactoryDefinition
-      summary: Get editable current factory definition
-      description: Returns the complete current factory definition for graph editing together with hybrid logical timestamp metadata clients must carry into saves for stale-edit detection.
-      responses:
-        '200':
-          description: Editable current factory definition and version metadata.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EditableFactoryDefinition'
-        '404':
-          $ref: '#/components/responses/CurrentFactoryNotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-    put:
-      tags:
-        - Factory
-      operationId: saveEditableCurrentFactoryDefinition
-      summary: Save editable current factory definition
-      description: Submits one complete replacement for the current factory definition. The payload preserves all untouched fields because the full Factory contract is saved through the same canonical factory persistence path used by named-factory activation.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SaveEditableFactoryDefinitionRequest'
-      responses:
-        '200':
-          description: Saved editable factory definition and new version metadata.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EditableFactoryDefinition'
-        '400':
-          $ref: '#/components/responses/SaveEditableFactoryDefinitionBadRequest'
-        '409':
-          $ref: '#/components/responses/SaveEditableFactoryDefinitionConflict'
-        '404':
-          $ref: '#/components/responses/CurrentFactoryNotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-  /factory/~current/workstations/{workstation_name}/prompt-template-validation:
+  /factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation:
     post:
       tags:
         - Factory
-      operationId: validateCurrentFactoryWorkstationPromptTemplate
+      operationId: validateCurrentFactoryWorkstationPromptTemplateBySessionId
       summary: Validate workstation prompt template
       description: Validates a prompt draft against the authoritative current-factory workstation prompt contract and returns typed syntax or variable diagnostics.
       parameters:
+        - $ref: '#/components/parameters/SessionID'
         - name: workstation_name
           in: path
           required: true
@@ -776,8 +695,8 @@ paths:
           $ref: '#/components/responses/InternalError'
 components:
   parameters:
-    FactoryID:
-      name: factory_id
+    SessionID:
+      name: session_id
       in: path
       required: true
       description: Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly.
@@ -893,8 +812,8 @@ components:
                 message: Current named factory not found.
                 family: NOT_FOUND
                 code: NOT_FOUND
-    SaveEditableFactoryDefinitionBadRequest:
-      description: Editable factory definition save request failed validation.
+    SaveCurrentFactoryBadRequest:
+      description: Current factory save request failed validation.
       content:
         application/json:
           schema:
@@ -908,14 +827,23 @@ components:
                 code: INVALID_FACTORY
                 targets:
                   - kind: form
-                    field: factoryDefinition
-    SaveEditableFactoryDefinitionConflict:
-      description: Editable factory definition could not be saved because the runtime or submitted version is not safe to replace.
+                    field: factory
+    SaveCurrentFactoryConflict:
+      description: Current factory could not be saved because the runtime or submitted version is not safe to replace.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           examples:
+            staleFactoryVersion:
+              summary: Submitted version is stale.
+              value:
+                message: Current factory definition is stale. Refresh the graph before saving.
+                family: CONFLICT
+                code: STALE_FACTORY_VERSION
+                targets:
+                  - kind: save
+                    id: stale-version
             factoryNotIdle:
               summary: Runtime is not idle.
               value:
@@ -996,10 +924,6 @@ components:
       $ref: './components/schemas/api/ErrorTarget.yaml'
     HybridLogicalTimestamp:
       $ref: './components/schemas/api/HybridLogicalTimestamp.yaml'
-    EditableFactoryDefinition:
-      $ref: './components/schemas/api/EditableFactoryDefinition.yaml'
-    SaveEditableFactoryDefinitionRequest:
-      $ref: './components/schemas/api/SaveEditableFactoryDefinitionRequest.yaml'
     ProviderSessionDetailResponse:
       $ref: './components/schemas/api/ProviderSessionDetailResponse.yaml'
     FactorySessionTargetRef:

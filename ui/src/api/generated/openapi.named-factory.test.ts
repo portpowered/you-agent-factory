@@ -47,7 +47,7 @@ describe("generated factory OpenAPI types", () => {
     };
     const created: operations["createFactory"]["responses"][201]["content"]["application/json"] =
       request;
-    const current: paths["/factory/~current"]["get"]["responses"][200]["content"]["application/json"] =
+    const current: paths["/factory-sessions/{session_id}/factory"]["get"]["responses"][200]["content"]["application/json"] =
       created;
     const invalidName: components["schemas"]["ErrorResponse"]["code"] =
       "INVALID_FACTORY_NAME";
@@ -63,11 +63,11 @@ describe("generated factory OpenAPI types", () => {
       "CONFLICT";
     const notFoundFamily: components["schemas"]["ErrorResponse"]["family"] =
       "NOT_FOUND";
-    const currentNotFound: paths["/factory/~current"]["get"]["responses"][404]["content"]["application/json"] =
+    const currentNotFound: paths["/factory-sessions/{session_id}/factory"]["get"]["responses"][404]["content"]["application/json"] =
       {
         code: "NOT_FOUND",
         family: "NOT_FOUND",
-        message: "Current named factory not found.",
+        message: "factory session not found",
       };
 
     expect(current.name).toBe("customer-support-triage");
