@@ -71,8 +71,6 @@ The workflow currently executes these repository-owned commands through one prer
 5. `cd ui && bunx playwright install chromium`
 6. `make ui-integration-test`
 7. `make test-backend-verification`
-6. `make test-ui-browser-integration`
-7. `make test-backend-verification`
 
 Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and pins Bun to `1.3.12` in `.github/workflows/ci.yml`; keep that version aligned with the checked-in `ui/package.json` `packageManager` pin when either file changes.
 
@@ -94,7 +92,7 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make verify-build-contracts` is the repository-owned build-contract lane used by CI after dependency setup. It runs `make typecheck`, `make ui-build`, `make build`, `make lint`, and `make api-smoke` in the same order the `verify-build-contracts` GitHub Actions job enforces.
 
-`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make test-ui-browser-integration`, and `make test-backend-verification`. The GitHub Actions workflow fans those commands out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Verification` jobs so required failures point at one lane instead of a mixed `make ui-test` rerun.
+`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make ui-integration-test`, and `make test-backend-verification`. The GitHub Actions workflow fans those commands out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Verification` jobs so required failures point at one lane instead of a mixed `make ui-test` rerun.
 
 Treat those lanes as the stable contributor mental model:
 

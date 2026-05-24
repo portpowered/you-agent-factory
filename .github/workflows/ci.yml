@@ -248,12 +248,5 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Run merged backend coverage and functional verification
-=======
-      - name: Run dashboard browser integration suite
-        timeout-minutes: 15
-        run: make ui-integration-test
-
-      - name: Run dashboard coverage suite
->>>>>>> cc78ee91 (feat: [prd-ui-integration-test-operation-002] - [Wire the dedicated integration target into the required CI verification lane])
         timeout-minutes: 15
         run: make test-backend-verification

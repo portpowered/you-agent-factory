@@ -182,18 +182,9 @@ verify-build-contracts:
 	$(MAKE) api-smoke
 
 verify-tests:
-<<<<<<< HEAD
 	$(MAKE) test-ui-coverage
-	$(MAKE) test-ui-browser-integration
-	$(MAKE) test-backend-verification
-=======
-	$(MAKE) ui-test
 	$(MAKE) ui-integration-test
-	$(MAKE) ui-test-coverage
-	$(MAKE) ui-replay-coverage-check
-	$(MAKE) test-coverage-go
-	$(MAKE) test-functional
->>>>>>> cc78ee91 (feat: [prd-ui-integration-test-operation-002] - [Wire the dedicated integration target into the required CI verification lane])
+	$(MAKE) test-backend-verification
 
 verify:
 	$(MAKE) verify-build-contracts
@@ -221,18 +212,9 @@ ci-verify-build-contracts: ci-typecheck
 
 ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) ui-install-playwright
-<<<<<<< HEAD
 	$(MAKE) test-ui-coverage
-	$(MAKE) test-ui-browser-integration
-	$(MAKE) test-backend-verification
-=======
-	$(MAKE) ui-test
 	$(MAKE) ui-integration-test
-	$(MAKE) ui-test-coverage
-	$(MAKE) ui-replay-coverage-check
-	$(MAKE) test-coverage-go
-	$(MAKE) test-functional
->>>>>>> cc78ee91 (feat: [prd-ui-integration-test-operation-002] - [Wire the dedicated integration target into the required CI verification lane])
+	$(MAKE) test-backend-verification
 
 release:
 	$(GO) run ./cmd/releaseprep -version $(VERSION)

@@ -58,7 +58,7 @@ behavior rather than source-shape assertions.
 - The PRD requested verification with the `dev-browser` skill, but that skill
   is not available in this session.
 - The closest repo-owned browser verification lane is the combination of
-  `ui/integration/event-stream-replay.integration.test.mjs` and
+  `ui/integration/*.integration.test.mjs` and
   `ui/scripts/run-storybook-ci.mjs`, which together exercise live dashboard
   interactions and responsive Storybook checks across the migrated feature
   surfaces.

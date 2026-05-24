@@ -70,7 +70,7 @@ The scenario registry and tracked replay surfaces live in `ui/src/testing/replay
 - scenario IDs and fixture filenames
 - covered stream-projected surfaces
 - verification layers such as `app-smoke`, `browser-integration`, or `projection-helper`
-- any browser-integration scenario metadata needed by `integration/event-stream-replay.integration.test.mjs`, so the smoke and the report stay on one registry
+- any browser-integration scenario metadata needed by `integration/event-stream-replay.integration.test.mjs`, while the shared preview and API seams live in `integration/browser-test-harness.mjs`, so the smoke and the report stay on one registry without re-creating per-file infrastructure
 - any smoke-only build hygiene needed by that integration test, such as clearing inherited `VITEST*` env before shelling out to `bun run build` so the tracked `dist/` bundle stays production-shaped
 
 After changing replay scenarios or tracked surfaces:
