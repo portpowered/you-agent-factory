@@ -65,6 +65,16 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 	if len(result.DashboardRenderEvidence.AssetRequestPaths) == 0 || len(result.DashboardRenderEvidence.LiveRequestPaths) == 0 {
 		t.Fatalf("dashboard render evidence = %#v, want asset and live request paths", result.DashboardRenderEvidence)
 	}
+	for _, want := range []string{"You Agent Factory", "Work totals", "step-one", "step-two"} {
+		if !containsString(result.DashboardRenderEvidence.VisibleTexts, want) {
+			t.Fatalf("visible texts = %#v, want %q", result.DashboardRenderEvidence.VisibleTexts, want)
+		}
+	}
+	for _, retired := range []string{"Infinite You", "finite you"} {
+		if containsSubstring(result.DashboardRenderEvidence.VisibleTexts, retired) {
+			t.Fatalf("visible texts = %#v, should retire %q", result.DashboardRenderEvidence.VisibleTexts, retired)
+		}
+	}
 }
 
 func TestReleaseSmokeHarness_FailingRenderedDashboardVerificationReturnsStructuredFailure(t *testing.T) {
@@ -210,4 +220,22 @@ func assertInstalledDocsSmoke(t *testing.T, binaryPath string) {
 			t.Fatalf("installed docs output missing %q:\n%s", want, rendered)
 		}
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSubstring(values []string, needle string) bool {
+	for _, value := range values {
+		if strings.Contains(value, needle) {
+			return true
+		}
+	}
+	return false
 }

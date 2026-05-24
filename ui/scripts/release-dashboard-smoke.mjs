@@ -16,6 +16,8 @@ function livePath(pathname) {
   return pathname === "/events" || pathname === "/status" || pathname === "/work";
 }
 
+const RETIRED_BRAND_PATTERNS = [/finite you/i, /Infinite You/i];
+
 async function waitForRenderedDashboard(page) {
   await page.getByRole("heading", { level: 1, name: "You Agent Factory" }).waitFor();
   await page.getByText("Work totals").waitFor();
@@ -46,6 +48,30 @@ async function readMetadata(page) {
         ?.getAttribute("content")
         ?.trim() ?? "",
   }));
+}
+
+async function readVisibleTexts(page) {
+  return page.evaluate(() => {
+    const selectors = [
+      '[role="heading"][aria-level="1"]',
+      '[aria-label="work totals"]',
+      'button[aria-label="Select step-one workstation"]',
+      'button[aria-label="Select step-two workstation"]',
+    ];
+    return selectors
+      .map((selector) => document.querySelector(selector)?.textContent?.trim() ?? "")
+      .filter((value) => value.length > 0);
+  });
+}
+
+function ensureNoRetiredBranding(values, contextLabel) {
+  for (const value of values) {
+    for (const pattern of RETIRED_BRAND_PATTERNS) {
+      if (pattern.test(value)) {
+        throw new Error(`${contextLabel} contained retired branding: ${JSON.stringify(value)}`);
+      }
+    }
+  }
 }
 
 async function main() {
@@ -89,6 +115,7 @@ async function main() {
 
     await waitForRenderedDashboard(page);
     const { pageTitle, metaDescription } = await readMetadata(page);
+    const visibleTexts = unique(await readVisibleTexts(page));
     if (pageTitle !== "You Agent Factory Dashboard") {
       throw new Error(`dashboard page title = ${JSON.stringify(pageTitle)}, want "You Agent Factory Dashboard"`);
     }
@@ -97,6 +124,7 @@ async function main() {
         `dashboard meta description = ${JSON.stringify(metaDescription)}, want "Standalone live dashboard shell for You Agent Factory."`,
       );
     }
+    ensureNoRetiredBranding([pageTitle, metaDescription, ...visibleTexts], "dashboard smoke evidence");
 
     if (pageErrors.length > 0) {
       throw new Error(`dashboard page errors: ${pageErrors.join(" | ")}`);
@@ -123,12 +151,6 @@ async function main() {
       );
     }
 
-    const visibleTexts = unique([
-      "You Agent Factory",
-      "Work totals",
-      "step-one",
-      "step-two",
-    ]);
     process.stdout.write(
       `${JSON.stringify(
         {

@@ -20,6 +20,11 @@ import {
   installExportDownloadProbe,
 } from "./testing/app-shell-export-test-utils";
 
+function expectNoRetiredDashboardBranding(): void {
+  expect(screen.queryByText(/finite you/i)).toBeNull();
+  expect(screen.queryByText(/Infinite You/i)).toBeNull();
+}
+
 describe("App shell import flows", () => {
   registerAppDashboardTestLifecycle();
 
@@ -29,6 +34,7 @@ describe("App shell import flows", () => {
     expect(
       await screen.findByRole("heading", { name: "You Agent Factory" }),
     ).toBeTruthy();
+    expectNoRetiredDashboardBranding();
     expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();
     expect(
