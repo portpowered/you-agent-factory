@@ -2238,6 +2238,42 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     }
   });
 
+  it("does not trigger React Flow missing-handle errors after entering embedded editor mode", async () => {
+    const reactFlowErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+
+    try {
+      renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Enter factory graph editor" }),
+      );
+
+      await screen.findByRole("button", { name: "Connect" });
+      await waitFor(() => {
+        expect(document.querySelectorAll(".react-flow__edge")).not.toHaveLength(
+          0,
+        );
+      });
+
+      expect(
+        reactFlowErrorSpy.mock.calls.some(([firstArg]) =>
+          String(firstArg).includes(
+            "Couldn't create edge for source handle id",
+          ),
+        ),
+      ).toBe(false);
+    } finally {
+      reactFlowErrorSpy.mockRestore();
+    }
+  });
+
   it("renders every graph place family through custom React Flow node types", async () => {
     renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
 

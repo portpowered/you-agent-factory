@@ -1,13 +1,13 @@
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
+import { buildVisibleGraphEdgesWithDraft } from "./react-flow-current-activity-card-draft-edges";
 import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
   buildCurrentActivityNodes,
   buildHandleAssignments,
   buildVisibleGraphEdges,
-  buildVisibleGraphEdgesWithDraft,
   EMPTY_NODE_POSITIONS,
 } from "./react-flow-current-activity-card-graph";
 
@@ -99,6 +99,9 @@ describe("current activity graph editor handles", () => {
     });
   });
 
+});
+
+describe("current activity graph draft edges", () => {
   it("adds supported pending draft routes onto the shared observer graph surface", async () => {
     const graphLayout = await buildGraphLayout(
       semanticWorkflowDashboardSnapshot.topology,

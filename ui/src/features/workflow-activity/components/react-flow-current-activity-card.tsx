@@ -43,10 +43,10 @@ import {
   buildActiveItemLabelsByPlaceId,
   buildCurrentActivityNodes,
   buildHandleAssignments,
-  buildVisibleGraphEdgesWithDraft,
   EMPTY_GRAPH_LAYOUT,
   EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
+import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
 import {
   currentActivityGraphKey,
   currentActivityTopologyKey,
