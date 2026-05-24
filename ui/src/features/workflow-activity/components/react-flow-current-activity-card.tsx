@@ -37,7 +37,6 @@ import {
 } from "../hooks/workflow-topology-async-cache";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
-import { useFactoryGraphEditorViewModel } from "../hooks/react-flow-current-activity-card-editor-graph";
 import {
   buildGraphEdges,
   initialFocusNodes,
@@ -342,11 +341,6 @@ export function ReactFlowCurrentActivityCardView(
 ) {
   const { editor, showHeaderActions = false } = props;
   const graph = useCurrentActivityGraphViewModel(props);
-  const editorGraph = useFactoryGraphEditorViewModel(
-    editor,
-    props.snapshot,
-    props.locale,
-  );
   const fallbackImportController = useCurrentActivityImportController({
     activateFactory: props.activateFactory,
     onFactoryActivated: props.onFactoryActivated,
@@ -401,7 +395,6 @@ export function ReactFlowCurrentActivityCardView(
       />
       <CurrentActivityGraphSurface
         editor={editor}
-        editorGraph={editorGraph}
         graph={graph}
         imports={imports}
         locale={props.locale}

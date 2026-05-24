@@ -1073,7 +1073,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     ]);
   });
 
-  it("renders pending draft-only graph nodes while editor mode is active", async () => {
+  it("keeps editor mode on the shared observer graph surface", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -1124,11 +1124,15 @@ function registerCurrentActivityCardTestLifecycle(): void {
       screen.getByRole("button", { name: "Enter factory graph editor" }),
     );
 
-    expect(await screen.findByText("review")).toBeTruthy();
-    expect(screen.getByText("Pending")).toBeTruthy();
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-current-activity-node-type="workstation"]'),
+      ).toBeTruthy();
+    });
+    expect(screen.queryByText("Pending")).toBeNull();
   });
 
-  it("shows worker runtime status badges in editor mode when runtime signals exist", async () => {
+  it("does not swap editor mode onto the worker and resource editor graph lanes", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
       error: null,
@@ -1148,18 +1152,19 @@ function registerCurrentActivityCardTestLifecycle(): void {
       screen.getByRole("button", { name: "Enter factory graph editor" }),
     );
 
-    const writerLabel = await screen.findByText("writer");
-    const reviewerLabel = await screen.findByText("reviewer");
-    const stalledLabel = await screen.findByText("stalled");
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-current-activity-node-type="workstation"]'),
+      ).toBeTruthy();
+    });
 
-    expect(writerLabel.closest("article")?.textContent).toContain("Active");
-    expect(reviewerLabel.closest("article")?.textContent).toContain("Errored");
-    expect(stalledLabel.closest("article")?.textContent).toContain(
-      "Unavailable",
-    );
+    expect(screen.queryByText("writer")).toBeNull();
+    expect(screen.queryByText("reviewer")).toBeNull();
+    expect(screen.queryByText("stalled")).toBeNull();
+    expect(screen.queryByText("gpu")).toBeNull();
   });
 
-  it("lets operators collapse worker and resource lanes without leaving editor mode", async () => {
+  it("does not render the editor-only visibility preset controls in embedded editor mode", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
       error: null,
@@ -1179,37 +1184,15 @@ function registerCurrentActivityCardTestLifecycle(): void {
       screen.getByRole("button", { name: "Enter factory graph editor" }),
     );
 
-    expect(await screen.findByText("writer")).toBeTruthy();
-    expect(screen.getByText("gpu")).toBeTruthy();
-    expect(screen.getByText("draft")).toBeTruthy();
-    expect(screen.getByText("story:review")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Infrastructure" }));
-
     await waitFor(() => {
-      expect(screen.getByText("writer")).toBeTruthy();
-      expect(screen.getByText("gpu")).toBeTruthy();
-      expect(screen.queryByText("story:review")).toBeNull();
-    });
-    expect(screen.getByText("draft")).toBeTruthy();
-    expect(screen.getByText("review")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Workflow" }));
-
-    await waitFor(() => {
-      expect(screen.queryByText("writer")).toBeNull();
-      expect(screen.queryByText("gpu")).toBeNull();
-      expect(screen.getByText("story:queued")).toBeTruthy();
-      expect(screen.getByText("story:review")).toBeTruthy();
+      expect(
+        document.querySelector('[data-current-activity-node-type="workstation"]'),
+      ).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("writer")).toBeTruthy();
-      expect(screen.getByText("gpu")).toBeTruthy();
-      expect(screen.getByText("story:review")).toBeTruthy();
-    });
+    expect(screen.queryByRole("button", { name: "Infrastructure" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Workflow" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "All" })).toBeNull();
   });
 
   it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {
