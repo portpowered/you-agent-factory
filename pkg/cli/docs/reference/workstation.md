@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-05-21
+last-modified: 2026-05-24
 doc-id: agent-factory/reference/workstation
 ---
 
@@ -15,7 +15,10 @@ Workstations are the dispatch steps in `factory.json`. A workstation consumes
 input places, optionally dispatches to a worker, and routes the result to its
 configured output, continue, rejection, or failure place. Classifier
 workstations route accepted success through authored `classificationRoutes`
-instead of normal success `outputs`.
+instead of normal success `outputs`. When a worker-backed workstation omits
+`onFailure`, config mapping still expands an explicit failure arc to each
+emitted work type's `FAILED` state; explicit authored `onFailure` routes still
+take precedence, and `LOGICAL_MOVE` stays explicit.
 
 ## Minimal Workstation
 
@@ -43,7 +46,7 @@ instead of normal success `outputs`.
 | `classificationRoutes` | Labeled success routes for `CLASSIFIER_WORKSTATION`; each label maps to one or more destination outputs. |
 | `onContinue` | Places produced on ordinary partial-progress completion. |
 | `onRejection` | Places produced on rejected completion. |
-| `onFailure` | Places produced on failure or timeout. |
+| `onFailure` | Places produced on failure or timeout. If omitted on a worker-backed workstation, mapping adds explicit failed-state routes automatically. |
 | `resources` | Resource capacity held while the dispatch is in flight. |
 | `guards` | Workstation-level `VISIT_COUNT` guards. |
 | `cron` | Schedule configuration for `behavior: "CRON"`. |
@@ -74,8 +77,42 @@ These can live inline in `factory.json` or in
   negative outcomes.
 - `CRON` submits internal time work on a schedule while the runtime stays in
   service mode.
+- `POLLER` keeps an external ingress loop active in service mode.
 
 Use a guarded `LOGICAL_MOVE` workstation to cap repeater or review loops.
+
+## Implicit Failure Routing
+
+Worker-backed workstation kinds and types participate in the same omitted
+`onFailure` normalization:
+
+- `STANDARD`, `REPEATER`, `CRON`, and `POLLER`
+- `MODEL_WORKSTATION`, `MODEL_INVOKE`, and `CLASSIFIER_WORKSTATION`
+
+When those workstations omit `onFailure`, config mapping emits explicit failure
+arcs to each emitted work type's `FAILED` place. Accepted success routing still
+must be authored explicitly through `outputs` or `classificationRoutes`.
+
+Example:
+
+```json
+{
+  "name": "poll-inbox",
+  "behavior": "CRON",
+  "type": "MODEL_WORKSTATION",
+  "worker": "ingest",
+  "cron": { "schedule": "*/5 * * * *" },
+  "outputs": [{ "workType": "task", "state": "queued" }]
+}
+```
+
+That shape still maps an explicit failure lane equivalent to:
+
+```json
+{
+  "onFailure": [{ "workType": "task", "state": "failed" }]
+}
+```
 
 ## Classifier Routing
 
