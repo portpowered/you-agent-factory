@@ -945,6 +945,188 @@ describe("ProviderSessionDetailPanel", () => {
     const panel = await screen.findByLabelText("已选会话详情");
     expect(panel.className).toContain("af-provider-session-sans");
   });
+
+  it("holds the zh-CN transcript reading model together across hierarchy, localization, timestamps, encrypted reasoning, and exec_command formatting", async () => {
+    const execCommandOutput = [
+      "Chunk ID: exec-789",
+      "Wall time: 0.4821 seconds",
+      "Process exited with code 0",
+      "Original token count: 16",
+      "Output:",
+      "命令执行成功",
+      `details:${"z".repeat(360)}`,
+    ].join("\n");
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 5,
+            functionCalls: [
+              {
+                arguments: "{\"path\":\"pkg/api/provider_session_details.go\"}",
+                callId: "call_exec_1",
+                name: "exec_command",
+                order: 4,
+                output: execCommandOutput,
+                status: "completed",
+                turnIndex: 2,
+                type: "function_call",
+              },
+            ],
+            lineCount: 5,
+            malformedLineCount: 1,
+            parseErrors: [
+              {
+                lineNumber: 6,
+                message: "unexpected end of JSON input",
+              },
+            ],
+            reasoning: [
+              {
+                encrypted: true,
+                order: 3,
+                sourceType: "reasoning",
+                turnIndex: 2,
+              },
+            ],
+            turns: [
+              {
+                eventCount: 5,
+                functionCallCount: 1,
+                index: 2,
+                reasoningCount: 1,
+                responseItemCount: 4,
+                startedAt: "2026-05-18T14:10:00Z",
+              },
+            ],
+            unknownEventCount: 1,
+            unknownEvents: [
+              {
+                lineNumber: 7,
+                payloadType: "mystery_payload",
+                type: "mystery_event",
+              },
+            ],
+          },
+          source: {
+            modifiedAt: "2026-05-18T14:09:59Z",
+            relativePath: "2026/05/18/rollout-sess_active.jsonl",
+            sizeBytes: 2048,
+          },
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              text: "请总结当前状态。",
+              timestamp: "2026-05-18T14:10:01Z",
+              turnIndex: 2,
+              type: "user_message",
+            },
+            {
+              lineNumber: 2,
+              order: 2,
+              text: "当前故障集中在 provider-session 解析。",
+              timestamp: "2026-05-18T14:10:02Z",
+              turnIndex: 2,
+              type: "assistant_message",
+            },
+            {
+              encrypted: true,
+              lineNumber: 3,
+              order: 3,
+              sourceType: "reasoning",
+              timestamp: "2026-05-18T14:10:03Z",
+              turnIndex: 2,
+              type: "reasoning",
+            },
+            {
+              callId: "call_exec_1",
+              lineNumber: 4,
+              name: "exec_command",
+              order: 4,
+              output: execCommandOutput,
+              status: "completed",
+              timestamp: "2026-05-18T14:10:04Z",
+              turnIndex: 2,
+              type: "tool_output",
+            },
+            {
+              lineNumber: 5,
+              order: 5,
+              sourceType: "task_started",
+              summary: "重试已计划。",
+              timestamp: "2026-05-18T14:10:05Z",
+              turnIndex: 2,
+              type: "system_event",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel
+        locale="zh-CN"
+        selectedProviderSession={SELECTED_SESSION}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "会话记录" })).toBeTruthy();
+    });
+
+    const headingNames = screen
+      .getAllByRole("heading")
+      .map((heading) => heading.textContent ?? "");
+    const transcriptIndex = headingNames.indexOf("会话记录");
+    const analysisIndex = headingNames.indexOf("会话分析");
+
+    expect(transcriptIndex).toBeGreaterThan(-1);
+    expect(analysisIndex).toBeGreaterThan(transcriptIndex);
+    expect(screen.getByText("提供方")).toBeTruthy();
+    expect(screen.getAllByText("类型").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("用户").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("助手").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("工具输出").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("加密推理").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(
+        "此步骤确实发生了推理，但明文内容会被有意隐藏，无法直接查看。",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("命令结果")).toBeTruthy();
+    expect(screen.getByText("退出代码")).toBeTruthy();
+    expect(screen.getByText("0.4821 seconds")).toBeTruthy();
+    expect(screen.getByText("命令执行成功")).toBeTruthy();
+    expect(screen.getByText("unexpected end of JSON input")).toBeTruthy();
+    expect(screen.getByText("第 7 行的未知事件")).toBeTruthy();
+    expect(
+      screen
+        .getAllByTitle("2026-05-18T14:10:04Z")
+        .some(
+          (element) =>
+            element.textContent === formatDateTime("2026-05-18T14:10:04Z", "zh-CN"),
+        ),
+    ).toBe(true);
+
+    fireEvent.click(screen.getAllByText("原始 ISO 时间戳")[0]);
+
+    expect(screen.getByText("2026-05-18T14:09:59Z")).toBeTruthy();
+    expect(screen.getByText("2026-05-18T14:10:04Z")).toBeTruthy();
+
+    const rawOutputButton = screen.getByRole("button", {
+      name: "展开原始 exec_command 输出",
+    });
+    expect(rawOutputButton.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(rawOutputButton);
+
+    expect(
+      screen.getByText((content) => content.includes("Chunk ID: exec-789")),
+    ).toBeTruthy();
+    expect(screen.getAllByText("命令执行成功").length).toBeGreaterThan(0);
+  });
 });
 
 function buildProviderSessionDetailResponse(

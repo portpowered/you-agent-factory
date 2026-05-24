@@ -330,8 +330,24 @@ export const ZhCnLocalizedChrome = {
     expect(canvas.getAllByText("类型").length).toBeGreaterThan(0);
     expect(canvas.getAllByText("用户").length).toBeGreaterThan(0);
     expect(canvas.getAllByText("助手").length).toBeGreaterThan(0);
+    expect(canvas.getAllByText("工具输出").length).toBeGreaterThan(0);
     expect(canvas.getByRole("heading", { name: "令牌用量" })).toBeTruthy();
     expect(canvas.getByRole("heading", { name: "维护诊断" })).toBeTruthy();
+    expect(
+      canvas.getByText(
+        "此步骤确实发生了推理，但明文内容会被有意隐藏，无法直接查看。",
+      ),
+    ).toBeTruthy();
+    expect(canvas.getByText("命令结果")).toBeTruthy();
+    expect(canvas.getByText("退出代码")).toBeTruthy();
+    expect(canvas.getByText("0.6289 seconds")).toBeTruthy();
+    expect(
+      canvas.getByText("provider-session parsing verified successfully"),
+    ).toBeTruthy();
+    expect(canvas.getAllByText("原始 ISO 时间戳").length).toBeGreaterThan(0);
+    expect(
+      canvas.getByRole("button", { name: "展开原始 exec_command 输出" }),
+    ).toBeTruthy();
     expect(canvas.getByLabelText("已选会话详情").className).toContain(
       "af-provider-session-sans",
     );
