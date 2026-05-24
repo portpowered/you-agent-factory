@@ -320,7 +320,7 @@ describe("AgentBentoLayout", () => {
     ).toHaveLength(1);
     expect(
       within(addWidgetItem).getByText(
-        "The widget picker opens here in the next step.",
+        "Browse available dashboard widgets without leaving this grid.",
       ),
     ).toBeTruthy();
   });

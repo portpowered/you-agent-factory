@@ -133,6 +133,7 @@ describe("verifyDashboardShellConsolidation", () => {
       name: "Work totals",
     });
     expect(board.getByRole).toHaveBeenCalledWith("button", {
+      exact: true,
       name: "Move Work totals",
     });
     expect(toolbar.getByRole).toHaveBeenCalledWith("button", {
