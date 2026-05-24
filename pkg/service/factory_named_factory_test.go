@@ -767,24 +767,7 @@ func TestFactoryService_SaveCurrentFactory_RejectsDuplicateAndDanglingTopology(t
 	if !errors.As(err, &topologyErr) {
 		t.Fatalf("SaveCurrentFactory error = %v, want topology validation error", err)
 	}
-	if len(topologyErr.Targets) < 3 {
-		t.Fatalf("topology targets = %#v, want duplicate worker, missing worker, and dangling output targets", topologyErr.Targets)
-	}
-	if !hasServiceErrorTarget(topologyErr.Targets, "node", "worker-a") {
-		t.Fatalf("topology targets = %#v, want duplicate worker node target", topologyErr.Targets)
-	}
-	if !hasServiceErrorTarget(topologyErr.Targets, "field", "process") {
-		t.Fatalf("topology targets = %#v, want missing workstation worker field target", topologyErr.Targets)
-	}
-	if !hasServiceErrorTarget(topologyErr.Targets, "edge", "process->story:missing-state") {
-		t.Fatalf("topology targets = %#v, want dangling output edge target", topologyErr.Targets)
-	}
-	if !hasServiceErrorField(topologyErr.Targets, "factory.workstations[0].worker") {
-		t.Fatalf("topology targets = %#v, want canonical factory field target", topologyErr.Targets)
-	}
-	if hasServiceErrorField(topologyErr.Targets, "factoryDefinition.workstations[0].worker") {
-		t.Fatalf("topology targets = %#v, should not use retired factoryDefinition field prefix", topologyErr.Targets)
-	}
+	assertCanonicalTopologyTargets(t, topologyErr.Targets)
 
 	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
@@ -793,6 +776,39 @@ func TestFactoryService_SaveCurrentFactory_RejectsDuplicateAndDanglingTopology(t
 	if current.WorkTypes == nil || (*current.WorkTypes)[0].Name != "task" {
 		t.Fatalf("current work types after rejected topology = %#v, want unchanged task", current.WorkTypes)
 	}
+}
+
+func assertCanonicalTopologyTargets(t *testing.T, targets []factoryapi.ErrorTarget) {
+	t.Helper()
+
+	if len(targets) < 3 {
+		t.Fatalf("topology targets = %#v, want duplicate worker, missing worker, and dangling output targets", targets)
+	}
+
+	assertHasServiceErrorTarget(t, targets, "node", "worker-a", "duplicate worker node target")
+	assertHasServiceErrorTarget(t, targets, "field", "process", "missing workstation worker field target")
+	assertHasServiceErrorTarget(t, targets, "edge", "process->story:missing-state", "dangling output edge target")
+	assertHasServiceErrorField(t, targets, "factory.workstations[0].worker", "canonical factory field target")
+
+	if hasServiceErrorField(targets, "factoryDefinition.workstations[0].worker") {
+		t.Fatalf("topology targets = %#v, should not use retired factoryDefinition field prefix", targets)
+	}
+}
+
+func assertHasServiceErrorTarget(t *testing.T, targets []factoryapi.ErrorTarget, kind, id, want string) {
+	t.Helper()
+	if hasServiceErrorTarget(targets, kind, id) {
+		return
+	}
+	t.Fatalf("topology targets = %#v, want %s", targets, want)
+}
+
+func assertHasServiceErrorField(t *testing.T, targets []factoryapi.ErrorTarget, field, want string) {
+	t.Helper()
+	if hasServiceErrorField(targets, field) {
+		return
+	}
+	t.Fatalf("topology targets = %#v, want %s", targets, want)
 }
 
 func hasServiceErrorTarget(targets []factoryapi.ErrorTarget, kind, id string) bool {
