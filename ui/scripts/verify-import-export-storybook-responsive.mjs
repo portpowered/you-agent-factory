@@ -258,8 +258,8 @@ export async function expectOrderedLeftEdges(locators, label) {
 }
 
 export async function verifyDashboardHeader(page, _dialog, viewport) {
-  const heading = page.getByRole("heading", { name: "you-agent-factory" });
-  const hiddenWordmark = heading.getByText("you-agent-factory");
+  const heading = page.getByRole("heading", { name: "You Agent Factory" });
+  const wordmark = heading.getByText("You Agent Factory");
   const slider = page.getByRole("slider", { name: "Timeline tick" });
   const sessionTabs = page.getByRole("navigation", {
     name: "factory sessions",
@@ -276,7 +276,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
     name: "Change language",
   });
   const streamStatus = page.getByRole("status", {
-    name: /you-agent-factory event stream (connecting|live)/,
+    name: /You Agent Factory event stream (connecting|live)/,
   });
   const exportButton = page.getByRole("button", { name: "Export PNG" });
   const globalActions = page.getByRole("group", {
@@ -285,7 +285,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   const timelineStatus = page.getByText(/^\d+\/\d+$/);
 
   await expectVisible(heading, "Dashboard heading");
-  await expectVisible(hiddenWordmark, "Accessible you-agent-factory wordmark");
+  await expectVisible(wordmark, "Visible You Agent Factory wordmark");
   await expectVisible(sessionTabs, "Session tabs navigation");
   await expectVisible(rootTab, "Default session tab");
   await expectVisible(openSessionButton, "Open another session button");
@@ -307,10 +307,10 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
     );
   }
 
-  const hiddenWordmarkClass = await hiddenWordmark.getAttribute("class");
-  if (!hiddenWordmarkClass?.includes("sr-only")) {
+  const wordmarkClass = await wordmark.getAttribute("class");
+  if (wordmarkClass?.includes("sr-only")) {
     throw new Error(
-      "Dashboard heading wordmark was not hidden with sr-only styling.",
+      "Dashboard heading wordmark should remain visible instead of sr-only.",
     );
   }
 

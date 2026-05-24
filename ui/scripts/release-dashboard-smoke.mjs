@@ -17,11 +17,11 @@ function livePath(pathname) {
 }
 
 async function waitForRenderedDashboard(page) {
-  await page.getByRole("heading", { level: 1, name: "you-agent-factory" }).waitFor();
+  await page.getByRole("heading", { level: 1, name: "You Agent Factory" }).waitFor();
   await page.getByText("Work totals").waitFor();
   await page.getByRole("button", { name: "Select step-one workstation" }).waitFor();
   await page.getByRole("button", { name: "Select step-two workstation" }).waitFor();
-  await page.getByRole("status", { name: "you-agent-factory event stream live" }).waitFor();
+  await page.getByRole("status", { name: "You Agent Factory event stream live" }).waitFor();
   await page.waitForFunction(() => {
     const workTotals = document.querySelector('[aria-label="work totals"]');
     if (!(workTotals instanceof HTMLElement)) {
@@ -95,16 +95,16 @@ async function main() {
     }
 
     const streamStatusName = await page
-      .getByRole("status", { name: "you-agent-factory event stream live" })
+      .getByRole("status", { name: "You Agent Factory event stream live" })
       .getAttribute("aria-label");
-    if (streamStatusName !== "you-agent-factory event stream live") {
+    if (streamStatusName !== "You Agent Factory event stream live") {
       throw new Error(
-        `dashboard stream status name = ${JSON.stringify(streamStatusName)}, want "you-agent-factory event stream live"`,
+        `dashboard stream status name = ${JSON.stringify(streamStatusName)}, want "You Agent Factory event stream live"`,
       );
     }
 
     const visibleTexts = unique([
-      "you-agent-factory",
+      "You Agent Factory",
       "Work totals",
       "step-one",
       "step-two",

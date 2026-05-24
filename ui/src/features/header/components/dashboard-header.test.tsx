@@ -104,7 +104,7 @@ describe("DashboardHeader", () => {
     useFactoryTimelineStore.getState().reset();
     useDashboardStreamStore.setState({
       streamState: {
-        message: "Connecting to the you-agent-factory event stream.",
+        message: "Connecting to the You Agent Factory event stream.",
         status: "connecting",
       },
     });
@@ -119,8 +119,8 @@ describe("DashboardHeader", () => {
     const toolbar = screen.getByRole("region", {
       name: headerMessages.dashboardSummaryLabel,
     });
-    const heading = screen.getByRole("heading", { name: "you-agent-factory" });
-    const wordmark = screen.getByText("you-agent-factory");
+    const heading = screen.getByRole("heading", { name: "You Agent Factory" });
+    const wordmark = screen.getByText("You Agent Factory");
     const slider = screen.getByRole("slider", {
       name: headerMessages.sliderAriaLabel,
     });
@@ -140,7 +140,7 @@ describe("DashboardHeader", () => {
     expect(exportButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
     expect(exportButton.getAttribute("aria-expanded")).toBe("false");
-    expect(wordmark.className).toContain("sr-only");
+    expect(wordmark.className).not.toContain("sr-only");
     expect(toolbar.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
     expect(toolbar.className).toContain("mb-3");
     expect(toolbar.className).toContain("gap-2");
@@ -255,7 +255,7 @@ describe("DashboardHeader", () => {
     act(() => {
       useDashboardStreamStore.setState({
         streamState: {
-          message: "you-agent-factory event stream is offline.",
+          message: "You Agent Factory event stream is offline.",
           status: "offline",
         },
       });

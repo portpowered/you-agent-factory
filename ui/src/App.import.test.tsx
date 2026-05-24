@@ -27,7 +27,7 @@ describe("App shell import flows", () => {
     renderApp({ snapshot: baselineSnapshot });
 
     expect(
-      await screen.findByRole("heading", { name: "you-agent-factory" }),
+      await screen.findByRole("heading", { name: "You Agent Factory" }),
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();

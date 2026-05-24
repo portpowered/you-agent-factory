@@ -125,7 +125,7 @@ describe("App timeline reconstruction flows", () => {
       name: "Export PNG",
     });
     const streamStatus = within(toolbar).getByRole("status", {
-      name: "you-agent-factory event stream connecting",
+      name: "You Agent Factory event stream connecting",
     });
     const headerControls = Array.from(
       toolbar.querySelectorAll(
