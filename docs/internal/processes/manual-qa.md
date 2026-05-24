@@ -21,6 +21,23 @@ After the preview server starts, open `http://127.0.0.1:4173` in a browser and s
 - Tablet: `768x1024`
 - Desktop: `1440x900`
 
+## Mock-Worker Runtime Verification
+
+Use live mock-worker QA when a change depends on real factory routing,
+runtime outcomes, or observable side effects that Storybook verification and
+unit-level automated coverage cannot prove on their own. This is the shared
+baseline for runtime-oriented checks; feature-specific mock-worker checklists
+may add narrower steps, but they extend this process instead of replacing it.
+
+Start from these existing command patterns:
+
+- `you run --dir ./factory --with-mock-workers`
+- `you run --dir ./factory --with-mock-workers ./mock-workers.json`
+
+Use the public [Authoring Factories](../../reference/authoring-factories.md)
+guide for command usage details, mock-worker setup expectations, and related
+runtime options instead of duplicating that setup documentation here.
+
 ## Dashboard UI Checklist
 
 Use this checklist for the shadcn primitive migration lane and similar dashboard-control changes.
