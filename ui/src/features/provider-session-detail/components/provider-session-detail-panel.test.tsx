@@ -769,6 +769,24 @@ describe("ProviderSessionDetailPanel", () => {
               },
             ],
           },
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              text: "请总结当前状态。",
+              timestamp: "2026-05-18T14:10:01Z",
+              turnIndex: 2,
+              type: "user_message",
+            },
+            {
+              lineNumber: 2,
+              order: 2,
+              text: "当前状态已记录。",
+              timestamp: "2026-05-18T14:10:02Z",
+              turnIndex: 2,
+              type: "assistant_message",
+            },
+          ],
         }),
       ),
     );
@@ -781,9 +799,15 @@ describe("ProviderSessionDetailPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Token 用量" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "令牌用量" })).toBeTruthy();
     });
 
+    expect(screen.getByRole("heading", { name: "已选会话详情" })).toBeTruthy();
+    expect(screen.getByText("提供方会话")).toBeTruthy();
+    expect(screen.getByText("提供方")).toBeTruthy();
+    expect(screen.getAllByText("类型").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("用户").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("助手").length).toBeGreaterThan(0);
     expect(screen.getByText("输入")).toBeTruthy();
     expect(screen.getByText("缓存输入")).toBeTruthy();
     expect(screen.getByText("轮次 2")).toBeTruthy();

@@ -271,3 +271,44 @@ export const MixedTranscript = {
   },
   render: TimestampPrefixedSessionSuccess.render,
 };
+
+export const ZhCnLocalizedChrome = {
+  tags: ["test"],
+  args: {
+    locale: "zh-CN",
+  },
+  parameters: MixedTranscript.parameters,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    await canvas.findByRole("heading", { name: "令牌用量" });
+
+    expect(canvas.getByText("提供方会话")).toBeTruthy();
+    expect(canvas.getByText("提供方")).toBeTruthy();
+    expect(canvas.getAllByText("类型").length).toBeGreaterThan(0);
+    expect(canvas.getAllByText("用户").length).toBeGreaterThan(0);
+    expect(canvas.getAllByText("助手").length).toBeGreaterThan(0);
+    expect(canvas.getByRole("heading", { name: "令牌用量" })).toBeTruthy();
+  },
+  render: ({ locale }: { locale?: string }) => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+
+    return (
+      <div style={{ maxWidth: "100%", width: "960px" }}>
+        <QueryClientProvider client={queryClient}>
+          <ProviderSessionDetailPanel
+            locale={locale}
+            selectedProviderSession={selectedProviderSession}
+          />
+        </QueryClientProvider>
+      </div>
+    );
+  },
+};

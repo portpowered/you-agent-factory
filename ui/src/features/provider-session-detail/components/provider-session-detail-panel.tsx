@@ -326,9 +326,9 @@ function TurnsSection({
             <article className={PROVIDER_SESSION_CARD_CLASS} key={turn.index}>
               <div className="grid gap-1">
                 <strong>{messages.turnLabel({ index: turn.index })}</strong>
-                <p
+                <div
                   className={cn(
-                    "m-0 text-af-ink/62",
+                    "text-af-ink/62",
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
                 >
@@ -337,7 +337,7 @@ function TurnsSection({
                     timestamp={turn.startedAt}
                     unavailableLabel={messages.noTimestamp}
                   />
-                </p>
+                </div>
               </div>
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
                 <DetailMetric label={messages.eventsLabel} value={turn.eventCount} />
@@ -546,12 +546,21 @@ function DetailMetric({
   label: string;
   value: number | string | ReactNode;
 }) {
+  const metricValue = code ? (
+    <code className={DASHBOARD_BODY_CODE_CLASS}>{value}</code>
+  ) : (
+    value
+  );
+  const wrapperClassName = cn("mt-1", DASHBOARD_BODY_TEXT_CLASS);
+
   return (
     <div className={PROVIDER_SESSION_CARD_CLASS}>
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <p className={cn("m-0 mt-1", DASHBOARD_BODY_TEXT_CLASS)}>
-        {code ? <code className={DASHBOARD_BODY_CODE_CLASS}>{value}</code> : value}
-      </p>
+      {typeof value === "string" || typeof value === "number" ? (
+        <p className={cn("m-0", wrapperClassName)}>{metricValue}</p>
+      ) : (
+        <div className={wrapperClassName}>{metricValue}</div>
+      )}
     </div>
   );
 }
