@@ -248,6 +248,12 @@ export const MixedTranscript = {
         expect(transcriptIndex).toBeLessThan(headingIndex);
       }
     }
+
+    expect(
+      canvas.getAllByText("{\"path\":\"pkg/api/provider_session_details.go\"}"),
+    ).toHaveLength(1);
+    expect(canvas.getAllByText("{\"lines\":128}")).toHaveLength(1);
+    expect(canvas.getAllByText("Inspect the parser branch before retrying.")).toHaveLength(1);
   },
   render: TimestampPrefixedSessionSuccess.render,
 };

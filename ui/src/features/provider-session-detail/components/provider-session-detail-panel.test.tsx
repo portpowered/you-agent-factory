@@ -297,9 +297,7 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("2026/05/18/rollout-sess_active.jsonl")).toBeTruthy();
     expect(screen.getByText("Turn 1")).toBeTruthy();
     expect(screen.getByText("list_dir")).toBeTruthy();
-    expect(
-      screen.getByText("Inspect the provider-session diff before retrying."),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Reasoning" })).toBeTruthy();
     expect(screen.getByText("182")).toBeTruthy();
     expect(screen.getByText("unexpected end of JSON input")).toBeTruthy();
     expect(screen.getByText("Unknown event on line 6")).toBeTruthy();
@@ -494,6 +492,121 @@ describe("ProviderSessionDetailPanel", () => {
         expect(transcriptIndex).toBeLessThan(headingIndex);
       }
     }
+  });
+
+  it("keeps reasoning and tool bodies in the transcript without duplicating them in summaries", async () => {
+    const reasoningSummary = "Inspect the provider-session diff before retrying.";
+    const reasoningText = "Investigate the failed response stream.";
+    const callArguments = "{\"path\":\"pkg/api/provider_session_details.go\"}";
+    const callOutput = "{\"lines\":128}";
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 5,
+            functionCalls: [
+              {
+                arguments: callArguments,
+                callId: "call_1",
+                name: "read_file",
+                order: 4,
+                output: callOutput,
+                status: "completed",
+                turnIndex: 1,
+                type: "function_call",
+              },
+            ],
+            lineCount: 5,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [
+              {
+                order: 3,
+                sourceType: "reasoning",
+                summary: reasoningSummary,
+                text: reasoningText,
+                turnIndex: 1,
+              },
+            ],
+            turns: [
+              {
+                eventCount: 5,
+                functionCallCount: 1,
+                index: 1,
+                reasoningCount: 1,
+                responseItemCount: 4,
+                startedAt: "2026-05-18T14:10:00Z",
+              },
+            ],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+          transcript: [
+            {
+              order: 1,
+              text: "Summarize the rollout state for this work item.",
+              turnIndex: 1,
+              type: "user_message",
+            },
+            {
+              lineNumber: 2,
+              order: 2,
+              text: "The current failure is isolated to provider-session parsing.",
+              timestamp: "2026-05-18T14:10:02Z",
+              turnIndex: 1,
+              type: "assistant_message",
+            },
+            {
+              lineNumber: 3,
+              order: 3,
+              sourceType: "reasoning",
+              summary: reasoningSummary,
+              text: reasoningText,
+              timestamp: "2026-05-18T14:10:03Z",
+              turnIndex: 1,
+              type: "reasoning",
+            },
+            {
+              arguments: callArguments,
+              callId: "call_1",
+              lineNumber: 4,
+              name: "read_file",
+              order: 4,
+              status: "completed",
+              timestamp: "2026-05-18T14:10:04Z",
+              turnIndex: 1,
+              type: "tool_call",
+            },
+            {
+              callId: "call_1",
+              lineNumber: 5,
+              order: 5,
+              output: callOutput,
+              status: "completed",
+              timestamp: "2026-05-18T14:10:05Z",
+              turnIndex: 1,
+              type: "tool_output",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Reasoning" })).toBeTruthy();
+    });
+
+    expect(screen.getAllByText(reasoningSummary)).toHaveLength(1);
+    expect(screen.getAllByText(reasoningText)).toHaveLength(1);
+    expect(screen.getAllByText(callArguments)).toHaveLength(1);
+    expect(screen.getAllByText(callOutput)).toHaveLength(1);
+    expect(screen.getAllByText("read_file")).toHaveLength(2);
+    expect(screen.getAllByText("Order 4 / Turn 1").length).toBeGreaterThan(0);
   });
 
   it("renders provider-session detail labels and templates from the zh-CN catalog", async () => {

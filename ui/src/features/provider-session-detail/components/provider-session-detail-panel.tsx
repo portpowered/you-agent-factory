@@ -403,12 +403,6 @@ function FunctionCallsSection({
                   label={messages.callIdLabel}
                   value={call.callId ?? messages.unavailableValue}
                 />
-                {call.arguments ? (
-                  <CodeBlockMetric label={messages.argumentsLabel} value={call.arguments} />
-                ) : null}
-                {call.output ? (
-                  <CodeBlockMetric label={messages.outputLabel} value={call.output} />
-                ) : null}
               </div>
             </article>
           ))}
@@ -455,21 +449,6 @@ function ReasoningSection({
                   })}
                 </p>
               </div>
-              {entry.summary ? (
-                <p className={cn("m-0 mt-2", DASHBOARD_BODY_TEXT_CLASS)}>
-                  {entry.summary}
-                </p>
-              ) : null}
-              {entry.text ? (
-                <pre
-                  className={cn(
-                    "m-0 mt-2 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere]",
-                    DASHBOARD_BODY_CODE_CLASS,
-                  )}
-                >
-                  {entry.text}
-                </pre>
-              ) : null}
               {entry.encrypted ? (
                 <p
                   className={cn(
@@ -566,28 +545,6 @@ function DetailMetric({
       <p className={cn("m-0 mt-1", DASHBOARD_BODY_TEXT_CLASS)}>
         {code ? <code className={DASHBOARD_BODY_CODE_CLASS}>{value}</code> : value}
       </p>
-    </div>
-  );
-}
-
-function CodeBlockMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="grid gap-1">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <pre
-        className={cn(
-          "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere]",
-          DASHBOARD_BODY_CODE_CLASS,
-        )}
-      >
-        {value}
-      </pre>
     </div>
   );
 }
