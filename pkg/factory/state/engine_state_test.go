@@ -60,7 +60,7 @@ func TestEngineStateSnapshot_AllFieldsAccessible(t *testing.T) {
 		t.Fatalf("expected topology snapshot-topology, got %#v", snap.Topology)
 	}
 
-	runtime := snap.RuntimeStateSnapshot()
+	runtime := engineRuntimeSnapshotFixture()
 	if runtime.RuntimeStatus != snap.RuntimeStatus {
 		t.Fatalf("runtime status = %q, want %q", runtime.RuntimeStatus, snap.RuntimeStatus)
 	}
@@ -69,6 +69,9 @@ func TestEngineStateSnapshot_AllFieldsAccessible(t *testing.T) {
 	}
 	if len(runtime.ActiveThrottlePauses) != 1 {
 		t.Fatalf("runtime active throttle pause count = %d, want 1", len(runtime.ActiveThrottlePauses))
+	}
+	if runtime.Topology != nil {
+		t.Fatalf("runtime topology = %#v, want nil", runtime.Topology)
 	}
 	aggregate := NewEngineStateSnapshot(runtime, "RUNNING", time.Minute, snap.Topology)
 	if len(aggregate.ActiveThrottlePauses) != 1 {
@@ -139,4 +142,12 @@ func engineStateSnapshotFixture() interfaces.EngineStateSnapshot[petri.MarkingSn
 		Uptime:       10 * time.Minute,
 		Topology:     topology,
 	}
+}
+
+func engineRuntimeSnapshotFixture() interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net] {
+	runtime := engineStateSnapshotFixture()
+	runtime.FactoryState = ""
+	runtime.Uptime = 0
+	runtime.Topology = nil
+	return runtime
 }

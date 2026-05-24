@@ -36,20 +36,3 @@ type EngineStateSnapshot[TMarking any, TTopology any] struct {
 	// records for service-facing observability read models.
 	Topology TTopology `json:"topology,omitempty"`
 }
-
-// RuntimeStateSnapshot returns the raw runtime portion of the aggregate
-// snapshot for reducers that intentionally operate on runtime records.
-func (s EngineStateSnapshot[TMarking, TTopology]) RuntimeStateSnapshot() EngineStateSnapshot[TMarking, TTopology] {
-	var topology TTopology
-	return EngineStateSnapshot[TMarking, TTopology]{
-		RuntimeStatus:        s.RuntimeStatus,
-		Marking:              s.Marking,
-		Dispatches:           s.Dispatches,
-		InFlightCount:        s.InFlightCount,
-		Results:              s.Results,
-		DispatchHistory:      s.DispatchHistory,
-		ActiveThrottlePauses: s.ActiveThrottlePauses,
-		TickCount:            s.TickCount,
-		Topology:             topology,
-	}
-}
