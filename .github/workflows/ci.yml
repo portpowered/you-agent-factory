@@ -179,8 +179,8 @@ jobs:
         timeout-minutes: 15
         run: make test-ui-browser-integration
 
-  backend-tests:
-    name: Backend Tests
+  backend-verification:
+    name: Backend Verification
     runs-on: ubuntu-latest
     needs: verify-build-contracts
     timeout-minutes: 35
@@ -194,10 +194,6 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Run backend coverage suite
+      - name: Run merged backend coverage and functional verification
         timeout-minutes: 15
-        run: make test-backend-coverage
-
-      - name: Run backend functional suite
-        timeout-minutes: 15
-        run: make test-backend-functional
+        run: make test-backend-verification

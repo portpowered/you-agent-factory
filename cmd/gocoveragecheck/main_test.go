@@ -82,6 +82,19 @@ func TestResolveCoverageLaneDefaults(t *testing.T) {
 	if !slices.Contains(testPackages, modulePath+"/tests/functional/runtime_api") {
 		t.Fatalf("test packages missing backend functional package: %v", testPackages)
 	}
+	for _, functionalPackage := range []string{
+		modulePath + "/tests/functional/bootstrap_portability",
+		modulePath + "/tests/functional/guards_batch",
+		modulePath + "/tests/functional/providers",
+		modulePath + "/tests/functional/replay_contracts",
+		modulePath + "/tests/functional/runtime_api",
+		modulePath + "/tests/functional/smoke",
+		modulePath + "/tests/functional/workflow",
+	} {
+		if !slices.Contains(testPackages, functionalPackage) {
+			t.Fatalf("test packages missing maintained functional package %q: %v", functionalPackage, testPackages)
+		}
+	}
 	if slices.Contains(testPackages, modulePath+"/tests/functional/internal/support") {
 		t.Fatalf("test packages unexpectedly include functional support helpers: %v", testPackages)
 	}

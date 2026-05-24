@@ -70,8 +70,7 @@ The workflow currently executes these repository-owned commands through one prer
 5. `make ui-replay-coverage-check`
 6. `cd ui && bunx playwright install chromium`
 7. `make test-ui-browser-integration`
-8. `make test-backend-coverage`
-9. `make test-backend-functional`
+8. `make test-backend-verification`
 
 Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and pins Bun to `1.3.12` in `.github/workflows/ci.yml`; keep that version aligned with the checked-in `ui/package.json` `packageManager` pin when either file changes.
 
@@ -89,14 +88,15 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make verify-build-contracts` is the repository-owned build-contract lane used by CI after dependency setup. It runs `make typecheck`, `make ui-build`, `make build`, `make lint`, and `make api-smoke` in the same order the `verify-build-contracts` GitHub Actions job enforces.
 
-`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make ui-replay-coverage-check`, `make test-ui-browser-integration`, `make test-backend-coverage`, and `make test-backend-functional`. The GitHub Actions workflow fans those commands out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Tests` jobs so required UI failures point at one lane instead of a mixed `make ui-test` rerun.
+`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make ui-replay-coverage-check`, `make test-ui-browser-integration`, and `make test-backend-verification`. The GitHub Actions workflow fans those commands out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Verification` jobs so required failures point at one lane instead of a mixed `make ui-test` rerun.
+
+The backend lane is intentionally merged. `make test-backend-verification` shells through `cmd/gocoveragecheck`, and that command's default package discovery already executes the maintained short functional packages under `tests/functional/...` in the same covered `go test` invocation as `./cmd/factory` and backend-owned `./pkg/...` packages. Because that coverage lane already includes `tests/functional/bootstrap_portability`, `guards_batch`, `providers`, `replay_contracts`, `runtime_api`, `smoke`, and `workflow` while excluding only the internal support helper package, a separate required `make test-backend-functional` lane would only rerun the same short functional corpus without adding pull-request confidence. Keep `make test-backend-functional` as a compatibility alias for ad hoc local usage, but treat `make test-backend-verification` as the required PR backend lane.
 
 Use the lane-specific targets below when you need to rerun one required CI lane locally without replaying the full suite:
 
 - `make test-ui-coverage` for the jsdom-oriented dashboard coverage lane.
 - `make test-ui-browser-integration` for the browser-backed dashboard integration lane.
-- `make test-backend-coverage` for the backend coverage lane.
-- `make test-backend-functional` for the backend functional verification lane.
+- `make test-backend-verification` for the merged backend coverage plus maintained short functional lane.
 
 `make verify` composes both aggregate lanes for a full review-ready local pass once dependencies and browser prerequisites are already installed. It does not install packages or browsers itself, so routine verification stays network-free after setup.
 
