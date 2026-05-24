@@ -48,13 +48,10 @@ describe("verifyEditorGraphParity", () => {
         }
         throw new Error(`Unexpected locator query ${selector}`);
       }),
-      getByTestId: vi.fn((value) => {
-        if (value === "rf__node-workstation:review") {
+      getByTitle: vi.fn((value) => {
+        if (String(value) === String(/^review$/)) {
           return reviewWorkstationNode;
         }
-        throw new Error(`Unexpected test id query ${String(value)}`);
-      }),
-      getByTitle: vi.fn((value) => {
         if (value === "gpu") {
           return gpuNode;
         }
@@ -70,7 +67,7 @@ describe("verifyEditorGraphParity", () => {
       { height: 900, label: "desktop", width: 1440 },
     );
 
-    expect(page.getByTestId).toHaveBeenCalledWith("rf__node-workstation:review");
+    expect(page.getByTitle).toHaveBeenCalledWith(/^review$/);
     expect(expectVisible).toHaveBeenCalledWith(
       reviewWorkstationNode,
       "Editor workstation node",
