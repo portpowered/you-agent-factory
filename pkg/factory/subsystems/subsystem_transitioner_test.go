@@ -378,6 +378,50 @@ func TestResolveWorkResult_MissingRuntimeConfigPreservesOriginalOutcome(t *testi
 	}
 }
 
+func TestTransitioner_SpawnedWorkRelationsRemainDetachedFromResultMutation(t *testing.T) {
+	now := time.Date(2026, time.May, 24, 2, 0, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	transitioner := NewTransitioner(net, nil, WithTransitionerClock(func() time.Time { return now }))
+	snapshot := workerBatchSnapshot("")
+	snapshot.Results[0].SpawnedWork = []interfaces.TokenColor{{
+		WorkID:     "child-work-1",
+		WorkTypeID: "child",
+		DataType:   interfaces.DataTypeWork,
+		Relations: []interfaces.Relation{{
+			Type:          interfaces.RelationDependsOn,
+			TargetWorkID:  "work-source",
+			RequiredState: "complete",
+		}},
+	}}
+
+	result, err := transitioner.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected transitioner result")
+	}
+
+	snapshot.Results[0].SpawnedWork[0].Relations[0].TargetWorkID = "mutated-after-execute"
+
+	var child *interfaces.Token
+	for i := range result.Mutations {
+		if result.Mutations[i].ToPlace == "child:init" {
+			child = result.Mutations[i].NewToken
+			break
+		}
+	}
+	if child == nil {
+		t.Fatalf("mutations = %#v, want spawned child token", result.Mutations)
+	}
+	if len(child.Color.Relations) != 1 {
+		t.Fatalf("spawned token relations = %#v, want one dependency relation", child.Color.Relations)
+	}
+	if child.Color.Relations[0].TargetWorkID != "work-source" {
+		t.Fatalf("spawned token relation target = %q, want detached work-source", child.Color.Relations[0].TargetWorkID)
+	}
+}
+
 func TestResolveWorkResult_RuntimeConfigUsesTransitionName(t *testing.T) {
 	transition := &petri.Transition{
 		ID:   "runtime-station-id",
