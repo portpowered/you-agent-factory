@@ -57,7 +57,7 @@ func (h *testSubmissionHook) OnTick(ctx context.Context, input interfaces.Submis
 type testDispatchResultHook struct {
 	waitCh   chan struct{}
 	submit   func(context.Context, interfaces.WorkDispatch) error
-	onTick   func(context.Context, interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.DispatchResultHookResult, error)
+	onTick   func(context.Context, interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error)
 	submits  []interfaces.WorkDispatch
 	results  []interfaces.WorkResult
 	waitOnce bool
@@ -75,17 +75,17 @@ func (h *testDispatchResultHook) SubmitDispatch(ctx context.Context, dispatch in
 	return nil
 }
 
-func (h *testDispatchResultHook) OnTick(ctx context.Context, input interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.DispatchResultHookResult, error) {
+func (h *testDispatchResultHook) OnTick(ctx context.Context, input interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error) {
 	if h.onTick != nil {
 		return h.onTick(ctx, input)
 	}
 	if len(h.results) == 0 {
-		return interfaces.DispatchResultHookResult{}, nil
+		return nil, nil
 	}
 	results := make([]interfaces.WorkResult, len(h.results))
 	copy(results, h.results)
 	h.results = nil
-	return interfaces.DispatchResultHookResult{Results: results}, nil
+	return results, nil
 }
 
 func (h *testDispatchResultHook) WaitCh() <-chan struct{} {

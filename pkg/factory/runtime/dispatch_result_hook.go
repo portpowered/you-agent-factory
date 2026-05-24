@@ -106,27 +106,27 @@ func (h *workerPoolDispatchResultHook) SubmitDispatch(ctx context.Context, dispa
 	return nil
 }
 
-func (h *workerPoolDispatchResultHook) OnTick(_ context.Context, input interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.DispatchResultHookResult, error) {
+func (h *workerPoolDispatchResultHook) OnTick(_ context.Context, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if validator, ok := h.planner.(replayTickValidator); ok {
-		if err := validator.ValidateReplayTick(input.Snapshot.TickCount); err != nil {
-			return interfaces.DispatchResultHookResult{}, err
+		if err := validator.ValidateReplayTick(snapshot.TickCount); err != nil {
+			return nil, err
 		}
 	}
 	if len(h.results) == 0 {
-		return interfaces.DispatchResultHookResult{}, nil
+		return nil, nil
 	}
 
-	results := h.takeDueResults(input.Snapshot.TickCount)
+	results := h.takeDueResults(snapshot.TickCount)
 	if len(h.results) > 0 {
 		h.signalWaitLocked()
 	}
 	if len(results) == 0 {
-		return interfaces.DispatchResultHookResult{}, nil
+		return nil, nil
 	}
 
-	return interfaces.DispatchResultHookResult{Results: results}, nil
+	return results, nil
 }
 
 func (h *workerPoolDispatchResultHook) takeDueResults(currentTick int) []interfaces.WorkResult {
