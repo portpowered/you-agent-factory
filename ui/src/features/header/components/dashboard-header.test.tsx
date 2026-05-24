@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it } from "vitest";
@@ -127,9 +128,13 @@ describe("DashboardHeader", () => {
     const languageButton = screen.getByRole<HTMLButtonElement>("button", {
       name: headerMessages.languageMenuButtonLabel,
     });
-    const openSessionButton = screen.getByRole<HTMLButtonElement>("button", {
-      name: headerMessages.openSessionButtonLabel,
-    });
+    const sessionTabs = screen.getByTestId("dashboard-session-tabs-en");
+    const openSessionButton = within(sessionTabs).getByRole<HTMLButtonElement>(
+      "button",
+      {
+        name: headerMessages.openSessionButtonLabel,
+      },
+    );
     const globalActions = screen.getByRole("group", {
       name: headerMessages.globalHeaderActionsLabel,
     });
@@ -233,9 +238,12 @@ describe("DashboardHeader", () => {
     renderWithQueryClient(<DashboardHeader locale="ko" />);
 
     expect(
-      screen.getByRole("button", {
-        name: headerMessages.openSessionButtonLabel,
-      }).textContent,
+      within(screen.getByTestId("dashboard-session-tabs-ko")).getByRole(
+        "button",
+        {
+          name: headerMessages.openSessionButtonLabel,
+        },
+      ).textContent,
     ).toBe("+");
     expect(
       screen.getByRole("button", {

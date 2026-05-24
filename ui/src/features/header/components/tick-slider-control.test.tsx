@@ -111,8 +111,7 @@ describe("TickSliderControl", () => {
     expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
     expect(slider.getAttribute("aria-valuetext")).toBe("9/9");
     expect(sliderShell?.className).toContain("gap-1.5");
-    expect(sliderShell?.className).toContain("px-1");
-    expect(sliderShell?.className).not.toContain("rounded-t-none");
+    expect(sliderShell?.className).toContain("flex-wrap");
     expect(screen.queryByText("Current")).toBeNull();
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
     expect(
