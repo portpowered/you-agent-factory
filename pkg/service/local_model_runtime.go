@@ -125,9 +125,10 @@ func (m *managedLocalModelManager) execute(
 	if err != nil {
 		return interfaces.InferenceResponse{}, true, err
 	}
+	loadWorker := factoryconfig.CloneWorkerConfig(*workerDef)
 	handle, err := m.loadHandle(ctx, resourceKey, localModelLoadRequest{
 		Resource:  resource,
-		Worker:    cloneWorkerForLocalModel(workerDef),
+		Worker:    &loadWorker,
 		ModelName: cacheLayout.ModelName,
 		CachePath: cacheLayout.CachePath,
 		Revision:  cacheLayout.Revision,
@@ -136,9 +137,10 @@ func (m *managedLocalModelManager) execute(
 	if err != nil {
 		return interfaces.InferenceResponse{}, true, err
 	}
+	invokeWorker := factoryconfig.CloneWorkerConfig(*workerDef)
 	response, err := handle.Invoke(ctx, localModelInvocationRequest{
 		Resource: resource,
-		Worker:   cloneWorkerForLocalModel(workerDef),
+		Worker:   &invokeWorker,
 		Request:  interfaces.CloneProviderInferenceRequest(request),
 	})
 	return response, true, err
@@ -211,17 +213,6 @@ func localModelRuntimeResource(factoryCfg *interfaces.FactoryConfig, workerDef *
 		return resource, key, true
 	}
 	return interfaces.ResourceConfig{}, "", false
-}
-
-func cloneWorkerForLocalModel(workerDef *interfaces.WorkerConfig) *interfaces.WorkerConfig {
-	if workerDef == nil {
-		return nil
-	}
-	clone := *workerDef
-	clone.Args = append([]string(nil), workerDef.Args...)
-	clone.Resources = append([]interfaces.ResourceConfig(nil), workerDef.Resources...)
-	clone.Operations = append([]interfaces.ModelOperation(nil), workerDef.Operations...)
-	return &clone
 }
 
 func canonicalBackendName(value string) string {
