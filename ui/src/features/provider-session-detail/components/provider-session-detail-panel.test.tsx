@@ -309,10 +309,15 @@ describe("ProviderSessionDetailPanel", () => {
       "{\"path\":\"pkg/api/provider_session_details.go\",\"mode\":\"diff\",\"note\":\"" +
       "x".repeat(360) +
       "\"}";
-    const longOutput =
-      "{\"summary\":\"provider session parsed\",\"details\":\"" +
-      "y".repeat(360) +
-      "\"}";
+    const longOutput = [
+      "Chunk ID: exec-123",
+      "Wall time: 0.6289 seconds",
+      "Process exited with code 0",
+      "Original token count: 22",
+      "Output:",
+      "provider-session parsing verified successfully",
+      `details:${"y".repeat(360)}`,
+    ].join("\n");
 
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse(
@@ -357,6 +362,7 @@ describe("ProviderSessionDetailPanel", () => {
             {
               callId: "call_tool_1",
               lineNumber: 5,
+              name: "exec_command",
               order: 5,
               output: longOutput,
               status: "completed",
@@ -400,6 +406,15 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("read_file")).toBeTruthy();
     expect(screen.getByText("call_tool_1")).toBeTruthy();
     expect(screen.getByText("Retry attempt scheduled.")).toBeTruthy();
+    expect(screen.getByText("Command result")).toBeTruthy();
+    expect(screen.getByText("Exit code")).toBeTruthy();
+    expect(screen.getAllByText("0").length).toBeGreaterThan(0);
+    expect(screen.getByText("Wall time")).toBeTruthy();
+    expect(screen.getByText("0.6289 seconds")).toBeTruthy();
+    expect(screen.getByText("Summary")).toBeTruthy();
+    expect(
+      screen.getByText("provider-session parsing verified successfully"),
+    ).toBeTruthy();
     expect(screen.getByText("Order 4 / Turn 1")).toBeTruthy();
     expect(screen.getByText("Session line 4")).toBeTruthy();
     expect(
@@ -426,8 +441,17 @@ describe("ProviderSessionDetailPanel", () => {
     );
     expect(screen.getByText(longArguments)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand Output" }));
-    expect(screen.getByText(longOutput)).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Expand Raw exec_command output" }),
+    );
+    expect(
+      screen.getByText((content) => content.includes("Chunk ID: exec-123")),
+    ).toBeTruthy();
+    expect(
+      screen.getAllByText((content) =>
+        content.includes("provider-session parsing verified successfully"),
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it("uses the provider-session sans stack for customer-facing content while preserving monospace raw blocks", async () => {
@@ -752,6 +776,15 @@ describe("ProviderSessionDetailPanel", () => {
   });
 
   it("renders provider-session detail labels and templates from the zh-CN catalog", async () => {
+    const execCommandOutput = [
+      "Chunk ID: exec-456",
+      "Wall time: 0.3000 seconds",
+      "Process exited with code 0",
+      "Original token count: 12",
+      "Output:",
+      "命令执行成功",
+    ].join("\n");
+
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse(
         buildProviderSessionDetailResponse({
@@ -823,10 +856,11 @@ describe("ProviderSessionDetailPanel", () => {
             {
               lineNumber: 2,
               order: 2,
-              text: "当前状态已记录。",
+              name: "exec_command",
+              output: execCommandOutput,
               timestamp: "2026-05-18T14:10:02Z",
               turnIndex: 2,
-              type: "assistant_message",
+              type: "tool_output",
             },
           ],
         }),
@@ -849,7 +883,7 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("提供方")).toBeTruthy();
     expect(screen.getAllByText("类型").length).toBeGreaterThan(0);
     expect(screen.getAllByText("用户").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("助手").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("工具输出").length).toBeGreaterThan(0);
     expect(screen.getByText("输入")).toBeTruthy();
     expect(screen.getByText("缓存输入")).toBeTruthy();
     expect(screen.getByText("轮次 2")).toBeTruthy();
@@ -858,6 +892,11 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("调用 ID")).toBeTruthy();
     expect(screen.getAllByText("不可用").length).toBeGreaterThan(0);
     expect(screen.getAllByText("加密推理").length).toBeGreaterThan(0);
+    expect(screen.getByText("命令结果")).toBeTruthy();
+    expect(screen.getByText("退出代码")).toBeTruthy();
+    expect(screen.getByText("耗时")).toBeTruthy();
+    expect(screen.getByText("摘要")).toBeTruthy();
+    expect(screen.getByText("命令执行成功")).toBeTruthy();
     expect(
       screen.getByText(
         "此步骤确实发生了推理，但明文内容会被有意隐藏，无法直接查看。",

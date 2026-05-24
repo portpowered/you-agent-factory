@@ -210,8 +210,17 @@ export const MixedTranscript = {
                 {
                   callId: "call_1",
                   lineNumber: 5,
+                  name: "exec_command",
                   order: 5,
-                  output: "{\"lines\":128}",
+                  output: [
+                    "Chunk ID: exec-123",
+                    "Wall time: 0.6289 seconds",
+                    "Process exited with code 0",
+                    "Original token count: 22",
+                    "Output:",
+                    "provider-session parsing verified successfully",
+                    `details:${"y".repeat(360)}`,
+                  ].join("\n"),
                   status: "completed",
                   timestamp: "2026-05-20T17:35:28Z",
                   turnIndex: 1,
@@ -255,14 +264,21 @@ export const MixedTranscript = {
     expect(
       canvas.getAllByText("{\"path\":\"pkg/api/provider_session_details.go\"}"),
     ).toHaveLength(1);
-    expect(canvas.getAllByText("{\"lines\":128}")).toHaveLength(1);
     expect(canvas.getAllByText("Inspect the parser branch before retrying.")).toHaveLength(1);
     expect(canvas.getAllByText("Encrypted reasoning").length).toBeGreaterThan(0);
     const panel = canvas.getByLabelText("Selected session details");
     expect(panel.className).toContain("af-provider-session-sans");
 
-    const rawToolOutput = canvas.getByText("{\"lines\":128}");
-    expect(rawToolOutput.className).toContain("af-dashboard-body-code");
+    expect(canvas.getByText("Command result")).toBeTruthy();
+    expect(canvas.getByText("Exit code")).toBeTruthy();
+    expect(canvas.getByText("0.6289 seconds")).toBeTruthy();
+    expect(
+      canvas.getByText("provider-session parsing verified successfully"),
+    ).toBeTruthy();
+    const rawToolOutputToggle = canvas.getByRole("button", {
+      name: "Expand Raw exec_command output",
+    });
+    expect(rawToolOutputToggle).toBeTruthy();
     expect(
       canvas.getByText(
         "Reasoning occurred for this step, but plaintext content is intentionally unavailable.",

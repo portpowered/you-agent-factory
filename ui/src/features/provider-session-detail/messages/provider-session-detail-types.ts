@@ -11,6 +11,12 @@ export interface ProviderSessionDetailMessages {
   encryptedReasoningDescription: string;
   encryptedReasoningStateLabel: string;
   encryptedReasoningOnly: string;
+  execCommandExitCodeLabel: string;
+  execCommandNoOutputSummary: string;
+  execCommandOutputSummaryLabel: string;
+  execCommandRawOutputLabel: string;
+  execCommandResultHeading: string;
+  execCommandWallTimeLabel: string;
   errorPrefix: string;
   eventCountLabel: string;
   eventsLabel: string;
