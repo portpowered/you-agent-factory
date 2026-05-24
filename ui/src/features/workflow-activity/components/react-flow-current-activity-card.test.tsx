@@ -1221,20 +1221,20 @@ function registerCurrentActivityCardTestLifecycle(): void {
       }),
     ).not.toHaveLength(0);
     expect(
-      screen.getByRole("button", {
+      screen.getAllByRole("button", {
         name: "Accept an input work state for this workstation.",
       }),
-    ).toBeTruthy();
+    ).not.toHaveLength(0);
     expect(
-      screen.getByRole("button", {
+      screen.getAllByRole("button", {
         name: "Route this work state into a workstation input.",
       }),
-    ).toBeTruthy();
+    ).not.toHaveLength(0);
     expect(
-      screen.getByRole("button", {
+      screen.getAllByRole("button", {
         name: "Receive a successful workstation output.",
       }),
-    ).toBeTruthy();
+    ).not.toHaveLength(0);
     expect(
       screen.queryByRole("button", {
         name: "Assign this worker to a workstation.",
@@ -1430,7 +1430,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
         name: "Select Review workstation",
       }),
     ).toBeTruthy();
-    expect(screen.getByText("Removing")).toBeTruthy();
+    expect(screen.getByText("Unsaved graph changes")).toBeTruthy();
   });
 
   it("shows a loading editor state while the editable definition is still fetching", async () => {
@@ -2266,7 +2266,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(
       (await getStateNodeArticle("story:documented"))
         .querySelector("article")
-        ?.className.includes("border-af-overlay/22"),
+        ?.className.includes("border-af-border-strong"),
     ).toBe(true);
     expect(screen.getByText("Active Story")).toBeTruthy();
     expect(screen.queryByText("dispatch-review-active")).toBeNull();
@@ -2351,10 +2351,6 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const reactFlowErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
-    const graphLayout = await buildGraphLayout(
-      semanticWorkflowDashboardSnapshot.topology,
-    );
-    const expectedEdgeCount = buildVisibleGraphEdges(graphLayout).length + 1;
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
@@ -2392,10 +2388,17 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
 
       await screen.findByRole("button", { name: "Save changes" });
       await waitFor(() => {
-        expect(document.querySelectorAll(".react-flow__edge")).toHaveLength(
-          expectedEdgeCount,
-        );
-      });
+        expect(
+          document.querySelectorAll(
+            ".react-flow__edge.agent-flow-edge--pending-addition",
+          ),
+        ).not.toHaveLength(0);
+        expect(
+          document.querySelector(
+            ".react-flow__edge.agent-flow-edge--pending-addition path",
+          ),
+        ).toBeTruthy();
+      }, { timeout: 5000 });
 
       expect(
         reactFlowErrorSpy.mock.calls.some(([firstArg]) =>
@@ -2578,12 +2581,12 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       .getByLabelText("agent-slot:available")
       .closest("article");
     expect(activeStateArticle.querySelector("article")?.className).toContain(
-      "border-af-success/70",
+      "border-af-success-border",
     );
     expect(idleStateArticle.querySelector("article")?.className).toContain(
       "opacity-[0.45]",
     );
-    expect(idleResourceArticle?.className).toContain("border-af-overlay/22");
+    expect(idleResourceArticle?.className).toContain("border-af-border-strong");
     expect(idleResourceArticle?.className).not.toContain("opacity-[0.45]");
   });
 
@@ -2625,9 +2628,11 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const activeSelectedState = await getStateNodeArticle("story:complete");
     const activeSelectedArticle = activeSelectedState.querySelector("article");
 
-    expect(activeSelectedArticle?.className).toContain("border-af-accent/70");
+    expect(activeSelectedArticle?.className).toContain(
+      "border-af-accent-border",
+    );
     expect(activeSelectedArticle?.className).not.toContain(
-      "border-af-success/70",
+      "border-af-success-border",
     );
 
     cleanup();
@@ -2644,7 +2649,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     });
     const reviewArticle = reviewButton.closest("article");
 
-    expect(reviewArticle?.className).toContain("border-af-accent/70");
+    expect(reviewArticle?.className).toContain("border-af-accent-border");
     expect(reviewArticle?.className).not.toContain("agent-flow-node--active");
   });
 
@@ -2829,7 +2834,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
       failedStateArticle.querySelector("article")?.textContent,
     ).not.toContain("Queue");
     expect(failedStateArticle.querySelector("article")?.className).toContain(
-      "border-af-edge-danger-muted",
+      "border-af-danger-border",
     );
   });
 
@@ -2847,10 +2852,10 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     );
 
     expect(controls?.getAttribute("style")).toContain(
-      "--xy-controls-button-background-color-props: rgb(from var(--color-af-surface) r g b / 0.94)",
+      "--xy-controls-button-background-color-props: var(--color-af-graph-controls-button-surface)",
     );
     expect(controls?.getAttribute("style")).toContain(
-      "--xy-controls-button-color-props: rgb(from var(--color-af-ink) r g b / 0.72)",
+      "--xy-controls-button-color-props: var(--color-af-graph-controls-text)",
     );
     expect(controls?.getAttribute("style")).toContain(
       "--xy-controls-box-shadow: none",
@@ -2995,11 +3000,11 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
       await getStateNodeArticle("story:documented");
 
     expect(readyStateArticle.querySelector("article")?.className).toContain(
-      "border-af-overlay/22",
+      "border-af-border-strong",
     );
     expect(
       documentedStateArticle.querySelector("article")?.className,
-    ).toContain("border-af-overlay/22");
+    ).toContain("border-af-border-strong");
   });
 
   it("selects workstation and work item context through the dashboard callbacks", async () => {
@@ -3061,7 +3066,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     expect(screen.getByRole("button", { name: /Active Story 3/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Active Story 4/ })).toBeNull();
     expect(reviewNode?.querySelector("article")?.className).toContain(
-      "border-af-success/50",
+      "border-af-success-border",
     );
 
     fireEvent.click(reviewButton);

@@ -176,7 +176,7 @@ describe("current activity graph draft edges", () => {
           source: "workstation:review",
           sourceHandle: "workstation-output-source",
           style: expect.objectContaining({
-            stroke: "var(--color-af-warning-ink)",
+            stroke: "var(--color-af-warning-text)",
             strokeDasharray: "9 4",
           }),
           target: "place:story:blocked",
