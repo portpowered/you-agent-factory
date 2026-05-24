@@ -1,3 +1,4 @@
+import * as React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/public";
 
@@ -7,6 +8,7 @@ import { DashboardBento } from "./dashboard-bento";
 
 const addDashboardWidget = vi.fn();
 const removeDashboardWidget = vi.fn();
+let mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT;
 
 const currentSelectionState = {
   canRedoSelection: false,
@@ -242,12 +244,23 @@ vi.mock("../hooks/useDashboardLayout", () => ({
     workTotals: "work-totals",
   },
   getRenderableDashboardLayout: (layout: unknown) => layout,
-  useDashboardLayout: () => ({
-    addDashboardWidget,
-    dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
-    persistDashboardLayout: vi.fn(),
-    removeDashboardWidget,
-  }),
+  useDashboardLayout: () => {
+    const [dashboardLayout, setDashboardLayout] = React.useState(mockDashboardLayout);
+
+    return {
+      addDashboardWidget: (widgetType: string) => {
+        addDashboardWidget(widgetType);
+      },
+      dashboardLayout,
+      persistDashboardLayout: vi.fn(),
+      removeDashboardWidget: (widgetInstanceID: string) => {
+        removeDashboardWidget(widgetInstanceID);
+        setDashboardLayout((currentLayout) =>
+          currentLayout.filter((item) => item.id !== widgetInstanceID),
+        );
+      },
+    };
+  },
 }));
 
 vi.mock("../hooks/useDashboardNow", () => ({
@@ -289,6 +302,7 @@ describe("DashboardBento", () => {
   beforeEach(() => {
     addDashboardWidget.mockReset();
     removeDashboardWidget.mockReset();
+    mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT;
   });
 
   it("registers the provider-session card alongside current selection", () => {
@@ -351,5 +365,38 @@ describe("DashboardBento", () => {
     fireEvent.click(workTotalsRemoveButton);
 
     expect(removeDashboardWidget).toHaveBeenCalledWith("work-totals::primary");
+  });
+
+  it("removes only the targeted duplicate widget instance and keeps the inline add card", () => {
+    mockDashboardLayout = [
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      {
+        h: 5,
+        id: "work-outcome-chart::instance-1",
+        minH: 4,
+        minW: 3,
+        w: 4,
+        widgetType: "work-outcome-chart",
+        x: 8,
+        y: 10,
+      },
+    ];
+
+    render(<DashboardBento />);
+
+    const workOutcomeRemoveButtons = screen.getAllByRole("button", {
+      name: "Remove Work outcome chart widget from dashboard",
+    });
+
+    expect(screen.getAllByText("Work outcome card")).toHaveLength(2);
+    expect(screen.getByTestId("add-widget").textContent).toContain("Add widget card");
+
+    fireEvent.click(workOutcomeRemoveButtons[1] ?? workOutcomeRemoveButtons[0]);
+
+    expect(removeDashboardWidget).toHaveBeenCalledWith("work-outcome-chart::instance-1");
+    expect(screen.getAllByText("Work outcome card")).toHaveLength(1);
+    expect(screen.getByTestId("add-widget").textContent).toContain("Add widget card");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText(/undo/i)).toBeNull();
   });
 });
