@@ -105,6 +105,9 @@ describe("AgentBentoLayout", () => {
     expect(activityBody?.className).toContain("af-dashboard-body-text");
     expect(moveButton.textContent?.trim()).toBe("");
     expect(moveButton.querySelector("svg")).toBeTruthy();
+    expect(moveButton.className).toContain("border-af-border");
+    expect(moveButton.className).toContain("bg-af-surface-raised");
+    expect(moveButton.className).toContain("text-af-text-muted");
   });
 
   it("keeps movement enabled and updates grid position during pointer interaction", async () => {

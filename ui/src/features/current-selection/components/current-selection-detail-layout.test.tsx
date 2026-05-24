@@ -35,6 +35,12 @@ describe("SelectionDetailLayout", () => {
     expect(
       screen.getByRole("button", { name: "Redo selection" }).textContent,
     ).toBe("Redo");
+    expect(
+      screen.getByRole("button", { name: "Undo selection" }).className,
+    ).toContain("border-af-border");
+    expect(
+      screen.getByRole("button", { name: "Undo selection" }).className,
+    ).toContain("bg-af-surface-subtle");
   });
 
   it("renders localized history control labels and accessible names from the requested locale", () => {

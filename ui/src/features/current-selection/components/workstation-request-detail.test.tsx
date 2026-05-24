@@ -121,18 +121,22 @@ describe("WorkstationRequestDetailCard", () => {
     expect(within(currentSelection).getByText("Gemini")).toBeTruthy();
     expect(within(currentSelection).getByText("factory")).toBeTruthy();
     expect(
-      within(currentSelection).getByText("Runner capability support"),
-    ).toBeTruthy();
+      within(currentSelection).getByText("Runner capability support").closest("div")?.className,
+    ).toContain("border-af-border");
     expect(
       within(currentSelection).getByText("Structured output"),
     ).toBeTruthy();
     expect(
-      within(currentSelection).getAllByText("Unsupported").length,
-    ).toBeGreaterThan(0);
+      within(currentSelection)
+        .getAllByText("Unsupported")
+        .every(
+          (pill) =>
+            pill.className.includes("border-af-warning-border") &&
+            pill.className.includes("bg-af-warning-surface"),
+        ),
+    ).toBe(true);
     expect(
-      within(currentSelection).queryByRole("heading", {
-        name: "Request counts",
-      }),
+      within(currentSelection).queryByRole("heading", { name: "Request counts" }),
     ).toBeNull();
     expect(within(currentSelection).queryByText("dispatchedCount")).toBeNull();
     expect(within(currentSelection).queryByText("respondedCount")).toBeNull();
@@ -903,7 +907,10 @@ describe("WorkstationRequestDetailCard", () => {
         "dispatch-review-script-success/script-request/1",
       ),
     ).toBeTruthy();
-    expect(responseDetails.getByText("script success stdout")).toBeTruthy();
+    const stdoutPanel = responseDetails.getByText("script success stdout");
+    expect(stdoutPanel).toBeTruthy();
+    expect(stdoutPanel.className).toContain("border-af-border");
+    expect(stdoutPanel.className).toContain("bg-af-surface-raised");
     expect(
       responseDetails.getByText(
         "No stderr was recorded for this script response.",

@@ -197,7 +197,7 @@ describe("SubmitWorkWidget", () => {
     expect(screen.getByRole("status").textContent).toBe(
       "Sending your request...",
     );
-    expect(submittingStatus.className).toContain("text-on-foreground");
+    expect(submittingStatus.className).toContain("text-af-text");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,

@@ -27,25 +27,25 @@ describe("workstationIconMetadata", () => {
   it("publishes the approved dashboard workstation icon vocabulary for supported kinds", () => {
     expect(SUPPORTED_WORKSTATION_ICON_METADATA).toEqual([
       {
-        className: "text-af-ink/62",
+        className: "text-af-text-subtle",
         iconKind: "workstation",
         label: "Standard workstation",
         semanticKind: STANDARD_WORKSTATION_KIND,
       },
       {
-        className: "text-af-info/78",
+        className: "text-af-info",
         iconKind: "repeater",
         label: "Repeater workstation",
         semanticKind: REPEATER_WORKSTATION_KIND,
       },
       {
-        className: "text-af-success-ink/76",
+        className: "text-af-success",
         iconKind: "cron",
         label: "Cron workstation",
         semanticKind: CRON_WORKSTATION_KIND,
       },
       {
-        className: "text-af-accent/78",
+        className: "text-af-accent",
         iconKind: "poller",
         label: "Poller workstation",
         semanticKind: POLLER_WORKSTATION_KIND,
@@ -59,7 +59,7 @@ describe("workstationIconMetadata", () => {
         dashboardWorkstationNode({ workstation_kind: STANDARD_WORKSTATION_KIND }),
       ),
     ).toEqual({
-      className: "text-af-ink/62",
+      className: "text-af-text-subtle",
       iconKind: "workstation",
       label: "Standard workstation",
       semanticKind: STANDARD_WORKSTATION_KIND,
@@ -69,7 +69,7 @@ describe("workstationIconMetadata", () => {
         dashboardWorkstationNode({ workstation_kind: REPEATER_WORKSTATION_KIND }),
       ),
     ).toEqual({
-      className: "text-af-info/78",
+      className: "text-af-info",
       iconKind: "repeater",
       label: "Repeater workstation",
       semanticKind: REPEATER_WORKSTATION_KIND,
@@ -79,7 +79,7 @@ describe("workstationIconMetadata", () => {
         dashboardWorkstationNode({ workstation_kind: CRON_WORKSTATION_KIND }),
       ),
     ).toEqual({
-      className: "text-af-success-ink/76",
+      className: "text-af-success",
       iconKind: "cron",
       label: "Cron workstation",
       semanticKind: CRON_WORKSTATION_KIND,
@@ -89,7 +89,7 @@ describe("workstationIconMetadata", () => {
         dashboardWorkstationNode({ workstation_kind: POLLER_WORKSTATION_KIND }),
       ),
     ).toEqual({
-      className: "text-af-accent/78",
+      className: "text-af-accent",
       iconKind: "poller",
       label: "Poller workstation",
       semanticKind: POLLER_WORKSTATION_KIND,
@@ -109,7 +109,7 @@ describe("workstationIconMetadata", () => {
     expect(workstationSemanticKind(explicitExhaustion)).toBe(EXHAUSTION_WORKSTATION_KIND);
     expect(workstationSemanticKind(emptyFallbackExhaustion)).toBe(EXHAUSTION_WORKSTATION_KIND);
     expect(workstationIconMetadata(explicitExhaustion)).toEqual({
-      className: "text-af-danger-ink/76",
+      className: "text-af-danger",
       iconKind: "exhaustion",
       label: "Exhaustion rule",
       semanticKind: EXHAUSTION_WORKSTATION_KIND,
@@ -120,7 +120,7 @@ describe("workstationIconMetadata", () => {
     expect(
       workstationIconMetadata(dashboardWorkstationNode({ workstation_kind: "future-kind" })),
     ).toEqual({
-      className: "text-af-ink/62",
+      className: "text-af-text-subtle",
       iconKind: "workstation",
       label: "Standard workstation",
       semanticKind: STANDARD_WORKSTATION_KIND,

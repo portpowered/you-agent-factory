@@ -9,10 +9,10 @@ import { editableWorkstationBehaviorOptions } from "../lib/factory-graph-editor-
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 const FIELD_GROUP_CLASS = "grid gap-2";
-const FIELD_LABEL_CLASS = "text-sm font-semibold text-af-ink";
-const FIELD_HELP_CLASS = "m-0 text-xs leading-5 text-af-ink/66";
-const FIELD_ERROR_CLASS = "m-0 text-sm text-af-danger-ink";
-const INPUT_CLASS = "bg-af-canvas";
+const FIELD_LABEL_CLASS = "text-sm font-semibold text-af-text";
+const FIELD_HELP_CLASS = "m-0 text-xs leading-5 text-af-text-muted";
+const FIELD_ERROR_CLASS = "m-0 text-sm text-af-danger-text";
+const INPUT_CLASS = "bg-af-surface";
 
 export function FactoryGraphEditorAddEntityDialog({
   currentFactoryDefinition,

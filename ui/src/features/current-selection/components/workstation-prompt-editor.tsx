@@ -162,9 +162,9 @@ export function WorkstationPromptEditor({
   return (
     <Editor
       className={cn(
-        "overflow-visible rounded-xl border border-af-overlay/14 bg-transparent",
+        "overflow-visible rounded-xl border border-af-border bg-transparent",
         hasDiagnostics
-          ? "border-af-danger/45 focus-within:border-af-danger"
+          ? "border-af-danger-border focus-within:border-af-danger"
           : undefined,
         className,
       )}
@@ -287,16 +287,16 @@ function PromptEditorFallbackState({
     <div
       aria-describedby={ariaDescribedBy}
       aria-invalid={ariaInvalid ? "true" : undefined}
-      className="grid min-h-56 gap-2 rounded-xl border border-af-overlay/14 bg-transparent px-3 py-3"
+      className="grid min-h-56 gap-2 rounded-xl border border-af-border bg-transparent px-3 py-3"
       data-monaco-editor-fallback="workstation-prompt"
       role={status}
     >
-      <p className={cn("m-0 text-af-ink/72", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
         {message}
       </p>
       <pre
         className={cn(
-          "m-0 whitespace-pre-wrap break-words text-af-ink/78 [overflow-wrap:anywhere]",
+          "m-0 whitespace-pre-wrap break-words text-af-text-muted [overflow-wrap:anywhere]",
           DASHBOARD_BODY_TEXT_CLASS,
         )}
       >

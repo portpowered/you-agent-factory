@@ -54,26 +54,26 @@ interface TerminalWorkRowProps {
 
 const TERMINAL_ROWS_CLASS = "grid gap-3";
 const TERMINAL_ROW_CLASS =
-  "grid gap-3 rounded-lg border border-af-overlay/8 p-3.5";
-const TERMINAL_FAILED_ROW_CLASS = "border-af-danger/50";
+  "grid gap-3 rounded-lg border border-af-border bg-af-surface-subtle p-3.5";
+const TERMINAL_FAILED_ROW_CLASS = "border-af-danger-border";
 const TERMINAL_ROW_HEADER_CLASS =
-  "mb-2 flex items-center justify-between gap-2 [&_h4]:m-0 [&_p]:m-0 [&_p]:mt-1 [&_p]:text-[0.82rem] [&_p]:text-af-ink/58";
+  "mb-2 flex items-center justify-between gap-2 [&_h4]:m-0 [&_p]:m-0 [&_p]:mt-1 [&_p]:text-[0.82rem] [&_p]:text-af-text-subtle";
 const TERMINAL_ROW_TITLE_CLASS = "flex min-w-0 items-center gap-2";
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_LIST_CLASS = "grid gap-2";
 const TERMINAL_TOGGLE_CLASS =
-  "min-h-9 shrink-0 border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-xs text-af-ink/78 hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink";
+  "min-h-9 shrink-0 border-af-border bg-af-surface-raised px-2.5 py-2 text-xs text-af-text-muted hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
 const TERMINAL_BUTTON_CLASS = cn(
-  "grid h-auto min-h-0 w-full justify-start gap-1 border-af-info/35 bg-af-info/10 px-3 py-2 text-left text-on-foreground [overflow-wrap:anywhere]",
+  "grid h-auto min-h-0 w-full justify-start gap-1 border-af-info-border bg-af-info-surface px-3 py-2 text-left text-af-on-info [overflow-wrap:anywhere]",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 const TERMINAL_BUTTON_FAILED_CLASS =
-  "border-af-danger/35 bg-af-danger/10 text-on-foreground";
+  "border-af-danger-border bg-af-danger-surface text-af-on-danger";
 const TERMINAL_BUTTON_SELECTED_CLASS =
-  "border-on-foreground/55 bg-on-foreground/14 text-on-foreground shadow-af-accent-chip";
+  "border-af-accent-border bg-af-accent-surface text-af-text shadow-af-accent-selected";
 const TERMINAL_BUTTON_LABEL_CLASS = "font-bold";
 const TERMINAL_BUTTON_META_CLASS = cn(
-  "leading-snug text-af-ink/66",
+  "leading-snug text-current",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 
@@ -84,9 +84,7 @@ function terminalStatusIconKind(
 }
 
 function terminalStatusIconClassName(status: TerminalWorkStatus): string {
-  return status === "failed"
-    ? "text-on-foreground/78"
-    : "text-on-foreground/76";
+  return status === "failed" ? "text-af-on-danger" : "text-af-on-info";
 }
 
 export function CompletedFailedWorkstationCard({

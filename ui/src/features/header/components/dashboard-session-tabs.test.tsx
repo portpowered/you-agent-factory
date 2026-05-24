@@ -1194,9 +1194,9 @@ describe("DashboardSessionTabs", () => {
       name: "Close beta session",
     });
 
-    expect(betaCloseButton.className).toContain("text-af-ink/34");
-    expect(betaCloseButton.className).toContain("group-focus-within:text-af-ink/76");
-    expect(betaCloseButton.className).toContain("focus-visible:text-af-ink");
+    expect(betaCloseButton.className).toContain("text-af-text-disabled");
+    expect(betaCloseButton.className).toContain("group-hover:text-af-text-muted");
+    expect(betaCloseButton.className).toContain("focus-visible:ring-af-focus-ring");
 
     betaCloseButton.focus();
     expect(document.activeElement).toBe(betaCloseButton);
@@ -1298,17 +1298,18 @@ describe("DashboardSessionTabs", () => {
     );
 
     const pendingCloseButton = await screen.findByRole("button", {
-      name: messages.closingSessionButtonLabel,
+      name: sessionCloseLabel(rootSession, messages),
     });
 
     expect(
       (pendingCloseButton as HTMLButtonElement).disabled,
     ).toBe(true);
-    expect(pendingCloseButton.textContent?.trim()).toBe("");
-    expect(screen.queryByText(messages.closingSessionButtonLabel)).toBeNull();
+    expect(pendingCloseButton.textContent?.trim()).toBe(
+      messages.closingSessionButtonLabel,
+    );
   });
 
-  it("uses short factory-first labels without rendering redundant visible subtitle copy", async () => {
+  it("uses short factory-first tab labels while preserving visible supporting context", async () => {
     listFactorySessions.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
@@ -1342,10 +1343,12 @@ describe("DashboardSessionTabs", () => {
     const rootTab = screen.getByRole("tab", { name: "root" });
     const reviewTab = screen.getByRole("tab", { name: "review" });
 
-    expect(rootTab.textContent).toBe("root");
-    expect(reviewTab.textContent).toBe("review");
-    expect(screen.queryByText("workspace root")).toBeNull();
-    expect(screen.queryByText("catalog")).toBeNull();
+    expect(rootTab.getAttribute("aria-label")).toBe("root");
+    expect(reviewTab.getAttribute("aria-label")).toBe("review");
+    expect(rootTab.textContent).toBe("rootworkspace root");
+    expect(reviewTab.textContent).toBe("reviewcatalog");
+    expect(screen.getByText("workspace root")).toBeTruthy();
+    expect(screen.getByText("catalog")).toBeTruthy();
   });
 });
 

@@ -162,6 +162,8 @@ describe("TraceGridBentoCard", () => {
       throw new Error("Expected dispatch pill to render in the trace grid table.");
     }
     expect(dispatchPill.className).toContain(DASHBOARD_SUPPORTING_CODE_CLASS);
+    expect(dispatchPill.className).toContain("border-af-info-border");
+    expect(dispatchPill.className).toContain("bg-af-info-surface");
     expect(dispatchPill.className).toContain("py-0.5");
     expect(within(card).getByText("Accepted · 1s")).toBeTruthy();
     expect(within(card).getByText("Accepted · 2s")).toBeTruthy();
@@ -183,6 +185,8 @@ describe("TraceGridBentoCard", () => {
     expect(within(card).getAllByText('story:"Active Story"').length).toBeGreaterThan(0);
     expect(within(card).getAllByText('story:"Reviewed Story"').length).toBeGreaterThan(0);
     expect(within(card).getAllByText('story:"Implemented Story"').length).toBeGreaterThan(0);
+    expect(within(card).getAllByRole("button", { name: 'story:"Active Story"' })[0]?.className)
+      .toContain("border-af-accent-border");
     expect(within(card).getByRole("region", { name: "Batch relation graph" })).toBeTruthy();
     expect(within(card).queryByRole("columnheader", { name: "Consumed tokens" })).toBeNull();
     expect(within(card).queryByRole("columnheader", { name: "Output mutations" })).toBeNull();

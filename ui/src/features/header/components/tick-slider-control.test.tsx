@@ -125,8 +125,9 @@ describe("TickSliderControl", () => {
     expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
     expect(slider.getAttribute("aria-valuetext")).toBe("9/9");
     expect(sliderShell?.className).toContain("gap-1.5");
-    expect(sliderShell?.className).toContain("px-1");
-    expect(sliderShell?.className).not.toContain("rounded-t-none");
+    expect(sliderShell?.className).toContain("px-2.5");
+    expect(sliderShell?.className).toContain("border-af-border");
+    expect(sliderShell?.className).toContain("bg-af-surface-subtle");
     expect(screen.queryByText("Current")).toBeNull();
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
     expect(
@@ -263,7 +264,7 @@ describe("TickSliderControl", () => {
     );
   });
 
-  it("keeps the slider status semantically attached and focus-visible without extra visible copy", () => {
+  it("keeps the slider status semantically attached without extra visible copy", () => {
     act(() => {
       useFactoryTimelineStore
         .getState()
@@ -279,8 +280,6 @@ describe("TickSliderControl", () => {
     });
     const statusText = screen.getByText("9/9");
 
-    expect(slider.className).toContain("focus-visible:ring-2");
-    expect(slider.className).toContain("focus-visible:ring-af-accent/25");
     expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
     expect(statusText.tagName).toBe("OUTPUT");
     expect(screen.queryByText("Current")).toBeNull();

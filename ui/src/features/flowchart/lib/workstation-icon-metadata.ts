@@ -28,31 +28,31 @@ export interface WorkstationIconMetadata {
 
 const WORKSTATION_ICON_METADATA_BY_KIND = {
   [CRON_WORKSTATION_KIND]: {
-    className: "text-af-success-ink/76",
+    className: "text-af-success",
     iconKind: "cron",
     label: "Cron workstation",
     semanticKind: CRON_WORKSTATION_KIND,
   },
   [POLLER_WORKSTATION_KIND]: {
-    className: "text-af-accent/78",
+    className: "text-af-accent",
     iconKind: "poller",
     label: "Poller workstation",
     semanticKind: POLLER_WORKSTATION_KIND,
   },
   [EXHAUSTION_WORKSTATION_KIND]: {
-    className: "text-af-danger-ink/76",
+    className: "text-af-danger",
     iconKind: "exhaustion",
     label: "Exhaustion rule",
     semanticKind: EXHAUSTION_WORKSTATION_KIND,
   },
   [REPEATER_WORKSTATION_KIND]: {
-    className: "text-af-info/78",
+    className: "text-af-info",
     iconKind: "repeater",
     label: "Repeater workstation",
     semanticKind: REPEATER_WORKSTATION_KIND,
   },
   [STANDARD_WORKSTATION_KIND]: {
-    className: "text-af-ink/62",
+    className: "text-af-text-subtle",
     iconKind: "workstation",
     label: "Standard workstation",
     semanticKind: STANDARD_WORKSTATION_KIND,

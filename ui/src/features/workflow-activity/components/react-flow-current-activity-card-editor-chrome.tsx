@@ -93,7 +93,7 @@ const FACTORY_GRAPH_HEADER_ACTIONS_CLASS =
 const FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS = "gap-1.5";
 const STATUS_PILL_COMPACT_CLASS = "px-2.5 py-0.5 text-[0.7rem]";
 const MODE_TOGGLE_COMPACT_CLASS =
-  "size-8 rounded-md border-af-overlay/12 bg-transparent text-af-ink/72 hover:bg-af-overlay/8";
+  "size-8 rounded-md border-af-border bg-transparent text-af-text-muted hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
 
 export function CurrentActivityGraphHeaderActions({
   compact = false,

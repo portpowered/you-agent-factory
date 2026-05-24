@@ -58,7 +58,7 @@ export function FactoryGraphEditorLeaveDialog({
         </>
       }
     >
-      <p className="m-0 text-sm text-af-ink/78">{messages.leaveDialogBody}</p>
+      <p className="m-0 text-sm text-af-text-muted">{messages.leaveDialogBody}</p>
     </DashboardMutationDialog>
   );
 }

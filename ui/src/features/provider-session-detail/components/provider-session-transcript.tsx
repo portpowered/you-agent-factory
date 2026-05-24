@@ -1,6 +1,5 @@
 import { useId, useState } from "react";
 import {
-  DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -8,7 +7,13 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { cn } from "../../../lib/cn";
-import { AuthoredBodyText, PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
+import {
+  AuthoredBodyText,
+  PROVIDER_SESSION_CARD_CLASS,
+  PROVIDER_SESSION_CODE_PANEL_CLASS,
+  PROVIDER_SESSION_STATUS_PILL_CLASS,
+  REQUEST_SELECTION_STATUS_CLASS,
+} from "./detail-card-shared";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 
 type SessionDetail = ProviderSessionDetailResponse;
@@ -16,20 +21,20 @@ type TranscriptEntry = SessionDetail["transcript"][number];
 
 const TRANSCRIPT_COLLAPSE_CHAR_LIMIT = 320;
 const TRANSCRIPT_ENTRY_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
-  assistant_message: "border-af-overlay/10 bg-af-overlay/4",
-  reasoning: "border-af-info/20 bg-af-info/7",
-  system_event: "border-af-overlay/12 bg-af-overlay/7",
-  tool_call: "border-af-warning/20 bg-af-warning/8",
-  tool_output: "border-af-success/20 bg-af-success/8",
-  user_message: "border-af-accent/18 bg-af-accent/6",
+  assistant_message: "border-af-border bg-af-surface-subtle",
+  reasoning: "border-af-info-border bg-af-info-surface",
+  system_event: "border-af-border bg-af-surface-raised",
+  tool_call: "border-af-warning-border bg-af-warning-surface",
+  tool_output: "border-af-success-border bg-af-success-surface",
+  user_message: "border-af-accent-border bg-af-accent-surface",
 };
 const TRANSCRIPT_BADGE_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
-  assistant_message: "border-af-overlay/12 bg-af-overlay/8 text-af-ink/78",
-  reasoning: "border-af-info/22 bg-af-info/12 text-af-info-ink",
-  system_event: "border-af-overlay/14 bg-af-overlay/10 text-af-ink/72",
-  tool_call: "border-af-warning/22 bg-af-warning/12 text-af-warning-ink",
-  tool_output: "border-af-success/22 bg-af-success/12 text-af-success-ink",
-  user_message: "border-af-accent/22 bg-af-accent/10 text-af-accent-ink",
+  assistant_message: "border-af-border bg-af-surface-raised text-af-text-muted",
+  reasoning: "border-af-info-border bg-af-info-surface text-af-info-text",
+  system_event: "border-af-border bg-af-surface-raised text-af-text-subtle",
+  tool_call: "border-af-warning-border bg-af-warning-surface text-af-warning-text",
+  tool_output: "border-af-success-border bg-af-success-surface text-af-success-text",
+  user_message: "border-af-accent-border bg-af-accent-surface text-af-text",
 };
 
 export function TranscriptSection({
@@ -99,8 +104,7 @@ function TranscriptEntryCard({
             {entry.status ? (
               <span
                 className={cn(
-                  "inline-flex rounded-full border border-af-overlay/12 bg-af-overlay/6 px-2 py-0.5 text-af-ink/72",
-                  DASHBOARD_SUPPORTING_TEXT_CLASS,
+                  PROVIDER_SESSION_STATUS_PILL_CLASS,
                 )}
               >
                 {entry.status}
@@ -108,7 +112,7 @@ function TranscriptEntryCard({
             ) : null}
           </div>
           {metadata.length > 0 ? (
-            <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+            <p className={REQUEST_SELECTION_STATUS_CLASS}>
               {metadata.join(messages.transcriptMetadataSeparator)}
             </p>
           ) : null}
@@ -140,9 +144,7 @@ function TranscriptEntryBody({
           ) : null}
           {entry.text ? <CodePanel value={entry.text} /> : null}
           {entry.encrypted && !entry.text ? (
-            <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-              {messages.encryptedReasoningOnly}
-            </p>
+            <p className={REQUEST_SELECTION_STATUS_CLASS}>{messages.encryptedReasoningOnly}</p>
           ) : null}
         </div>
       );
@@ -248,7 +250,7 @@ function ExpandableCodeBlock({
             aria-controls={panelID}
             aria-expanded={expanded}
             className={cn(
-              "inline-flex w-fit rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-af-ink/78 transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
+              "inline-flex w-fit rounded-lg border border-af-border bg-af-surface-raised px-2.5 py-2 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
             onClick={() => setExpanded((current) => !current)}
@@ -274,10 +276,7 @@ function ExpandableCodeBlock({
 function CodePanel({ value }: { value: string }) {
   return (
     <pre
-      className={cn(
-        "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere]",
-        DASHBOARD_BODY_CODE_CLASS,
-      )}
+      className={PROVIDER_SESSION_CODE_PANEL_CLASS}
     >
       {value}
     </pre>

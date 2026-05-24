@@ -52,7 +52,7 @@ export function FactoryGraphEditorModeToggle({
       className={buttonVariants({
         className: cn(
           "shrink-0",
-          disabled && "cursor-not-allowed opacity-60",
+          disabled && "cursor-not-allowed",
           className,
         ),
         size: "icon",
@@ -93,7 +93,7 @@ export function FactoryGraphEditorStatus({
         className={cn(
           STATUS_PILL_CLASS,
           className,
-          "border-af-danger/30 bg-af-danger/8 text-af-danger-ink",
+          "border-af-danger-border bg-af-danger-surface text-af-danger-text",
         )}
         role="status"
       >
@@ -108,7 +108,7 @@ export function FactoryGraphEditorStatus({
         className={cn(
           STATUS_PILL_CLASS,
           className,
-          "border-af-overlay/12 bg-af-overlay/6 text-af-ink/76",
+          "border-af-border bg-af-surface-subtle text-af-text-muted",
         )}
       >
         {messages.modeObserve}
@@ -123,7 +123,7 @@ export function FactoryGraphEditorStatus({
         className={cn(
           STATUS_PILL_CLASS,
           className,
-          "border-af-accent/24 bg-af-accent/10 text-af-accent",
+          "border-af-accent-border bg-af-accent-surface text-af-text",
         )}
       >
         {messages.modeLoadingDefinition}
@@ -138,7 +138,7 @@ export function FactoryGraphEditorStatus({
         className={cn(
           STATUS_PILL_CLASS,
           className,
-          "border-af-danger/30 bg-af-danger/8 text-af-danger-ink",
+          "border-af-danger-border bg-af-danger-surface text-af-danger-text",
         )}
         role="status"
       >
@@ -154,8 +154,8 @@ export function FactoryGraphEditorStatus({
         STATUS_PILL_CLASS,
         className,
         hasChanges
-          ? "border-af-warning/30 bg-af-warning/10 text-af-warning-ink"
-          : "border-af-accent/24 bg-af-accent/10 text-af-accent",
+          ? "border-af-warning-border bg-af-warning-surface text-af-warning-text"
+          : "border-af-accent-border bg-af-accent-surface text-af-text",
       )}
       role="status"
     >

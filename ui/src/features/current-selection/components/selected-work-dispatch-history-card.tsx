@@ -1,7 +1,6 @@
 import { cn } from "../../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import {
@@ -9,6 +8,8 @@ import {
   formatLocalDateTime,
 } from "../../../components/ui/formatters";
 import {
+  CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
+  CURRENT_SELECTION_BADGE_CLASS,
   EXECUTION_PILL_CLASS,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   InferenceAttemptDetail,
@@ -79,7 +80,7 @@ export function DispatchHistoryCard({
     <article
       className={cn(
         PROVIDER_SESSION_CARD_CLASS,
-        isCurrentDispatch && "border-on-foreground/30 bg-on-foreground/6",
+        isCurrentDispatch && CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
       )}
     >
       <DispatchHistoryHeader
@@ -212,16 +213,11 @@ function DispatchHistoryHeader({
           {title || dispatchID || messages.unknownDispatchTitle}
         </strong>
         <div className="flex flex-wrap items-center gap-2">
-          <p className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+          <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
             {outcome ?? messages.pendingOutcome}
           </p>
           {isCurrentDispatch ? (
-            <span
-              className={cn(
-                "inline-flex rounded-full border border-on-foreground/35 bg-on-foreground/10 px-2 py-0.5 text-on-foreground",
-                DASHBOARD_SUPPORTING_TEXT_CLASS,
-              )}
-            >
+            <span className={CURRENT_SELECTION_BADGE_CLASS}>
               {messages.currentDispatchBadge}
             </span>
           ) : null}

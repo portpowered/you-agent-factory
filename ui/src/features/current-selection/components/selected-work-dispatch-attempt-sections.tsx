@@ -130,7 +130,7 @@ function CollapsibleDispatchAttemptSection({
   return (
     <section
       aria-labelledby={headingId}
-      className="mt-3 grid gap-2.5 border-t border-af-overlay/8 pt-3"
+      className="mt-3 grid gap-2.5 border-t border-af-border pt-3"
     >
       <div className={HISTORY_HEADER_CLASS}>
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
@@ -171,7 +171,7 @@ function ScriptRequestAttemptCard({
               String(attemptNumber ?? messages.pendingAttemptLabel),
             )}
           </strong>
-          <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>
+          <p className={`m-0 text-af-text-muted ${DASHBOARD_BODY_TEXT_CLASS}`}>
             {messages.pendingOutcome}
           </p>
         </div>
@@ -255,7 +255,7 @@ function ScriptResponseAttemptCard({
               String(attemptNumber ?? messages.completedAttemptLabel),
             )}
           </strong>
-          <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>
+          <p className={`m-0 text-af-text-muted ${DASHBOARD_BODY_TEXT_CLASS}`}>
             {scriptResponse.outcome ?? messages.recordedAttemptStatus}
           </p>
         </div>

@@ -38,13 +38,16 @@ describe("WorkTotalsCard", () => {
     expect(screen.getByLabelText("Completed: 3")).toBeTruthy();
     expect(screen.getByLabelText("Failed: 1")).toBeTruthy();
     expect(screen.getByLabelText("Dispatched: 5")).toBeTruthy();
-    expect(inProgressCard?.className).toContain("border-af-info/30");
-    expect(completedCard?.className).toContain("border-af-success/30");
-    expect(failedCard?.className).toContain("border-af-danger/30");
-    expect(dispatchedCard?.className).toContain("border-af-overlay/10");
-    expect(dispatchedCard?.className).not.toContain("border-af-info/30");
-    expect(dispatchedCard?.className).not.toContain("border-af-success/30");
-    expect(dispatchedCard?.className).not.toContain("border-af-danger/30");
+    expect(inProgressCard?.className).toContain("border-af-info-border");
+    expect(inProgressCard?.className).toContain("bg-af-info-surface");
+    expect(completedCard?.className).toContain("border-af-success-border");
+    expect(completedCard?.className).toContain("bg-af-success-surface");
+    expect(failedCard?.className).toContain("border-af-danger-border");
+    expect(failedCard?.className).toContain("bg-af-danger-surface");
+    expect(dispatchedCard?.className).toContain("border-af-border");
+    expect(dispatchedCard?.className).not.toContain("border-af-info-border");
+    expect(dispatchedCard?.className).not.toContain("border-af-success-border");
+    expect(dispatchedCard?.className).not.toContain("border-af-danger-border");
   });
 
   it("renders zh-CN widget labels and accessible stat values", () => {
