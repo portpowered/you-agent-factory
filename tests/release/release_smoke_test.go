@@ -30,8 +30,10 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 			return releasesmoke.DashboardRenderEvidence{
 				AssetRequestPaths: []string{"/dashboard/ui/assets/index.js"},
 				LiveRequestPaths:  []string{"/events"},
-				StreamStatusName:  "Infinite You event stream live",
-				VisibleTexts:      []string{"Infinite You", "Work totals", "step-one", "step-two"},
+				PageTitle:         "You Agent Factory Dashboard",
+				MetaDescription:   "Standalone live dashboard shell for You Agent Factory.",
+				StreamStatusName:  "You Agent Factory event stream live",
+				VisibleTexts:      []string{"You Agent Factory", "Work totals", "step-one", "step-two"},
 			}, nil
 		},
 	})
@@ -51,7 +53,13 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 	if renderedDashboardURL != result.DashboardURL {
 		t.Fatalf("rendered dashboard URL = %q, want %q", renderedDashboardURL, result.DashboardURL)
 	}
-	if result.DashboardRenderEvidence.StreamStatusName != "Infinite You event stream live" {
+	if result.DashboardRenderEvidence.PageTitle != "You Agent Factory Dashboard" {
+		t.Fatalf("page title = %q, want renamed dashboard title", result.DashboardRenderEvidence.PageTitle)
+	}
+	if result.DashboardRenderEvidence.MetaDescription != "Standalone live dashboard shell for You Agent Factory." {
+		t.Fatalf("meta description = %q, want renamed dashboard description", result.DashboardRenderEvidence.MetaDescription)
+	}
+	if result.DashboardRenderEvidence.StreamStatusName != "You Agent Factory event stream live" {
 		t.Fatalf("stream status name = %q, want live status evidence", result.DashboardRenderEvidence.StreamStatusName)
 	}
 	if len(result.DashboardRenderEvidence.AssetRequestPaths) == 0 || len(result.DashboardRenderEvidence.LiveRequestPaths) == 0 {

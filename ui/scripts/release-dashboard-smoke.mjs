@@ -37,6 +37,17 @@ async function waitForRenderedDashboard(page) {
   });
 }
 
+async function readMetadata(page) {
+  return page.evaluate(() => ({
+    pageTitle: document.title,
+    metaDescription:
+      document
+        .querySelector('meta[name="description"]')
+        ?.getAttribute("content")
+        ?.trim() ?? "",
+  }));
+}
+
 async function main() {
   const dashboardURL = process.argv[2];
   if (!dashboardURL) {
@@ -77,6 +88,15 @@ async function main() {
     }
 
     await waitForRenderedDashboard(page);
+    const { pageTitle, metaDescription } = await readMetadata(page);
+    if (pageTitle !== "You Agent Factory Dashboard") {
+      throw new Error(`dashboard page title = ${JSON.stringify(pageTitle)}, want "You Agent Factory Dashboard"`);
+    }
+    if (metaDescription !== "Standalone live dashboard shell for You Agent Factory.") {
+      throw new Error(
+        `dashboard meta description = ${JSON.stringify(metaDescription)}, want "Standalone live dashboard shell for You Agent Factory."`,
+      );
+    }
 
     if (pageErrors.length > 0) {
       throw new Error(`dashboard page errors: ${pageErrors.join(" | ")}`);
@@ -114,6 +134,8 @@ async function main() {
         {
           assetRequestPaths: observedAssetPaths,
           liveRequestPaths: observedLivePaths,
+          pageTitle,
+          metaDescription,
           streamStatusName,
           visibleTexts,
         },
