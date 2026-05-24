@@ -80,7 +80,7 @@ function FactoryGraphEditorEdge({
       />
       {edgeData.label ? (
         <text
-          className="agent-factory-editor-edge-label pointer-events-none fill-af-ink/60 text-[11px] font-semibold"
+          className="agent-factory-editor-edge-label pointer-events-none fill-af-text-subtle text-[11px] font-semibold"
           style={{
             paintOrder: "stroke",
             stroke: "var(--color-af-surface)",

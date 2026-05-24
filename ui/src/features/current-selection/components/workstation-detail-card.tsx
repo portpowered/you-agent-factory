@@ -167,7 +167,7 @@ function CollapsibleWorkstationRequests({
           </h4>
           <p
             className={cn(
-              "m-0 text-af-ink/62",
+              "m-0 text-af-text-subtle",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
           >
@@ -222,7 +222,7 @@ function CollapsibleWorkstationRequests({
                   <div className="mt-2 grid gap-1">
                     <p
                       className={cn(
-                        "m-0 text-af-ink/70",
+                        "m-0 text-af-text-muted",
                         DASHBOARD_BODY_TEXT_CLASS,
                       )}
                     >
@@ -230,19 +230,19 @@ function CollapsibleWorkstationRequests({
                     </p>
                     <p
                       className={cn(
-                        "m-0 text-af-ink/62",
+                        "m-0 text-af-text-subtle",
                         DASHBOARD_SUPPORTING_TEXT_CLASS,
                       )}
                     >
                       {requestSummary}
                     </p>
                     {request.started_at ? (
-                      <p
-                        className={cn(
-                          "m-0 text-af-ink/62",
-                          DASHBOARD_SUPPORTING_TEXT_CLASS,
-                        )}
-                      >
+                        <p
+                          className={cn(
+                            "m-0 text-af-text-subtle",
+                            DASHBOARD_SUPPORTING_TEXT_CLASS,
+                          )}
+                        >
                         {messages.requestStatusStartedAgo(
                           formatDurationFromISO(request.started_at, now),
                         )}
@@ -315,7 +315,7 @@ function WorkstationActiveWorkList({
               return (
                 <li
                   className={cn(
-                    "grid min-w-0 gap-2 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2",
+                    "grid min-w-0 gap-2 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2",
                     DASHBOARD_BODY_TEXT_CLASS,
                   )}
                   key={`${execution.dispatch_id}-${workIdentifier}`}

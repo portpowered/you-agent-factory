@@ -35,6 +35,9 @@ describe("react-flow-current-activity-card-import", () => {
 
     expect(screen.getByText(japaneseMessages.graphDropTitle)).toBeTruthy();
     expect(screen.getByText(japaneseMessages.graphDropHint)).toBeTruthy();
+    expect(screen.getByText(japaneseMessages.graphDropHint).className).toContain(
+      "text-af-text-muted",
+    );
 
     rerender(
       <GraphDropOverlay

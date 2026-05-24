@@ -22,7 +22,7 @@ describe("GraphSemanticIcon", () => {
       expect(icon.tagName.toLowerCase()).toBe("svg");
       expect(icon.getAttribute("data-graph-semantic-icon")).toBe(kind);
       expect(icon.getAttribute("stroke")).toBe("currentColor");
-      expect(icon.getAttribute("class")).toContain("text-af-ink/72");
+      expect(icon.getAttribute("class")).toContain("text-af-text-muted");
       expect(icon.querySelectorAll("path, rect, circle, ellipse").length).toBeGreaterThan(0);
     }
   });
@@ -43,4 +43,3 @@ describe("GraphSemanticIcon", () => {
     expect(screen.getByRole("img", { name: "Replay gate" })).toBeTruthy();
   });
 });
-

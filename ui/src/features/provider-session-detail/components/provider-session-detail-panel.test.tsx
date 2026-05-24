@@ -34,6 +34,8 @@ describe("ProviderSessionDetailPanel", () => {
     );
     expect(screen.getByText("dispatch-review-active")).toBeTruthy();
     expect(screen.getByText("sess_active")).toBeTruthy();
+    expect(screen.getByRole("status").className).toContain("border-af-border");
+    expect(screen.getByRole("status").className).toContain("bg-af-surface-subtle");
   });
 
   it("renders zh-CN provider-session loading and missing states", async () => {
@@ -161,6 +163,8 @@ describe("ProviderSessionDetailPanel", () => {
         "The selected session file could not be parsed into Codex events. Review the malformed-line diagnostics below.",
       );
     });
+    expect(screen.getByRole("alert").className).toContain("border-af-danger-border");
+    expect(screen.getByRole("alert").className).toContain("bg-af-danger-surface");
     expect(
       screen.getByText("invalid character '}' after object key:value pair"),
     ).toBeTruthy();
@@ -396,12 +400,26 @@ describe("ProviderSessionDetailPanel", () => {
     expect(
       screen.getByText("Order 4 / Turn 1 / 2026-05-18T14:10:04Z / Session line 4"),
     ).toBeTruthy();
+    expect(
+      screen
+        .getByText("Summarize the rollout state for this work item.")
+        .closest("article")?.className,
+    ).toContain("border-af-accent-border");
+    expect(
+      screen
+        .getByText("Summarize the rollout state for this work item.")
+        .closest("article")?.className,
+    ).toContain("bg-af-accent-surface");
+    expect(screen.getAllByText("completed")[0].className).toContain("border-af-border");
+    expect(screen.getAllByText("completed")[0].className).toContain("bg-af-surface-raised");
 
     const expandArguments = screen.getByRole("button", {
       name: "Expand Arguments",
     });
     expect(expandArguments.getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByText(`${longArguments.slice(0, 320)}…`)).toBeTruthy();
+    expect(expandArguments.className).toContain("border-af-border");
+    expect(expandArguments.className).toContain("bg-af-surface-raised");
 
     fireEvent.click(expandArguments);
 

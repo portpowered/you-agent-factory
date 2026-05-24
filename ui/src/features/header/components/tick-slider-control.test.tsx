@@ -5,7 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import { graphStateSmokeTimelineEvents } from "../../../components/dashboard/fixtures";
@@ -53,41 +53,55 @@ function currentTickStatus(
 
 describe("TickSliderControl", () => {
   afterEach(() => {
-    useFactoryTimelineStore.getState().reset();
+    act(() => {
+      useFactoryTimelineStore.getState().reset();
+    });
   });
 
   it("renders an explained disabled state until more than one tick is available", () => {
-    useFactoryTimelineStore.getState().replaceEvents([
-      timelineEvent("tick-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
-        factory: {
-          workTypes: [
-            {
-              name: "story",
-              states: [{ name: "ready", type: "INITIAL" }],
-            },
-          ],
-          workstations: [],
-          workers: [],
-        },
-      }),
-    ]);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    act(() => {
+      useFactoryTimelineStore.getState().replaceEvents([
+        timelineEvent("tick-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
+          factory: {
+            workTypes: [
+              {
+                name: "story",
+                states: [{ name: "ready", type: "INITIAL" }],
+              },
+            ],
+            workstations: [],
+            workers: [],
+          },
+        }),
+      ]);
+    });
 
     const messages = getHeaderControlsMessages("en");
 
-    render(<TickSliderControl />);
+    try {
+      render(<TickSliderControl />);
 
-    expect(
-      screen.getByRole<HTMLInputElement>("slider", {
-        name: messages.sliderAriaLabel,
-      }).disabled,
-    ).toBe(true);
-    expect(screen.getByText(messages.waitingForMoreTicks)).toBeTruthy();
-    expect(
-      screen.queryByRole("button", {
-        name: messages.returnToCurrentTickLabel,
-      }),
-    ).toBeNull();
-    expect(screen.queryByText("Current")).toBeNull();
+      expect(
+        screen.getByRole<HTMLInputElement>("slider", {
+          name: messages.sliderAriaLabel,
+        }).disabled,
+      ).toBe(true);
+      expect(screen.getByText(messages.waitingForMoreTicks)).toBeTruthy();
+      expect(
+        screen.queryByRole("button", {
+          name: messages.returnToCurrentTickLabel,
+        }),
+      ).toBeNull();
+      expect(screen.queryByText("Current")).toBeNull();
+      expect(
+        errorSpy.mock.calls.some(([firstArg]) =>
+          String(firstArg).includes("not wrapped in act"),
+        ),
+      ).toBe(false);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it("switches between fixed and current mode through scrubber interaction", async () => {
@@ -111,8 +125,9 @@ describe("TickSliderControl", () => {
     expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
     expect(slider.getAttribute("aria-valuetext")).toBe("9/9");
     expect(sliderShell?.className).toContain("gap-1.5");
-    expect(sliderShell?.className).toContain("px-1");
-    expect(sliderShell?.className).not.toContain("rounded-t-none");
+    expect(sliderShell?.className).toContain("px-2.5");
+    expect(sliderShell?.className).toContain("border-af-border");
+    expect(sliderShell?.className).toContain("bg-af-surface-subtle");
     expect(screen.queryByText("Current")).toBeNull();
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
     expect(
@@ -141,12 +156,14 @@ describe("TickSliderControl", () => {
   });
 
   it("falls back to zero bounds when no timeline ticks are available", () => {
-    useFactoryTimelineStore.setState({
-      events: [],
-      latestTick: 0,
-      mode: "fixed",
-      selectedTick: 7,
-      worldViewCache: {} as Record<number, TimelineWorldState>,
+    act(() => {
+      useFactoryTimelineStore.setState({
+        events: [],
+        latestTick: 0,
+        mode: "fixed",
+        selectedTick: 7,
+        worldViewCache: {} as Record<number, TimelineWorldState>,
+      });
     });
 
     const messages = getHeaderControlsMessages("en");
@@ -173,16 +190,18 @@ describe("TickSliderControl", () => {
   });
 
   it("ignores non-numeric cached ticks and clamps the selected tick to cached bounds", () => {
-    useFactoryTimelineStore.setState({
-      events: [],
-      latestTick: 0,
-      mode: "fixed",
-      selectedTick: 9,
-      worldViewCache: {
-        2: {} as TimelineWorldState,
-        4: {} as TimelineWorldState,
-        NaN: {} as TimelineWorldState,
-      } as Record<number, TimelineWorldState>,
+    act(() => {
+      useFactoryTimelineStore.setState({
+        events: [],
+        latestTick: 0,
+        mode: "fixed",
+        selectedTick: 9,
+        worldViewCache: {
+          2: {} as TimelineWorldState,
+          4: {} as TimelineWorldState,
+          NaN: {} as TimelineWorldState,
+        } as Record<number, TimelineWorldState>,
+      });
     });
 
     const messages = getHeaderControlsMessages("en");
@@ -245,7 +264,7 @@ describe("TickSliderControl", () => {
     );
   });
 
-  it("keeps the slider status semantically attached and focus-visible without extra visible copy", () => {
+  it("keeps the slider status semantically attached without extra visible copy", () => {
     act(() => {
       useFactoryTimelineStore
         .getState()
@@ -261,8 +280,6 @@ describe("TickSliderControl", () => {
     });
     const statusText = screen.getByText("9/9");
 
-    expect(slider.className).toContain("focus-visible:ring-2");
-    expect(slider.className).toContain("focus-visible:ring-af-accent/25");
     expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
     expect(statusText.tagName).toBe("OUTPUT");
     expect(screen.queryByText("Current")).toBeNull();

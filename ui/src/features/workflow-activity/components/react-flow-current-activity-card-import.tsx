@@ -77,14 +77,14 @@ export function GraphDropOverlay({ dropState, locale }: GraphDropOverlayProps) {
 
   return (
     <div
-      className="pointer-events-none absolute inset-4 z-10 grid place-items-center rounded-2xl border border-dashed border-af-accent/45 bg-af-surface/92 p-5 text-center shadow-af-panel backdrop-blur-lg"
+      className="pointer-events-none absolute inset-4 z-10 grid place-items-center rounded-2xl border border-dashed border-af-accent-border bg-af-surface-raised p-5 text-center shadow-af-panel backdrop-blur-lg"
       data-current-activity-drop-overlay={dropState.status}
     >
       <div className="grid max-w-sm gap-2">
         <p className="mb-0 text-xs font-bold uppercase tracking-[0.16em] text-af-accent">
           {copy.title}
         </p>
-        <p className="m-0 text-sm text-af-ink/84">{copy.message}</p>
+        <p className="m-0 text-sm text-af-text-muted">{copy.message}</p>
       </div>
     </div>
   );

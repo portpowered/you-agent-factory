@@ -115,10 +115,10 @@ export function buildGraphEdges(
         fill: "var(--color-af-surface)",
         fillOpacity: activeFlow || semantic ? 0.92 : 0,
       },
-      labelStyle: { fill: "var(--color-af-ink)" },
+      labelStyle: { fill: "var(--color-af-text)" },
       markerEnd: {
         color: pendingAddition
-          ? "var(--color-af-warning-ink)"
+          ? "var(--color-af-warning-text)"
           : edgeMarkerColor(edge, activeFlow),
         type: MarkerType.ArrowClosed,
       },
@@ -126,7 +126,7 @@ export function buildGraphEdges(
       sourceHandle: handleAssignments.sourceHandlesByEdgeId.get(edge.edgeId),
       style: pendingAddition
         ? {
-            stroke: "var(--color-af-warning-ink)",
+            stroke: "var(--color-af-warning-text)",
             strokeDasharray: "9 4",
             strokeWidth: 2,
           }

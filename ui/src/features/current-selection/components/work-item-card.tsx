@@ -146,7 +146,7 @@ function WorkRelationshipsSection({
         {messages.workRelationshipsHeading}
       </h4>
       {relationships.length > 0 ? (
-        <div className="grid gap-3 rounded-xl border border-af-overlay/10 bg-af-overlay/3 p-3">
+        <div className="grid gap-3 rounded-xl border border-af-border bg-af-surface-subtle p-3">
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(14rem,16rem)_minmax(0,1fr)] md:grid-rows-[auto_auto_auto] md:items-start">
             <RelationshipLane
               className="md:col-start-2 md:row-start-1"
@@ -162,11 +162,11 @@ function WorkRelationshipsSection({
               messages={messages}
               onSelectWorkID={onSelectWorkID}
             />
-            <div className="grid gap-2 rounded-xl border border-on-foreground/20 bg-on-foreground/8 p-3 md:col-start-2 md:row-start-2">
+            <div className="grid gap-2 rounded-xl border border-af-accent-border bg-af-accent-surface p-3 md:col-start-2 md:row-start-2">
               <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
                 {messages.selectedWorkHeading}
               </span>
-              <code className="text-sm text-on-foreground">
+              <code className="text-sm text-af-text">
                 {selectedWorkLabel}
               </code>
             </div>
@@ -193,7 +193,7 @@ function WorkRelationshipsSection({
           />
         </div>
       ) : (
-        <p className="m-0 text-sm text-af-ink/68">
+        <p className="m-0 text-sm text-af-text-subtle">
           {messages.workRelationshipsEmpty}
         </p>
       )}
@@ -300,13 +300,13 @@ function RelationshipLane({
   return (
     <section
       aria-label={messages.relationshipLaneAriaLabel(label)}
-      className={`grid gap-2 rounded-xl border border-af-overlay/8 bg-af-overlay/4 p-3 ${className ?? ""}`.trim()}
+      className={`grid gap-2 rounded-xl border border-af-border bg-af-surface-subtle p-3 ${className ?? ""}`.trim()}
     >
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       <ul className="m-0 grid list-none gap-2 p-0">
         {items.map((relationship) => (
           <li
-            className="grid gap-1 rounded-lg border border-af-overlay/8 bg-af-base/80 p-3"
+            className="grid gap-1 rounded-lg border border-af-border bg-af-surface-raised p-3"
             key={relationship.key}
           >
             <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>

@@ -40,9 +40,9 @@ import {
 
 // tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
-  "h-[36rem] min-h-[36rem] border-transparent bg-af-overlay/4";
+  "h-[36rem] min-h-[36rem] border-transparent bg-af-surface-subtle";
 const PATH_NODE_CLASS =
-  "flex h-full min-w-0 w-full flex-col gap-1.5 overflow-hidden rounded-lg border px-3 py-3 text-left text-af-ink shadow-[0_10px_30px_rgba(15,23,42,0.06)]";
+  "flex h-full min-w-0 w-full flex-col gap-1.5 overflow-hidden rounded-lg border px-3 py-3 text-left text-af-text shadow-af-card";
 const DISPATCH_NODE_WIDTH = 240;
 const DISPATCH_NODE_HEIGHT = 124;
 const TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS = {
@@ -219,14 +219,14 @@ function WorkstationPathGraphNode({
         </span>
       </div>
       <strong
-        className={cn("text-sm text-af-ink [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("text-sm text-af-text [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
       >
         {data.label}
       </strong>
-      <p className="text-[0.76rem] text-af-ink/72 [overflow-wrap:anywhere]">
+      <p className="text-[0.76rem] text-af-text-muted [overflow-wrap:anywhere]">
         {messages.dispatchPathInputPrefix}: {data.inputSummary}
       </p>
-      <p className="text-[0.76rem] text-af-ink/72 [overflow-wrap:anywhere]">
+      <p className="text-[0.76rem] text-af-text-muted [overflow-wrap:anywhere]">
         {messages.dispatchPathOutputPrefix}: {data.outputSummary}
       </p>
     </article>
@@ -428,12 +428,12 @@ function dedupeWorkItems(workItems: DashboardWorkItemRef[]): DashboardWorkItemRe
 
 function outcomeToneClassName(outcome?: string): string {
   if (!outcome) {
-    return "border-af-overlay/10 bg-af-canvas";
+    return "border-af-border bg-af-surface";
   }
 
   if (outcome.toUpperCase() === "FAILED" || outcome.toUpperCase() === "REJECTED") {
-    return "border-af-danger/24 bg-af-danger/6";
+    return "border-af-danger-border bg-af-danger-surface";
   }
 
-  return "border-af-success/20 bg-af-success/6";
+  return "border-af-success-border bg-af-success-surface";
 }

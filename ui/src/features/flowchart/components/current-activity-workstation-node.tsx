@@ -72,23 +72,26 @@ export function WorkstationNodeView({
     data.workstation.transition_id ||
     data.workstation.node_id;
   const nodeClassName = cn(
-    "min-w-0 w-full justify-start overflow-hidden border-2 bg-af-surface/88",
-    exhaustionRule ? "border-dashed border-af-danger/36" : "border-af-info/28",
+    "min-w-0 w-full justify-start overflow-hidden border-2 bg-af-surface-raised",
+    exhaustionRule
+      ? "border-dashed border-af-danger-border"
+      : "border-af-info-border",
     !exhaustionRule &&
       semanticIconMetadata.semanticKind === "repeater" &&
       "border-double",
     !exhaustionRule &&
       data.active &&
       !data.selectedWorkstation &&
-      "border-af-success/50 shadow-af-success-chip",
+      "border-af-success-border shadow-af-success-chip",
     !exhaustionRule &&
       data.activeFlow &&
       !data.selectedWorkstation &&
-      "agent-flow-node--active ring-2 ring-af-success/18",
-    data.selectedWorkstation && "border-af-accent/70 shadow-af-accent-selected",
+      "agent-flow-node--active ring-2 ring-af-success-border",
+    data.selectedWorkstation &&
+      "border-af-accent-border shadow-af-accent-selected",
     !exhaustionRule &&
       selectedWork &&
-      "border-af-info/70 shadow-af-info-selected",
+      "border-af-info-border shadow-af-info-selected",
     data.muted && "opacity-[0.45]",
   );
 
@@ -155,7 +158,7 @@ function ExhaustionRuleNodeButton({
         />
       </span>
       <span
-        className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.74rem] font-bold leading-tight text-af-ink/86"
+        className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.74rem] font-bold leading-tight text-af-text"
         data-workstation-title
       >
         {workstationTitle}
@@ -226,7 +229,7 @@ function ActiveWorkstationNodeContent({
             tone="success"
           >
             <GraphSemanticIcon
-              className="h-3.5 w-3.5 text-af-success-ink"
+              className="h-3.5 w-3.5 text-af-success"
               kind="active-work"
               label="Active"
             />
@@ -248,9 +251,9 @@ function ActiveWorkstationNodeContent({
               <button
                 aria-pressed={workItemSelected}
                 className={cn(
-                  "nodrag nopan grid min-w-0 w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-af-overlay/8 bg-af-surface px-2 py-1.5 text-left text-[0.74rem] text-inherit",
+                  "nodrag nopan grid min-w-0 w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-af-border bg-af-surface px-2 py-1.5 text-left text-[0.74rem] text-inherit",
                   workItemSelected &&
-                    "border-af-info/60 bg-af-info/15 shadow-af-info-chip",
+                    "border-af-info-border bg-af-info-surface shadow-af-info-chip",
                 )}
                 data-selected={workItemSelected ? "true" : undefined}
                 onClick={(event) => {
@@ -270,7 +273,7 @@ function ActiveWorkstationNodeContent({
                   {workItemLabel}
                 </span>
                 <span
-                  className="shrink-0 whitespace-nowrap text-right font-mono text-[0.72rem] text-af-ink/68"
+                  className="shrink-0 whitespace-nowrap text-right font-mono text-[0.72rem] text-af-text-subtle"
                   data-active-work-duration
                 >
                   {durationLabel}
@@ -298,7 +301,7 @@ function workstationOverflowMarkers(totalCount: number, visibleCount: number) {
     return (
       <span
         aria-label={`${totalCount} active items`}
-        className="mt-2 flex min-h-7 w-full items-center justify-center rounded-lg border border-af-success/25 bg-af-success/12 px-3 py-1 font-mono text-[0.9rem] font-bold leading-none text-af-success-ink"
+        className="mt-2 flex min-h-7 w-full items-center justify-center rounded-lg border border-af-success-border bg-af-success-surface px-3 py-1 font-mono text-[0.9rem] font-bold leading-none text-af-success"
         data-workstation-work-progress="numeric"
         role="status"
       >
@@ -310,7 +313,7 @@ function workstationOverflowMarkers(totalCount: number, visibleCount: number) {
   return (
     <span
       aria-label={`${totalCount} active items`}
-      className="mt-2 flex min-h-7 items-center justify-center gap-1 rounded-lg border border-af-success/18 bg-af-success/10 px-2"
+      className="mt-2 flex min-h-7 items-center justify-center gap-1 rounded-lg border border-af-success-border bg-af-success-surface px-2"
       data-workstation-work-progress="dots"
       role="status"
     >
@@ -325,7 +328,7 @@ function workstationOverflowMarkers(totalCount: number, visibleCount: number) {
           data-workstation-work-progress-dot={String(dotNumber - 1)}
         />
       ))}
-      <span className="ml-1 font-mono text-[0.68rem] font-bold text-af-success-ink">
+      <span className="ml-1 font-mono text-[0.68rem] font-bold text-af-success">
         +{remainingCount}
       </span>
     </span>

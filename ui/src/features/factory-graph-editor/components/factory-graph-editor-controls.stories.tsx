@@ -70,7 +70,7 @@ function EditorModeStory() {
         hasChanges={true}
         isDefinitionLoading={false}
       />
-      <div className="relative min-h-44 rounded-[1.5rem] border border-af-overlay/12 bg-af-overlay/4">
+      <div className="relative min-h-44 rounded-[1.5rem] border border-af-border bg-af-surface-subtle">
         <FactoryGraphEditorToolbar
           activeTool={activeTool}
           addMenuActions={[...ADD_MENU_ACTIONS]}
@@ -94,7 +94,7 @@ function EditorModeStory() {
 function AddMenuOpenStory() {
   return (
     <div className="grid gap-4 p-6">
-      <div className="relative min-h-52 rounded-[1.5rem] border border-af-overlay/12 bg-af-overlay/4">
+      <div className="relative min-h-52 rounded-[1.5rem] border border-af-border bg-af-surface-subtle">
         <FactoryGraphEditorToolbar
           activeTool="add"
           addMenuActions={[...ADD_MENU_ACTIONS]}
@@ -250,10 +250,12 @@ export const EditorMode = {
     const toolbar = canvas.getByRole("region", {
       name: "Factory graph editor tools",
     });
+    const addMenuButton = within(toolbar).getByRole("button", {
+      name: "Open add entity menu",
+    });
 
-    await expect(
-      within(toolbar).getByRole("button", { name: "Open add entity menu" }),
-    ).toBeVisible();
+    await expect(addMenuButton).toHaveAttribute("aria-expanded", "false");
+    await expect(addMenuButton).toBeVisible();
     await expect(
       within(toolbar).getByRole("button", { name: "Connect" }),
     ).toHaveAttribute("aria-pressed", "true");

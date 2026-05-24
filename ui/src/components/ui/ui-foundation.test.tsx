@@ -14,7 +14,7 @@ describe("UIFoundationShowcase", () => {
   it("renders the shared primitive baseline with interactive evidence", async () => {
     const user = userEvent.setup();
 
-    render(<UIFoundationShowcase includeResizable={false} />);
+    render(<UIFoundationShowcase />);
 
     expect(screen.getByRole("button", { name: "Primary action" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Disabled action" }).hasAttribute("disabled")).toBe(
@@ -31,6 +31,8 @@ describe("UIFoundationShowcase", () => {
     ).toBeTruthy();
     expect(screen.getByRole("table", { name: "Primitive data table showcase" })).toBeTruthy();
     expect(screen.getByLabelText("Primitive calendar showcase")).toBeTruthy();
+    expect(screen.getByText("Sidebar panel")).toBeTruthy();
+    expect(screen.getByText("Detail panel")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Open dialog" }));
     const dialog = await screen.findByRole("dialog", { name: "Export factory" });
@@ -44,4 +46,3 @@ describe("UIFoundationShowcase", () => {
     );
   });
 });
-

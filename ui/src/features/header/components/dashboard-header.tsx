@@ -27,7 +27,6 @@ import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { TickSliderControl } from "./tick-slider-control";
-import { sessionStreamToggleLabel } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { useDashboardSessionTabsState } from "../hooks/use-dashboard-session-tabs-state";
 
@@ -35,31 +34,30 @@ const DASHBOARD_TOOLBAR_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
   "mb-3 grid gap-2 p-2 md:px-3 md:py-2",
 );
-const DASHBOARD_HEADER_ROWS_CLASS = "flex min-w-0 flex-col gap-0";
+const DASHBOARD_HEADER_ROWS_CLASS = "flex min-w-0 flex-col gap-2";
 const DASHBOARD_PRIMARY_ROW_CLASS = cn(
   "flex min-w-0 items-stretch gap-2",
   "max-md:flex-col",
 );
 const DASHBOARD_SECONDARY_ROW_CLASS = "flex min-w-0";
 const DASHBOARD_BRAND_SLOT_CLASS = "min-w-0 self-end pb-2";
-const DASHBOARD_TIMELINE_CLUSTER_CLASS = "flex min-w-0 w-full flex-1";
-const DASHBOARD_SESSION_STRIP_CLASS =
-  "flex min-w-0 h-full w-full items-stretch px-2 pt-1";
-const DASHBOARD_TIMELINE_OPERATIONS_ROW_CLASS =
-  "relative flex min-w-0 w-full items-center gap-1.5 rounded-t-2xl bg-af-surface/72 pb-2 pt-1";
+const DASHBOARD_TAB_STRIP_CLASS = "flex min-w-0 flex-1 items-stretch px-2 pt-1";
+const DASHBOARD_TIMELINE_ROW_CLASS = "flex min-w-0 justify-end";
 const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
+const DASHBOARD_STREAM_STATUS_CLASS = cn(
+  "sr-only shrink-0 whitespace-nowrap text-sm text-af-text-muted",
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+);
 const DASHBOARD_CONTROLS_CLASS = cn(
-  "flex shrink-0 items-center gap-1.5 p-0",
-  "self-end pb-2",
+  "flex shrink-0 items-center gap-2 self-end pb-2",
   "max-md:w-full max-md:justify-end",
 );
-const DASHBOARD_TIMELINE_ACTIONS_CLASS =
-  "ml-auto flex shrink-0 items-center gap-1.5";
 const LOCALE_MENU_PANEL_CLASS =
-  "absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-af-overlay/12 bg-af-surface/96 p-1 shadow-af-panel backdrop-blur-lg";
+  "absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-af-border bg-af-surface-raised p-1 text-af-text shadow-af-panel backdrop-blur-lg";
 const LOCALE_MENU_ITEM_CLASS = cn(
-  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-af-ink/82 outline-none transition-colors",
-  "focus-visible:bg-af-overlay/8 focus-visible:ring-2 focus-visible:ring-af-accent/25",
+  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-af-text-muted outline-none transition-colors hover:bg-af-overlay hover:text-af-text",
+  "focus-visible:bg-af-overlay focus-visible:text-af-text focus-visible:ring-2 focus-visible:ring-af-focus-ring",
 );
 
 interface HeaderLocaleOption {
@@ -86,8 +84,8 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
 
   return (
     <section
-      className={DASHBOARD_TOOLBAR_CLASS}
       aria-label={headerMessages.dashboardSummaryLabel}
+      className={DASHBOARD_TOOLBAR_CLASS}
     >
       <div className={DASHBOARD_HEADER_ROWS_CLASS}>
         <div className={DASHBOARD_PRIMARY_ROW_CLASS}>
@@ -97,21 +95,15 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
               wordmarkClassName="truncate"
             />
           </h1>
-          <div className={DASHBOARD_TIMELINE_CLUSTER_CLASS}>
-            <div className={DASHBOARD_SESSION_STRIP_CLASS}>
-              <DashboardSessionTabs
-                locale={resolvedLocale}
-                state={sessionTabsState}
-              />
-            </div>
+          <div className={DASHBOARD_TAB_STRIP_CLASS}>
+            <DashboardSessionTabs
+              locale={resolvedLocale}
+              state={sessionTabsState}
+            />
           </div>
           <p
             aria-label={streamStatusLabel(streamStatus, headerMessages)}
-            className={cn(
-              "sr-only",
-              DASHBOARD_BODY_TEXT_CLASS,
-              DASHBOARD_SUPPORTING_LABELS_CLASS,
-            )}
+            className={DASHBOARD_STREAM_STATUS_CLASS}
             role="status"
           >
             {streamStatusLabel(streamStatus, headerMessages)}
@@ -120,6 +112,29 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
             aria-label={headerMessages.globalHeaderActionsLabel}
             className={DASHBOARD_CONTROLS_CLASS}
           >
+            <DashboardHeaderActionButton
+              aria-label={exportMessages.triggerLabel}
+              aria-expanded={isExportDialogOpen}
+              aria-haspopup="dialog"
+              compact
+              onClick={openExportDialog}
+            >
+              <svg
+                aria-hidden="true"
+                fill="none"
+                height="18"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+                viewBox="0 0 24 24"
+                width="18"
+              >
+                <path d="M14 5h5v5" />
+                <path d="M10 14 19 5" />
+                <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+              </svg>
+            </DashboardHeaderActionButton>
             <DashboardLocaleMenu
               locale={resolvedLocale}
               onChangeLocale={setLocale}
@@ -127,59 +142,8 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
           </fieldset>
         </div>
         <div className={DASHBOARD_SECONDARY_ROW_CLASS}>
-          <div className={DASHBOARD_TIMELINE_OPERATIONS_ROW_CLASS}>
+          <div className={DASHBOARD_TIMELINE_ROW_CLASS}>
             <TickSliderControl locale={resolvedLocale} />
-            <div className={DASHBOARD_TIMELINE_ACTIONS_CLASS}>
-              {sessionTabsState.activeSession ? (
-                <DashboardHeaderActionButton
-                  aria-label={sessionStreamToggleLabel(
-                    sessionTabsState.activeSession,
-                    sessionTabsState.isSessionStreamPaused(
-                      sessionTabsState.activeSession.id,
-                    ),
-                    headerMessages,
-                  )}
-                  aria-pressed={sessionTabsState.isSessionStreamPaused(
-                    sessionTabsState.activeSession.id,
-                  )}
-                  compact
-                  onClick={() => {
-                    sessionTabsState.toggleSessionStreamPaused(
-                      sessionTabsState.activeSession.id,
-                    );
-                  }}
-                >
-                  <SessionStreamToggleIcon
-                    paused={sessionTabsState.isSessionStreamPaused(
-                      sessionTabsState.activeSession.id,
-                    )}
-                  />
-                </DashboardHeaderActionButton>
-              ) : null}
-              <DashboardHeaderActionButton
-                aria-label={exportMessages.triggerLabel}
-                aria-expanded={isExportDialogOpen}
-                aria-haspopup="dialog"
-                compact
-                onClick={openExportDialog}
-              >
-                <svg
-                  aria-hidden="true"
-                  fill="none"
-                  height="18"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.8"
-                  viewBox="0 0 24 24"
-                  width="18"
-                >
-                  <path d="M14 5h5v5" />
-                  <path d="M10 14 19 5" />
-                  <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
-                </svg>
-              </DashboardHeaderActionButton>
-            </div>
           </div>
         </div>
       </div>
@@ -205,35 +169,6 @@ function resolveLanguageSwitcherValue(locale: string): SupportedLocale {
   return SUPPORTED_LOCALES.includes(locale as SupportedLocale)
     ? (locale as SupportedLocale)
     : "en";
-}
-
-function SessionStreamToggleIcon({
-  paused,
-}: {
-  paused: boolean;
-}) {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="16"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-      width="16"
-    >
-      {paused ? (
-        <path d="M8 5.75 18 12 8 18.25v-12.5Z" />
-      ) : (
-        <>
-          <path d="M9 5.75v12.5" />
-          <path d="M15 5.75v12.5" />
-        </>
-      )}
-    </svg>
-  );
 }
 
 function DashboardLocaleMenu({
@@ -273,14 +208,14 @@ function DashboardLocaleMenu({
         aria-haspopup="menu"
         aria-label={headerMessages.languageMenuButtonLabel}
         compact
+        onClick={() => {
+          setIsOpen((current) => !current);
+        }}
         onKeyDown={(event) => {
           if (shouldOpenLocaleMenuFromKey(event.key)) {
             event.preventDefault();
             setIsOpen(true);
           }
-        }}
-        onClick={() => {
-          setIsOpen((current) => !current);
         }}
       >
         <svg
@@ -362,12 +297,13 @@ function DashboardLocaleMenuList({
 
         return (
           <button
+            key={option.value}
             aria-checked={isSelected}
             className={cn(
               LOCALE_MENU_ITEM_CLASS,
-              isSelected && "bg-af-accent/10 text-af-accent",
+              isSelected &&
+                "border border-af-accent-border bg-af-accent-surface text-af-text",
             )}
-            key={option.value}
             onClick={() => {
               onChangeLocale(option.value);
               onClose();
@@ -395,19 +331,25 @@ function LocaleMenuCheckIcon() {
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth="1.8"
-      viewBox="0 0 16 16"
+      viewBox="0 0 24 24"
       width="16"
     >
-      <path d="m3.5 8.5 2.5 2.5 6-6" />
+      <path d="m5 12 4 4L19 6" />
     </svg>
   );
 }
 
 function createHeaderLocaleOptions(): readonly HeaderLocaleOption[] {
-  return SUPPORTED_LOCALES.map((locale) => ({
-    label: getNativeLanguageLabel(locale),
-    value: locale,
+  return SUPPORTED_LOCALES.map((value) => ({
+    label: getNativeLanguageLabel(value),
+    value,
   }));
+}
+
+function shouldOpenLocaleMenuFromKey(key: string): boolean {
+  return (
+    key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === " "
+  );
 }
 
 function useLocaleMenuDismissal({
@@ -476,12 +418,6 @@ function useLocaleMenuSelectionFocus({
   }, [isOpen, menuRef]);
 }
 
-function shouldOpenLocaleMenuFromKey(key: string): boolean {
-  return (
-    key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === " "
-  );
-}
-
 function moveLocaleMenuFocus(
   event: ReactKeyboardEvent<HTMLDivElement>,
   menuRef: RefObject<HTMLDivElement | null>,
@@ -491,9 +427,8 @@ function moveLocaleMenuFocus(
   }
 
   const items = Array.from(
-    menuRef.current?.querySelectorAll<HTMLButtonElement>(
-      '[role="menuitemradio"]',
-    ) ?? [],
+    menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ??
+      [],
   );
   if (items.length === 0) {
     return;

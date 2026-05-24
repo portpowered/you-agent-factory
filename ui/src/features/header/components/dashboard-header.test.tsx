@@ -146,7 +146,7 @@ describe("DashboardHeader", () => {
     expect(toolbar.className).toContain("gap-2");
     expect(toolbar.className).toContain("p-2");
     expect(toolbar.firstElementChild?.className).toContain("flex-col");
-    expect(toolbar.firstElementChild?.className).toContain("gap-0");
+    expect(toolbar.firstElementChild?.className).toContain("gap-2");
     expect(toolbar.firstElementChild?.firstElementChild?.className).toContain(
       "items-stretch",
     );
@@ -157,9 +157,6 @@ describe("DashboardHeader", () => {
     );
     expect(heading.className).toContain("pb-2");
     expect(heading.firstElementChild?.className).toContain("gap-3");
-    expect(globalActions.className).not.toContain("rounded-2xl");
-    expect(globalActions.className).not.toContain("border");
-    expect(globalActions.className).not.toContain("bg-af-overlay/6");
     expect(globalActions.className).toContain("self-end");
     expect(globalActions.className).toContain("max-md:w-full");
     expect(globalActions.className).toContain("max-md:justify-end");
@@ -167,10 +164,8 @@ describe("DashboardHeader", () => {
       heading.querySelector('[aria-hidden="true"]')?.className,
     ).toContain("h-12");
     expect(slider.closest("div")?.parentElement?.className).toContain(
-      "rounded-t-2xl",
+      "justify-end",
     );
-    expect(slider.closest("div")?.parentElement?.className).toContain("bg-af-surface/72");
-    expect(slider.closest("div")?.parentElement?.className).toContain("w-full");
     expect(slider.closest("div")?.className).toContain("md:flex-nowrap");
     expect(slider.closest("div")?.className).toContain("w-full");
     const controls = Array.from(
@@ -180,12 +175,12 @@ describe("DashboardHeader", () => {
     );
     expect(controls).toHaveLength(4);
     expect(controls[0]).toBe(openSessionButton);
-    expect(controls[1]).toBe(languageButton);
-    expect(controls[2]).toBe(slider);
-    expect(controls[3]).toBe(exportButton);
+    expect(controls[1]).toBe(exportButton);
+    expect(controls[2]).toBe(languageButton);
+    expect(controls[3]).toBe(slider);
     expect(globalActions.contains(languageButton)).toBe(true);
     expect(globalActions.contains(openSessionButton)).toBe(false);
-    expect(globalActions.contains(exportButton)).toBe(false);
+    expect(globalActions.contains(exportButton)).toBe(true);
     expect(globalActions.compareDocumentPosition(slider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");

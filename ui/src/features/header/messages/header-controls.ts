@@ -4,6 +4,7 @@ import {
 } from "../../../i18n";
 
 export interface HeaderControlsMessages {
+  activeSessionFolderLabelTemplate: string;
   brandWordmark: string;
   browseSessionFolderButtonLabel: string;
   closingSessionButtonLabel: string;
@@ -67,6 +68,7 @@ export const HEADER_MAX_TICK_TOKEN = "{{maxTick}}";
 
 const headerControlsMessagesByLocale = {
   en: {
+    activeSessionFolderLabelTemplate: "Active folder: {{folderPath}}",
     brandWordmark: "you-agent-factory",
     browseSessionFolderButtonLabel: "Choose folder",
     closingSessionButtonLabel: "Closing session",
@@ -78,7 +80,7 @@ const headerControlsMessagesByLocale = {
     languageMenuButtonLabel: "Change language",
     loadingSessionsLabel: "Loading sessions...",
     loadingDashboardTitle: "Loading dashboard",
-    openSessionButtonLabel: "Open factory folder",
+    openSessionButtonLabel: "Open another session",
     openSessionDialogDescription:
       "Choose or enter a local factory folder. The folder must contain a runnable factory before you can open a session.",
     openSessionFolderRequiredError:
@@ -141,6 +143,7 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "Waiting for more ticks",
   },
   ja: {
+    activeSessionFolderLabelTemplate: "アクティブなフォルダー: {{folderPath}}",
     brandWordmark: "you-agent-factory",
     browseSessionFolderButtonLabel: "フォルダーを選ぶ",
     closingSessionButtonLabel: "セッションを終了中",
@@ -152,7 +155,7 @@ const headerControlsMessagesByLocale = {
     languageMenuButtonLabel: "言語を変更",
     loadingSessionsLabel: "セッションを読み込み中...",
     loadingDashboardTitle: "ダッシュボードを読み込み中",
-    openSessionButtonLabel: "ファクトリーフォルダーを開く",
+    openSessionButtonLabel: "別のセッションを開く",
     openSessionDialogDescription:
       "ローカルのファクトリーフォルダーを選ぶか入力してください。セッションを開くには、そのフォルダーに実行可能なファクトリーが含まれている必要があります。",
     openSessionFolderRequiredError:
@@ -216,6 +219,7 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "ティックが増えるまで待機しています",
   },
   ko: {
+    activeSessionFolderLabelTemplate: "활성 폴더: {{folderPath}}",
     brandWordmark: "you-agent-factory",
     browseSessionFolderButtonLabel: "폴더 선택",
     closingSessionButtonLabel: "세션 종료 중",
@@ -227,7 +231,7 @@ const headerControlsMessagesByLocale = {
     languageMenuButtonLabel: "언어 변경",
     loadingSessionsLabel: "세션을 불러오는 중...",
     loadingDashboardTitle: "대시보드 로드 중",
-    openSessionButtonLabel: "팩토리 폴더 열기",
+    openSessionButtonLabel: "다른 세션 열기",
     openSessionDialogDescription:
       "로컬 팩토리 폴더를 선택하거나 경로를 입력하세요. 세션을 열려면 해당 폴더에 실행 가능한 팩토리가 있어야 합니다.",
     openSessionFolderRequiredError:
@@ -291,6 +295,7 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "틱이 더 쌓일 때까지 기다리는 중",
   },
   "zh-CN": {
+    activeSessionFolderLabelTemplate: "当前文件夹：{{folderPath}}",
     brandWordmark: "you-agent-factory",
     browseSessionFolderButtonLabel: "选择文件夹",
     closingSessionButtonLabel: "正在关闭会话",
@@ -302,7 +307,7 @@ const headerControlsMessagesByLocale = {
     languageMenuButtonLabel: "切换语言",
     loadingSessionsLabel: "正在加载会话...",
     loadingDashboardTitle: "正在加载仪表板",
-    openSessionButtonLabel: "打开工厂文件夹",
+    openSessionButtonLabel: "打开另一个会话",
     openSessionDialogDescription:
       "请选择或输入本地工厂文件夹。只有文件夹中包含可运行的工厂时，才能打开会话。",
     openSessionFolderRequiredError:

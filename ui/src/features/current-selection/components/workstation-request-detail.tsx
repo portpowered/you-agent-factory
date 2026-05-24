@@ -1,8 +1,11 @@
 import { formatDurationMillis } from "../../../components/ui/formatters";
 import {
+  DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { WIDGET_SUBTITLE_CLASS } from "../../../components/dashboard/widget-board";
+import { cn } from "../../../lib/cn";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
@@ -167,30 +170,28 @@ function WorkstationRequestSummary({
         ) : null}
       </dl>
       {requestRunnerMetadata ? (
-        <div className="mt-3 grid gap-2 rounded-xl border border-af-overlay/8 bg-af-overlay/4 p-3">
-          <p className="m-0 text-sm text-af-ink/72">
+        <div className="mt-3 grid gap-2 rounded-xl border border-af-border bg-af-surface-subtle p-3">
+          <p className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
             {messages.runnerCapabilitySupportHeading}
           </p>
           <ul className="m-0 grid list-none gap-2 p-0">
             {requestRunnerMetadata.capabilities.optionalCapabilities.map(
               (capability) => (
                 <li
-                  className="grid gap-1 rounded-lg border border-af-overlay/8 bg-af-surface/66 p-2"
+                  className="grid gap-1 rounded-lg border border-af-border bg-af-surface-raised p-2"
                   key={capability.capability}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm text-af-ink">
-                      {labelForRunnerCapability(
-                        messages,
-                        capability.capability,
-                      )}
+                    <span className={cn("text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
+                      {labelForRunnerCapability(messages, capability.capability)}
                     </span>
                     <span
-                      className={
+                      className={cn(
+                        "rounded-full border px-2 py-1 text-xs font-semibold",
                         capability.status === "supported"
-                          ? "rounded-full bg-af-success/10 px-2 py-1 text-xs font-semibold text-af-success-ink"
-                          : "rounded-full bg-af-warning/12 px-2 py-1 text-xs font-semibold text-af-warning-ink"
-                      }
+                          ? "border-af-success-border bg-af-success-surface text-af-success"
+                          : "border-af-warning-border bg-af-warning-surface text-af-warning",
+                      )}
                     >
                       {capability.status === "supported"
                         ? messages.runnerCapabilitySupportedLabel
@@ -198,7 +199,7 @@ function WorkstationRequestSummary({
                     </span>
                   </div>
                   {capability.detail ? (
-                    <p className="m-0 text-sm text-af-ink/62">
+                    <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
                       {capability.detail}
                     </p>
                   ) : null}

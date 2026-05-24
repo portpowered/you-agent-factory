@@ -31,7 +31,7 @@ export interface GraphSemanticIconProps {
   label?: string;
 }
 
-const DEFAULT_ICON_CLASS_NAME = "h-4 w-4 shrink-0 text-af-ink/72";
+const DEFAULT_ICON_CLASS_NAME = "h-4 w-4 shrink-0 text-af-text-muted";
 const UNKNOWN_ICON_LABEL = "Unknown graph semantic";
 
 const GRAPH_SEMANTIC_ICON_DEFINITIONS = {

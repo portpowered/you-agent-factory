@@ -1,4 +1,10 @@
 import {
+  CURRENT_SELECTION_ALERT_PANEL_CLASS,
+  CURRENT_SELECTION_CODE_SUBTLE_CLASS,
+  CURRENT_SELECTION_FIELD_PANEL_CLASS,
+  CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
+} from "./detail-card-shared";
+import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -38,7 +44,7 @@ export function EditableConfigurationPromptInput({
           className={cn(
             "bg-transparent",
             state.promptDiagnostics.length > 0
-              ? "border-af-danger/45 focus-visible:border-af-danger focus-visible:ring-af-danger/20"
+              ? "border-af-danger-border focus-visible:border-af-danger focus-visible:ring-af-focus-ring"
               : undefined,
             DASHBOARD_BODY_TEXT_CLASS,
           )}
@@ -75,7 +81,7 @@ function EditableConfigurationPromptAutocompleteFeedback({
 }) {
   if (state.promptHelpState.status === "loading") {
     return (
-      <p className={cn("m-0 text-af-ink/70", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
         {messages.editableConfigurationPromptHelpLoading}
       </p>
     );
@@ -84,7 +90,7 @@ function EditableConfigurationPromptAutocompleteFeedback({
   if (state.promptHelpState.status === "error") {
     return (
       <p
-        className={cn("m-0 text-af-danger-ink", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+        className={cn("m-0 text-af-danger-text", DASHBOARD_SUPPORTING_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationPromptHelpErrorPrefix}{" "}
@@ -95,21 +101,21 @@ function EditableConfigurationPromptAutocompleteFeedback({
 
   if (state.promptHelpState.status === "empty") {
     return (
-      <p className={cn("m-0 text-af-ink/70", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
         {state.promptHelpState.message}
       </p>
     );
   }
 
   return (
-    <div className="grid gap-1 rounded-xl border border-af-overlay/10 bg-af-overlay/4 p-3">
-      <p className={cn("m-0 text-af-ink/72", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+      <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
         {messages.editableConfigurationPromptAutocompleteSummary(
           state.promptHelpState.contract.availableVariables.length,
           state.promptHelpState.contract.inputCount,
         )}
       </p>
-      <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
         {messages.editableConfigurationPromptAutocompleteDetail}
       </p>
     </div>
@@ -130,7 +136,7 @@ function EditableConfigurationPromptValidationFeedback({
 }) {
   if (state.promptValidationState.status === "loading") {
     return (
-      <p className={cn("m-0 text-af-ink/70", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
         {messages.editableConfigurationPromptValidationLoading}
       </p>
     );
@@ -140,7 +146,7 @@ function EditableConfigurationPromptValidationFeedback({
     return (
       <p
         className={cn(
-          "m-0 text-af-danger-ink",
+          "m-0 text-af-danger-text",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
         role="alert"
@@ -157,14 +163,14 @@ function EditableConfigurationPromptValidationFeedback({
 
   return (
     <div
-      className="grid gap-2 rounded-xl border border-af-danger/20 bg-af-danger/6 p-3"
+      className={CURRENT_SELECTION_ALERT_PANEL_CLASS}
       id={diagnosticsId}
       role="alert"
     >
-      <p className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}>
         {messages.editableConfigurationPromptDiagnosticsSummary}
       </p>
-      <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
         {messages.editableConfigurationPromptValidationDetail}
       </p>
       <div className="grid gap-2">
@@ -174,7 +180,7 @@ function EditableConfigurationPromptValidationFeedback({
         <ul className="m-0 grid list-none gap-2 p-0">
           {state.promptDiagnostics.map((diagnostic) => (
             <li
-              className="grid gap-1 rounded-lg border border-af-danger/18 bg-af-overlay/4 p-2"
+              className="grid gap-1 rounded-lg border border-af-danger-border bg-af-surface-raised p-2"
               key={[
                 diagnostic.kind,
                 diagnostic.path ?? "",
@@ -185,15 +191,17 @@ function EditableConfigurationPromptValidationFeedback({
               ].join(":")}
             >
               <p
-                className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
+                className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
               >
                 {diagnosticLabel(diagnostic.kind, messages)}: {diagnostic.message}
               </p>
               {diagnostic.path ? (
-                <code className="text-xs text-af-ink/72">{diagnostic.path}</code>
+                <code className={CURRENT_SELECTION_CODE_SUBTLE_CLASS}>
+                  {diagnostic.path}
+                </code>
               ) : null}
               {diagnostic.sourceText ? (
-                <pre className="m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 text-xs text-af-ink/78 [overflow-wrap:anywhere]">
+                <pre className="m-0 whitespace-pre-wrap rounded-lg border border-af-border bg-af-surface-subtle p-2 text-xs text-af-text-muted [overflow-wrap:anywhere]">
                   {diagnostic.sourceText}
                 </pre>
               ) : null}

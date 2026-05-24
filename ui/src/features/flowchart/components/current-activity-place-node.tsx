@@ -99,8 +99,9 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
     placeNodeClassName(data.place),
     data.activeFlow &&
       !data.selectedStateNode &&
-      "border-af-success/70 shadow-af-success-chip",
-    data.selectedStateNode && "border-af-accent/70 shadow-af-accent-selected",
+      "border-af-success-border shadow-af-success-chip",
+    data.selectedStateNode &&
+      "border-af-accent-border shadow-af-accent-selected",
     data.muted && "opacity-[0.45]",
   );
 
@@ -150,18 +151,18 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
 function placeNodeClassName(place: DashboardPlaceRef): string {
   const kindClassName = (() => {
     if (place.kind === "work_state") {
-      return "border-af-overlay/22";
+      return "border-af-border-strong";
     }
     if (place.kind === "resource") {
-      return "border-af-overlay/22 bg-af-canvas text-af-ink";
+      return "border-af-border-strong bg-af-surface text-af-text";
     }
-    return "border-dashed border-af-info/36 bg-af-surface/78 text-af-ink";
+    return "border-dashed border-af-info-border bg-af-surface-subtle text-af-text";
   })();
   const stateClassName =
     place.state_category === "TERMINAL"
-      ? "border-af-overlay/22"
+      ? "border-af-border-strong"
       : place.state_category === "FAILED"
-        ? "border-af-edge-danger-muted"
+        ? "border-af-danger-border"
         : "";
 
   return cn(kindClassName, stateClassName);
@@ -219,22 +220,22 @@ function placeSemanticIconLabel(place: DashboardPlaceRef): string {
 function placeSemanticIconClassName(place: DashboardPlaceRef): string {
   if (place.kind === "work_state") {
     if (place.state_category === "TERMINAL") {
-      return "text-af-success-ink/76";
+      return "text-af-success";
     }
     if (place.state_category === "FAILED") {
-      return "text-af-danger-ink/78";
+      return "text-af-danger";
     }
     if (place.state_category === "PROCESSING") {
-      return "text-af-info/78";
+      return "text-af-info";
     }
-    return "text-af-ink/58";
+    return "text-af-text-subtle";
   }
 
   if (place.kind === "resource") {
-    return "text-af-success-ink/76";
+    return "text-af-success";
   }
 
-  return place.kind === "limit" ? "text-af-danger-ink/74" : "text-af-info/74";
+  return place.kind === "limit" ? "text-af-danger" : "text-af-info";
 }
 
 function activeItemCountLabel(count: number): string {
@@ -251,7 +252,7 @@ function statePositionMarkers(count: number): ReactNode {
     return (
       <span
         aria-label={activeItemCountLabel(count)}
-        className="inline-flex min-h-5 min-w-7 items-center justify-center rounded-full border border-af-success/25 bg-af-success/12 px-2 font-mono text-[0.76rem] font-bold leading-none text-af-success-ink"
+        className="inline-flex min-h-5 min-w-7 items-center justify-center rounded-full border border-af-success-border bg-af-success-surface px-2 font-mono text-[0.76rem] font-bold leading-none text-af-success"
         data-state-work-progress="numeric"
         role="status"
       >
@@ -335,7 +336,7 @@ function PlaceLabelText({
   return (
     <span className="grid min-w-0 gap-px overflow-hidden" title={label}>
       <span
-        className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-af-ink/52"
+        className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-af-text-subtle"
         data-place-work-type={dataPrefix === "place" ? true : undefined}
         data-state-work-type={dataPrefix === "state" ? true : undefined}
         title={labelParts.workType}
@@ -343,7 +344,7 @@ function PlaceLabelText({
         {labelParts.workType}
       </span>
       <span
-        className="block min-w-0 overflow-hidden truncate whitespace-nowrap font-mono text-[0.76rem] font-bold leading-[0.82rem] text-af-ink"
+        className="block min-w-0 overflow-hidden truncate whitespace-nowrap font-mono text-[0.76rem] font-bold leading-[0.82rem] text-af-text"
         data-place-state-value={dataPrefix === "place" ? true : undefined}
         data-state-value={dataPrefix === "state" ? true : undefined}
         title={labelParts.stateValue}

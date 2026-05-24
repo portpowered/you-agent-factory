@@ -32,31 +32,31 @@ src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-attribute|Describe the w
 src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-prop|Describe the work to run
 src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-attribute|Primitive chart showcase
 src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-prop|Primitive chart showcase
-src/components/ui/ui-foundation-showcase.tsx|150|27|jsx-text|Primitive table foundation for trace and detail surfaces.
-src/components/ui/ui-foundation-showcase.tsx|153|28|jsx-text|Dispatch
-src/components/ui/ui-foundation-showcase.tsx|154|28|jsx-text|Status
-src/components/ui/ui-foundation-showcase.tsx|155|28|jsx-text|Duration
-src/components/ui/ui-foundation-showcase.tsx|160|28|jsx-text|dispatch-review-1
-src/components/ui/ui-foundation-showcase.tsx|161|28|jsx-text|ACCEPTED
-src/components/ui/ui-foundation-showcase.tsx|162|28|jsx-text|420ms
-src/components/ui/ui-foundation-showcase.tsx|165|28|jsx-text|dispatch-review-2
-src/components/ui/ui-foundation-showcase.tsx|166|28|jsx-text|FAILED
-src/components/ui/ui-foundation-showcase.tsx|167|28|jsx-text|1.2s
-src/components/ui/ui-foundation-showcase.tsx|173|23|jsx-prop|Primitive data table showcase
-src/components/ui/ui-foundation-showcase.tsx|190|17|jsx-text|Loading
-src/components/ui/ui-foundation-showcase.tsx|198|58|jsx-text|Collapsible section
-src/components/ui/ui-foundation-showcase.tsx|207|19|jsx-text|Shared disclosure state is ready for section toggles and drill-down controls.
-src/components/ui/ui-foundation-showcase.tsx|214|17|jsx-text|Open dialog
-src/components/ui/ui-foundation-showcase.tsx|219|34|jsx-text|Export factory
-src/components/ui/ui-foundation-showcase.tsx|221|23|jsx-text|Shared dialog chrome for export and confirmation flows.
-src/components/ui/ui-foundation-showcase.tsx|225|39|jsx-attribute|Factory name
-src/components/ui/ui-foundation-showcase.tsx|226|42|jsx-attribute|Export notes
-src/components/ui/ui-foundation-showcase.tsx|230|23|jsx-text|Cancel
-src/components/ui/ui-foundation-showcase.tsx|232|29|jsx-text|Confirm export
-src/components/ui/ui-foundation-showcase.tsx|240|24|jsx-attribute|Primitive calendar showcase
-src/components/ui/ui-foundation-showcase.tsx|251|13|jsx-text|Resizable panels
-src/components/ui/ui-foundation-showcase.tsx|257|19|jsx-text|Sidebar panel
-src/components/ui/ui-foundation-showcase.tsx|263|19|jsx-text|Detail panel
+src/components/ui/ui-foundation-showcase.tsx|155|27|jsx-text|Primitive table foundation for trace and detail surfaces.
+src/components/ui/ui-foundation-showcase.tsx|158|28|jsx-text|Dispatch
+src/components/ui/ui-foundation-showcase.tsx|159|28|jsx-text|Status
+src/components/ui/ui-foundation-showcase.tsx|160|28|jsx-text|Duration
+src/components/ui/ui-foundation-showcase.tsx|165|28|jsx-text|dispatch-review-1
+src/components/ui/ui-foundation-showcase.tsx|166|28|jsx-text|ACCEPTED
+src/components/ui/ui-foundation-showcase.tsx|167|28|jsx-text|420ms
+src/components/ui/ui-foundation-showcase.tsx|170|28|jsx-text|dispatch-review-2
+src/components/ui/ui-foundation-showcase.tsx|171|28|jsx-text|FAILED
+src/components/ui/ui-foundation-showcase.tsx|172|28|jsx-text|1.2s
+src/components/ui/ui-foundation-showcase.tsx|178|23|jsx-prop|Primitive data table showcase
+src/components/ui/ui-foundation-showcase.tsx|195|17|jsx-text|Loading
+src/components/ui/ui-foundation-showcase.tsx|203|58|jsx-text|Collapsible section
+src/components/ui/ui-foundation-showcase.tsx|212|19|jsx-text|Shared disclosure state is ready for section toggles and drill-down controls.
+src/components/ui/ui-foundation-showcase.tsx|219|17|jsx-text|Open dialog
+src/components/ui/ui-foundation-showcase.tsx|224|34|jsx-text|Export factory
+src/components/ui/ui-foundation-showcase.tsx|226|23|jsx-text|Shared dialog chrome for export and confirmation flows.
+src/components/ui/ui-foundation-showcase.tsx|230|39|jsx-attribute|Factory name
+src/components/ui/ui-foundation-showcase.tsx|231|42|jsx-attribute|Export notes
+src/components/ui/ui-foundation-showcase.tsx|235|23|jsx-text|Cancel
+src/components/ui/ui-foundation-showcase.tsx|237|29|jsx-text|Confirm export
+src/components/ui/ui-foundation-showcase.tsx|245|24|jsx-attribute|Primitive calendar showcase
+src/components/ui/ui-foundation-showcase.tsx|256|13|jsx-text|Resizable panels
+src/components/ui/ui-foundation-showcase.tsx|262|19|jsx-text|Sidebar panel
+src/components/ui/ui-foundation-showcase.tsx|268|19|jsx-text|Detail panel
 src/features/current-selection/state/selectionHistoryStore.ts|36|14|string-literal|node:
 src/features/current-selection/state/selectionHistoryStore.ts|38|14|string-literal|state:
 src/features/current-selection/state/selectionHistoryStore.ts|40|14|string-literal|work: : :
@@ -148,17 +148,17 @@ src/features/factory-graph-editor/lib/factory-graph-editor-save-summary.ts|48|12
 src/features/factory-graph-editor/lib/factory-graph-editor-save-summary.ts|52|12|string-literal|This save will apply .
 src/features/factory-graph-editor/lib/factory-graph-editor-save-summary.ts|56|10|string-literal|This save will apply and .
 src/features/flowchart/components/current-activity-node-chrome.tsx|26|10|string-literal|text-[0.65rem] font-semibold uppercase tracking-[0.08em]
-src/features/flowchart/components/current-activity-place-node.tsx|156|14|string-literal|border-af-overlay/22 bg-af-canvas text-af-ink
-src/features/flowchart/components/current-activity-place-node.tsx|158|12|string-literal|border-dashed border-af-info/36 bg-af-surface/78 text-af-ink
-src/features/flowchart/components/current-activity-place-node.tsx|173|14|string-literal|Terminal
-src/features/flowchart/components/current-activity-place-node.tsx|176|14|string-literal|Failed
-src/features/flowchart/components/current-activity-place-node.tsx|178|12|string-literal|Queue
-src/features/flowchart/components/current-activity-place-node.tsx|182|12|string-literal|Resource
-src/features/flowchart/components/current-activity-place-node.tsx|185|35|string-literal|Limit
-src/features/flowchart/components/current-activity-place-node.tsx|185|45|string-literal|Constraint
-src/features/flowchart/components/current-activity-place-node.tsx|213|12|string-literal|Processing state
-src/features/flowchart/components/current-activity-place-node.tsx|286|12|string-literal|resource tokens
-src/features/flowchart/components/current-activity-workstation-node.tsx|231|21|jsx-prop|Active
+src/features/flowchart/components/current-activity-place-node.tsx|157|14|string-literal|border-af-border-strong bg-af-surface text-af-text
+src/features/flowchart/components/current-activity-place-node.tsx|159|12|string-literal|border-dashed border-af-info-border bg-af-surface-subtle text-af-text
+src/features/flowchart/components/current-activity-place-node.tsx|174|14|string-literal|Terminal
+src/features/flowchart/components/current-activity-place-node.tsx|177|14|string-literal|Failed
+src/features/flowchart/components/current-activity-place-node.tsx|179|12|string-literal|Queue
+src/features/flowchart/components/current-activity-place-node.tsx|183|12|string-literal|Resource
+src/features/flowchart/components/current-activity-place-node.tsx|186|35|string-literal|Limit
+src/features/flowchart/components/current-activity-place-node.tsx|186|45|string-literal|Constraint
+src/features/flowchart/components/current-activity-place-node.tsx|214|12|string-literal|Processing state
+src/features/flowchart/components/current-activity-place-node.tsx|287|12|string-literal|resource tokens
+src/features/flowchart/components/current-activity-workstation-node.tsx|234|21|jsx-prop|Active
 src/features/flowchart/components/graph-semantic-icon.tsx|39|12|string-literal|Active work
 src/features/flowchart/components/graph-semantic-icon.tsx|48|12|string-literal|Constraint
 src/features/flowchart/components/graph-semantic-icon.tsx|58|12|string-literal|Cron workstation
@@ -193,9 +193,9 @@ src/features/import/lib/factory-png-import.ts|270|18|string-literal|The you-agen
 src/features/import/lib/factory-png-import.ts|309|16|string-literal|The you-agent-factory factory metadata is missing the factory name.
 src/features/timeline/state/timeline/replayGraphState.ts|220|10|string-literal|:resource:
 src/features/trace-drilldown/components/trace-workstation-path.tsx|280|67|string-literal|Unknown workstation
-src/features/trace-drilldown/components/trace-workstation-path.tsx|431|12|string-literal|border-af-overlay/10 bg-af-canvas
-src/features/trace-drilldown/components/trace-workstation-path.tsx|435|12|string-literal|border-af-danger/24 bg-af-danger/6
-src/features/trace-drilldown/components/trace-workstation-path.tsx|438|10|string-literal|border-af-success/20 bg-af-success/6
+src/features/trace-drilldown/components/trace-workstation-path.tsx|431|12|string-literal|border-af-border bg-af-surface
+src/features/trace-drilldown/components/trace-workstation-path.tsx|435|12|string-literal|border-af-danger-border bg-af-danger-surface
+src/features/trace-drilldown/components/trace-workstation-path.tsx|438|10|string-literal|border-af-success-border bg-af-success-surface
 src/features/trace-drilldown/hooks/useTraceDrilldown.ts|22|20|string-literal|Select active, completed, or failed work to inspect retained trace history.
 src/features/trace-drilldown/hooks/useTraceDrilldown.ts|34|28|string-literal|Select active, completed, or failed work to inspect retained trace history.
 src/features/work-outcome/components/trend-cards.tsx|254|60|jsx-text|retry or rework events
