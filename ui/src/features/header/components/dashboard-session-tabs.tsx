@@ -89,7 +89,6 @@ function DashboardSessionTabsView({
     setDialogOpen,
     setSelectedTargetValue,
     validateFolderMutation,
-    toggleSessionStreamPaused,
   } = state;
 
   useEffect(() => {
@@ -115,14 +114,12 @@ function DashboardSessionTabsView({
             }
             error={sessionsQuery.isError ? sessionsQuery.error : null}
             isPending={sessionsQuery.isPending}
-            isSessionStreamPaused={state.isSessionStreamPaused}
             messages={messages}
             onCloseSession={handleCloseSession}
             onRetry={() => {
               void sessionsQuery.refetch();
             }}
             onSelectSession={setActiveSessionID}
-            onToggleSessionStreamPaused={toggleSessionStreamPaused}
             sessions={sessions}
             streamStatus={streamStatus}
           />
@@ -197,12 +194,10 @@ function SessionTabsContent({
   closingSessionID,
   error,
   isPending,
-  isSessionStreamPaused,
   messages,
   onCloseSession,
   onRetry,
   onSelectSession,
-  onToggleSessionStreamPaused,
   sessions,
   streamStatus,
 }: {
@@ -210,12 +205,10 @@ function SessionTabsContent({
   closingSessionID: string | null;
   error: unknown;
   isPending: boolean;
-  isSessionStreamPaused: (sessionID: string) => boolean;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onCloseSession: (sessionID: string) => void;
   onRetry: () => void;
   onSelectSession: (sessionID: string) => void;
-  onToggleSessionStreamPaused: (sessionID: string) => void;
   sessions: FactorySessionSummary[];
   streamStatus: DashboardStreamState["status"];
 }) {
@@ -312,16 +305,13 @@ function SessionTabsContent({
                     return;
                 }
               }}
-              onSelect={onSelectSession}
-              panelID={sessionPanelID(sessionTabsID, session.id)}
+              onClick={() => {
+                onSelectSession(session.id);
+              }}
               closeDisabled={closingSessionID === session.id}
-              isStreamPaused={isSessionStreamPaused(session.id)}
               messages={messages}
               onClose={() => {
                 onCloseSession(session.id);
-              }}
-              onToggleStreamPaused={() => {
-                onToggleSessionStreamPaused(session.id);
               }}
               session={session}
               streamStatus={streamStatus}
@@ -351,12 +341,12 @@ function SessionErrorState({
   onRetry: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <p className={cn("text-sm text-af-ink/72", DASHBOARD_BODY_TEXT_CLASS)}>
+    <div className="flex flex-wrap items-center gap-3">
+      <p className={cn("text-sm text-af-ink/76", DASHBOARD_BODY_TEXT_CLASS)}>
         {label}
       </p>
-      <Button onClick={onRetry} size="sm" type="button" variant="secondary">
-        {messages.sessionsRetryLabel}
+      <Button onClick={onRetry} size="sm" tone="outline">
+        {messages.retrySessionsLabel}
       </Button>
     </div>
   );
