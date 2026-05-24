@@ -11,6 +11,7 @@ export interface ActivityGraphNodeHandle {
   buttonPressed?: boolean;
   buttonTitle?: string;
   connectable?: boolean;
+  hidden?: boolean;
   id: string;
   label: string;
   onButtonClick?: () => void;
@@ -36,8 +37,7 @@ export function ActivityGraphNodeShell({
   nodeType,
   outgoingHandleCount,
 }: ActivityGraphNodeShellProps) {
-  const leftHandles =
-    handles?.filter((handle) => handle.side === "left") ?? [];
+  const leftHandles = handles?.filter((handle) => handle.side === "left") ?? [];
   const rightHandles =
     handles?.filter((handle) => handle.side === "right") ?? [];
 
@@ -49,50 +49,48 @@ export function ActivityGraphNodeShell({
       )}
       data-current-activity-node-type={nodeType}
     >
-      {handles
-        ? leftHandles.map((handle, handleNumber) => (
-            <NodeHandleBadge
-              handle={handle}
-              key={handle.id}
-              top={handlePosition(handleNumber, leftHandles.length)}
-            />
-          ))
-        : Array.from({ length: incomingHandleCount }, (_, handleNumber) => {
-            const top = handlePosition(handleNumber, incomingHandleCount);
-            const handleId = `in-${handleNumber}`;
-            return (
-              <Handle
-                className="opacity-0"
-                id={handleId}
-                key={`incoming-${top}`}
-                position={Position.Left}
-                style={{ top }}
-                type="target"
-              />
-            );
-          })}
-      {handles
-        ? rightHandles.map((handle, handleNumber) => (
-            <NodeHandleBadge
-              handle={handle}
-              key={handle.id}
-              top={handlePosition(handleNumber, rightHandles.length)}
-            />
-          ))
-        : Array.from({ length: outgoingHandleCount }, (_, handleNumber) => {
-            const top = handlePosition(handleNumber, outgoingHandleCount);
-            const handleId = `out-${handleNumber}`;
-            return (
-              <Handle
-                className="opacity-0"
-                id={handleId}
-                key={`outgoing-${top}`}
-                position={Position.Right}
-                style={{ top }}
-                type="source"
-              />
-            );
-          })}
+      {leftHandles.map((handle, handleNumber) => (
+        <NodeHandleBadge
+          handle={handle}
+          key={handle.id}
+          top={handlePosition(handleNumber, leftHandles.length)}
+        />
+      ))}
+      {Array.from({ length: incomingHandleCount }, (_, handleNumber) => {
+        const top = handlePosition(handleNumber, incomingHandleCount);
+        const handleId = `in-${handleNumber}`;
+        return (
+          <Handle
+            className="pointer-events-none opacity-0"
+            id={handleId}
+            key={`incoming-${top}`}
+            position={Position.Left}
+            style={{ top }}
+            type="target"
+          />
+        );
+      })}
+      {rightHandles.map((handle, handleNumber) => (
+        <NodeHandleBadge
+          handle={handle}
+          key={handle.id}
+          top={handlePosition(handleNumber, rightHandles.length)}
+        />
+      ))}
+      {Array.from({ length: outgoingHandleCount }, (_, handleNumber) => {
+        const top = handlePosition(handleNumber, outgoingHandleCount);
+        const handleId = `out-${handleNumber}`;
+        return (
+          <Handle
+            className="pointer-events-none opacity-0"
+            id={handleId}
+            key={`outgoing-${top}`}
+            position={Position.Right}
+            style={{ top }}
+            type="source"
+          />
+        );
+      })}
       {children}
     </article>
   );
@@ -110,6 +108,18 @@ function NodeHandleBadge({
   top: string;
 }) {
   const position = handle.side === "left" ? Position.Left : Position.Right;
+  if (handle.hidden) {
+    return (
+      <Handle
+        className="pointer-events-none opacity-0"
+        id={handle.id}
+        isConnectable={handle.connectable ?? false}
+        position={position}
+        style={{ top }}
+        type={handle.type}
+      />
+    );
+  }
   const wrapperClassName =
     handle.side === "left"
       ? "-translate-x-1 flex-row"

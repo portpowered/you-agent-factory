@@ -13,19 +13,21 @@ import {
   semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,
 } from "../../../components/dashboard/test-fixtures";
-import type { GraphLayout } from "../../flowchart/lib/layout";
 import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
-import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/public";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
+import {
+  createEmptyFactoryGraphDraft,
+  useFactoryGraphDraftState,
+} from "../../factory-graph-editor/public";
+import type { GraphLayout } from "../../flowchart/lib/layout";
+import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
+import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import {
   ReactFlowCurrentActivityCard,
   useCurrentActivityGraphViewModel,
 } from "./react-flow-current-activity-card";
-import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
-import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 type BuildGraphLayout = (
@@ -77,11 +79,7 @@ vi.mock("@xyflow/react", async () => {
         data-testid="graph-background"
       />
     ),
-    Controls: ({
-      style,
-    }: {
-      style?: Record<string, string | number>;
-    }) => (
+    Controls: ({ style }: { style?: Record<string, string | number> }) => (
       <div
         data-controls-style={JSON.stringify(style ?? null)}
         data-testid="graph-controls"
@@ -202,7 +200,9 @@ vi.mock("./react-flow-current-activity-card-import", () => ({
 }));
 
 vi.mock("../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual("../../current-factory-definition/public");
+  const actual = await vi.importActual(
+    "../../current-factory-definition/public",
+  );
 
   return {
     ...actual,
@@ -212,9 +212,7 @@ vi.mock("../../current-factory-definition/public", async () => {
 });
 
 vi.mock("../../factory-graph-editor/public", async () => {
-  const actual = await vi.importActual(
-    "../../factory-graph-editor/public",
-  );
+  const actual = await vi.importActual("../../factory-graph-editor/public");
 
   return {
     ...actual,
@@ -298,6 +296,17 @@ function createProps(
   };
 }
 
+function createEditorStub(overrides: Record<string, unknown> = {}) {
+  return {
+    activeTool: null,
+    canInteractWithEditor: false,
+    editorMode: false,
+    handleConnectionAnchorClick: vi.fn(),
+    pendingConnectionSource: null,
+    ...overrides,
+  };
+}
+
 describe("ReactFlowCurrentActivityCard coverage", () => {
   beforeEach(() => {
     mockBuildGraphLayout.mockReset();
@@ -361,6 +370,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     const { result, rerender } = renderHook(
       ({ snapshot }) =>
         useCurrentActivityGraphViewModel({
+          editor: createEditorStub() as never,
           now: Date.parse("2026-04-08T12:00:00Z"),
           onSelectStateNode,
           onSelectWorkID,
@@ -414,20 +424,28 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(screen.getByTestId("graph-background")).toBeTruthy();
     expect(screen.getByTestId("graph-controls")).toBeTruthy();
     expect(
-      screen.getByTestId("graph-background").getAttribute("data-background-color"),
+      screen
+        .getByTestId("graph-background")
+        .getAttribute("data-background-color"),
     ).toBe("var(--color-af-edge-muted-soft)");
     expect(
-      screen.getByTestId("graph-background").getAttribute("data-background-gap"),
+      screen
+        .getByTestId("graph-background")
+        .getAttribute("data-background-gap"),
     ).toBe("24");
     expect(
-      screen.getByTestId("graph-background").getAttribute("data-background-size"),
+      screen
+        .getByTestId("graph-background")
+        .getAttribute("data-background-size"),
     ).toBe("1");
     expect(
       screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
-    ).toContain("\"backgroundColor\":\"rgb(from var(--color-af-surface) r g b / 0.88)\"");
+    ).toContain(
+      '"backgroundColor":"rgb(from var(--color-af-surface) r g b / 0.88)"',
+    );
     expect(
       screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
-    ).toContain("\"borderRadius\":8");
+    ).toContain('"borderRadius":8');
   });
 
   it("renders the compact editor toolbar inside the graph card without duplicate add controls", () => {
@@ -451,9 +469,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(
       within(toolbar).getByRole("button", { name: "Delete" }),
     ).toBeTruthy();
-    expect(
-      within(toolbar).queryByRole("button", { name: "Add" }),
-    ).toBeNull();
+    expect(within(toolbar).queryByRole("button", { name: "Add" })).toBeNull();
   });
 
   it("skips node-position persistence when the viewport has no graph key", () => {
@@ -670,11 +686,15 @@ function renderViewport({
   onEditorNodeClick,
 }: {
   activeTool?: "add" | "connect" | "delete" | null;
-  addMenuActions?: Parameters<typeof CurrentActivityGraphViewport>[0]["addMenuActions"];
+  addMenuActions?: Parameters<
+    typeof CurrentActivityGraphViewport
+  >[0]["addMenuActions"];
   editorMode?: boolean;
   graphKey: string;
   nodes?: Parameters<typeof CurrentActivityGraphViewport>[0]["nodes"];
-  onAddAction?: Parameters<typeof CurrentActivityGraphViewport>[0]["onAddAction"];
+  onAddAction?: Parameters<
+    typeof CurrentActivityGraphViewport
+  >[0]["onAddAction"];
   onConnect?: Parameters<typeof CurrentActivityGraphViewport>[0]["onConnect"];
   onEditorEdgeClick?: Parameters<
     typeof CurrentActivityGraphViewport

@@ -7,19 +7,23 @@ import {
   getDashboardPlaceLabelParts,
 } from "../../../components/ui/place-labels";
 import { cn } from "../../../lib/cn";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
 import {
+  type ActivityGraphNodeHandle,
   ActivityGraphNodeShell,
   type PlaceNodeType,
 } from "./current-activity-node-shell";
-import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
 import type { GraphSemanticIconKind } from "./graph-semantic-icon";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
 
 export interface BasePlaceNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   activeItemLabels: string[];
+  handles?: ActivityGraphNodeHandle[];
   incomingHandleCount: number;
+  kind?: FactoryGraphNodeKind;
   locale?: string;
   muted: boolean;
   onSelectStateNode?: (placeId: string) => void;
@@ -103,6 +107,7 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
   return (
     <ActivityGraphNodeShell
       className={cn("justify-center text-left", nodeClassName)}
+      handles={data.handles}
       incomingHandleCount={data.incomingHandleCount}
       nodeType={nodeType}
       outgoingHandleCount={data.outgoingHandleCount}

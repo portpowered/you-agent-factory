@@ -1,11 +1,24 @@
-import type { DashboardActiveExecution, DashboardSnapshot } from "../../../api/dashboard/types";
+import type {
+  DashboardActiveExecution,
+  DashboardSnapshot,
+} from "../../../api/dashboard/types";
+import type {
+  GraphLayout,
+  PositionedEdge,
+  PositionedPlaceNode,
+  PositionedWorkstationNode,
+} from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
-import type { GraphLayout, PositionedEdge, PositionedPlaceNode, PositionedWorkstationNode } from "../../flowchart/lib/layout";
 import type { CurrentActivitySelection } from "../components/react-flow-current-activity-card";
 import type {
   GraphNodePosition,
   GraphNodePositions,
 } from "../state/currentActivityGraphStore";
+import {
+  buildEditorHandles,
+  type CurrentActivityEditorState,
+  supportedEditorHandleIdsForEdge,
+} from "./react-flow-current-activity-card-editor-handles";
 
 export const EMPTY_GRAPH_LAYOUT: GraphLayout = {
   edges: [],
@@ -61,6 +74,7 @@ function placeGraphNodeId(placeId: string): string {
 
 export function buildHandleAssignments(
   edges: PositionedEdge[],
+  options?: { editorMode?: boolean },
 ): HandleAssignments {
   const incomingHandleCounts = new Map<string, number>();
   const outgoingHandleCounts = new Map<string, number>();
@@ -70,9 +84,19 @@ export function buildHandleAssignments(
   for (const edge of edges) {
     const sourceIndex = outgoingHandleCounts.get(edge.fromNodeId) ?? 0;
     const targetIndex = incomingHandleCounts.get(edge.toNodeId) ?? 0;
+    const supportedHandles =
+      options?.editorMode === true
+        ? supportedEditorHandleIdsForEdge(edge)
+        : null;
 
-    sourceHandlesByEdgeId.set(edge.edgeId, `out-${sourceIndex}`);
-    targetHandlesByEdgeId.set(edge.edgeId, `in-${targetIndex}`);
+    sourceHandlesByEdgeId.set(
+      edge.edgeId,
+      supportedHandles?.sourceHandleId ?? `out-${sourceIndex}`,
+    );
+    targetHandlesByEdgeId.set(
+      edge.edgeId,
+      supportedHandles?.targetHandleId ?? `in-${targetIndex}`,
+    );
     outgoingHandleCounts.set(edge.fromNodeId, sourceIndex + 1);
     incomingHandleCounts.set(edge.toNodeId, targetIndex + 1);
   }
@@ -211,6 +235,7 @@ interface BuildCurrentActivityNodesInput {
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
   onSelectWorkstation: (nodeId: string) => void;
+  editor?: CurrentActivityEditorState;
   selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;
   storedNodePositions: GraphNodePositions;
@@ -241,8 +266,15 @@ function buildPlaceNode(
     activeFlow: input.activeGraphHighlights.activePlaceNodeIds.has(
       positionedNode.nodeId,
     ),
-    activeItemLabels:
-      input.activeItemLabelsByPlaceId.get(place.place_id) ?? [],
+    activeItemLabels: input.activeItemLabelsByPlaceId.get(place.place_id) ?? [],
+    handles:
+      input.editor?.editorMode && place.kind === "work_state"
+        ? buildEditorHandles({
+            editor: input.editor,
+            nodeId: positionedNode.nodeId,
+            nodeKind: "work-state",
+          })
+        : undefined,
     incomingHandleCount:
       input.handleAssignments.incomingHandleCounts.get(positionedNode.nodeId) ??
       1,
@@ -266,6 +298,7 @@ function buildPlaceNode(
       ...basePlaceNode,
       data: {
         ...basePlaceData,
+        kind: "work-state" as const,
         onSelectStateNode: input.onSelectStateNode,
         place,
       },
@@ -319,9 +352,18 @@ function buildWorkstationNode(
         positionedNode.nodeId,
       ),
       executions,
+      handles: input.editor?.editorMode
+        ? buildEditorHandles({
+            editor: input.editor,
+            nodeId: positionedNode.nodeId,
+            nodeKind: "workstation",
+          })
+        : undefined,
       incomingHandleCount:
-        input.handleAssignments.incomingHandleCounts.get(positionedNode.nodeId) ??
-        1,
+        input.handleAssignments.incomingHandleCounts.get(
+          positionedNode.nodeId,
+        ) ?? 1,
+      kind: "workstation",
       locale: input.locale,
       muted:
         input.activeGraphHighlights.hasActiveFlow &&
@@ -330,8 +372,9 @@ function buildWorkstationNode(
       onSelectWorkID: input.onSelectWorkID,
       onSelectWorkstation: input.onSelectWorkstation,
       outgoingHandleCount:
-        input.handleAssignments.outgoingHandleCounts.get(positionedNode.nodeId) ??
-        1,
+        input.handleAssignments.outgoingHandleCounts.get(
+          positionedNode.nodeId,
+        ) ?? 1,
       selectedWorkID:
         input.selection?.kind === "work-item" &&
         input.selection.nodeId === workstation.node_id
@@ -362,6 +405,7 @@ export function buildCurrentActivityNodes({
   activeExecutionsByWorkstationNodeID,
   activeGraphHighlights,
   activeItemLabelsByPlaceId,
+  editor,
   graphLayout,
   handleAssignments,
   locale,
@@ -378,6 +422,7 @@ export function buildCurrentActivityNodes({
     activeExecutionsByWorkstationNodeID,
     activeGraphHighlights,
     activeItemLabelsByPlaceId,
+    editor,
     graphLayout,
     handleAssignments,
     locale,
@@ -392,7 +437,9 @@ export function buildCurrentActivityNodes({
 
   for (const positionedNode of graphLayout.nodes) {
     if (positionedNode.nodeKind !== "workstation") {
-      nextNodes.push(buildPlaceNode(positionedNode as PositionedPlaceNode, input));
+      nextNodes.push(
+        buildPlaceNode(positionedNode as PositionedPlaceNode, input),
+      );
       continue;
     }
 
