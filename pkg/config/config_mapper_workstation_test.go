@@ -180,6 +180,47 @@ func TestConfigMapping_WorkstationKindPollerUsesImplicitFailureRouting(t *testin
 	}
 }
 
+func TestConfigMapping_CronWithoutRequiredInputsUsesOutputWorkTypeForImplicitFailureRouting(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{
+			Name: "cron-worker",
+			Type: interfaces.WorkerTypeModel,
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "poll-for-work",
+			Kind:           interfaces.WorkstationKindCron,
+			WorkerTypeName: "cron-worker",
+			Cron:           &interfaces.CronConfig{Schedule: "* * * * *", TriggerAtStart: true},
+			Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+		}},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tr := net.Transitions["poll-for-work"]
+	if tr == nil {
+		t.Fatal("expected mapped transition for poll-for-work")
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("cron failure arcs = %+v, want output-derived failed-state routing", tr.FailureArcs)
+	}
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("cron rejection arcs = %+v, want cloned failed-state routing", tr.RejectionArcs)
+	}
+}
+
 func TestConfigMapping_ModelInvokeWorkstationUsesImplicitFailureRouting(t *testing.T) {
 	input := &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{{

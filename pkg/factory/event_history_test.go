@@ -9,6 +9,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 
@@ -157,6 +158,59 @@ func TestFactoryEventHistory_RecordInitialStructure_PreservesNonSuccessRouteArra
 	if workstation.OnFailure == nil || !reflect.DeepEqual(*workstation.OnFailure, []factoryapi.WorkstationIO{{WorkType: "story", State: "failed"}, {WorkType: "story", State: "abandoned"}}) {
 		t.Fatalf("workstation onFailure = %#v, want authored route array", workstation.OnFailure)
 	}
+}
+
+func TestFactoryEventHistory_RecordInitialStructure_ProjectsImplicitCronFailureRoutes(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "queued", Type: interfaces.StateTypeInitial},
+				{Name: "done", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "cron-worker"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "poll-for-work",
+			Kind:           interfaces.WorkstationKindCron,
+			WorkerTypeName: "cron-worker",
+			Cron:           &interfaces.CronConfig{Schedule: "* * * * *", TriggerAtStart: true},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		}},
+	}
+	mapper := &factoryconfig.ConfigMapper{}
+	net, err := mapper.Map(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Map: %v", err)
+	}
+
+	history := NewFactoryEventHistory(net, func() time.Time { return time.Unix(0, 0).UTC() })
+	history.RecordInitialStructure()
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsInitialStructureRequestEventPayload()
+	if err != nil {
+		t.Fatalf("initial structure payload: %v", err)
+	}
+	if payload.Factory.Workstations == nil {
+		t.Fatalf("workstations = %#v, want generated workstations", payload.Factory.Workstations)
+	}
+
+	want := []factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}}
+	for _, workstation := range *payload.Factory.Workstations {
+		if workstation.Name != "poll-for-work" {
+			continue
+		}
+		if workstation.OnFailure == nil || !reflect.DeepEqual(*workstation.OnFailure, want) {
+			t.Fatalf("workstation onFailure = %#v, want implicit failed-state route", workstation.OnFailure)
+		}
+		return
+	}
+	t.Fatalf("workstations = %#v, want generated cron workstation", payload.Factory.Workstations)
 }
 
 func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnumPointerValues(t *testing.T) {

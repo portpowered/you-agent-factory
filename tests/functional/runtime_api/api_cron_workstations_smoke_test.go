@@ -13,6 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -155,6 +157,45 @@ func TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutpu
 	assertCronTimeWorkRetainedInCanonicalHistory(t, fs, firstRecord.Request.WorkID, "poll-terminal-output")
 }
 
+func TestCronWorkstations_ServiceModeImplicitFailureRoutingMovesFailedCronWorkIntoFailedState(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 14, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	dir := support.ScaffoldFactory(t, cronImplicitFailureFactoryConfig("* * * * *"))
+	support.WriteAgentConfig(t, dir, "cron-worker", `---
+type: MODEL_WORKER
+executorProvider: codex-cli
+modelProvider: openai
+model: gpt-5.4
+stopToken: COMPLETE
+---
+Fail the cron task.
+`)
+
+	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 32)
+	fs := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.Clock = fakeClock
+		cfg.ProviderCommandRunnerOverride = testutil.NewProviderCommandRunner(workers.CommandResult{
+			Stderr:   []byte("cron worker unavailable"),
+			ExitCode: 1,
+		})
+	}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+		observedSubmissions <- record
+	}))
+
+	startupRecord := waitForCronSubmissionFromWorkstation(t, observedSubmissions, "fail-cron", start, time.Second)
+	assertCronSubmissionRecord(t, startupRecord, "fail-cron", start)
+	waitForCronDispatch(t, fs, "fail-cron", startupRecord.Request.WorkID, time.Second)
+
+	failedToken := waitForTokenInPlaceByParent(t, fs, "task:failed", startupRecord.Request.WorkID, time.Second)
+	if failedToken.Color.WorkTypeID != "task" {
+		t.Fatalf("failed cron output work type = %q, want task", failedToken.Color.WorkTypeID)
+	}
+	if failedToken.History.LastError == "" {
+		t.Fatalf("failed cron token history = %#v, want last error evidence", failedToken.History)
+	}
+}
+
 func assertExpiredCronTimeWorkHandled(t *testing.T, fs *functionalAPIServer, expiredTimeWorkID string, workstation string) {
 	t.Helper()
 
@@ -251,6 +292,36 @@ func cronDefaultExpiryTerminalOutputConfig(schedule string) map[string]any {
 				"cron":     map[string]any{"schedule": schedule, "triggerAtStart": true},
 				"inputs":   []map[string]string{{"workType": "signal", "state": "init"}},
 				"outputs":  []map[string]string{{"workType": "task", "state": "complete"}},
+			},
+		},
+	}
+}
+
+func cronImplicitFailureFactoryConfig(schedule string) map[string]any {
+	return map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{{"name": "cron-worker"}},
+		"workstations": []map[string]any{
+			{
+				"name":     "fail-cron",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron": map[string]any{
+					"schedule":       schedule,
+					"triggerAtStart": true,
+					"expiryWindow":   "10s",
+				},
+				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
 			},
 		},
 	}
