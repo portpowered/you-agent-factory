@@ -85,7 +85,14 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make verify-build-contracts` is the repository-owned build-contract lane used by CI after dependency setup. It runs `make typecheck`, `make ui-build`, `make build`, `make lint`, and `make api-smoke` in the same order the `verify-build-contracts` GitHub Actions job enforces.
 
-`make verify-tests` is the repository-owned test lane used by CI after Playwright setup. It runs `make ui-test`, `make ui-test-coverage`, `make ui-replay-coverage-check`, `make test-coverage-go`, and `make test-functional`.
+`make verify-tests` is the repository-owned test aggregate used by CI after Playwright setup. It runs `make test-ui-coverage`, `make ui-replay-coverage-check`, `make test-ui-browser-integration`, `make test-backend-coverage`, and `make test-backend-functional`.
+
+Use the lane-specific targets below when you need to rerun one required CI lane locally without replaying the full suite:
+
+- `make test-ui-coverage` for the jsdom-oriented dashboard coverage lane.
+- `make test-ui-browser-integration` for the browser-backed dashboard integration lane.
+- `make test-backend-coverage` for the backend coverage lane.
+- `make test-backend-functional` for the backend functional verification lane.
 
 `make verify` composes both aggregate lanes for a full review-ready local pass once dependencies and browser prerequisites are already installed. It does not install packages or browsers itself, so routine verification stays network-free after setup.
 

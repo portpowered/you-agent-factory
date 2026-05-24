@@ -28,6 +28,10 @@ const ChartContext = createContext<ChartConfig | null>(null);
 // tailwind-exception: intrinsic-sizing
 const CHART_CONTAINER_CLASS =
   "relative h-[18rem] rounded-2xl border border-af-overlay/10 bg-af-surface/56 p-4 text-af-ink";
+const DEFAULT_RESPONSIVE_CHART_DIMENSION = {
+  height: 288,
+  width: 960,
+} as const;
 
 function useChartConfig() {
   const context = useContext(ChartContext);
@@ -84,6 +88,7 @@ export function ChartContainer({
         ) : null}
         <ResponsiveContainer
           height="100%"
+          initialDimension={DEFAULT_RESPONSIVE_CHART_DIMENSION}
           minHeight={0}
           minWidth={0}
           width="100%"

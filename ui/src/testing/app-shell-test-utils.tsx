@@ -103,6 +103,16 @@ type CurrentFactoryDocumentResult = ReturnType<typeof useCurrentFactoryDocument>
 const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
+const defaultFactorySessionSummary = {
+  factoryDir: "/workspace/root",
+  folderPath: "/workspace/root",
+  id: DEFAULT_FACTORY_SESSION_ID,
+  isDefault: true,
+  project: "root",
+  target: {
+    kind: "default" as const,
+  },
+};
 
 export const baselineSnapshot = buildDashboardSnapshotFixture(
   mediumBranchingDashboardTopology,
@@ -274,6 +284,12 @@ export function renderApp({
           : input instanceof URL
             ? `${input.pathname}${input.search}`
             : input.url;
+
+      if (path === "/factory-sessions") {
+        return jsonResponse({
+          sessions: [defaultFactorySessionSummary],
+        });
+      }
 
       throw new Error(`unexpected fetch for ${path}`);
     });
