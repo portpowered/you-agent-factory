@@ -21,9 +21,7 @@ export async function expectCompactedTopDashboardSection(
   const slider = within(toolbar).getByRole("slider", {
     name: "Timeline tick",
   });
-  const currentButton = within(toolbar).getByRole("button", {
-    name: "Return to current tick",
-  });
+  const progressText = within(toolbar).getByText("5/5");
   const languageButton = within(toolbar).getByRole("button", {
     name: "Change language",
   });
@@ -43,7 +41,10 @@ export async function expectCompactedTopDashboardSection(
   expect(board.contains(workTotals)).toBe(true);
   expect(board.contains(graphCard)).toBe(true);
   expect(slider).toBeVisible();
-  expect(currentButton).toBeVisible();
+  expect(progressText).toBeVisible();
+  expect(
+    within(toolbar).queryByRole("button", { name: "Return to current tick" }),
+  ).toBeNull();
   expect(languageButton).toBeVisible();
   expect(exportButton).toBeVisible();
   expect(streamStatus).toBeVisible();

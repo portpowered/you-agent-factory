@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	factorypkg "github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -85,10 +86,10 @@ func (t *Transformer) InitialTokenFromSubmit(req interfaces.SubmitRequest, now t
 			PreviousChainingTraceIDs: interfaces.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
 			TraceID:                  req.TraceID,
 			ParentID:                 submitParentID(req.Relations),
-			Tags:                     cloneTags(req.Tags),
-			Relations:                cloneRelations(req.Relations),
+			Tags:                     factorypkg.CloneRuntimeTags(req.Tags),
+			Relations:                factorypkg.CloneRuntimeRelations(req.Relations),
 			Content:                  cloneWorkContent(req.Content),
-			Payload:                  clonePayload(req.Payload),
+			Payload:                  factorypkg.CloneRuntimePayload(req.Payload),
 		},
 		CreatedAt: now,
 		EnteredAt: now,
@@ -428,31 +429,4 @@ func submitParentID(relations []interfaces.Relation) string {
 		}
 	}
 	return ""
-}
-
-func cloneTags(tags map[string]string) map[string]string {
-	if tags == nil {
-		return nil
-	}
-	out := make(map[string]string, len(tags))
-	for key, value := range tags {
-		out[key] = value
-	}
-	return out
-}
-
-func cloneRelations(relations []interfaces.Relation) []interfaces.Relation {
-	if relations == nil {
-		return nil
-	}
-	out := make([]interfaces.Relation, len(relations))
-	copy(out, relations)
-	return out
-}
-
-func clonePayload(payload []byte) []byte {
-	if payload == nil {
-		return nil
-	}
-	return append([]byte(nil), payload...)
 }

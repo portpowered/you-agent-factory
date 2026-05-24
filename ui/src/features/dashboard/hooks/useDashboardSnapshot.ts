@@ -27,6 +27,20 @@ export interface UseDashboardSnapshotOptions {
   refreshToken?: number;
 }
 
+interface DashboardStreamConnectionOptions {
+  debugOptions: ReturnType<typeof readFactoryTimelineDebugOptions>;
+  flushHandleRef: RefObject<number | null>;
+  flushQueuedEvents: () => void;
+  queryClient: ReturnType<typeof useQueryClient>;
+  queuedEventsRef: RefObject<FactoryEvent[]>;
+  refreshToken: number;
+  resetStreamState: () => void;
+  resetTimeline: () => void;
+  scheduleQueuedFlush: () => void;
+  selectedSessionID: string | null;
+  setStreamState: (streamState: ReturnType<typeof useDashboardStreamStore.getState>["streamState"]) => void;
+}
+
 function resetDashboardSessionScopedState(
   queryClient: ReturnType<typeof useQueryClient>,
   resetStreamState: () => void,
@@ -59,6 +73,7 @@ function clearQueuedFlush(flushHandleRef: RefObject<number | null>): void {
 
 function resetDashboardSessionStateForSelectionChange({
   hasOpenedStreamRef,
+  previousSessionKey,
   queryClient,
   queuedEventsRef,
   refreshToken,
@@ -67,6 +82,7 @@ function resetDashboardSessionStateForSelectionChange({
   selectedSessionID,
 }: {
   hasOpenedStreamRef: RefObject<boolean>;
+  previousSessionKey: string | null;
   queryClient: ReturnType<typeof useQueryClient>;
   queuedEventsRef: RefObject<FactoryEvent[]>;
   refreshToken: number;
@@ -76,18 +92,155 @@ function resetDashboardSessionStateForSelectionChange({
 }): boolean {
   if (selectedSessionID == null) {
     queuedEventsRef.current = [];
+    hasOpenedStreamRef.current = false;
     resetDashboardSessionScopedState(queryClient, resetStreamState, resetTimeline);
     return false;
   }
 
-  if (hasOpenedStreamRef.current || refreshToken !== 0) {
+  if (previousSessionKey !== null || refreshToken !== 0) {
     queuedEventsRef.current = [];
     resetDashboardSessionScopedState(queryClient, resetStreamState, resetTimeline);
-  } else {
-    hasOpenedStreamRef.current = true;
   }
+  hasOpenedStreamRef.current = true;
 
   return true;
+}
+
+function pausedDashboardStreamState() {
+  return {
+    status: "offline" as const,
+    // hardcoded-ui-copy-exception: non-product-diagnostic
+    message: "Live session updates paused. Showing last event state.",
+  };
+}
+
+function dashboardSessionKey(
+  selectedSessionID: string | null,
+  refreshToken: number,
+): string | null {
+  return selectedSessionID == null ? null : `${selectedSessionID}::${refreshToken}`;
+}
+
+function useDashboardStreamConnection({
+  debugOptions,
+  flushHandleRef,
+  flushQueuedEvents,
+  queryClient,
+  queuedEventsRef,
+  refreshToken,
+  resetStreamState,
+  resetTimeline,
+  scheduleQueuedFlush,
+  selectedSessionID,
+  setStreamState,
+}: DashboardStreamConnectionOptions) {
+  const isSessionStreamPaused = useDashboardSessionStore((state) =>
+    selectedSessionID == null
+      ? false
+      : state.pausedSessionIDs.includes(selectedSessionID),
+  );
+  const hasOpenedStreamRef = useRef(false);
+  const lastSessionKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const sessionKey = dashboardSessionKey(selectedSessionID, refreshToken);
+    const previousSessionKey = lastSessionKeyRef.current;
+    const sessionSelectionChanged = sessionKey !== previousSessionKey;
+    lastSessionKeyRef.current = sessionKey;
+
+    if (!sessionSelectionChanged && isSessionStreamPaused) {
+      setStreamState(pausedDashboardStreamState());
+      return;
+    }
+
+    if (!sessionSelectionChanged && !isSessionStreamPaused && selectedSessionID == null) {
+      return;
+    }
+
+    const shouldOpenStream = resetDashboardSessionStateForSelectionChange({
+      hasOpenedStreamRef,
+      previousSessionKey: sessionSelectionChanged ? previousSessionKey : null,
+      queryClient,
+      queuedEventsRef,
+      refreshToken,
+      resetStreamState,
+      resetTimeline,
+      selectedSessionID,
+    });
+    if (!shouldOpenStream || selectedSessionID == null) {
+      return;
+    }
+    if (isSessionStreamPaused) {
+      setStreamState(pausedDashboardStreamState());
+      return;
+    }
+
+    const stream = openFactoryEventStream(
+      (event) => {
+        syncCurrentFactoryDefinition(queryClient, event, selectedSessionID);
+        queuedEventsRef.current.push(
+          compactFactoryEventForTimeline(event, debugOptions),
+        );
+        scheduleQueuedFlush();
+      },
+      (status, message) => {
+        setStreamState({ status, message });
+      },
+      selectedSessionID,
+    );
+    return () => {
+      clearQueuedFlush(flushHandleRef);
+      flushQueuedEvents();
+      stream?.close();
+    };
+  }, [
+    debugOptions,
+    flushHandleRef,
+    flushQueuedEvents,
+    isSessionStreamPaused,
+    queryClient,
+    queuedEventsRef,
+    refreshToken,
+    resetStreamState,
+    resetTimeline,
+    scheduleQueuedFlush,
+    selectedSessionID,
+    setStreamState,
+  ]);
+}
+
+function useDashboardTimelineMemoryDebug({
+  debugOptions,
+  eventCount,
+}: {
+  debugOptions: ReturnType<typeof readFactoryTimelineDebugOptions>;
+  eventCount: number;
+}) {
+  useEffect(() => {
+    if (typeof window === "undefined" || !debugOptions.memoryDebug) {
+      return;
+    }
+
+    installFactoryTimelineDebugGlobal(
+      window,
+      () => useFactoryTimelineStore.getState(),
+      debugOptions,
+    );
+  }, [debugOptions]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !debugOptions.memoryDebug || eventCount === 0) {
+      return;
+    }
+
+    const state = useFactoryTimelineStore.getState();
+    const summary = summarizeFactoryTimelineMemory(
+      state.events,
+      state.selectedTick,
+      window,
+    );
+    persistFactoryTimelineMemorySummary(window.localStorage, summary);
+  }, [debugOptions, eventCount]);
 }
 
 export function useDashboardSnapshot({
@@ -107,7 +260,6 @@ export function useDashboardSnapshot({
   );
   const queuedEventsRef = useRef<FactoryEvent[]>([]);
   const flushHandleRef = useRef<number | null>(null);
-  const hasOpenedStreamRef = useRef(false);
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);
 
   const flushQueuedEvents = useCallback(() => {
@@ -136,78 +288,29 @@ export function useDashboardSnapshot({
   }, [flushQueuedEvents]);
 
   useEffect(() => {
-    const shouldOpenStream = resetDashboardSessionStateForSelectionChange({
-      hasOpenedStreamRef,
-      queryClient,
-      queuedEventsRef,
-      refreshToken,
-      resetStreamState,
-      resetTimeline,
-      selectedSessionID,
-    });
-    if (!shouldOpenStream) {
-      return;
-    }
-    if (selectedSessionID == null) {
-      return;
-    }
-    const sessionID = selectedSessionID;
-
-    const stream = openFactoryEventStream(
-      (event) => {
-        syncCurrentFactoryDefinition(queryClient, event, sessionID);
-        queuedEventsRef.current.push(
-          compactFactoryEventForTimeline(event, debugOptions),
-        );
-        scheduleQueuedFlush();
-      },
-      (status, message) => {
-        setStreamState({ status, message });
-      },
-      sessionID,
-    );
     return () => {
       clearQueuedFlush(flushHandleRef);
-      flushQueuedEvents();
-      stream?.close();
     };
-  }, [
+  }, []);
+
+  useDashboardStreamConnection({
     debugOptions,
+    flushHandleRef,
     flushQueuedEvents,
+    queryClient,
+    queuedEventsRef,
     refreshToken,
     resetStreamState,
     resetTimeline,
     scheduleQueuedFlush,
     setStreamState,
-    queryClient,
     selectedSessionID,
-  ]);
+  });
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !debugOptions.memoryDebug) {
-      return;
-    }
-
-    installFactoryTimelineDebugGlobal(
-      window,
-      () => useFactoryTimelineStore.getState(),
-      debugOptions,
-    );
-  }, [debugOptions]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !debugOptions.memoryDebug || eventCount === 0) {
-      return;
-    }
-
-    const state = useFactoryTimelineStore.getState();
-    const summary = summarizeFactoryTimelineMemory(
-      state.events,
-      state.selectedTick,
-      window,
-    );
-    persistFactoryTimelineMemorySummary(window.localStorage, summary);
-  }, [debugOptions, eventCount]);
+  useDashboardTimelineMemoryDebug({
+    debugOptions,
+    eventCount,
+  });
 
   const isInitialLoading =
     selectedSessionID != null && selectedTick === 0 && eventCount === 0;

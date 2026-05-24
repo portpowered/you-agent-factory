@@ -271,7 +271,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 		Resources:             resourceRequirementsAPIFromInternal(normalized.Resources),
 		CopyReferencedScripts: boolPtrIfTrue(normalized.CopyReferencedScripts),
 		Guards:                workstationGuardsAPIFromInternal(normalized.Guards),
-		StopWords:             stringSlicePtr(mergeCanonicalStopWords(normalized.StopWords, normalized.RuntimeStopWords)),
+		StopWords:             stringSlicePtr(mergeStopWords(normalized.StopWords, normalized.RuntimeStopWords)),
 		Env:                   stringMapPtr(normalized.Env),
 		Body:                  stringPtrIfNotEmpty(promptBody),
 		Limits:                workstationLimitsAPIFromInternal(normalized.Limits),
@@ -527,28 +527,6 @@ func modelOperationContentTypesAPIFromInternal(contentTypes []string) []factorya
 		values[i] = publicFactoryModelOperationContentTypeFromInternal(contentType)
 	}
 	return values
-}
-
-func mergeCanonicalStopWords(base []string, extra []string) []string {
-	if len(base) == 0 {
-		return append([]string(nil), extra...)
-	}
-	if len(extra) == 0 {
-		return append([]string(nil), base...)
-	}
-	out := append([]string(nil), base...)
-	seen := make(map[string]struct{}, len(base)+len(extra))
-	for _, word := range base {
-		seen[word] = struct{}{}
-	}
-	for _, word := range extra {
-		if _, ok := seen[word]; ok {
-			continue
-		}
-		out = append(out, word)
-		seen[word] = struct{}{}
-	}
-	return out
 }
 
 func workstationLimitsAPIFromInternal(limits interfaces.WorkstationLimits) *factoryapi.WorkstationLimits {

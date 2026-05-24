@@ -382,13 +382,30 @@ func cloneTags(tags map[string]string) map[string]string {
 	return clone
 }
 
+func cloneRuntimeTokenColors(colors []interfaces.TokenColor) []interfaces.TokenColor {
+	if len(colors) == 0 {
+		return nil
+	}
+
+	cloned := make([]interfaces.TokenColor, len(colors))
+	for i := range colors {
+		cloned[i] = colors[i]
+		cloned[i].PreviousChainingTraceIDs = append([]string(nil), colors[i].PreviousChainingTraceIDs...)
+		cloned[i].Tags = factory.CloneRuntimeTags(colors[i].Tags)
+		cloned[i].Relations = factory.CloneRuntimeRelations(colors[i].Relations)
+		cloned[i].Content = interfaces.CloneWorkContentParts(colors[i].Content)
+		cloned[i].Payload = factory.CloneRuntimePayload(colors[i].Payload)
+	}
+	return cloned
+}
+
 func resolveWorkResult(transition *petri.Transition, result *interfaces.WorkResult, runtimeConfig interfaces.RuntimeWorkstationLookup) resolvedWorkResult {
 	resolved := resolvedWorkResult{
 		dispatchID:         result.DispatchID,
 		transitionID:       result.TransitionID,
 		outcome:            result.Outcome,
 		output:             result.Output,
-		spawnedWork:        result.SpawnedWork,
+		spawnedWork:        cloneRuntimeTokenColors(result.SpawnedWork),
 		recordedOutputWork: cloneFactoryWorkItems(result.RecordedOutputWork),
 		err:                result.Error,
 		feedback:           result.Feedback,

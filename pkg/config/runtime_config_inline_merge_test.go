@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestInlineRuntimeDefinitions_LoadsSplitDefinitionsIntoFactoryConfig(t *testing.T) {
@@ -146,5 +148,42 @@ Fallback body.
 
 	if !reflect.DeepEqual(inlined, merged) {
 		t.Fatalf("inline and lookup-merged factory configs differ\ninline: %#v\nlookup: %#v", inlined, merged)
+	}
+}
+
+func TestFactoryConfigWithRuntimeDefinitions_MergesWorkstationStopWordsAndDetachesSlices(t *testing.T) {
+	factoryCfg := &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:      "execute-story",
+			StopWords: []string{"CANONICAL", "SHARED"},
+		}},
+	}
+	runtimeDefs := &runtimeDefinitionLookupMaps{
+		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"execute-story": {
+				Name:             "execute-story",
+				StopWords:        []string{"RUNTIME", "SHARED"},
+				RuntimeStopWords: []string{"TAIL", "RUNTIME"},
+			},
+		},
+	}
+
+	merged, err := FactoryConfigWithRuntimeDefinitions(factoryCfg, runtimeDefs)
+	if err != nil {
+		t.Fatalf("FactoryConfigWithRuntimeDefinitions: %v", err)
+	}
+
+	got := merged.Workstations[0].StopWords
+	want := []string{"CANONICAL", "SHARED", "RUNTIME", "TAIL"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("merged stopWords mismatch\n got: %#v\nwant: %#v", got, want)
+	}
+
+	factoryCfg.Workstations[0].StopWords[0] = "CHANGED-CANONICAL"
+	runtimeDefs.workstations["execute-story"].StopWords[0] = "CHANGED-RUNTIME"
+	runtimeDefs.workstations["execute-story"].RuntimeStopWords[0] = "CHANGED-TAIL"
+
+	if !reflect.DeepEqual(merged.Workstations[0].StopWords, want) {
+		t.Fatalf("merged stopWords should be detached from source slices\n got: %#v\nwant: %#v", merged.Workstations[0].StopWords, want)
 	}
 }

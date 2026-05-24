@@ -29,7 +29,7 @@ export async function verifyEditorGraphParity(
   page,
   viewport,
 ) {
-  const reviewNode = page.getByTitle(/^review$/);
+  const reviewWorkstationNode = page.getByTestId("rf__node-workstation:review");
   const visibilityPresets = page.getByRole("region", {
     name: "Factory graph visibility presets",
   });
@@ -53,13 +53,13 @@ export async function verifyEditorGraphParity(
     infrastructurePreset,
     "Infrastructure visibility preset",
   );
-  await expectVisible(reviewNode, "Editor workstation node");
+  await expectVisible(reviewWorkstationNode, "Editor workstation node");
 
   await infrastructurePreset.click();
   await expectVisible(page.getByTitle("gpu"), "Infrastructure resource node");
 
   await workflowPreset.click();
-  await reviewNode.waitFor({ state: "visible" });
+  await reviewWorkstationNode.waitFor({ state: "visible" });
   if (await page.getByTitle("gpu").isVisible()) {
     throw new Error(
       "Workflow preset should hide infrastructure-only resource nodes in editor parity verification.",

@@ -8,6 +8,7 @@ import type {
 } from "../src/api/dashboard";
 import type { FactoryEvent } from "../src/api/events";
 import { resetSelectionHistoryStore } from "../src/features/current-selection/state/selectionHistoryStore";
+import { resetDashboardSessionStore } from "../src/features/dashboard/state/dashboardSessionStore";
 import {
   useFactoryTimelineStore,
   type WorldState,
@@ -250,6 +251,7 @@ function timelineSnapshot(
 }
 
 function resetDashboardStoryStores(): void {
+  resetDashboardSessionStore();
   resetSelectionHistoryStore();
   useFactoryTimelineStore.getState().reset();
 }

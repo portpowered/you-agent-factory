@@ -26,6 +26,10 @@ func TestCloneToken_DetachesNestedMutableRuntimeFields(t *testing.T) {
 				Type:         RelationDependsOn,
 				TargetWorkID: "work-upstream",
 			}},
+			Content: []WorkContentPart{{
+				Type: WorkContentPartTypeText,
+				Text: "original content",
+			}},
 			Payload: []byte("payload"),
 		},
 		CreatedAt: now,
@@ -49,6 +53,7 @@ func TestCloneToken_DetachesNestedMutableRuntimeFields(t *testing.T) {
 	cloned.Color.PreviousChainingTraceIDs[0] = "trace-z"
 	cloned.Color.Tags["priority"] = "low"
 	cloned.Color.Relations[0].TargetWorkID = "work-mutated"
+	cloned.Color.Content[0].Text = "mutated content"
 	cloned.Color.Payload[0] = 'P'
 	cloned.History.TotalVisits["queued"] = 9
 	cloned.History.ConsecutiveFailures["queued"] = 8
@@ -63,6 +68,9 @@ func TestCloneToken_DetachesNestedMutableRuntimeFields(t *testing.T) {
 	}
 	if original.Color.Relations[0].TargetWorkID != "work-upstream" {
 		t.Fatalf("original relations = %#v, want target unchanged", original.Color.Relations)
+	}
+	if original.Color.Content[0].Text != "original content" {
+		t.Fatalf("original content = %#v, want text unchanged", original.Color.Content)
 	}
 	if string(original.Color.Payload) != "payload" {
 		t.Fatalf("original payload = %q, want payload unchanged", original.Color.Payload)
@@ -120,6 +128,7 @@ func TestCloneToken_PreserveNilAndEmptyValues(t *testing.T) {
 			assertNilMatches(t, tc.token.Color.PreviousChainingTraceIDs == nil, cloned.Color.PreviousChainingTraceIDs == nil, "previous chaining trace ids")
 			assertNilMatches(t, tc.token.Color.Tags == nil, cloned.Color.Tags == nil, "tags")
 			assertNilMatches(t, tc.token.Color.Relations == nil, cloned.Color.Relations == nil, "relations")
+			assertNilMatches(t, tc.token.Color.Content == nil, cloned.Color.Content == nil, "content")
 			assertNilMatches(t, tc.token.Color.Payload == nil, cloned.Color.Payload == nil, "payload")
 			assertNilMatches(t, tc.token.History.TotalVisits == nil, cloned.History.TotalVisits == nil, "total visits")
 			assertNilMatches(t, tc.token.History.ConsecutiveFailures == nil, cloned.History.ConsecutiveFailures == nil, "consecutive failures")
@@ -134,6 +143,9 @@ func TestCloneToken_PreserveNilAndEmptyValues(t *testing.T) {
 			}
 			if tc.token.Color.Relations != nil && len(cloned.Color.Relations) != 0 {
 				t.Fatalf("cloned relations = %#v, want detached empty slice", cloned.Color.Relations)
+			}
+			if tc.token.Color.Content != nil && len(cloned.Color.Content) != 0 {
+				t.Fatalf("cloned content = %#v, want detached empty slice", cloned.Color.Content)
 			}
 			if tc.token.Color.Payload != nil && len(cloned.Color.Payload) != 0 {
 				t.Fatalf("cloned payload = %#v, want detached empty bytes", cloned.Color.Payload)

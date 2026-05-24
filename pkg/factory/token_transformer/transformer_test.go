@@ -198,6 +198,54 @@ func TestInitialTokenFromSubmit_ParentChildRelationSetsParentID(t *testing.T) {
 	}
 }
 
+func TestInitialTokenFromSubmit_DetachesMutableRuntimeFields(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"story:init": {ID: "story:init", TypeID: "story", State: "init"},
+		},
+		map[string]*state.WorkType{
+			"story": {
+				ID: "story",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+				},
+			},
+		},
+		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
+	)
+
+	req := interfaces.SubmitRequest{
+		WorkTypeID: "story",
+		TraceID:    "trace-1",
+		Tags:       map[string]string{"scope": "alpha"},
+		Relations: []interfaces.Relation{{
+			Type:          interfaces.RelationDependsOn,
+			TargetWorkID:  "work-parent-1",
+			RequiredState: "complete",
+		}},
+		Payload: []byte("draft"),
+	}
+
+	token, err := transformer.InitialTokenFromSubmit(req, time.Date(2026, time.May, 24, 10, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("InitialTokenFromSubmit() error = %v", err)
+	}
+
+	req.Tags["scope"] = "mutated"
+	req.Relations[0].TargetWorkID = "work-mutated"
+	req.Payload[0] = 'D'
+
+	if token.Color.Tags["scope"] != "alpha" {
+		t.Fatalf("token tags = %#v, want detached original tag value", token.Color.Tags)
+	}
+	if len(token.Color.Relations) != 1 || token.Color.Relations[0].TargetWorkID != "work-parent-1" {
+		t.Fatalf("token relations = %#v, want detached original relation", token.Color.Relations)
+	}
+	if string(token.Color.Payload) != "draft" {
+		t.Fatalf("token payload = %q, want detached original payload", token.Color.Payload)
+	}
+}
+
 func TestOutputToken_CrossType_UsesWorkIDGenerator(t *testing.T) {
 	gen := petri.NewWorkIDGenerator()
 	pattern := regexp.MustCompile(`^work-target-type-\d+$`)

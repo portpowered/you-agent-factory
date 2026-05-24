@@ -90,9 +90,7 @@ export const WorkChartTimelineVerification = {
     expect(canvas.queryByText("Current")).toBeNull();
     expectWorkOutcomeSeries(outcomeChart);
 
-    await userEvent.click(
-      await canvas.findByRole("button", { name: "Return to current tick" }),
-    );
+    fireEvent.change(slider, { target: { value: "5" } });
 
     await expect(await canvas.findByText("5/5")).toBeVisible();
     expectWorkOutcomeSeries(outcomeChart);
@@ -130,18 +128,21 @@ export const HeaderActionButtonsVerification = {
       const exportButton = within(toolbar).getByRole("button", {
         name: "Export PNG",
       });
-      const currentButton = within(toolbar).getByRole("button", {
-        name: "Return to current tick",
+      const sessionButton = within(toolbar).getByRole("button", {
+        name: "Open another session",
       });
 
       await expect(exportButton).toHaveAttribute(
         "data-dashboard-header-action",
         "neutral",
       );
-      await expect(currentButton).toHaveAttribute(
+      await expect(sessionButton).toHaveAttribute(
         "data-dashboard-header-action",
         "neutral",
       );
+      expect(
+        within(toolbar).queryByRole("button", { name: "Return to current tick" }),
+      ).toBeNull();
 
       const slider = await canvas.findByRole<HTMLInputElement>("slider", {
         name: "Timeline tick",
@@ -149,10 +150,9 @@ export const HeaderActionButtonsVerification = {
       fireEvent.change(slider, { target: { value: "2" } });
 
       await expect(await canvas.findByText("2/5")).toBeVisible();
-      await expect(currentButton).toBeEnabled();
-
-      currentButton.focus();
-      await userEvent.keyboard("{Enter}");
+      sessionButton.focus();
+      await expect(sessionButton).toHaveFocus();
+      fireEvent.change(slider, { target: { value: "5" } });
       await expect(await canvas.findByText("5/5")).toBeVisible();
 
       exportButton.focus();

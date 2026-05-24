@@ -343,8 +343,8 @@ func cloneModelOperationBindings(bindings []interfaces.ModelOperationBinding) []
 	for i := range bindings {
 		out[i] = interfaces.ModelOperationBinding{
 			Slot:           bindings[i].Slot,
-			Config:         cloneWorkContentParts(bindings[i].Config),
-			DefaultContent: cloneWorkContentParts(bindings[i].DefaultContent),
+			Config:         interfaces.CloneWorkContentParts(bindings[i].Config),
+			DefaultContent: interfaces.CloneWorkContentParts(bindings[i].DefaultContent),
 		}
 		if bindings[i].Selector != nil {
 			selector := *bindings[i].Selector
@@ -352,15 +352,6 @@ func cloneModelOperationBindings(bindings []interfaces.ModelOperationBinding) []
 		}
 	}
 	return out
-}
-
-func cloneWorkContentParts(parts []interfaces.WorkContentPart) []interfaces.WorkContentPart {
-	if len(parts) == 0 {
-		return nil
-	}
-	cloned := make([]interfaces.WorkContentPart, len(parts))
-	copy(cloned, parts)
-	return cloned
 }
 
 func cloneIOConfig(cfg interfaces.IOConfig) interfaces.IOConfig {

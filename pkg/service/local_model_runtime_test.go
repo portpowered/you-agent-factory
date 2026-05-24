@@ -245,6 +245,159 @@ func TestLoadWorkersFromConfig_LocalModelWorkerRecordsModelExecutionEvents(t *te
 	assertRecordedLocalModelExecutionEvents(t, history.Events(), audioPath)
 }
 
+func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromLaterSourceMutation(t *testing.T) {
+	audioPath := filepath.Join(t.TempDir(), "speech.wav")
+	runtime := &fakeLocalModelRuntime{
+		response: interfaces.InferenceResponse{
+			Content: mustMarshalAudioContentResponse(t, audioPath),
+		},
+	}
+	factoryCfg := localModelFactoryConfig()
+	cache := localModelTestCacheLayout(t)
+	runtimeWorkers := localModelRuntimeWorkersWithCloneCoverage()
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, runtimeWorkers, map[string]*interfaces.FactoryWorkstationConfig{
+		"speak": {
+			Name:           "speak",
+			Type:           interfaces.WorkstationTypeInvoke,
+			WorkerTypeName: "tts-worker",
+			Operation:      "TTS",
+			OperationBindings: []interfaces.ModelOperationBinding{{
+				Slot: "text",
+				Selector: &interfaces.ModelOperationBindingSelector{
+					Label: "utterance",
+					Type:  interfaces.ModelOperationContentTypeText,
+				},
+			}},
+		},
+	})
+	opts, err := loadWorkersFromConfig(
+		"",
+		factoryCfg,
+		"",
+		runtimeCfg,
+		logging.NoopLogger{},
+		true,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		newLocalModelResourceLimiter(),
+		newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+	exec, ok := fc.WorkerExecutors["tts-worker"]
+	if !ok {
+		t.Fatal("expected tts-worker executor to be registered")
+	}
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), localModelDispatch())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if runtime.loadCount() != 1 || runtime.invocationCount() != 1 {
+		t.Fatalf("runtime load/invoke counts = %d/%d, want 1/1", runtime.loadCount(), runtime.invocationCount())
+	}
+
+	mutateLocalModelWorkerCloneSource(runtimeWorkers["tts-worker"])
+
+	runtime.mu.Lock()
+	if len(runtime.loads) != 1 {
+		runtime.mu.Unlock()
+		t.Fatalf("load requests = %d, want 1", len(runtime.loads))
+	}
+	loadWorker := runtime.loads[0].Worker
+	if len(runtime.invocations) != 1 {
+		runtime.mu.Unlock()
+		t.Fatalf("invoke requests = %d, want 1", len(runtime.invocations))
+	}
+	invokeWorker := runtime.invocations[0].Worker
+	runtime.mu.Unlock()
+
+	assertLocalModelCloneCoverageWorker(t, loadWorker)
+	assertLocalModelCloneCoverageWorker(t, invokeWorker)
+}
+
+func TestNewRecordingModelRunner_LocalModelWorkerEventsStayDetachedFromLaterSourceMutation(t *testing.T) {
+	eventTime := time.Date(2026, time.May, 24, 8, 30, 0, 0, time.UTC)
+	workerDef := localModelRuntimeWorkersWithCloneCoverage()["tts-worker"]
+	var events []factoryapi.FactoryEvent
+	runner := newRecordingModelRunner(
+		recordingModelRunnerFunc(func(_ context.Context, _ interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+			return interfaces.RunnerExecutionResult{
+				Content: mustMarshalAudioContentResponse(t, filepath.Join(t.TempDir(), "speech.wav")),
+			}, nil
+		}),
+		localModelFactoryConfig(),
+		workerDef,
+		func(event factoryapi.FactoryEvent) {
+			events = append(events, event)
+		},
+		func() time.Time { return eventTime },
+	)
+
+	mutateLocalModelWorkerCloneSource(workerDef)
+
+	_, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID: "dispatch-tts",
+			Execution: interfaces.ExecutionMetadata{
+				CurrentTick: 2,
+				RequestID:   "request-tts",
+				TraceID:     "trace-tts",
+				WorkIDs:     []string{"work-tts"},
+			},
+		},
+		ModelOperation: "TTS",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if len(events) != 2 {
+		t.Fatalf("recorded events = %d, want 2", len(events))
+	}
+	requestPayload, err := events[0].Payload.AsModelRequestEventPayload()
+	if err != nil {
+		t.Fatalf("decode model request payload: %v", err)
+	}
+	if requestPayload.Worker != "tts-worker" {
+		t.Fatalf("request worker = %q, want tts-worker", requestPayload.Worker)
+	}
+	if requestPayload.Model != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("request model = %q, want OMNIVOICE_Q4_K_M", requestPayload.Model)
+	}
+	if requestPayload.ProviderLocality != interfaces.ModelLocalityLocal {
+		t.Fatalf("request locality = %q, want %q", requestPayload.ProviderLocality, interfaces.ModelLocalityLocal)
+	}
+	if requestPayload.Resources == nil || len(*requestPayload.Resources) != 1 || (*requestPayload.Resources)[0].Name != "omnivoice-cache" {
+		t.Fatalf("request resources = %#v, want omnivoice-cache", requestPayload.Resources)
+	}
+	responsePayload, err := events[1].Payload.AsModelResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode model response payload: %v", err)
+	}
+	if responsePayload.Resources == nil || len(*responsePayload.Resources) != 1 || (*responsePayload.Resources)[0].Name != "omnivoice-cache" {
+		t.Fatalf("response resources = %#v, want omnivoice-cache", responsePayload.Resources)
+	}
+}
+
 func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*workers.WorkstationExecutor, *factory.FactoryEventHistory, string) {
 	t.Helper()
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
@@ -396,6 +549,46 @@ func localModelRuntimeWorkers() map[string]*interfaces.WorkerConfig {
 	}
 }
 
+func localModelRuntimeWorkersWithCloneCoverage() map[string]*interfaces.WorkerConfig {
+	return map[string]*interfaces.WorkerConfig{
+		"tts-worker": {
+			Name:          "tts-worker",
+			Type:          interfaces.WorkerTypeModel,
+			Model:         "OMNIVOICE_Q4_K_M",
+			ModelProvider: interfaces.RunnerIDCodex,
+			ModelLocality: interfaces.ModelLocalityLocal,
+			Args:          []string{"--voice", "alloy"},
+			Resources: []interfaces.ResourceConfig{{
+				Name:     "omnivoice-cache",
+				Capacity: 1,
+			}},
+			Operations: []interfaces.ModelOperation{{
+				Name: "TTS",
+				Inputs: []interfaces.ModelOperationSlot{{
+					Name:         "text",
+					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					Required:     true,
+				}},
+				Outputs: []interfaces.ModelOperationSlot{{
+					Name:         "audio",
+					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				}},
+			}},
+			Auth: &interfaces.HostedWorkerAuthConfig{
+				SecretRef: "secret/local-model",
+			},
+			Linear: &interfaces.HostedLinearWorkerConfig{
+				PollInterval: "30s",
+				TeamIDs:      []string{"team-a"},
+				StateIDs:     []string{"state-ready"},
+				Claim: &interfaces.HostedLinearWorkerClaimConfig{
+					AssigneeField: "owner",
+				},
+			},
+		},
+	}
+}
+
 func localModelTestCacheLayout(t *testing.T) localModelCacheLayout {
 	t.Helper()
 	return localModelCacheLayout{
@@ -421,4 +614,103 @@ func mustMarshalAudioContentResponse(t *testing.T, audioPath string) string {
 		t.Fatalf("marshal audio content response: %v", err)
 	}
 	return string(data)
+}
+
+func localModelDispatch() interfaces.WorkDispatch {
+	return interfaces.WorkDispatch{
+		DispatchID:      "dispatch-tts",
+		TransitionID:    "transition-tts",
+		WorkerType:      "tts-worker",
+		WorkstationName: "speak",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "token-tts",
+			Color: interfaces.TokenColor{
+				WorkID: "work-tts",
+				Content: []interfaces.WorkContentPart{{
+					Type:  interfaces.WorkContentPartTypeText,
+					Label: "utterance",
+					Text:  "hello world",
+				}},
+			},
+		}),
+	}
+}
+
+func mutateLocalModelWorkerCloneSource(worker *interfaces.WorkerConfig) {
+	worker.Args[0] = "--mutated"
+	worker.Resources[0].Name = "mutated-cache"
+	worker.Resources[0].Capacity = 9
+	worker.Operations[0].Inputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeJSON
+	worker.Operations[0].Outputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeBinary
+	worker.Auth.SecretRef = "secret/mutated"
+	worker.Linear.TeamIDs[0] = "team-b"
+	worker.Linear.StateIDs[0] = "state-done"
+	worker.Linear.Claim.AssigneeField = "mutated-owner"
+	worker.Model = "mutated-model"
+	worker.ModelLocality = interfaces.ModelLocalityCloud
+}
+
+func assertLocalModelCloneCoverageWorker(t *testing.T, worker *interfaces.WorkerConfig) {
+	t.Helper()
+	if worker == nil {
+		t.Fatal("expected cloned worker, got nil")
+	}
+	assertLocalModelCloneCoverageArgs(t, worker)
+	assertLocalModelCloneCoverageResources(t, worker)
+	assertLocalModelCloneCoverageOperations(t, worker)
+	assertLocalModelCloneCoverageAuth(t, worker)
+	assertLocalModelCloneCoverageLinear(t, worker)
+}
+
+func assertLocalModelCloneCoverageArgs(t *testing.T, worker *interfaces.WorkerConfig) {
+	t.Helper()
+	if len(worker.Args) != 2 || worker.Args[0] != "--voice" || worker.Args[1] != "alloy" {
+		t.Fatalf("worker args = %#v, want [--voice alloy]", worker.Args)
+	}
+}
+
+func assertLocalModelCloneCoverageResources(t *testing.T, worker *interfaces.WorkerConfig) {
+	t.Helper()
+	if len(worker.Resources) != 1 || worker.Resources[0].Name != "omnivoice-cache" || worker.Resources[0].Capacity != 1 {
+		t.Fatalf("worker resources = %#v, want omnivoice-cache capacity 1", worker.Resources)
+	}
+}
+
+func assertLocalModelCloneCoverageOperations(t *testing.T, worker *interfaces.WorkerConfig) {
+	t.Helper()
+	if len(worker.Operations) != 1 || len(worker.Operations[0].Inputs) != 1 || len(worker.Operations[0].Inputs[0].ContentTypes) != 1 || worker.Operations[0].Inputs[0].ContentTypes[0] != interfaces.ModelOperationContentTypeText {
+		t.Fatalf("worker input operations = %#v, want text input content type", worker.Operations)
+	}
+	if len(worker.Operations[0].Outputs) != 1 || len(worker.Operations[0].Outputs[0].ContentTypes) != 1 || worker.Operations[0].Outputs[0].ContentTypes[0] != interfaces.ModelOperationContentTypeAudio {
+		t.Fatalf("worker output operations = %#v, want audio output content type", worker.Operations)
+	}
+}
+
+func assertLocalModelCloneCoverageAuth(t *testing.T, worker *interfaces.WorkerConfig) {
+	t.Helper()
+	if worker.Auth == nil || worker.Auth.SecretRef != "secret/local-model" {
+		t.Fatalf("worker auth = %#v, want secret/local-model", worker.Auth)
+	}
+}
+
+func assertLocalModelCloneCoverageLinear(t *testing.T, worker *interfaces.WorkerConfig) {
+	t.Helper()
+	if worker.Linear == nil {
+		t.Fatal("worker linear config = nil, want values")
+	}
+	if len(worker.Linear.TeamIDs) != 1 || worker.Linear.TeamIDs[0] != "team-a" {
+		t.Fatalf("worker linear team IDs = %#v, want team-a", worker.Linear.TeamIDs)
+	}
+	if len(worker.Linear.StateIDs) != 1 || worker.Linear.StateIDs[0] != "state-ready" {
+		t.Fatalf("worker linear state IDs = %#v, want state-ready", worker.Linear.StateIDs)
+	}
+	if worker.Linear.Claim == nil || worker.Linear.Claim.AssigneeField != "owner" {
+		t.Fatalf("worker linear claim = %#v, want owner", worker.Linear.Claim)
+	}
+}
+
+type recordingModelRunnerFunc func(context.Context, interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error)
+
+func (fn recordingModelRunnerFunc) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+	return fn(ctx, request)
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -65,10 +66,13 @@ func newRecordingModelRunner(
 	return &recordingModelRunner{
 		inner:      inner,
 		factoryCfg: factoryCfg,
-		workerDef:  cloneWorkerForLocalModel(workerDef),
-		recorder:   recorder,
-		now:        now,
-		attempts:   make(map[string]int),
+		workerDef: func() *interfaces.WorkerConfig {
+			cloned := factoryconfig.CloneWorkerConfig(*workerDef)
+			return &cloned
+		}(),
+		recorder: recorder,
+		now:      now,
+		attempts: make(map[string]int),
 	}
 }
 
@@ -145,11 +149,11 @@ func modelRequestEvent(
 	eventTime time.Time,
 ) factoryapi.FactoryEvent {
 	payload := factoryapi.ModelRequestEventPayload{
-		ModelRequestId:  modelRequestID,
-		Attempt:         attempt,
-		Operation:       strings.TrimSpace(request.ModelOperation),
-		Worker:          modelEventFirstNonEmpty(request.WorkerType, workerNameForModelEvents(workerDef)),
-		Model:           modelEventFirstNonEmpty(request.Model, modelNameForModelEvents(workerDef)),
+		ModelRequestId: modelRequestID,
+		Attempt:        attempt,
+		Operation:      strings.TrimSpace(request.ModelOperation),
+		Worker:         modelEventFirstNonEmpty(request.WorkerType, workerNameForModelEvents(workerDef)),
+		Model:          modelEventFirstNonEmpty(request.Model, modelNameForModelEvents(workerDef)),
 		ProviderLocality: modelEventFirstNonEmpty(
 			strings.TrimSpace(request.ModelLocality),
 			modelLocalityForModelEvents(workerDef),
@@ -186,11 +190,11 @@ func modelResponseEvent(
 	eventTime time.Time,
 ) factoryapi.FactoryEvent {
 	payload := factoryapi.ModelResponseEventPayload{
-		ModelRequestId:  modelRequestID,
-		Attempt:         attempt,
-		Operation:       strings.TrimSpace(request.ModelOperation),
-		Worker:          modelEventFirstNonEmpty(request.WorkerType, workerNameForModelEvents(workerDef)),
-		Model:           modelEventFirstNonEmpty(request.Model, modelNameForModelEvents(workerDef)),
+		ModelRequestId: modelRequestID,
+		Attempt:        attempt,
+		Operation:      strings.TrimSpace(request.ModelOperation),
+		Worker:         modelEventFirstNonEmpty(request.WorkerType, workerNameForModelEvents(workerDef)),
+		Model:          modelEventFirstNonEmpty(request.Model, modelNameForModelEvents(workerDef)),
 		ProviderLocality: modelEventFirstNonEmpty(
 			strings.TrimSpace(request.ModelLocality),
 			modelLocalityForModelEvents(workerDef),

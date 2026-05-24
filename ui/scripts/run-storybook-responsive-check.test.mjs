@@ -7,31 +7,11 @@ import {
 } from "./run-storybook-responsive-check.mjs";
 
 describe("ensureStorybookServer", () => {
-  test("reuses an already-running Storybook server", async () => {
-    const verifyIndex = vi.fn().mockResolvedValue(undefined);
-    const assertAvailable = vi.fn();
-    const spawnProcess = vi.fn();
-    const waitReady = vi.fn();
-
-    const server = await ensureStorybookServer({
-      assertAvailable,
-      spawnProcess,
-      verifyIndex,
-      waitReady,
-    });
-
-    expect(verifyIndex).toHaveBeenCalledTimes(1);
-    expect(assertAvailable).not.toHaveBeenCalled();
-    expect(spawnProcess).not.toHaveBeenCalled();
-    expect(waitReady).not.toHaveBeenCalled();
-    expect(server.startedServer).toBe(false);
-  });
-
-  test("starts and waits for a static Storybook server when none is running", async () => {
-    const verifyIndex = vi.fn().mockRejectedValue(new Error("down"));
+  test("starts and waits for a dedicated static Storybook server", async () => {
     const assertAvailable = vi.fn().mockResolvedValue(undefined);
     const serverProcess = { once: vi.fn() };
     const spawnProcess = vi.fn().mockReturnValue(serverProcess);
+    const verifyIndex = vi.fn().mockRejectedValue(new Error("not running"));
     const waitReady = vi.fn().mockResolvedValue(undefined);
 
     const server = await ensureStorybookServer({
@@ -43,6 +23,9 @@ describe("ensureStorybookServer", () => {
       waitReady,
     });
 
+    expect(verifyIndex).toHaveBeenCalledWith({
+      url: "http://127.0.0.1:6008/index.json",
+    });
     expect(assertAvailable).toHaveBeenCalledWith("127.0.0.1", "6008");
     expect(spawnProcess).toHaveBeenCalledWith([
       "x",
@@ -57,6 +40,30 @@ describe("ensureStorybookServer", () => {
     ]);
     expect(waitReady).toHaveBeenCalledTimes(1);
     expect(server.startedServer).toBe(true);
+  });
+
+  test("reuses an already-running Storybook server when the index is available", async () => {
+    const assertAvailable = vi.fn().mockResolvedValue(undefined);
+    const spawnProcess = vi.fn();
+    const verifyIndex = vi.fn().mockResolvedValue(undefined);
+    const waitReady = vi.fn().mockResolvedValue(undefined);
+
+    const server = await ensureStorybookServer({
+      assertAvailable,
+      host: "127.0.0.1",
+      port: "6008",
+      spawnProcess,
+      verifyIndex,
+      waitReady,
+    });
+
+    expect(verifyIndex).toHaveBeenCalledWith({
+      url: "http://127.0.0.1:6008/index.json",
+    });
+    expect(assertAvailable).not.toHaveBeenCalled();
+    expect(spawnProcess).not.toHaveBeenCalled();
+    expect(waitReady).not.toHaveBeenCalled();
+    expect(server.startedServer).toBe(false);
   });
 });
 

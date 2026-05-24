@@ -13,7 +13,7 @@ function createVisibleLocator(label, overrides = {}) {
 
 describe("verifyEditorGraphParity", () => {
   test("targets the review workstation title exactly so reviewer does not match", async () => {
-    const reviewNode = createVisibleLocator("review workstation");
+    const reviewWorkstationNode = createVisibleLocator("review workstation");
     const gpuNode = createVisibleLocator("gpu resource", {
       isVisible: vi.fn().mockResolvedValue(false),
     });
@@ -51,10 +51,13 @@ describe("verifyEditorGraphParity", () => {
         }
         throw new Error(`Unexpected role query ${role}:${options?.name}`);
       }),
-      getByTitle: vi.fn((value) => {
-        if (String(value) === "/^review$/") {
-          return reviewNode;
+      getByTestId: vi.fn((value) => {
+        if (value === "rf__node-workstation:review") {
+          return reviewWorkstationNode;
         }
+        throw new Error(`Unexpected test id query ${String(value)}`);
+      }),
+      getByTitle: vi.fn((value) => {
         if (value === "gpu") {
           return gpuNode;
         }
@@ -70,13 +73,13 @@ describe("verifyEditorGraphParity", () => {
       { height: 900, label: "desktop", width: 1440 },
     );
 
-    expect(page.getByTitle).toHaveBeenCalledWith(/^review$/);
+    expect(page.getByTestId).toHaveBeenCalledWith("rf__node-workstation:review");
     expect(expectVisible).toHaveBeenCalledWith(
-      reviewNode,
+      reviewWorkstationNode,
       "Editor workstation node",
     );
     expect(workflowPreset.click).toHaveBeenCalledTimes(1);
-    expect(reviewNode.waitFor).toHaveBeenCalledWith({ state: "visible" });
+    expect(reviewWorkstationNode.waitFor).toHaveBeenCalledWith({ state: "visible" });
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
       "Editor graph parity at desktop",

@@ -5,21 +5,41 @@ import {
   render,
   renderHook,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import {
+  semanticWorkflowDashboardSnapshot,
+  singleNodeDashboardSnapshot,
+} from "../../../components/dashboard/test-fixtures";
+import type { GraphLayout } from "../../flowchart/lib/layout";
 import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
-import { createEmptyFactoryGraphDraft, useFactoryGraphDraftState } from "../../factory-graph-editor/public";
-import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/public";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
+import {
+  ReactFlowCurrentActivityCard,
+  useCurrentActivityGraphViewModel,
+} from "./react-flow-current-activity-card";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
-const { mockImportController, mockSetStoredNodePosition } = vi.hoisted(() => ({
+type BuildGraphLayout = (
+  topology: typeof semanticWorkflowDashboardSnapshot.topology,
+) => Promise<GraphLayout>;
+
+const {
+  actualBuildGraphLayoutRef,
+  mockBuildGraphLayout,
+  mockImportController,
+  mockSetStoredNodePosition,
+} = vi.hoisted(() => ({
+  actualBuildGraphLayoutRef: { current: null as BuildGraphLayout | null },
+  mockBuildGraphLayout: vi.fn(),
   mockImportController: {
     activateImport: vi.fn().mockResolvedValue(undefined),
     activationState: { status: "idle" as const },
@@ -202,6 +222,23 @@ vi.mock("../../factory-graph-editor/public", async () => {
   };
 });
 
+vi.mock("../../flowchart/lib/layout", async () => {
+  const actual = await vi.importActual("../../flowchart/lib/layout");
+  actualBuildGraphLayoutRef.current = actual.buildGraphLayout;
+
+  return {
+    ...actual,
+    buildGraphLayout: (...args: Parameters<typeof actual.buildGraphLayout>) => {
+      const implementation = mockBuildGraphLayout.getMockImplementation();
+      if (implementation) {
+        return mockBuildGraphLayout(...args);
+      }
+
+      return actual.buildGraphLayout(...args);
+    },
+  };
+});
+
 const defaultDraftState = {
   baseDocument: null,
   draft: {
@@ -263,6 +300,7 @@ function createProps(
 
 describe("ReactFlowCurrentActivityCard coverage", () => {
   beforeEach(() => {
+    mockBuildGraphLayout.mockReset();
     mockSetStoredNodePosition.mockReset();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: undefined,
@@ -299,6 +337,54 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByTestId("mock-react-flow")).toBeNull();
+  });
+
+  it("falls back to the empty graph outcome when a replacement current-activity layout fails", async () => {
+    const loadedSnapshot = structuredClone(singleNodeDashboardSnapshot);
+    const rejectedSnapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    const onSelectStateNode = vi.fn();
+    const onSelectWorkID = vi.fn();
+    const onSelectWorkstation = vi.fn();
+
+    mockBuildGraphLayout.mockImplementation(async (topology) => {
+      if (topology === rejectedSnapshot.topology) {
+        throw new Error("layout failed");
+      }
+
+      if (actualBuildGraphLayoutRef.current === null) {
+        throw new Error("expected buildGraphLayout to be available");
+      }
+
+      return actualBuildGraphLayoutRef.current(topology);
+    });
+
+    const { result, rerender } = renderHook(
+      ({ snapshot }) =>
+        useCurrentActivityGraphViewModel({
+          now: Date.parse("2026-04-08T12:00:00Z"),
+          onSelectStateNode,
+          onSelectWorkID,
+          onSelectWorkstation,
+          selection: null,
+          snapshot,
+        }),
+      {
+        initialProps: {
+          snapshot: loadedSnapshot,
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.nodes.length).toBeGreaterThan(0);
+    });
+
+    rerender({ snapshot: rejectedSnapshot });
+
+    await waitFor(() => {
+      expect(result.current.nodes).toHaveLength(0);
+      expect(result.current.edges).toHaveLength(0);
+    });
   });
 
   it("persists node positions after drag-stop when the viewport provides a graph key", () => {

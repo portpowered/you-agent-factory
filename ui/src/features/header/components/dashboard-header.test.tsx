@@ -127,16 +127,15 @@ describe("DashboardHeader", () => {
     const openSessionButton = screen.getByRole<HTMLButtonElement>("button", {
       name: headerMessages.openSessionButtonLabel,
     });
+    const globalActions = screen.getByRole("group", {
+      name: headerMessages.globalHeaderActionsLabel,
+    });
 
     const exportButton = screen.getByRole<HTMLButtonElement>("button", {
       name: messages.triggerLabel,
     });
-    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
-      name: headerMessages.returnToCurrentTickLabel,
-    });
     expect(openSessionButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(exportButton.dataset.dashboardHeaderAction).toBe("neutral");
-    expect(currentButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
     expect(exportButton.getAttribute("aria-expanded")).toBe("false");
     expect(wordmark.className).toContain("sr-only");
@@ -144,14 +143,23 @@ describe("DashboardHeader", () => {
     expect(toolbar.className).toContain("mb-3");
     expect(toolbar.className).toContain("gap-2");
     expect(toolbar.className).toContain("p-2");
+    expect(toolbar.firstElementChild?.className).toContain("flex-wrap");
+    expect(toolbar.firstElementChild?.className).toContain("max-md:items-stretch");
     expect(heading.textContent).toContain("∞");
     expect(heading.textContent).toContain("U");
     expect(toolbar.firstElementChild?.firstElementChild).toBe(heading);
     expect(heading.firstElementChild?.className).toContain("gap-3");
+    expect(globalActions.className).toContain("rounded-2xl");
+    expect(globalActions.className).toContain("border");
+    expect(globalActions.className).toContain("bg-af-overlay/6");
+    expect(globalActions.className).toContain("max-md:w-full");
+    expect(globalActions.className).toContain("max-md:justify-end");
     expect(
       heading.querySelector('[aria-hidden="true"]')?.className,
     ).toContain("h-12");
     expect(slider.closest("div")?.parentElement?.className).toContain("border-t");
+    expect(slider.closest("div")?.className).toContain("md:flex-nowrap");
+    expect(slider.closest("div")?.className).toContain("md:min-w-72");
     const controls = Array.from(
       toolbar.querySelectorAll(
         `[aria-label="${headerMessages.sliderAriaLabel}"], [aria-label="${headerMessages.openSessionButtonLabel}"], [aria-label="${headerMessages.languageMenuButtonLabel}"], [aria-label="${messages.triggerLabel}"]`,
@@ -162,6 +170,11 @@ describe("DashboardHeader", () => {
     expect(controls[1]).toBe(exportButton);
     expect(controls[2]).toBe(languageButton);
     expect(controls[3]).toBe(slider);
+    expect(globalActions.contains(openSessionButton)).toBe(true);
+    expect(globalActions.contains(exportButton)).toBe(true);
+    expect(globalActions.contains(languageButton)).toBe(true);
+    expect(openSessionButton.closest("fieldset")).toBe(globalActions);
+    expect(globalActions.compareDocumentPosition(slider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");
     expect(languageButton.getAttribute("aria-expanded")).toBe("false");
@@ -171,12 +184,17 @@ describe("DashboardHeader", () => {
     expect(openSessionButton.className).toContain("w-10");
     expect(exportButton.className).toContain("h-10");
     expect(exportButton.className).toContain("w-10");
-    expect(currentButton.className).toContain("h-10");
-    expect(currentButton.className).toContain("w-10");
     expect(screen.getByText("Dashboard session tabs en")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: headerMessages.returnToCurrentTickLabel,
+      }),
+    ).toBeNull();
     expect(useExportDialogStore.getState().isExportDialogOpen).toBe(false);
 
-    fireEvent.click(exportButton);
+    act(() => {
+      fireEvent.click(exportButton);
+    });
 
     return waitFor(() => {
       expect(useExportDialogStore.getState().isExportDialogOpen).toBe(true);
@@ -193,6 +211,37 @@ describe("DashboardHeader", () => {
     expect(
       screen.getByRole("button", { name: messages.triggerLabel }),
     ).toBeTruthy();
+  });
+
+  it("keeps global header controls icon-only while preserving localized accessible names", () => {
+    seedDashboardHeaderSnapshot();
+
+    const headerMessages = getHeaderControlsMessages("ko");
+    const exportMessages = getExportDialogMessages("ko");
+
+    renderWithQueryClient(<DashboardHeader locale="ko" />);
+
+    expect(
+      screen.getByRole("button", {
+        name: headerMessages.openSessionButtonLabel,
+      }).textContent,
+    ).toBe("+");
+    expect(
+      screen.getByRole("button", {
+        name: exportMessages.triggerLabel,
+      }).textContent,
+    ).toBe("");
+    expect(
+      screen.getByRole("button", {
+        name: headerMessages.languageMenuButtonLabel,
+      }).textContent,
+    ).toBe("");
+    expect(screen.queryByText(headerMessages.openSessionButtonLabel)).toBeNull();
+    expect(screen.queryByText(exportMessages.triggerLabel)).toBeNull();
+    expect(screen.queryByText(headerMessages.languageMenuButtonLabel)).toBeNull();
+    expect(screen.queryByText(headerMessages.sliderLabel)?.className).toContain(
+      "sr-only",
+    );
   });
 
   it("resolves the header summary, brand, slider, and session-status labels from the requested locale catalog", () => {
@@ -223,8 +272,8 @@ describe("DashboardHeader", () => {
       screen.getByRole("slider", { name: messages.sliderAriaLabel }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: messages.returnToCurrentTickLabel }),
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: messages.returnToCurrentTickLabel }),
+    ).toBeNull();
     expect(screen.getByText("Dashboard session tabs zh-CN")).toBeTruthy();
     expect(screen.getByText(messages.streamStatusConnectingLabel)).toBeTruthy();
   });
@@ -378,10 +427,10 @@ describe("DashboardHeader", () => {
     ).toBeTruthy();
     expect(screen.getByText("1/2")).toBeTruthy();
     expect(
-      screen.getByRole("button", {
+      screen.queryByRole("button", {
         name: englishMessages.returnToCurrentTickLabel,
       }),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       screen.getByRole("button", {
         name: englishExportMessages.triggerLabel,

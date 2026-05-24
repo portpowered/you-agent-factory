@@ -97,9 +97,7 @@ export const Verification = {
     await userEvent.type(requestNameField, "Root session request");
     await userEvent.type(requestField, "Keep the default session isolated.");
 
-    const betaTab = canvas.getByRole("tab", {
-      name: "root / beta beta",
-    });
+    const betaTab = canvas.getByRole("tab", { name: "beta" });
     await userEvent.click(betaTab);
 
     await waitFor(() => {

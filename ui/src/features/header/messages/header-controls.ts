@@ -10,6 +10,7 @@ export interface HeaderControlsMessages {
   currentTickStatusTemplate: string;
   dashboardSummaryLabel: string;
   dashboardUnavailableTitle: string;
+  globalHeaderActionsLabel: string;
   languageLabel: string;
   languageMenuButtonLabel: string;
   loadingSessionsLabel: string;
@@ -19,7 +20,9 @@ export interface HeaderControlsMessages {
   openSessionDialogTitle: string;
   openSessionSubmitLabel: string;
   openSessionSubmitPendingLabel: string;
+  pauseSessionStreamLabelTemplate: string;
   returnToCurrentTickLabel: string;
+  resumeSessionStreamLabelTemplate: string;
   retrySessionsLabel: string;
   selectSessionTargetLabel: string;
   sessionFolderFieldLabel: string;
@@ -50,6 +53,7 @@ const headerControlsMessagesByLocale = {
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "dashboard summary",
     dashboardUnavailableTitle: "Dashboard unavailable",
+    globalHeaderActionsLabel: "Dashboard actions",
     languageLabel: "Language",
     languageMenuButtonLabel: "Change language",
     loadingSessionsLabel: "Loading sessions...",
@@ -60,7 +64,9 @@ const headerControlsMessagesByLocale = {
     openSessionDialogTitle: "Open factory session",
     openSessionSubmitLabel: "Inspect folder",
     openSessionSubmitPendingLabel: "Inspecting folder...",
+    pauseSessionStreamLabelTemplate: "Pause {{sessionLabel}} updates",
     returnToCurrentTickLabel: "Return to current tick",
+    resumeSessionStreamLabelTemplate: "Resume {{sessionLabel}} updates",
     retrySessionsLabel: "Retry sessions",
     selectSessionTargetLabel: "Open session target",
     sessionFolderFieldLabel: "Factory folder",
@@ -86,6 +92,7 @@ const headerControlsMessagesByLocale = {
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "ダッシュボードの概要",
     dashboardUnavailableTitle: "ダッシュボードを利用できません",
+    globalHeaderActionsLabel: "ダッシュボードの操作",
     languageLabel: "言語",
     languageMenuButtonLabel: "言語を変更",
     loadingSessionsLabel: "セッションを読み込み中...",
@@ -96,7 +103,9 @@ const headerControlsMessagesByLocale = {
     openSessionDialogTitle: "ファクトリーセッションを開く",
     openSessionSubmitLabel: "フォルダーを確認",
     openSessionSubmitPendingLabel: "フォルダーを確認中...",
+    pauseSessionStreamLabelTemplate: "{{sessionLabel}} の更新を一時停止",
     returnToCurrentTickLabel: "現在のティックに戻る",
+    resumeSessionStreamLabelTemplate: "{{sessionLabel}} の更新を再開",
     retrySessionsLabel: "セッションを再試行",
     selectSessionTargetLabel: "セッションターゲットを開く",
     sessionFolderFieldLabel: "ファクトリーフォルダー",
@@ -123,6 +132,7 @@ const headerControlsMessagesByLocale = {
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "대시보드 요약",
     dashboardUnavailableTitle: "대시보드를 사용할 수 없음",
+    globalHeaderActionsLabel: "대시보드 작업",
     languageLabel: "언어",
     languageMenuButtonLabel: "언어 변경",
     loadingSessionsLabel: "세션을 불러오는 중...",
@@ -133,7 +143,9 @@ const headerControlsMessagesByLocale = {
     openSessionDialogTitle: "팩토리 세션 열기",
     openSessionSubmitLabel: "폴더 확인",
     openSessionSubmitPendingLabel: "폴더를 확인하는 중...",
+    pauseSessionStreamLabelTemplate: "{{sessionLabel}} 업데이트 일시중지",
     returnToCurrentTickLabel: "현재 틱으로 돌아가기",
+    resumeSessionStreamLabelTemplate: "{{sessionLabel}} 업데이트 다시 시작",
     retrySessionsLabel: "세션 다시 시도",
     selectSessionTargetLabel: "세션 대상 열기",
     sessionFolderFieldLabel: "팩토리 폴더",
@@ -160,6 +172,7 @@ const headerControlsMessagesByLocale = {
     currentTickStatusTemplate: `${HEADER_CURRENT_TICK_TOKEN}/${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "仪表板概览",
     dashboardUnavailableTitle: "仪表板不可用",
+    globalHeaderActionsLabel: "仪表板操作",
     languageLabel: "语言",
     languageMenuButtonLabel: "切换语言",
     loadingSessionsLabel: "正在加载会话...",
@@ -170,7 +183,9 @@ const headerControlsMessagesByLocale = {
     openSessionDialogTitle: "打开工厂会话",
     openSessionSubmitLabel: "检查文件夹",
     openSessionSubmitPendingLabel: "正在检查文件夹...",
+    pauseSessionStreamLabelTemplate: "暂停 {{sessionLabel}} 更新",
     returnToCurrentTickLabel: "返回当前刻度",
+    resumeSessionStreamLabelTemplate: "恢复 {{sessionLabel}} 更新",
     retrySessionsLabel: "重试会话",
     selectSessionTargetLabel: "打开会话目标",
     sessionFolderFieldLabel: "工厂文件夹",

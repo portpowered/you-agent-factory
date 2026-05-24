@@ -177,3 +177,34 @@ func TestWorkRequestFromSubmitRequests_EmptyBatchReturnsCanonicalEnvelope(t *tes
 		t.Fatalf("work count = %d, want 0", len(workRequest.Works))
 	}
 }
+
+func TestWorkRequestFromSubmitRequests_EmptyMutableInputsNormalizeToNil(t *testing.T) {
+	workRequest := WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+		RequestID:  "request-shared",
+		WorkID:     "work-1",
+		Name:       "draft",
+		WorkTypeID: "task",
+		Payload:    []byte{},
+		Tags:       map[string]string{},
+		Relations:  []interfaces.Relation{},
+	}})
+
+	if len(workRequest.Works) != 1 {
+		t.Fatalf("work count = %d, want 1", len(workRequest.Works))
+	}
+
+	first := workRequest.Works[0]
+	payload, ok := first.Payload.([]byte)
+	if !ok {
+		t.Fatalf("first payload type = %T, want []byte", first.Payload)
+	}
+	if payload != nil {
+		t.Fatalf("first payload = %#v, want nil slice for empty input", payload)
+	}
+	if first.Tags != nil {
+		t.Fatalf("first tags = %#v, want nil map for empty input", first.Tags)
+	}
+	if first.RuntimeRelations != nil {
+		t.Fatalf("first runtime relations = %#v, want nil slice for empty input", first.RuntimeRelations)
+	}
+}

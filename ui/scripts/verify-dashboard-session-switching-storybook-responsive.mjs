@@ -4,7 +4,7 @@ export async function verifyDashboardSessionSwitching(
   viewport,
 ) {
   const betaTab = page.getByRole("tab", {
-    name: "root / beta beta",
+    name: "beta",
   });
 
   await betaTab.click();

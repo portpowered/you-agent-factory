@@ -66,11 +66,17 @@ export const OpenFlowVerification = {
     );
 
     await expect(tabsNavigation).toBeVisible();
-    await expect(canvas.getByRole("tab", { name: /root \/ default/i })).toHaveAttribute(
+    await expect(canvas.getByRole("tab", { name: "root" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    await expect(canvas.getByRole("tab", { name: /root \/ beta/i })).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "Pause root updates" }),
+    ).toBeVisible();
+    await expect(canvas.getByRole("tab", { name: "beta" })).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "Close beta session" }),
+    ).toBeVisible();
 
     await userEvent.click(openButton);
 
@@ -97,21 +103,21 @@ export const OpenFlowVerification = {
     );
 
     await waitFor(() => {
-      expect(
-        canvas.getByRole("tab", { name: /catalog \/ review/i }),
-      ).toHaveAttribute("aria-selected", "true");
+      expect(canvas.getByRole("tab", { name: "review" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
     });
     await userEvent.click(
-      canvas.getByRole("button", { name: "Close catalog / review session" }),
+      canvas.getByRole("button", { name: "Close review session" }),
     );
     await waitFor(() => {
-      expect(
-        canvas.getByRole("tab", { name: /root \/ default/i }),
-      ).toHaveAttribute("aria-selected", "true");
+      expect(canvas.getByRole("tab", { name: "root" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
     });
-    await expect(
-      canvas.queryByRole("tab", { name: /catalog \/ review/i }),
-    ).toBeNull();
+    await expect(canvas.queryByRole("tab", { name: "review" })).toBeNull();
   },
 };
 
