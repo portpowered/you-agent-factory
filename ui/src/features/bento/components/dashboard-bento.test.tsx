@@ -194,7 +194,7 @@ vi.mock("../state/dashboardBentoStore", () => ({
 }));
 
 vi.mock("../hooks/useDashboardLayout", () => ({
-  DASHBOARD_WIDGET_IDS: {
+  DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS: {
     currentSelection: "current-selection",
     providerSession: "provider-session",
     submitWork: "submit-work",
@@ -204,6 +204,18 @@ vi.mock("../hooks/useDashboardLayout", () => ({
     workOutcomeChart: "work-outcome-chart",
     workTotals: "work-totals",
   },
+  DASHBOARD_WIDGET_IDS: {
+    addWidget: "add-widget",
+    currentSelection: "current-selection",
+    providerSession: "provider-session",
+    submitWork: "submit-work",
+    terminalWork: "terminal-work",
+    trace: "trace",
+    workGraph: "work-graph",
+    workOutcomeChart: "work-outcome-chart",
+    workTotals: "work-totals",
+  },
+  getRenderableDashboardLayout: (layout: unknown) => layout,
   useDashboardLayout: () => ({
     dashboardLayout: [],
     persistDashboardLayout: vi.fn(),
@@ -215,10 +227,14 @@ vi.mock("../hooks/useDashboardNow", () => ({
 }));
 
 vi.mock("./agent-bento", () => ({
-  AgentBentoLayout: ({ cards }: { cards: Array<{ id: string; children: React.ReactNode }> }) => (
+  AgentBentoLayout: ({
+    cards,
+  }: {
+    cards: Array<{ children: React.ReactNode; id: string; widgetType?: string }>;
+  }) => (
     <div>
       {cards.map((card) => (
-        <div data-testid={card.id} key={card.id}>
+        <div data-testid={card.widgetType ?? card.id} key={card.id}>
           {card.children}
         </div>
       ))}

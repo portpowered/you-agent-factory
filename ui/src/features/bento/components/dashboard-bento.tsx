@@ -24,7 +24,12 @@ import {
 } from "../../workflow-activity/public";
 import { AgentBentoLayout, type AgentBentoLayoutCard } from "./agent-bento";
 import { useDashboardBentoStore } from "../state/dashboardBentoStore";
-import { DASHBOARD_WIDGET_IDS, useDashboardLayout } from "../hooks/useDashboardLayout";
+import {
+  DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
+  DASHBOARD_WIDGET_IDS,
+  getRenderableDashboardLayout,
+  useDashboardLayout,
+} from "../hooks/useDashboardLayout";
 import { useDashboardNow } from "../hooks/useDashboardNow";
 
 const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
@@ -131,6 +136,10 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     traceGridState,
     workChartModel,
   });
+  const renderableLayout = getRenderableDashboardLayout(
+    dashboardLayout,
+    cards.map((card) => card.widgetType),
+  );
 
   if (!selectedSnapshot) {
     return null;
@@ -140,7 +149,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     <>
       <AgentBentoLayout
         cards={cards}
-        layout={dashboardLayout}
+        layout={renderableLayout}
         locale={resolvedLocale}
         onLayoutChange={persistDashboardLayout}
       />
@@ -193,11 +202,13 @@ function buildDashboardCards({
 }: DashboardCardBuilderArgs): AgentBentoLayoutCard[] {
   return [
     {
-      id: DASHBOARD_WIDGET_IDS.workTotals,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workTotals,
+      widgetType: DASHBOARD_WIDGET_IDS.workTotals,
       children: <WorkTotalsWidget locale={locale} snapshot={snapshot} />,
     },
     {
-      id: DASHBOARD_WIDGET_IDS.workGraph,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workGraph,
+      widgetType: DASHBOARD_WIDGET_IDS.workGraph,
       children: (
         <WorkflowActivityWidget
           importController={importController}
@@ -212,7 +223,8 @@ function buildDashboardCards({
       ),
     },
     {
-      id: DASHBOARD_WIDGET_IDS.terminalWork,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.terminalWork,
+      widgetType: DASHBOARD_WIDGET_IDS.terminalWork,
       children: (
         <TerminalWorkWidget
           completedItems={currentSelection.completedWorkItems}
@@ -225,7 +237,8 @@ function buildDashboardCards({
       ),
     },
     {
-      id: DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
+      widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
       children: (
         <WorkOutcomeWidget
           locale={locale}
@@ -235,7 +248,8 @@ function buildDashboardCards({
       ),
     },
     {
-      id: DASHBOARD_WIDGET_IDS.currentSelection,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
+      widgetType: DASHBOARD_WIDGET_IDS.currentSelection,
       children: (
         <CurrentSelectionWidget
           activeTraceID={selectedTraceID ?? selectedTrace?.trace_id ?? null}
@@ -257,7 +271,8 @@ function buildDashboardCards({
       ),
     },
     {
-      id: DASHBOARD_WIDGET_IDS.providerSession,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
+      widgetType: DASHBOARD_WIDGET_IDS.providerSession,
       children: (
         <ProviderSessionWidget
           locale={locale}
@@ -267,7 +282,8 @@ function buildDashboardCards({
       ),
     },
     {
-      id: DASHBOARD_WIDGET_IDS.submitWork,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.submitWork,
+      widgetType: DASHBOARD_WIDGET_IDS.submitWork,
       children: (
         <SubmitWorkWidget
           locale={locale}
@@ -276,7 +292,8 @@ function buildDashboardCards({
       ),
     },
     {
-      id: DASHBOARD_WIDGET_IDS.trace,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace,
+      widgetType: DASHBOARD_WIDGET_IDS.trace,
       children: (
         <TraceDrilldownWidget
           locale={locale}

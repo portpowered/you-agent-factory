@@ -20,6 +20,7 @@ export interface AgentBentoLayoutItem {
   maxW?: number;
   minH?: number;
   minW?: number;
+  widgetType: string;
   w: number;
   x: number;
   y: number;
@@ -28,6 +29,7 @@ export interface AgentBentoLayoutItem {
 export interface AgentBentoLayoutCard {
   children: ReactNode;
   id: string;
+  widgetType: string;
 }
 
 export interface AgentBentoLayoutProps {
@@ -97,7 +99,10 @@ function toGridLayout(layout: AgentBentoLayoutItem[]): Layout {
   }));
 }
 
-function toBentoLayout(layout: Layout): AgentBentoLayoutItem[] {
+function toBentoLayout(
+  layout: Layout,
+  existingLayoutById: ReadonlyMap<string, AgentBentoLayoutItem>,
+): AgentBentoLayoutItem[] {
   return layout.map((item: LayoutItem) => ({
     h: item.h,
     id: item.i,
@@ -105,6 +110,7 @@ function toBentoLayout(layout: Layout): AgentBentoLayoutItem[] {
     maxW: item.maxW,
     minH: item.minH,
     minW: item.minW,
+    widgetType: existingLayoutById.get(item.i)?.widgetType ?? item.i,
     w: item.w,
     x: item.x,
     y: item.y,
@@ -113,7 +119,7 @@ function toBentoLayout(layout: Layout): AgentBentoLayoutItem[] {
 
 function layoutSignature(layout: AgentBentoLayoutItem[]): string {
   return layout
-    .map((item) => `${item.id}:${item.x}:${item.y}:${item.w}:${item.h}`)
+    .map((item) => `${item.widgetType}:${item.x}:${item.y}:${item.w}:${item.h}`)
     .join("|");
 }
 
@@ -142,6 +148,10 @@ export function AgentBentoLayout({
 }: AgentBentoLayoutProps) {
   const messages = getAgentBentoMessages(locale);
   const normalizedLayout = useMemo(() => toGridLayout(layout), [layout]);
+  const layoutByID = useMemo(
+    () => new Map(layout.map((item) => [item.id, item])),
+    [layout],
+  );
   const [currentLayout, setCurrentLayout] = useState<Layout>(normalizedLayout);
   const { containerRef, width } = useContainerWidth({ initialWidth });
   const renderedLayout = hasSameLayoutItems(currentLayout, normalizedLayout)
@@ -160,7 +170,7 @@ export function AgentBentoLayout({
     }
 
     setCurrentLayout(nextLayout);
-    onLayoutChange?.(toBentoLayout(nextLayout));
+    onLayoutChange?.(toBentoLayout(nextLayout, layoutByID));
   };
 
   const layoutClassName = cn(BENTO_LAYOUT_CLASS, className);
@@ -194,9 +204,12 @@ export function AgentBentoLayout({
         {cards.map((card) => (
           <div
             className={BENTO_ITEM_CLASS}
-            data-bento-card-id={card.id}
+            data-bento-card-id={card.widgetType}
+            data-bento-instance-id={card.id}
             data-layout-signature={layoutSignature(
-              toBentoLayout(currentLayout),
+              toBentoLayout(currentLayout, layoutByID).filter(
+                (item) => item.id === card.id,
+              ),
             )}
             id={card.id}
             key={card.id}

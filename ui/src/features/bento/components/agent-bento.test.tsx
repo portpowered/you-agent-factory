@@ -16,8 +16,8 @@ import {
 } from "./agent-bento";
 
 const defaultLayout: AgentBentoLayoutItem[] = [
-  { id: "activity", x: 0, y: 0, w: 6, h: 2 },
-  { id: "trace", x: 6, y: 0, w: 6, h: 2 },
+  { h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 },
+  { h: 2, id: "trace", widgetType: "trace", w: 6, x: 6, y: 0 },
 ];
 
 function renderBentoBoard(onLayoutChange = vi.fn()) {
@@ -26,6 +26,7 @@ function renderBentoBoard(onLayoutChange = vi.fn()) {
       cards={[
         {
           id: "activity",
+          widgetType: "activity",
           children: (
             <AgentBentoCard title="Current activity">
               <p>Active workstation graph goes here.</p>
@@ -34,6 +35,7 @@ function renderBentoBoard(onLayoutChange = vi.fn()) {
         },
         {
           id: "trace",
+          widgetType: "trace",
           children: (
             <AgentBentoCard title="Trace grid">
               <p>Trace dispatches stay visible.</p>
@@ -173,6 +175,7 @@ describe("AgentBentoLayout", () => {
         cards={[
           {
             id: "activity",
+            widgetType: "activity",
             children: (
               <AgentBentoCard title="Current activity">
                 <p>Active workstation graph goes here.</p>
@@ -181,7 +184,7 @@ describe("AgentBentoLayout", () => {
           },
         ]}
         initialWidth={960}
-        layout={[{ id: "activity", x: 0, y: 0, w: 6, h: 2 }]}
+        layout={[{ h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 }]}
         locale="zh-CN"
       />,
     );
@@ -234,6 +237,7 @@ describe("AgentBentoLayout", () => {
         cards={[
           {
             id: "work-totals",
+            widgetType: "work-totals",
             children: (
               <WorkTotalsCard
                 completedCount={3}
@@ -245,13 +249,14 @@ describe("AgentBentoLayout", () => {
           },
           {
             id: "current-selection",
+            widgetType: "current-selection",
             children: <NoSelectionDetailCard />,
           },
         ]}
         initialWidth={1180}
         layout={[
-          { id: "work-totals", x: 0, y: 0, w: 4, h: 2 },
-          { id: "current-selection", x: 4, y: 0, w: 8, h: 4 },
+          { h: 2, id: "work-totals", widgetType: "work-totals", w: 4, x: 0, y: 0 },
+          { h: 4, id: "current-selection", widgetType: "current-selection", w: 8, x: 4, y: 0 },
         ]}
       />,
     );
