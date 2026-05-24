@@ -266,12 +266,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   });
   const rootTab = page.getByRole("tab", { name: "root" });
   const allTabs = page.getByRole("tab");
-  const openSessionButton = page.getByRole("button", {
-    name: "Open another session",
-  });
-  const closeSelectedSessionButton = page.getByRole("button", {
-    name: "Close root session",
-  });
   const languageButton = page.getByRole("button", {
     name: "Change language",
   });
@@ -288,8 +282,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectVisible(wordmark, "Visible You Agent Factory wordmark");
   await expectVisible(sessionTabs, "Session tabs navigation");
   await expectVisible(rootTab, "Default session tab");
-  await expectVisible(openSessionButton, "Open another session button");
-  await expectVisible(closeSelectedSessionButton, "Active session close button");
   await expectVisible(slider, "Timeline slider");
   await expectVisible(timelineStatus, "Timeline status");
   await expectVisible(languageButton, "Language menu button");

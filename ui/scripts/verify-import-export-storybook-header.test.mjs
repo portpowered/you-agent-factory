@@ -77,13 +77,11 @@ function createHeaderFixture(isDesktop, headingWordmarkClassName) {
 }
 
 function createRoleLookup({
-  closeSelectedSessionButton,
   currentButton,
   exportButton,
   globalActions,
   heading,
   languageButton,
-  openSessionButton,
   rootTab,
   sessionTabs,
   slider,
@@ -95,12 +93,6 @@ function createRoleLookup({
     if (role === "navigation") return sessionTabs;
     if (role === "tab" && options == null) return { count: vi.fn().mockResolvedValue(3) };
     if (role === "tab" && options?.name === "root") return rootTab;
-    if (role === "button" && options?.name === "Open another session") {
-      return openSessionButton;
-    }
-    if (role === "button" && options?.name === "Close root session") {
-      return closeSelectedSessionButton;
-    }
     if (options?.name === "Change language") return languageButton;
     if (role === "status") return streamStatus;
     if (role === "group") return globalActions;
@@ -139,8 +131,6 @@ function createPage({
   const { exportButton, heading, languageButton, sessionTabs, slider, streamStatus } =
     createHeaderFixture(isDesktop, headingWordmarkClassName);
   const rootTab = createLocator();
-  const openSessionButton = createLocator();
-  const closeSelectedSessionButton = createLocator();
   const currentButton = createLocator({
     isVisible: vi.fn().mockResolvedValue(returnToCurrentVisible),
   });
@@ -156,13 +146,11 @@ function createPage({
       .fn()
       .mockResolvedValue({ clientWidth: isDesktop ? 1440 : 390, scrollWidth: isDesktop ? 1440 : 390 }),
     getByRole: createRoleLookup({
-      closeSelectedSessionButton,
       currentButton,
       exportButton,
       globalActions,
       heading,
       languageButton,
-      openSessionButton,
       rootTab,
       sessionTabs,
       slider,
