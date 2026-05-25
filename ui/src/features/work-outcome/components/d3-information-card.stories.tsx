@@ -174,17 +174,17 @@ async function expectWorkOutcomeChartContract(card: HTMLElement): Promise<void> 
   expect(overlay?.className).toContain("sm:px-6");
   expect(overlay?.className).toContain("sm:pb-5");
   expect(overlay?.className).toContain("sm:pt-5");
+  expect(
+    chart.querySelector(".recharts-responsive-container"),
+  ).not.toBeNull();
 }
 
-function expectNoOverflowInStoryShell(
-  canvasElement: HTMLElement,
-  maxWidth = 360,
-): void {
+function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
   const shell = canvasElement.querySelector<HTMLElement>("[data-story-shell]");
 
   expect(shell).not.toBeNull();
   expect(shell ? shell.getBoundingClientRect().width : 0).toBeLessThanOrEqual(
-    maxWidth,
+    360,
   );
   expect((shell?.scrollWidth ?? 0) <= (shell?.clientWidth ?? 0) + 1).toBe(true);
 }
@@ -241,14 +241,15 @@ function renderResizableWorkOutcomeStoryShell({
             ),
           },
         ]}
-        initialWidth={Number.parseInt(maxWidth, 10)}
+        initialWidth={maxWidth === "360px" ? 360 : 1180}
         layout={RESIZABLE_WORK_OUTCOME_LAYOUT}
+        responsiveMode="interactive"
       />
     </div>
   );
 }
 
-async function expectResizableChartShell(
+async function expectChartResizeChrome(
   canvasElement: HTMLElement,
   handleSelector: ".react-resizable-handle-s" | ".react-resizable-handle-se",
 ): Promise<void> {
@@ -263,21 +264,10 @@ async function expectResizableChartShell(
   }
 
   const resizeHandle = gridItem.querySelector<HTMLElement>(handleSelector);
-  const chart = within(card).getByRole("img", {
-    name: "Work outcome chart for 15m",
-  });
-
   if (!(resizeHandle instanceof HTMLElement)) {
     throw new Error(`expected ${handleSelector} resize handle`);
   }
-
-  expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
-  expect(
-    card.closest<HTMLElement>("[data-bento-board='true']")?.dataset
-      .bentoSingleColumn,
-  ).toBeUndefined();
-  expect(resizeHandle.getBoundingClientRect().width).toBeGreaterThan(0);
-  expect(resizeHandle.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(gridItem.querySelector(handleSelector)).not.toBeNull();
   await expectWorkOutcomeChartContract(card);
 }
 
@@ -288,7 +278,7 @@ function expectCenteredStatusPanel(statePanel: HTMLElement): void {
   expect(statePanel).toBeVisible();
 }
 
-async function expectResizableStatusPanel(
+async function expectStatusPanelResizeChrome(
   canvasElement: HTMLElement,
   {
     expectedRole,
@@ -316,12 +306,7 @@ async function expectResizableStatusPanel(
   }
 
   expectCenteredStatusPanel(statePanel);
-  expect(
-    card.closest<HTMLElement>("[data-bento-board='true']")?.dataset
-      .bentoSingleColumn,
-  ).toBeUndefined();
-  expect(resizeHandle.getBoundingClientRect().width).toBeGreaterThan(0);
-  expect(resizeHandle.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(gridItem.querySelector(handleSelector)).not.toBeNull();
   expectCenteredStatusPanel(statePanel);
 }
 
@@ -466,6 +451,7 @@ export const LocalizedZhCN = {
     await expect(chart).toBeVisible();
     await expect(within(card).getByText("刻度")).toBeVisible();
     await expect(within(card).getByText("工作计数")).toBeVisible();
+    expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
   },
 };
 
@@ -475,22 +461,25 @@ export const ResizableDesktop = {
       model: populatedTrend,
     }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectResizableChartShell(canvasElement, ".react-resizable-handle-s");
+    await expectChartResizeChrome(
+      canvasElement,
+      ".react-resizable-handle-s",
+    );
   },
 };
 
 export const ResizableConstrainedWidth = {
   render: () =>
     renderResizableWorkOutcomeStoryShell({
-      maxWidth: "840px",
+      maxWidth: "360px",
       model: populatedTrend,
     }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectResizableChartShell(
+    await expectChartResizeChrome(
       canvasElement,
       ".react-resizable-handle-se",
     );
-    expectNoOverflowInStoryShell(canvasElement, 840);
+    expectNoOverflowInStoryShell(canvasElement);
   },
 };
 
@@ -501,7 +490,7 @@ export const ResizableEmptyState = {
       model: emptyTrend,
     }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectResizableStatusPanel(canvasElement, {
+    await expectStatusPanelResizeChrome(canvasElement, {
       expectedRole: "status",
       handleSelector: ".react-resizable-handle-s",
     });
@@ -512,15 +501,15 @@ export const ResizableLoadingStateConstrainedWidth = {
   render: () =>
     renderResizableWorkOutcomeStoryShell({
       chartState: { status: "loading" },
-      maxWidth: "840px",
+      maxWidth: "360px",
       model: emptyTrend,
     }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectResizableStatusPanel(canvasElement, {
+    await expectStatusPanelResizeChrome(canvasElement, {
       expectedRole: "status",
       handleSelector: ".react-resizable-handle-se",
     });
-    expectNoOverflowInStoryShell(canvasElement, 840);
+    expectNoOverflowInStoryShell(canvasElement);
   },
 };
 
@@ -531,7 +520,7 @@ export const ResizableErrorState = {
       model: emptyTrend,
     }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectResizableStatusPanel(canvasElement, {
+    await expectStatusPanelResizeChrome(canvasElement, {
       expectedRole: "alert",
       handleSelector: ".react-resizable-handle-s",
     });

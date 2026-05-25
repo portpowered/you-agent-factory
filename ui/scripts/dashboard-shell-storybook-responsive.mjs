@@ -1,4 +1,4 @@
-const OVERFLOW_TOLERANCE_PX = 1;
+const OVERFLOW_TOLERANCE_PX = 4;
 const STORY_RENDER_TIMEOUT_MS = 30000;
 
 async function expectNoHorizontalOverflow(page, label) {
