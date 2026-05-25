@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - fileName
+  - mediaType
+  - stagedFileRef
+properties:
+  stagedFileRef:
+    type: string
+    minLength: 1
+    description: Backend-owned staged file reference returned for later structured submit-work items.
+  fileName:
+    type: string
+    minLength: 1
+    description: Browser-authored filename preserved for inline identification after staging.
+  mediaType:
+    type: string
+    minLength: 1
+    description: Browser-authored MIME type preserved for inline identification after staging.

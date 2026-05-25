@@ -5,11 +5,18 @@ import { extractAPIErrorPayload, readAPIResponseBody } from "../transport";
 
 type SubmitWorkRequest = components["schemas"]["SubmitWorkRequest"];
 type SubmitWorkResponse = components["schemas"]["SubmitWorkResponse"];
+type StageSubmitWorkFileRequest =
+  components["schemas"]["StageSubmitWorkFileRequest"];
+type StageSubmitWorkFileResponse =
+  components["schemas"]["StageSubmitWorkFileResponse"];
 type ErrorResponse = components["schemas"]["ErrorResponse"];
 
 const SUBMIT_WORK_ENDPOINT = "/work";
+const STAGE_SUBMIT_WORK_FILE_ENDPOINT = "/work/staged-files";
 const GENERIC_SUBMIT_WORK_ERROR_MESSAGE =
   "Dashboard submission failed. Try again in a moment.";
+const GENERIC_STAGE_SUBMIT_WORK_FILE_ERROR_MESSAGE =
+  "We couldn't stage that file. Try again in a moment.";
 
 export class SubmitWorkAPIError extends Error {
   public readonly code?: ErrorResponse["code"];
@@ -29,6 +36,30 @@ export class SubmitWorkAPIError extends Error {
   }) {
     super(message);
     this.name = "SubmitWorkAPIError";
+    this.code = code;
+    this.status = status;
+    this.statusText = statusText;
+  }
+}
+
+export class StageSubmitWorkFileAPIError extends Error {
+  public readonly code?: ErrorResponse["code"];
+  public readonly status: number;
+  public readonly statusText: string;
+
+  constructor({
+    code,
+    message,
+    status,
+    statusText,
+  }: {
+    code?: ErrorResponse["code"];
+    message: string;
+    status: number;
+    statusText: string;
+  }) {
+    super(message);
+    this.name = "StageSubmitWorkFileAPIError";
     this.code = code;
     this.status = status;
     this.statusText = statusText;
@@ -55,6 +86,30 @@ export async function submitWork(
   }
 
   throw await submitWorkErrorFromResponse(response);
+}
+
+export async function stageSubmitWorkFile(
+  request: StageSubmitWorkFileRequest,
+  options: { sessionID?: string | null } = {},
+): Promise<StageSubmitWorkFileResponse> {
+  const response = await fetch(
+    factoryAPIURL(
+      factorySessionScopedPath(STAGE_SUBMIT_WORK_FILE_ENDPOINT, options.sessionID),
+    ),
+    {
+      body: JSON.stringify(request),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    },
+  );
+
+  if (response.status === 201) {
+    return (await response.json()) as StageSubmitWorkFileResponse;
+  }
+
+  throw await stageSubmitWorkFileErrorFromResponse(response);
 }
 
 async function submitWorkErrorFromResponse(response: Response): Promise<SubmitWorkAPIError> {
@@ -97,4 +152,24 @@ function normalizeSubmitWorkErrorCode(
 
 export function isSubmitWorkAPIError(error: unknown): error is SubmitWorkAPIError {
   return error instanceof SubmitWorkAPIError;
+}
+
+async function stageSubmitWorkFileErrorFromResponse(
+  response: Response,
+): Promise<StageSubmitWorkFileAPIError> {
+  const responseBody = await readAPIResponseBody(response);
+  const errorResponse = extractAPIErrorPayload(responseBody);
+  const message = normalizeSubmitWorkErrorMessage(errorResponse?.message);
+  return new StageSubmitWorkFileAPIError({
+    code: message ? normalizeSubmitWorkErrorCode(errorResponse?.code) : undefined,
+    message: message ?? GENERIC_STAGE_SUBMIT_WORK_FILE_ERROR_MESSAGE,
+    status: response.status,
+    statusText: response.statusText,
+  });
+}
+
+export function isStageSubmitWorkFileAPIError(
+  error: unknown,
+): error is StageSubmitWorkFileAPIError {
+  return error instanceof StageSubmitWorkFileAPIError;
 }

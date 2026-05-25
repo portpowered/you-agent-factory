@@ -2,6 +2,7 @@ package runtime_api
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net"
@@ -10,12 +11,15 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -61,6 +65,215 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	}
 
 	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
+}
+
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+
+	req := map[string]any{
+		"name":         "generated-api-empty-items",
+		"workTypeName": "task",
+		"items": []map[string]any{
+			{"type": "text", "text": "   "},
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal generated submit request: %v", err)
+	}
+	resp, err := http.Post(server.URL()+"/work", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work status = %d, want 400: %s", resp.StatusCode, string(payload))
+	}
+}
+
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+
+	req := map[string]any{
+		"name":         "generated-api-items-text",
+		"workTypeName": "task",
+		"items": []map[string]any{
+			{"type": "text", "text": "Alpha "},
+			{"type": "text", "text": "Beta"},
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal generated submit request: %v", err)
+	}
+	resp, err := http.Post(server.URL()+"/work", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work status = %d, want 201: %s", resp.StatusCode, string(payload))
+	}
+	var submitted factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(resp.Body).Decode(&submitted); err != nil {
+		t.Fatalf("decode submit response: %v", err)
+	}
+
+	work := waitForGeneratedWorkComplete(t, server.URL(), submitted.TraceId, 10*time.Second)
+	if len(work.Results) != 1 {
+		t.Fatalf("GET /work result count = %d, want 1", len(work.Results))
+	}
+	content := work.Results[0].Content
+	if content == nil || len(*content) != 2 {
+		t.Fatalf("GET /work content = %#v, want two ordered text content parts", content)
+	}
+	firstPart, err := (*content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode first projected text content: %v", err)
+	}
+	secondPart, err := (*content)[1].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode second projected text content: %v", err)
+	}
+	if firstPart.Text != "Alpha " || secondPart.Text != "Beta" {
+		t.Fatalf("GET /work content parts = %#v, want ordered text items Alpha / Beta", content)
+	}
+}
+
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
+
+	server := startFunctionalServerWithConfig(
+		t,
+		dir,
+		false,
+		func(cfg *service.FactoryServiceConfig) {
+			cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("Done. COMPLETE")
+		},
+		factory.WithServiceMode(),
+	)
+	stagedImageRef := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
+
+	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         "generated-api-items-mixed",
+		WorkTypeName: "task",
+		Items: &[]factoryapi.SubmitWorkItem{
+			mustSubmitWorkTextItem(t, "Review this screenshot."),
+			mustSubmitWorkImageItem(t, stagedImageRef, "review.png", "image/png"),
+		},
+	})
+
+	work := waitForGeneratedWorkComplete(t, server.URL(), traceID, 10*time.Second)
+	item := requireGeneratedWorkByTrace(t, work, traceID)
+	content := item.Content
+	if content == nil || len(*content) != 2 {
+		t.Fatalf("GET /work content = %#v, want ordered text and image content parts", content)
+	}
+	textPart, err := (*content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode projected text content: %v", err)
+	}
+	imagePart, err := (*content)[1].AsWorkImageContentPart()
+	if err != nil {
+		t.Fatalf("decode projected image content: %v", err)
+	}
+	if textPart.Text != "Review this screenshot." {
+		t.Fatalf("projected text part = %#v, want authored text", textPart)
+	}
+	if stringPointerValue(imagePart.ContentType) != "image/png" {
+		t.Fatalf("projected image part = %#v, want staged image reference and media type", imagePart)
+	}
+	imageContent, err := os.ReadFile(imagePart.File)
+	if err != nil {
+		t.Fatalf("read staged image content: %v", err)
+	}
+	if string(imageContent) != "png-bytes" {
+		t.Fatalf("staged image content = %q, want png-bytes", imageContent)
+	}
+}
+
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderGemini, "gemini-1.5-pro"))
+	runner := support.NewRecordingCommandRunner("unused")
+
+	server := startFunctionalServerWithConfig(
+		t,
+		dir,
+		false,
+		func(cfg *service.FactoryServiceConfig) {
+			cfg.ProviderCommandRunnerOverride = runner
+		},
+		factory.WithServiceMode(),
+	)
+	stagedImageRef := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
+
+	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         "generated-api-items-unsupported-mixed",
+		WorkTypeName: "task",
+		Items: &[]factoryapi.SubmitWorkItem{
+			mustSubmitWorkTextItem(t, "Review this screenshot."),
+			mustSubmitWorkImageItem(t, stagedImageRef, "review.png", "image/png"),
+		},
+	})
+
+	work := waitForGeneratedWorkAtPlace(t, server.URL(), traceID, "task:failed", 10*time.Second)
+	item := requireGeneratedWorkByTrace(t, work, traceID)
+	if generatedWorkStateName(item.State) != "failed" {
+		t.Fatalf("GET /work state = %#v, want failed work state", item.State)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want 0 because capability rejection should happen before subprocess launch", runner.CallCount())
+	}
+
+	workID := stringPointerValue(item.WorkId)
+	snapshot := server.GetEngineStateSnapshot(t)
+	for _, token := range snapshot.Marking.TokensInPlace("task:failed") {
+		if token.Color.WorkID != workID {
+			continue
+		}
+		if token.History.LastError == "" {
+			t.Fatalf("failed token history = %#v, want last error evidence", token.History)
+		}
+		const want = "image input is not supported by the gemini runner in v1"
+		if !strings.Contains(token.History.LastError, want) {
+			t.Fatalf("failed token last error = %q, want substring %q", token.History.LastError, want)
+		}
+		return
+	}
+
+	t.Fatalf("failed token for work %q not found in task:failed", workID)
+}
+
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileReference(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+
+	req := factoryapi.SubmitWorkRequest{
+		Name:         "generated-api-forged-staged-ref",
+		WorkTypeName: "task",
+		Items: &[]factoryapi.SubmitWorkItem{
+			mustSubmitWorkImageItem(t, "staged://forged-review.png", "review.png", "image/png"),
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal forged staged-ref request: %v", err)
+	}
+	resp, err := http.Post(server.URL()+"/work", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work with forged staged ref: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work status = %d, want 400: %s", resp.StatusCode, string(payload))
+	}
 }
 
 func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
@@ -184,6 +397,42 @@ func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWork
 	return out.TraceId
 }
 
+func stageGeneratedSubmitWorkFile(
+	t *testing.T,
+	baseURL string,
+	itemType string,
+	fileName string,
+	mediaType string,
+	content []byte,
+) string {
+	t.Helper()
+
+	req := map[string]string{
+		"itemType":      itemType,
+		"fileName":      fileName,
+		"mediaType":     mediaType,
+		"contentBase64": base64.StdEncoding.EncodeToString(content),
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal stage submit-work request: %v", err)
+	}
+	resp, err := http.Post(baseURL+"/work/staged-files", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work/staged-files: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work/staged-files status = %d, want 201: %s", resp.StatusCode, string(payload))
+	}
+	var out factoryapi.StageSubmitWorkFileResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode staged-file response: %v", err)
+	}
+	return out.StagedFileRef
+}
+
 func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req factoryapi.WorkRequest) factoryapi.UpsertWorkRequestResponse {
 	t.Helper()
 	body, err := json.Marshal(req)
@@ -298,11 +547,50 @@ func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []str
 	return nil
 }
 
+func requireGeneratedWorkByTrace(t *testing.T, work factoryapi.ListWorkResponse, traceID string) factoryapi.Work {
+	t.Helper()
+	for _, item := range work.Results {
+		if stringPointerValue(item.TraceId) == traceID {
+			return item
+		}
+	}
+	t.Fatalf("trace %q missing from generated work response: %#v", traceID, work)
+	return factoryapi.Work{}
+}
+
 func generatedWorkPlaceID(work factoryapi.Work) string {
 	if work.State == nil {
 		return stringPointerValue(work.WorkTypeName) + ":"
 	}
 	return stringPointerValue(work.WorkTypeName) + ":" + work.State.Name
+}
+
+func mustSubmitWorkTextItem(t *testing.T, text string) factoryapi.SubmitWorkItem {
+	t.Helper()
+
+	var item factoryapi.SubmitWorkItem
+	if err := item.FromSubmitWorkTextItem(factoryapi.SubmitWorkTextItem{
+		Type: factoryapi.SubmitWorkItemTypeText,
+		Text: text,
+	}); err != nil {
+		t.Fatalf("encode submit-work text item: %v", err)
+	}
+	return item
+}
+
+func mustSubmitWorkImageItem(t *testing.T, stagedFileRef string, fileName string, mediaType string) factoryapi.SubmitWorkItem {
+	t.Helper()
+
+	var item factoryapi.SubmitWorkItem
+	if err := item.FromSubmitWorkImageItem(factoryapi.SubmitWorkImageItem{
+		Type:          factoryapi.SubmitWorkItemTypeImage,
+		StagedFileRef: stagedFileRef,
+		FileName:      fileName,
+		MediaType:     mediaType,
+	}); err != nil {
+		t.Fatalf("encode submit-work image item: %v", err)
+	}
+	return item
 }
 
 func functionalServerPort(t *testing.T, rawURL string) int {

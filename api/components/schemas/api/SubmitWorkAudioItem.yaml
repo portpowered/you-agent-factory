@@ -1,0 +1,16 @@
+description: Ordered audio submission item backed by one staged file reference.
+allOf:
+  - $ref: './SubmitWorkFileItemCommonFields.yaml'
+  - type: object
+    additionalProperties: false
+    required:
+      - type
+      - stagedFileRef
+      - fileName
+      - mediaType
+    properties:
+      type:
+        allOf:
+          - $ref: './SubmitWorkItemType.yaml'
+        enum:
+          - audio

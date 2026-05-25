@@ -28,6 +28,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/work/staged-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage one submit-work file
+         * @description Accepts one dashboard-authored file payload, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
+         */
+        post: operations["stageSubmitWorkFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factory-sessions/{session_id}/work": {
         parameters: {
             query?: never;
@@ -46,6 +66,26 @@ export interface paths {
          * @description Submits one work item to the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
          */
         post: operations["submitWorkBySessionId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/factory-sessions/{session_id}/work/staged-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage one submit-work file for one session
+         * @description Accepts one dashboard-authored file payload for the selected factory session, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
+         */
+        post: operations["stageSubmitWorkFileBySessionId"];
         delete?: never;
         options?: never;
         head?: never;
@@ -453,6 +493,8 @@ export interface components {
             currentChainingTraceId?: string;
             /** @description Legacy trace identifier retained for compatibility; prefer currentChainingTraceId. */
             traceId?: string;
+            /** @description Ordered submit-work items authored by the dashboard for structured multimodal submission. */
+            items?: components["schemas"]["SubmitWorkItemList"];
             /** @description Optional canonical ordered work content parts for this submission. */
             content?: components["schemas"]["WorkContent"];
             /** @description Opaque work payload forwarded as raw JSON. */
@@ -470,6 +512,68 @@ export interface components {
         };
         SubmitWorkResponse: {
             traceId: string;
+        };
+        /** @description Ordered dashboard-authored submit-work items preserved for one submission. */
+        SubmitWorkItemList: components["schemas"]["SubmitWorkItem"][];
+        /** @description One ordered dashboard-authored submit-work item. */
+        SubmitWorkItem: components["schemas"]["SubmitWorkTextItem"] | components["schemas"]["SubmitWorkImageItem"] | components["schemas"]["SubmitWorkVideoItem"] | components["schemas"]["SubmitWorkAudioItem"] | components["schemas"]["SubmitWorkDocumentItem"];
+        /**
+         * @description Supported dashboard submit-work item types for multimodal submission.
+         * @enum {string}
+         */
+        SubmitWorkItemType: "text" | "image" | "video" | "audio" | "document";
+        SubmitWorkFileItemCommonFields: {
+            /** @description Backend-owned staged file reference preserved for later dispatch. */
+            stagedFileRef?: string;
+            /** @description Browser-authored filename preserved for inline identification and validation. */
+            fileName?: string;
+            /** @description Browser-authored MIME type preserved for validation and dispatch decisions. */
+            mediaType?: string;
+        };
+        /** @description Ordered inline text submission item. */
+        SubmitWorkTextItem: {
+            /** @enum {unknown} */
+            type: "text";
+            /** @description Authored inline text preserved in item order. */
+            text: string;
+        };
+        /** @description Ordered image submission item backed by one staged file reference. */
+        SubmitWorkImageItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+            /** @enum {unknown} */
+            type: "image";
+        };
+        /** @description Ordered video submission item backed by one staged file reference. */
+        SubmitWorkVideoItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+            /** @enum {unknown} */
+            type: "video";
+        };
+        /** @description Ordered audio submission item backed by one staged file reference. */
+        SubmitWorkAudioItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+            /** @enum {unknown} */
+            type: "audio";
+        };
+        /** @description Ordered document submission item backed by one staged file reference. */
+        SubmitWorkDocumentItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+            /** @enum {unknown} */
+            type: "document";
+        };
+        StageSubmitWorkFileRequest: {
+            /** @description Structured submit-work item kind this file will back. Text is not allowed. */
+            itemType: components["schemas"]["SubmitWorkItemType"];
+            /** @description Browser-authored filename preserved for inline identification and staging. */
+            fileName: string;
+            /** @description Browser-authored MIME type preserved for validation and dispatch decisions. */
+            mediaType: string;
+            /** @description Base64-encoded file payload to stage behind a backend-owned reference. */
+            contentBase64: string;
+        };
+        StageSubmitWorkFileResponse: {
+            /** @description Backend-owned staged file reference returned for later structured submit-work items. */
+            stagedFileRef: string;
+            /** @description Browser-authored filename preserved for inline identification after staging. */
+            fileName: string;
+            /** @description Browser-authored MIME type preserved for inline identification after staging. */
+            mediaType: string;
         };
         UpsertWorkRequestResponse: {
             requestId: string;
@@ -2338,6 +2442,32 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    stageSubmitWorkFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StageSubmitWorkFileRequest"];
+            };
+        };
+        responses: {
+            /** @description File payload staged successfully for later submit-work use. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StageSubmitWorkFileResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     listWorkBySessionId: {
         parameters: {
             query?: {
@@ -2397,6 +2527,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubmitWorkResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    stageSubmitWorkFileBySessionId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+                session_id: components["parameters"]["SessionID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StageSubmitWorkFileRequest"];
+            };
+        };
+        responses: {
+            /** @description File payload staged successfully for later session-scoped submit-work use. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StageSubmitWorkFileResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

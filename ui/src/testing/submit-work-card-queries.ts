@@ -17,9 +17,11 @@ export type AsyncRoleQuery = SyncRoleQuery & {
 };
 
 export const submitWorkCardQueryContract = {
+  addInputButtonName: "Add input",
   dashboardRegionName: "you-agent-factory bento board",
   requestNameFieldName: "Request name",
-  requestFieldName: "Request",
+  requestFieldName: "Text item 1",
+  submissionItemsListName: "Submission items",
   submitButtonName: "Submit work",
   submitWorkCardName: "Submit work",
   workTypeFieldName: "Work type",
@@ -46,6 +48,7 @@ export function getSubmitWorkCardControls<QueryScope extends SyncRoleQuery>(
 ): {
   requestName: HTMLInputElement;
   requestText: HTMLTextAreaElement;
+  submissionItemsList: HTMLOListElement;
   submitButton: HTMLButtonElement;
   workType: HTMLSelectElement;
 } {
@@ -55,6 +58,9 @@ export function getSubmitWorkCardControls<QueryScope extends SyncRoleQuery>(
     }),
     requestText: submitWorkScope.getByRole<HTMLTextAreaElement>("textbox", {
       name: submitWorkCardQueryContract.requestFieldName,
+    }),
+    submissionItemsList: submitWorkScope.getByRole<HTMLOListElement>("list", {
+      name: submitWorkCardQueryContract.submissionItemsListName,
     }),
     submitButton: submitWorkScope.getByRole<HTMLButtonElement>("button", {
       name: submitWorkCardQueryContract.submitButtonName,

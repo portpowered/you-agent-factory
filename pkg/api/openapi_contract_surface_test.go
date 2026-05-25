@@ -130,7 +130,8 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 	}
 
 	requiredOperations := map[string][]string{
-		"/factory-sessions/{session_id}/work":                       {"get", "post"},
+		"/factory-sessions/{session_id}/work":                        {"get", "post"},
+		"/factory-sessions/{session_id}/work/staged-files":          {"post"},
 		"/factory-sessions/{session_id}/work-requests/{request_id}": {"put"},
 		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
 		"/factory-sessions/{session_id}/events":                     {"get"},
@@ -209,6 +210,8 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 	offenses := collectSnakeCaseComponentFields(t, schemas, []string{
 		"Relation",
+		"StageSubmitWorkFileRequest",
+		"StageSubmitWorkFileResponse",
 		"StatusResponse",
 		"SubmitWorkRequest",
 		"SubmitWorkResponse",
@@ -240,17 +243,18 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 func assertPublishedOperations(t *testing.T, paths map[string]any) {
 	t.Helper()
 	requiredOperations := map[string][]string{
-		"/work":                            {"get", "post"},
-		"/work-requests/{request_id}":      {"put"},
-		"/work/{id}":                       {"get"},
-		"/events":                          {"get"},
-		"/status":                          {"get"},
-		"/models":                          {"get"},
-		"/models/{model_name}":             {"get"},
-		"/models/{model_name}/invocations": {"post"},
-		"/models/{model_name}/pull":        {"post"},
-		"/provider-sessions/detail":        {"get"},
-		"/factories":                       {"post"},
+		"/work":                                 {"get", "post"},
+		"/work/staged-files":                    {"post"},
+		"/work-requests/{request_id}":           {"put"},
+		"/work/{id}":                            {"get"},
+		"/events":                               {"get"},
+		"/status":                               {"get"},
+		"/models":                               {"get"},
+		"/models/{model_name}":                  {"get"},
+		"/models/{model_name}/invocations":      {"post"},
+		"/models/{model_name}/pull":             {"post"},
+		"/provider-sessions/detail":             {"get"},
+		"/factories":                            {"post"},
 		"/factory-sessions/{session_id}/factory": {"get", "put"},
 	}
 	for path, methods := range requiredOperations {
@@ -294,7 +298,7 @@ func assertRemovedPaths(t *testing.T, paths map[string]any) {
 func assertPublishedSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	t.Helper()
 	for _, schema := range []string{
-		"SubmitWorkRequest", "SubmitWorkResponse", "UpsertWorkRequestResponse", "WorkRequest", "Work", "WorkContent",
+		"SubmitWorkRequest", "SubmitWorkResponse", "StageSubmitWorkFileRequest", "StageSubmitWorkFileResponse", "UpsertWorkRequestResponse", "WorkRequest", "Work", "WorkContent",
 		"WorkContentPart", "WorkContentPartType", "WorkTextContentPart", "WorkImageContentPart", "Relation", "ListWorkResponse",
 		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "Workstation", "WorkstationKind",
 	} {
@@ -325,7 +329,8 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 		t.Fatalf("components.schemas.SubmitWorkRequest.required must include name and workTypeName")
 	}
 	submitWorkRequestProperties := schemaProperties(t, submitWorkRequestSchema, "SubmitWorkRequest")
-	assertSchemaPropertiesPresent(t, submitWorkRequestProperties, "SubmitWorkRequest", "name", "workTypeName", "currentChainingTraceId")
+	assertSchemaPropertiesPresent(t, submitWorkRequestProperties, "SubmitWorkRequest", "name", "workTypeName", "currentChainingTraceId", "items")
+	assertPropertyRef(t, submitWorkRequestProperties, "items", "#/components/schemas/SubmitWorkItemList")
 	assertPropertyRef(t, submitWorkRequestProperties, "content", "#/components/schemas/WorkContent")
 	assertArrayItemRef(t, submitWorkRequestProperties, "relations", "#/components/schemas/SubmitRelation")
 	assertPropertiesAbsent(t, submitWorkRequestProperties, "SubmitWorkRequest", "work_type_id")
@@ -335,6 +340,39 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	submitRelationProperties := schemaProperties(t, submitRelationSchema, "SubmitRelation")
 	assertSchemaPropertiesPresent(t, submitRelationProperties, "SubmitRelation", "type", "targetWorkId")
 	assertPropertiesAbsent(t, submitRelationProperties, "SubmitRelation", "sourceWorkName", "targetWorkName")
+
+	submitWorkItemListSchema := schemaObject(t, schemas, "SubmitWorkItemList")
+	if got, ok := submitWorkItemListSchema["type"].(string); !ok || got != "array" {
+		t.Fatalf("components.schemas.SubmitWorkItemList.type = %v, want array", submitWorkItemListSchema["type"])
+	}
+	submitWorkItemListItems, ok := submitWorkItemListSchema["items"].(map[string]any)
+	if !ok || submitWorkItemListItems["$ref"] != "#/components/schemas/SubmitWorkItem" {
+		t.Fatalf("components.schemas.SubmitWorkItemList.items must reference SubmitWorkItem")
+	}
+
+	submitWorkItemSchema := schemaObject(t, schemas, "SubmitWorkItem")
+	assertSchemaOneOfRefs(t, submitWorkItemSchema, "SubmitWorkItem", []string{
+		"#/components/schemas/SubmitWorkTextItem",
+		"#/components/schemas/SubmitWorkImageItem",
+		"#/components/schemas/SubmitWorkVideoItem",
+		"#/components/schemas/SubmitWorkAudioItem",
+		"#/components/schemas/SubmitWorkDocumentItem",
+	})
+	assertEnumValues(t, schemaObject(t, schemas, "SubmitWorkItemType"), "SubmitWorkItemType", []string{"text", "image", "video", "audio", "document"})
+	assertSchemaPropertiesPresent(t, schemaProperties(t, schemaObject(t, schemas, "SubmitWorkFileItemCommonFields"), "SubmitWorkFileItemCommonFields"), "SubmitWorkFileItemCommonFields", "stagedFileRef", "fileName", "mediaType")
+	submitWorkTextItemSchema := schemaObject(t, schemas, "SubmitWorkTextItem")
+	assertRequiredFields(t, submitWorkTextItemSchema, "type", "text")
+	assertSchemaPropertiesPresent(t, schemaProperties(t, submitWorkTextItemSchema, "SubmitWorkTextItem"), "SubmitWorkTextItem", "type", "text")
+	assertSchemaAllOfVariant(t, schemas, "SubmitWorkImageItem", "#/components/schemas/SubmitWorkFileItemCommonFields", "type", "stagedFileRef", "fileName", "mediaType")
+	assertSchemaAllOfVariant(t, schemas, "SubmitWorkVideoItem", "#/components/schemas/SubmitWorkFileItemCommonFields", "type", "stagedFileRef", "fileName", "mediaType")
+	assertSchemaAllOfVariant(t, schemas, "SubmitWorkAudioItem", "#/components/schemas/SubmitWorkFileItemCommonFields", "type", "stagedFileRef", "fileName", "mediaType")
+	assertSchemaAllOfVariant(t, schemas, "SubmitWorkDocumentItem", "#/components/schemas/SubmitWorkFileItemCommonFields", "type", "stagedFileRef", "fileName", "mediaType")
+	stageSubmitWorkFileRequest := schemaObject(t, schemas, "StageSubmitWorkFileRequest")
+	assertRequiredFields(t, stageSubmitWorkFileRequest, "itemType", "fileName", "mediaType", "contentBase64")
+	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileRequest, "StageSubmitWorkFileRequest"), "StageSubmitWorkFileRequest", "itemType", "fileName", "mediaType", "contentBase64")
+	stageSubmitWorkFileResponse := schemaObject(t, schemas, "StageSubmitWorkFileResponse")
+	assertRequiredFields(t, stageSubmitWorkFileResponse, "stagedFileRef", "fileName", "mediaType")
+	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileResponse, "StageSubmitWorkFileResponse"), "StageSubmitWorkFileResponse", "stagedFileRef", "fileName", "mediaType")
 }
 
 func assertWorkRequestSurfaceSchemas(t *testing.T, schemas map[string]any) {
@@ -392,22 +430,34 @@ func assertWorkContentSurfaceSchemas(t *testing.T, schemas map[string]any) {
 
 func assertWorkContentPartSchemaVariant(t *testing.T, schemas map[string]any, schemaName string, requiredFields ...string) {
 	t.Helper()
+	assertSchemaAllOfVariant(t, schemas, schemaName, "#/components/schemas/WorkContentCommonFields", requiredFields...)
+}
+
+func assertSchemaAllOfVariant(t *testing.T, schemas map[string]any, schemaName string, commonSchemaRef string, requiredFields ...string) {
+	t.Helper()
 
 	schema := schemaObject(t, schemas, schemaName)
 	allOf, ok := schema["allOf"].([]any)
 	if !ok || len(allOf) != 2 {
 		t.Fatalf("%s.allOf has %d entries, want 2", schemaName, len(allOf))
 	}
-	commonRef, ok := allOf[0].(map[string]any)
-	if !ok || commonRef["$ref"] != "#/components/schemas/WorkContentCommonFields" {
-		t.Fatalf("%s first allOf entry must reference WorkContentCommonFields", schemaName)
+	commonRefEntry, ok := allOf[0].(map[string]any)
+	if !ok || commonRefEntry["$ref"] != commonSchemaRef {
+		t.Fatalf("%s first allOf entry must reference %s", schemaName, commonSchemaRef)
 	}
 	inlineSchema, ok := allOf[1].(map[string]any)
 	if !ok {
 		t.Fatalf("%s inline allOf schema is missing", schemaName)
 	}
 	assertRequiredFields(t, inlineSchema, requiredFields...)
-	assertSchemaPropertiesPresent(t, schemaProperties(t, inlineSchema, schemaName), schemaName, requiredFields...)
+	combinedProperties := map[string]any{}
+	for key, value := range schemaProperties(t, schemaObject(t, schemas, strings.TrimPrefix(commonSchemaRef, "#/components/schemas/")), strings.TrimPrefix(commonSchemaRef, "#/components/schemas/")) {
+		combinedProperties[key] = value
+	}
+	for key, value := range schemaProperties(t, inlineSchema, schemaName) {
+		combinedProperties[key] = value
+	}
+	assertSchemaPropertiesPresent(t, combinedProperties, schemaName, requiredFields...)
 }
 
 func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {

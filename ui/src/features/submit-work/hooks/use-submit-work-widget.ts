@@ -1,20 +1,28 @@
 import { useMutation } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
 import type { DashboardSubmitWorkType } from "../../../api/dashboard/types";
-import { isSubmitWorkAPIError, submitWork } from "../../../api/work";
+import { stageSubmitWorkFile, submitWork } from "../../../api/work";
 import type { SubmitWorkMessages } from "../messages/submit-work";
-import type {
-  SubmitWorkDraft,
-  SubmitWorkStatus,
-  SubmitWorkValidationErrors,
-} from "../components/submit-work-card";
+import type { SubmitWorkDraft, SubmitWorkDraftFileItem, SubmitWorkDraftItemType } from "../components/submit-work-card";
+import {
+  buildStatus,
+  buildStructuredSubmitItems,
+  createDefaultDraft,
+  createDraftItem,
+  createDefaultTextItem,
+  fileToBase64,
+  normalizeMediaType,
+  resetDraftPreservingWorkType,
+  resetSubmitMutation,
+  stageSubmitWorkErrorMessage,
+  validateDraft,
+  hasValidationErrors,
+} from "./use-submit-work-widget-helpers";
 
-const EMPTY_DRAFT: SubmitWorkDraft = {
-  requestName: "",
-  requestText: "",
-  workTypeName: "",
-};
+const EMPTY_DRAFT: SubmitWorkDraft = createDefaultDraft();
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: this hook intentionally keeps the submit-work draft transitions visible in one place while the multimodal flow is still landing.
 export function useSubmitWorkWidget(
   sessionID: string,
   submitWorkTypes: DashboardSubmitWorkType[],
@@ -22,6 +30,8 @@ export function useSubmitWorkWidget(
 ) {
   const [draft, setDraft] = useState<SubmitWorkDraft>(EMPTY_DRAFT);
   const [showValidation, setShowValidation] = useState(false);
+  const nextItemSequenceRef = useRef(2);
+  const fileStageRequestIDsRef = useRef<Record<string, number>>({});
   const submitWorkTypeNames = submitWorkTypes.map(
     (workType) => workType.work_type_name,
   );
@@ -30,10 +40,10 @@ export function useSubmitWorkWidget(
     mutationFn: (request: Parameters<typeof submitWork>[0]) =>
       submitWork(request, { sessionID }),
     onSuccess: () => {
-      setDraft((currentDraft) => ({
-        ...EMPTY_DRAFT,
-        workTypeName: currentDraft.workTypeName,
-      }));
+      setDraft((currentDraft) =>
+        resetDraftPreservingWorkType(currentDraft.workTypeName),
+      );
+      fileStageRequestIDsRef.current = {};
       setShowValidation(false);
     },
   });
@@ -43,7 +53,9 @@ export function useSubmitWorkWidget(
     if (sessionID.trim().length === 0) {
       return;
     }
-    setDraft(EMPTY_DRAFT);
+    nextItemSequenceRef.current = 2;
+    fileStageRequestIDsRef.current = {};
+    setDraft(createDefaultDraft());
     setShowValidation(false);
     resetMutation();
   }, [resetMutation, sessionID]);
@@ -62,26 +74,170 @@ export function useSubmitWorkWidget(
 
   const validationErrors = showValidation ? validateDraft(draft, messages) : {};
 
+  const stageFileItem = async (
+    itemId: string,
+    itemType: SubmitWorkDraftFileItem["type"],
+    file: File,
+  ) => {
+    const mediaType = normalizeMediaType(file);
+    const requestID = (fileStageRequestIDsRef.current[itemId] ?? 0) + 1;
+    fileStageRequestIDsRef.current[itemId] = requestID;
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      items: currentDraft.items.map((item) =>
+        item.id === itemId && item.type !== "text"
+          ? {
+              ...item,
+              fileName: file.name,
+              mediaType,
+              stagedFileRef: undefined,
+              stagingError: undefined,
+              stagingStatus: "staging",
+            }
+          : item,
+      ),
+    }));
+
+    try {
+      const response = await stageSubmitWorkFile(
+        {
+          contentBase64: await fileToBase64(file),
+          fileName: file.name,
+          itemType,
+          mediaType,
+        },
+        { sessionID },
+      );
+      if (fileStageRequestIDsRef.current[itemId] !== requestID) {
+        return;
+      }
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        items: currentDraft.items.map((item) =>
+          item.id === itemId && item.type !== "text"
+            ? {
+                ...item,
+                fileName: response.fileName,
+                mediaType: response.mediaType,
+                stagedFileRef: response.stagedFileRef,
+                stagingError: undefined,
+                stagingStatus: "ready",
+              }
+            : item,
+        ),
+      }));
+    } catch (error) {
+      if (fileStageRequestIDsRef.current[itemId] !== requestID) {
+        return;
+      }
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        items: currentDraft.items.map((item) =>
+          item.id === itemId && item.type !== "text"
+            ? {
+                ...item,
+                fileName: file.name,
+                mediaType,
+                stagedFileRef: undefined,
+                stagingError: stageSubmitWorkErrorMessage(error, messages),
+                stagingStatus: "failure",
+              }
+            : item,
+        ),
+      }));
+    }
+  };
+
   return {
     draft,
     isSubmitting: mutation.isPending,
+    onAddItem: (type: SubmitWorkDraftItemType) => {
+      resetSubmitMutation(mutation);
+      const nextItem = createDraftItem(type, nextItemSequenceRef.current);
+      nextItemSequenceRef.current += 1;
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        items: [...currentDraft.items, nextItem],
+      }));
+    },
+    onItemTextChange: (itemId: string, value: string) => {
+      resetSubmitMutation(mutation);
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        items: currentDraft.items.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                text: value,
+              }
+            : item,
+        ),
+      }));
+    },
+    onRemoveItem: (itemId: string) => {
+      resetSubmitMutation(mutation);
+      delete fileStageRequestIDsRef.current[itemId];
+      setDraft((currentDraft) => {
+        const remainingItems = currentDraft.items.filter((item) => item.id !== itemId);
+
+        return {
+          ...currentDraft,
+          items: remainingItems.length > 0 ? remainingItems : [createDefaultTextItem()],
+        };
+      });
+    },
     onRequestNameChange: (value: string) => {
-      if (mutation.isError || mutation.isSuccess) {
-        mutation.reset();
-      }
+      resetSubmitMutation(mutation);
       setDraft((currentDraft) => ({
         ...currentDraft,
         requestName: value,
       }));
     },
-    onRequestTextChange: (value: string) => {
-      if (mutation.isError || mutation.isSuccess) {
-        mutation.reset();
+    onStageFileItems: async (itemId: string, files: File[]) => {
+      resetSubmitMutation(mutation);
+      const targetItem = draft.items.find(
+        (item): item is SubmitWorkDraftFileItem =>
+          item.id === itemId && item.type !== "text",
+      );
+      if (!targetItem || files.length === 0) {
+        return;
       }
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        requestText: value,
+      const [firstFile, ...additionalFiles] = files;
+      const additionalItems = additionalFiles.map((file, index) => ({
+        file,
+        item: createDraftItem(
+          targetItem.type,
+          nextItemSequenceRef.current + index,
+        ) as SubmitWorkDraftFileItem,
       }));
+      nextItemSequenceRef.current += additionalItems.length;
+
+      if (additionalItems.length > 0) {
+        setDraft((currentDraft) => {
+          const targetIndex = currentDraft.items.findIndex((item) => item.id === itemId);
+          if (targetIndex < 0) {
+            return currentDraft;
+          }
+
+          return {
+            ...currentDraft,
+            items: [
+              ...currentDraft.items.slice(0, targetIndex + 1),
+              ...additionalItems.map(({ item }) => item),
+              ...currentDraft.items.slice(targetIndex + 1),
+            ],
+          };
+        });
+      }
+
+      void stageFileItem(itemId, targetItem.type, firstFile);
+      for (const additionalItem of additionalItems) {
+        void stageFileItem(
+          additionalItem.item.id,
+          additionalItem.item.type,
+          additionalItem.file,
+        );
+      }
     },
     onSubmit: () => {
       setShowValidation(true);
@@ -93,15 +249,13 @@ export function useSubmitWorkWidget(
       }
 
       mutation.mutate({
+        items: buildStructuredSubmitItems(draft),
         name: draft.requestName,
-        payload: draft.requestText.trim().length === 0 ? "" : draft.requestText,
         workTypeName: draft.workTypeName,
       });
     },
     onWorkTypeNameChange: (value: string) => {
-      if (mutation.isError || mutation.isSuccess) {
-        mutation.reset();
-      }
+      resetSubmitMutation(mutation);
       setDraft((currentDraft) => ({
         ...currentDraft,
         workTypeName: value,
@@ -122,135 +276,4 @@ export function useSubmitWorkWidget(
     submitWorkTypeNames,
     validationErrors,
   };
-}
-
-function buildStatus({
-  draft,
-  error,
-  isSubmitting,
-  isSuccess,
-  messages,
-  resultTraceID,
-  showValidation,
-  submitWorkTypeNames,
-}: {
-  draft: SubmitWorkDraft;
-  error: unknown;
-  isSubmitting: boolean;
-  isSuccess: boolean;
-  messages: SubmitWorkMessages;
-  resultTraceID?: string;
-  showValidation: boolean;
-  submitWorkTypeNames: string[];
-}): SubmitWorkStatus {
-  if (isSubmitting) {
-    return {
-      kind: "submitting",
-      message: messages.statusMessages.submitting,
-    };
-  }
-
-  if (error) {
-    return {
-      kind: "error",
-      message: submitWorkErrorMessage(error, messages),
-    };
-  }
-
-  if (isSuccess) {
-    return {
-      kind: "success",
-      message: messages.statusMessages.success(resultTraceID ?? "unavailable"),
-    };
-  }
-
-  if (submitWorkTypeNames.length === 0) {
-    return {
-      kind: "guidance",
-      message: messages.statusMessages.noWorkTypes,
-    };
-  }
-
-  const validationErrors = validateDraft(draft, messages);
-  if (showValidation && hasValidationErrors(validationErrors)) {
-    return {
-      kind: "validation-error",
-      message: buildValidationSummary(validationErrors, messages),
-    };
-  }
-
-  if (draft.workTypeName.length === 0) {
-    if (draft.requestName.trim().length === 0) {
-      return {
-        kind: "guidance",
-        message: messages.statusMessages.emptyGuidance,
-      };
-    }
-
-    return {
-      kind: "guidance",
-      message: messages.statusMessages.workTypeOnly,
-    };
-  }
-
-  if (draft.requestName.trim().length === 0) {
-    return {
-      kind: "guidance",
-      message: messages.statusMessages.requestOnly,
-    };
-  }
-
-  return {
-    kind: "guidance",
-    message: messages.statusMessages.ready,
-  };
-}
-
-function buildValidationSummary(
-  validationErrors: SubmitWorkValidationErrors,
-  messages: SubmitWorkMessages,
-): string {
-  if (validationErrors.workTypeName) {
-    if (validationErrors.requestName) {
-      return messages.validationMessages.bothMissing;
-    }
-    return validationErrors.workTypeName;
-  }
-  if (validationErrors.requestName) {
-    return validationErrors.requestName;
-  }
-  return messages.validationMessages.fallback;
-}
-
-function hasValidationErrors(
-  validationErrors: SubmitWorkValidationErrors,
-): boolean {
-  return Boolean(validationErrors.requestName || validationErrors.workTypeName);
-}
-
-function submitWorkErrorMessage(
-  error: unknown,
-  messages: SubmitWorkMessages,
-): string {
-  if (isSubmitWorkAPIError(error) && error.message.length > 0) {
-    return error.message;
-  }
-  return messages.statusMessages.errorFallback;
-}
-
-function validateDraft(
-  draft: SubmitWorkDraft,
-  messages: SubmitWorkMessages,
-): SubmitWorkValidationErrors {
-  const validationErrors: SubmitWorkValidationErrors = {};
-
-  if (draft.workTypeName.length === 0) {
-    validationErrors.workTypeName =
-      messages.validationMessages.workTypeRequired;
-  }
-  if (draft.requestName.trim().length === 0) {
-    validationErrors.requestName =
-      messages.validationMessages.requestRequired;
-  }
-  return validationErrors;
 }

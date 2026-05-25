@@ -46,7 +46,7 @@ export const Configured = {
     ).toBeNull();
     const workType = scope.getByRole("combobox", { name: "Work type" });
     const requestName = scope.getByRole("textbox", { name: "Request name" });
-    const requestText = scope.getByRole("textbox", { name: "Request" });
+    const requestText = scope.getByRole("textbox", { name: "Text item 1" });
     const submitButton = scope.getByRole("button", { name: "Submit work" });
 
     await expect(submitButton).toBeDisabled();
@@ -76,7 +76,7 @@ export const Unconfigured = {
       scope.getByRole("textbox", { name: "Request name" }),
     ).toBeDisabled();
     await expect(
-      scope.getByRole("textbox", { name: "Request" }),
+      scope.getByRole("textbox", { name: "Text item 1" }),
     ).toBeDisabled();
     await expect(
       scope.getByRole("button", { name: "Submit work" }),
@@ -91,12 +91,15 @@ export const FailureRetry = {
   render: () => (
     <SubmitWorkCard
       draft={{
+        items: [{ id: "submission-item-1", text: "Retry the broken submission.", type: "text" }],
         requestName: "Retry dashboard request",
-        requestText: "Retry the broken submission.",
         workTypeName: "story",
       }}
+      onAddItem={() => {}}
+      onItemTextChange={() => {}}
+      onRemoveItem={() => {}}
       onRequestNameChange={() => {}}
-      onRequestTextChange={() => {}}
+      onStageFileItems={() => {}}
       onSubmit={() => {}}
       onWorkTypeNameChange={() => {}}
       status={{
@@ -117,7 +120,7 @@ export const FailureRetry = {
     await expect(
       scope.getByRole("textbox", { name: "Request name" }),
     ).toHaveValue("Retry dashboard request");
-    await expect(scope.getByRole("textbox", { name: "Request" })).toHaveValue(
+    await expect(scope.getByRole("textbox", { name: "Text item 1" })).toHaveValue(
       "Retry the broken submission.",
     );
     await expect(scope.getByText("work_type_name is required")).toBeVisible();
@@ -143,7 +146,8 @@ export const LocalizedZhCN = {
     await expect(
       scope.getByRole("textbox", { name: "请求名称" }),
     ).toBeVisible();
-    await expect(scope.getByRole("textbox", { name: "请求" })).toBeVisible();
+    await expect(scope.getByRole("list", { name: "提交项" })).toBeVisible();
+    await expect(scope.getByRole("textbox", { name: "文本项 1" })).toBeVisible();
     await expect(
       scope.getByText("先选择工作类型并填写请求名称，然后即可继续。"),
     ).toBeVisible();
@@ -169,12 +173,15 @@ export const StableActionAlignment = {
       <div className="w-full max-w-xs">
         <SubmitWorkCard
           draft={{
+            items: [{ id: "submission-item-1", text: "", type: "text" }],
             requestName: "Driver review",
-            requestText: "",
             workTypeName: "story",
           }}
+          onAddItem={() => {}}
+          onItemTextChange={() => {}}
+          onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
-          onRequestTextChange={() => {}}
+          onStageFileItems={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
           status={{
@@ -189,13 +196,16 @@ export const StableActionAlignment = {
       <div className="w-full max-w-xs">
         <SubmitWorkCard
           draft={{
+            items: [{ id: "submission-item-1", text: "", type: "text" }],
             requestName: "Driver review",
-            requestText: "",
             workTypeName: "story",
           }}
           isSubmitting
+          onAddItem={() => {}}
+          onItemTextChange={() => {}}
+          onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
-          onRequestTextChange={() => {}}
+          onStageFileItems={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
           status={{
@@ -210,12 +220,15 @@ export const StableActionAlignment = {
       <div className="w-full max-w-xs">
         <SubmitWorkCard
           draft={{
+            items: [{ id: "submission-item-1", text: "", type: "text" }],
             requestName: "",
-            requestText: "",
             workTypeName: "story",
           }}
+          onAddItem={() => {}}
+          onItemTextChange={() => {}}
+          onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
-          onRequestTextChange={() => {}}
+          onStageFileItems={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
           status={{
@@ -230,12 +243,15 @@ export const StableActionAlignment = {
       <div className="w-full max-w-xs">
         <SubmitWorkCard
           draft={{
+            items: [{ id: "submission-item-1", text: "Retry the broken submission.", type: "text" }],
             requestName: "Retry dashboard request",
-            requestText: "Retry the broken submission.",
             workTypeName: "story",
           }}
+          onAddItem={() => {}}
+          onItemTextChange={() => {}}
+          onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
-          onRequestTextChange={() => {}}
+          onStageFileItems={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
           status={{
@@ -250,12 +266,15 @@ export const StableActionAlignment = {
       <div className="w-full max-w-xs">
         <SubmitWorkCard
           draft={{
+            items: [{ id: "submission-item-1", text: "", type: "text" }],
             requestName: "",
-            requestText: "",
             workTypeName: "",
           }}
+          onAddItem={() => {}}
+          onItemTextChange={() => {}}
+          onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
-          onRequestTextChange={() => {}}
+          onStageFileItems={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
           status={{

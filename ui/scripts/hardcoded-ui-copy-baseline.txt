@@ -1,7 +1,7 @@
 # Baseline for the hardcoded UI copy check.
 # Entries are path|line|column|kind|text.
 src/api/provider-session-details/api.ts|155|14|string-literal|INTERNAL_ERROR
-src/api/work/api.ts|94|14|string-literal|INTERNAL_ERROR
+src/api/work/api.ts|149|14|string-literal|INTERNAL_ERROR
 src/components/ui/data-table.tsx|37|18|string-literal|No rows available.
 src/components/ui/dialog.tsx|29|16|string-literal|Close dialog
 src/components/ui/formatters.ts|48|12|string-literal|h m

@@ -92,6 +92,30 @@ paths:
                 $ref: '#/components/schemas/ListWorkResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /work/staged-files:
+    post:
+      tags:
+        - Work
+      operationId: stageSubmitWorkFile
+      summary: Stage one submit-work file
+      description: Accepts one dashboard-authored file payload, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StageSubmitWorkFileRequest'
+      responses:
+        '201':
+          description: File payload staged successfully for later submit-work use.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StageSubmitWorkFileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work:
     post:
       tags:
@@ -140,6 +164,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListWorkResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/work/staged-files:
+    post:
+      tags:
+        - Work
+      operationId: stageSubmitWorkFileBySessionId
+      summary: Stage one submit-work file for one session
+      description: Accepts one dashboard-authored file payload for the selected factory session, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StageSubmitWorkFileRequest'
+      responses:
+        '201':
+          description: File payload staged successfully for later session-scoped submit-work use.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StageSubmitWorkFileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -866,6 +918,28 @@ components:
       $ref: './components/schemas/api/SubmitRelation.yaml'
     SubmitWorkResponse:
       $ref: './components/schemas/api/SubmitWorkResponse.yaml'
+    SubmitWorkItemList:
+      $ref: './components/schemas/api/SubmitWorkItemList.yaml'
+    SubmitWorkItem:
+      $ref: './components/schemas/api/SubmitWorkItem.yaml'
+    SubmitWorkItemType:
+      $ref: './components/schemas/api/SubmitWorkItemType.yaml'
+    SubmitWorkFileItemCommonFields:
+      $ref: './components/schemas/api/SubmitWorkFileItemCommonFields.yaml'
+    SubmitWorkTextItem:
+      $ref: './components/schemas/api/SubmitWorkTextItem.yaml'
+    SubmitWorkImageItem:
+      $ref: './components/schemas/api/SubmitWorkImageItem.yaml'
+    SubmitWorkVideoItem:
+      $ref: './components/schemas/api/SubmitWorkVideoItem.yaml'
+    SubmitWorkAudioItem:
+      $ref: './components/schemas/api/SubmitWorkAudioItem.yaml'
+    SubmitWorkDocumentItem:
+      $ref: './components/schemas/api/SubmitWorkDocumentItem.yaml'
+    StageSubmitWorkFileRequest:
+      $ref: './components/schemas/api/StageSubmitWorkFileRequest.yaml'
+    StageSubmitWorkFileResponse:
+      $ref: './components/schemas/api/StageSubmitWorkFileResponse.yaml'
     UpsertWorkRequestResponse:
       $ref: './components/schemas/api/UpsertWorkRequestResponse.yaml'
     ListWorkResponse:

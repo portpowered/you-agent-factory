@@ -1,0 +1,23 @@
+type: object
+additionalProperties: false
+required:
+  - contentBase64
+  - fileName
+  - itemType
+  - mediaType
+properties:
+  itemType:
+    $ref: './SubmitWorkItemType.yaml'
+    description: Structured submit-work item kind this file will back. Text is not allowed.
+  fileName:
+    type: string
+    minLength: 1
+    description: Browser-authored filename preserved for inline identification and staging.
+  mediaType:
+    type: string
+    minLength: 1
+    description: Browser-authored MIME type preserved for validation and dispatch decisions.
+  contentBase64:
+    type: string
+    minLength: 1
+    description: Base64-encoded file payload to stage behind a backend-owned reference.
