@@ -6,7 +6,7 @@ import {
   resourceCountTimelineEvents,
 } from "./components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
-import { useExportDialogStore } from "./features/export/state";
+import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import {
   activeStoryTrace,
   expectCompactedTopDashboardSection,
