@@ -5,6 +5,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -28,7 +29,7 @@ type FactoryConfig struct {
 	RuntimeMode               interfaces.RuntimeMode
 	Logger                    logging.Logger
 	Clock                     Clock
-	EventHistory              *FactoryEventHistory
+	EventHistory              *events.FactoryEventHistory
 	SubmissionRecorder        SubmissionRecorder
 	FactoryEventRecorder      FactoryEventRecorder
 	SubmissionHooks           []SubmissionHook
@@ -172,7 +173,7 @@ func WithInlineDispatch() FactoryOption {
 // WithFactoryEventHistory injects a preconstructed canonical event history.
 // This lets service wiring provide the same append surface to provider
 // wrappers before worker executors are constructed.
-func WithFactoryEventHistory(history *FactoryEventHistory) FactoryOption {
+func WithFactoryEventHistory(history *events.FactoryEventHistory) FactoryOption {
 	return func(c *FactoryConfig) {
 		if history != nil {
 			c.EventHistory = history

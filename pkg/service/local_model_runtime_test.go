@@ -10,6 +10,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -398,7 +399,7 @@ func TestNewRecordingModelRunner_LocalModelWorkerEventsStayDetachedFromLaterSour
 	}
 }
 
-func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*workers.WorkstationExecutor, *factory.FactoryEventHistory, string) {
+func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*workers.WorkstationExecutor, *factoryevents.FactoryEventHistory, string) {
 	t.Helper()
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
@@ -423,7 +424,7 @@ func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*wor
 			}},
 		},
 	})
-	history := factory.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
+	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
 	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, history.RecordModelEvent, func() time.Time { return eventTime }, newLocalModelResourceLimiter(), newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime))
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)

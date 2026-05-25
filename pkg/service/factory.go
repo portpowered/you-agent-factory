@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/listeners"
@@ -66,7 +67,7 @@ var ErrCurrentFactoryNotFound = apisurface.ErrCurrentFactoryNotFound
 type replacementFactoryRuntime struct {
 	dir            string
 	folderPath     string
-	eventHistory   *factory.FactoryEventHistory
+	eventHistory   *factoryevents.FactoryEventHistory
 	factory        factory.Factory
 	listener       *listeners.FileWatcher
 	net            *state.Net
@@ -127,7 +128,7 @@ type FactoryService struct {
 	net            *state.Net
 	cfg            *FactoryServiceConfig
 	runtimeCfg     *factoryconfig.LoadedFactoryConfig
-	eventHistory   *factory.FactoryEventHistory
+	eventHistory   *factoryevents.FactoryEventHistory
 	baseLogger     *zap.Logger
 	logger         *zap.Logger
 	startTime      time.Time

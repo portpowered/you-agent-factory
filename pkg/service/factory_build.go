@@ -12,6 +12,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -176,7 +177,7 @@ func buildRuntimeBundle(
 	}
 
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
-	eventHistory := factory.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
+	eventHistory := factoryevents.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	modelResources, modelAssets, localModels := newRuntimeLocalModelDependencies(input.cfg)
 	workerOpts, err := loadWorkersFromConfig(
