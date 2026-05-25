@@ -374,6 +374,91 @@ describe("SubmitWorkWidget", () => {
     );
   });
 
+  it("keeps drag-active state scoped to file drags and clears it when leaving the dropzone", () => {
+    const onStageFileItems = vi.fn();
+
+    render(
+      <SubmitWorkCard
+        draft={{
+          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          requestName: "Image review",
+          workTypeName: "story",
+        }}
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItems={onStageFileItems}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+
+    const dropzoneLabel = screen.getByText("Image file");
+    const dropzone = dropzoneLabel.closest("label");
+    if (!(dropzone instanceof HTMLLabelElement)) {
+      throw new Error("expected image upload dropzone label");
+    }
+
+    fireEvent.dragEnter(dropzone, {
+      dataTransfer: {
+        files: [],
+        types: ["text/plain"],
+      },
+    });
+    expect(
+      screen.getByText("Drop or choose one image file to stage it for this submission."),
+    ).toBeTruthy();
+    fireEvent.dragEnter(dropzone, {
+      dataTransfer: {
+        files: [],
+        types: ["Files"],
+      },
+    });
+    expect(screen.getByText("Drop the image file to stage it.")).toBeTruthy();
+
+    fireEvent.dragOver(dropzone, {
+      dataTransfer: {
+        dropEffect: "copy",
+        files: [],
+        types: ["Files"],
+      },
+    });
+    expect(screen.getByText("Drop the image file to stage it.")).toBeTruthy();
+
+    const nestedTarget = document.createElement("span");
+    dropzone.append(nestedTarget);
+    const nestedLeaveEvent = new Event("dragleave", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(nestedLeaveEvent, "dataTransfer", {
+      value: {
+        files: [],
+        types: ["Files"],
+      },
+    });
+    Object.defineProperty(nestedLeaveEvent, "relatedTarget", {
+      value: nestedTarget,
+    });
+    dropzone.dispatchEvent(nestedLeaveEvent);
+    expect(screen.getByText("Drop the image file to stage it.")).toBeTruthy();
+
+    fireEvent.dragLeave(dropzone, {
+      dataTransfer: {
+        files: [],
+        types: ["Files"],
+      },
+      relatedTarget: document.body,
+    });
+    expect(
+      screen.getByText("Drop or choose one image file to stage it for this submission."),
+    ).toBeTruthy();
+    expect(onStageFileItems).not.toHaveBeenCalled();
+  });
+
   it("blocks drag-drop staging while file-backed inputs are disabled", () => {
     const onStageFileItems = vi.fn();
 
@@ -403,6 +488,16 @@ describe("SubmitWorkWidget", () => {
       throw new Error("expected image upload dropzone label");
     }
 
+    const disabledFileInput = document.querySelector('input[type="file"]');
+    if (!(disabledFileInput instanceof HTMLInputElement)) {
+      throw new Error("expected disabled image file input");
+    }
+    fireEvent.change(disabledFileInput, {
+      target: {
+        files: [createStageableFile("blocked", "blocked.png", "image/png")],
+      },
+    });
+
     fireEvent.dragOver(dropzone, {
       dataTransfer: {
         dropEffect: "copy",
@@ -419,6 +514,301 @@ describe("SubmitWorkWidget", () => {
 
     expect(onStageFileItems).not.toHaveBeenCalled();
     expect(screen.queryByText("Drop the image file to stage it.")).toBeNull();
+  });
+
+  it("stages selected and dropped files through the shared file-backed input", () => {
+    const onStageFileItems = vi.fn();
+
+    render(
+      <SubmitWorkCard
+        draft={{
+          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          requestName: "Image review",
+          workTypeName: "story",
+        }}
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItems={onStageFileItems}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+
+    const fileInput = document.querySelector('input[type="file"]');
+    if (!(fileInput instanceof HTMLInputElement)) {
+      throw new Error("expected a file-backed submit-work input");
+    }
+
+    fireEvent.dragEnter(fileInput.closest("label") ?? fileInput);
+    expect(
+      screen.getByText("Drop or choose one image file to stage it for this submission."),
+    ).toBeTruthy();
+
+    const selectedFile = createStageableFile("selected", "selected.png", "image/png");
+    fireEvent.change(fileInput, {
+      target: {
+        files: [],
+      },
+    });
+    expect(onStageFileItems).not.toHaveBeenCalled();
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [selectedFile],
+      },
+    });
+    expect(onStageFileItems).toHaveBeenCalledWith("submission-item-2", [selectedFile]);
+
+    const dropzoneLabel = screen.getByText("Image file");
+    const dropzone = dropzoneLabel.closest("label");
+    if (!(dropzone instanceof HTMLLabelElement)) {
+      throw new Error("expected image upload dropzone label");
+    }
+
+    const droppedFile = createStageableFile("dropped", "dropped.png", "image/png");
+    fireEvent.dragOver(dropzone, {
+      dataTransfer: {
+        dropEffect: "copy",
+        files: [],
+        types: ["Files"],
+      },
+    });
+    fireEvent.drop(dropzone, {
+      dataTransfer: {
+        files: [],
+        types: ["Files"],
+      },
+    });
+    expect(onStageFileItems).toHaveBeenCalledTimes(1);
+
+    fireEvent.dragOver(dropzone, {
+      dataTransfer: {
+        dropEffect: "copy",
+        files: [],
+        types: ["Files"],
+      },
+    });
+    fireEvent.drop(dropzone, {
+      dataTransfer: {
+        files: [droppedFile],
+        types: ["Files"],
+      },
+    });
+
+    expect(onStageFileItems).toHaveBeenLastCalledWith("submission-item-2", [droppedFile]);
+    expect(
+      screen.getByText("Drop or choose one image file to stage it for this submission."),
+    ).toBeTruthy();
+  });
+
+  it("ignores drag events that do not carry file metadata on the shared dropzone", () => {
+    const onStageFileItems = vi.fn();
+
+    render(
+      <SubmitWorkCard
+        draft={{
+          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          requestName: "Image review",
+          workTypeName: "story",
+        }}
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItems={onStageFileItems}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+
+    const dropzoneLabel = screen.getByText("Image file");
+    const dropzone = dropzoneLabel.closest("label");
+    if (!(dropzone instanceof HTMLLabelElement)) {
+      throw new Error("expected image upload dropzone label");
+    }
+
+    fireEvent.dragEnter(dropzone);
+    fireEvent.dragLeave(dropzone, {
+      relatedTarget: document.body,
+    });
+    fireEvent.drop(dropzone);
+
+    expect(
+      screen.getByText("Drop or choose one image file to stage it for this submission."),
+    ).toBeTruthy();
+    expect(onStageFileItems).not.toHaveBeenCalled();
+  });
+
+  it("renders zh-CN file upload state copy for drag-active, staging, ready, failure, and success states", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ traceId: "trace-zh-submit" }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 201,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const view = render(
+      <SubmitWorkCard
+        draft={{
+          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          requestName: "中文请求",
+          workTypeName: "story",
+        }}
+        locale="zh-CN"
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItems={() => {}}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "guidance", message: "提交前请先暂存每个文件项。" }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+
+    const dropzoneLabel = screen.getByText("图像文件");
+    const dropzone = dropzoneLabel.closest("label");
+    if (!(dropzone instanceof HTMLLabelElement)) {
+      throw new Error("expected zh-CN image upload dropzone label");
+    }
+
+    fireEvent.dragOver(dropzone, {
+      dataTransfer: {
+        dropEffect: "copy",
+        files: [],
+        types: ["Files"],
+      },
+    });
+    expect(screen.getByText("拖放图像文件以上传暂存。")).toBeTruthy();
+    fireEvent.dragLeave(dropzone, {
+      dataTransfer: {
+        files: [],
+        types: ["Files"],
+      },
+      relatedTarget: document.body,
+    });
+
+    view.rerender(
+      <SubmitWorkCard
+        draft={{
+          items: [
+            {
+              fileName: "界面.png",
+              id: "submission-item-2",
+              stagingStatus: "staging",
+              type: "image",
+            },
+          ],
+          requestName: "中文请求",
+          workTypeName: "story",
+        }}
+        locale="zh-CN"
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItems={() => {}}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "guidance", message: "提交前请先暂存每个文件项。" }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+    expect(screen.getByText("正在暂存 界面.png...")).toBeTruthy();
+
+    view.rerender(
+      <SubmitWorkCard
+        draft={{
+          items: [
+            {
+              fileName: "界面.png",
+              id: "submission-item-2",
+              mediaType: "image/png",
+              stagedFileRef: "/tmp/submit-work-stage/ui.png",
+              stagingStatus: "ready",
+              type: "image",
+            },
+          ],
+          requestName: "中文请求",
+          workTypeName: "story",
+        }}
+        locale="zh-CN"
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItems={() => {}}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "success", message: "你的请求已提交。追踪 ID：trace-zh-submit。" }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+    expect(screen.getByText("已暂存 界面.png（image/png）。")).toBeTruthy();
+    expect(screen.getByText("界面.png（image/png）")).toBeTruthy();
+
+    view.rerender(
+      <SubmitWorkCard
+        draft={{
+          items: [
+            {
+              fileName: "界面.pdf",
+              id: "submission-item-2",
+              mediaType: "application/pdf",
+              stagingError: "mediaType must start with image/ for image items",
+              stagingStatus: "failure",
+              type: "image",
+            },
+          ],
+          requestName: "中文请求",
+          workTypeName: "story",
+        }}
+        locale="zh-CN"
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItems={() => {}}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "guidance", message: "提交前请先暂存每个文件项。" }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+    expect(screen.getByText("重新暂存这个图像文件，或改选另一个文件。")).toBeTruthy();
+
+    view.unmount();
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget
+        locale="zh-CN"
+        submitWorkTypes={[{ work_type_name: "story" }]}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("combobox", { name: "工作类型" }), {
+      target: { value: "story" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "请求名称" }), {
+      target: { value: "中文请求" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "文本项 1" }), {
+      target: { value: "请总结这次提交。" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "提交工作" }));
+
+    expect(
+      await screen.findByText("你的请求已提交。追踪 ID：trace-zh-submit。"),
+    ).toBeTruthy();
   });
 
   it("blocks item removal while the widget is submitting", () => {
