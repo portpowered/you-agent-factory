@@ -362,9 +362,9 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 		Output:       "partial output",
 		Error:        "provider error: throttled: selected model is at capacity",
 		Feedback:     "retry later",
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyThrottle,
-			Type:   interfaces.ProviderErrorTypeThrottled,
+		FailureMetadata: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Type:   interfaces.WorkFailureTypeThrottled,
 		},
 	}
 	completed := interfaces.CompletedDispatch{
@@ -625,6 +625,23 @@ func TestFailureDetailsForResult_FailedWorkerErrorUsesStableFailureDetails(t *te
 	}
 	if message != "script exited with code 1" {
 		t.Fatalf("failure message = %q, want script error", message)
+	}
+}
+
+func TestFailureDetailsForResult_FailureMetadataOverridesWorkerErrorReason(t *testing.T) {
+	reason, message := failureDetailsForResult(interfaces.WorkResult{
+		DispatchID:      "dispatch-timeout",
+		TransitionID:    "build",
+		Outcome:         interfaces.OutcomeFailed,
+		Error:           "provider error: timeout: context deadline exceeded",
+		FailureMetadata: &interfaces.WorkFailureMetadata{Type: interfaces.WorkFailureTypeTimeout},
+	})
+
+	if reason != string(interfaces.WorkFailureTypeTimeout) {
+		t.Fatalf("failure reason = %q, want %q", reason, interfaces.WorkFailureTypeTimeout)
+	}
+	if message != "provider error: timeout: context deadline exceeded" {
+		t.Fatalf("failure message = %q, want preserved rendered timeout text", message)
 	}
 }
 
