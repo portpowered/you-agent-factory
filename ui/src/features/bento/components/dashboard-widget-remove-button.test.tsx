@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { DashboardWidgetRemoveButton } from "./dashboard-widget-remove-button";
 
 describe("DashboardWidgetRemoveButton", () => {
-  it("renders a compact close-style remove control with a dashboard-specific label", () => {
+  it("renders a shared destructive compact control with a dashboard-specific label", () => {
     const onClick = vi.fn();
     render(
       <DashboardWidgetRemoveButton
@@ -18,6 +18,8 @@ describe("DashboardWidgetRemoveButton", () => {
 
     expect(button.className).toContain("size-8");
     expect(button.className).toContain("focus-visible:ring-2");
+    expect(button.className).toContain("border-af-danger");
+    expect(button.className).toContain("bg-af-danger");
 
     fireEvent.click(button);
 

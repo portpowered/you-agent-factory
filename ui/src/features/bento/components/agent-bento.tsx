@@ -5,6 +5,7 @@ import { GridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
+import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
 import { cn } from "../../../lib/cn";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import {
@@ -75,10 +76,8 @@ const BENTO_CARD_TITLE_CLASS = cn(
 const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS = "gap-1.5";
-const BENTO_DRAG_HANDLE_CLASS =
-  "inline-grid size-9 shrink-0 cursor-grab place-items-center rounded-lg border border-af-border bg-af-surface-raised text-af-text-muted outline-af-accent transition-colors hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 active:cursor-grabbing";
 const BENTO_DRAG_HANDLE_COMPACT_CLASS =
-  "size-8 rounded-md border-af-border bg-transparent text-af-text-subtle hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
+  "size-8 rounded-md bg-transparent text-af-text-subtle";
 const BENTO_CARD_BODY_CLASS = cn(
   "grid h-full min-h-0 flex-1 gap-2.5 overflow-auto p-3.5 [&_p]:m-0",
   DASHBOARD_BODY_TEXT_CLASS,
@@ -278,14 +277,15 @@ export function AgentBentoDragHandle({
   title,
 }: AgentBentoDragHandleProps) {
   return (
-    <button
+    <DashboardActionButton
       aria-label={`Move ${title}`}
       className={cn(
-        BENTO_DRAG_HANDLE_CLASS,
+        "cursor-grab bg-af-surface-raised text-af-text-muted active:cursor-grabbing",
         compact && BENTO_DRAG_HANDLE_COMPACT_CLASS,
       )}
       data-bento-drag-handle="true"
-      type="button"
+      iconOnly
+      tone="outline"
     >
       <svg
         aria-hidden="true"
@@ -303,6 +303,6 @@ export function AgentBentoDragHandle({
           strokeWidth="1.7"
         />
       </svg>
-    </button>
+    </DashboardActionButton>
   );
 }
