@@ -1,4 +1,4 @@
-package workers
+package executor
 
 import (
 	"crypto/sha256"
@@ -78,7 +78,7 @@ func withInferenceErrorDiagnostics(base *interfaces.WorkDiagnostics, err error, 
 }
 
 func commandDiagnostics(req CommandRequest, result CommandResult, duration time.Duration, timedOut bool) *interfaces.WorkDiagnostics {
-	envProjection := ProjectCommandEnvForDiagnostics(req.Env)
+	envProjection := projectCommandEnvForDiagnostics(req.Env)
 	return &interfaces.WorkDiagnostics{
 		Command: &interfaces.CommandDiagnostic{
 			Command:    req.Command,

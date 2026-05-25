@@ -10,7 +10,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
@@ -165,9 +165,9 @@ func assertPortableExpandedExecution(t *testing.T, targetDir string, loaded *fac
 
 	worker, _ := loaded.Worker("executor")
 	runner := &recordingScriptRunner{stdout: "portable copied script accepted"}
-	executor := &workers.WorkstationExecutor{
+	executor := &workerexecutor.WorkstationExecutor{
 		RuntimeConfig: loaded,
-		Executor:      workers.NewScriptExecutorWithRunner(worker, runner, nil),
+		Executor:      workerexecutor.NewScriptExecutorWithRunner(worker, runner, nil),
 		Renderer:      &workerprompting.DefaultPromptRenderer{},
 	}
 
@@ -244,21 +244,21 @@ func writePortableFile(t *testing.T, path, content string) {
 }
 
 type recordingScriptRunner struct {
-	requests []workers.CommandRequest
+	requests []workerexecutor.CommandRequest
 	stdout   string
 }
 
-func (r *recordingScriptRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+func (r *recordingScriptRunner) Run(_ context.Context, req workerexecutor.CommandRequest) (workerexecutor.CommandResult, error) {
 	copied := req
 	copied.Args = append([]string(nil), req.Args...)
 	copied.Env = append([]string(nil), req.Env...)
 	r.requests = append(r.requests, copied)
-	return workers.CommandResult{Stdout: []byte(r.stdout)}, nil
+	return workerexecutor.CommandResult{Stdout: []byte(r.stdout)}, nil
 }
 
-func (r *recordingScriptRunner) LastRequest() workers.CommandRequest {
+func (r *recordingScriptRunner) LastRequest() workerexecutor.CommandRequest {
 	if len(r.requests) == 0 {
-		return workers.CommandRequest{}
+		return workerexecutor.CommandRequest{}
 	}
 	return r.requests[len(r.requests)-1]
 }

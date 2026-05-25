@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
@@ -132,7 +133,7 @@ Work from {{ .Context.WorkDir }}
 	executor := &captureReplayWorkstationExecutor{
 		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"},
 	}
-	we := &workers.WorkstationExecutor{
+	we := &workerexecutor.WorkstationExecutor{
 		RuntimeConfig: runtimeCfg,
 		Executor:      executor,
 		Renderer:      &workerprompting.DefaultPromptRenderer{},

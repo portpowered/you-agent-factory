@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 const defaultRuntimeBufferSize = 64
@@ -193,7 +194,7 @@ func configureRuntimeDispatch(cfg *factory.FactoryConfig, logger logging.Logger,
 		return nil, nil, append(engineOpts, engine.WithDispatchHandler(inlineDispatchHandler(cfg, resultBuffer)))
 	}
 
-	pool := workers.NewWorkerPool(logger)
+	pool := workerexecutor.NewWorkerPool(logger)
 	for typ, exec := range cfg.WorkerExecutors {
 		pool.Register(typ, exec)
 	}

@@ -1,4 +1,4 @@
-package workers
+package executor
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 // AgentExecutor implements WorkstationRequestExecutor for MODEL_WORKER types.
@@ -96,8 +97,8 @@ func missingWorkerWorkResult(dispatch interfaces.WorkDispatch, workerType string
 }
 
 func inferenceErrorWorkResult(dispatch interfaces.WorkDispatch, err error, diagnostics *interfaces.WorkDiagnostics, retryCount int, start time.Time) interfaces.WorkResult {
-	providerErr := NormalizeProviderExecutionError(err)
-	failureMetadata := WorkFailureMetadataFromError(providerErr)
+	providerErr := workerprovider.NormalizeProviderExecutionError(err)
+	failureMetadata := workerprovider.WorkFailureMetadataFromError(providerErr)
 	return interfaces.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
@@ -221,14 +222,14 @@ func inferenceWorkstationType(request interfaces.WorkstationExecutionRequest) st
 	return request.Dispatch.WorkstationName
 }
 
-func providerSessionFromError(providerErr *ProviderError) *interfaces.ProviderSessionMetadata {
+func providerSessionFromError(providerErr *workerprovider.ProviderError) *interfaces.ProviderSessionMetadata {
 	if providerErr == nil {
 		return nil
 	}
 	return interfaces.CloneProviderSessionMetadata(providerErr.ProviderSession)
 }
 
-func providerDiagnosticsFromError(providerErr *ProviderError) *interfaces.WorkDiagnostics {
+func providerDiagnosticsFromError(providerErr *workerprovider.ProviderError) *interfaces.WorkDiagnostics {
 	if providerErr == nil {
 		return nil
 	}
@@ -236,7 +237,7 @@ func providerDiagnosticsFromError(providerErr *ProviderError) *interfaces.WorkDi
 }
 
 func formatAgentProviderError(err error) string {
-	var providerErr *ProviderError
+	var providerErr *workerprovider.ProviderError
 	if errors.As(err, &providerErr) {
 		message := strings.TrimSpace(providerErr.Message)
 		if providerErr.Type == interfaces.ProviderErrorTypeTimeout && message == "execution timeout" {
@@ -284,8 +285,13 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req interfaces.Prov
 			return resp, retryCount, nil
 		}
 
+<<<<<<< HEAD:pkg/workers/agent.go
 		providerErr := NormalizeProviderExecutionError(err)
 		if providerErr == nil {
+=======
+		var providerErr *workerprovider.ProviderError
+		if !errors.As(err, &providerErr) {
+>>>>>>> e832cc93 (feat: prd-backend-package-restructure-005 - Extract worker execution orchestration into a dedicated package):pkg/workers/executor/agent.go
 			return interfaces.InferenceResponse{}, retryCount, err
 		}
 

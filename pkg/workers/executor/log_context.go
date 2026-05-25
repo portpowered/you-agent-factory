@@ -1,4 +1,4 @@
-package workers
+package executor
 
 import "github.com/portpowered/infinite-you/pkg/interfaces"
 

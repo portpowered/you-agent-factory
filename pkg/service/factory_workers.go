@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
@@ -64,7 +65,7 @@ func loadWorkersFromConfig(
 		def, ok := runtimeCfg.Worker(workerCfg.Name)
 		if !ok || def == nil || def.Type == "" {
 			logger.Debug("no AGENTS.md for worker; using noop executor", "worker", workerCfg.Name)
-			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workers.NoopExecutor{}))
+			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
 			continue
 		}
 		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelResources, localModels)
@@ -85,7 +86,7 @@ func loadWorkersFromConfig(
 			continue
 		}
 		logger.Info("loading workerless logical workstation", "workstation", workstationCfg.Name)
-		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workers.WorkstationExecutor{
+		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
 			Renderer:        &workerprompting.DefaultPromptRenderer{},
@@ -150,14 +151,14 @@ func buildWorkerExecutor(
 			}
 		}
 
-		agentOpts := []workers.AgentExecutorOption{
-			workers.WithLogger(logger),
+		agentOpts := []workerexecutor.AgentExecutorOption{
+			workerexecutor.WithLogger(logger),
 		}
 		runner = localModels.wrapRunner(runner, runtimeCfg, factoryCfg, def)
 		runner = modelResources.wrapRunner(runner, factoryCfg, def)
 		runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
-		agentExec := workers.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
-		return &workers.WorkstationExecutor{
+		agentExec := workerexecutor.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
+		return &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
 			Executor:        agentExec,
@@ -165,27 +166,27 @@ func buildWorkerExecutor(
 			Logger:          logger,
 		}
 	case interfaces.WorkstationTypeLogical:
-		return &workers.WorkstationExecutor{
+		return &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
 			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
 		}
 	case interfaces.WorkerTypeScript:
-		var scriptOpts []workers.ScriptExecutorOption
+		var scriptOpts []workerexecutor.ScriptExecutorOption
 		if runtimeCfg != nil && runtimeCfg.FactoryDir() != "" {
-			scriptOpts = append(scriptOpts, workers.WithScriptFactoryDir(runtimeCfg.FactoryDir()))
+			scriptOpts = append(scriptOpts, workerexecutor.WithScriptFactoryDir(runtimeCfg.FactoryDir()))
 		}
 		if scriptRecorder != nil {
-			scriptOpts = append(scriptOpts, workers.WithScriptEventRecorder(scriptRecorder))
+			scriptOpts = append(scriptOpts, workerexecutor.WithScriptEventRecorder(scriptRecorder))
 		}
 		var scriptExec workers.WorkstationRequestExecutor
 		if cmdRunner != nil {
-			scriptExec = workers.NewScriptExecutorWithRunner(def, cmdRunner, logger, scriptOpts...)
+			scriptExec = workerexecutor.NewScriptExecutorWithRunner(def, cmdRunner, logger, scriptOpts...)
 		} else {
-			scriptExec = workers.NewScriptExecutor(def, logger, scriptOpts...)
+			scriptExec = workerexecutor.NewScriptExecutor(def, logger, scriptOpts...)
 		}
-		return &workers.WorkstationExecutor{
+		return &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
 			Executor:        scriptExec,
