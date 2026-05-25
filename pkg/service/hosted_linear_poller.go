@@ -698,7 +698,7 @@ func (c linearPollerClient) fetchIssuesPage(ctx context.Context, apiKey, cursor 
 	if err != nil {
 		return linearIssuePage{}, fmt.Errorf("hosted linear graphql request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {

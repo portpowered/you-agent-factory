@@ -26,6 +26,11 @@ const (
 	ModelProviderKiro     = workerprovider.ModelProviderKiro
 	ModelProviderCursor   = workerprovider.ModelProviderCursor
 	ModelProviderOpenCode = workerprovider.ModelProviderOpenCode
+
+	providerSessionKindSessionID       = "session_id"
+	providerSessionKindConversationID  = "conversation_id"
+	providerSessionKindResponseID      = "response_id"
+	codexWindowsProcessFailureExitCode = 4294967295
 )
 
 func WithSkipPermissions(skip bool) ScriptWrapProviderOption {

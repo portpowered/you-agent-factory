@@ -82,9 +82,7 @@ func (fw *FileWatcher) Watch(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("create watcher: %w", err)
 	}
-	defer func() {
-		_ = watcher.Close()
-	}()
+	defer watcher.Close()
 
 	if err := fw.watchExistingDirs(watcher); err != nil {
 		return err

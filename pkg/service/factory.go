@@ -719,7 +719,11 @@ func replacementFactoryChangePayload(events []factoryapi.FactoryEvent) (factorya
 		if err != nil {
 			return factoryapi.FactoryChangeEventPayload{}, false
 		}
-		return factoryapi.FactoryChangeEventPayload(payload), true
+		return factoryapi.FactoryChangeEventPayload{
+			Factory:         payload.Factory,
+			Metadata:        payload.Metadata,
+			SourceDirectory: payload.SourceDirectory,
+		}, true
 	}
 	return factoryapi.FactoryChangeEventPayload{}, false
 }
