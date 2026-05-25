@@ -14,8 +14,7 @@ describe("DashboardStatusPanel", () => {
     expect(
       screen.getByRole("heading", { name: "Timeline unavailable" }),
     ).toBeTruthy();
-    expect(screen.getByText("You Agent Factory").className).not.toContain("sr-only");
-    expect(headerEyebrow?.textContent).toContain("∞");
+    expect(screen.getByText("U").className).not.toContain("sr-only");
     expect(headerEyebrow?.textContent).toContain("U");
     expect(screen.queryByText("Waiting for more timeline data.")).toBeNull();
     expect(container.querySelector("section")?.className).toContain(
@@ -54,7 +53,7 @@ describe("DashboardStatusPanel", () => {
     expect(
       screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
     ).toBeTruthy();
-    expect(screen.getByText(messages.brandWordmark).className).not.toContain(
+    expect(screen.getByText("U").className).not.toContain(
       "sr-only",
     );
   });

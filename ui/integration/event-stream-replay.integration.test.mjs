@@ -813,7 +813,9 @@ async function assertReplayScenarioRenders({
     await page.goto(previewURL, { waitUntil: "domcontentloaded" });
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
-    await page.getByRole("heading", { name: headingName }).waitFor();
+    await page
+      .getByRole("heading", { exact: true, name: headingName })
+      .waitFor();
     await page
       .getByRole("region", { name: "you-agent-factory bento board" })
       .waitFor();
@@ -834,7 +836,7 @@ async function assertReplayScenarioRenders({
     const dashboardSummary = page.locator('[aria-label="dashboard summary"]');
     await dashboardSummary
       .getByRole("status", {
-        name: /You Agent Factory event stream (live|connecting|offline)/,
+        name: /Event stream (live|connecting|offline)/,
       })
       .waitFor();
     expect(
@@ -923,7 +925,7 @@ async function assertFactoryExportRoundTrip() {
       },
     );
     await page.goto(previewURL, { waitUntil: "domcontentloaded" });
-    await page.getByRole("heading", { name: "You Agent Factory" }).waitFor({
+    await page.getByRole("heading", { exact: true, name: "U" }).waitFor({
       state: "visible",
       timeout: uiInteractionTimeoutMs,
     });

@@ -104,7 +104,7 @@ describe("App follow-up submit request flows", () => {
       },
     );
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
 
     const {
       requestName,
@@ -221,7 +221,7 @@ describe("App follow-up submit multimodal flows", () => {
       },
     );
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
 
     const {
       requestName,
@@ -352,7 +352,7 @@ describe("App follow-up workstation and live totals flows", () => {
   it("updates completed and failed totals from the live stream", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
     const stream = MockEventSource.instances[0];
     if (!stream) {
       throw new Error("expected dashboard stream to be opened");
@@ -392,9 +392,7 @@ describe("App follow-up workstation and live totals flows", () => {
         ).getByText("1"),
       ).toBeTruthy();
       expect(
-        screen.getByRole("status", {
-          name: "You Agent Factory event stream live",
-        }),
+        screen.getByRole("status", { name: "Event stream live" }),
       ).toBeTruthy();
     });
   });

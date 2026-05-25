@@ -11,9 +11,11 @@ import { cn } from "../../../lib/cn";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import {
   DASHBOARD_PAGE_HEADING_CLASS,
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import {
+  DashboardActionRow,
+  DashboardStatusPill,
+} from "../../../components/ui";
 import {
   getNativeLanguageLabel,
   SUPPORTED_LOCALES,
@@ -27,6 +29,7 @@ import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { TickSliderControl } from "./tick-slider-control";
+import { sessionStreamToggleLabel } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { useDashboardSessionTabsState } from "../hooks/use-dashboard-session-tabs-state";
 
@@ -34,25 +37,25 @@ const DASHBOARD_TOOLBAR_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
   "mb-3 grid gap-2 p-2 md:px-3 md:py-2",
 );
-const DASHBOARD_HEADER_ROWS_CLASS = "flex min-w-0 flex-col gap-2";
+const DASHBOARD_HEADER_ROWS_CLASS = "flex min-w-0 flex-col gap-0";
 const DASHBOARD_PRIMARY_ROW_CLASS = cn(
   "flex min-w-0 items-stretch gap-2",
   "max-md:flex-col",
 );
 const DASHBOARD_SECONDARY_ROW_CLASS = "flex min-w-0";
 const DASHBOARD_BRAND_SLOT_CLASS = "min-w-0 self-end pb-2";
-const DASHBOARD_TAB_STRIP_CLASS = "flex min-w-0 flex-1 items-stretch px-2 pt-1";
-const DASHBOARD_TIMELINE_ROW_CLASS = "flex min-w-0 justify-end";
+const DASHBOARD_TIMELINE_CLUSTER_CLASS = "flex min-w-0 w-full flex-1";
+const DASHBOARD_SESSION_STRIP_CLASS =
+  "flex min-w-0 h-full w-full items-stretch px-2 pt-1";
+const DASHBOARD_TIMELINE_OPERATIONS_ROW_CLASS =
+  "relative flex min-w-0 w-full items-center gap-1.5 rounded-t-2xl bg-af-surface-subtle pb-2";
 const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
-const DASHBOARD_STREAM_STATUS_CLASS = cn(
-  "sr-only shrink-0 whitespace-nowrap text-sm text-af-text-muted",
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-);
-const DASHBOARD_CONTROLS_CLASS = cn(
-  "flex shrink-0 items-center gap-2 self-end pb-2",
-  "max-md:w-full max-md:justify-end",
-);
+const DASHBOARD_CONTROLS_CLASS = "shrink-0 self-end pb-2";
+const DASHBOARD_HEADER_ACTION_ROW_CLASS = "justify-end max-md:w-full";
+const DASHBOARD_HEADER_ACTION_ROW_ACTIONS_CLASS =
+  "max-md:w-full max-md:justify-end";
+const DASHBOARD_TIMELINE_ACTIONS_CLASS =
+  "ml-auto flex shrink-0 items-center gap-1.5";
 const LOCALE_MENU_PANEL_CLASS =
   "absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-af-border bg-af-surface-raised p-1 text-af-text shadow-af-panel backdrop-blur-lg";
 const LOCALE_MENU_ITEM_CLASS = cn(
@@ -95,55 +98,93 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
               wordmarkClassName="truncate"
             />
           </h1>
-          <div className={DASHBOARD_TAB_STRIP_CLASS}>
-            <DashboardSessionTabs
-              locale={resolvedLocale}
-              state={sessionTabsState}
-            />
+          <div className={DASHBOARD_TIMELINE_CLUSTER_CLASS}>
+            <div className={DASHBOARD_SESSION_STRIP_CLASS}>
+              <DashboardSessionTabs
+                locale={resolvedLocale}
+                state={sessionTabsState}
+              />
+            </div>
           </div>
-          <p
-            aria-label={streamStatusLabel(streamStatus, headerMessages)}
-            className={DASHBOARD_STREAM_STATUS_CLASS}
-            role="status"
-          >
-            {streamStatusLabel(streamStatus, headerMessages)}
-          </p>
-          <fieldset
-            aria-label={headerMessages.globalHeaderActionsLabel}
-            className={DASHBOARD_CONTROLS_CLASS}
-          >
-            <DashboardHeaderActionButton
-              aria-label={exportMessages.triggerLabel}
-              aria-expanded={isExportDialogOpen}
-              aria-haspopup="dialog"
-              compact
-              onClick={openExportDialog}
-            >
-              <svg
-                aria-hidden="true"
-                fill="none"
-                height="18"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.8"
-                viewBox="0 0 24 24"
-                width="18"
+          <DashboardActionRow
+            actions={
+              <fieldset
+                aria-label={headerMessages.globalHeaderActionsLabel}
+                className={DASHBOARD_CONTROLS_CLASS}
               >
-                <path d="M14 5h5v5" />
-                <path d="M10 14 19 5" />
-                <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
-              </svg>
-            </DashboardHeaderActionButton>
-            <DashboardLocaleMenu
-              locale={resolvedLocale}
-              onChangeLocale={setLocale}
-            />
-          </fieldset>
+                <DashboardLocaleMenu
+                  locale={resolvedLocale}
+                  onChangeLocale={setLocale}
+                />
+              </fieldset>
+            }
+            actionsClassName={DASHBOARD_HEADER_ACTION_ROW_ACTIONS_CLASS}
+            className={DASHBOARD_HEADER_ACTION_ROW_CLASS}
+            statuses={
+              <DashboardStatusPill
+                aria-label={streamStatusLabel(streamStatus, headerMessages)}
+                role="status"
+                tone={streamStatusTone(streamStatus)}
+              >
+                {streamStatusLabel(streamStatus, headerMessages)}
+              </DashboardStatusPill>
+            }
+          />
         </div>
         <div className={DASHBOARD_SECONDARY_ROW_CLASS}>
-          <div className={DASHBOARD_TIMELINE_ROW_CLASS}>
+          <div className={DASHBOARD_TIMELINE_OPERATIONS_ROW_CLASS}>
             <TickSliderControl locale={resolvedLocale} />
+            <div className={DASHBOARD_TIMELINE_ACTIONS_CLASS}>
+              {sessionTabsState.activeSession ? (
+                <DashboardHeaderActionButton
+                  aria-label={sessionStreamToggleLabel(
+                    sessionTabsState.activeSession,
+                    sessionTabsState.isSessionStreamPaused(
+                      sessionTabsState.activeSession.id,
+                    ),
+                    headerMessages,
+                  )}
+                  aria-pressed={sessionTabsState.isSessionStreamPaused(
+                    sessionTabsState.activeSession.id,
+                  )}
+                  compact
+                  onClick={() => {
+                    sessionTabsState.toggleSessionStreamPaused(
+                      sessionTabsState.activeSession.id,
+                    );
+                  }}
+                >
+                  <SessionStreamToggleIcon
+                    paused={sessionTabsState.isSessionStreamPaused(
+                      sessionTabsState.activeSession.id,
+                    )}
+                  />
+                </DashboardHeaderActionButton>
+              ) : null}
+              <DashboardHeaderActionButton
+                aria-label={exportMessages.triggerLabel}
+                aria-expanded={isExportDialogOpen}
+                aria-haspopup="dialog"
+                compact
+                onClick={openExportDialog}
+              >
+                <svg
+                  aria-hidden="true"
+                  fill="none"
+                  height="18"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.8"
+                  viewBox="0 0 24 24"
+                  width="18"
+                >
+                  <path d="M14 5h5v5" />
+                  <path d="M10 14 19 5" />
+                  <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+                </svg>
+              </DashboardHeaderActionButton>
+            </div>
           </div>
         </div>
       </div>
@@ -165,10 +206,52 @@ function streamStatusLabel(
   return messages.streamStatusConnectingLabel;
 }
 
+function streamStatusTone(
+  status: ReturnType<typeof useDashboardStreamStore.getState>["streamState"]["status"],
+) {
+  if (status === "live") {
+    return "active";
+  }
+  if (status === "offline") {
+    return "danger";
+  }
+
+  return "neutral";
+}
+
 function resolveLanguageSwitcherValue(locale: string): SupportedLocale {
   return SUPPORTED_LOCALES.includes(locale as SupportedLocale)
     ? (locale as SupportedLocale)
     : "en";
+}
+
+function SessionStreamToggleIcon({
+  paused,
+}: {
+  paused: boolean;
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="16"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="16"
+    >
+      {paused ? (
+        <path d="M8 5.75 18 12 8 18.25v-12.5Z" />
+      ) : (
+        <>
+          <path d="M9 5.75v12.5" />
+          <path d="M15 5.75v12.5" />
+        </>
+      )}
+    </svg>
+  );
 }
 
 function DashboardLocaleMenu({

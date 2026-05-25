@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 type providerCallRecorder struct {
@@ -44,6 +45,29 @@ func (p *providerCallRecorder) Calls() []interfaces.ProviderInferenceRequest {
 		calls[i] = interfaces.CloneProviderInferenceRequest(call)
 	}
 	return calls
+}
+
+type providerCommandRunnerRecorder struct {
+	mu       sync.Mutex
+	requests []workers.CommandRequest
+	result   workers.CommandResult
+}
+
+func (r *providerCommandRunnerRecorder) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.requests = append(r.requests, workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req)))
+	return r.result, nil
+}
+
+func (r *providerCommandRunnerRecorder) Requests() []workers.CommandRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	requests := make([]workers.CommandRequest, len(r.requests))
+	copy(requests, r.requests)
+	return requests
 }
 
 func TestLoadWorkersFromConfig_PromptTemplateFromBody(t *testing.T) {
@@ -198,6 +222,83 @@ You are a helpful assistant.
 	if workerDef.ModelProvider != "codex" {
 		t.Fatalf("model provider = %q, want codex", workerDef.ModelProvider)
 	}
+}
+
+func TestLoadWorkersFromConfig_ModelWorkerUsesCanonicalProviderCommandRunnerAndRecordingProvider(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: gpt-5.4
+executorProvider: script_wrap
+modelProvider: codex
+stopToken: COMPLETE
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: workers.CommandResult{
+			Stdout: []byte("provider-output COMPLETE"),
+			Stderr: []byte(`{"event":"session.created","session_id":"sess_codex_123"}`),
+		},
+	}
+	recorded := make([]factoryapi.FactoryEvent, 0, 2)
+	recorder := func(event factoryapi.FactoryEvent) {
+		recorded = append(recorded, event)
+	}
+
+	opts, err := loadWorkersFromConfigForServiceTest(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, runner, nil, nil, recorder)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-model-worker-provider-command",
+		TransitionID:    "t-model-worker-provider-command",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-model-worker-provider-command",
+			Color: interfaces.TokenColor{
+				WorkID:  "work-model-worker-provider-command",
+				Payload: []byte("helpful input"),
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertCanonicalModelWorkerExecutionResult(t, result)
+	assertCanonicalProviderCommandRequests(t, runner.Requests())
+	assertRecordedInferenceEvents(t, recorded)
 }
 
 // backendsizecheck:ignore-function this dual-locality integration test keeps the full model-invoke execution assertion path in one place.
@@ -796,7 +897,7 @@ func loadWorkersFromConfigForServiceTest(
 	providerCommandRunner workers.CommandRunner,
 	commandRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
-	inferenceRecorder workers.InferenceEventRecorder,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
 ) ([]factory.FactoryOption, error) {
 	return loadWorkersFromConfig(
 		factoryDir,
@@ -815,4 +916,40 @@ func loadWorkersFromConfigForServiceTest(
 		nil,
 		nil,
 	)
+}
+
+func assertCanonicalModelWorkerExecutionResult(t *testing.T, result interfaces.WorkResult) {
+	t.Helper()
+
+	if result.Outcome != interfaces.OutcomeAccepted || result.Output != "provider-output COMPLETE" {
+		t.Fatalf("result = %#v, want accepted provider output", result)
+	}
+	if result.ProviderSession == nil || result.ProviderSession.Provider != "codex" || result.ProviderSession.ID != "sess_codex_123" {
+		t.Fatalf("provider session = %#v, want canonical codex session metadata", result.ProviderSession)
+	}
+}
+
+func assertCanonicalProviderCommandRequests(t *testing.T, requests []workers.CommandRequest) {
+	t.Helper()
+
+	if len(requests) != 1 {
+		t.Fatalf("provider command runner request count = %d, want 1", len(requests))
+	}
+	if requests[0].Command != string(workers.ModelProviderCodex) {
+		t.Fatalf("provider command = %q, want %q", requests[0].Command, workers.ModelProviderCodex)
+	}
+}
+
+func assertRecordedInferenceEvents(t *testing.T, recorded []factoryapi.FactoryEvent) {
+	t.Helper()
+
+	if len(recorded) != 2 {
+		t.Fatalf("recorded event count = %d, want 2", len(recorded))
+	}
+	if recorded[0].Type != factoryapi.FactoryEventTypeInferenceRequest {
+		t.Fatalf("first event type = %s, want %s", recorded[0].Type, factoryapi.FactoryEventTypeInferenceRequest)
+	}
+	if recorded[1].Type != factoryapi.FactoryEventTypeInferenceResponse {
+		t.Fatalf("second event type = %s, want %s", recorded[1].Type, factoryapi.FactoryEventTypeInferenceResponse)
+	}
 }

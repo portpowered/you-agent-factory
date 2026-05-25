@@ -37,10 +37,10 @@ describe("SelectionDetailLayout", () => {
     ).toBe("Redo");
     expect(
       screen.getByRole("button", { name: "Undo selection" }).className,
-    ).toContain("border-af-border");
+    ).toContain("rounded-lg");
     expect(
       screen.getByRole("button", { name: "Undo selection" }).className,
-    ).toContain("bg-af-surface-subtle");
+    ).toContain("min-h-10");
   });
 
   it("renders localized history control labels and accessible names from the requested locale", () => {

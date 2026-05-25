@@ -12,7 +12,7 @@ import {
   FactoryGraphEditorVisibilityPanel,
 } from "./factory-graph-editor-controls";
 
-function renderToolbar() {
+function renderToolbar({ hasPendingChanges = true }: { hasPendingChanges?: boolean } = {}) {
   function ToolbarHarness() {
     const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -31,7 +31,7 @@ function renderToolbar() {
           canInteract={true}
           canSave={true}
           canDiscard={true}
-          hasPendingChanges={true}
+          hasPendingChanges={hasPendingChanges}
           onDiscard={() => {}}
           onAddAction={() => {}}
           onAddMenuOpenChange={setMenuOpen}
@@ -53,11 +53,18 @@ describe("factory graph editor toolbar controls", () => {
 
     renderToolbar();
 
+    const addMenuButton = screen.getByRole("button", {
+      name: "Open add entity menu",
+    });
+    expect(addMenuButton.textContent).toBe("");
+    expect(addMenuButton.getAttribute("aria-expanded")).toBe("false");
+
     await user.tab();
     await user.keyboard("{Enter}");
 
     const menu = await screen.findByLabelText("Add graph entity menu");
     expect(menu).toBeTruthy();
+    expect(addMenuButton.getAttribute("aria-expanded")).toBe("true");
     expect(
       within(menu).getByRole("button", { name: "Workstation" }),
     ).toBeTruthy();
@@ -80,7 +87,9 @@ describe("factory graph editor toolbar controls", () => {
     const connectButton = screen.getByRole("button", { name: "Connect" });
     const deleteButton = screen.getByRole("button", { name: "Delete" });
     const saveButton = screen.getByRole("button", { name: "Save changes" });
+    const addButton = screen.getByRole("button", { name: "Open add entity menu" });
 
+    expect(addButton.textContent).toBe("");
     expect(connectButton.textContent).toBe("");
     expect(deleteButton.textContent).toBe("");
     expect(saveButton.textContent).toBe("");
@@ -89,6 +98,9 @@ describe("factory graph editor toolbar controls", () => {
     expect(
       screen.getByRole("button", { name: "Discard changes" }),
     ).toBeTruthy();
+    expect(addButton.className).toContain("h-10");
+    expect(connectButton.className).toContain("h-10");
+    expect(deleteButton.className).toContain("h-10");
 
     await user.click(connectButton);
     expect(connectButton.getAttribute("aria-pressed")).toBe("true");
@@ -145,6 +157,50 @@ describe("factory graph editor toolbar controls", () => {
     expect(tooltip.className).toContain("border-af-border-strong");
     expect(tooltip.className).toContain("bg-af-surface-raised");
     expect(tooltip.className).toContain("text-af-text");
+  });
+
+});
+
+describe("factory graph editor toolbar action-row composition", () => {
+  it("renders the pending-status pill before draft action buttons", () => {
+    renderToolbar();
+
+    const toolbar = screen.getByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    const sections = toolbar.querySelectorAll("[data-dashboard-action-row-section]");
+
+    expect(sections).toHaveLength(2);
+    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
+      "statuses",
+    );
+    expect(sections[1]?.getAttribute("data-dashboard-action-row-section")).toBe(
+      "actions",
+    );
+    expect(within(sections[0] as HTMLElement).getByRole("status").textContent).toBe(
+      "Draft changes pending",
+    );
+    expect(
+      within(sections[1] as HTMLElement).getByRole("button", {
+        name: "Discard changes",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("omits the draft action section when no pending changes exist", () => {
+    renderToolbar({ hasPendingChanges: false });
+
+    const toolbar = screen.getByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    const sections = toolbar.querySelectorAll("[data-dashboard-action-row-section]");
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
+      "statuses",
+    );
+    expect(within(toolbar).queryByRole("button", { name: "Discard changes" })).toBeNull();
+    expect(within(toolbar).getByRole("status").textContent).toBe("No draft changes");
   });
 });
 

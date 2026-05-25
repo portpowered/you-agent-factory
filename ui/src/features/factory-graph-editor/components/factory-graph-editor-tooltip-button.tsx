@@ -1,16 +1,18 @@
-import { useId, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useId, useState } from "react";
+
+import {
+  DashboardActionButton,
+  type DashboardActionButtonProps,
+} from "../../../components/ui";
 
 const INLINE_TOOLTIP_CLASS =
   "pointer-events-none absolute left-1/2 top-full z-30 mt-2 -translate-x-1/2 rounded-xl border border-af-border-strong bg-af-surface-raised px-3 py-2 text-center text-xs font-medium text-af-text shadow-af-panel";
 
-export function FactoryGraphEditorTooltipButton({
+export function FactoryGraphEditorTooltipActionButton({
   children,
-  className,
   tooltip,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  children: ReactNode;
-  className: string;
+}: DashboardActionButtonProps & {
   tooltip: string;
 }) {
   const tooltipID = useId();
@@ -18,10 +20,9 @@ export function FactoryGraphEditorTooltipButton({
 
   return (
     <div className="relative inline-flex">
-      <button
+      <DashboardActionButton
         {...props}
         aria-describedby={tooltipVisible ? tooltipID : undefined}
-        className={className}
         onBlur={(event) => {
           props.onBlur?.(event);
           setTooltipVisible(false);
@@ -40,7 +41,7 @@ export function FactoryGraphEditorTooltipButton({
         }}
       >
         {children}
-      </button>
+      </DashboardActionButton>
       {tooltipVisible ? (
         <span className={INLINE_TOOLTIP_CLASS} id={tooltipID} role="tooltip">
           {tooltip}

@@ -3,10 +3,12 @@ import type { ReactNode } from "react";
 import { DashboardMutationDialog } from "../../../components/dashboard";
 import {
   Button,
+  DashboardActionRow,
+  DashboardActionButton,
+  DashboardStatusPill,
   Popover,
   PopoverContent,
   PopoverTrigger,
-  buttonVariants,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
@@ -14,7 +16,9 @@ export {
   FactoryGraphEditorModeToggle,
   FactoryGraphEditorStatus,
 } from "./factory-graph-editor-mode-controls";
-import { FactoryGraphEditorTooltipButton } from "./factory-graph-editor-tooltip-button";
+import {
+  FactoryGraphEditorTooltipActionButton,
+} from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
 export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
@@ -41,6 +45,7 @@ const TOOLBAR_SHELL_CLASS =
   "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0";
 const TOOLBAR_ACTIONS_CLASS =
   "flex items-center gap-2 border-l border-af-border pl-2 max-md:ml-auto";
+const TOOLBAR_MIXED_ROW_CLASS = "min-w-0 flex-1";
 const MENU_LIST_CLASS = "grid gap-1";
 const MENU_ACTION_CLASS =
   "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent-border hover:bg-af-accent-surface focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
@@ -53,9 +58,6 @@ const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
   neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
   warning: "border-af-warning-border bg-af-warning-surface text-af-warning-text",
 };
-
-const STATUS_PILL_CLASS =
-  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold max-md:min-w-0 max-md:flex-1 max-md:justify-center";
 
 export function FactoryGraphEditorToolbar({
   activeTool,
@@ -130,47 +132,50 @@ export function FactoryGraphEditorToolbar({
         }
         tone={activeTool === "connect" ? "secondary" : "outline"}
       />
-      <p
-        aria-live="polite"
-        className={cn(
-          STATUS_PILL_CLASS,
-          hasPendingChanges
-            ? "border-af-warning-border bg-af-warning-surface text-af-warning-text"
-            : "border-af-border bg-af-surface-subtle text-af-text-muted",
-        )}
-      >
-        {hasPendingChanges
-          ? messages.toolbarPendingChanges
-          : messages.toolbarNoPendingChanges}
-      </p>
-      {hasPendingChanges ? (
-        <div className={TOOLBAR_ACTIONS_CLASS}>
-          <Button
-            disabled={!canDiscard || isSaving}
-            onClick={onDiscard}
-            size="sm"
-            tone="outline"
-            type="button"
+      <DashboardActionRow
+        actions={
+          hasPendingChanges ? (
+            <>
+              <DashboardActionButton
+                disabled={!canDiscard || isSaving}
+                onClick={onDiscard}
+                tone="outline"
+                type="button"
+              >
+                {messages.draftActionsDiscard}
+              </DashboardActionButton>
+              <FactoryGraphEditorTooltipActionButton
+                aria-label={
+                  isSaving ? messages.draftActionsSaving : messages.draftActionsSave
+                }
+                disabled={!canSave || isSaving}
+                executing={isSaving}
+                iconOnly
+                onClick={onSave}
+                tooltip={saveDisabledReason ?? messages.draftActionsSave}
+                tone={canSave && !isSaving ? "default" : "outline"}
+                type="button"
+              >
+                <SaveIcon />
+              </FactoryGraphEditorTooltipActionButton>
+            </>
+          ) : null
+        }
+        actionsClassName={hasPendingChanges ? TOOLBAR_ACTIONS_CLASS : undefined}
+        className={TOOLBAR_MIXED_ROW_CLASS}
+        statuses={
+          <DashboardStatusPill
+            aria-live="polite"
+            className="max-md:min-w-0 max-md:flex-1 max-md:justify-center"
+            role="status"
+            tone={hasPendingChanges ? "warning" : "neutral"}
           >
-            {messages.draftActionsDiscard}
-          </Button>
-          <FactoryGraphEditorTooltipButton
-            aria-label={
-              isSaving ? messages.draftActionsSaving : messages.draftActionsSave
-            }
-            className={buttonVariants({
-              size: "icon",
-              tone: canSave && !isSaving ? "default" : "outline",
-            })}
-            disabled={!canSave || isSaving}
-            onClick={onSave}
-            tooltip={saveDisabledReason ?? messages.draftActionsSave}
-            type="button"
-          >
-            <SaveIcon />
-          </FactoryGraphEditorTooltipButton>
-        </div>
-      ) : null}
+            {hasPendingChanges
+              ? messages.toolbarPendingChanges
+              : messages.toolbarNoPendingChanges}
+          </DashboardStatusPill>
+        }
+      />
     </section>
   );
 }
@@ -197,17 +202,17 @@ export function FactoryGraphEditorVisibilityPanel({
       className={VISIBILITY_PANEL_CLASS}
     >
       {options.map((option) => (
-        <Button
+        <DashboardActionButton
           aria-pressed={option.selected}
           className="min-w-20"
+          iconOnly={false}
           key={option.key}
           onClick={() => onSelectPreset(option.key)}
-          size="sm"
           tone={option.selected ? "secondary" : "outline"}
           type="button"
         >
           {option.label}
-        </Button>
+        </DashboardActionButton>
       ))}
     </section>
   );
@@ -231,17 +236,18 @@ function FactoryGraphEditorToolbarButton({
   tone: "outline" | "secondary";
 }) {
   return (
-    <FactoryGraphEditorTooltipButton
+    <FactoryGraphEditorTooltipActionButton
       aria-label={label}
       aria-pressed={active}
-      className={buttonVariants({ size: "icon", tone })}
       disabled={disabled}
+      iconOnly
       onClick={onClick}
       tooltip={description}
+      tone={tone}
       type="button"
     >
       {icon}
-    </FactoryGraphEditorTooltipButton>
+    </FactoryGraphEditorTooltipActionButton>
   );
 }
 
@@ -267,26 +273,29 @@ function FactoryGraphEditorAddMenu({
 
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
-      <PopoverTrigger
-        aria-label={messages.toolbarOpenAddMenuLabel}
-        className={buttonVariants({ size: "icon", tone: "ghost" })}
-        disabled={!canInteract}
-        type="button"
-      >
-        <svg
-          aria-hidden="true"
-          fill="none"
-          height="18"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.8"
-          viewBox="0 0 24 24"
-          width="18"
+      <PopoverTrigger asChild>
+        <DashboardActionButton
+          aria-label={messages.toolbarOpenAddMenuLabel}
+          disabled={!canInteract}
+          iconOnly
+          tone={open ? "secondary" : "outline"}
+          type="button"
         >
-          <path d="M12 5v14" />
-          <path d="M5 12h14" />
-        </svg>
+          <svg
+            aria-hidden="true"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+            viewBox="0 0 24 24"
+            width="18"
+          >
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
+          </svg>
+        </DashboardActionButton>
       </PopoverTrigger>
       <PopoverContent
         align="start"

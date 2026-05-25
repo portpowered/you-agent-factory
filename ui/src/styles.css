@@ -30,10 +30,13 @@
   --color-af-background: var(--color-af-foundation-background);
   --color-af-surface: var(--color-af-foundation-surface);
   --color-af-surface-subtle: rgb(from var(--color-af-foundation-overlay) r g b / 0.04);
+  --color-af-surface-subtle-muted: rgb(from var(--color-af-foundation-overlay) r g b / 0.028);
   --color-af-surface-raised: rgb(from var(--color-af-foundation-surface) r g b / 0.94);
   --color-af-border: rgb(from var(--color-af-foundation-overlay) r g b / 0.1);
   --color-af-border-strong: rgb(from var(--color-af-foundation-overlay) r g b / 0.18);
   --color-af-overlay: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
+  --color-af-overlay-subtle: rgb(from var(--color-af-foundation-overlay) r g b / 0.04);
+  --color-af-overlay-focus: rgb(from var(--color-af-foundation-overlay) r g b / 0.1);
   --color-af-overlay-strong: rgb(from var(--color-af-foundation-background) r g b / 0.78);
   --color-af-focus-ring: rgb(from var(--color-af-foundation-accent) r g b / 0.25);
   --color-af-text: var(--color-af-foundation-ink);
@@ -298,6 +301,10 @@
 
   [data-legend-flow] {
     animation: agent-flow-legend 1.15s ease-in-out infinite;
+  }
+
+  [data-bento-card-id] {
+    overflow: hidden;
   }
 
   [data-bento-card-id] > .react-resizable-handle {

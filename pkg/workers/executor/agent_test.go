@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 type agentMockProvider struct {
@@ -311,7 +312,7 @@ func TestAgentExecutor_ErrorDiagnosticsStayDetachedFromProviderMutation(t *testi
 		Metadata: map[string]string{"phase": "initial"},
 	}
 	provider := &agentMockProvider{
-		err: NewProviderError(interfaces.ProviderErrorTypeInternalServerError, "provider 500", nil),
+		err: workerprovider.NewProviderError(interfaces.ProviderErrorTypeInternalServerError, "provider 500", nil),
 	}
 	var providerErr *ProviderError
 	if !errors.As(provider.err, &providerErr) {
@@ -604,8 +605,8 @@ func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T)
 func TestAgentExecutor_RetryableProviderError_RetriesTwiceBeforeSuccess(t *testing.T) {
 	provider := &agentMockProvider{
 		errors: []error{
-			NewProviderError(interfaces.ProviderErrorTypeInternalServerError, "provider 500", nil),
-			NewProviderError(interfaces.ProviderErrorTypeTimeout, "provider timeout", nil),
+			workerprovider.NewProviderError(interfaces.ProviderErrorTypeInternalServerError, "provider 500", nil),
+			workerprovider.NewProviderError(interfaces.ProviderErrorTypeTimeout, "provider timeout", nil),
 			nil,
 		},
 		responses: []interfaces.InferenceResponse{
@@ -665,7 +666,7 @@ func TestAgentExecutor_RetryableProviderError_RetriesTwiceBeforeSuccess(t *testi
 
 func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryableProviderMetadata(t *testing.T) {
 	provider := &agentMockProvider{
-		err: normalizeProviderExitFailure(
+		err: workerprovider.NormalizeProviderExitFailure(
 			string(ModelProviderCodex),
 			CommandResult{
 				ExitCode: codexWindowsProcessFailureExitCode,
@@ -724,7 +725,7 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 	if result.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
 		t.Fatalf("provider failure family = %q, want %q", result.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
 	}
-	decision := ProviderFailureDecisionFromMetadata(result.ProviderFailure)
+	decision := workerprovider.ProviderFailureDecisionFromMetadata(result.ProviderFailure)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
 		t.Fatalf("ProviderFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", result.ProviderFailure, decision)
 	}
@@ -739,7 +740,7 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 	provider := &agentMockProvider{
 		errors: []error{
-			NewProviderErrorWithSession(
+			workerprovider.NewProviderErrorWithSession(
 				interfaces.ProviderErrorTypeAuthFailure,
 				"auth failed",
 				nil,
@@ -801,7 +802,7 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testing.T) {
 	provider := &agentMockProvider{
 		errors: []error{
-			NewProviderErrorWithSession(
+			workerprovider.NewProviderErrorWithSession(
 				interfaces.ProviderErrorTypeAuthFailure,
 				"auth failed",
 				nil,

@@ -18,7 +18,7 @@ import {
 import { installDashboardBrowserTestShims } from "../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { reloadDashboardLayoutFromStorage } from "../features/bento/public";
-import { useDashboardBentoStore } from "../features/bento/state";
+import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
 import { useCurrentFactoryDocument } from "../features/current-factory-definition/public";
 import { resetSelectionHistoryStore } from "../features/current-selection/state";
 import {
@@ -26,7 +26,7 @@ import {
   useDashboardStreamStore,
 } from "../features/dashboard/state";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
-import { useExportDialogStore } from "../features/export/state";
+import { useExportDialogStore } from "../features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "../features/import/public";
 import type { WorldState } from "../features/timeline/state";
 import { useFactoryTimelineStore } from "../features/timeline/state";

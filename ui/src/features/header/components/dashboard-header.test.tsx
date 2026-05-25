@@ -104,7 +104,7 @@ describe("DashboardHeader", () => {
     useFactoryTimelineStore.getState().reset();
     useDashboardStreamStore.setState({
       streamState: {
-        message: "Connecting to the You Agent Factory event stream.",
+        message: "Connecting to the event stream.",
         status: "connecting",
       },
     });
@@ -119,8 +119,7 @@ describe("DashboardHeader", () => {
     const toolbar = screen.getByRole("region", {
       name: headerMessages.dashboardSummaryLabel,
     });
-    const heading = screen.getByRole("heading", { name: "You Agent Factory" });
-    const wordmark = screen.getByText("You Agent Factory");
+    const heading = screen.getByRole("heading");
     const slider = screen.getByRole("slider", {
       name: headerMessages.sliderAriaLabel,
     });
@@ -133,6 +132,13 @@ describe("DashboardHeader", () => {
     const globalActions = screen.getByRole("group", {
       name: headerMessages.globalHeaderActionsLabel,
     });
+    const streamStatus = screen.getByRole("status", {
+      name: headerMessages.streamStatusConnectingLabel,
+    });
+    const actionRow = streamStatus.parentElement?.parentElement;
+    const actionRowSections = toolbar.querySelectorAll(
+      "[data-dashboard-action-row-section]",
+    );
 
     const exportButton = screen.getByRole<HTMLButtonElement>("button", {
       name: messages.triggerLabel,
@@ -140,32 +146,43 @@ describe("DashboardHeader", () => {
     expect(exportButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
     expect(exportButton.getAttribute("aria-expanded")).toBe("false");
-    expect(wordmark.className).not.toContain("sr-only");
     expect(toolbar.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
     expect(toolbar.className).toContain("mb-3");
     expect(toolbar.className).toContain("gap-2");
     expect(toolbar.className).toContain("p-2");
     expect(toolbar.firstElementChild?.className).toContain("flex-col");
-    expect(toolbar.firstElementChild?.className).toContain("gap-2");
+    expect(toolbar.firstElementChild?.className).toContain("gap-0");
     expect(toolbar.firstElementChild?.firstElementChild?.className).toContain(
       "items-stretch",
     );
-    expect(heading.textContent).toContain("∞");
     expect(heading.textContent).toContain("U");
     expect(toolbar.firstElementChild?.firstElementChild?.firstElementChild).toBe(
       heading,
     );
     expect(heading.className).toContain("pb-2");
-    expect(heading.firstElementChild?.className).toContain("gap-3");
+    expect(heading.firstElementChild?.className).toContain("items-center");
     expect(globalActions.className).toContain("self-end");
-    expect(globalActions.className).toContain("max-md:w-full");
-    expect(globalActions.className).toContain("max-md:justify-end");
+    expect(actionRow?.className).toContain("justify-end");
+    expect(actionRow?.className).toContain("max-md:w-full");
+    expect(actionRowSections).toHaveLength(2);
     expect(
-      heading.querySelector('[aria-hidden="true"]')?.className,
+      actionRowSections[0]?.getAttribute("data-dashboard-action-row-section"),
+    ).toBe("statuses");
+    expect(
+      actionRowSections[1]?.getAttribute("data-dashboard-action-row-section"),
+    ).toBe("actions");
+    expect(actionRowSections[0]?.contains(streamStatus)).toBe(true);
+    expect(actionRowSections[1]?.contains(languageButton)).toBe(true);
+    expect(
+      heading.firstElementChild?.firstElementChild?.className,
     ).toContain("h-12");
     expect(slider.closest("div")?.parentElement?.className).toContain(
-      "justify-end",
+      "rounded-t-2xl",
     );
+    expect(slider.closest("div")?.parentElement?.className).toContain(
+      "bg-af-surface-subtle",
+    );
+    expect(slider.closest("div")?.parentElement?.className).toContain("w-full");
     expect(slider.closest("div")?.className).toContain("md:flex-nowrap");
     expect(slider.closest("div")?.className).toContain("w-full");
     const controls = Array.from(
@@ -175,12 +192,17 @@ describe("DashboardHeader", () => {
     );
     expect(controls).toHaveLength(4);
     expect(controls[0]).toBe(openSessionButton);
-    expect(controls[1]).toBe(exportButton);
-    expect(controls[2]).toBe(languageButton);
-    expect(controls[3]).toBe(slider);
+    expect(controls[1]).toBe(languageButton);
+    expect(controls[2]).toBe(slider);
+    expect(controls[3]).toBe(exportButton);
+    expect(streamStatus.textContent).toBe(
+      headerMessages.streamStatusConnectingLabel,
+    );
+    expect(streamStatus.className).toContain("rounded-full");
     expect(globalActions.contains(languageButton)).toBe(true);
     expect(globalActions.contains(openSessionButton)).toBe(false);
-    expect(globalActions.contains(exportButton)).toBe(true);
+    expect(globalActions.contains(exportButton)).toBe(false);
+    expect(actionRowSections[1]?.contains(exportButton)).toBe(false);
     expect(globalActions.compareDocumentPosition(slider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");
@@ -255,7 +277,7 @@ describe("DashboardHeader", () => {
     act(() => {
       useDashboardStreamStore.setState({
         streamState: {
-          message: "You Agent Factory event stream is offline.",
+          message: "Event stream is offline.",
           status: "offline",
         },
       });
@@ -269,7 +291,7 @@ describe("DashboardHeader", () => {
       screen.getByRole("region", { name: messages.dashboardSummaryLabel }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("heading", { name: messages.brandWordmark }),
+      screen.getByRole("heading"),
     ).toBeTruthy();
     expect(screen.getByText(messages.sliderLabel).className).toContain(
       "sr-only",
@@ -281,7 +303,9 @@ describe("DashboardHeader", () => {
       screen.queryByRole("button", { name: messages.returnToCurrentTickLabel }),
     ).toBeNull();
     expect(screen.getByText("Dashboard session tabs zh-CN")).toBeTruthy();
-    expect(screen.getByText(messages.streamStatusConnectingLabel)).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: messages.streamStatusOfflineLabel }),
+    ).toBeTruthy();
   });
 
   it("opens and closes the locale menu through keyboard and dismissal events", async () => {

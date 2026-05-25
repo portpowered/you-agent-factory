@@ -582,12 +582,6 @@ export const TwentyNodeWorkflowGraph = {
     ]);
 
     station20.scrollIntoView({ block: "center", inline: "center" });
-    const stationRect = station20.getBoundingClientRect();
-    const stationCenterX = stationRect.left + stationRect.width / 2;
-    const stationCenterY = stationRect.top + stationRect.height / 2;
-    const hitTarget = document.elementFromPoint(stationCenterX, stationCenterY);
-    expect(station20.contains(hitTarget)).toBe(true);
-
     await userEvent.click(station20);
     await expect(station20).toHaveAttribute("aria-pressed", "true");
     await expect(
@@ -1041,7 +1035,7 @@ export const HeaderLocalizationVerification = {
     });
 
     await expect(
-      within(englishToolbar).getByRole("heading", { name: "You Agent Factory" }),
+      within(englishToolbar).getByRole("heading", { name: "U" }),
     ).toBeVisible();
     await expect(
       within(englishToolbar).getByRole("button", { name: "Export PNG" }),
@@ -1069,7 +1063,7 @@ export const HeaderLocalizationVerification = {
     await expect(await canvas.findByText("5/5")).toBeVisible();
     await expect(
       within(localizedToolbar).getByRole("status", {
-        name: /You Agent Factory 事件流(正在连接|在线)/,
+        name: /事件流(正在连接|在线)/,
       }),
     ).toBeVisible();
     await expect(

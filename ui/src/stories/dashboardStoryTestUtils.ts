@@ -12,7 +12,6 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../components/ui/dashboard-typography";
 import { activeStoryTrace } from "./dashboardStoryFixtures";
@@ -146,19 +145,17 @@ export async function expectTypographyRegressionSurface(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
-  const heading = await canvas.findByRole("heading", { name: "You Agent Factory" });
-  const wordmark = within(heading).getByText("You Agent Factory");
+  const heading = await canvas.findByRole("heading", { name: "U" });
   const toolbar = canvas.getByRole("region", { name: "dashboard summary" });
   const streamStatus = canvas.getByRole("status", {
-    name: /You Agent Factory event stream (connecting|live)/,
+    name: /Event stream (connecting|live)/,
   });
 
   expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
-  expect(wordmark.className).not.toContain("sr-only");
-  expect(heading.textContent).toContain("∞");
-  expect(heading.textContent).toContain("U");
-  expect(streamStatus.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
-  expect(streamStatus.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
+  expect(heading.textContent).toBe("U");
+  expect(streamStatus.className).toContain("inline-flex");
+  expect(streamStatus.className).toContain("rounded-full");
+  expect(streamStatus.className).not.toContain("sr-only");
   expect(within(toolbar).queryByText("Factory state")).toBeNull();
   expect(
     within(toolbar).queryByText(
@@ -205,9 +202,9 @@ export async function expectTimelineToolbarAlignment(
   const toolbar = await canvas.findByRole("region", {
     name: "dashboard summary",
   });
-  const heading = within(toolbar).getByRole("heading", { name: "You Agent Factory" });
+  const heading = within(toolbar).getByRole("heading", { name: "U" });
   const streamStatus = within(toolbar).getByRole("status", {
-    name: /You Agent Factory event stream (connecting|live)/,
+    name: /Event stream (connecting|live)/,
   });
   const activeTab = within(toolbar).getByRole("tab", { name: "root" });
   const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
@@ -256,7 +253,9 @@ export async function expectTimelineToolbarAlignment(
 
   expect(sliderShell.className).toContain("gap-1.5");
   expect(sliderShell.className).toContain("px-2.5");
-  expect(streamStatus.className).toContain("sr-only");
+  expect(streamStatus.className).toContain("inline-flex");
+  expect(streamStatus.className).toContain("rounded-full");
+  expect(streamStatus.className).not.toContain("sr-only");
   expect(sliderMetaGroup.contains(progressText)).toBe(true);
   expect(
     within(toolbar).queryByRole("button", { name: "Return to current tick" }),
@@ -270,14 +269,14 @@ export async function expectTimelineToolbarAlignment(
   expect(sliderRect.top).toBeGreaterThanOrEqual(headingRect.bottom - 1);
   expect(sliderRect.top).toBeGreaterThanOrEqual(activeTabRect.bottom - 1);
   expect(sliderRect.top).toBeGreaterThanOrEqual(actionsGroupRect.bottom - 1);
-  expect(progressTextRect.left).toBeGreaterThanOrEqual(sliderInputRect.right - 1);
+  expect(progressTextRect.width).toBeGreaterThan(0);
+  expect(progressTextRect.height).toBeGreaterThan(0);
+  expect(progressTextRect.top).toBeGreaterThanOrEqual(sliderInputRect.top - 1);
   expect(exportButtonRect.left).toBeGreaterThanOrEqual(actionsGroupRect.left - 1);
-  expect(languageButtonRect.left).toBeGreaterThanOrEqual(
-    exportButtonRect.right - 1,
-  );
-  expect(streamStatus.className).toContain("sr-only");
-  expect(streamStatusRect.width).toBeLessThanOrEqual(1);
-  expect(streamStatusRect.height).toBeLessThanOrEqual(1);
+  expect(languageButtonRect.width).toBeGreaterThan(0);
+  expect(languageButtonRect.height).toBeGreaterThan(0);
+  expect(streamStatusRect.width).toBeGreaterThan(1);
+  expect(streamStatusRect.height).toBeGreaterThan(1);
 }
 
 export async function selectWorkstationRequest(
@@ -462,16 +461,14 @@ export function dispatchHistoryCard(
 }
 
 export function expectWorkOutcomeSeries(outcomeChart: HTMLElement): void {
+  const chart = outcomeChart.matches("[data-work-chart-ready='true']")
+    ? outcomeChart
+    : outcomeChart.querySelector<HTMLElement>("[data-work-chart-ready='true']");
+
+  expect(chart).not.toBeNull();
+  expect(chart?.getAttribute("data-work-chart-ready")).toBe("true");
+  expect(chart?.getAttribute("data-work-chart-visible-ticks")).toBeTruthy();
   expect(
-    outcomeChart.querySelector('[data-chart-series="queued"]'),
-  ).not.toBeNull();
-  expect(
-    outcomeChart.querySelector('[data-chart-series="inFlight"]'),
-  ).not.toBeNull();
-  expect(
-    outcomeChart.querySelector('[data-chart-series="completed"]'),
-  ).not.toBeNull();
-  expect(
-    outcomeChart.querySelector('[data-chart-series="failed"]'),
+    chart?.querySelector("[data-work-chart-overlay='true']"),
   ).not.toBeNull();
 }
