@@ -10,7 +10,7 @@ import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import { formatDateTime } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import { PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
+import { PROVIDER_SESSION_CARD_CLASS } from "../../current-selection/components/detail-card-shared";
 import {
   EncryptedReasoningNotice,
   TranscriptSection,
