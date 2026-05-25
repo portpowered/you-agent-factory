@@ -2,6 +2,6 @@ type: object
 additionalProperties: false
 properties:
   family:
-    type: string
+    $ref: '../../../openapi-main.yaml#/components/schemas/WorkFailureFamily'
   type:
-    type: string
+    $ref: '../../../openapi-main.yaml#/components/schemas/WorkFailureType'

@@ -2844,14 +2844,56 @@ components:
         - The workstation made partial progress and should follow the continue route for another iteration.
         - The workstation completed normally but rejected the input for business reasons.
         - The workstation could not complete because execution crashed, timed out, or hit a system error.
+    WorkFailureFamily:
+      type: string
+      description: Stable machine-readable failure family used to decide retry and routing behavior for failed work.
+      x-enum-varnames:
+        - WorkFailureFamilyTerminal
+        - WorkFailureFamilyRetryable
+        - WorkFailureFamilyThrottle
+      enum:
+        - terminal
+        - retryable
+        - throttle
+      x-enum-descriptions:
+        - The failure is final and should not be retried automatically.
+        - The failure may succeed on a later retry without manual intervention.
+        - The failure indicates upstream throttling and should follow throttling-specific retry behavior.
+    WorkFailureType:
+      type: string
+      description: Stable machine-readable failure type used to classify failed work across providers and runtimes.
+      x-enum-varnames:
+        - WorkFailureTypeAuthFailure
+        - WorkFailureTypePermanentBadRequest
+        - WorkFailureTypeThrottled
+        - WorkFailureTypeInternalServerError
+        - WorkFailureTypeTimeout
+        - WorkFailureTypeUnknown
+        - WorkFailureTypeMisconfigured
+      enum:
+        - auth_failure
+        - permanent_bad_request
+        - throttled
+        - internal_server_error
+        - timeout
+        - unknown
+        - misconfigured
+      x-enum-descriptions:
+        - Authentication or authorization failed and operator action is required.
+        - The request is invalid in a non-retryable way and should be fixed before retrying.
+        - The dependency rejected the request because of throttling or capacity limits.
+        - The dependency or runtime failed with a retryable internal error.
+        - The work exceeded a configured deadline before completing.
+        - The runtime could not classify the failure into a more specific stable type.
+        - The worker or runtime was misconfigured and requires operator intervention.
     ProviderFailureMetadata:
       type: object
       additionalProperties: false
       properties:
         family:
-          type: string
+          $ref: '#/components/schemas/WorkFailureFamily'
         type:
-          type: string
+          $ref: '#/components/schemas/WorkFailureType'
     ProviderSessionMetadata:
       type: object
       additionalProperties: false

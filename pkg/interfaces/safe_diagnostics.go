@@ -112,9 +112,11 @@ func GeneratedWorkFailureMetadata(failure *WorkFailureMetadata) *factoryapi.Prov
 	if failure == nil {
 		return nil
 	}
+	family := factoryapi.WorkFailureFamily(failure.Family)
+	failureType := factoryapi.WorkFailureType(failure.Type)
 	return &factoryapi.ProviderFailureMetadata{
-		Family: safeDiagnosticsStringPtrIfNotEmpty(string(failure.Family)),
-		Type:   safeDiagnosticsStringPtrIfNotEmpty(string(failure.Type)),
+		Family: &family,
+		Type:   &failureType,
 	}
 }
 
@@ -125,8 +127,8 @@ func WorkFailureMetadataFromGenerated(failure *factoryapi.ProviderFailureMetadat
 		return nil
 	}
 	return &WorkFailureMetadata{
-		Family: WorkFailureFamily(safeDiagnosticsStringValue(failure.Family)),
-		Type:   WorkFailureType(safeDiagnosticsStringValue(failure.Type)),
+		Family: WorkFailureFamily(safeDiagnosticsEnumStringValue(failure.Family)),
+		Type:   WorkFailureType(safeDiagnosticsEnumStringValue(failure.Type)),
 	}
 }
 
@@ -342,4 +344,11 @@ func safeDiagnosticsStringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func safeDiagnosticsEnumStringValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }

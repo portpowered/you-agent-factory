@@ -50,6 +50,8 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"InferenceOutcome",
 	"Diagnostics",
 	"ProviderDiagnostic",
+	"WorkFailureFamily",
+	"WorkFailureType",
 	"ProviderFailureMetadata",
 	"ProviderSessionMetadata",
 	"RenderedPromptDiagnostic",
