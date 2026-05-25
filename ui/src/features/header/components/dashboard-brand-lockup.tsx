@@ -30,7 +30,7 @@ export function DashboardBrandLockup({
       </span>
       <span
         className={cn(
-          "truncate text-lg font-semibold tracking-[0.02em] text-af-ink",
+          "truncate text-lg font-semibold tracking-[0.02em] text-af-text",
           wordmarkClassName,
         )}
       >
