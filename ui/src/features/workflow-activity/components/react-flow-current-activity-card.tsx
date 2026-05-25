@@ -15,7 +15,7 @@ import type { FactoryValue } from "../../../api/named-factory";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
-import { buildGraphLayout, type GraphLayout } from "../../flowchart/lib/layout";
+import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import type {
   FactoryPngImportValue,
@@ -30,10 +30,7 @@ import {
   useActiveExecutions,
 } from "../hooks/react-flow-current-activity-card-active-executions";
 import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
-import {
-  createWorkflowTopologyAsyncCache,
-  useWorkflowTopologyAsyncCache,
-} from "../hooks/workflow-topology-async-cache";
+import { useCurrentActivityGraphLayout } from "../hooks/react-flow-current-activity-card-graph-layout";
 import {
   buildGraphEdges,
   initialFocusNodes,
@@ -43,14 +40,10 @@ import {
   buildActiveItemLabelsByPlaceId,
   buildCurrentActivityNodes,
   buildHandleAssignments,
-  EMPTY_GRAPH_LAYOUT,
   EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
 import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
-import {
-  currentActivityGraphKey,
-  currentActivityTopologyKey,
-} from "../lib/react-flow-current-activity-card-keys";
+import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
@@ -61,8 +54,6 @@ export {
   currentActivityGraphKey,
   currentActivityTopologyKey,
 } from "../lib/react-flow-current-activity-card-keys";
-
-const GRAPH_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<GraphLayout>();
 const CURRENT_ACTIVITY_CARD_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
   "relative flex h-full min-h-0 min-w-0 flex-col p-4 md:p-5",
@@ -116,28 +107,6 @@ interface ReactFlowCurrentActivityCardProps {
   readFactoryImportFile?: ReadFactoryImportFile;
   selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;
-}
-
-function useGraphLayout(snapshot: DashboardSnapshot) {
-  const topologyKey = useMemo(
-    () => currentActivityTopologyKey(snapshot.topology),
-    [snapshot.topology],
-  );
-  const layoutTopology = useMemo(() => snapshot.topology, [snapshot.topology]);
-
-  return useWorkflowTopologyAsyncCache({
-    cache: GRAPH_LAYOUT_CACHE,
-    dependencies: [layoutTopology],
-    fallbackValue: EMPTY_GRAPH_LAYOUT,
-    initialValue: EMPTY_GRAPH_LAYOUT,
-    loadLayout: () => buildGraphLayout(layoutTopology),
-    mapResolvedLayout: identityGraphLayout,
-    topologyKey,
-  });
-}
-
-function identityGraphLayout(layout: GraphLayout) {
-  return layout;
 }
 
 function useCurrentActivityBaseNodes({
@@ -239,7 +208,7 @@ export function useCurrentActivityGraphViewModel({
     () => groupActiveExecutionsByWorkstationNodeID(activeExecutions),
     [activeExecutions],
   );
-  const graphLayout = useGraphLayout(snapshot);
+  const graphLayout = useCurrentActivityGraphLayout(snapshot);
   const graphKey = useMemo(
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],
