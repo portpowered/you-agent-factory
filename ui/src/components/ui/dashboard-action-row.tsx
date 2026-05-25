@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
 
@@ -7,10 +7,10 @@ const DASHBOARD_ACTION_ROW_CLASS =
 const DASHBOARD_ACTION_ROW_SECTION_CLASS =
   "flex min-w-0 flex-wrap items-center gap-2";
 
-export interface DashboardActionRowProps {
+export interface DashboardActionRowProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   actions?: ReactNode;
   actionsClassName?: string;
-  className?: string;
   statuses?: ReactNode;
   statusesClassName?: string;
 }
@@ -21,6 +21,7 @@ export function DashboardActionRow({
   className,
   statuses,
   statusesClassName,
+  ...props
 }: DashboardActionRowProps) {
   const hasStatuses = statuses !== undefined && statuses !== null;
   const hasActions = actions !== undefined && actions !== null;
@@ -30,7 +31,7 @@ export function DashboardActionRow({
   }
 
   return (
-    <div className={cn(DASHBOARD_ACTION_ROW_CLASS, className)}>
+    <div className={cn(DASHBOARD_ACTION_ROW_CLASS, className)} {...props}>
       {hasStatuses ? (
         <div
           className={cn(

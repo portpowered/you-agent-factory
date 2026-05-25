@@ -137,6 +137,9 @@ describe("DashboardHeader", () => {
       name: headerMessages.streamStatusConnectingLabel,
     });
     const actionRow = streamStatus.parentElement?.parentElement;
+    const actionRowSections = toolbar.querySelectorAll(
+      "[data-dashboard-action-row-section]",
+    );
 
     const exportButton = screen.getByRole<HTMLButtonElement>("button", {
       name: messages.triggerLabel,
@@ -164,6 +167,16 @@ describe("DashboardHeader", () => {
     expect(globalActions.className).toContain("self-end");
     expect(actionRow?.className).toContain("justify-end");
     expect(actionRow?.className).toContain("max-md:w-full");
+    expect(actionRowSections).toHaveLength(2);
+    expect(
+      actionRowSections[0]?.getAttribute("data-dashboard-action-row-section"),
+    ).toBe("statuses");
+    expect(
+      actionRowSections[1]?.getAttribute("data-dashboard-action-row-section"),
+    ).toBe("actions");
+    expect(actionRowSections[0]?.contains(streamStatus)).toBe(true);
+    expect(actionRowSections[1]?.contains(exportButton)).toBe(true);
+    expect(actionRowSections[1]?.contains(languageButton)).toBe(true);
     expect(
       heading.querySelector('[aria-hidden="true"]')?.className,
     ).toContain("h-12");
