@@ -335,7 +335,7 @@ describe.sequential("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { name: "you-agent-factory" })
+          .getByRole("heading", { name: "You Agent Factory" })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,
@@ -564,46 +564,38 @@ describe.sequential("factory graph editor browser integration", () => {
           .getByRole("button", { name: "Add entity" })
           .click();
 
-        const draftActions = browserPage.page.getByRole("region", {
-          name: "Pending graph changes",
+        const saveChangesButton = toolbar.getByRole("button", {
+          name: "Save changes",
         });
-        await draftActions.waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
-        await draftActions
-          .getByText("This save will apply 1 created entity.", { exact: true })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await expect
+          .poll(async () => await saveChangesButton.isEnabled(), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe(true);
 
         await toolbar.getByRole("button", { name: "Connect" }).click();
         await browserPage.page
-          .getByRole("button", { name: "Connect: story:done Input" })
+          .getByTestId("rf__node-workstation:draft")
+          .getByRole("button", {
+            name: "Route a failure transition from this workstation.",
+          })
           .click();
         await browserPage.page
-          .getByRole("button", { name: "Connect: review Input" })
+          .getByTestId("rf__node-place:story:queued")
+          .getByRole("button", {
+            name: "Receive a workstation failure transition.",
+          })
           .click();
 
-        await draftActions
-          .getByText(
-            "This save will apply 1 created entity and 1 changed edge.",
-            { exact: true },
-          )
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await expect
           .poll(
-            async () =>
-              await draftActions
-                .getByRole("button", { name: "Save changes" })
-                .isEnabled(),
+            async () => await saveChangesButton.isEnabled(),
             {
               timeout: uiInteractionTimeoutMs,
             },
           )
           .toBe(true);
 
-        const saveChangesButton = draftActions.getByRole("button", {
-          name: "Save changes",
-        });
         await saveChangesButton.focus();
         await saveChangesButton.press("Enter");
         const saveDialog = browserPage.page.getByRole("dialog", {
@@ -638,15 +630,18 @@ describe.sequential("factory graph editor browser integration", () => {
               ...editableGraphFactoryDefinition,
               version: initialEditableFactoryDefinitionVersion,
               workstations: [
-                editableGraphFactoryDefinition.workstations[0],
                 {
-                  body: "Review the drafted story.",
-                  inputs: [
+                  ...editableGraphFactoryDefinition.workstations[0],
+                  onFailure: [
                     {
-                      state: "done",
+                      state: "queued",
                       workType: "story",
                     },
                   ],
+                },
+                {
+                  body: "Review the drafted story.",
+                  inputs: [],
                   name: "review",
                   type: "MODEL_WORKSTATION",
                   worker: "writer",

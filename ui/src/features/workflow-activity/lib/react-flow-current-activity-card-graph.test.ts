@@ -171,7 +171,7 @@ describe("current activity graph editor handles", () => {
           nodeId: "workstation:review",
         },
       },
-      nodeId: "place:story:done",
+      nodeId: "work-state:story:done",
       nodeKind: "work-state",
     });
 
@@ -185,7 +185,7 @@ describe("current activity graph editor handles", () => {
 
     expect(onConnectionAnchorClick).toHaveBeenCalledWith({
       anchorId: "workstation-output-target",
-      nodeId: "place:story:done",
+      nodeId: "work-state:story:done",
     });
   });
 
