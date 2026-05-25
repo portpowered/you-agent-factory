@@ -29,9 +29,13 @@ function renderToolbar() {
             },
           ]}
           canInteract={true}
+          canSave={true}
+          canDiscard={true}
           hasPendingChanges={true}
+          onDiscard={() => {}}
           onAddAction={() => {}}
           onAddMenuOpenChange={setMenuOpen}
+          onSave={() => {}}
           onSelectTool={setActiveTool}
           openAddMenu={menuOpen}
           visible={true}
@@ -75,10 +79,16 @@ describe("factory graph editor toolbar controls", () => {
 
     const connectButton = screen.getByRole("button", { name: "Connect" });
     const deleteButton = screen.getByRole("button", { name: "Delete" });
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
 
     expect(connectButton.textContent).toBe("");
     expect(deleteButton.textContent).toBe("");
+    expect(saveButton.textContent).toBe("");
     expect(connectButton.getAttribute("aria-pressed")).toBe("false");
+    expect(saveButton).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Discard changes" }),
+    ).toBeTruthy();
 
     await user.click(connectButton);
     expect(connectButton.getAttribute("aria-pressed")).toBe("true");
@@ -228,9 +238,9 @@ describe("factory graph editor visibility controls", () => {
 
     expect(onSelectPreset).toHaveBeenCalledWith("all");
     expect(
-      screen.getByRole("button", { name: "Workflow" }).getAttribute(
-        "aria-pressed",
-      ),
+      screen
+        .getByRole("button", { name: "Workflow" })
+        .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
       screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed"),

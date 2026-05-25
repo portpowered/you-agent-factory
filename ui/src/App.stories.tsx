@@ -342,6 +342,21 @@ async function expectFactoryGraphHeaderBrowserFlow(
       name: "Factory graph editor tools",
     }),
   ).toBeVisible();
+  await expect(
+    within(graphCard).getAllByRole("button", {
+      name: "Route successful output from this workstation.",
+    }).length,
+  ).toBeGreaterThan(0);
+  await expect(
+    within(graphCard).queryByRole("button", {
+      name: "Accept a worker assignment for this workstation.",
+    }),
+  ).not.toBeInTheDocument();
+  await expect(
+    within(graphCard).queryByRole("button", {
+      name: "Accept a resource requirement for this workstation.",
+    }),
+  ).not.toBeInTheDocument();
   await userEvent.click(
     headerScope.getByRole("button", {
       name: "Leave factory graph editor",
@@ -1026,7 +1041,7 @@ export const HeaderLocalizationVerification = {
     });
 
     await expect(
-      within(englishToolbar).getByRole("heading", { name: "you-agent-factory" }),
+      within(englishToolbar).getByRole("heading", { name: "You Agent Factory" }),
     ).toBeVisible();
     await expect(
       within(englishToolbar).getByRole("button", { name: "Export PNG" }),
@@ -1054,7 +1069,7 @@ export const HeaderLocalizationVerification = {
     await expect(await canvas.findByText("5/5")).toBeVisible();
     await expect(
       within(localizedToolbar).getByRole("status", {
-        name: /you-agent-factory 事件流(正在连接|在线)/,
+        name: /You Agent Factory 事件流(正在连接|在线)/,
       }),
     ).toBeVisible();
     await expect(

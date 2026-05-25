@@ -37,12 +37,12 @@ func TestGetDashboardUI_ReturnsEmbeddedShell(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	for _, want := range []string{"<title>Infinite You Dashboard</title>", "Standalone live dashboard shell for Infinite You.", "Infinite%20You%20dashboard%20icon", "<div id=\"root\"></div>", "/dashboard/ui/assets/"} {
+	for _, want := range []string{"<title>You Agent Factory Dashboard</title>", "Standalone live dashboard shell for You Agent Factory.", "You%20Agent%20Factory%20dashboard%20icon", "<div id=\"root\"></div>", "/dashboard/ui/assets/"} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("expected embedded dashboard shell to contain %q, got body: %s", want, rec.Body.String())
 		}
 	}
-	for _, retired := range []string{"Agent Factory Dashboard", "Standalone live dashboard shell for Agent Factory.", "Port OS Agent Factory"} {
+	for _, retired := range []string{"Infinite You Dashboard", "Standalone live dashboard shell for Infinite You.", "Infinite%20You%20dashboard%20icon"} {
 		if strings.Contains(rec.Body.String(), retired) {
 			t.Fatalf("expected embedded dashboard shell to retire %q, got body: %s", retired, rec.Body.String())
 		}

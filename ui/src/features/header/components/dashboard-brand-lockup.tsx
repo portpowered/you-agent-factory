@@ -28,7 +28,12 @@ export function DashboardBrandLockup({
         <span className="text-[1.45rem] leading-none">∞</span>
         <span className="text-[1rem] leading-none">U</span>
       </span>
-      <span className={cn("sr-only", wordmarkClassName)}>
+      <span
+        className={cn(
+          "truncate text-lg font-semibold tracking-[0.02em] text-af-text",
+          wordmarkClassName,
+        )}
+      >
         {messages.brandWordmark}
       </span>
     </span>

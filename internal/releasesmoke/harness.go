@@ -60,6 +60,8 @@ type Failure struct {
 type DashboardRenderEvidence struct {
 	AssetRequestPaths []string `json:"assetRequestPaths"`
 	LiveRequestPaths  []string `json:"liveRequestPaths"`
+	PageTitle         string   `json:"pageTitle"`
+	MetaDescription   string   `json:"metaDescription"`
 	StreamStatusName  string   `json:"streamStatusName"`
 	VisibleTexts      []string `json:"visibleTexts"`
 }

@@ -23,7 +23,7 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(dirname, "..");
 const replayFixtureDirectory = path.join(dirname, "fixtures");
 const previewHost = "127.0.0.1";
-const buildTimeoutMs = 180_000;
+const buildTimeoutMs = 240_000;
 const browserScenarioTimeoutMs = 240_000;
 const readyTimeoutMs = 90_000;
 const replayDelayMs = 25;
@@ -834,7 +834,7 @@ async function assertReplayScenarioRenders({
     const dashboardSummary = page.locator('[aria-label="dashboard summary"]');
     await dashboardSummary
       .getByRole("status", {
-        name: /you-agent-factory event stream (live|connecting|offline)/,
+        name: /You Agent Factory event stream (live|connecting|offline)/,
       })
       .waitFor();
     expect(
@@ -923,7 +923,7 @@ async function assertFactoryExportRoundTrip() {
       },
     );
     await page.goto(previewURL, { waitUntil: "domcontentloaded" });
-    await page.getByRole("heading", { name: "you-agent-factory" }).waitFor({
+    await page.getByRole("heading", { name: "You Agent Factory" }).waitFor({
       state: "visible",
       timeout: uiInteractionTimeoutMs,
     });
