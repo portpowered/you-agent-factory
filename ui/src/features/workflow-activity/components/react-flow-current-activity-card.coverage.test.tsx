@@ -5,6 +5,7 @@ import {
   render,
   renderHook,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 
@@ -347,6 +348,14 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     const onSelectStateNode = vi.fn();
     const onSelectWorkID = vi.fn();
     const onSelectWorkstation = vi.fn();
+    const editor = {
+      activeTool: null,
+      canInteractWithEditor: false,
+      draftState: defaultDraftState,
+      editorMode: false,
+      handleConnectionAnchorClick: vi.fn(),
+      pendingConnectionSource: null,
+    };
     const loadedLayout: GraphLayout = {
       edges: [],
       height: 196,
@@ -376,6 +385,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     const { result, rerender } = renderHook(
       ({ snapshot }) =>
         useCurrentActivityGraphViewModel({
+          editor: editor as never,
           now: Date.parse("2026-04-08T12:00:00Z"),
           onSelectStateNode,
           onSelectWorkID,
@@ -394,7 +404,9 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       expect(result.current.nodes.length).toBeGreaterThan(0);
     });
 
-    rerender({ snapshot: rejectedSnapshot });
+    await act(async () => {
+      rerender({ snapshot: rejectedSnapshot });
+    });
 
     await waitFor(() => {
       expect(result.current.nodes).toHaveLength(0);
