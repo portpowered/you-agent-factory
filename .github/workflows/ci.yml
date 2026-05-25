@@ -227,7 +227,7 @@ jobs:
 
       - name: Run dashboard browser integration suite
         timeout-minutes: 15
-        run: make test-ui-browser-integration
+        run: make ui-integration-test
 
   backend-verification:
     name: Backend Verification

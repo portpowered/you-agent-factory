@@ -2,6 +2,7 @@ import type {
   DashboardActiveExecution,
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
+import { nodeKeyId } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type {
   GraphLayout,
   PositionedEdge,
@@ -70,6 +71,29 @@ function workstationGraphNodeId(nodeId: string): string {
 
 function placeGraphNodeId(placeId: string): string {
   return `place:${placeId}`;
+}
+
+function resolveEditorPlaceNodeId(
+  positionedNodeId: string,
+  place: {
+    kind: string;
+    state_value?: string;
+    type_id?: string;
+  },
+): string {
+  if (
+    place.kind === "work_state" &&
+    typeof place.type_id === "string" &&
+    typeof place.state_value === "string"
+  ) {
+    return nodeKeyId({
+      kind: "work-state",
+      stateName: place.state_value,
+      workTypeName: place.type_id,
+    });
+  }
+
+  return positionedNodeId;
 }
 
 export function buildHandleAssignments(
@@ -271,7 +295,7 @@ function buildPlaceNode(
       input.editor?.editorMode && place.kind === "work_state"
         ? buildEditorHandles({
             editor: input.editor,
-            nodeId: positionedNode.nodeId,
+            nodeId: resolveEditorPlaceNodeId(positionedNode.nodeId, place),
             nodeKind: "work-state",
           })
         : undefined,

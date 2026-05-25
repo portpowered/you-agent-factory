@@ -286,7 +286,7 @@ function SessionTabsContent({
 
   return (
     <>
-      <nav aria-label={messages.sessionTabsLabel} className="min-w-0 flex-1">
+      <nav aria-label={messages.sessionTabsLabel} className="min-w-0 flex-1 overflow-hidden">
         <div
           aria-orientation="horizontal"
           className={SESSION_TAB_LIST_CLASS}
@@ -344,12 +344,12 @@ function SessionTabsContent({
               tabID={sessionTabID(sessionTabsID, session.id)}
             />
           ))}
-          <OpenSessionButton
-            label={messages.openSessionButtonLabel}
-            onClick={onOpenSession}
-          />
         </div>
       </nav>
+      <OpenSessionButton
+        label={messages.openSessionButtonLabel}
+        onClick={onOpenSession}
+      />
       {activeSession ? (
         <div
           aria-labelledby={sessionTabID(sessionTabsID, activeSession.id)}

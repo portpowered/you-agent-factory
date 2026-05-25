@@ -136,10 +136,7 @@ export const HeaderActionButtonsVerification = {
         "data-dashboard-header-action",
         "neutral",
       );
-      await expect(sessionButton).toHaveAttribute(
-        "data-dashboard-header-action",
-        "neutral",
-      );
+      await expect(sessionButton).toHaveAttribute("aria-haspopup", "dialog");
       expect(
         within(toolbar).queryByRole("button", { name: "Return to current tick" }),
       ).toBeNull();

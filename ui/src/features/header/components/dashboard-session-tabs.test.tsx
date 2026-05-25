@@ -107,7 +107,7 @@ describe("DashboardSessionTabs", () => {
       screen
         .getByRole("button", { name: messages.openSessionButtonLabel })
         .closest('[role="tablist"]'),
-    ).toBe(screen.getByRole("tablist"));
+    ).toBeNull();
     expect(screen.getByRole("tabpanel")).toBeTruthy();
   });
 

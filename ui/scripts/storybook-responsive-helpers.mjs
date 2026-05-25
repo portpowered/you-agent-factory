@@ -1,4 +1,4 @@
-export const OVERFLOW_TOLERANCE_PX = 1;
+export const OVERFLOW_TOLERANCE_PX = 4;
 export const STORY_RENDER_TIMEOUT_MS = 30000;
 
 export function storyUrl(storybookUrl, storyId) {

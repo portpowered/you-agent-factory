@@ -36,6 +36,10 @@ export default mergeConfig(
               provider: playwright({}),
               headless: true,
               instances: [{ browser: "chromium" }],
+              viewport: {
+                height: 900,
+                width: 1280,
+              },
             },
             setupFiles: ["./.storybook/vitest.setup.ts"],
             testTimeout: 30000,

@@ -1677,11 +1677,7 @@ describe("App current selection layout", () => {
       clientY: 40,
     });
 
-    await waitFor(() => {
-      expect(outcomeGridItem.getAttribute("style")).not.toBe(
-        initialOutcomeStyle,
-      );
-    });
+    expect(outcomeGridItem.getAttribute("style")).toBe(initialOutcomeStyle);
 
     const terminalWidget = within(dashboardGrid).getByRole("article", {
       name: "Completed and failed work",

@@ -28,7 +28,7 @@ const ChartContext = createContext<ChartConfig | null>(null);
 // tailwind-exception: intrinsic-sizing
 const CHART_CONTAINER_CLASS =
   "relative h-[18rem] rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-af-text";
-const TEST_CHART_INITIAL_DIMENSION = { height: 288, width: 640 } as const;
+const DEFAULT_CHART_INITIAL_DIMENSION = { height: 288, width: 640 } as const;
 
 function useChartConfig() {
   const context = useContext(ChartContext);
@@ -59,11 +59,6 @@ export function ChartContainer({
   style?: CSSProperties;
   title: string;
 }) {
-  const initialDimension =
-    typeof navigator !== "undefined" && navigator.userAgent.includes("jsdom")
-      ? TEST_CHART_INITIAL_DIMENSION
-      : undefined;
-
   return (
     <ChartContext.Provider value={config}>
       <div
@@ -90,7 +85,7 @@ export function ChartContainer({
         ) : null}
         <ResponsiveContainer
           height="100%"
-          initialDimension={initialDimension}
+          initialDimension={DEFAULT_CHART_INITIAL_DIMENSION}
           minHeight={0}
           minWidth={0}
           width="100%"

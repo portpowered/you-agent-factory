@@ -6,15 +6,26 @@ doc-id: AGF-DEV-007
 
 # Dashboard UI Replay Testing
 
-This document is the canonical contributor guide for Agent Factory UI replay-driven regression coverage. Use it when a dashboard behavior is primarily projected from `/events` and you need to decide whether to add or extend replay coverage.
+This document is the canonical contributor guide for replay-focused coverage inside the broader browser-backed Agent Factory UI integration lane. Use it when a dashboard behavior is primarily projected from `/events` and you need to decide whether to add or extend replay coverage instead of a more local or more workflow-oriented browser scenario.
 
 ## Summary
 
 - Prefer replay coverage for stream-projected dashboard behavior such as dashboard shell rendering, current selection, trace drill-downs, runtime request details, failure rendering, and timeline history.
+- Run browser-backed dashboard scenarios through `make ui-integration-test`, which executes the maintained files under `ui/integration/`.
+- Treat replay coverage as one member of that browser-backed lane alongside other feature-oriented browser scenarios such as session opening or graph editing.
 - Keep recorded fixtures as canonical `FactoryEvent` JSONL files under `ui/integration/fixtures/`.
 - Load fixtures through `ui/src/testing/replay-fixtures.ts` and use `ui/src/testing/replay-harness.ts` for App-level or browser-backed `/events` replay.
+- Reuse the shared browser harness seams in `ui/integration/browser-test-harness.mjs` when a replay scenario needs real preview-server or API wiring in Chromium.
 - Keep scenario and surface metadata in `ui/src/testing/replay-fixture-catalog.ts`.
 - Print or verify replay coverage visibility with `bun run replay:coverage` and `bun run replay:coverage:check`.
+
+## Lane Boundary
+
+The browser-backed integration lane lives under `ui/integration/`. Keep customer-facing browser workflows in feature-oriented files there and choose the narrowest stable seam that still proves the behavior:
+
+- Use replay-oriented files when the behavior is driven by deterministic `/events` history.
+- Use session, graph-editor, or other feature-oriented browser files when the behavior depends on request or interaction flows outside replay alone.
+- Prefer checked-in fixtures, shared harness seams, labeled controls, and request interception over operating-system-native dialogs, pixel-dependent gestures, or fixed sleeps.
 
 ## When To Prefer Replay Coverage
 
@@ -31,7 +42,7 @@ Prefer more local tests only when the behavior is not stream-driven or when the 
 
 ## Fixture Contract
 
-- Store replay fixtures in `libraries/agent-factory/ui/integration/fixtures/*.jsonl`.
+- Store replay fixtures in `ui/integration/fixtures/*.jsonl`.
 - Each non-empty line must be one canonical UI `FactoryEvent` object.
 - Keep fixtures on the current generated event contract. Do not preserve stale dashboard-local aliases in new fixtures.
 - Keep scenario metadata out of the JSONL payload. Register scenario identity, covered surfaces, and verification layers in `ui/src/testing/replay-fixture-catalog.ts`.
@@ -70,13 +81,13 @@ The scenario registry and tracked replay surfaces live in `ui/src/testing/replay
 - scenario IDs and fixture filenames
 - covered stream-projected surfaces
 - verification layers such as `app-smoke`, `browser-integration`, or `projection-helper`
-- any browser-integration scenario metadata needed by `integration/event-stream-replay.integration.test.mjs`, so the smoke and the report stay on one registry
+- any browser-integration scenario metadata needed by `ui/integration/event-stream-replay.integration.test.mjs`, while the shared preview and API seams live in `ui/integration/browser-test-harness.mjs`, so the smoke and the report stay on one registry without re-creating per-file infrastructure
 - any smoke-only build hygiene needed by that integration test, such as clearing inherited `VITEST*` env before shelling out to `bun run build` so the tracked `dist/` bundle stays production-shaped
 
 After changing replay scenarios or tracked surfaces:
 
 ```bash
-cd libraries/agent-factory/ui
+cd ui
 bun run replay:coverage
 bun run replay:coverage:check
 ```
@@ -100,15 +111,15 @@ Future stories can raise coverage breadth or thresholds after this shared seam p
 
 ## Verification
 
-For replay-guidance changes and replay-scenario changes, use the smallest relevant checks from `libraries/agent-factory/ui`:
+For replay-guidance changes and replay-scenario changes, use the smallest relevant checks from the repository root or `ui/` workspace:
 
 ```bash
-bun run tsc
-bun run test
-bun run replay:coverage:check
+make typecheck
+make ui-integration-test
+cd ui && bun run replay:coverage:check
 ```
 
-`bun run test` already runs the browser-backed replay smoke in a separate `test:integration` phase after the faster unit/jsdom suite so the preview-backed replay harness does not share one Vitest process with unrelated UI tests. Use `bun run test:integration` directly only when you need to iterate on that browser path in isolation.
+`make ui-integration-test` is the canonical browser-backed verification entry point. Replay smoke still runs there through `ui/integration/event-stream-replay.integration.test.mjs`, but it now shares the maintained lane with the session-opening and graph-editor scenarios instead of being a one-off `test:integration` exception. Use a direct file-scoped Vitest integration command only when iterating on one browser file in isolation.
 
 ## References
 

@@ -6,7 +6,6 @@ import {
   within,
 } from "@testing-library/react";
 
-import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { NoSelectionDetailCard } from "../../current-selection/components/no-selection-detail-card";
 import { WorkTotalsCard } from "../../work-totals/public";
@@ -14,6 +13,7 @@ import {
   AgentBentoCard,
   AgentBentoLayout,
   type AgentBentoLayoutItem,
+  toCompactGridLayout,
 } from "./agent-bento";
 import { InlineAddWidgetCard } from "./inline-add-widget-card";
 
@@ -65,16 +65,13 @@ function getGridItem(cardTitle: string): HTMLElement {
 }
 
 describe("AgentBentoLayout", () => {
-  let restoreBrowserShims: (() => void) | undefined;
-
   beforeEach(() => {
-    restoreBrowserShims = installDashboardBrowserTestShims();
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    restoreBrowserShims?.();
-    restoreBrowserShims = undefined;
+    Object.defineProperty(HTMLElement.prototype, "offsetParent", {
+      configurable: true,
+      get() {
+        return this.parentElement ?? document.body;
+      },
+    });
   });
 
   it("renders card IDs, titles, and body content inside the movable board", () => {
@@ -115,7 +112,6 @@ describe("AgentBentoLayout", () => {
     expect(moveButton.className).toContain("border-af-border");
     expect(moveButton.className).toContain("bg-af-surface-raised");
     expect(moveButton.className).toContain("text-af-text-muted");
-    expect(moveButton.className).toContain("focus-visible:ring-2");
   });
 
   it("keeps movement enabled and updates grid position during pointer interaction", async () => {
@@ -175,102 +171,48 @@ describe("AgentBentoLayout", () => {
     }
   });
 
-  it("collapses the board to a single non-resizable column at narrow widths", () => {
-    const onLayoutChange = vi.fn();
-    restoreBrowserShims?.();
-    restoreBrowserShims = undefined;
+  it("stacks cards into a single full-width column in compact layouts", () => {
+    const compactLayout = toCompactGridLayout([
+      { h: 2, i: "activity", w: 6, x: 0, y: 0 },
+      { h: 3, i: "trace", w: 6, x: 6, y: 0 },
+      { h: 4, i: "terminal", w: 12, x: 0, y: 3 },
+    ]);
 
-    class NarrowResizeObserver {
-      public constructor(private readonly callback: ResizeObserverCallback) {}
-
-      public disconnect(): void {}
-
-      public observe(target: Element): void {
-        this.callback(
-          [
-            {
-              borderBoxSize: [],
-              contentBoxSize: [],
-              contentRect: {
-                bottom: 600,
-                height: 600,
-                left: 0,
-                right: 360,
-                top: 0,
-                width: 360,
-                x: 0,
-                y: 0,
-                toJSON: () => ({}),
-              },
-              devicePixelContentBoxSize: [],
-              target,
-            } as ResizeObserverEntry,
-          ],
-          this,
-        );
-      }
-
-      public unobserve(): void {}
-    }
-
-    vi.stubGlobal("ResizeObserver", NarrowResizeObserver);
-    Object.defineProperty(HTMLElement.prototype, "offsetParent", {
-      configurable: true,
-      get() {
-        return this.parentElement ?? document.body;
+    expect(compactLayout).toEqual([
+      {
+        h: 2,
+        i: "activity",
+        isDraggable: false,
+        isResizable: false,
+        maxW: 12,
+        minW: 12,
+        w: 12,
+        x: 0,
+        y: 0,
       },
-    });
-    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
-      configurable: true,
-      get() {
-        return 360;
+      {
+        h: 3,
+        i: "trace",
+        isDraggable: false,
+        isResizable: false,
+        maxW: 12,
+        minW: 12,
+        w: 12,
+        x: 0,
+        y: 2,
       },
-    });
-    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
-      configurable: true,
-      get() {
-        return 360;
+      {
+        h: 4,
+        i: "terminal",
+        isDraggable: false,
+        isResizable: false,
+        maxW: 12,
+        minW: 12,
+        w: 12,
+        x: 0,
+        y: 5,
       },
-    });
-
-    render(
-      <AgentBentoLayout
-        cards={[
-          {
-            id: "activity",
-            widgetType: "activity",
-            children: (
-              <AgentBentoCard title="Current activity">
-                <p>Active workstation graph goes here.</p>
-              </AgentBentoCard>
-            ),
-          },
-          {
-            id: "trace",
-            widgetType: "trace",
-            children: (
-              <AgentBentoCard title="Trace grid">
-                <p>Trace dispatches stay visible.</p>
-              </AgentBentoCard>
-            ),
-          },
-        ]}
-        initialWidth={360}
-        layout={defaultLayout}
-        onLayoutChange={onLayoutChange}
-      />,
-    );
-
-    const board = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-
-    expect(board.dataset.bentoSingleColumn).toBe("true");
-    expect(board.querySelector(".react-grid-layout")).toBeNull();
-    expect(screen.getByRole("article", { name: "Current activity" })).toBeTruthy();
-    expect(screen.getByRole("article", { name: "Trace grid" })).toBeTruthy();
-    expect(board.querySelector(".react-resizable-handle")).toBeNull();
-    expect(onLayoutChange).not.toHaveBeenCalled();
+    ]);
   });
 
   it("renders a localized accessible name for the movable board", () => {

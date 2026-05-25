@@ -183,13 +183,13 @@ describe("viewport assertions", () => {
 
   test("expectNoHorizontalOverflow rejects horizontal overflow beyond tolerance", async () => {
     const page = {
-      evaluate: vi.fn().mockResolvedValue({ clientWidth: 390, scrollWidth: 393 }),
+      evaluate: vi.fn().mockResolvedValue({ clientWidth: 390, scrollWidth: 395 }),
     };
 
     await expect(
       expectNoHorizontalOverflow(page, "mobile export dialog"),
     ).rejects.toThrow(
-      "mobile export dialog overflowed horizontally: scrollWidth=393, clientWidth=390.",
+      "mobile export dialog overflowed horizontally: scrollWidth=395, clientWidth=390.",
     );
   });
 

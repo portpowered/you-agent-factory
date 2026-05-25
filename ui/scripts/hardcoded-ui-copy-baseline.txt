@@ -211,5 +211,5 @@ src/features/workflow-activity/components/mutation-dialog.tsx|75|22|string-liter
 src/features/workflow-activity/lib/react-flow-current-activity-card-draft-edges.ts|12|12|string-literal|workstation:
 src/features/workflow-activity/lib/react-flow-current-activity-card-draft-edges.ts|16|12|string-literal|place:
 src/features/workflow-activity/lib/react-flow-current-activity-card-draft-edges.ts|19|10|string-literal|place: :
-src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|68|10|string-literal|workstation:
-src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|72|10|string-literal|place:
+src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|69|10|string-literal|workstation:
+src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|73|10|string-literal|place:

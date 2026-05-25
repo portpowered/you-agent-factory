@@ -321,7 +321,7 @@
   }
 
   [data-bento-card-id] > .react-resizable-handle-e {
-    @apply right-0 top-1/2 h-10 w-3 -translate-y-1/2 bg-af-overlay;
+    @apply right-2 top-1/2 h-10 w-3 -translate-y-1/2 bg-af-overlay;
   }
 
   [data-bento-card-id] > .react-resizable-handle-s {
@@ -329,7 +329,7 @@
   }
 
   [data-bento-card-id] > .react-resizable-handle-se {
-    @apply bottom-0 right-0 h-5 w-5 bg-af-overlay;
+    @apply bottom-2 right-2 h-5 w-5 bg-af-overlay;
   }
 
   [data-chart-container] .recharts-cartesian-axis-tick-text {

@@ -47,8 +47,8 @@ endif
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_MIN ?= 80.0
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode verify-build-contracts verify-tests verify test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode verify-build-contracts verify-tests verify test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -111,7 +111,7 @@ test-ui-coverage:
 
 test-ui-browser-integration:
 ifeq ($(BUN_BIN),)
-	cd ui && $(NPM) exec vitest run integration/event-stream-replay.integration.test.mjs
+	cd ui && $(NPM) run test:integration
 else
 	cd ui && $(UI_SCRIPT) test:integration
 endif
@@ -183,7 +183,7 @@ verify-build-contracts:
 
 verify-tests:
 	$(MAKE) test-ui-coverage
-	$(MAKE) test-ui-browser-integration
+	$(MAKE) ui-integration-test
 	$(MAKE) test-backend-verification
 
 verify:
@@ -213,7 +213,7 @@ ci-verify-build-contracts: ci-typecheck
 ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) ui-install-playwright
 	$(MAKE) test-ui-coverage
-	$(MAKE) test-ui-browser-integration
+	$(MAKE) ui-integration-test
 	$(MAKE) test-backend-verification
 
 release:
@@ -249,9 +249,16 @@ endif
 
 ui-test:
 ifeq ($(BUN_BIN),)
-	cd ui && $(NPM) exec vitest run --exclude integration/event-stream-replay.integration.test.mjs && $(NPM) exec vitest run integration/event-stream-replay.integration.test.mjs
+	cd ui && $(NPM) exec vitest run --exclude 'integration/*.integration.test.mjs'
 else
-	cd ui && $(UI_SCRIPT) test
+	cd ui && $(UI_SCRIPT) test:unit
+endif
+
+ui-integration-test:
+ifeq ($(BUN_BIN),)
+	cd ui && $(NPM) run test:integration
+else
+	cd ui && $(UI_SCRIPT) test:integration
 endif
 
 ui-test-coverage:

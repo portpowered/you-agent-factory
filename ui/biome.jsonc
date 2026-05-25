@@ -125,7 +125,10 @@
         "src/features/workflow-activity/components/react-flow-current-activity-card.coverage.test.tsx",
         "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
         "src/features/workflow-activity/react-flow-current-activity-card-editor-controllers.test.tsx",
-        "integration/event-stream-replay.integration.test.mjs"
+        "integration/browser-test-harness.mjs",
+        "integration/event-stream-replay.integration.test.mjs",
+        "integration/dashboard-session-tabs.integration.test.mjs",
+        "integration/factory-graph-editor.integration.test.mjs"
       ],
       "linter": {
         "rules": {
