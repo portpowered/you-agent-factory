@@ -132,7 +132,7 @@ function createTextLookup(timelineStatus) {
 
 function createPage({
   timelineStatus = createCurrentTickLocator(),
-  headingWordmarkClassName = "sr-only",
+  headingWordmarkClassName = "truncate text-lg font-semibold",
   isDesktop = false,
   returnToCurrentVisible = false,
 } = {}) {
@@ -185,13 +185,13 @@ describe("verifyDashboardHeader", () => {
       width: 1440,
     });
 
-    expect(page.heading.getByText).toHaveBeenCalledWith("you-agent-factory");
+    expect(page.heading.getByText).toHaveBeenCalledWith("You Agent Factory");
     expect(page.slider.focus).not.toHaveBeenCalled();
     expect(page.keyboard.press).not.toHaveBeenCalled();
   });
 
-  test("verifyDashboardHeader rejects a non-sr-only heading wordmark", async () => {
-    const page = createPage({ headingWordmarkClassName: "text-visible" });
+  test("verifyDashboardHeader rejects a hidden sr-only heading wordmark", async () => {
+    const page = createPage({ headingWordmarkClassName: "sr-only" });
 
     await expect(
       verifyDashboardHeader(page, null, {
@@ -200,7 +200,7 @@ describe("verifyDashboardHeader", () => {
         width: 390,
       }),
     ).rejects.toThrow(
-      "Dashboard heading wordmark was not hidden with sr-only styling.",
+      "Dashboard heading wordmark should remain visible instead of sr-only.",
     );
   });
 

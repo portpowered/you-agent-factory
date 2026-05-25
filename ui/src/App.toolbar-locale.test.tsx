@@ -161,11 +161,11 @@ describe("App shell locale and toolbar flows", () => {
     renderApp({ snapshot: terminalSnapshot });
 
     const heading = await screen.findByRole("heading", {
-      name: "you-agent-factory",
+      name: "You Agent Factory",
     });
     const toolbar = screen.getByRole("region", { name: "dashboard summary" });
     const streamStatus = screen.getByRole("status", {
-      name: "you-agent-factory event stream connecting",
+      name: "You Agent Factory event stream connecting",
     });
     const exportButton = screen.getByRole("button", { name: "Export PNG" });
 
@@ -188,7 +188,7 @@ describe("App shell locale and toolbar flows", () => {
 
     expect(
       within(toolbar).getByRole("status", {
-        name: "you-agent-factory event stream connecting",
+        name: "You Agent Factory event stream connecting",
       }),
     ).toBeTruthy();
     expect(within(toolbar).queryByText("Factory state")).toBeNull();
@@ -208,7 +208,7 @@ describe("App shell locale and toolbar flows", () => {
     await waitFor(() => {
       expect(
         within(toolbar).getByRole("status", {
-          name: "you-agent-factory event stream live",
+          name: "You Agent Factory event stream live",
         }),
       ).toBeTruthy();
     });
@@ -229,7 +229,7 @@ describe("App shell locale and toolbar flows", () => {
     await waitFor(() => {
       expect(
         within(toolbar).getByRole("status", {
-          name: "you-agent-factory event stream offline",
+          name: "You Agent Factory event stream offline",
         }),
       ).toBeTruthy();
     });
