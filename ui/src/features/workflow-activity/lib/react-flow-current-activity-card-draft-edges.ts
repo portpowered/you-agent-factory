@@ -32,6 +32,7 @@ function positionedEdgeOutcomeKind(
     case "workstation-input":
     case "workstation-output":
       return "accepted";
+    /* c8 ignore next: defensive fallback for future edge kinds outside the current typed union. */
     default:
       return "accepted";
   }

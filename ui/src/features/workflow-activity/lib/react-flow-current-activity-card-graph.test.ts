@@ -2,7 +2,6 @@
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
-import { buildVisibleGraphEdgesWithDraft } from "./react-flow-current-activity-card-draft-edges";
 import {
   buildEditorHandles,
   supportedEditorHandleIdsForEdge,
@@ -192,74 +191,55 @@ describe("current activity graph editor handles", () => {
 
 });
 
-describe("current activity graph draft edges", () => {
-  it("adds supported pending draft routes onto the shared observer graph surface", async () => {
-    const graphLayout = await buildGraphLayout(
-      semanticWorkflowDashboardSnapshot.topology,
-    );
-    const { pendingAdditionEdgeIds, visibleGraphEdges } =
-      buildVisibleGraphEdgesWithDraft({
-        draft: {
-          additions: {
-            resources: [],
-            workers: [],
-            workStates: [],
-            workTypes: [],
-            workstations: [],
+describe("current activity graph active item labels", () => {
+  it("prefers token names, falls back through work item labels, and skips duplicate place labels", () => {
+    const labelsByPlaceId = buildActiveItemLabelsByPlaceId([
+      {
+        consumed_tokens: [
+          {
+            name: "Explicit token label",
+            place_id: "story:ready",
+            token_id: "token-1",
+            work_id: "work-1",
           },
-          edgeChanges: {
-            additions: [
-              {
-                kind: "workstation-output",
-                source: { kind: "workstation", name: "review" },
-                target: {
-                  kind: "work-state",
-                  stateName: "blocked",
-                  workTypeName: "story",
-                },
-              },
-            ],
-            removals: [],
+          {
+            place_id: "story:ready",
+            token_id: "token-2",
+            work_id: "work-2",
           },
-          removals: {
-            resources: [],
-            workers: [],
-            workStates: [],
-            workTypes: [],
-            workstations: [],
+          {
+            place_id: "story:ready",
+            token_id: "token-3",
+            work_id: "work-3",
           },
-        },
-        graphLayout,
-      });
-    const handleAssignments = buildHandleAssignments(visibleGraphEdges, {
-      editorMode: true,
-    });
-    const edges = buildGraphEdges(
-      buildActiveGraphHighlights([], visibleGraphEdges),
-      handleAssignments,
-      pendingAdditionEdgeIds,
-      visibleGraphEdges,
-    );
+          {
+            place_id: "story:blocked",
+            token_id: "token-4",
+            work_id: "missing-work",
+          },
+        ],
+        work_items: [
+          {
+            display_name: "Draft story",
+            work_id: "work-2",
+          },
+          {
+            work_id: "work-3",
+          },
+          {
+            display_name: "Draft story",
+            work_id: "work-duplicate",
+          },
+        ],
+        workstation_node_id: "review",
+      },
+    ] as Parameters<typeof buildActiveItemLabelsByPlaceId>[0]);
 
-    expect(pendingAdditionEdgeIds).toEqual(
-      new Set([
-        "workstation-output:workstation:review->place:story:blocked",
-      ]),
-    );
-    expect(edges).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "workstation-output:workstation:review->place:story:blocked",
-          source: "workstation:review",
-          sourceHandle: "workstation-output-source",
-          style: expect.objectContaining({
-            stroke: "var(--color-af-warning-text)",
-            strokeDasharray: "9 4",
-          }),
-          target: "place:story:blocked",
-          targetHandle: "workstation-output-target",
-        }),
-      ]),
-    );
+    expect(labelsByPlaceId.get("story:ready")).toEqual([
+      "Explicit token label",
+      "Draft story",
+      "work-3",
+    ]);
+    expect(labelsByPlaceId.get("story:blocked")).toEqual(["token-4"]);
   });
 });
