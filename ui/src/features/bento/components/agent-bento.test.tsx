@@ -6,6 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { NoSelectionDetailCard } from "../../current-selection/components/no-selection-detail-card";
 import { WorkTotalsCard } from "../../work-totals/public";
@@ -64,13 +65,16 @@ function getGridItem(cardTitle: string): HTMLElement {
 }
 
 describe("AgentBentoLayout", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
   beforeEach(() => {
-    Object.defineProperty(HTMLElement.prototype, "offsetParent", {
-      configurable: true,
-      get() {
-        return this.parentElement ?? document.body;
-      },
-    });
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
   });
 
   it("renders card IDs, titles, and body content inside the movable board", () => {
@@ -173,6 +177,61 @@ describe("AgentBentoLayout", () => {
 
   it("collapses the board to a single non-resizable column at narrow widths", () => {
     const onLayoutChange = vi.fn();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+
+    class NarrowResizeObserver {
+      public constructor(private readonly callback: ResizeObserverCallback) {}
+
+      public disconnect(): void {}
+
+      public observe(target: Element): void {
+        this.callback(
+          [
+            {
+              borderBoxSize: [],
+              contentBoxSize: [],
+              contentRect: {
+                bottom: 600,
+                height: 600,
+                left: 0,
+                right: 360,
+                top: 0,
+                width: 360,
+                x: 0,
+                y: 0,
+                toJSON: () => ({}),
+              },
+              devicePixelContentBoxSize: [],
+              target,
+            } as ResizeObserverEntry,
+          ],
+          this,
+        );
+      }
+
+      public unobserve(): void {}
+    }
+
+    vi.stubGlobal("ResizeObserver", NarrowResizeObserver);
+    Object.defineProperty(HTMLElement.prototype, "offsetParent", {
+      configurable: true,
+      get() {
+        return this.parentElement ?? document.body;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get() {
+        return 360;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return 360;
+      },
+    });
 
     render(
       <AgentBentoLayout
