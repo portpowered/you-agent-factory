@@ -18,6 +18,7 @@ You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .I
 3. Apply these review rules in order:
    - review correctness before style or preference
    - verify the change solves the stated problem without obvious regressions
+   - treat unexpected functionality changes outside the PRD's explicit behavior-change scope as BLOCKING
    - check architecture and dependency fit
    - evaluate readability and maintainability
    - confirm appropriate tests and quality-check evidence
@@ -48,6 +49,11 @@ Go through the acceptance criteria from prd.json **one by one**. For each criter
 - Mark it as PASS or FAIL with a brief explanation
 
 If ANY project-level acceptance criterion fails, call it out clearly in the PR comment. This is the primary gate — individual story acceptance criteria are secondary.
+
+Also verify that the PR only changes the functionality the PRD said to change.
+If the diff changes other functions or behaviors that were not named in scope,
+raise a **BLOCKING** comment that names the specific function or behavior that
+should not have changed.
 
 **Behavioral assertion check:**
 For each story marked `passes:true`, verify that the acceptance criteria include at least one **behavioral assertion** — a criterion describing an observable outcome, not just compilation or structural presence. If a story only has structural/compile-time criteria (e.g., "interface defined", "typecheck passes"), flag it as a **BLOCKING** issue. Structural criteria like "typecheck passes" and "tests pass" are necessary quality gates but are NOT sufficient on their own — they do not prove the system actually functions.

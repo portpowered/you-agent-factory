@@ -26,6 +26,7 @@ Every plan must reflect these quality expectations:
 - readability and maintainability
 - direct test evidence for changed behavior
 - no broad unrelated cleanup inside a narrow behavior lane
+- explicit behavior-change scope that says what existing functionality is expected to change
 
 When the ask touches backend, plan for clear package ownership, explicit state,
 isolated side effects, aligned contracts, and direct verification at the right
@@ -35,6 +36,10 @@ When the ask touches frontend, plan for explicit loading, empty, error, and
 success states, accessible semantics, keyboard behavior, responsive behavior,
 typed network/state handling, and direct UI verification when browser-visible
 behavior changes.
+
+If the work is expected to change existing functionality, say so explicitly in
+the PRD. Name the behaviors that should change and, when relevant, the
+behaviors that should remain unchanged.
 
 When the work will require tests or acceptance criteria, prohibit meta-test planning.
 Do not ask implementers to scan source files, validate docs link topology, assert
@@ -48,6 +53,8 @@ The markdown PRD should include, when relevant:
 - context with customer ask, concrete problem, and high-level solution
 - project-level acceptance criteria
 - goals
+- explicit behavior-change scope describing which existing functionality is
+  expected to change
 - user stories
 - high-level technical design for non-trivial or multi-story work
 - functional requirements
