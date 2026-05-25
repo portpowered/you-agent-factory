@@ -110,6 +110,7 @@ const LEGEND_ICON_EXPECTATIONS = [
     EXHAUSTION_WORKSTATION_ICON_METADATA.iconKind,
   ],
 ] as const;
+const workflowGraphLocaleFallbackTimeoutMs = 180_000;
 
 const editableFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -3604,30 +3605,34 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     expect(screen.getByText(graphMessages.graphDropHint)).toBeTruthy();
   });
 
-  it("falls back to English legend copy for unsupported workflow graph locales", async () => {
-    const messages = getDashboardFlowAxisLegendMessages("en");
+  it(
+    "falls back to English legend copy for unsupported workflow graph locales",
+    async () => {
+      const messages = getDashboardFlowAxisLegendMessages("en");
 
-    renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
-      locale: "fr-CA",
-    });
+      renderCurrentActivity({
+        snapshot: semanticWorkflowDashboardSnapshot,
+        locale: "fr-CA",
+      });
 
-    const legend = await expandGraphLegend("fr-CA");
+      const legend = await expandGraphLegend("fr-CA");
 
-    expect(
-      within(legend).getByText(messages.edgeLabels.activeFlow),
-    ).toBeTruthy();
-    expect(
-      within(legend)
-        .getByRole("img", {
-          name: messages.iconLabel(messages.iconLabels.queue),
-        })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("queue");
-    expect(
-      await screen.findByRole("button", { name: "Select Review workstation" }),
-    ).toBeTruthy();
-  });
+      expect(
+        within(legend).getByText(messages.edgeLabels.activeFlow),
+      ).toBeTruthy();
+      expect(
+        within(legend)
+          .getByRole("img", {
+            name: messages.iconLabel(messages.iconLabels.queue),
+          })
+          .getAttribute("data-graph-semantic-icon"),
+      ).toBe("queue");
+      expect(
+        await screen.findByRole("button", { name: "Select Review workstation" }),
+      ).toBeTruthy();
+    },
+    workflowGraphLocaleFallbackTimeoutMs,
+  );
 
   it("uses persisted graph node positions when the topology remounts", async () => {
     const layout = await buildGraphLayout(

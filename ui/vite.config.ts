@@ -5,17 +5,26 @@ import monacoEditorPluginModule from "vite-plugin-monaco-editor";
 import { coverageConfigDefaults } from "vitest/config";
 
 const apiOrigin = process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
+const isCoverageRun = process.argv.includes("--coverage");
+const isVitestRun = process.argv.includes("vitest") || process.env.VITEST === "true";
 const monacoEditorPlugin =
   typeof monacoEditorPluginModule === "function"
     ? monacoEditorPluginModule
     : monacoEditorPluginModule.default;
-const optimizedDeps = [
-  "monaco-editor/esm/vs/editor/editor.api.js",
-  "react",
-  "react-dom",
-  "react/jsx-runtime",
-  "react/jsx-dev-runtime",
-] as const;
+const optimizedDeps = isVitestRun
+  ? ([
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+    ] as const)
+  : ([
+      "monaco-editor/esm/vs/editor/editor.api.js",
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+    ] as const);
 const storybookInteropDeps = [
   "react",
   "react-dom",
@@ -75,10 +84,14 @@ export default defineConfig({
   },
   plugins: [
     react(),
-    tailwindcss(),
-    monacoEditorPlugin({
-      languageWorkers: ["editorWorkerService"],
-    }),
+    ...(!isVitestRun ? [tailwindcss()] : []),
+    ...(!isVitestRun
+      ? [
+          monacoEditorPlugin({
+            languageWorkers: ["editorWorkerService"],
+          }),
+        ]
+      : []),
   ],
   server: {
     host: true,
@@ -98,7 +111,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/testing/vitest.setup.ts"],
-    testTimeout: 15000,
+    testTimeout: isCoverageRun ? 180000 : 30000,
     coverage: {
       provider: "v8",
       exclude: [

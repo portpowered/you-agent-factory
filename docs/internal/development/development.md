@@ -61,15 +61,21 @@ The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automati
 
 The maintainer-owned CLI release policy lives in [CLI release policy](cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
 
-The workflow currently executes these repository-owned commands in order:
+The workflow currently executes these repository-owned commands through one prerequisite lane and three required verification lanes:
 
 1. `cd ui && bun install --frozen-lockfile`
 2. `cd ui && bun run tsc`
 3. `make verify-build-contracts`
-4. `cd ui && bunx playwright install chromium`
-5. `make verify-tests`
+4. `make test-ui-coverage`
+5. `cd ui && bunx playwright install chromium`
+6. `make test-ui-browser-integration`
+7. `make test-backend-verification`
 
 Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and pins Bun to `1.3.12` in `.github/workflows/ci.yml`; keep that version aligned with the checked-in `ui/package.json` `packageManager` pin when either file changes.
+
+The pull-request workflow restores the supported built-in Go module and build cache through `actions/setup-go` keyed by `go.sum`, and restores Bun's global package cache from `~/.bun/install/cache` keyed by the hosted-runner OS, the pinned `BUN_VERSION`, and `ui/bun.lock`. Keep those invalidation inputs aligned with the real dependency surfaces instead of introducing static cache keys. The workflow intentionally does not cache Playwright browser binaries in the PR lanes because Playwright's CI guidance says restore cost is usually comparable to a fresh download on hosted runners; if that assumption changes, document the measured reason before adding a browser cache layer.
+
+The `UI Browser Integration` lane also intentionally does not reuse a prebuilt `ui/dist` artifact from `verify-build-contracts`. The owned browser harness in `ui/integration/event-stream-replay.integration.test.mjs` rebuilds the dashboard with a lane-scoped `VITE_AGENT_FACTORY_API_ORIGIN` and then starts its own `vite preview` server inside `beforeAll`, so downloading an upstream artifact would add upload/download coupling without removing the lane's own build-and-preview responsibility or making independent retries easier to reason about.
 
 Use `make dashboard-verify` for dashboard review readiness after UI source changes that affect embedded assets. It runs `ui-build`, `lint`, and the short Go test suite sequentially so Vite asset rotation does not race with Go embed scanning.
 
@@ -85,9 +91,29 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make verify-build-contracts` is the repository-owned build-contract lane used by CI after dependency setup. It runs `make typecheck`, `make ui-build`, `make build`, `make lint`, and `make api-smoke` in the same order the `verify-build-contracts` GitHub Actions job enforces.
 
-`make verify-tests` is the repository-owned test lane used by CI after Playwright setup. It runs `make ui-test`, `make ui-test-coverage`, `make ui-replay-coverage-check`, `make test-coverage-go`, and `make test-functional`.
+`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make test-ui-browser-integration`, and `make test-backend-verification`. The GitHub Actions workflow fans those commands out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Verification` jobs so required failures point at one lane instead of a mixed `make ui-test` rerun.
+
+Treat those lanes as the stable contributor mental model:
+
+| CI lane | Owned checks | Local rerun command | Why this lane stays separate |
+| --- | --- | --- | --- |
+| `UI Coverage` | jsdom-oriented Vitest coverage run plus the trailing non-covered `ui/scripts/dashboard-shell-storybook-responsive.test.mjs` check and the replay metadata guard | `make test-ui-coverage` | Keeps unit and app-shell regressions, coverage thresholds, and replay fixture coverage in one dashboard-only lane without rerunning browser-backed integration. |
+| `UI Browser Integration` | `ui/integration/event-stream-replay.integration.test.mjs` with Playwright provisioning, `bun run build`, and `vite preview` owned by the replay harness | `make test-ui-browser-integration` | Keeps the browser-backed replay workflow isolated so failures map cleanly to preview startup, API-origin wiring, or browser-visible behavior instead of the jsdom suite. |
+| `Backend Verification` | `cmd/gocoveragecheck` over `./cmd/factory`, maintained backend `./pkg/...` packages, and the maintained short functional packages under `tests/functional/...` | `make test-backend-verification` | Merges backend coverage with the maintained short functional corpus because the covered command already executes the same supported backend packages and short functional packages in one lane. |
+
+The backend lane is intentionally merged. `make test-backend-verification` shells through `cmd/gocoveragecheck`, and that command's default package discovery already executes the maintained short functional packages under `tests/functional/...` in the same covered `go test` invocation as `./cmd/factory` and backend-owned `./pkg/...` packages. Because that coverage lane already includes `tests/functional/bootstrap_portability`, `guards_batch`, `providers`, `replay_contracts`, `runtime_api`, `smoke`, and `workflow` while excluding only the internal support helper package, a separate required `make test-backend-functional` lane would only rerun the same short functional corpus without adding pull-request confidence. Keep `make test-backend-functional` as a compatibility alias for ad hoc local usage, but treat `make test-backend-verification` as the required PR backend lane.
+
+The browser-backed lane remains self-building for the same reason: `make test-ui-browser-integration` delegates into the replay harness that runs `bun run build` with a test-owned API origin and serves that exact build with `vite preview`. Treat that build plus preview startup as part of the lane's owned runtime contract instead of uploading `ui/dist` from another job.
+
+Use the lane-specific targets below when you need to rerun one required CI lane locally without replaying the full suite:
+
+- `make test-ui-coverage` for the jsdom-oriented dashboard coverage lane.
+- `make test-ui-browser-integration` for the browser-backed dashboard integration lane.
+- `make test-backend-verification` for the merged backend coverage plus maintained short functional lane.
 
 `make verify` composes both aggregate lanes for a full review-ready local pass once dependencies and browser prerequisites are already installed. It does not install packages or browsers itself, so routine verification stays network-free after setup.
+
+When extending the workflow, change the repository-owned command surface before editing GitHub Actions orchestration. Add or adjust the relevant `make test-*` target first, keep the lane name aligned with the owned command, and document any cache, artifact, or deduplication decision here in the same change. Contributors should be able to answer "which lane owns this check?" and "what do I rerun locally?" from this section alone without reverse-engineering `.github/workflows/ci.yml`.
 
 To reproduce the backend size gate directly, run:
 

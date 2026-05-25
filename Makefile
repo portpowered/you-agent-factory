@@ -47,8 +47,8 @@ endif
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_MIN ?= 80.0
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode verify-build-contracts verify-tests verify test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode verify-build-contracts verify-tests verify test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -104,6 +104,27 @@ test-functional:
 
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+test-ui-coverage:
+	$(MAKE) ui-test-coverage
+	$(MAKE) ui-replay-coverage-check
+
+test-ui-browser-integration:
+ifeq ($(BUN_BIN),)
+	cd ui && $(NPM) exec vitest run integration/event-stream-replay.integration.test.mjs
+else
+	cd ui && $(UI_SCRIPT) test:integration
+endif
+
+test-backend-coverage:
+	$(MAKE) test-backend-verification
+
+test-backend-verification:
+	$(MAKE) test-coverage-go
+
+test-backend-functional:
+	@printf '%s\n' "Backend functional verification is merged into make test-backend-verification; rerun that target for the required PR lane."
+	$(MAKE) test-backend-verification
 
 long-tests:
 	$(MAKE) long-tests-managed-runtime
@@ -161,11 +182,9 @@ verify-build-contracts:
 	$(MAKE) api-smoke
 
 verify-tests:
-	$(MAKE) ui-test
-	$(MAKE) ui-test-coverage
-	$(MAKE) ui-replay-coverage-check
-	$(MAKE) test-coverage-go
-	$(MAKE) test-functional
+	$(MAKE) test-ui-coverage
+	$(MAKE) test-ui-browser-integration
+	$(MAKE) test-backend-verification
 
 verify:
 	$(MAKE) verify-build-contracts
@@ -193,11 +212,9 @@ ci-verify-build-contracts: ci-typecheck
 
 ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) ui-install-playwright
-	$(MAKE) ui-test
-	$(MAKE) ui-test-coverage
-	$(MAKE) ui-replay-coverage-check
-	$(MAKE) test-coverage-go
-	$(MAKE) test-functional
+	$(MAKE) test-ui-coverage
+	$(MAKE) test-ui-browser-integration
+	$(MAKE) test-backend-verification
 
 release:
 	$(GO) run ./cmd/releaseprep -version $(VERSION)
@@ -238,11 +255,7 @@ else
 endif
 
 ui-test-coverage:
-ifeq ($(BUN_BIN),)
-	cd ui && $(NPM) exec vitest run --coverage --exclude integration/event-stream-replay.integration.test.mjs
-else
 	cd ui && $(UI_SCRIPT) test:coverage
-endif
 
 ui-replay-coverage-check:
 ifeq ($(BUN_BIN),)

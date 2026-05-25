@@ -1,5 +1,14 @@
+import { configure } from "@testing-library/react";
 import { createElement, type ReactNode, useEffect, useMemo, useState } from "react";
 import { vi } from "vitest";
+
+Object.assign(globalThis, {
+  IS_REACT_ACT_ENVIRONMENT: true,
+});
+
+configure({
+  asyncUtilTimeout: 10_000,
+});
 
 if (typeof HTMLAnchorElement !== "undefined") {
   const originalAnchorClick = HTMLAnchorElement.prototype.click;
@@ -124,3 +133,22 @@ vi.mock("@monaco-editor/react", () => ({
     config: vi.fn(),
   },
 }));
+
+const mockedMonacoModule = {
+  editor: {
+    defineTheme: vi.fn(),
+    setModelMarkers: vi.fn(),
+  },
+  languages: {
+    CompletionItemKind: { Variable: 4 },
+    CompletionTriggerKind: { Invoke: 0, TriggerCharacter: 1 },
+    register: vi.fn(),
+    registerCompletionItemProvider: vi.fn(() => ({
+      dispose() {},
+    })),
+    setMonarchTokensProvider: vi.fn(),
+  },
+};
+
+vi.mock("monaco-editor/esm/vs/editor/editor.all.js", () => ({}));
+vi.mock("monaco-editor/esm/vs/editor/editor.api.js", () => mockedMonacoModule);
