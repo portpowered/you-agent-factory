@@ -1320,9 +1320,19 @@ export interface components {
          * @enum {string}
          */
         WorkOutcome: "ACCEPTED" | "CONTINUE" | "REJECTED" | "FAILED";
+        /**
+         * @description Stable machine-readable failure family used to decide retry and routing behavior for failed work.
+         * @enum {string}
+         */
+        WorkFailureFamily: "terminal" | "retryable" | "throttle";
+        /**
+         * @description Stable machine-readable failure type used to classify failed work across providers and runtimes.
+         * @enum {string}
+         */
+        WorkFailureType: "auth_failure" | "permanent_bad_request" | "throttled" | "internal_server_error" | "timeout" | "unknown" | "misconfigured";
         ProviderFailureMetadata: {
-            family?: string;
-            type?: string;
+            family?: components["schemas"]["WorkFailureFamily"];
+            type?: components["schemas"]["WorkFailureType"];
         };
         ProviderSessionMetadata: {
             provider?: string;

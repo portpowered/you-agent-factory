@@ -1,0 +1,14 @@
+type: string
+description: Stable machine-readable failure family used to decide retry and routing behavior for failed work.
+x-enum-varnames:
+  - WorkFailureFamilyTerminal
+  - WorkFailureFamilyRetryable
+  - WorkFailureFamilyThrottle
+enum:
+  - terminal
+  - retryable
+  - throttle
+x-enum-descriptions:
+  - The failure is final and should not be retried automatically.
+  - The failure may succeed on a later retry without manual intervention.
+  - The failure indicates upstream throttling and should follow throttling-specific retry behavior.

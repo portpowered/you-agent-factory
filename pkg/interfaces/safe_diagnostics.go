@@ -103,24 +103,32 @@ func WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *W
 // GeneratedProviderFailureMetadata converts canonical provider-failure metadata
 // into the generated event contract.
 func GeneratedProviderFailureMetadata(failure *ProviderFailureMetadata) *factoryapi.ProviderFailureMetadata {
+	return GeneratedWorkFailureMetadata(failure)
+}
+
+// GeneratedWorkFailureMetadata converts canonical work-failure metadata into
+// the generated event contract.
+func GeneratedWorkFailureMetadata(failure *WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
 	if failure == nil {
 		return nil
 	}
+	family := factoryapi.WorkFailureFamily(failure.Family)
+	failureType := factoryapi.WorkFailureType(failure.Type)
 	return &factoryapi.ProviderFailureMetadata{
-		Family: safeDiagnosticsStringPtrIfNotEmpty(string(failure.Family)),
-		Type:   safeDiagnosticsStringPtrIfNotEmpty(string(failure.Type)),
+		Family: &family,
+		Type:   &failureType,
 	}
 }
 
-// ProviderFailureMetadataFromGenerated converts the generated provider-failure
-// contract into canonical provider-failure metadata.
-func ProviderFailureMetadataFromGenerated(failure *factoryapi.ProviderFailureMetadata) *ProviderFailureMetadata {
+// WorkFailureMetadataFromGenerated converts the generated provider-failure
+// contract into canonical work-failure metadata.
+func WorkFailureMetadataFromGenerated(failure *factoryapi.ProviderFailureMetadata) *WorkFailureMetadata {
 	if failure == nil {
 		return nil
 	}
-	return &ProviderFailureMetadata{
-		Family: ProviderErrorFamily(safeDiagnosticsStringValue(failure.Family)),
-		Type:   ProviderErrorType(safeDiagnosticsStringValue(failure.Type)),
+	return &WorkFailureMetadata{
+		Family: WorkFailureFamily(safeDiagnosticsEnumStringValue(failure.Family)),
+		Type:   WorkFailureType(safeDiagnosticsEnumStringValue(failure.Type)),
 	}
 }
 
@@ -336,4 +344,11 @@ func safeDiagnosticsStringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func safeDiagnosticsEnumStringValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }

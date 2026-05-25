@@ -54,6 +54,7 @@ type CompletedDispatch struct {
 	Outcome                     WorkOutcome              `json:"outcome"`
 	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
 	Reason                      string                   `json:"reason,omitempty"`
+	FailureMetadata             *WorkFailureMetadata     `json:"failure_metadata,omitempty"`
 	ProviderFailure             *ProviderFailureMetadata `json:"provider_failure,omitempty"`
 	ProviderSession             *ProviderSessionMetadata `json:"provider_session,omitempty"`
 	StartTime                   time.Time                `json:"start_time"`

@@ -84,9 +84,10 @@ func (s *SideEffects) Infer(ctx context.Context, req interfaces.ProviderInferenc
 	}
 
 	result := record.completion.result
-	if result.Outcome == interfaces.OutcomeFailed && result.ProviderFailure != nil {
+	failureMetadata := interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)
+	if result.Outcome == interfaces.OutcomeFailed && failureMetadata != nil {
 		return interfaces.InferenceResponse{}, workers.NewProviderError(
-			result.ProviderFailure.Type,
+			failureMetadata.Type,
 			result.Error,
 			errors.New(result.Error),
 		)

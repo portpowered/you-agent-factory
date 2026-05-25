@@ -715,8 +715,8 @@ func generatedProviderFailureForProjectionTest(failure *interfaces.ProviderFailu
 		return nil
 	}
 	return &factoryapi.ProviderFailureMetadata{
-		Family: stringPtrForProjectionTest(string(failure.Family)),
-		Type:   stringPtrForProjectionTest(string(failure.Type)),
+		Family: workFailureFamilyPtrForProjectionTest(failure.Family),
+		Type:   workFailureTypePtrForProjectionTest(failure.Type),
 	}
 }
 
@@ -757,6 +757,22 @@ func stringPtrForProjectionTest(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func workFailureFamilyPtrForProjectionTest(value interfaces.WorkFailureFamily) *factoryapi.WorkFailureFamily {
+	if value == "" {
+		return nil
+	}
+	typed := factoryapi.WorkFailureFamily(value)
+	return &typed
+}
+
+func workFailureTypePtrForProjectionTest(value interfaces.WorkFailureType) *factoryapi.WorkFailureType {
+	if value == "" {
+		return nil
+	}
+	typed := factoryapi.WorkFailureType(value)
+	return &typed
 }
 
 func stringValueForProjectionTest(value *string) string {

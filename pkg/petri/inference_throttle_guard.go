@@ -9,11 +9,11 @@ import (
 )
 
 type RuntimeGuardContext struct {
-	Now               time.Time
+	Now                 time.Time
 	CurrentTransitionID string
-	DispatchHistory   []interfaces.CompletedDispatch
-	RuntimeConfig     interfaces.RuntimeDefinitionLookup
-	TransitionWorkers map[string]string
+	DispatchHistory     []interfaces.CompletedDispatch
+	RuntimeConfig       interfaces.RuntimeDefinitionLookup
+	TransitionWorkers   map[string]string
 }
 
 type RuntimeGuard interface {
@@ -58,7 +58,8 @@ func (g *InferenceThrottleGuard) ActivePauses(ctx RuntimeGuardContext) []interfa
 	history := make([]factorythrottle.FailureRecord, 0, len(ctx.DispatchHistory))
 	for i := range ctx.DispatchHistory {
 		record := ctx.DispatchHistory[i]
-		if record.ProviderFailure == nil || record.ProviderFailure.Family != interfaces.ProviderErrorFamilyThrottle {
+		failureMetadata := interfaces.CanonicalWorkFailureMetadata(record.FailureMetadata, record.ProviderFailure)
+		if failureMetadata == nil || failureMetadata.Family != interfaces.ProviderErrorFamilyThrottle {
 			continue
 		}
 		if !g.historyDispatchMatchesLane(ctx, record.TransitionID) {
@@ -68,7 +69,8 @@ func (g *InferenceThrottleGuard) ActivePauses(ctx RuntimeGuardContext) []interfa
 			Provider:        g.Provider,
 			Model:           g.Model,
 			OccurredAt:      record.EndTime,
-			ProviderFailure: record.ProviderFailure,
+			FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
+			ProviderFailure: interfaces.CloneProviderFailureMetadata(failureMetadata),
 		})
 	}
 	return factorythrottle.DeriveActiveThrottlePauses(history, g.RefreshWindow, ctx.Now)

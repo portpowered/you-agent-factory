@@ -44,7 +44,7 @@ type resolvedWorkResult struct {
 	recordedOutputWork          []interfaces.FactoryWorkItem
 	err                         string
 	feedback                    string
-	providerFailure             *interfaces.ProviderFailureMetadata
+	failureMetadata             *interfaces.WorkFailureMetadata
 }
 
 type generatedBatchWork struct {
@@ -184,7 +184,7 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 			resolved.outcome = interfaces.OutcomeFailed
 			resolved.err = batchErr.Error()
 		} else if detectedBatch {
-			mutations := t.releaseResourceTokens(consumedTokens, map[string]bool{}, result.TransitionID, now)
+			mutations := t.releaseResourceTokens(consumedTokens, map[string]int{}, result.TransitionID, now)
 			completed := t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now)
 			batch := interfaces.GeneratedSubmissionBatch{
 				Request:     generatedBatch.request,
@@ -240,7 +240,8 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		Outcome:                     resolved.outcome,
 		SelectedClassificationLabel: resolved.selectedClassificationLabel,
 		Reason:                      completedDispatchReason(resolved),
-		ProviderFailure:             interfaces.CloneProviderFailureMetadata(result.ProviderFailure),
+		FailureMetadata:             interfaces.CloneWorkFailureMetadata(interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)),
+		ProviderFailure:             interfaces.CloneProviderFailureMetadata(interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)),
 		ProviderSession:             interfaces.CloneProviderSessionMetadata(result.ProviderSession),
 		EndTime:                     endTime,
 		ConsumedTokens:              interfaces.CloneTokens(consumedTokens),
@@ -409,7 +410,7 @@ func resolveWorkResult(transition *petri.Transition, result *interfaces.WorkResu
 		recordedOutputWork: cloneFactoryWorkItems(result.RecordedOutputWork),
 		err:                result.Error,
 		feedback:           result.Feedback,
-		providerFailure:    result.ProviderFailure,
+		failureMetadata:    interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure),
 	}
 	if workstation, ok := workstationconfig.Workstation(transition, runtimeConfig); ok && workstation != nil && len(workstation.StopWords) > 0 {
 		resolved.outcome = evaluateStopWords(workstation.StopWords, result.Output)
@@ -418,10 +419,10 @@ func resolveWorkResult(transition *petri.Transition, result *interfaces.WorkResu
 }
 
 func shouldRequeueIntermittentFailureResult(result resolvedWorkResult) bool {
-	if result.outcome != interfaces.OutcomeFailed || result.providerFailure == nil {
+	if result.outcome != interfaces.OutcomeFailed || result.failureMetadata == nil {
 		return false
 	}
-	return workers.ProviderFailureDecisionFromMetadata(result.providerFailure).Retryable
+	return workers.WorkFailureDecisionFromMetadata(result.failureMetadata).Retryable
 }
 
 func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult, inputColors []interfaces.TokenColor) (generatedBatchWork, bool, error) {
@@ -589,13 +590,20 @@ func (t *TransitionerSubsystem) logArcSelection(transitionID string, outcome int
 func (t *TransitionerSubsystem) releaseResourceTokensOnFailureMutations(outcome interfaces.WorkOutcome, transitionID string, consumedTokens []interfaces.Token, arcs []petri.Arc, now time.Time) []interfaces.MarkingMutation {
 	mutations := []interfaces.MarkingMutation{}
 	if outcome == interfaces.OutcomeFailed || outcome == interfaces.OutcomeContinue || outcome == interfaces.OutcomeRejected {
-		covered := make(map[string]bool, len(arcs))
+		covered := make(map[string]int, len(arcs))
 		for _, a := range arcs {
-			covered[a.PlaceID] = true
+			covered[a.PlaceID] += arcCoverageCount(a)
 		}
 		mutations = append(mutations, t.releaseResourceTokens(consumedTokens, covered, transitionID, now)...)
 	}
 	return mutations
+}
+
+func arcCoverageCount(arc petri.Arc) int {
+	if arc.Cardinality.Mode == petri.CardinalityN && arc.Cardinality.Count > 0 {
+		return arc.Cardinality.Count
+	}
+	return 1
 }
 
 func (t *TransitionerSubsystem) getSpawnedWorkMutations(result resolvedWorkResult, now time.Time) []interfaces.MarkingMutation {
@@ -651,7 +659,7 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 	mutations := make([]interfaces.MarkingMutation, 0)
 	workOutputIndex := 0
 	for arcIdx, arc := range in.arcs {
-		newToken, err := in.transformer.OutputToken(token_transformer.OutputTokenInput{
+		baseInput := token_transformer.OutputTokenInput{
 			ArcIndex:       arcIdx,
 			Arcs:           in.arcs,
 			ConsumedTokens: in.consumed,
@@ -663,25 +671,59 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			Feedback:       in.result.feedback,
 			Now:            in.now,
 			History:        in.history,
-		})
-		if err != nil {
-			return nil, err
 		}
-		if newToken.Color.DataType != interfaces.DataTypeResource {
-			if workOutputIndex < len(in.result.recordedOutputWork) {
-				applyRecordedOutputWorkIdentity(newToken, in.result.recordedOutputWork[workOutputIndex])
+		repeatCount := mutationRepeatCountForArc(arc, in.consumed)
+		for resourceTokenIndex := 0; resourceTokenIndex < repeatCount; resourceTokenIndex++ {
+			tokenInput := baseInput
+			tokenInput.ResourceTokenIndex = resourceTokenIndex
+			newToken, err := in.transformer.OutputToken(tokenInput)
+			if err != nil {
+				return nil, err
 			}
-			workOutputIndex++
-		}
+			if newToken.Color.DataType != interfaces.DataTypeResource {
+				if workOutputIndex < len(in.result.recordedOutputWork) {
+					applyRecordedOutputWorkIdentity(newToken, in.result.recordedOutputWork[workOutputIndex])
+				}
+				workOutputIndex++
+			}
 
-		mutations = append(mutations, interfaces.MarkingMutation{
-			Type:     interfaces.MutationCreate,
-			ToPlace:  arc.PlaceID,
-			NewToken: newToken,
-			Reason:   fmt.Sprintf("transitioner: %s from transition %s", in.result.outcome, in.transition.ID),
-		})
+			mutations = append(mutations, interfaces.MarkingMutation{
+				Type:     interfaces.MutationCreate,
+				ToPlace:  arc.PlaceID,
+				NewToken: newToken,
+				Reason:   fmt.Sprintf("transitioner: %s from transition %s", in.result.outcome, in.transition.ID),
+			})
+		}
 	}
 	return mutations, nil
+}
+
+func mutationRepeatCountForArc(
+	arc petri.Arc,
+	consumedTokens []interfaces.Token,
+) int {
+	if arc.Cardinality.Mode != petri.CardinalityN || arc.Cardinality.Count <= 0 {
+		return 1
+	}
+	repeatCount := arc.Cardinality.Count
+	available := consumedResourceTokenCountForPlace(consumedTokens, arc.PlaceID)
+	if available > 0 && repeatCount > available {
+		return available
+	}
+	return repeatCount
+}
+
+func consumedResourceTokenCountForPlace(consumedTokens []interfaces.Token, placeID string) int {
+	count := 0
+	for i := range consumedTokens {
+		if consumedTokens[i].Color.DataType != interfaces.DataTypeResource {
+			continue
+		}
+		if consumedTokens[i].PlaceID == placeID {
+			count++
+		}
+	}
+	return count
 }
 
 func applyRecordedOutputWorkIdentity(token *interfaces.Token, recorded interfaces.FactoryWorkItem) {
@@ -775,14 +817,15 @@ func (t *TransitionerSubsystem) hasFanoutGroup(transitionID string) bool {
 }
 
 // releaseResourceTokens returns consumed resource tokens back to their original resource places.
-func (t *TransitionerSubsystem) releaseResourceTokens(consumedTokens []interfaces.Token, alreadyCovered map[string]bool, transitionID string, now time.Time) []interfaces.MarkingMutation {
+func (t *TransitionerSubsystem) releaseResourceTokens(consumedTokens []interfaces.Token, alreadyCovered map[string]int, transitionID string, now time.Time) []interfaces.MarkingMutation {
 	var mutations []interfaces.MarkingMutation
 	for i := range consumedTokens {
 		consumed := consumedTokens[i]
 		if consumed.Color.DataType != interfaces.DataTypeResource {
 			continue
 		}
-		if alreadyCovered[consumed.PlaceID] {
+		if alreadyCovered[consumed.PlaceID] > 0 {
+			alreadyCovered[consumed.PlaceID]--
 			continue
 		}
 		resourceToken := t.transformer.ReleasedResourceToken(consumed, consumed.PlaceID, now)

@@ -287,6 +287,24 @@ const (
 	WorkContentPartTypeTextUpper  WorkContentPartType = "TEXT"
 )
 
+// Defines values for WorkFailureFamily.
+const (
+	WorkFailureFamilyRetryable WorkFailureFamily = "retryable"
+	WorkFailureFamilyTerminal  WorkFailureFamily = "terminal"
+	WorkFailureFamilyThrottle  WorkFailureFamily = "throttle"
+)
+
+// Defines values for WorkFailureType.
+const (
+	WorkFailureTypeAuthFailure         WorkFailureType = "auth_failure"
+	WorkFailureTypeInternalServerError WorkFailureType = "internal_server_error"
+	WorkFailureTypeMisconfigured       WorkFailureType = "misconfigured"
+	WorkFailureTypePermanentBadRequest WorkFailureType = "permanent_bad_request"
+	WorkFailureTypeThrottled           WorkFailureType = "throttled"
+	WorkFailureTypeTimeout             WorkFailureType = "timeout"
+	WorkFailureTypeUnknown             WorkFailureType = "unknown"
+)
+
 // Defines values for WorkOutcome.
 const (
 	WorkOutcomeAccepted WorkOutcome = "ACCEPTED"
@@ -1651,8 +1669,11 @@ type ProviderDiagnostic struct {
 
 // ProviderFailureMetadata defines model for ProviderFailureMetadata.
 type ProviderFailureMetadata struct {
-	Family *string `json:"family,omitempty"`
-	Type   *string `json:"type,omitempty"`
+	// Family Stable machine-readable failure family used to decide retry and routing behavior for failed work.
+	Family *WorkFailureFamily `json:"family,omitempty"`
+
+	// Type Stable machine-readable failure type used to classify failed work across providers and runtimes.
+	Type *WorkFailureType `json:"type,omitempty"`
 }
 
 // ProviderSessionDetailResponse defines model for ProviderSessionDetailResponse.
@@ -2117,6 +2138,12 @@ type WorkDiagnostics struct {
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
+
+// WorkFailureFamily Stable machine-readable failure family used to decide retry and routing behavior for failed work.
+type WorkFailureFamily string
+
+// WorkFailureType Stable machine-readable failure type used to classify failed work across providers and runtimes.
+type WorkFailureType string
 
 // WorkImageContentPart defines model for WorkImageContentPart.
 type WorkImageContentPart struct {

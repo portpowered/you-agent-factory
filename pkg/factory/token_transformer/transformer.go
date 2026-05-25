@@ -46,17 +46,18 @@ func New(places map[string]*petri.Place, workTypes map[string]*state.WorkType, o
 // OutputTokenInput contains the data needed to convert consumed input tokens
 // plus an output arc into a routed output token.
 type OutputTokenInput struct {
-	ArcIndex       int
-	Arcs           []petri.Arc
-	ConsumedTokens []interfaces.Token
-	InputColors    []interfaces.TokenColor
-	Output         string
-	Outcome        interfaces.WorkOutcome
-	TransitionID   string
-	Error          string
-	Feedback       string
-	Now            time.Time
-	History        interfaces.TokenHistory
+	ArcIndex           int
+	Arcs               []petri.Arc
+	ConsumedTokens     []interfaces.Token
+	InputColors        []interfaces.TokenColor
+	Output             string
+	Outcome            interfaces.WorkOutcome
+	TransitionID       string
+	Error              string
+	Feedback           string
+	Now                time.Time
+	History            interfaces.TokenHistory
+	ResourceTokenIndex int
 }
 
 // InitialTokenFromSubmit converts a submit request into a token placed in the
@@ -197,7 +198,7 @@ func reuseConsumedResourceToken(in OutputTokenInput, arc petri.Arc, color interf
 	if color.DataType != interfaces.DataTypeResource {
 		return nil
 	}
-	consumed := matchingConsumedResourceToken(in.ConsumedTokens, color.WorkTypeID)
+	consumed := matchingConsumedResourceToken(in.ConsumedTokens, color.WorkTypeID, in.ResourceTokenIndex)
 	if consumed == nil {
 		return nil
 	}
@@ -362,13 +363,20 @@ func firstNonResourceInput(inputs []interfaces.TokenColor) *interfaces.TokenColo
 	return nil
 }
 
-func matchingConsumedResourceToken(consumedTokens []interfaces.Token, resourceTypeID string) *interfaces.Token {
+func matchingConsumedResourceToken(consumedTokens []interfaces.Token, resourceTypeID string, resourceTokenIndex int) *interfaces.Token {
+	if resourceTokenIndex < 0 {
+		resourceTokenIndex = 0
+	}
+	matchIndex := 0
 	for i := range consumedTokens {
 		if consumedTokens[i].Color.DataType != interfaces.DataTypeResource {
 			continue
 		}
 		if consumedTokens[i].Color.WorkTypeID == resourceTypeID {
-			return &consumedTokens[i]
+			if matchIndex == resourceTokenIndex {
+				return &consumedTokens[i]
+			}
+			matchIndex++
 		}
 	}
 	return nil

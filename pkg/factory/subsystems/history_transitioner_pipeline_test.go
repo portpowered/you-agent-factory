@@ -223,9 +223,9 @@ func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesConsumedWorkToOrigina
 		TransitionID: "t1",
 		Outcome:      interfaces.OutcomeFailed,
 		Error:        "execution timeout",
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyRetryable,
-			Type:   interfaces.ProviderErrorTypeTimeout,
+		FailureMetadata: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyRetryable,
+			Type:   interfaces.WorkFailureTypeTimeout,
 		},
 	})
 	createdAt := time.Date(2026, time.April, 6, 10, 30, 0, 0, time.UTC)
@@ -244,11 +244,16 @@ func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesConsumedWorkToOrigina
 	if result == nil || len(result.Mutations) != 1 {
 		t.Fatalf("expected 1 mutation, got %+v", result)
 	}
+	assertTimeoutFailureRequeueResult(t, result, createdAt, "w-timeout", "execution timeout")
+}
+
+func assertTimeoutFailureRequeueResult(t *testing.T, result *interfaces.TickResult, createdAt time.Time, workID string, errorText string) {
+	t.Helper()
 	if result.Mutations[0].ToPlace != "wt-code:init" {
 		t.Fatalf("ToPlace = %s, want wt-code:init", result.Mutations[0].ToPlace)
 	}
-	if result.Mutations[0].NewToken.Color.WorkID != "w-timeout" {
-		t.Fatalf("WorkID = %s, want w-timeout", result.Mutations[0].NewToken.Color.WorkID)
+	if result.Mutations[0].NewToken.Color.WorkID != workID {
+		t.Fatalf("WorkID = %s, want %s", result.Mutations[0].NewToken.Color.WorkID, workID)
 	}
 	if !result.Mutations[0].NewToken.CreatedAt.Equal(createdAt) {
 		t.Fatalf("CreatedAt = %v, want %v", result.Mutations[0].NewToken.CreatedAt, createdAt)
@@ -259,7 +264,7 @@ func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesConsumedWorkToOrigina
 	if got := result.Mutations[0].NewToken.History.ConsecutiveFailures["t1"]; got != 1 {
 		t.Fatalf("ConsecutiveFailures[t1] = %d, want 1", got)
 	}
-	if result.Mutations[0].NewToken.History.LastError != "execution timeout" {
+	if result.Mutations[0].NewToken.History.LastError != errorText {
 		t.Fatalf("LastError = %q", result.Mutations[0].NewToken.History.LastError)
 	}
 	if len(result.Mutations[0].NewToken.History.FailureLog) != 1 {
@@ -267,6 +272,25 @@ func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesConsumedWorkToOrigina
 	}
 	if result.Mutations[0].NewToken.History.FailureLog[0].Attempt != 1 {
 		t.Fatalf("FailureLog attempt = %d, want 1", result.Mutations[0].NewToken.History.FailureLog[0].Attempt)
+	}
+	if len(result.CompletedDispatches) != 1 {
+		t.Fatalf("completed dispatch count = %d, want 1", len(result.CompletedDispatches))
+	}
+	completed := result.CompletedDispatches[0]
+	if completed.FailureMetadata == nil {
+		t.Fatal("completed dispatch FailureMetadata = nil, want timeout metadata")
+	}
+	if completed.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("completed dispatch FailureMetadata.Type = %q, want %q", completed.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
+	}
+	if completed.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("completed dispatch FailureMetadata.Family = %q, want %q", completed.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	}
+	if completed.ProviderFailure == nil {
+		t.Fatal("completed dispatch ProviderFailure = nil, want mirrored timeout metadata")
+	}
+	if completed.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
+		t.Fatalf("completed dispatch ProviderFailure.Type = %q, want %q", completed.ProviderFailure.Type, interfaces.ProviderErrorTypeTimeout)
 	}
 }
 
@@ -278,9 +302,9 @@ func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesDespiteRenderedErrorT
 		TransitionID: "t1",
 		Outcome:      interfaces.OutcomeFailed,
 		Error:        "provider error: timeout: context deadline exceeded",
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyRetryable,
-			Type:   interfaces.ProviderErrorTypeTimeout,
+		FailureMetadata: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyRetryable,
+			Type:   interfaces.WorkFailureTypeTimeout,
 		},
 	})
 	createdAt := time.Date(2026, time.April, 6, 10, 45, 0, 0, time.UTC)
@@ -381,7 +405,7 @@ func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesFromNormalized
 				TransitionID:    "t1",
 				Outcome:         interfaces.OutcomeFailed,
 				Error:           "provider error: internal_server_error",
-				ProviderFailure: tc.metadata,
+				FailureMetadata: (*interfaces.WorkFailureMetadata)(tc.metadata),
 			})
 
 			snapshot := pipelineSnapshot(

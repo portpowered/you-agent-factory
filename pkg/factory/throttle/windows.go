@@ -11,6 +11,7 @@ type FailureRecord struct {
 	Provider        string
 	Model           string
 	OccurredAt      time.Time
+	FailureMetadata *interfaces.WorkFailureMetadata
 	ProviderFailure *interfaces.ProviderFailureMetadata
 }
 
@@ -41,7 +42,7 @@ func DeriveActiveThrottlePauses(history []FailureRecord, pauseDuration time.Dura
 		if record.Provider == "" {
 			continue
 		}
-		if !triggersThrottlePause(record.ProviderFailure) {
+		if !triggersThrottlePause(interfaces.CanonicalWorkFailureMetadata(record.FailureMetadata, record.ProviderFailure)) {
 			continue
 		}
 		key := laneKey{provider: record.Provider, model: record.Model}
@@ -89,6 +90,6 @@ func laneID(key laneKey) string {
 	return key.provider + "/" + key.model
 }
 
-func triggersThrottlePause(failure *interfaces.ProviderFailureMetadata) bool {
+func triggersThrottlePause(failure *interfaces.WorkFailureMetadata) bool {
 	return failure != nil && failure.Family == interfaces.ProviderErrorFamilyThrottle
 }

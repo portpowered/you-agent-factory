@@ -70,6 +70,8 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"ScriptFailureType":                     "./components/schemas/events/ScriptFailureType.yaml",
 		"FactoryState":                          "./components/schemas/events/FactoryState.yaml",
 		"WorkOutcome":                           "./components/schemas/events/WorkOutcome.yaml",
+		"WorkFailureFamily":                     "./components/schemas/events/WorkFailureFamily.yaml",
+		"WorkFailureType":                       "./components/schemas/events/WorkFailureType.yaml",
 		"ProviderFailureMetadata":               "./components/schemas/events/ProviderFailureMetadata.yaml",
 		"ProviderSessionMetadata":               "./components/schemas/events/ProviderSessionMetadata.yaml",
 		"WorkMetrics":                           "./components/schemas/events/WorkMetrics.yaml",
@@ -243,6 +245,11 @@ func TestOpenAPIContract_GeneratedFactoryModelRetiresExhaustionRules(t *testing.
 	assertGeneratedFactoryLoopBreakerPayload(t, payload)
 }
 
+func TestOpenAPIContract_GeneratedProviderFailureModelUsesPublishedFailureEnums(t *testing.T) {
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.ProviderFailureMetadata{}), "Family", reflect.TypeOf((*generated.WorkFailureFamily)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.ProviderFailureMetadata{}), "Type", reflect.TypeOf((*generated.WorkFailureType)(nil)))
+}
+
 func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	workerSchema := schemaObject(t, componentSchemas(t, doc), "Worker")
@@ -330,6 +337,10 @@ func assertBundledEventPayloadRefs(t *testing.T, schemas map[string]any) {
 	assertPropertyRef(t, dispatchResponseProperties, "outcome", "#/components/schemas/WorkOutcome")
 	assertPropertyRef(t, dispatchResponseProperties, "providerFailure", "#/components/schemas/ProviderFailureMetadata")
 	assertPropertyRef(t, dispatchResponseProperties, "metrics", "#/components/schemas/WorkMetrics")
+	assertPublishedWorkFailureSchemas(t, schemas, schemaProperties(t, schemaObject(t, schemas, "ProviderFailureMetadata"), "ProviderFailureMetadata"))
+
+	providerFailureProperties := schemaProperties(t, schemaObject(t, schemas, "ProviderFailureMetadata"), "ProviderFailureMetadata")
+	assertPublishedWorkFailureSchemas(t, schemas, providerFailureProperties)
 
 	stateResponseProperties := schemaProperties(t, schemaObject(t, schemas, "FactoryStateResponseEventPayload"), "FactoryStateResponseEventPayload")
 	assertPropertyRef(t, stateResponseProperties, "previousState", "#/components/schemas/FactoryState")
@@ -339,6 +350,22 @@ func assertBundledEventPayloadRefs(t *testing.T, schemas map[string]any) {
 	assertPropertyRef(t, runResponseProperties, "state", "#/components/schemas/FactoryState")
 	assertPropertyRef(t, runResponseProperties, "wallClock", "#/components/schemas/WallClock")
 	assertPropertyRef(t, runResponseProperties, "diagnostics", "#/components/schemas/Diagnostics")
+}
+
+func assertPublishedWorkFailureSchemas(t *testing.T, schemas map[string]any, providerFailureProperties map[string]any) {
+	t.Helper()
+	assertPropertyRef(t, providerFailureProperties, "family", "#/components/schemas/WorkFailureFamily")
+	assertPropertyRef(t, providerFailureProperties, "type", "#/components/schemas/WorkFailureType")
+	assertEnumValues(t, schemaObject(t, schemas, "WorkFailureFamily"), "WorkFailureFamily", []string{"terminal", "retryable", "throttle"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkFailureType"), "WorkFailureType", []string{
+		"auth_failure",
+		"permanent_bad_request",
+		"throttled",
+		"internal_server_error",
+		"timeout",
+		"unknown",
+		"misconfigured",
+	})
 }
 
 func assertBundledEventStreamRoute(t *testing.T, doc map[string]any) {

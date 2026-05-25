@@ -1056,6 +1056,10 @@ components:
       $ref: './components/schemas/events/FactoryState.yaml'
     WorkOutcome:
       $ref: './components/schemas/events/WorkOutcome.yaml'
+    WorkFailureFamily:
+      $ref: './components/schemas/events/WorkFailureFamily.yaml'
+    WorkFailureType:
+      $ref: './components/schemas/events/WorkFailureType.yaml'
     ProviderFailureMetadata:
       $ref: './components/schemas/events/ProviderFailureMetadata.yaml'
     ProviderSessionMetadata:

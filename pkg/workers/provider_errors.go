@@ -1,6 +1,8 @@
 package workers
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -51,9 +53,9 @@ func (e *ProviderError) Unwrap() error {
 	return e.Cause
 }
 
-func ClassifyProviderFailure(err *ProviderError) interfaces.ProviderFailureDecision {
+func ClassifyProviderFailure(err *ProviderError) interfaces.WorkFailureDecision {
 	if err == nil {
-		return interfaces.ProviderFailureDecision{}
+		return interfaces.WorkFailureDecision{}
 	}
 	return providerFailureDecisionForFamily(err.Family)
 }
@@ -62,9 +64,15 @@ func ClassifyProviderFailure(err *ProviderError) interfaces.ProviderFailureDecis
 // normalized provider-failure metadata carried across runtime boundaries.
 // The normalized type is canonical when present; family remains a fallback for
 // older or partial metadata that omitted type.
-func ProviderFailureDecisionFromMetadata(metadata *interfaces.ProviderFailureMetadata) interfaces.ProviderFailureDecision {
+func ProviderFailureDecisionFromMetadata(metadata *interfaces.ProviderFailureMetadata) interfaces.WorkFailureDecision {
+	return WorkFailureDecisionFromMetadata(metadata)
+}
+
+// WorkFailureDecisionFromMetadata resolves retry behavior from durable
+// generalized failure metadata carried across runtime boundaries.
+func WorkFailureDecisionFromMetadata(metadata *interfaces.WorkFailureMetadata) interfaces.WorkFailureDecision {
 	if metadata == nil {
-		return interfaces.ProviderFailureDecision{}
+		return interfaces.WorkFailureDecision{}
 	}
 	if metadata.Type != "" {
 		return providerFailureDecisionForFamily(providerErrorFamilyForType(metadata.Type))
@@ -72,20 +80,20 @@ func ProviderFailureDecisionFromMetadata(metadata *interfaces.ProviderFailureMet
 	return providerFailureDecisionForFamily(metadata.Family)
 }
 
-func providerFailureDecisionForFamily(family interfaces.ProviderErrorFamily) interfaces.ProviderFailureDecision {
+func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) interfaces.WorkFailureDecision {
 	switch family {
 	case interfaces.ProviderErrorFamilyRetryable:
-		return interfaces.ProviderFailureDecision{Retryable: true}
+		return interfaces.WorkFailureDecision{Retryable: true}
 	case interfaces.ProviderErrorFamilyThrottle:
-		return interfaces.ProviderFailureDecision{Retryable: true, TriggersThrottlePause: true}
+		return interfaces.WorkFailureDecision{Retryable: true, TriggersThrottlePause: true}
 	case interfaces.ProviderErrorFamilyTerminal:
-		return interfaces.ProviderFailureDecision{Terminal: true}
+		return interfaces.WorkFailureDecision{Terminal: true}
 	default:
-		return interfaces.ProviderFailureDecision{Terminal: true}
+		return interfaces.WorkFailureDecision{Terminal: true}
 	}
 }
 
-func providerErrorFamilyForType(errorType interfaces.ProviderErrorType) interfaces.ProviderErrorFamily {
+func providerErrorFamilyForType(errorType interfaces.WorkFailureType) interfaces.WorkFailureFamily {
 	switch errorType {
 	case interfaces.ProviderErrorTypeThrottled:
 		return interfaces.ProviderErrorFamilyThrottle
@@ -98,12 +106,31 @@ func providerErrorFamilyForType(errorType interfaces.ProviderErrorType) interfac
 	}
 }
 
-func ProviderFailureMetadataFromError(err *ProviderError) *interfaces.ProviderFailureMetadata {
+// WorkFailureMetadataFromError projects a provider-shaped execution error onto
+// the generalized runtime failure contract.
+func WorkFailureMetadataFromError(err *ProviderError) *interfaces.WorkFailureMetadata {
 	if err == nil {
 		return nil
 	}
-	return &interfaces.ProviderFailureMetadata{
+	return &interfaces.WorkFailureMetadata{
 		Family: err.Family,
 		Type:   err.Type,
 	}
+}
+
+// NormalizeProviderExecutionError projects raw execution failures that affect
+// retry policy onto the shared provider failure contract before retry decisions
+// are made.
+func NormalizeProviderExecutionError(err error) *ProviderError {
+	if err == nil {
+		return nil
+	}
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) {
+		return providerErr
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return NewProviderError(interfaces.ProviderErrorTypeTimeout, "execution timeout", err)
+	}
+	return nil
 }
