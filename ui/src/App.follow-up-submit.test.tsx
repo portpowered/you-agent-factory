@@ -64,6 +64,11 @@ describe("App follow-up submit and dashboard shell flows", () => {
     expect(within(exportDialog).getByLabelText("Factory name")).toBeTruthy();
   });
 
+});
+
+describe("App follow-up submit request flows", () => {
+  registerAppDashboardTestLifecycle();
+
   it("submits configured and empty work requests, while preserving failed form state", async () => {
     const { fetchMock } = renderApp({ snapshot: activeSnapshot });
     fetchMock
@@ -95,10 +100,18 @@ describe("App follow-up submit and dashboard shell flows", () => {
 
     await screen.findByRole("heading", { name: "You Agent Factory" });
 
-    const { requestName, requestText, submitButton, submitWorkScope, workType } =
+    const {
+      requestName,
+      requestText,
+      submissionItemsList,
+      submitButton,
+      submitWorkScope,
+      workType,
+    } =
       submitWorkCardControls();
 
     expect(Array.from(workType.options, (option) => option.value)).toContain("story");
+    expect(within(submissionItemsList).getAllByRole("listitem")).toHaveLength(1);
     expect(submitButton.disabled).toBe(true);
     expect(
       submitWorkScope.getByText("Choose a work type and enter a request name to continue."),

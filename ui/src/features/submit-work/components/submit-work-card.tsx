@@ -16,10 +16,18 @@ import { cn } from "../../../lib/cn";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 
 export interface SubmitWorkDraft {
+  items: SubmitWorkDraftItem[];
   requestName: string;
-  requestText: string;
   workTypeName: string;
 }
+
+export interface SubmitWorkDraftTextItem {
+  id: string;
+  text: string;
+  type: "text";
+}
+
+export type SubmitWorkDraftItem = SubmitWorkDraftTextItem;
 
 export interface SubmitWorkValidationErrors {
   requestName?: string;
@@ -36,8 +44,8 @@ export interface SubmitWorkCardProps {
   headerAction?: ReactNode;
   isSubmitting?: boolean;
   locale?: string;
+  onItemTextChange: (itemId: string, value: string) => void;
   onRequestNameChange: (value: string) => void;
-  onRequestTextChange: (value: string) => void;
   onSubmit: () => void;
   onWorkTypeNameChange: (value: string) => void;
   status: SubmitWorkStatus;
@@ -71,8 +79,8 @@ export function SubmitWorkCard({
   headerAction,
   isSubmitting = false,
   locale,
+  onItemTextChange,
   onRequestNameChange,
-  onRequestTextChange,
   onSubmit,
   onWorkTypeNameChange,
   status,
@@ -90,11 +98,9 @@ export function SubmitWorkCard({
     hasSelectedWorkType &&
     hasValidRequestName &&
     !isSubmitting;
-  const requestHint = messages.requestHint?.trim();
   const requestNameID = `${widgetId}-request-name`;
   const requestNameErrorID = `${widgetId}-request-name-error`;
-  const requestTextID = `${widgetId}-request-text`;
-  const requestTextHintID = `${widgetId}-request-text-hint`;
+  const submissionItemsID = `${widgetId}-submission-items`;
   const workTypeID = `${widgetId}-work-type`;
   const workTypeErrorID = `${widgetId}-work-type-error`;
   const statusID = `${widgetId}-status`;
@@ -166,23 +172,53 @@ export function SubmitWorkCard({
         </div>
 
         <div className={FIELD_GROUP_CLASS}>
-          <label className={FIELD_LABEL_CLASS} htmlFor={requestTextID}>
-            {messages.requestLabel}
-          </label>
-          <Textarea
-            aria-describedby={requestHint ? requestTextHintID : undefined}
-            className={DASHBOARD_BODY_TEXT_CLASS}
-            disabled={controlsDisabled}
-            id={requestTextID}
-            onChange={(event) => onRequestTextChange(event.target.value)}
-            placeholder={messages.requestPlaceholder}
-            value={draft.requestText}
-          />
-          {requestHint ? (
-            <p className={HELP_TEXT_CLASS} id={requestTextHintID}>
-              {requestHint}
-            </p>
-          ) : null}
+          <div className={FIELD_LABEL_CLASS} id={submissionItemsID}>
+            {messages.submissionItemsLabel}
+          </div>
+          <ol
+            aria-labelledby={submissionItemsID}
+            className="grid gap-3"
+          >
+            {draft.items.map((item, index) => {
+              const requestTextID = `${widgetId}-${item.id}-text`;
+              const requestTextHintID = `${widgetId}-${item.id}-text-hint`;
+              const requestItemLabel = messages.requestItemLabel(index + 1);
+              const requestHint = messages.requestHint?.trim();
+
+              return (
+                <li
+                  className="grid gap-2 rounded-lg border border-af-border-subtle bg-af-panel p-3"
+                  key={item.id}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={FIELD_LABEL_CLASS}>
+                      {messages.textItemTypeLabel}
+                    </span>
+                    <span className={HELP_TEXT_CLASS}>{requestItemLabel}</span>
+                  </div>
+                  <label className={FIELD_LABEL_CLASS} htmlFor={requestTextID}>
+                    {requestItemLabel}
+                  </label>
+                  <Textarea
+                    aria-describedby={requestHint ? requestTextHintID : undefined}
+                    className={DASHBOARD_BODY_TEXT_CLASS}
+                    disabled={controlsDisabled}
+                    id={requestTextID}
+                    onChange={(event) =>
+                      onItemTextChange(item.id, event.target.value)
+                    }
+                    placeholder={messages.requestPlaceholder}
+                    value={item.text}
+                  />
+                  {requestHint ? (
+                    <p className={HELP_TEXT_CLASS} id={requestTextHintID}>
+                      {requestHint}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
         </div>
 
         <div className={ACTION_ROW_CLASS}>

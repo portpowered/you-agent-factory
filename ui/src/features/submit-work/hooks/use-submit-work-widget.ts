@@ -5,15 +5,43 @@ import { isSubmitWorkAPIError, submitWork } from "../../../api/work";
 import type { SubmitWorkMessages } from "../messages/submit-work";
 import type {
   SubmitWorkDraft,
+  SubmitWorkDraftItem,
   SubmitWorkStatus,
   SubmitWorkValidationErrors,
 } from "../components/submit-work-card";
 
-const EMPTY_DRAFT: SubmitWorkDraft = {
-  requestName: "",
-  requestText: "",
-  workTypeName: "",
-};
+const DEFAULT_TEXT_ITEM_ID = "submission-item-1";
+
+function createDefaultDraft(): SubmitWorkDraft {
+  return {
+    items: [createDefaultTextItem()],
+    requestName: "",
+    workTypeName: "",
+  };
+}
+
+function createDefaultTextItem(): SubmitWorkDraftItem {
+  return {
+    id: DEFAULT_TEXT_ITEM_ID,
+    text: "",
+    type: "text",
+  };
+}
+
+const EMPTY_DRAFT: SubmitWorkDraft = createDefaultDraft();
+
+function resetDraftPreservingWorkType(workTypeName: string): SubmitWorkDraft {
+  return {
+    ...createDefaultDraft(),
+    workTypeName,
+  };
+}
+
+function draftRequestText(draft: SubmitWorkDraft): string {
+  return draft.items[0]?.text ?? "";
+}
+
+const LEGACY_EMPTY_PAYLOAD = "";
 
 export function useSubmitWorkWidget(
   sessionID: string,
@@ -30,10 +58,9 @@ export function useSubmitWorkWidget(
     mutationFn: (request: Parameters<typeof submitWork>[0]) =>
       submitWork(request, { sessionID }),
     onSuccess: () => {
-      setDraft((currentDraft) => ({
-        ...EMPTY_DRAFT,
-        workTypeName: currentDraft.workTypeName,
-      }));
+      setDraft((currentDraft) =>
+        resetDraftPreservingWorkType(currentDraft.workTypeName),
+      );
       setShowValidation(false);
     },
   });
@@ -43,7 +70,7 @@ export function useSubmitWorkWidget(
     if (sessionID.trim().length === 0) {
       return;
     }
-    setDraft(EMPTY_DRAFT);
+    setDraft(createDefaultDraft());
     setShowValidation(false);
     resetMutation();
   }, [resetMutation, sessionID]);
@@ -65,6 +92,22 @@ export function useSubmitWorkWidget(
   return {
     draft,
     isSubmitting: mutation.isPending,
+    onItemTextChange: (itemId: string, value: string) => {
+      if (mutation.isError || mutation.isSuccess) {
+        mutation.reset();
+      }
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        items: currentDraft.items.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                text: value,
+              }
+            : item,
+        ),
+      }));
+    },
     onRequestNameChange: (value: string) => {
       if (mutation.isError || mutation.isSuccess) {
         mutation.reset();
@@ -72,15 +115,6 @@ export function useSubmitWorkWidget(
       setDraft((currentDraft) => ({
         ...currentDraft,
         requestName: value,
-      }));
-    },
-    onRequestTextChange: (value: string) => {
-      if (mutation.isError || mutation.isSuccess) {
-        mutation.reset();
-      }
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        requestText: value,
       }));
     },
     onSubmit: () => {
@@ -94,7 +128,10 @@ export function useSubmitWorkWidget(
 
       mutation.mutate({
         name: draft.requestName,
-        payload: draft.requestText.trim().length === 0 ? "" : draft.requestText,
+        payload:
+          draftRequestText(draft).trim().length === 0
+            ? LEGACY_EMPTY_PAYLOAD
+            : draftRequestText(draft),
         workTypeName: draft.workTypeName,
       });
     },

@@ -46,7 +46,12 @@ describe("SubmitWorkWidget", () => {
     expect(
       within(card).getByRole("textbox", { name: "Request name" }),
     ).toBeTruthy();
-    expect(within(card).getByRole("textbox", { name: "Request" })).toBeTruthy();
+    expect(
+      within(card).getByRole("list", { name: "Submission items" }),
+    ).toBeTruthy();
+    expect(
+      within(card).getByRole("textbox", { name: "Text item 1" }),
+    ).toBeTruthy();
     expect(
       within(card).getByText(
         "Choose a work type and enter a request name to continue.",
@@ -54,7 +59,7 @@ describe("SubmitWorkWidget", () => {
     ).toBeTruthy();
     expect(
       within(card).queryByText(
-        "Optional. Leave this blank to submit an empty request.",
+        "Optional: describe what you want this request to accomplish.",
       ),
     ).toBeNull();
     expect(
@@ -79,7 +84,7 @@ describe("SubmitWorkWidget", () => {
       name: "Request name",
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
-      name: "Request",
+      name: "Text item 1",
     });
     const submitButton = screen.getByRole<HTMLButtonElement>("button", {
       name: "Submit work",
@@ -148,6 +153,23 @@ describe("SubmitWorkWidget", () => {
     ).toBeTruthy();
   });
 
+  it("renders a seeded ordered submission-items list with one blank text item by default", () => {
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    const submissionItems = screen.getByRole<HTMLOListElement>("list", {
+      name: "Submission items",
+    });
+    const seededTextItem = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Text item 1",
+    });
+
+    expect(within(submissionItems).getAllByRole("listitem")).toHaveLength(1);
+    expect(seededTextItem.value).toBe("");
+    expect(screen.getByText("Text")).toBeTruthy();
+  });
+
   it("submits work with a request name, clears only request fields on success, and shows the returned trace", async () => {
     const pendingResponse = {
       resolve: null as ((value: Response) => void) | null,
@@ -170,7 +192,7 @@ describe("SubmitWorkWidget", () => {
       name: "Request name",
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
-      name: "Request",
+      name: "Text item 1",
     });
 
     fireEvent.change(workType, { target: { value: "story" } });
@@ -377,7 +399,7 @@ describe("SubmitWorkWidget", () => {
       name: "Request name",
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
-      name: "Request",
+      name: "Text item 1",
     });
 
     fireEvent.change(workType, { target: { value: "story" } });
@@ -416,7 +438,7 @@ describe("SubmitWorkWidget", () => {
       name: "Request name",
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
-      name: "Request",
+      name: "Text item 1",
     });
 
     fireEvent.change(workType, { target: { value: "story" } });
@@ -463,7 +485,7 @@ describe("SubmitWorkWidget", () => {
       name: "Request name",
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
-      name: "Request",
+      name: "Text item 1",
     });
     const submitButton = screen.getByRole<HTMLButtonElement>("button", {
       name: "Submit work",
@@ -494,7 +516,8 @@ describe("SubmitWorkWidget", () => {
     expect(
       within(card).getByRole("textbox", { name: "请求名称" }),
     ).toBeTruthy();
-    expect(within(card).getByRole("textbox", { name: "请求" })).toBeTruthy();
+    expect(within(card).getByRole("list", { name: "提交项" })).toBeTruthy();
+    expect(within(card).getByRole("textbox", { name: "文本项 1" })).toBeTruthy();
     expect(
       within(card).getByText("先选择工作类型并填写请求名称，然后即可继续。"),
     ).toBeTruthy();

@@ -25,8 +25,8 @@ export function SubmitWorkWidget({
   const {
     draft,
     isSubmitting,
+    onItemTextChange,
     onRequestNameChange,
-    onRequestTextChange,
     onSubmit,
     onWorkTypeNameChange,
     status,
@@ -44,8 +44,8 @@ export function SubmitWorkWidget({
       headerAction={headerAction}
       isSubmitting={isSubmitting}
       locale={locale}
+      onItemTextChange={onItemTextChange}
       onRequestNameChange={onRequestNameChange}
-      onRequestTextChange={onRequestTextChange}
       onSubmit={onSubmit}
       onWorkTypeNameChange={onWorkTypeNameChange}
       status={status}

@@ -5,14 +5,16 @@ import {
 
 export interface SubmitWorkMessages {
   cardTitle: string;
-  requestLabel: string;
   requestHint?: string;
+  requestItemLabel: (position: number) => string;
   requestNameLabel: string;
   requestNamePlaceholder: string;
   requestPlaceholder: string;
   selectWorkTypePlaceholder: string;
+  submissionItemsLabel: string;
   submitAction: string;
   submittingAction: string;
+  textItemTypeLabel: string;
   workTypeLabel: string;
   statusMessages: {
     emptyGuidance: string;
@@ -35,14 +37,16 @@ export interface SubmitWorkMessages {
 const submitWorkMessagesByLocale = {
   en: {
     cardTitle: "Submit work",
-    requestLabel: "Request",
     requestNameLabel: "Request name",
     requestNamePlaceholder: "Add a name for this request.",
     requestPlaceholder:
       "Optional: describe what you want this request to accomplish.",
+    requestItemLabel: (position) => `Text item ${position}`,
     selectWorkTypePlaceholder: "Select a work type",
+    submissionItemsLabel: "Submission items",
     submitAction: "Submit work",
     submittingAction: "Submitting...",
+    textItemTypeLabel: "Text",
     workTypeLabel: "Work type",
     statusMessages: {
       emptyGuidance:
@@ -65,13 +69,15 @@ const submitWorkMessagesByLocale = {
   },
   "zh-CN": {
     cardTitle: "提交工作",
-    requestLabel: "请求",
     requestNameLabel: "请求名称",
     requestNamePlaceholder: "为此请求添加名称。",
     requestPlaceholder: "可选：描述你希望这个请求完成什么。",
+    requestItemLabel: (position) => `文本项 ${position}`,
     selectWorkTypePlaceholder: "选择工作类型",
+    submissionItemsLabel: "提交项",
     submitAction: "提交工作",
     submittingAction: "正在提交...",
+    textItemTypeLabel: "文本",
     workTypeLabel: "工作类型",
     statusMessages: {
       emptyGuidance: "先选择工作类型并填写请求名称，然后即可继续。",
