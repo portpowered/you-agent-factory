@@ -6,7 +6,6 @@ import {
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";

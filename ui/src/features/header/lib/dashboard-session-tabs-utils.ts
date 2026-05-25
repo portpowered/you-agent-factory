@@ -1,7 +1,6 @@
 import {
   type FactorySessionTarget,
   type FactorySessionsAPIErrorTarget,
-  type FactorySessionTargetRef,
   type FactorySessionSummary,
   FactorySessionsAPIError,
 } from "../../../api/factory-sessions";
@@ -180,24 +179,6 @@ export function selectedFactorySessionTarget(
       (target) => factorySessionTargetOptionValue(target) === selectedTargetValue,
     ) ?? null
   );
-}
-
-export function manualFactorySessionTargetRef(
-  factoryName: string,
-): FactorySessionTargetRef | null {
-  const normalizedFactoryName = normalizeManualFactoryName(factoryName);
-  if (normalizedFactoryName === "") {
-    return null;
-  }
-
-  return {
-    kind: "named",
-    name: normalizedFactoryName,
-  };
-}
-
-export function normalizeManualFactoryName(factoryName: string): string {
-  return factoryName.trim();
 }
 
 function folderValidationErrorMessage(

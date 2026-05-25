@@ -108,7 +108,6 @@ function DashboardSessionTabsView({
     sessionsQuery,
     setActiveSessionID,
     setDialogOpen,
-    setSelectedTargetValue,
     validateFolderMutation,
   } = state;
 

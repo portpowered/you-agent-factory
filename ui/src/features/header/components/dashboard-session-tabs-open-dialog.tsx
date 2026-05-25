@@ -33,7 +33,7 @@ const SESSION_DIALOG_STATUS_CLASS =
 const SESSION_TARGET_PICKER_CLASS =
   "grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4";
 const SESSION_TARGET_BUTTON_CLASS =
-  "flex min-h-16 w-full flex-col items-start justify-center rounded-xl border border-af-surface bg-af-surface hover:border-af-accent px-4 py-3 text-left text-sm text-af-accent-foreground shadow-sm transition-colors hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+  "flex min-h-16 w-full flex-col items-start justify-center rounded-xl border border-af-accent bg-af-accent px-4 py-3 text-left text-sm text-af-on-accent shadow-sm transition-colors hover:border-af-accent-hover hover:bg-af-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TARGET_LIST_CLASS = "grid gap-3";
 
 export function OpenSessionDialog({
@@ -191,7 +191,7 @@ function SessionTargetPicker({
             >
               <span className="font-semibold text-af-text">{target.label}</span>
               <span className="truncate text-xs text-af-text-subtle">
-                <b>path:</b> {target.factoryDir}
+                {target.factoryDir}
               </span>
             </button>
           );
