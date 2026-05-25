@@ -648,6 +648,112 @@ func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testi
 	}
 }
 
+func TestScriptWrapProvider_Infer_NonCodexPayloadUsesExpectedCommandRequestAndNoStdin(t *testing.T) {
+	for _, tc := range nonCodexInferencePayloadTestCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeExec := &recordingProviderExec{
+				result: CommandResult{Stdout: []byte(strings.ToLower(tc.name) + " output")},
+			}
+			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+			resp, err := provider.Infer(context.Background(), tc.req)
+			if err != nil {
+				t.Fatalf("Infer returned error: %v", err)
+			}
+			if resp.Content != strings.ToLower(tc.name)+" output" {
+				t.Fatalf("response content = %q", resp.Content)
+			}
+			if fakeExec.request.Command != tc.req.ModelProvider {
+				t.Fatalf("command = %q, want %q", fakeExec.request.Command, tc.req.ModelProvider)
+			}
+			assertStringSlicesEqual(t, tc.wantArgs, fakeExec.request.Args)
+			if len(fakeExec.request.Stdin) != 0 {
+				t.Fatalf("expected non-codex request not to use stdin, got %q", string(fakeExec.request.Stdin))
+			}
+			if fakeExec.request.WorkDir != tc.wantWorkDir {
+				t.Fatalf("workdir = %q, want %q", fakeExec.request.WorkDir, tc.wantWorkDir)
+			}
+			assertEnvContains(t, fakeExec.request.Env, tc.wantEnv)
+		})
+	}
+}
+
+type nonCodexInferencePayloadTestCase struct {
+	name        string
+	req         interfaces.ProviderInferenceRequest
+	wantArgs    []string
+	wantWorkDir string
+	wantEnv     string
+}
+
+func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
+	return []nonCodexInferencePayloadTestCase{
+		{
+			name: "Gemini",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderGemini),
+				Model:         "gemini-2.5-flash",
+				UserMessage:   "run the tests",
+				EnvVars: map[string]string{
+					"AGENT_FACTORY_GEMINI_ENV": "enabled",
+				},
+			},
+			wantArgs: []string{"--prompt", "run the tests", "--model", "gemini-2.5-flash"},
+			wantEnv:  "AGENT_FACTORY_GEMINI_ENV=enabled",
+		},
+		{
+			name: "Kiro",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderKiro),
+				SystemPrompt:  "You are a careful reviewer.",
+				SessionID:     "kiro-session-123",
+				UserMessage:   "run the tests",
+				EnvVars: map[string]string{
+					"AGENT_FACTORY_KIRO_ENV": "enabled",
+				},
+			},
+			wantArgs: []string{
+				"chat",
+				"--no-interactive",
+				"--resume-id",
+				"kiro-session-123",
+				"System instructions:\nYou are a careful reviewer.\n\nUser request:\nrun the tests",
+			},
+			wantEnv: "AGENT_FACTORY_KIRO_ENV=enabled",
+		},
+		{
+			name: "Cursor",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderCursor),
+				Model:         "gpt-5",
+				SessionID:     "cursor-session-123",
+				UserMessage:   "run the tests",
+				EnvVars: map[string]string{
+					"AGENT_FACTORY_CURSOR_ENV": "enabled",
+				},
+			},
+			wantArgs: []string{"--print", "run the tests", "--output-format", "text", "--model", "gpt-5", "--resume", "cursor-session-123"},
+			wantEnv:  "AGENT_FACTORY_CURSOR_ENV=enabled",
+		},
+		{
+			name: "OpenCode",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider:    string(ModelProviderOpenCode),
+				Model:            "openai/gpt-5",
+				SessionID:        "opencode-session-123",
+				WorkingDirectory: "/tmp/project",
+				UserMessage:      "run the tests",
+				EnvVars: map[string]string{
+					"AGENT_FACTORY_OPENCODE_ENV": "enabled",
+				},
+			},
+			wantArgs:    []string{"run", "--model", "openai/gpt-5", "--session", "opencode-session-123", "--dir", "/tmp/project", "run the tests"},
+			wantWorkDir: "/tmp/project",
+			wantEnv:     "AGENT_FACTORY_OPENCODE_ENV=enabled",
+		},
+	}
+}
+
 func TestScriptWrapProvider_Infer_AttachesSharedCommandDiagnosticsToResponse(t *testing.T) {
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{

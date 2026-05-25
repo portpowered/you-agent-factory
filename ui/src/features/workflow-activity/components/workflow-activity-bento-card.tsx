@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { AgentBentoCard } from "../../../components/ui";
 import type { DashboardSelection } from "../../current-selection/public";
@@ -11,6 +13,7 @@ import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 
 interface WorkflowActivityBentoCardProps {
+  headerAction?: ReactNode;
   importController: CurrentActivityImportController;
   locale?: string;
   now: number;
@@ -22,16 +25,19 @@ interface WorkflowActivityBentoCardProps {
   ) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
+  widgetInstanceID?: string;
 }
 
 const GRAPH_PANEL_SHELL_CLASS = "relative h-full min-h-0";
 
 export function WorkflowActivityBentoCard({
+  headerAction,
   importController,
   locale,
   now,
   selection,
   snapshot,
+  widgetInstanceID,
   onSelectWorkID,
   onSelectStateNode,
   onSelectWorkstation,
@@ -43,20 +49,23 @@ export function WorkflowActivityBentoCard({
     <AgentBentoCard
       chromeDensity="compact"
       headerAction={
-        <CurrentActivityGraphHeaderActions
-          compact
-          editorMode={editor.editorMode}
-          editorUnavailableClassifierWorkstationName={
-            editor.editorUnavailableClassifierWorkstationName
-          }
-          hasChanges={editor.draftState.hasChanges}
-          isDefinitionLoading={
-            editor.editableDefinitionQuery.status === "pending"
-          }
-          loadErrorMessage={editor.editableDefinitionQuery.error?.message}
-          locale={locale}
-          onToggle={editor.handleEditorModeToggle}
-        />
+        <>
+          {headerAction}
+          <CurrentActivityGraphHeaderActions
+            compact
+            editorMode={editor.editorMode}
+            editorUnavailableClassifierWorkstationName={
+              editor.editorUnavailableClassifierWorkstationName
+            }
+            hasChanges={editor.draftState.hasChanges}
+            isDefinitionLoading={
+              editor.editableDefinitionQuery.status === "pending"
+            }
+            loadErrorMessage={editor.editableDefinitionQuery.error?.message}
+            locale={locale}
+            onToggle={editor.handleEditorModeToggle}
+          />
+        </>
       }
       title={messages.widgetTitle}
     >
@@ -69,6 +78,7 @@ export function WorkflowActivityBentoCard({
           selection={toCurrentActivitySelection(selection)}
           showHeaderActions={false}
           snapshot={snapshot}
+          widgetInstanceID={widgetInstanceID}
           onSelectWorkID={onSelectWorkID}
           onSelectStateNode={onSelectStateNode}
           onSelectWorkstation={onSelectWorkstation}

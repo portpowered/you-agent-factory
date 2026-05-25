@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "../../../lib/cn";
@@ -64,6 +66,7 @@ export type TraceGridState =
 
 export interface TraceGridBentoCardProps {
   className?: string;
+  headerAction?: ReactNode;
   locale?: string;
   onSelectWorkID?: (workID: string) => void;
   state: TraceGridState;
@@ -73,6 +76,7 @@ export interface TraceGridBentoCardProps {
 
 export function TraceGridBentoCard({
   className = "",
+  headerAction,
   locale,
   onSelectWorkID,
   state,
@@ -88,7 +92,11 @@ export function TraceGridBentoCard({
   );
 
   return (
-    <AgentBentoCard className={cardClassName} title={title ?? messages.title}>
+    <AgentBentoCard
+      className={cardClassName}
+      headerAction={headerAction}
+      title={title ?? messages.title}
+    >
       {renderTraceState(state, locale, onSelectWorkID)}
     </AgentBentoCard>
   );

@@ -221,6 +221,73 @@ describe("CompletedFailedWorkstationCard", () => {
     ).toBeTruthy();
   });
 
+  it("keeps disclosure ids and labels distinct across duplicate terminal-work cards", () => {
+    const messages = getTerminalWorkMessages("en");
+
+    render(
+      <>
+        <CompletedFailedWorkstationCard
+          completedItems={[
+            { label: "Done Story", traceWorkID: "work-done-story" },
+          ]}
+          failedItems={[
+            { label: "Failed Story", traceWorkID: "work-failed-story" },
+          ]}
+          onSelectItem={vi.fn()}
+          widgetId="terminal-work::one"
+        />
+        <CompletedFailedWorkstationCard
+          completedItems={[
+            { label: "Done Story 2", traceWorkID: "work-done-story-2" },
+          ]}
+          failedItems={[
+            { label: "Failed Story 2", traceWorkID: "work-failed-story-2" },
+          ]}
+          onSelectItem={vi.fn()}
+          widgetId="terminal-work::two"
+        />
+      </>,
+    );
+
+    const completedToggles = screen.getAllByRole("button", {
+      name: messages.disclosureLabel(true),
+    });
+    expect(completedToggles).toHaveLength(4);
+
+    expect(completedToggles[0]?.getAttribute("aria-controls")).toBe(
+      "terminal-work::one-completed-items",
+    );
+    expect(completedToggles[2]?.getAttribute("aria-controls")).toBe(
+      "terminal-work::two-completed-items",
+    );
+
+    const firstCompletedRegion = document.getElementById(
+      "terminal-work::one-completed-items",
+    );
+    const secondCompletedRegion = document.getElementById(
+      "terminal-work::two-completed-items",
+    );
+    expect(firstCompletedRegion).toBeTruthy();
+    expect(secondCompletedRegion).toBeTruthy();
+    expect(firstCompletedRegion?.id).not.toBe(secondCompletedRegion?.id);
+
+    const firstCompletedHeading = screen.getAllByRole("heading", {
+      level: 4,
+      name: messages.rowTitle("completed"),
+    })[0];
+    const secondCompletedHeading = screen.getAllByRole("heading", {
+      level: 4,
+      name: messages.rowTitle("completed"),
+    })[1];
+    expect(firstCompletedHeading?.id).toBe(
+      "terminal-work::one-completed-items-heading",
+    );
+    expect(secondCompletedHeading?.id).toBe(
+      "terminal-work::two-completed-items-heading",
+    );
+    expect(firstCompletedHeading?.id).not.toBe(secondCompletedHeading?.id);
+  });
+
   it("marks the selected outcome item through the shared button state", () => {
     render(
       <CompletedFailedWorkstationCard

@@ -1,13 +1,17 @@
+import type { ReactNode } from "react";
+
 import { WorkChartCard } from "./d3-information-card";
 import type { WorkChartModel } from "../lib/trends";
 
 export interface WorkOutcomeWidgetProps {
+  headerAction?: ReactNode;
   locale?: string;
   model: WorkChartModel;
   widgetId?: string;
 }
 
 export function WorkOutcomeWidget({
+  headerAction,
   locale,
   model,
   widgetId = "work-outcome-chart",
@@ -15,6 +19,7 @@ export function WorkOutcomeWidget({
   return (
     <WorkChartCard
       className="min-h-72"
+      headerAction={headerAction}
       locale={locale}
       model={model}
       widgetId={widgetId}

@@ -9,22 +9,25 @@ import {
   type AgentBentoLayoutItem,
 } from "./agent-bento";
 
-const defaultLayout: AgentBentoLayoutItem[] = [{ id: "summary", x: 0, y: 0, w: 4, h: 2 }];
+const defaultLayout: AgentBentoLayoutItem[] = [
+  { h: 2, id: "summary", widgetType: "summary", w: 4, x: 0, y: 0 },
+];
 
 const multiCardLayout: AgentBentoLayoutItem[] = [
-  { id: "activity", x: 0, y: 0, w: 5, h: 3 },
-  { id: "trace", x: 5, y: 0, w: 4, h: 3 },
-  { id: "terminal", x: 9, y: 0, w: 3, h: 3 },
+  { h: 3, id: "activity", widgetType: "activity", w: 5, x: 0, y: 0 },
+  { h: 3, id: "trace", widgetType: "trace", w: 4, x: 5, y: 0 },
+  { h: 3, id: "terminal", widgetType: "terminal", w: 3, x: 9, y: 0 },
 ];
 
 const featureBoardLayout: AgentBentoLayoutItem[] = [
-  { id: "work-totals", x: 0, y: 0, w: 4, h: 2 },
-  { id: "current-selection", x: 4, y: 0, w: 8, h: 4 },
+  { h: 2, id: "work-totals", widgetType: "work-totals", w: 4, x: 0, y: 0 },
+  { h: 4, id: "current-selection", widgetType: "current-selection", w: 8, x: 4, y: 0 },
 ];
 
 function card(id: string, title: string, body: string) {
   return {
     id,
+    widgetType: id,
     children: (
       <AgentBentoCard title={title}>
         <p>{body}</p>
@@ -95,6 +98,7 @@ export const RealDashboardState = {
         cards={[
           {
             id: "work-totals",
+            widgetType: "work-totals",
             children: (
               <WorkTotalsCard
                 completedCount={3}
@@ -106,6 +110,7 @@ export const RealDashboardState = {
           },
           {
             id: "current-selection",
+            widgetType: "current-selection",
             children: <NoSelectionDetailCard />,
           },
         ]}
@@ -139,8 +144,8 @@ export const ConstrainedWidth = {
         ]}
         initialWidth={520}
         layout={[
-          { id: "activity", x: 0, y: 0, w: 6, h: 2 },
-          { id: "trace", x: 0, y: 2, w: 6, h: 2 },
+          { h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 },
+          { h: 2, id: "trace", widgetType: "trace", w: 6, x: 0, y: 2 },
         ]}
       />
     </div>

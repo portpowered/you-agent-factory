@@ -1,7 +1,14 @@
+import * as React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/public";
 
+import { DEFAULT_DASHBOARD_LAYOUT } from "../hooks/dashboardLayoutSchema";
+
 import { DashboardBento } from "./dashboard-bento";
+
+const addDashboardWidget = vi.fn();
+const removeDashboardWidget = vi.fn();
+let mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT;
 
 const currentSelectionState = {
   canRedoSelection: false,
@@ -47,11 +54,14 @@ vi.mock("../../current-selection/public", async () => {
 
   return {
     CurrentSelectionWidget: ({
+      headerAction,
       onSelectProviderSession,
     }: {
+      headerAction?: React.ReactNode;
       onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
     }) => (
       <section>
+        {headerAction}
         <p>Current selection card</p>
         <button
           onClick={() => onSelectProviderSession?.(SHARED_SELECTED_SESSION)}
@@ -80,11 +90,14 @@ vi.mock("../../current-selection/public", async () => {
 
 vi.mock("../../provider-session-detail/public", () => ({
   ProviderSessionWidget: ({
+    headerAction,
     selectedProviderSession,
   }: {
+    headerAction?: React.ReactNode;
     selectedProviderSession: LoadableProviderSessionRef | null;
   }) => (
     <section>
+      {headerAction}
       Provider session card
       {selectedProviderSession ? `: ${selectedProviderSession.id}` : ""}
     </section>
@@ -96,11 +109,19 @@ vi.mock("../../import", () => ({
 }));
 
 vi.mock("../../submit-work/public", () => ({
-  SubmitWorkWidget: () => <section>Submit work card</section>,
+  SubmitWorkWidget: ({
+    headerAction,
+  }: {
+    headerAction?: React.ReactNode;
+  }) => <section>{headerAction}Submit work card</section>,
 }));
 
 vi.mock("../../terminal-work/public", () => ({
-  TerminalWorkWidget: () => <section>Terminal work card</section>,
+  TerminalWorkWidget: ({
+    headerAction,
+  }: {
+    headerAction?: React.ReactNode;
+  }) => <section>{headerAction}Terminal work card</section>,
 }));
 
 vi.mock("../../dashboard/state/dashboardSessionStore", () => ({
@@ -147,7 +168,11 @@ vi.mock("../../timeline/state/factoryTimelineStore", () => ({
 }));
 
 vi.mock("../../trace-drilldown/public", () => ({
-  TraceDrilldownWidget: () => <section>Trace card</section>,
+  TraceDrilldownWidget: ({
+    headerAction,
+  }: {
+    headerAction?: React.ReactNode;
+  }) => <section>{headerAction}Trace card</section>,
   useTraceDrilldown: () => ({
     selectedTrace: null,
     traceGridState: { status: "empty" },
@@ -155,16 +180,36 @@ vi.mock("../../trace-drilldown/public", () => ({
 }));
 
 vi.mock("../../work-outcome/public", () => ({
-  WorkOutcomeWidget: () => <section>Work outcome card</section>,
+  WorkOutcomeWidget: ({
+    headerAction,
+  }: {
+    headerAction?: React.ReactNode;
+  }) => <section>{headerAction}Work outcome card</section>,
   useWorkOutcomeChart: () => ({ status: "empty" }),
 }));
 
 vi.mock("../../work-totals/public", () => ({
-  WorkTotalsWidget: () => <section>Work totals card</section>,
+  WorkTotalsWidget: ({
+    headerAction,
+  }: {
+    headerAction?: React.ReactNode;
+  }) => <section>{headerAction}Work totals card</section>,
 }));
 
 vi.mock("../../workflow-activity/public", () => ({
-  WorkflowActivityWidget: () => <section>Workflow activity card</section>,
+  WorkflowActivityWidget: ({
+    headerAction,
+    widgetInstanceID,
+  }: {
+    headerAction?: React.ReactNode;
+    widgetInstanceID?: string;
+  }) => (
+    <section>
+      {headerAction}
+      Workflow activity card
+      {widgetInstanceID ? `:${widgetInstanceID}` : ""}
+    </section>
+  ),
   useCurrentActivityImportController: () => ({
     activationState: { status: "idle" },
     activateImport: vi.fn(),
@@ -194,7 +239,9 @@ vi.mock("../state/dashboardBentoStore", () => ({
 }));
 
 vi.mock("../hooks/useDashboardLayout", () => ({
+  DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID: "add-widget::inline-add",
   DASHBOARD_WIDGET_IDS: {
+    addWidget: "add-widget",
     currentSelection: "current-selection",
     providerSession: "provider-session",
     submitWork: "submit-work",
@@ -204,10 +251,24 @@ vi.mock("../hooks/useDashboardLayout", () => ({
     workOutcomeChart: "work-outcome-chart",
     workTotals: "work-totals",
   },
-  useDashboardLayout: () => ({
-    dashboardLayout: [],
-    persistDashboardLayout: vi.fn(),
-  }),
+  getRenderableDashboardLayout: (layout: unknown) => layout,
+  useDashboardLayout: () => {
+    const [dashboardLayout, setDashboardLayout] = React.useState(mockDashboardLayout);
+
+    return {
+      addDashboardWidget: (widgetType: string) => {
+        addDashboardWidget(widgetType);
+      },
+      dashboardLayout,
+      persistDashboardLayout: vi.fn(),
+      removeDashboardWidget: (widgetInstanceID: string) => {
+        removeDashboardWidget(widgetInstanceID);
+        setDashboardLayout((currentLayout) =>
+          currentLayout.filter((item) => item.id !== widgetInstanceID),
+        );
+      },
+    };
+  },
 }));
 
 vi.mock("../hooks/useDashboardNow", () => ({
@@ -215,10 +276,14 @@ vi.mock("../hooks/useDashboardNow", () => ({
 }));
 
 vi.mock("./agent-bento", () => ({
-  AgentBentoLayout: ({ cards }: { cards: Array<{ id: string; children: React.ReactNode }> }) => (
+  AgentBentoLayout: ({
+    cards,
+  }: {
+    cards: Array<{ children: React.ReactNode; id: string; widgetType?: string }>;
+  }) => (
     <div>
       {cards.map((card) => (
-        <div data-testid={card.id} key={card.id}>
+        <div data-testid={card.widgetType ?? card.id} key={card.id}>
           {card.children}
         </div>
       ))}
@@ -226,7 +291,28 @@ vi.mock("./agent-bento", () => ({
   ),
 }));
 
+vi.mock("./inline-add-widget-card", () => ({
+  InlineAddWidgetCard: ({
+    onSelectWidget,
+  }: {
+    onSelectWidget?: (widgetType: string) => void;
+  }) => (
+    <section>
+      Add widget card
+      <button onClick={() => onSelectWidget?.("work-graph")} type="button">
+        Add workflow activity widget
+      </button>
+    </section>
+  ),
+}));
+
 describe("DashboardBento", () => {
+  beforeEach(() => {
+    addDashboardWidget.mockReset();
+    removeDashboardWidget.mockReset();
+    mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT;
+  });
+
   it("registers the provider-session card alongside current selection", () => {
     render(<DashboardBento />);
 
@@ -235,6 +321,9 @@ describe("DashboardBento", () => {
     );
     expect(screen.getByTestId("provider-session").textContent).toContain(
       "Provider session card",
+    );
+    expect(screen.getByTestId("add-widget").textContent).toContain(
+      "Add widget card",
     );
   });
 
@@ -252,5 +341,93 @@ describe("DashboardBento", () => {
     expect(screen.getByTestId("provider-session").textContent).toContain(
       SHARED_SELECTED_SESSION.id,
     );
+  });
+
+  it("adds a widget instance through the inline picker selection seam", () => {
+    render(<DashboardBento />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add workflow activity widget" }),
+    );
+
+    expect(addDashboardWidget).toHaveBeenCalledWith("work-graph");
+  });
+
+  it("passes stable workflow activity instance ids into duplicate-capable dashboard cards", () => {
+    mockDashboardLayout = [
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      {
+        h: 8,
+        id: "work-graph::instance-1",
+        minH: 6,
+        minW: 5,
+        w: 8,
+        widgetType: "work-graph",
+        x: 0,
+        y: 12,
+      },
+    ];
+
+    render(<DashboardBento />);
+
+    expect(screen.getByText("Workflow activity card:work-graph::primary")).toBeTruthy();
+    expect(
+      screen.getByText("Workflow activity card:work-graph::instance-1"),
+    ).toBeTruthy();
+  });
+
+  it("renders compact remove controls for removable dashboard cards and routes removal by instance id", () => {
+    render(<DashboardBento />);
+
+    const workTotalsRemoveButton = screen.getByRole("button", {
+      name: "Remove Work totals widget from dashboard",
+    });
+
+    expect(workTotalsRemoveButton.className).toContain("size-8");
+    expect(workTotalsRemoveButton.className).toContain(
+      "focus-visible:ring-2",
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: "Remove Add widget widget from dashboard",
+      }),
+    ).toBeNull();
+
+    fireEvent.click(workTotalsRemoveButton);
+
+    expect(removeDashboardWidget).toHaveBeenCalledWith("work-totals::primary");
+  });
+
+  it("removes only the targeted duplicate widget instance and keeps the inline add card", () => {
+    mockDashboardLayout = [
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      {
+        h: 5,
+        id: "work-outcome-chart::instance-1",
+        minH: 4,
+        minW: 3,
+        w: 4,
+        widgetType: "work-outcome-chart",
+        x: 8,
+        y: 10,
+      },
+    ];
+
+    render(<DashboardBento />);
+
+    const workOutcomeRemoveButtons = screen.getAllByRole("button", {
+      name: "Remove Work outcome chart widget from dashboard",
+    });
+
+    expect(screen.getAllByText("Work outcome card")).toHaveLength(2);
+    expect(screen.getByTestId("add-widget").textContent).toContain("Add widget card");
+
+    fireEvent.click(workOutcomeRemoveButtons[1] ?? workOutcomeRemoveButtons[0]);
+
+    expect(removeDashboardWidget).toHaveBeenCalledWith("work-outcome-chart::instance-1");
+    expect(screen.getAllByText("Work outcome card")).toHaveLength(1);
+    expect(screen.getByTestId("add-widget").textContent).toContain("Add widget card");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText(/undo/i)).toBeNull();
   });
 });

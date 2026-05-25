@@ -5,7 +5,7 @@ import {
   type FitViewOptions,
   type NodeChange,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import type {
   DashboardActiveExecution,
@@ -67,9 +67,11 @@ export type CurrentActivitySelection =
   | { kind: "work-item"; dispatchId: string; nodeId: string; workID: string };
 
 function CurrentActivityCardHeading({
+  headingID,
   hidden = false,
   locale,
 }: {
+  headingID: string;
   hidden?: boolean;
   locale?: string;
 }) {
@@ -77,7 +79,7 @@ function CurrentActivityCardHeading({
 
   if (hidden) {
     return (
-      <span className="sr-only" id="workflow-graph-heading">
+      <span className="sr-only" id={headingID}>
         {messages.title}
       </span>
     );
@@ -85,11 +87,19 @@ function CurrentActivityCardHeading({
 
   return (
     <div>
-      <h2 className={CURRENT_ACTIVITY_TITLE_CLASS} id="workflow-graph-heading">
+      <h2 className={CURRENT_ACTIVITY_TITLE_CLASS} id={headingID}>
         {messages.title}
       </h2>
     </div>
   );
+}
+
+function useCurrentActivityAccessibilityIDs(widgetInstanceID?: string) {
+  const fallbackID = useId();
+
+  return {
+    headingID: `workflow-graph-heading-${widgetInstanceID ?? fallbackID}`,
+  };
 }
 interface ReactFlowCurrentActivityCardProps {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
@@ -107,6 +117,7 @@ interface ReactFlowCurrentActivityCardProps {
   readFactoryImportFile?: ReadFactoryImportFile;
   selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;
+  widgetInstanceID?: string;
 }
 
 function useCurrentActivityBaseNodes({
@@ -335,6 +346,9 @@ export function ReactFlowCurrentActivityCardView(
   },
 ) {
   const { editor, showHeaderActions = false } = props;
+  const { headingID } = useCurrentActivityAccessibilityIDs(
+    props.widgetInstanceID,
+  );
   const graph = useCurrentActivityGraphViewModel({ ...props, editor });
   const fallbackImportController = useCurrentActivityImportController({
     activateFactory: props.activateFactory,
@@ -351,7 +365,7 @@ export function ReactFlowCurrentActivityCardView(
 
   return (
     <section
-      aria-labelledby="workflow-graph-heading"
+      aria-labelledby={headingID}
       className={CURRENT_ACTIVITY_CARD_CLASS}
     >
       {showHeaderActions ? (
@@ -372,13 +386,18 @@ export function ReactFlowCurrentActivityCardView(
         </div>
       ) : null}
       {showHeaderActions ? (
-        <CurrentActivityCardHeading locale={props.locale} />
+        <CurrentActivityCardHeading headingID={headingID} locale={props.locale} />
       ) : (
-        <CurrentActivityCardHeading hidden locale={props.locale} />
+        <CurrentActivityCardHeading
+          headingID={headingID}
+          hidden
+          locale={props.locale}
+        />
       )}
       <CurrentActivityGraphSurface
         editor={editor}
         graph={graph}
+        headingID={headingID}
         imports={imports}
         locale={props.locale}
         snapshot={props.snapshot}

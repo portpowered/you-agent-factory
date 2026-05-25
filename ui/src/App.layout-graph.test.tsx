@@ -1,6 +1,9 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
+  DASHBOARD_WIDGET_IDS,
+} from "./features/bento/hooks/dashboardLayoutSchema";
+import {
   activeSnapshot,
   baselineSnapshot,
   registerAppDashboardTestLifecycle,
@@ -191,7 +194,9 @@ describe("App layout migration behavior", () => {
         '[data-bento-card-id="completion-trend"], [data-bento-card-id="failure-trend"]',
       ),
     ).toBeNull();
-    expect(workOutcome?.dataset.layoutSignature).toMatch(/work-outcome-chart:7:\d+:5:5/);
+    expect(workOutcome?.dataset.layoutSignature).toMatch(
+      new RegExp(`${DASHBOARD_WIDGET_IDS.workOutcomeChart}:\\d+:\\d+:\\d+:5`),
+    );
   });
 
   it("ignores stored retry, rework, and timing trend card IDs in the visible dashboard layout", async () => {

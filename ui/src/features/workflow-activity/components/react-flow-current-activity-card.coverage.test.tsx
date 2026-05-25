@@ -546,6 +546,52 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(onEditorNodeClick).toHaveBeenCalledWith("workstation:review");
   });
 
+  it("rejects editor connections when the target node cannot be found", () => {
+    renderViewport({
+      activeTool: "connect",
+      editorMode: true,
+      graphKey: "graph-key",
+      nodes: [
+        {
+          data: { kind: "workstation" },
+          id: "workstation:review",
+          position: { x: 0, y: 0 },
+          type: "workstation",
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("valid-workstation-output").textContent).toBe(
+      "false",
+    );
+  });
+
+  it("rejects editor connections when a participating node omits its graph kind", () => {
+    renderViewport({
+      activeTool: "connect",
+      editorMode: true,
+      graphKey: "graph-key",
+      nodes: [
+        {
+          data: {},
+          id: "workstation:review",
+          position: { x: 0, y: 0 },
+          type: "workstation",
+        },
+        {
+          data: { kind: "work-state" },
+          id: "work-state:story:done",
+          position: { x: 240, y: 0 },
+          type: "workState",
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("valid-workstation-output").textContent).toBe(
+      "false",
+    );
+  });
+
   it("keeps editor edges focusable outside delete mode so hidden labels stay reachable", () => {
     renderViewport({
       activeTool: "connect",

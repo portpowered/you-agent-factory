@@ -10,12 +10,14 @@ import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card
 export function CurrentActivityGraphSurface({
   editor,
   graph,
+  headingID,
   imports,
   locale,
   snapshot,
 }: {
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
   graph: ReturnType<typeof useCurrentActivityGraphViewModel>;
+  headingID: string;
   imports: CurrentActivityImportController;
   locale?: string;
   snapshot: DashboardSnapshot;
@@ -93,6 +95,7 @@ export function CurrentActivityGraphSurface({
           editor.setIsConfirmingSave(true);
         }}
         hasPendingChanges={editor.draftState.hasChanges}
+        headingID={headingID}
         imports={imports}
         initialFitViewKey={graph.initialFitViewKey}
         initialFitViewOptions={graph.initialFitViewOptions}
