@@ -205,4 +205,34 @@ describe("CurrentActivityGraphSurface", () => {
     expect(editor.handleEditorNodeDelete).toHaveBeenCalledTimes(1);
     expect(editor.setActiveTool).toHaveBeenCalledWith("connect");
   });
+
+  it("renders the shared success notice once a draft save completes cleanly", () => {
+    render(
+      <CurrentActivityGraphSurface
+        editor={
+          createEditorStub({
+            blockedRemovalReason: null,
+            connectionNotice: null,
+            draftState: { hasChanges: false },
+            hasActiveWork: false,
+            isStaleDraft: false,
+            saveEditableDefinition: {
+              error: null,
+              status: "success" as const,
+            },
+          }) as never
+        }
+        graph={createGraphStub() as never}
+        imports={{} as never}
+        snapshot={semanticWorkflowDashboardSnapshot}
+      />,
+    );
+
+    expect(screen.getByText("Topology saved")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "The draft has been cleared and the graph is waiting for the latest factory-change event refresh.",
+      ),
+    ).toBeTruthy();
+  });
 });
