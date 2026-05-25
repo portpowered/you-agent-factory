@@ -1,4 +1,5 @@
 export * from "../../features/bento/public";
+export * from "./dashboard-action-row";
 export * from "./button";
 export * from "./calendar";
 export * from "./chart";

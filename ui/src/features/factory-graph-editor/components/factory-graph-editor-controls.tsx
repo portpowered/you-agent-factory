@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { DashboardMutationDialog } from "../../../components/dashboard";
 import {
   Button,
+  DashboardActionRow,
   DashboardActionButton,
   DashboardStatusPill,
   Popover,
@@ -43,6 +44,7 @@ const TOOLBAR_SHELL_CLASS =
   "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0";
 const TOOLBAR_ACTIONS_CLASS =
   "flex items-center gap-2 border-l border-af-border pl-2 max-md:ml-auto";
+const TOOLBAR_MIXED_ROW_CLASS = "min-w-0 flex-1";
 const MENU_LIST_CLASS = "grid gap-1";
 const MENU_ACTION_CLASS =
   "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent-border hover:bg-af-accent-surface focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
@@ -129,44 +131,52 @@ export function FactoryGraphEditorToolbar({
         }
         tone={activeTool === "connect" ? "secondary" : "outline"}
       />
-      <DashboardStatusPill
-        aria-live="polite"
-        className="max-md:min-w-0 max-md:flex-1 max-md:justify-center"
-        role="status"
-        tone={hasPendingChanges ? "warning" : "neutral"}
-      >
-        {hasPendingChanges
-          ? messages.toolbarPendingChanges
-          : messages.toolbarNoPendingChanges}
-      </DashboardStatusPill>
-      {hasPendingChanges ? (
-        <div className={TOOLBAR_ACTIONS_CLASS}>
-          <Button
-            disabled={!canDiscard || isSaving}
-            onClick={onDiscard}
-            size="sm"
-            tone="outline"
-            type="button"
+      <DashboardActionRow
+        actions={
+          hasPendingChanges ? (
+            <>
+              <Button
+                disabled={!canDiscard || isSaving}
+                onClick={onDiscard}
+                size="sm"
+                tone="outline"
+                type="button"
+              >
+                {messages.draftActionsDiscard}
+              </Button>
+              <FactoryGraphEditorTooltipButton
+                aria-label={
+                  isSaving ? messages.draftActionsSaving : messages.draftActionsSave
+                }
+                className={buttonVariants({
+                  size: "icon",
+                  tone: canSave && !isSaving ? "default" : "outline",
+                })}
+                disabled={!canSave || isSaving}
+                onClick={onSave}
+                tooltip={saveDisabledReason ?? messages.draftActionsSave}
+                type="button"
+              >
+                <SaveIcon />
+              </FactoryGraphEditorTooltipButton>
+            </>
+          ) : null
+        }
+        actionsClassName={hasPendingChanges ? TOOLBAR_ACTIONS_CLASS : undefined}
+        className={TOOLBAR_MIXED_ROW_CLASS}
+        statuses={
+          <DashboardStatusPill
+            aria-live="polite"
+            className="max-md:min-w-0 max-md:flex-1 max-md:justify-center"
+            role="status"
+            tone={hasPendingChanges ? "warning" : "neutral"}
           >
-            {messages.draftActionsDiscard}
-          </Button>
-          <FactoryGraphEditorTooltipButton
-            aria-label={
-              isSaving ? messages.draftActionsSaving : messages.draftActionsSave
-            }
-            className={buttonVariants({
-              size: "icon",
-              tone: canSave && !isSaving ? "default" : "outline",
-            })}
-            disabled={!canSave || isSaving}
-            onClick={onSave}
-            tooltip={saveDisabledReason ?? messages.draftActionsSave}
-            type="button"
-          >
-            <SaveIcon />
-          </FactoryGraphEditorTooltipButton>
-        </div>
-      ) : null}
+            {hasPendingChanges
+              ? messages.toolbarPendingChanges
+              : messages.toolbarNoPendingChanges}
+          </DashboardStatusPill>
+        }
+      />
     </section>
   );
 }

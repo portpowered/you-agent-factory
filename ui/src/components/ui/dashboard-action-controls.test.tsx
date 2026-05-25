@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 
 import { render, screen } from "@testing-library/react";
 
+import { DashboardActionRow } from "./dashboard-action-row";
 import { DashboardActionButton } from "./dashboard-action-button";
 import { DashboardStatusPill } from "./dashboard-status-pill";
 
@@ -78,5 +79,67 @@ describe("DashboardStatusPill", () => {
       "border-af-warning-border",
     );
     expect(screen.getByRole("status").textContent).toBe("Draft changes pending");
+  });
+});
+
+describe("DashboardActionRow", () => {
+  it("renders status pills before action buttons for mixed rows", () => {
+    const { container } = render(
+      <DashboardActionRow
+        actions={
+          <>
+            <DashboardActionButton type="button">Discard</DashboardActionButton>
+            <DashboardActionButton type="button">Save</DashboardActionButton>
+          </>
+        }
+        statuses={
+          <DashboardStatusPill role="status" tone="warning">
+            Draft changes pending
+          </DashboardStatusPill>
+        }
+      />,
+    );
+
+    const sections = container.querySelectorAll("[data-dashboard-action-row-section]");
+    expect(sections).toHaveLength(2);
+    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
+      "statuses",
+    );
+    expect(sections[1]?.getAttribute("data-dashboard-action-row-section")).toBe(
+      "actions",
+    );
+    expect(screen.getByRole("status").textContent).toBe("Draft changes pending");
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Discard",
+      "Save",
+    ]);
+  });
+
+  it("omits placeholder sections for button-only and pill-only rows", () => {
+    const { container, rerender } = render(
+      <DashboardActionRow
+        actions={<DashboardActionButton type="button">Save</DashboardActionButton>}
+      />,
+    );
+
+    let sections = container.querySelectorAll("[data-dashboard-action-row-section]");
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
+      "actions",
+    );
+    expect(container.textContent).toContain("Save");
+
+    rerender(
+      <DashboardActionRow
+        statuses={<DashboardStatusPill tone="neutral">Observe mode</DashboardStatusPill>}
+      />,
+    );
+
+    sections = container.querySelectorAll("[data-dashboard-action-row-section]");
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
+      "statuses",
+    );
+    expect(screen.getByText("Observe mode").tagName).toBe("SPAN");
   });
 });
