@@ -72,6 +72,82 @@ func TestInvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 	}
 }
 
+func TestModelInvocationExecutor_UsesCanonicalModelExecutorPath(t *testing.T) {
+	provider := &providerCallRecorder{
+		responses: []interfaces.InferenceResponse{{
+			Content: "executor-output",
+		}},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{
+		Workers: []interfaces.WorkerConfig{{Name: "tts-worker"}},
+	}, map[string]*interfaces.WorkerConfig{
+		"tts-worker": {
+			Name:          "tts-worker",
+			Type:          interfaces.WorkerTypeModel,
+			Model:         "OMNIVOICE_Q4_K_M",
+			ModelProvider: interfaces.RunnerIDCodex,
+			ModelLocality: interfaces.ModelLocalityLocal,
+			Body:          "You are a TTS worker.",
+			Operations: []interfaces.ModelOperation{{
+				Name: "TTS",
+				Inputs: []interfaces.ModelOperationSlot{
+					{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}, Required: true},
+				},
+			}},
+		},
+	}, nil)
+	svc := &FactoryService{
+		cfg: &FactoryServiceConfig{ProviderOverride: provider},
+	}
+
+	executor, err := svc.modelInvocationExecutor(runtimeCfg, runtimeCfg.FactoryConfig(), "tts-worker")
+	if err != nil {
+		t.Fatalf("modelInvocationExecutor: %v", err)
+	}
+
+	result, err := executor.Execute(context.Background(), interfaces.WorkstationExecutionRequest{
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID:      "direct-model-invocation",
+			TransitionID:    "direct-model-invocation",
+			WorkerType:      "tts-worker",
+			WorkstationName: "direct-model-invocation",
+		},
+		WorkerType:            "tts-worker",
+		WorkstationType:       "direct-model-invocation",
+		RunnerID:              interfaces.RunnerIDCodex,
+		RunnerSelectionSource: interfaces.RunnerSelectionSourceDefault,
+		ModelOperation:        "TTS",
+		ModelBindings: []interfaces.ResolvedModelOperationBinding{{
+			Slot:   "text",
+			Source: interfaces.ModelOperationBindingSourceInput,
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "hello world",
+				Slot: "text",
+			}},
+		}},
+		SystemPrompt: "You are a TTS worker.",
+		UserMessage:  `{"operation":"TTS"}`,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted || result.Output != "executor-output" {
+		t.Fatalf("execution result = %#v, want accepted executor-output", result)
+	}
+
+	calls := provider.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("provider call count = %d, want 1", len(calls))
+	}
+	if calls[0].ModelOperation != "TTS" || len(calls[0].ModelBindings) != 1 || calls[0].ModelBindings[0].Slot != "text" {
+		t.Fatalf("provider call = %#v, want one resolved TTS binding", calls[0])
+	}
+	if got := calls[0].ModelBindings[0].Content[0].Text; got != "hello world" {
+		t.Fatalf("provider binding text = %q, want hello world", got)
+	}
+}
+
 func TestInvokeModel_ReturnsNotFoundWhenModelDoesNotExist(t *testing.T) {
 	svc := &FactoryService{
 		runtimeCfg: newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{}, nil, nil),

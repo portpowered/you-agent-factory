@@ -31,44 +31,8 @@ const (
 	WorkLogEventCommandRunnerOutputDetails  = workerexecutor.WorkLogEventCommandRunnerOutputDetails
 )
 
-func WithLogger(logger logging.Logger) AgentExecutorOption {
-	return workerexecutor.WithLogger(logger)
-}
-
-func NewAgentExecutor(runtimeConfig interfaces.RuntimeDefinitionLookup, provider Provider, opts ...AgentExecutorOption) *AgentExecutor {
-	return workerexecutor.NewAgentExecutor(runtimeConfig, provider, opts...)
-}
-
-func NewAgentExecutorWithRunner(runtimeConfig interfaces.RuntimeDefinitionLookup, runner Runner, opts ...AgentExecutorOption) *AgentExecutor {
-	return workerexecutor.NewAgentExecutorWithRunner(runtimeConfig, runner, opts...)
-}
-
 func RunnerFromProvider(provider Provider) Runner {
 	return workerexecutor.RunnerFromProvider(provider)
-}
-
-func WithScriptEventRecorder(recorder ScriptEventRecorder) ScriptExecutorOption {
-	return workerexecutor.WithScriptEventRecorder(recorder)
-}
-
-func WithScriptFactoryDir(factoryDir string) ScriptExecutorOption {
-	return workerexecutor.WithScriptFactoryDir(factoryDir)
-}
-
-func NewScriptExecutor(def *interfaces.WorkerConfig, logger logging.Logger, opts ...ScriptExecutorOption) *ScriptExecutor {
-	return workerexecutor.NewScriptExecutor(def, logger, opts...)
-}
-
-func NewScriptExecutorWithRunner(def *interfaces.WorkerConfig, runner CommandRunner, logger logging.Logger, opts ...ScriptExecutorOption) *ScriptExecutor {
-	return workerexecutor.NewScriptExecutorWithRunner(def, runner, logger, opts...)
-}
-
-func ResolveModelOperationBindings(
-	workstationDef *interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
-	inputTokens []interfaces.Token,
-) ([]interfaces.ResolvedModelOperationBinding, error) {
-	return workerexecutor.ResolveModelOperationBindings(workstationDef, workerDef, inputTokens)
 }
 
 func NewWorkerPool(logger logging.Logger) *WorkerPool {
