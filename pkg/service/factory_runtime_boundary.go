@@ -8,6 +8,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -97,7 +98,7 @@ func (fs *FactoryService) submitWorkFile(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read work file %s: %w", fs.cfg.WorkFile, err)
 	}
-	workRequest, err := factory.ParseCanonicalWorkRequestJSON(data)
+	workRequest, err := requests.ParseCanonicalWorkRequestJSON(data)
 	if err != nil {
 		return fmt.Errorf("parse work file %s: %w", fs.cfg.WorkFile, err)
 	}

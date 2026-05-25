@@ -14,6 +14,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"go.uber.org/zap"
 )
@@ -247,9 +248,9 @@ func (fw *FileWatcher) preseedFileRequest(path string, d fs.DirEntry, walkErr er
 	return request, explicitBatch, true, nil
 }
 
-func (fw *FileWatcher) validatePreseedRequests(requests []interfaces.WorkRequest) error {
-	for i, request := range requests {
-		if _, err := factory.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{
+func (fw *FileWatcher) validatePreseedRequests(workRequests []interfaces.WorkRequest) error {
+	for i, request := range workRequests {
+		if _, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{
 			ValidWorkTypes:    fw.knownWorkTypes,
 			ValidStatesByType: fw.knownWorkStates,
 		}); err != nil {
@@ -404,7 +405,7 @@ func fileToWorkRequest(filename, ext, workType, executionID string, content []by
 }
 
 func parseFactoryRequestBatch(content []byte, workType string, executionID string) (interfaces.WorkRequest, error) {
-	request, err := factory.ParseCanonicalWorkRequestJSON(content)
+	request, err := requests.ParseCanonicalWorkRequestJSON(content)
 	if err != nil {
 		return interfaces.WorkRequest{}, fmt.Errorf("parse work request batch: %w", err)
 	}
@@ -429,7 +430,7 @@ func parseFactoryRequestBatch(content []byte, workType string, executionID strin
 			request.Works[i].ExecutionID = executionID
 		}
 	}
-	if _, err := factory.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{}); err != nil {
+	if _, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{}); err != nil {
 		return interfaces.WorkRequest{}, err
 	}
 	return request, nil

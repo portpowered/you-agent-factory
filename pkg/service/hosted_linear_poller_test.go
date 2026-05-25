@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -328,7 +328,7 @@ func hostedLinearWorkerConfigForTest(
 func normalizeSubmittedLinearWorkRequest(t *testing.T, request interfaces.WorkRequest) []interfaces.SubmitRequest {
 	t.Helper()
 
-	normalized, err := factory.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest: %v", err)
 	}

@@ -12,7 +12,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -123,7 +123,7 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 		Logger:            zap.NewNop(),
 		APIServerStarter: func(ctx context.Context, runtime apisurface.APISurface, port int, l *zap.Logger) error {
 			observation := starterObservation{}
-			workRequest := factory.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+			workRequest := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
 				WorkID:     "starter-task",
 				Name:       "starter-task",
 				WorkTypeID: "task",

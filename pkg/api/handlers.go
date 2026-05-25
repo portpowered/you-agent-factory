@@ -18,7 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factorypkg "github.com/portpowered/infinite-you/pkg/factory"
+	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -67,13 +67,13 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		Name:                   strings.TrimSpace(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
-		TraceID:                factorypkg.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
+		TraceID:                factoryrequests.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
 		Content:                workcontent.PartsFromGenerated(req.Content),
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
 	}
-	workRequest := factorypkg.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
+	workRequest := factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
 
 	result, err := s.runtime.SubmitWorkRequest(r.Context(), workRequest)
 	if err != nil {
@@ -120,13 +120,13 @@ func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, s
 		Name:                   strings.TrimSpace(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
-		TraceID:                factorypkg.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
+		TraceID:                factoryrequests.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
 		Content:                workcontent.PartsFromGenerated(req.Content),
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
 	}
-	workRequest := factorypkg.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
+	workRequest := factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
 
 	result, err := sessionRuntime.SubmitWorkRequestForSession(r.Context(), string(sessionID), workRequest)
 	if err != nil {
@@ -1628,7 +1628,7 @@ func ensureSingleJSONObject(dec *json.Decoder) error {
 }
 
 func validateCanonicalWorkRequestJSONForAPI(data []byte) error {
-	if err := factorypkg.ValidateCanonicalWorkRequestJSON(data); err != nil {
+	if err := factoryrequests.ValidateCanonicalWorkRequestJSON(data); err != nil {
 		return translateCanonicalWorkRequestValidationError(err)
 	}
 	return nil

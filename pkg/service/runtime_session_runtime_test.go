@@ -11,7 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -284,7 +284,7 @@ func TestFactoryService_SessionRuntimeSurfaceTargetsExplicitSessionID(t *testing
 	defer harness.stop(t)
 
 	betaSessionID := harness.openFactorySession(t, "beta")
-	request := factory.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
 		WorkID:     "beta-session-targeted-work",
 		Name:       "beta-session-targeted-work",
 		WorkTypeID: "task",

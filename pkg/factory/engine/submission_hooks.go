@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -33,7 +34,7 @@ func (h *queuedSubmissionHook) enqueue(work []interfaces.SubmitRequest) {
 	copied := make([]interfaces.SubmitRequest, len(work))
 	copy(copied, work)
 	h.batches = append(h.batches, interfaces.GeneratedSubmissionBatch{
-		Request:  factory.WorkRequestFromSubmitRequests(copied),
+		Request:  requests.WorkRequestFromSubmitRequests(copied),
 		Metadata: interfaces.GeneratedSubmissionBatchMetadata{Source: h.Name()},
 	})
 }

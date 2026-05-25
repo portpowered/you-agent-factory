@@ -7,6 +7,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -102,11 +103,11 @@ func startFunctionalServer(t *testing.T, factoryDir string, useMockWorkers bool,
 	return startFunctionalServerWithConfig(t, factoryDir, useMockWorkers, nil, extraOpts...)
 }
 
-func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, requests ...interfaces.SubmitRequest) []interfaces.SubmitRequest {
+func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, submitted ...interfaces.SubmitRequest) []interfaces.SubmitRequest {
 	t.Helper()
 
-	normalized := normalizeSubmitRequestsForFunctionalTest(requests)
-	workRequest := factory.WorkRequestFromSubmitRequests(normalized)
+	normalized := normalizeSubmitRequestsForFunctionalTest(submitted)
+	workRequest := requests.WorkRequestFromSubmitRequests(normalized)
 	if _, err := fs.factory.SubmitWorkRequest(context.Background(), workRequest); err != nil {
 		t.Fatalf("factory.SubmitWorkRequest: %v", err)
 	}

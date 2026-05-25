@@ -21,7 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -503,7 +503,7 @@ func LoadWorkFile(path string) (interfaces.WorkRequest, error) {
 	if err != nil {
 		return interfaces.WorkRequest{}, fmt.Errorf("read %s: %w", path, err)
 	}
-	req, err := factory.ParseCanonicalWorkRequestJSON(data)
+	req, err := requests.ParseCanonicalWorkRequestJSON(data)
 	if err != nil {
 		return interfaces.WorkRequest{}, fmt.Errorf("parse %s: %w", path, err)
 	}

@@ -1,4 +1,4 @@
-package factory
+package requests
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -79,7 +80,7 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 			TargetState:              work.State,
 			ExecutionID:              work.ExecutionID,
 			Relations: appendUniquePetriRelations(
-				CloneRuntimeRelations(relIndex[work.Name]),
+				factory.CloneRuntimeRelations(relIndex[work.Name]),
 				work.RuntimeRelations,
 			),
 		})
@@ -169,7 +170,7 @@ func applyGeneratedSubmissionOverrides(next interfaces.SubmitRequest, submitted 
 		maps.Copy(next.Tags, submitted.Tags)
 	}
 	if len(submitted.Relations) > 0 {
-		next.Relations = appendUniquePetriRelations(CloneRuntimeRelations(submitted.Relations), next.Relations)
+		next.Relations = appendUniquePetriRelations(factory.CloneRuntimeRelations(submitted.Relations), next.Relations)
 	}
 	if len(submitted.PreviousChainingTraceIDs) > 0 {
 		next.PreviousChainingTraceIDs = interfaces.CanonicalChainingTraceIDs(submitted.PreviousChainingTraceIDs)
@@ -205,10 +206,10 @@ func WorkRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfac
 			PreviousChainingTraceIDs: append([]string(nil), req.PreviousChainingTraceIDs...),
 			TraceID:                  req.TraceID,
 			Content:                  append([]interfaces.WorkContentPart(nil), req.Content...),
-			Payload:                  CloneRuntimePayload(req.Payload),
-			Tags:                     CloneRuntimeTags(req.Tags),
+			Payload:                  factory.CloneRuntimePayload(req.Payload),
+			Tags:                     factory.CloneRuntimeTags(req.Tags),
 			ExecutionID:              req.ExecutionID,
-			RuntimeRelations:         CloneRuntimeRelations(req.Relations),
+			RuntimeRelations:         factory.CloneRuntimeRelations(req.Relations),
 		})
 	}
 

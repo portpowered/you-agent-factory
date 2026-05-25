@@ -1,4 +1,4 @@
-package factory
+package requests
 
 import (
 	"testing"

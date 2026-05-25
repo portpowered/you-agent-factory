@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
@@ -472,7 +473,7 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 		Metadata:    metadata,
 		Submissions: envelope.Submissions,
 	}
-	normalized, err := factory.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
 		ValidWorkTypes: t.validWorkTypes(),
 	})
 	if err != nil {
