@@ -471,3 +471,82 @@ func TestFactoryConfigFromOpenAPI_ReportsNestedGeneratedFieldPathOnMappingError(
 		t.Fatalf("expected guard cardinality context in error, got %v", err)
 	}
 }
+
+func TestFactoryConfigToOpenAPI_PreservesAndDetachesWorkstationEnv(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "execute-story",
+			WorkerTypeName: "executor",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+			Env:            map[string]string{"TEAM": `{{ index .Tags "team" }}`},
+		}},
+	}
+
+	generated := FactoryConfigToOpenAPI(cfg)
+	workstation := requireSingleGeneratedWorkstation(t, generated)
+	if workstation.Env == nil {
+		t.Fatal("expected generated workstation env")
+	}
+	if got := (*workstation.Env)["TEAM"]; got != `{{ index .Tags "team" }}` {
+		t.Fatalf("expected generated workstation env TEAM to be preserved, got %#v", workstation.Env)
+	}
+
+	cfg.Workstations[0].Env["TEAM"] = "mutated"
+	cfg.Workstations[0].Env["LATE_BOUND"] = "true"
+
+	if got := (*workstation.Env)["TEAM"]; got != `{{ index .Tags "team" }}` {
+		t.Fatalf("expected generated workstation env TEAM to stay detached, got %#v", workstation.Env)
+	}
+	if got := (*workstation.Env)["LATE_BOUND"]; got != "" {
+		t.Fatalf("expected generated workstation env to stay detached from later source mutations, got %#v", workstation.Env)
+	}
+}
+
+func TestFactoryConfigToOpenAPI_OmitsEmptyWorkstationEnv(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "execute-story",
+			WorkerTypeName: "executor",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+			Env:            map[string]string{},
+		}},
+	}
+
+	generated := FactoryConfigToOpenAPI(cfg)
+	workstation := requireSingleGeneratedWorkstation(t, generated)
+	if workstation.Env != nil {
+		t.Fatalf("expected empty workstation env to be omitted from generated boundary, got %#v", workstation.Env)
+	}
+
+	generatedJSON, err := json.Marshal(generated)
+	if err != nil {
+		t.Fatalf("marshal generated factory boundary: %v", err)
+	}
+	var serialized struct {
+		Workstations []map[string]any `json:"workstations"`
+	}
+	if err := json.Unmarshal(generatedJSON, &serialized); err != nil {
+		t.Fatalf("unmarshal generated factory boundary JSON: %v", err)
+	}
+	if _, ok := serialized.Workstations[0]["env"]; ok {
+		t.Fatalf("expected generated workstation JSON to omit empty env, got %#v", serialized.Workstations[0])
+	}
+}
