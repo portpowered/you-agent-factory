@@ -175,7 +175,7 @@ You are a helpful assistant.
 	}
 }
 
-func TestValidateConfiguredWorkstationRunners_AcceptsLegacyBuiltInRunnerDefault(t *testing.T) {
+func TestRunnerSelectionValidation_AcceptsLegacyBuiltInRunnerDefault(t *testing.T) {
 	cfg := &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "review",
@@ -192,7 +192,7 @@ func TestValidateConfiguredWorkstationRunners_AcceptsLegacyBuiltInRunnerDefault(
 	}
 }
 
-func TestValidateConfiguredWorkstationRunners_SkipsDefaultFallbackValidation(t *testing.T) {
+func TestRunnerSelectionValidation_SkipsDefaultFallbackValidation(t *testing.T) {
 	cfg := &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "review",
@@ -206,6 +206,53 @@ func TestValidateConfiguredWorkstationRunners_SkipsDefaultFallbackValidation(t *
 
 	if err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg, runnerSelectionPreflight{}); err != nil {
 		t.Fatalf("validateConfiguredWorkstationRunners: %v", err)
+	}
+}
+
+func TestRunnerSelectionValidation_RejectsUnknownExplicitWorkstationRunner(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+		}},
+	}
+	runtimeCfg := configRuntimeFixture{
+		workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Name:          "worker-a",
+				ModelProvider: interfaces.RunnerIDCodex,
+			},
+		},
+		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"review": {
+				Name:           "review",
+				WorkerTypeName: "worker-a",
+				Runner:         "mystery-runner",
+			},
+		},
+	}
+
+	err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg, runnerSelectionPreflight{skipCommandAvailability: true})
+	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
+		t.Fatalf("validateConfiguredWorkstationRunners error = %v, want unknown workstation runner", err)
+	}
+}
+
+func TestRunnerSelectionValidation_RejectsUnknownExplicitFactoryRunner(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+		}},
+	}
+	runtimeCfg := configFixtureWithWorkerAndWorkstation("worker-a", "review", &interfaces.WorkerConfig{
+		Name:          "worker-a",
+		ModelProvider: "claude",
+	})
+
+	err := validateConfiguredWorkstationRunners(cfg, "mystery-runner", runtimeCfg, runnerSelectionPreflight{skipCommandAvailability: true})
+	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
+		t.Fatalf("validateConfiguredWorkstationRunners error = %v, want unknown factory runner", err)
 	}
 }
 
