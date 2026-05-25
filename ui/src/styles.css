@@ -303,6 +303,10 @@
     animation: agent-flow-legend 1.15s ease-in-out infinite;
   }
 
+  [data-bento-card-id] {
+    overflow: hidden;
+  }
+
   [data-bento-card-id] > .react-resizable-handle {
     @apply opacity-0 transition-opacity;
   }

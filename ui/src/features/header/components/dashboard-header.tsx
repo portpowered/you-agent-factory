@@ -11,9 +11,11 @@ import { cn } from "../../../lib/cn";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import {
   DASHBOARD_PAGE_HEADING_CLASS,
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import {
+  DashboardActionRow,
+  DashboardStatusPill,
+} from "../../../components/ui";
 import {
   getNativeLanguageLabel,
   SUPPORTED_LOCALES,
@@ -48,16 +50,10 @@ const DASHBOARD_SESSION_STRIP_CLASS =
 const DASHBOARD_TIMELINE_OPERATIONS_ROW_CLASS =
   "relative flex min-w-0 w-full items-center gap-1.5 rounded-t-2xl bg-af-surface-subtle pb-2";
 const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
-const DASHBOARD_STREAM_STATUS_CLASS = cn(
-  "sr-only shrink-0 whitespace-nowrap text-sm text-af-text-muted",
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-);
-const DASHBOARD_CONTROLS_CLASS = cn(
-  "flex shrink-0 items-center gap-1.5 p-0",
-  "self-end pb-2",
-  "max-md:w-full max-md:justify-end",
-);
+const DASHBOARD_CONTROLS_CLASS = "shrink-0 self-end pb-2";
+const DASHBOARD_HEADER_ACTION_ROW_CLASS = "justify-end max-md:w-full";
+const DASHBOARD_HEADER_ACTION_ROW_ACTIONS_CLASS =
+  "max-md:w-full max-md:justify-end";
 const DASHBOARD_TIMELINE_ACTIONS_CLASS =
   "ml-auto flex shrink-0 items-center gap-1.5";
 const LOCALE_MENU_PANEL_CLASS =
@@ -110,22 +106,30 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
               />
             </div>
           </div>
-          <p
-            aria-label={streamStatusLabel(streamStatus, headerMessages)}
-            className={DASHBOARD_STREAM_STATUS_CLASS}
-            role="status"
-          >
-            {streamStatusLabel(streamStatus, headerMessages)}
-          </p>
-          <fieldset
-            aria-label={headerMessages.globalHeaderActionsLabel}
-            className={DASHBOARD_CONTROLS_CLASS}
-          >
-            <DashboardLocaleMenu
-              locale={resolvedLocale}
-              onChangeLocale={setLocale}
-            />
-          </fieldset>
+          <DashboardActionRow
+            actions={
+              <fieldset
+                aria-label={headerMessages.globalHeaderActionsLabel}
+                className={DASHBOARD_CONTROLS_CLASS}
+              >
+                <DashboardLocaleMenu
+                  locale={resolvedLocale}
+                  onChangeLocale={setLocale}
+                />
+              </fieldset>
+            }
+            actionsClassName={DASHBOARD_HEADER_ACTION_ROW_ACTIONS_CLASS}
+            className={DASHBOARD_HEADER_ACTION_ROW_CLASS}
+            statuses={
+              <DashboardStatusPill
+                aria-label={streamStatusLabel(streamStatus, headerMessages)}
+                role="status"
+                tone={streamStatusTone(streamStatus)}
+              >
+                {streamStatusLabel(streamStatus, headerMessages)}
+              </DashboardStatusPill>
+            }
+          />
         </div>
         <div className={DASHBOARD_SECONDARY_ROW_CLASS}>
           <div className={DASHBOARD_TIMELINE_OPERATIONS_ROW_CLASS}>
@@ -200,6 +204,19 @@ function streamStatusLabel(
   }
 
   return messages.streamStatusConnectingLabel;
+}
+
+function streamStatusTone(
+  status: ReturnType<typeof useDashboardStreamStore.getState>["streamState"]["status"],
+) {
+  if (status === "live") {
+    return "active";
+  }
+  if (status === "offline") {
+    return "danger";
+  }
+
+  return "neutral";
 }
 
 function resolveLanguageSwitcherValue(locale: string): SupportedLocale {

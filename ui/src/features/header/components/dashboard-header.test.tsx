@@ -132,6 +132,13 @@ describe("DashboardHeader", () => {
     const globalActions = screen.getByRole("group", {
       name: headerMessages.globalHeaderActionsLabel,
     });
+    const streamStatus = screen.getByRole("status", {
+      name: headerMessages.streamStatusConnectingLabel,
+    });
+    const actionRow = streamStatus.parentElement?.parentElement;
+    const actionRowSections = toolbar.querySelectorAll(
+      "[data-dashboard-action-row-section]",
+    );
 
     const exportButton = screen.getByRole<HTMLButtonElement>("button", {
       name: messages.triggerLabel,
@@ -155,11 +162,20 @@ describe("DashboardHeader", () => {
     expect(heading.className).toContain("pb-2");
     expect(heading.firstElementChild?.className).toContain("items-center");
     expect(globalActions.className).toContain("self-end");
-    expect(globalActions.className).toContain("max-md:w-full");
-    expect(globalActions.className).toContain("max-md:justify-end");
-    expect(heading.firstElementChild?.firstElementChild?.className).toContain(
-      "h-12",
-    );
+    expect(actionRow?.className).toContain("justify-end");
+    expect(actionRow?.className).toContain("max-md:w-full");
+    expect(actionRowSections).toHaveLength(2);
+    expect(
+      actionRowSections[0]?.getAttribute("data-dashboard-action-row-section"),
+    ).toBe("statuses");
+    expect(
+      actionRowSections[1]?.getAttribute("data-dashboard-action-row-section"),
+    ).toBe("actions");
+    expect(actionRowSections[0]?.contains(streamStatus)).toBe(true);
+    expect(actionRowSections[1]?.contains(languageButton)).toBe(true);
+    expect(
+      heading.firstElementChild?.firstElementChild?.className,
+    ).toContain("h-12");
     expect(slider.closest("div")?.parentElement?.className).toContain(
       "rounded-t-2xl",
     );
@@ -179,9 +195,14 @@ describe("DashboardHeader", () => {
     expect(controls[1]).toBe(languageButton);
     expect(controls[2]).toBe(slider);
     expect(controls[3]).toBe(exportButton);
+    expect(streamStatus.textContent).toBe(
+      headerMessages.streamStatusConnectingLabel,
+    );
+    expect(streamStatus.className).toContain("rounded-full");
     expect(globalActions.contains(languageButton)).toBe(true);
     expect(globalActions.contains(openSessionButton)).toBe(false);
     expect(globalActions.contains(exportButton)).toBe(false);
+    expect(actionRowSections[1]?.contains(exportButton)).toBe(false);
     expect(globalActions.compareDocumentPosition(slider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");
@@ -282,7 +303,9 @@ describe("DashboardHeader", () => {
       screen.queryByRole("button", { name: messages.returnToCurrentTickLabel }),
     ).toBeNull();
     expect(screen.getByText("Dashboard session tabs zh-CN")).toBeTruthy();
-    expect(screen.getByText(messages.streamStatusConnectingLabel)).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: messages.streamStatusOfflineLabel }),
+    ).toBeTruthy();
   });
 
   it("opens and closes the locale menu through keyboard and dismissal events", async () => {

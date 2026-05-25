@@ -6,6 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { NoSelectionDetailCard } from "../../current-selection/components/no-selection-detail-card";
 import { WorkTotalsCard } from "../../work-totals/public";
@@ -64,13 +65,16 @@ function getGridItem(cardTitle: string): HTMLElement {
 }
 
 describe("AgentBentoLayout", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
   beforeEach(() => {
-    Object.defineProperty(HTMLElement.prototype, "offsetParent", {
-      configurable: true,
-      get() {
-        return this.parentElement ?? document.body;
-      },
-    });
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
   });
 
   it("renders card IDs, titles, and body content inside the movable board", () => {
@@ -111,6 +115,7 @@ describe("AgentBentoLayout", () => {
     expect(moveButton.className).toContain("border-af-border");
     expect(moveButton.className).toContain("bg-af-surface-raised");
     expect(moveButton.className).toContain("text-af-text-muted");
+    expect(moveButton.className).toContain("focus-visible:ring-2");
   });
 
   it("keeps movement enabled and updates grid position during pointer interaction", async () => {
@@ -168,6 +173,104 @@ describe("AgentBentoLayout", () => {
       expect(gridItem.querySelector(".react-resizable-handle-s")).toBeTruthy();
       expect(gridItem.querySelector(".react-resizable-handle-se")).toBeTruthy();
     }
+  });
+
+  it("collapses the board to a single non-resizable column at narrow widths", () => {
+    const onLayoutChange = vi.fn();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+
+    class NarrowResizeObserver {
+      public constructor(private readonly callback: ResizeObserverCallback) {}
+
+      public disconnect(): void {}
+
+      public observe(target: Element): void {
+        this.callback(
+          [
+            {
+              borderBoxSize: [],
+              contentBoxSize: [],
+              contentRect: {
+                bottom: 600,
+                height: 600,
+                left: 0,
+                right: 360,
+                top: 0,
+                width: 360,
+                x: 0,
+                y: 0,
+                toJSON: () => ({}),
+              },
+              devicePixelContentBoxSize: [],
+              target,
+            } as ResizeObserverEntry,
+          ],
+          this,
+        );
+      }
+
+      public unobserve(): void {}
+    }
+
+    vi.stubGlobal("ResizeObserver", NarrowResizeObserver);
+    Object.defineProperty(HTMLElement.prototype, "offsetParent", {
+      configurable: true,
+      get() {
+        return this.parentElement ?? document.body;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get() {
+        return 360;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return 360;
+      },
+    });
+
+    render(
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "activity",
+            widgetType: "activity",
+            children: (
+              <AgentBentoCard title="Current activity">
+                <p>Active workstation graph goes here.</p>
+              </AgentBentoCard>
+            ),
+          },
+          {
+            id: "trace",
+            widgetType: "trace",
+            children: (
+              <AgentBentoCard title="Trace grid">
+                <p>Trace dispatches stay visible.</p>
+              </AgentBentoCard>
+            ),
+          },
+        ]}
+        initialWidth={360}
+        layout={defaultLayout}
+        onLayoutChange={onLayoutChange}
+      />,
+    );
+
+    const board = screen.getByRole("region", {
+      name: "you-agent-factory bento board",
+    });
+
+    expect(board.dataset.bentoSingleColumn).toBe("true");
+    expect(board.querySelector(".react-grid-layout")).toBeNull();
+    expect(screen.getByRole("article", { name: "Current activity" })).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Trace grid" })).toBeTruthy();
+    expect(board.querySelector(".react-resizable-handle")).toBeNull();
+    expect(onLayoutChange).not.toHaveBeenCalled();
   });
 
   it("renders a localized accessible name for the movable board", () => {

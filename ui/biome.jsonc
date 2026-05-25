@@ -88,7 +88,6 @@
         "src/features/current-selection/components/workstation-detail-card.editable-configuration.test.tsx",
         "src/features/current-selection/components/workstation-detail-card.test.tsx",
         "src/features/current-selection/components/workstation-prompt-monaco.test.ts",
-        "src/features/current-selection/components/workstation-request-detail.test.tsx",
         "src/features/current-selection/editable-workstation-prompt-state.test.ts",
         "src/features/current-selection/hooks/use-editable-workstation-configuration-state.test.tsx",
         "src/features/current-selection/hooks/useCurrentSelection.actions.test.ts",
