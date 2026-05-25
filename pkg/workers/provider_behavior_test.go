@@ -351,8 +351,169 @@ func TestOpenCodeProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabiliti
 	}
 }
 
-func TestClaudeProviderBehavior_FormatTimeoutFailure(t *testing.T) {
-	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
+func TestNonCodexProviderBehavior_BuildCommandRequest(t *testing.T) {
+	for _, tc := range nonCodexCommandRequestTestCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			request := providerBehaviorFor(tc.req.ModelProvider, logging.NoopLogger{}).BuildCommandRequest(tc.req, tc.args)
+			if request.Command != tc.req.ModelProvider {
+				t.Fatalf("command = %q, want %q", request.Command, tc.req.ModelProvider)
+			}
+			assertStringSlicesEqual(t, tc.args, request.Args)
+			if len(request.Stdin) != 0 {
+				t.Fatalf("expected non-codex request to avoid stdin, got %q", string(request.Stdin))
+			}
+			if request.WorkDir != tc.req.WorkingDirectory {
+				t.Fatalf("workdir = %q, want %q", request.WorkDir, tc.req.WorkingDirectory)
+			}
+			assertEnvContains(t, request.Env, tc.wantEnv)
+			if len(request.InputTokens) != len(tc.req.InputTokens) {
+				t.Fatalf("input token count = %d, want %d", len(request.InputTokens), len(tc.req.InputTokens))
+			}
+			if len(request.InputTokens) > 0 && &request.InputTokens[0] == &tc.req.InputTokens[0] {
+				t.Fatal("expected command request input tokens to be cloned")
+			}
+		})
+	}
+}
+
+type nonCodexCommandRequestTestCase struct {
+	name    string
+	req     interfaces.ProviderInferenceRequest
+	args    []string
+	wantEnv string
+}
+
+func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
+	token := interfaces.Token{
+		ID: "token-1",
+		Color: interfaces.TokenColor{
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "hello"},
+			},
+		},
+	}
+
+	return []nonCodexCommandRequestTestCase{
+		{
+			name: "Claude",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderClaude),
+				UserMessage:   "review this",
+				EnvVars: map[string]string{
+					"AGENT_FACTORY_PROVIDER": "claude",
+				},
+				InputTokens: InputTokens(token),
+			},
+			args:    []string{"-p", "review this"},
+			wantEnv: "AGENT_FACTORY_PROVIDER=claude",
+		},
+		{
+			name: "Gemini",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderGemini),
+				UserMessage:   "review this",
+				EnvVars: map[string]string{
+					"AGENT_FACTORY_PROVIDER": "gemini",
+				},
+				InputTokens: InputTokens(token),
+			},
+			args:    []string{"--prompt", "review this"},
+			wantEnv: "AGENT_FACTORY_PROVIDER=gemini",
+		},
+		{
+			name: "Kiro",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderKiro),
+				UserMessage:   "review this",
+				EnvVars: map[string]string{
+					"AGENT_FACTORY_PROVIDER": "kiro",
+				},
+				InputTokens: InputTokens(token),
+			},
+			args:    []string{"chat", "--no-interactive", "review this"},
+			wantEnv: "AGENT_FACTORY_PROVIDER=kiro",
+		},
+		{
+			name: "Cursor",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(ModelProviderCursor),
+				UserMessage:   "review this",
+				EnvVars: map[string]string{
+					"AGENT_FACTORY_PROVIDER": "cursor",
+				},
+				InputTokens: InputTokens(token),
+			},
+			args:    []string{"--print", "review this", "--output-format", "text"},
+			wantEnv: "AGENT_FACTORY_PROVIDER=cursor",
+		},
+		{
+			name: "OpenCode",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider:    string(ModelProviderOpenCode),
+				UserMessage:      "review this",
+				WorkingDirectory: "/tmp/project",
+				EnvVars: map[string]string{
+					"AGENT_FACTORY_PROVIDER": "opencode",
+				},
+				InputTokens: InputTokens(token),
+			},
+			args:    []string{"run", "review this"},
+			wantEnv: "AGENT_FACTORY_PROVIDER=opencode",
+		},
+	}
+}
+
+func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
+	behaviors := map[string]providerBehavior{
+		string(ModelProviderClaude):   claudeProviderBehavior{logger: logging.NoopLogger{}},
+		string(ModelProviderGemini):   geminiProviderBehavior{logger: logging.NoopLogger{}},
+		string(ModelProviderKiro):     kiroProviderBehavior{logger: logging.NoopLogger{}},
+		string(ModelProviderCursor):   cursorProviderBehavior{logger: logging.NoopLogger{}},
+		string(ModelProviderOpenCode): openCodeProviderBehavior{logger: logging.NoopLogger{}},
+	}
+
+	testCases := []struct {
+		name   string
+		result CommandResult
+		want   string
+	}{
+		{
+			name: "PrefersTrimmedStderr",
+			result: CommandResult{
+				Stderr: []byte("  provider timed out waiting for upstream  \n"),
+				Stdout: []byte("stdout fallback"),
+			},
+			want: "provider timed out waiting for upstream",
+		},
+		{
+			name: "FallsBackToStdout",
+			result: CommandResult{
+				Stdout: []byte("provider timeout echoed on stdout"),
+			},
+			want: "provider timeout echoed on stdout",
+		},
+		{
+			name:   "UsesDefaultMessageWhenNoOutputExists",
+			result: CommandResult{},
+			want:   "execution timeout",
+		},
+	}
+
+	for providerName, behavior := range behaviors {
+		t.Run(providerName, func(t *testing.T) {
+			for _, tc := range testCases {
+				t.Run(tc.name, func(t *testing.T) {
+					if got := behavior.FormatTimeoutFailure(tc.result); got != tc.want {
+						t.Fatalf("FormatTimeoutFailure() = %q, want %q", got, tc.want)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
+	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
 
 	testCases := []struct {
 		name   string

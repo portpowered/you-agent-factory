@@ -50,7 +50,10 @@ type providerBehavior interface {
 	FormatTimeoutFailure(result CommandResult) string
 }
 
+type sharedNonCodexProviderBehavior struct{}
+
 type claudeProviderBehavior struct {
+	sharedNonCodexProviderBehavior
 	logger logging.Logger
 }
 
@@ -59,18 +62,22 @@ type codexProviderBehavior struct {
 }
 
 type geminiProviderBehavior struct {
+	sharedNonCodexProviderBehavior
 	logger logging.Logger
 }
 
 type kiroProviderBehavior struct {
+	sharedNonCodexProviderBehavior
 	logger logging.Logger
 }
 
 type cursorProviderBehavior struct {
+	sharedNonCodexProviderBehavior
 	logger logging.Logger
 }
 
 type openCodeProviderBehavior struct {
+	sharedNonCodexProviderBehavior
 	logger logging.Logger
 }
 
@@ -108,6 +115,14 @@ func providerBehaviorForErrorClassification(provider string) providerBehavior {
 	}
 }
 
+func (sharedNonCodexProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+	return buildBaseProviderCommandRequest(req, args)
+}
+
+func (sharedNonCodexProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
+	return formatProviderOutputOrDefault(result, "execution timeout")
+}
+
 func (b claudeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
 	logger := logging.EnsureLogger(b.logger)
 	if err := unsupportedImageContentError(req.InputTokens, "model provider claude"); err != nil {
@@ -137,10 +152,6 @@ func (b claudeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceReques
 	return args, nil
 }
 
-func (b claudeProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
-	return buildBaseProviderCommandRequest(req, args)
-}
-
 func (b claudeProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
 	return fmt.Sprintf("%s exited with code %d", provider, result.ExitCode)
 }
@@ -161,10 +172,6 @@ func (b claudeProviderBehavior) ClassifyExitFailure(result CommandResult) interf
 	default:
 		return interfaces.ProviderErrorTypeUnknown
 	}
-}
-
-func (b claudeProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
-	return formatProviderOutputOrDefault(result, "execution timeout")
 }
 
 func (b codexProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
@@ -259,10 +266,6 @@ func (b geminiProviderBehavior) BuildArgs(req interfaces.ProviderInferenceReques
 	return args, nil
 }
 
-func (b geminiProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
-	return buildBaseProviderCommandRequest(req, args)
-}
-
 func (b geminiProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
 	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
 }
@@ -285,10 +288,6 @@ func (b geminiProviderBehavior) ClassifyExitFailure(result CommandResult) interf
 	}
 }
 
-func (b geminiProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
-	return formatProviderOutputOrDefault(result, "execution timeout")
-}
-
 func (b kiroProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
 	if err := validateKiroOptionalCapabilities(req); err != nil {
 		return nil, err
@@ -304,10 +303,6 @@ func (b kiroProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest,
 		args = append(args, prompt)
 	}
 	return args, nil
-}
-
-func (b kiroProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
-	return buildBaseProviderCommandRequest(req, args)
 }
 
 func (b kiroProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
@@ -332,10 +327,6 @@ func (b kiroProviderBehavior) ClassifyExitFailure(result CommandResult) interfac
 	}
 }
 
-func (b kiroProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
-	return formatProviderOutputOrDefault(result, "execution timeout")
-}
-
 func (b cursorProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
 	if err := validateCursorOptionalCapabilities(req); err != nil {
 		return nil, err
@@ -353,20 +344,12 @@ func (b cursorProviderBehavior) BuildArgs(req interfaces.ProviderInferenceReques
 	return args, nil
 }
 
-func (b cursorProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
-	return buildBaseProviderCommandRequest(req, args)
-}
-
 func (b cursorProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
 	return codexProviderBehavior{}.FormatExitFailure(provider, result)
 }
 
 func (b cursorProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
 	return codexProviderBehavior{}.ClassifyExitFailure(result)
-}
-
-func (b cursorProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
-	return formatProviderOutputOrDefault(result, "execution timeout")
 }
 
 func (b openCodeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
@@ -390,10 +373,6 @@ func (b openCodeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequ
 	return args, nil
 }
 
-func (b openCodeProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
-	return buildBaseProviderCommandRequest(req, args)
-}
-
 func (b openCodeProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
 	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
 }
@@ -414,10 +393,6 @@ func (b openCodeProviderBehavior) ClassifyExitFailure(result CommandResult) inte
 	default:
 		return interfaces.ProviderErrorTypeUnknown
 	}
-}
-
-func (b openCodeProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
-	return formatProviderOutputOrDefault(result, "execution timeout")
 }
 
 func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
