@@ -2,6 +2,7 @@ package subsystems
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -778,6 +779,73 @@ func TestTransitioner_WorkerEmittedFactoryRequestBatchReleasesConsumedResources(
 	}
 	if len(result.GeneratedBatches) != 1 {
 		t.Fatalf("generated batches = %d, want 1", len(result.GeneratedBatches))
+	}
+}
+
+func TestTransitioner_AcceptedTransitionReleasesAllConsumedResourceUnitsForCardinalityNArc(t *testing.T) {
+	now := time.Date(2026, time.April, 17, 2, 0, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	net.Places["agent-slot:available"] = &petri.Place{ID: "agent-slot:available", TypeID: "agent-slot", State: "available"}
+	net.Resources = map[string]*state.ResourceDef{
+		"agent-slot": {ID: "agent-slot", Capacity: 2},
+	}
+	net.Transitions["t1"].InputArcs = []petri.Arc{
+		{ID: "task-in", PlaceID: "task:init"},
+		{ID: "slot-in", PlaceID: "agent-slot:available", Cardinality: petri.ArcCardinality{Mode: petri.CardinalityN, Count: 2}},
+	}
+	net.Transitions["t1"].OutputArcs = []petri.Arc{
+		{ID: "accepted", PlaceID: "task:complete"},
+		{ID: "slot-out", PlaceID: "agent-slot:available", Cardinality: petri.ArcCardinality{Mode: petri.CardinalityN, Count: 2}},
+	}
+
+	transitioner := NewTransitioner(net, nil, WithTransitionerClock(func() time.Time { return now }))
+	snapshot := workerBatchSnapshot("accepted")
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens = append(snapshot.Dispatches["dispatch-1"].ConsumedTokens,
+		interfaces.Token{
+			ID:        "agent-slot:resource:0",
+			PlaceID:   "agent-slot:available",
+			CreatedAt: now.Add(-time.Hour),
+			EnteredAt: now.Add(-time.Hour),
+			Color: interfaces.TokenColor{
+				WorkID:     "agent-slot:0",
+				WorkTypeID: "agent-slot",
+				DataType:   interfaces.DataTypeResource,
+			},
+		},
+		interfaces.Token{
+			ID:        "agent-slot:resource:1",
+			PlaceID:   "agent-slot:available",
+			CreatedAt: now.Add(-time.Hour),
+			EnteredAt: now.Add(-time.Hour),
+			Color: interfaces.TokenColor{
+				WorkID:     "agent-slot:1",
+				WorkTypeID: "agent-slot",
+				DataType:   interfaces.DataTypeResource,
+			},
+		},
+	)
+
+	result, err := transitioner.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected transitioner result")
+	}
+
+	releasedIDs := make([]string, 0, 2)
+	for i := range result.Mutations {
+		mutation := result.Mutations[i]
+		if mutation.NewToken == nil || mutation.NewToken.Color.DataType != interfaces.DataTypeResource {
+			continue
+		}
+		if mutation.ToPlace != "agent-slot:available" {
+			t.Fatalf("resource release ToPlace = %q, want agent-slot:available", mutation.ToPlace)
+		}
+		releasedIDs = append(releasedIDs, mutation.NewToken.ID)
+	}
+	if !reflect.DeepEqual(releasedIDs, []string{"agent-slot:resource:0", "agent-slot:resource:1"}) {
+		t.Fatalf("released resource IDs = %#v, want both consumed resource units restored", releasedIDs)
 	}
 }
 

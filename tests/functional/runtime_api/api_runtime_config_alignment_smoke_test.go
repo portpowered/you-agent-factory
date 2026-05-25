@@ -24,6 +24,9 @@ const (
 	runtimeConfigAlignmentSignalTimeout     = 10 * time.Second
 	runtimeConfigAlignmentCompletionTimeout = 15 * time.Second
 	runtimeConfigAlignmentPollInterval      = 50 * time.Millisecond
+	runtimeConfigAlignmentExecuteTimeout    = 100 * time.Millisecond
+	runtimeConfigAlignmentTimeoutMinElapsed = 50 * time.Millisecond
+	runtimeConfigAlignmentTimeoutMaxElapsed = 1500 * time.Millisecond
 
 	runtimeConfigAlignmentCronWorkstation    = "aaa-cron-task"
 	runtimeConfigAlignmentExecuteWorkstation = "yyy-execute-task"
@@ -249,8 +252,8 @@ func assertRuntimeConfigAlignmentFinalState(
 	if len(engineState.Marking.PlaceTokens["scheduled:complete"]) != 1 {
 		t.Fatalf("completed scheduled token count = %d, want 1; places=%#v", len(engineState.Marking.PlaceTokens["scheduled:complete"]), engineState.Marking.PlaceTokens)
 	}
-	if len(engineState.Marking.PlaceTokens["agent-slot:available"]) != 1 {
-		t.Fatalf("agent-slot availability after completion = %d, want 1; places=%#v", len(engineState.Marking.PlaceTokens["agent-slot:available"]), engineState.Marking.PlaceTokens)
+	if len(engineState.Marking.PlaceTokens["agent-slot:available"]) != 2 {
+		t.Fatalf("agent-slot availability after completion = %d, want 2; places=%#v", len(engineState.Marking.PlaceTokens["agent-slot:available"]), engineState.Marking.PlaceTokens)
 	}
 	if providerRunner.CallCount() != 2 {
 		t.Fatalf("provider runner call count = %d, want 2", providerRunner.CallCount())
@@ -532,8 +535,8 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	if execute.Worker != "executor" {
 		t.Fatalf("%s worker = %q, want executor", runtimeConfigAlignmentExecuteWorkstation, execute.Worker)
 	}
-	if execute.Limits == nil || stringValueFromFunctionalPtr(execute.Limits.MaxExecutionTime) != "100ms" {
-		t.Fatalf("%s limits = %#v, want maxExecutionTime 100ms", runtimeConfigAlignmentExecuteWorkstation, execute.Limits)
+	if execute.Limits == nil || stringValueFromFunctionalPtr(execute.Limits.MaxExecutionTime) != runtimeConfigAlignmentExecuteTimeout.String() {
+		t.Fatalf("%s limits = %#v, want maxExecutionTime %s", runtimeConfigAlignmentExecuteWorkstation, execute.Limits, runtimeConfigAlignmentExecuteTimeout)
 	}
 	if !runtimeConfigAlignmentHasGeneratedResource(execute.Resources, "agent-slot", 1) {
 		t.Fatalf("%s resources = %#v, want agent-slot capacity 1", runtimeConfigAlignmentExecuteWorkstation, execute.Resources)
@@ -605,6 +608,8 @@ func (r *runtimeConfigAlignmentProviderRunner) CallCount() int {
 type runtimeConfigAlignmentScriptRunner struct {
 	mu                   sync.Mutex
 	callCount            int
+	firstDispatchAt      time.Time
+	firstTimeoutAt       time.Time
 	firstDispatchStarted chan struct{}
 	firstTimeout         chan struct{}
 	releaseSecondAttempt chan struct{}
@@ -627,8 +632,14 @@ func (r *runtimeConfigAlignmentScriptRunner) Run(ctx context.Context, _ workers.
 	r.mu.Unlock()
 
 	if call == 1 {
+		r.mu.Lock()
+		r.firstDispatchAt = time.Now()
+		r.mu.Unlock()
 		r.firstStartedOnce.Do(func() { close(r.firstDispatchStarted) })
 		<-ctx.Done()
+		r.mu.Lock()
+		r.firstTimeoutAt = time.Now()
+		r.mu.Unlock()
 		r.firstTimeoutOnce.Do(func() { close(r.firstTimeout) })
 		return workers.CommandResult{}, ctx.Err()
 	}
@@ -648,6 +659,15 @@ func (r *runtimeConfigAlignmentScriptRunner) CallCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.callCount
+}
+
+func (r *runtimeConfigAlignmentScriptRunner) firstTimeoutElapsed() (time.Duration, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.firstDispatchAt.IsZero() || r.firstTimeoutAt.IsZero() {
+		return 0, false
+	}
+	return r.firstTimeoutAt.Sub(r.firstDispatchAt), true
 }
 
 func (r *runtimeConfigAlignmentScriptRunner) waitForFirstDispatch(timeout time.Duration) bool {
@@ -697,7 +717,13 @@ func waitForRuntimeConfigAlignmentInFlightResourceConsumption(
 	t.Helper()
 
 	if !runner.waitForFirstDispatch(runtimeConfigAlignmentSignalTimeout) {
-		t.Fatalf("timed out waiting for %s to start", runtimeConfigAlignmentExecuteWorkstation)
+		snapshot := server.GetEngineStateSnapshot(t)
+		t.Fatalf(
+			"timed out waiting for %s to start; history=%#v places=%#v",
+			runtimeConfigAlignmentExecuteWorkstation,
+			snapshot.DispatchHistory,
+			snapshot.Marking.PlaceTokens,
+		)
 	}
 
 	deadline := time.Now().Add(runtimeConfigAlignmentSignalTimeout)
@@ -727,6 +753,18 @@ func waitForRuntimeConfigAlignmentTimeoutAndRequeue(
 
 	if !runner.waitForFirstTimeout(runtimeConfigAlignmentSignalTimeout) {
 		t.Fatalf("timed out waiting for %s to hit limits.maxExecutionTime", runtimeConfigAlignmentExecuteWorkstation)
+	}
+	elapsed, ok := runner.firstTimeoutElapsed()
+	if !ok {
+		t.Fatalf("missing first timeout timing for %s", runtimeConfigAlignmentExecuteWorkstation)
+	}
+	if elapsed < runtimeConfigAlignmentTimeoutMinElapsed || elapsed > runtimeConfigAlignmentTimeoutMaxElapsed {
+		t.Fatalf(
+			"%s timeout elapsed = %s, want bounded around configured maxExecutionTime %s",
+			runtimeConfigAlignmentExecuteWorkstation,
+			elapsed,
+			runtimeConfigAlignmentExecuteTimeout,
+		)
 	}
 
 	deadline := time.Now().Add(runtimeConfigAlignmentSignalTimeout)
@@ -799,8 +837,27 @@ func assertRuntimeConfigAlignmentDispatchHistory(t *testing.T, history []interfa
 	if !runtimeConfigAlignmentHasDispatch(history, runtimeConfigAlignmentReviewWorkstation, interfaces.OutcomeAccepted, "") {
 		t.Fatalf("dispatch history missing accepted %s: %#v", runtimeConfigAlignmentReviewWorkstation, history)
 	}
-	if !runtimeConfigAlignmentHasDispatch(history, runtimeConfigAlignmentExecuteWorkstation, interfaces.OutcomeFailed, "execution timeout") {
+	timeoutDispatch, ok := runtimeConfigAlignmentFindDispatch(history, runtimeConfigAlignmentExecuteWorkstation, interfaces.OutcomeFailed, "execution timeout")
+	if !ok {
 		t.Fatalf("dispatch history missing execution-timeout failure for %s: %#v", runtimeConfigAlignmentExecuteWorkstation, history)
+	}
+	if timeoutDispatch.FailureMetadata == nil {
+		t.Fatalf("%s failed dispatch FailureMetadata = nil, want timeout metadata", runtimeConfigAlignmentExecuteWorkstation)
+	}
+	if timeoutDispatch.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("%s failed dispatch FailureMetadata.Type = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
+	}
+	if timeoutDispatch.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("%s failed dispatch FailureMetadata.Family = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	}
+	if timeoutDispatch.ProviderFailure == nil {
+		t.Fatalf("%s failed dispatch ProviderFailure = nil, want timeout metadata", runtimeConfigAlignmentExecuteWorkstation)
+	}
+	if timeoutDispatch.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
+		t.Fatalf("%s failed dispatch ProviderFailure.Type = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.ProviderFailure.Type, interfaces.ProviderErrorTypeTimeout)
+	}
+	if timeoutDispatch.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
+		t.Fatalf("%s failed dispatch ProviderFailure.Family = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
 	}
 	if !runtimeConfigAlignmentHasDispatch(history, runtimeConfigAlignmentExecuteWorkstation, interfaces.OutcomeAccepted, "") {
 		t.Fatalf("dispatch history missing accepted retry for %s: %#v", runtimeConfigAlignmentExecuteWorkstation, history)
