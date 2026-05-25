@@ -285,17 +285,12 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req interfaces.Prov
 			return resp, retryCount, nil
 		}
 
-<<<<<<< HEAD:pkg/workers/agent.go
-		providerErr := NormalizeProviderExecutionError(err)
+		providerErr := workerprovider.NormalizeProviderExecutionError(err)
 		if providerErr == nil {
-=======
-		var providerErr *workerprovider.ProviderError
-		if !errors.As(err, &providerErr) {
->>>>>>> e832cc93 (feat: prd-backend-package-restructure-005 - Extract worker execution orchestration into a dedicated package):pkg/workers/executor/agent.go
 			return interfaces.InferenceResponse{}, retryCount, err
 		}
 
-		decision := ClassifyProviderFailure(providerErr)
+		decision := workerprovider.ClassifyProviderFailure(providerErr)
 		if !decision.Retryable || retryCount >= ae.retryConfig.maxRetries {
 			return interfaces.InferenceResponse{}, retryCount, providerErr
 		}

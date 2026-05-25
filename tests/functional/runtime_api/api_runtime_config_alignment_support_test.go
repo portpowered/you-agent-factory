@@ -53,7 +53,7 @@ func runtimeConfigAlignmentWorkTypes() []map[string]any {
 func runtimeConfigAlignmentResources() []map[string]any {
 	return []map[string]any{{
 		"name":     "agent-slot",
-		"capacity": 2,
+		"capacity": 1,
 	}}
 }
 

@@ -58,16 +58,8 @@ func NewProviderErrorWithSession(errorType interfaces.ProviderErrorType, message
 	return workerprovider.NewProviderErrorWithSession(errorType, message, cause, session)
 }
 
-func ClassifyProviderFailure(err *ProviderError) interfaces.ProviderFailureDecision {
-	return workerprovider.ClassifyProviderFailure(err)
-}
-
 func ProviderFailureDecisionFromMetadata(metadata *interfaces.ProviderFailureMetadata) interfaces.ProviderFailureDecision {
 	return workerprovider.ProviderFailureDecisionFromMetadata(metadata)
-}
-
-func ProviderFailureMetadataFromError(err *ProviderError) *interfaces.ProviderFailureMetadata {
-	return workerprovider.ProviderFailureMetadataFromError(err)
 }
 
 func normalizeProviderExitFailure(provider string, result CommandResult, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {

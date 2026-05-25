@@ -202,15 +202,15 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	if stringValueFromFunctionalPtr(reviewer.StopToken) != "COMPLETE" {
 		t.Fatalf("reviewer stop token = %q, want COMPLETE", stringValueFromFunctionalPtr(reviewer.StopToken))
 	}
-	if !runtimeConfigAlignmentHasGeneratedResource(reviewer.Resources, "agent-slot", 1) {
-		t.Fatalf("reviewer resources = %#v, want agent-slot capacity 1", reviewer.Resources)
+	if reviewer.Resources != nil && len(*reviewer.Resources) != 0 {
+		t.Fatalf("reviewer resources = %#v, want no worker-level resources in this fixture", reviewer.Resources)
 	}
 	executor := runtimeConfigAlignmentRequireGeneratedWorker(t, *generated.Workers, "executor")
 	if stringValueFromFunctionalPtr(executor.Type) != interfaces.WorkerTypeScript {
 		t.Fatalf("executor type = %q, want %q", stringValueFromFunctionalPtr(executor.Type), interfaces.WorkerTypeScript)
 	}
-	if !runtimeConfigAlignmentHasGeneratedResource(executor.Resources, "agent-slot", 1) {
-		t.Fatalf("executor resources = %#v, want agent-slot capacity 1", executor.Resources)
+	if executor.Resources != nil && len(*executor.Resources) != 0 {
+		t.Fatalf("executor resources = %#v, want no worker-level resources in this fixture", executor.Resources)
 	}
 
 	if generated.Workstations == nil || len(*generated.Workstations) != 3 {

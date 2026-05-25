@@ -70,7 +70,7 @@ func ProviderFailureDecisionFromMetadata(metadata *interfaces.ProviderFailureMet
 }
 
 func ProviderFailureMetadataFromError(err *ProviderError) *interfaces.ProviderFailureMetadata {
-	return workerprovider.ProviderFailureMetadataFromError(err)
+	return workerprovider.WorkFailureMetadataFromError(err)
 }
 
 func LoadProviderErrorCorpus() (ProviderErrorCorpus, error) {

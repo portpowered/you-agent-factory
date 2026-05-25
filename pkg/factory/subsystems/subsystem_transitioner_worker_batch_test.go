@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -37,7 +37,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchPreservesCanonicalCha
 
 	result := executeWorkerBatchTransition(t, transitioner, snapshot)
 	batch := result.GeneratedBatches[0]
-	normalized, err := factory.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true, "child": true},
 	})
 	if err != nil {
@@ -100,7 +100,7 @@ func assertGeneratedWorkerBatchMetadata(t *testing.T, result *interfaces.TickRes
 func normalizeGeneratedWorkerBatch(t *testing.T, batch interfaces.GeneratedSubmissionBatch) []interfaces.SubmitRequest {
 	t.Helper()
 
-	normalized, err := factory.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true, "child": true},
 	})
 	if err != nil {
@@ -117,7 +117,7 @@ func assertGeneratedWorkerBatchSubmissions(
 ) interfaces.SubmitRequest {
 	t.Helper()
 
-	record := factory.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
+	record := requests.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
 	if len(record.Relations) != 1 {
 		t.Fatalf("request relation count = %d, want 1", len(record.Relations))
 	}
@@ -391,7 +391,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchUsesBatchMetadataSour
 	if len(batch.Metadata.ParentLineage) != 2 {
 		t.Fatalf("parent lineage = %#v, want metadata preserved", batch.Metadata.ParentLineage)
 	}
-	normalized, err := factory.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true, "child": true},
 	})
 	if err != nil {
@@ -442,73 +442,3 @@ func TestTransitioner_MalformedWorkerEmittedFactoryRequestBatchFailsDispatch(t *
 	}
 }
 
-func workerBatchTestNet() *state.Net {
-	return &state.Net{
-		Places: map[string]*petri.Place{
-			"task:init":      {ID: "task:init", TypeID: "task", State: "init"},
-			"task:complete":  {ID: "task:complete", TypeID: "task", State: "complete"},
-			"task:failed":    {ID: "task:failed", TypeID: "task", State: "failed"},
-			"child:init":     {ID: "child:init", TypeID: "child", State: "init"},
-			"child:complete": {ID: "child:complete", TypeID: "child", State: "complete"},
-		},
-		WorkTypes: map[string]*state.WorkType{
-			"task": {
-				ID: "task",
-				States: []state.StateDefinition{
-					{Value: "init", Category: state.StateCategoryInitial},
-					{Value: "complete", Category: state.StateCategoryTerminal},
-					{Value: "failed", Category: state.StateCategoryFailed},
-				},
-			},
-			"child": {
-				ID: "child",
-				States: []state.StateDefinition{
-					{Value: "init", Category: state.StateCategoryInitial},
-					{Value: "complete", Category: state.StateCategoryTerminal},
-				},
-			},
-		},
-		Transitions: map[string]*petri.Transition{
-			"t1": {
-				ID: "t1",
-				OutputArcs: []petri.Arc{
-					{ID: "accepted", PlaceID: "task:complete"},
-				},
-				FailureArcs: []petri.Arc{
-					{ID: "failed", PlaceID: "task:failed"},
-				},
-			},
-		},
-	}
-}
-
-func workerBatchSnapshot(output string) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Dispatches: map[string]*interfaces.DispatchEntry{
-			"dispatch-1": {
-				DispatchID:   "dispatch-1",
-				TransitionID: "t1",
-				ConsumedTokens: []interfaces.Token{{
-					ID:        "tok-source",
-					PlaceID:   "task:init",
-					CreatedAt: time.Date(2026, time.April, 16, 21, 0, 0, 0, time.UTC),
-					Color: interfaces.TokenColor{
-						Name:       "source",
-						RequestID:  "request-source",
-						WorkID:     "work-source",
-						WorkTypeID: "task",
-						DataType:   interfaces.DataTypeWork,
-						TraceID:    "trace-source",
-						Tags:       map[string]string{"tenant": "port"},
-					},
-				}},
-			},
-		},
-		Results: []interfaces.WorkResult{{
-			DispatchID:   "dispatch-1",
-			TransitionID: "t1",
-			Outcome:      interfaces.OutcomeAccepted,
-			Output:       output,
-		}},
-	}
-}
