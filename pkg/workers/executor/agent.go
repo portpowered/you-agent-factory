@@ -326,7 +326,7 @@ func RunnerFromProvider(provider Provider) Runner {
 
 func (a providerRunnerAdapter) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
 	if a.inner == nil {
-		return interfaces.RunnerExecutionResult{}, NewProviderError(
+		return interfaces.RunnerExecutionResult{}, workerprovider.NewProviderError(
 			interfaces.ProviderErrorTypeMisconfigured,
 			"runner requires a provider implementation",
 			nil,
@@ -373,7 +373,7 @@ func (ae *AgentExecutor) evaluateOutcome(resp interfaces.InferenceResponse, work
 		ae.logger.Info("no stop token configured; defaulting to ACCEPTED outcome")
 		return interfaces.OutcomeAccepted
 	}
-	if ContainsStopToken(resp.Content, workerDef.StopToken) {
+	if workerprovider.ContainsStopToken(resp.Content, workerDef.StopToken) {
 		ae.logger.Info("stop token found in output; returning ACCEPTED outcome", "stop_token", workerDef.StopToken)
 		return interfaces.OutcomeAccepted
 	}

@@ -29,7 +29,7 @@ const (
 	ModelProviderCursor   = workerprovider.ModelProviderCursor
 	ModelProviderOpenCode = workerprovider.ModelProviderOpenCode
 
-	providerSessionKindSessionID      = "session_id"
+	providerSessionKindSessionID       = "session_id"
 	codexWindowsProcessFailureExitCode = 4294967295
 
 	omitZeroWorkerEventExitCode    = false
@@ -45,26 +45,6 @@ const (
 	RedactedCommandEnvValue     = redactedCommandEnvValue
 	MetadataOnlyCommandEnvValue = metadataOnlyCommandEnvValue
 )
-
-func ContainsStopToken(output, stopToken string) bool {
-	return workerprovider.ContainsStopToken(output, stopToken)
-}
-
-func NewProviderError(errorType interfaces.ProviderErrorType, message string, cause error) *ProviderError {
-	return workerprovider.NewProviderError(errorType, message, cause)
-}
-
-func NewProviderErrorWithSession(errorType interfaces.ProviderErrorType, message string, cause error, session *interfaces.ProviderSessionMetadata) *ProviderError {
-	return workerprovider.NewProviderErrorWithSession(errorType, message, cause, session)
-}
-
-func ProviderFailureDecisionFromMetadata(metadata *interfaces.ProviderFailureMetadata) interfaces.ProviderFailureDecision {
-	return workerprovider.ProviderFailureDecisionFromMetadata(metadata)
-}
-
-func normalizeProviderExitFailure(provider string, result CommandResult, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
-	return workerprovider.NormalizeProviderExitFailure(provider, result, session, diagnostics)
-}
 
 func cloneInputTokens(rawTokens []any) []interfaces.Token {
 	if len(rawTokens) == 0 {
