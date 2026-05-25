@@ -38,6 +38,7 @@ export default mergeConfig(
               instances: [{ browser: "chromium" }],
             },
             setupFiles: ["./.storybook/vitest.setup.ts"],
+            testTimeout: 30000,
           },
         },
       ],

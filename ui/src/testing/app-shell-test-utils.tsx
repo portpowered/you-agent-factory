@@ -4,11 +4,13 @@ import { afterEach, beforeEach, vi, type Mock } from "vitest";
 import { App } from "../App";
 import type {
   DashboardSnapshot,
+  DashboardTopology,
   DashboardTrace,
   DashboardWorkstationRequest,
 } from "../api/dashboard";
 import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
 import type { FactoryEvent } from "../api/events";
+import type { FactorySessionSummary } from "../api/factory-sessions/api";
 import {
   buildDashboardSnapshotFixture,
   mediumBranchingDashboardTopology,
@@ -28,6 +30,17 @@ import { useExportDialogStore } from "../features/export/state";
 import type { FactoryPngImportValue } from "../features/import/public";
 import type { WorldState } from "../features/timeline/state";
 import { useFactoryTimelineStore } from "../features/timeline/state";
+import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
+
+vi.mock("../features/flowchart/lib/layout", async () => {
+  const actual = await vi.importActual("../features/flowchart/lib/layout");
+
+  return {
+    ...actual,
+    buildGraphLayout: async (topology: DashboardTopology) =>
+      buildDashboardTestGraphLayout(topology),
+  };
+});
 
 vi.mock("../features/current-factory-definition/public", async () => {
   const actual = await vi.importActual(
@@ -103,14 +116,14 @@ type CurrentFactoryDocumentResult = ReturnType<typeof useCurrentFactoryDocument>
 const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
-const defaultFactorySessionSummary = {
-  factoryDir: "/workspace/root",
-  folderPath: "/workspace/root",
+const defaultFactorySessionSummary: FactorySessionSummary = {
+  factoryDir: "/workspace/default",
+  folderPath: "/workspace",
   id: DEFAULT_FACTORY_SESSION_ID,
   isDefault: true,
-  project: "root",
+  project: "default",
   target: {
-    kind: "default" as const,
+    kind: "default",
   },
 };
 

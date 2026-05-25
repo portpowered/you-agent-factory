@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 func TestFactoryService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T) {
@@ -16,7 +19,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *te
 	})
 	defer harness.stop(t)
 
-	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil)
+	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(single target): %v", err)
 	}
@@ -42,7 +45,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_ReturnsTargetPickerMetadata
 	})
 	defer harness.stop(t)
 
-	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil)
+	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(multi target): %v", err)
 	}
@@ -73,21 +76,21 @@ func TestFactoryService_OpenFactorySessionFromFolder_OpensExplicitDefaultAndName
 
 	defaultOpen, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, &FactorySessionTargetRef{
 		Kind: FactorySessionTargetKindDefault,
-	})
+	}, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(default): %v", err)
 	}
 	betaOpenOne, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, &FactorySessionTargetRef{
 		Kind: FactorySessionTargetKindNamed,
 		Name: "beta",
-	})
+	}, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(beta one): %v", err)
 	}
 	betaOpenTwo, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, &FactorySessionTargetRef{
 		Kind: FactorySessionTargetKindNamed,
 		Name: "beta",
-	})
+	}, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(beta two): %v", err)
 	}
@@ -116,8 +119,10 @@ func TestFactoryService_OpenFactorySessionFromFolder_RejectsInvalidFolderAndTarg
 	defer harness.stop(t)
 
 	before := harness.svc.sessions.count()
-	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), filepath.Join(harness.rootDir, "missing"), nil); err == nil || !strings.Contains(err.Error(), "stat factory session folder") {
+	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), filepath.Join(harness.rootDir, "missing"), nil, false); err == nil || !strings.Contains(err.Error(), "stat factory session folder") {
 		t.Fatalf("OpenFactorySessionFromFolder(missing folder) error = %v, want folder stat failure", err)
+	} else {
+		assertFactorySessionValidationTarget(t, err, "missing", "folderPath")
 	}
 	if got := harness.svc.sessions.count(); got != before {
 		t.Fatalf("missing-folder open mutated live sessions to %d, want %d", got, before)
@@ -126,11 +131,35 @@ func TestFactoryService_OpenFactorySessionFromFolder_RejectsInvalidFolderAndTarg
 	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, &FactorySessionTargetRef{
 		Kind: FactorySessionTargetKindNamed,
 		Name: "missing",
-	}); err == nil || !strings.Contains(err.Error(), `factory session target "missing" was not found`) {
+	}, false); err == nil || !strings.Contains(err.Error(), `factory session target "missing" was not found`) {
 		t.Fatalf("OpenFactorySessionFromFolder(missing target) error = %v, want missing-target failure", err)
+	} else {
+		assertFactorySessionValidationTarget(t, err, "target_not_found", "target.name")
 	}
 	if got := harness.svc.sessions.count(); got != before {
 		t.Fatalf("missing-target open mutated live sessions to %d, want %d", got, before)
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_RejectsReadableFolderWithoutRunnableTargetsWithoutMutation(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	before := harness.svc.sessions.count()
+	emptyDir := filepath.Join(harness.rootDir, "empty")
+	if err := os.Mkdir(emptyDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(empty): %v", err)
+	}
+
+	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, false); err == nil || !strings.Contains(err.Error(), `does not expose any runnable factory targets`) {
+		t.Fatalf("OpenFactorySessionFromFolder(empty runnable folder) error = %v, want no-runnable-targets failure", err)
+	} else {
+		assertFactorySessionValidationTarget(t, err, "not_runnable", "folderPath")
+	}
+	if got := harness.svc.sessions.count(); got != before {
+		t.Fatalf("empty-folder open mutated live sessions to %d, want %d", got, before)
 	}
 }
 
@@ -149,7 +178,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_CanceledRequestDoesNotRegis
 	openCtx, cancelOpen := context.WithCancel(context.Background())
 	cancelOpen()
 
-	if _, err := harness.svc.OpenFactorySessionFromFolder(openCtx, harness.factoryDirs["beta"], nil); !errors.Is(err, context.Canceled) {
+	if _, err := harness.svc.OpenFactorySessionFromFolder(openCtx, harness.factoryDirs["beta"], nil, false); !errors.Is(err, context.Canceled) {
 		t.Fatalf("OpenFactorySessionFromFolder(canceled) error = %v, want context canceled", err)
 	}
 
@@ -160,5 +189,147 @@ func TestFactoryService_OpenFactorySessionFromFolder_CanceledRequestDoesNotRegis
 			continue
 		}
 		t.Fatalf("canceled open mutated live sessions to %v, want only [%s]", harness.svc.sessions.ids(), defaultFactorySessionID)
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_ValidateOnlyReturnsTargetsWithoutOpening(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	before := harness.svc.sessions.count()
+	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, true)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate only): %v", err)
+	}
+	if result == nil {
+		t.Fatal("validate-only result = nil, want target metadata")
+	}
+	if result.SessionID != "" {
+		t.Fatalf("validate-only session id = %q, want none", result.SessionID)
+	}
+	if len(result.Targets) != 1 {
+		t.Fatalf("validate-only targets = %#v, want one target", result.Targets)
+	}
+	assertSessionTargetMetadata(t, result.Targets[0], FactorySessionTargetKindNamed, "alpha", "alpha", harness.factoryDirs["alpha"], "alpha")
+	if got := harness.svc.sessions.count(); got != before {
+		t.Fatalf("validate-only mutated live sessions to %d, want %d", got, before)
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_ExpandsLeadingTildeForValidationAndLaunch(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	relativeToHome, err := filepath.Rel(homeDir, harness.rootDir)
+	if err != nil {
+		t.Fatalf("filepath.Rel(home, root): %v", err)
+	}
+	if relativeToHome == "." || strings.HasPrefix(relativeToHome, "..") {
+		t.Skipf("root dir %q is not under the user home %q", harness.rootDir, homeDir)
+	}
+
+	tildePath := "~"
+	if relativeToHome != "." {
+		tildePath = filepath.Join("~", relativeToHome)
+	}
+
+	validateResult, err := harness.svc.OpenFactorySessionFromFolder(
+		context.Background(),
+		tildePath,
+		nil,
+		true,
+	)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate tilde): %v", err)
+	}
+	if validateResult == nil || len(validateResult.Targets) != 1 {
+		t.Fatalf("validate-only tilde targets = %#v, want one target", validateResult)
+	}
+	assertSessionTargetMetadata(
+		t,
+		validateResult.Targets[0],
+		FactorySessionTargetKindNamed,
+		"alpha",
+		"alpha",
+		harness.factoryDirs["alpha"],
+		"alpha",
+	)
+	if validateResult.Targets[0].FolderPath != harness.rootDir {
+		t.Fatalf("validated tilde folder path = %q, want %q", validateResult.Targets[0].FolderPath, harness.rootDir)
+	}
+
+	openResult, err := harness.svc.OpenFactorySessionFromFolder(
+		context.Background(),
+		tildePath,
+		&FactorySessionTargetRef{
+			Kind: FactorySessionTargetKindNamed,
+			Name: "alpha",
+		},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(open tilde): %v", err)
+	}
+	session := harness.requireSession(t, openResult.SessionID)
+	if session.folderPath != harness.rootDir {
+		t.Fatalf("opened session folder path = %q, want %q", session.folderPath, harness.rootDir)
+	}
+	if session.handle.runtime.dir != harness.factoryDirs["alpha"] {
+		t.Fatalf("opened session runtime dir = %q, want %q", session.handle.runtime.dir, harness.factoryDirs["alpha"])
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_InvalidExpandedTildePathReturnsResolvedError(t *testing.T) {
+	missingPath := filepath.Join("~", ".infinite-you-missing-factory-folder")
+
+	_, err := resolveFactorySessionFolder(missingPath)
+	if err == nil {
+		t.Fatal("resolveFactorySessionFolder(~missing) error = nil, want failure")
+	}
+
+	homeDir, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		t.Fatalf("UserHomeDir: %v", homeErr)
+	}
+	wantResolvedPath := filepath.Join(homeDir, ".infinite-you-missing-factory-folder")
+	if !strings.Contains(err.Error(), wantResolvedPath) {
+		t.Fatalf("resolveFactorySessionFolder(~missing) error = %q, want resolved path %q", err, wantResolvedPath)
+	}
+	assertFactorySessionValidationTarget(t, err, "missing", "folderPath")
+}
+
+func assertFactorySessionValidationTarget(t *testing.T, err error, wantReason string, wantField string) {
+	t.Helper()
+
+	var targetedErr interface {
+		ErrorTargets() []factoryapi.ErrorTarget
+	}
+	if !errors.As(err, &targetedErr) {
+		t.Fatalf("validation error %v did not expose structured targets", err)
+	}
+
+	targets := targetedErr.ErrorTargets()
+	if len(targets) != 1 {
+		t.Fatalf("validation error targets = %#v, want one target", targets)
+	}
+	target := targets[0]
+	if target.Kind != factorySessionValidationTargetKind {
+		t.Fatalf("validation target kind = %q, want %q", target.Kind, factorySessionValidationTargetKind)
+	}
+	if target.Id == nil || *target.Id != wantReason {
+		t.Fatalf("validation target id = %#v, want %q", target.Id, wantReason)
+	}
+	if target.Field == nil || *target.Field != wantField {
+		t.Fatalf("validation target field = %#v, want %q", target.Field, wantField)
 	}
 }

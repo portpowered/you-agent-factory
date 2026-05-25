@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "../../../lib/cn";
@@ -45,13 +47,13 @@ import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
 
 const TRACE_EXPANDER_HEADER_CLASS =
-  "flex items-center justify-between gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2";
+  "flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2";
 const TRACE_EXPANDER_TOGGLE_CLASS = "min-h-9 shrink-0 px-2.5 py-2";
 const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-48";
 // tailwind-exception: intrinsic-sizing
 const TRACE_GRID_TABLE_CLASS = "min-w-[860px]";
 const TRACE_WORK_ITEM_BUTTON_CLASS = cn(
-  "h-auto min-h-0 justify-start border-af-accent/35 bg-af-accent/10 px-2.5 py-1.5 text-left text-af-accent",
+  "h-auto min-h-0 justify-start border-af-accent-border bg-af-accent-surface px-2.5 py-1.5 text-left text-af-accent",
   DASHBOARD_SUPPORTING_CODE_CLASS,
 );
 
@@ -64,6 +66,7 @@ export type TraceGridState =
 
 export interface TraceGridBentoCardProps {
   className?: string;
+  headerAction?: ReactNode;
   locale?: string;
   onSelectWorkID?: (workID: string) => void;
   state: TraceGridState;
@@ -73,6 +76,7 @@ export interface TraceGridBentoCardProps {
 
 export function TraceGridBentoCard({
   className = "",
+  headerAction,
   locale,
   onSelectWorkID,
   state,
@@ -88,7 +92,11 @@ export function TraceGridBentoCard({
   );
 
   return (
-    <AgentBentoCard className={cardClassName} title={title ?? messages.title}>
+    <AgentBentoCard
+      className={cardClassName}
+      headerAction={headerAction}
+      title={title ?? messages.title}
+    >
       {renderTraceState(state, locale, onSelectWorkID)}
     </AgentBentoCard>
   );
@@ -160,7 +168,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
     <div className="grid min-w-0 w-full gap-3" style={{ overflowX: "hidden" }}>
       <dl
         className={cn(
-          "m-0 grid gap-3 [&_dd]:m-0 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-af-overlay/6 [&_div]:pt-3 [&_dt]:mb-1",
+          "m-0 grid gap-3 [&_dd]:m-0 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-af-border [&_div]:pt-3 [&_dt]:mb-1",
           DASHBOARD_SUPPORTING_LABELS_CLASS,
           DASHBOARD_BODY_TEXT_CLASS,
         )}
@@ -275,7 +283,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
                   <TableHead className="align-top" scope="row">
                     <span
                       className={cn(
-                        "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
+                        "inline-flex rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info-text",
                         DASHBOARD_SUPPORTING_CODE_CLASS,
                       )}
                     >

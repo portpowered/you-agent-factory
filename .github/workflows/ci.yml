@@ -16,6 +16,9 @@ concurrency:
 env:
   # Keep this pinned version aligned with ui/package.json's packageManager value.
   BUN_VERSION: 1.3.12
+  # Keep CI on an explicit Node LTS major so setup-node does not need to resolve
+  # the floating lts/* alias through the GitHub-hosted manifest API.
+  NODE_VERSION: 22
 
 jobs:
   typecheck:
@@ -25,6 +28,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
         uses: actions/setup-go@v5
@@ -60,6 +65,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
         uses: actions/setup-go@v5
@@ -76,7 +83,7 @@ jobs:
       - name: Set up Node for API contract commands
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Restore Bun package cache
         uses: actions/cache@v4
@@ -131,6 +138,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
         uses: actions/setup-go@v5
@@ -147,7 +156,7 @@ jobs:
       - name: Set up Node for dashboard runtime
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Restore Bun package cache
         uses: actions/cache@v4

@@ -132,7 +132,7 @@ function Build-BackendFromSource {
     New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
 
     Invoke-NativeCommand "cmake configure omnivoice.cpp" {
-        cmake "-S" $sourceDir "-B" $buildDir "-G" "Visual Studio 17 2022" "-A" "x64"
+        cmake "-S" $sourceDir "-B" $buildDir "-G" "Visual Studio 17 2022" "-A" "x64" "-DGGML_NATIVE=OFF"
     }
     Invoke-NativeCommand "cmake build omnivoice.cpp" {
         cmake "--build" $buildDir "--config" "Release" "--parallel" $env:NUMBER_OF_PROCESSORS

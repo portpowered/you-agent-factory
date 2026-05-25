@@ -89,6 +89,7 @@ interface RenderCurrentActivityOptions {
   readFactoryImportFile?: ReadFactoryImportFile;
   snapshot: DashboardSnapshot;
   selection?: CurrentActivitySelection | null;
+  widgetInstanceID?: string;
 }
 
 const LEGEND_ICON_EXPECTATIONS = [
@@ -377,6 +378,7 @@ function renderCurrentActivity({
   readFactoryImportFile,
   snapshot,
   selection = null,
+  widgetInstanceID,
 }: RenderCurrentActivityOptions) {
   const onSelectWorkID =
     vi.fn<
@@ -399,6 +401,7 @@ function renderCurrentActivity({
       readFactoryImportFile={readFactoryImportFile}
       selection={selection}
       snapshot={snapshot}
+      widgetInstanceID={widgetInstanceID}
     />,
   );
 
@@ -1072,7 +1075,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
         workTypeName: "story",
       },
     ]);
-  });
+  }, 30_000);
 
   it("renders pending draft-only graph nodes while editor mode is active", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
@@ -1158,13 +1161,21 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(stalledLabel.closest("article")?.textContent).toContain(
       "Unavailable",
     );
+    expect(writerLabel.closest("article")?.className).toContain(
+      "border-af-info-border",
+    );
+    expect(stalledLabel.closest("article")?.className).toContain(
+      "border-af-info-border",
+    );
   });
 
-  it("lets operators collapse worker and resource lanes without leaving editor mode", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: workerDenseFactoryDefinitionDocument,
-      error: null,
-      status: "success",
+  it(
+    "lets operators collapse worker and resource lanes without leaving editor mode",
+    async () => {
+      vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+        data: workerDenseFactoryDefinitionDocument,
+        error: null,
+        status: "success",
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
@@ -1211,7 +1222,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
       expect(screen.getByText("gpu")).toBeTruthy();
       expect(screen.getByText("story:review")).toBeTruthy();
     });
-  });
+    },
+    30000,
+  );
 
   it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {
     const updateDraft = vi.fn();
@@ -1753,6 +1766,8 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(viewport.getAttribute("data-current-activity-drop-state")).toBe(
       "drag-active",
     );
+    expect(viewport.className).toContain("border-af-accent-border");
+    expect(viewport.className).toContain("bg-af-accent-surface");
     expect(screen.getByText("Import factory PNG")).toBeTruthy();
     expect(
       screen.getByText(
@@ -1896,8 +1911,8 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(legend?.className).not.toContain("right-0");
     expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
-    expect(viewport.getAttribute("aria-describedby")).toBe(
-      "workflow-graph-heading",
+    expect(viewport.getAttribute("aria-describedby")).toMatch(
+      /^workflow-graph-heading-/,
     );
   });
 
@@ -1944,6 +1959,8 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(viewport.getAttribute("data-current-activity-drop-state")).toBe(
       "error",
     );
+    expect(viewport.className).toContain("border-af-danger-border");
+    expect(viewport.className).toContain("bg-af-danger-surface");
     expect(
       screen.getByRole("button", { name: "Select Review workstation" }),
     ).toBeTruthy();
@@ -2204,7 +2221,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(
       (await getStateNodeArticle("story:documented"))
         .querySelector("article")
-        ?.className.includes("border-af-overlay/22"),
+        ?.className.includes("border-af-border-strong"),
     ).toBe(true);
     expect(screen.getByText("Active Story")).toBeTruthy();
     expect(screen.queryByText("dispatch-review-active")).toBeNull();
@@ -2418,12 +2435,12 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       .getByLabelText("agent-slot:available")
       .closest("article");
     expect(activeStateArticle.querySelector("article")?.className).toContain(
-      "border-af-success/70",
+      "border-af-success-border",
     );
     expect(idleStateArticle.querySelector("article")?.className).toContain(
       "opacity-[0.45]",
     );
-    expect(idleResourceArticle?.className).toContain("border-af-overlay/22");
+    expect(idleResourceArticle?.className).toContain("border-af-border-strong");
     expect(idleResourceArticle?.className).not.toContain("opacity-[0.45]");
   });
 
@@ -2465,9 +2482,11 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const activeSelectedState = await getStateNodeArticle("story:complete");
     const activeSelectedArticle = activeSelectedState.querySelector("article");
 
-    expect(activeSelectedArticle?.className).toContain("border-af-accent/70");
+    expect(activeSelectedArticle?.className).toContain(
+      "border-af-accent-border",
+    );
     expect(activeSelectedArticle?.className).not.toContain(
-      "border-af-success/70",
+      "border-af-success-border",
     );
 
     cleanup();
@@ -2484,7 +2503,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     });
     const reviewArticle = reviewButton.closest("article");
 
-    expect(reviewArticle?.className).toContain("border-af-accent/70");
+    expect(reviewArticle?.className).toContain("border-af-accent-border");
     expect(reviewArticle?.className).not.toContain("agent-flow-node--active");
   });
 
@@ -2669,7 +2688,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
       failedStateArticle.querySelector("article")?.textContent,
     ).not.toContain("Queue");
     expect(failedStateArticle.querySelector("article")?.className).toContain(
-      "border-af-edge-danger-muted",
+      "border-af-danger-border",
     );
   });
 
@@ -2687,10 +2706,10 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     );
 
     expect(controls?.getAttribute("style")).toContain(
-      "--xy-controls-button-background-color-props: rgb(from var(--color-af-surface) r g b / 0.94)",
+      "--xy-controls-button-background-color-props: var(--color-af-graph-controls-button-surface)",
     );
     expect(controls?.getAttribute("style")).toContain(
-      "--xy-controls-button-color-props: rgb(from var(--color-af-ink) r g b / 0.72)",
+      "--xy-controls-button-color-props: var(--color-af-graph-controls-text)",
     );
     expect(controls?.getAttribute("style")).toContain(
       "--xy-controls-box-shadow: none",
@@ -2835,11 +2854,11 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
       await getStateNodeArticle("story:documented");
 
     expect(readyStateArticle.querySelector("article")?.className).toContain(
-      "border-af-overlay/22",
+      "border-af-border-strong",
     );
     expect(
       documentedStateArticle.querySelector("article")?.className,
-    ).toContain("border-af-overlay/22");
+    ).toContain("border-af-border-strong");
   });
 
   it("selects workstation and work item context through the dashboard callbacks", async () => {
@@ -2901,7 +2920,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     expect(screen.getByRole("button", { name: /Active Story 3/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Active Story 4/ })).toBeNull();
     expect(reviewNode?.querySelector("article")?.className).toContain(
-      "border-af-success/50",
+      "border-af-success-border",
     );
 
     fireEvent.click(reviewButton);

@@ -97,4 +97,17 @@ describe("provider-session-detail message catalogs", () => {
       invokeProviderSessionWidget,
     );
   });
+
+  it("uses localized repeated labels for non-default provider-session locales", () => {
+    expect(getProviderSessionDetailMessages("ja").assistantMessageLabel).toBe(
+      "アシスタント",
+    );
+    expect(getProviderSessionDetailMessages("ko").userMessageLabel).toBe(
+      "사용자",
+    );
+    expect(getProviderSessionDetailMessages("zh-CN").sessionLabel).toBe(
+      "提供方会话",
+    );
+    expect(getProviderSessionWidgetMessages("zh-CN").title).toBe("提供方会话");
+  });
 });

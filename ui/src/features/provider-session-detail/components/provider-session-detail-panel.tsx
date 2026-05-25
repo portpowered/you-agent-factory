@@ -7,10 +7,14 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
+import { formatDateTime } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
-import { TranscriptSection } from "./provider-session-transcript";
+import {
+  EncryptedReasoningNotice,
+  TranscriptSection,
+} from "./provider-session-transcript";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
@@ -21,6 +25,7 @@ export interface ProviderSessionDetailPanelProps {
 }
 
 type SessionDetail = ProviderSessionDetailResponse;
+const PROVIDER_SESSION_SANS_CLASS = "af-provider-session-sans";
 
 export function ProviderSessionDetailPanel({
   locale,
@@ -63,7 +68,10 @@ function LoadedProviderSessionDetailPanel({
   return (
     <section
       aria-label={messages.selectedSessionHeading}
-      className="mt-4 grid gap-3 border-t border-af-overlay/8 pt-4"
+      className={cn(
+        "mt-4 grid gap-3 border-t border-af-border pt-4",
+        PROVIDER_SESSION_SANS_CLASS,
+      )}
     >
       <div className="grid gap-3">
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
@@ -111,11 +119,15 @@ function LoadedProviderSessionDetailPanel({
       {detail ? (
         <>
           <SourceFileSection detail={detail} locale={locale} />
-          {detailState.status !== "empty" ? (
-            <>
+          {detailState.status !== "empty" &&
+          detailState.status !== "success" ? (
+            <SecondarySection
+              description={messages.sessionAnalysisDescription}
+              heading={messages.sessionAnalysisHeading}
+            >
               <ParseOverview detail={detail} locale={locale} />
               <TokenUsageSection detail={detail} locale={locale} />
-            </>
+            </SecondarySection>
           ) : null}
           {detailState.status === "empty" ? (
             <StatusNotice>{messages.emptyState}</StatusNotice>
@@ -135,9 +147,16 @@ function LoadedProviderSessionDetailPanel({
           {detailState.status === "success" ? (
             <>
               <TranscriptSection detail={detail} locale={locale} />
-              <TurnsSection detail={detail} locale={locale} />
-              <FunctionCallsSection detail={detail} locale={locale} />
-              <ReasoningSection detail={detail} locale={locale} />
+              <SecondarySection
+                description={messages.sessionAnalysisDescription}
+                heading={messages.sessionAnalysisHeading}
+              >
+                <ParseOverview detail={detail} locale={locale} />
+                <TokenUsageSection detail={detail} locale={locale} />
+                <TurnsSection detail={detail} locale={locale} />
+                <FunctionCallsSection detail={detail} locale={locale} />
+                <ReasoningSection detail={detail} locale={locale} />
+              </SecondarySection>
               <ParseDiagnosticsSection detail={detail} locale={locale} />
             </>
           ) : null}
@@ -170,7 +189,13 @@ function SourceFileSection({
         />
         <DetailMetric
           label={messages.modifiedAtLabel}
-          value={detail.source.modifiedAt ?? messages.unavailableValue}
+          value={
+            <TimestampMetricValue
+              locale={locale}
+              timestamp={detail.source.modifiedAt}
+              unavailableLabel={messages.unavailableValue}
+            />
+          }
         />
       </div>
     </section>
@@ -189,8 +214,8 @@ function StatusNotice({
       className={cn(
         "m-0 rounded-lg border px-3 py-2.5",
         tone === "error"
-          ? "border-af-danger/25 bg-af-danger/8 text-af-danger-ink"
-          : "border-af-overlay/10 bg-af-overlay/4 text-af-ink/82",
+          ? "border-af-danger-border bg-af-danger-surface text-af-danger-text"
+          : "border-af-border bg-af-surface-subtle text-af-text-muted",
         DASHBOARD_BODY_TEXT_CLASS,
       )}
       role={tone === "error" ? "alert" : "status"}
@@ -235,9 +260,7 @@ function ParseOverview({
 
   return (
     <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.parseDiagnosticsHeading}
-      </h5>
+      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.parseSummaryHeading}</h5>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <DetailMetric
           label={messages.eventCountLabel}
@@ -311,14 +334,18 @@ function TurnsSection({
             <article className={PROVIDER_SESSION_CARD_CLASS} key={turn.index}>
               <div className="grid gap-1">
                 <strong>{messages.turnLabel({ index: turn.index })}</strong>
-                <p
+                <div
                   className={cn(
-                    "m-0 text-af-ink/62",
+                    "text-af-text-subtle",
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
                 >
-                  {turn.startedAt ?? messages.noTimestamp}
-                </p>
+                  <TimestampMetricValue
+                    locale={locale}
+                    timestamp={turn.startedAt}
+                    unavailableLabel={messages.noTimestamp}
+                  />
+                </div>
               </div>
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
                 <DetailMetric label={messages.eventsLabel} value={turn.eventCount} />
@@ -371,7 +398,7 @@ function FunctionCallsSection({
                   <strong>{call.name ?? call.type}</strong>
                   <p
                     className={cn(
-                      "m-0 text-af-ink/62",
+                      "m-0 text-af-text-subtle",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
@@ -384,7 +411,7 @@ function FunctionCallsSection({
                 {call.status ? (
                   <span
                     className={cn(
-                      "inline-flex w-fit rounded-full border border-af-overlay/12 bg-af-overlay/6 px-2 py-0.5",
+                      "inline-flex w-fit rounded-full border border-af-border bg-af-surface-raised px-2 py-0.5 text-af-text-subtle",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
@@ -398,12 +425,6 @@ function FunctionCallsSection({
                   label={messages.callIdLabel}
                   value={call.callId ?? messages.unavailableValue}
                 />
-                {call.arguments ? (
-                  <CodeBlockMetric label={messages.argumentsLabel} value={call.arguments} />
-                ) : null}
-                {call.output ? (
-                  <CodeBlockMetric label={messages.outputLabel} value={call.output} />
-                ) : null}
               </div>
             </article>
           ))}
@@ -440,7 +461,7 @@ function ReasoningSection({
                 <strong>{entry.sourceType}</strong>
                 <p
                   className={cn(
-                    "m-0 text-af-ink/62",
+                    "m-0 text-af-text-subtle",
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
                 >
@@ -450,30 +471,8 @@ function ReasoningSection({
                   })}
                 </p>
               </div>
-              {entry.summary ? (
-                <p className={cn("m-0 mt-2", DASHBOARD_BODY_TEXT_CLASS)}>
-                  {entry.summary}
-                </p>
-              ) : null}
-              {entry.text ? (
-                <pre
-                  className={cn(
-                    "m-0 mt-2 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere]",
-                    DASHBOARD_BODY_CODE_CLASS,
-                  )}
-                >
-                  {entry.text}
-                </pre>
-              ) : null}
               {entry.encrypted ? (
-                <p
-                  className={cn(
-                    "m-0 mt-2 text-af-ink/62",
-                    DASHBOARD_SUPPORTING_TEXT_CLASS,
-                  )}
-                >
-                  {messages.encryptedReasoningOnly}
-                </p>
+                <EncryptedReasoningNotice className="mt-2" locale={locale} />
               ) : null}
             </article>
           ))}
@@ -502,45 +501,74 @@ function ParseDiagnosticsSection({
   }
 
   return (
-    <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.parseErrorsHeading}
-      </h5>
-      <div className="grid gap-3">
-        {detail.parse.parseErrors.map((error) => (
-          <article
-            className={PROVIDER_SESSION_CARD_CLASS}
-            key={`parse-error-${error.lineNumber}`}
-          >
-            <strong>{messages.lineLabel({ lineNumber: error.lineNumber })}</strong>
-            <p className={cn("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
-              {error.message}
-            </p>
-          </article>
-        ))}
-        {detail.parse.unknownEvents.map((event) => (
-          <article
-            className={PROVIDER_SESSION_CARD_CLASS}
-            key={`unknown-event-${event.lineNumber}`}
-          >
-            <strong>
-              {messages.unknownEventOnLineLabel({ lineNumber: event.lineNumber })}
-            </strong>
-            <p
-              className={cn(
-                "m-0 mt-1.5 text-af-ink/62",
-                DASHBOARD_SUPPORTING_TEXT_CLASS,
-              )}
+    <SecondarySection
+      description={messages.maintainerDiagnosticsDescription}
+      heading={messages.maintainerDiagnosticsHeading}
+    >
+      <section className="grid gap-2.5">
+        <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
+          {messages.parseErrorsHeading}
+        </h5>
+        <div className="grid gap-3">
+          {detail.parse.parseErrors.map((error) => (
+            <article
+              className={PROVIDER_SESSION_CARD_CLASS}
+              key={`parse-error-${error.lineNumber}`}
             >
-              {[
-                event.type ? `type=${event.type}` : null,
-                event.payloadType ? `payload=${event.payloadType}` : null,
-              ]
-                .filter(Boolean)
-                .join(" / ")}
-            </p>
-          </article>
-        ))}
+              <strong>{messages.lineLabel({ lineNumber: error.lineNumber })}</strong>
+              <p className={cn("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
+                {error.message}
+              </p>
+            </article>
+          ))}
+          {detail.parse.unknownEvents.map((event) => (
+            <article
+              className={PROVIDER_SESSION_CARD_CLASS}
+              key={`unknown-event-${event.lineNumber}`}
+            >
+              <strong>
+                {messages.unknownEventOnLineLabel({ lineNumber: event.lineNumber })}
+              </strong>
+              <p
+                className={cn(
+                  "m-0 mt-1.5 text-af-text-subtle",
+                  DASHBOARD_SUPPORTING_TEXT_CLASS,
+                )}
+              >
+                {[
+                  event.type ? `type=${event.type}` : null,
+                  event.payloadType ? `payload=${event.payloadType}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" / ")}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </SecondarySection>
+  );
+}
+
+function SecondarySection({
+  children,
+  description,
+  heading,
+}: {
+  children: ReactNode;
+  description: string;
+  heading: string;
+}) {
+  return (
+    <section className="grid gap-4 rounded-xl border border-af-border bg-af-surface-subtle p-4">
+      <div className="grid gap-1">
+        <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{heading}</h5>
+        <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          {description}
+        </p>
+      </div>
+      <div className="grid gap-3">
+        {children}
       </div>
     </section>
   );
@@ -553,36 +581,66 @@ function DetailMetric({
 }: {
   code?: boolean;
   label: string;
-  value: number | string;
+  value: number | string | ReactNode;
 }) {
+  const metricValue = code ? (
+    <code className={DASHBOARD_BODY_CODE_CLASS}>{value}</code>
+  ) : (
+    value
+  );
+  const wrapperClassName = cn("mt-1", DASHBOARD_BODY_TEXT_CLASS);
+
   return (
     <div className={PROVIDER_SESSION_CARD_CLASS}>
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <p className={cn("m-0 mt-1", DASHBOARD_BODY_TEXT_CLASS)}>
-        {code ? <code className={DASHBOARD_BODY_CODE_CLASS}>{value}</code> : value}
-      </p>
+      {typeof value === "string" || typeof value === "number" ? (
+        <p className={cn("m-0", wrapperClassName)}>{metricValue}</p>
+      ) : (
+        <div className={wrapperClassName}>{metricValue}</div>
+      )}
     </div>
   );
 }
 
-function CodeBlockMetric({
-  label,
-  value,
+function TimestampMetricValue({
+  locale,
+  timestamp,
+  unavailableLabel,
 }: {
-  label: string;
-  value: string;
+  locale?: string;
+  timestamp?: string | null;
+  unavailableLabel: string;
 }) {
+  const messages = getProviderSessionDetailMessages(locale);
+
+  if (!timestamp) {
+    return unavailableLabel;
+  }
+
+  const formattedTimestamp = formatDateTime(timestamp, locale, {
+  });
+
   return (
-    <div className="grid gap-1">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <pre
-        className={cn(
-          "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere]",
-          DASHBOARD_BODY_CODE_CLASS,
-        )}
-      >
-        {value}
-      </pre>
-    </div>
+    <span className="grid gap-1">
+      <span title={timestamp}>{formattedTimestamp}</span>
+      <details className="grid gap-1">
+        <summary
+          className={cn(
+            "w-fit cursor-pointer text-af-text-subtle underline decoration-dotted underline-offset-2",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+        >
+          {messages.rawTimestampDetailsLabel}
+        </summary>
+        <code
+          className={cn(
+            "w-fit rounded-md border border-af-border bg-af-surface-subtle px-2 py-1",
+            DASHBOARD_BODY_CODE_CLASS,
+          )}
+        >
+          {timestamp}
+        </code>
+      </details>
+    </span>
   );
 }

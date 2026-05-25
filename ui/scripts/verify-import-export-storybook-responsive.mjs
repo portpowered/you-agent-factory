@@ -266,8 +266,8 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   });
   const rootTab = page.getByRole("tab", { name: "root" });
   const allTabs = page.getByRole("tab");
-  const pauseButton = page.getByRole("button", {
-    name: "Pause root updates",
+  const openSessionButton = page.getByRole("button", {
+    name: "Open another session",
   });
   const closeSelectedSessionButton = page.getByRole("button", {
     name: "Close root session",
@@ -288,7 +288,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectVisible(hiddenWordmark, "Accessible you-agent-factory wordmark");
   await expectVisible(sessionTabs, "Session tabs navigation");
   await expectVisible(rootTab, "Default session tab");
-  await expectVisible(pauseButton, "Active session pause button");
+  await expectVisible(openSessionButton, "Open another session button");
   await expectVisible(closeSelectedSessionButton, "Active session close button");
   await expectVisible(slider, "Timeline slider");
   await expectVisible(timelineStatus, "Timeline status");
@@ -316,7 +316,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
 
   if (viewport.label === "desktop") {
     await expectOrderedLeftEdges(
-      [heading, exportButton, languageButton],
+      [heading, sessionTabs, languageButton],
       "Dashboard header desktop primary-row controls",
     );
     await expectOrderedLeftEdges(

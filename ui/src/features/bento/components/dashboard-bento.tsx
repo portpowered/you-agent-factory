@@ -1,30 +1,30 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useAppLocale } from "../../../i18n";
 import {
-  CurrentSelectionWidget,
   useCurrentSelection,
   useCurrentSelectionDetails,
   useSelectedProviderSessionState,
 } from "../../current-selection/public";
 import { DashboardImportPreviewDialog } from "../../import/public";
-import { ProviderSessionWidget } from "../../provider-session-detail/public";
-import { SubmitWorkWidget } from "../../submit-work/public";
-import { TerminalWorkWidget } from "../../terminal-work/public";
+import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
-import { TraceDrilldownWidget, useTraceDrilldown } from "../../trace-drilldown/public";
-import { useWorkOutcomeChart, WorkOutcomeWidget } from "../../work-outcome/public";
-import { WorkTotalsWidget } from "../../work-totals/public";
+import { useTraceDrilldown } from "../../trace-drilldown/public";
+import { useWorkOutcomeChart } from "../../work-outcome/public";
+import { useCurrentActivityImportController } from "../../workflow-activity/public";
+import { AgentBentoLayout } from "./agent-bento";
 import {
-  useCurrentActivityImportController,
-  WorkflowActivityWidget,
-} from "../../workflow-activity/public";
-import { AgentBentoLayout, type AgentBentoLayoutCard } from "./agent-bento";
+  buildDashboardCards,
+  type DashboardCardBuilderArgs,
+} from "./dashboard-bento-cards";
 import { useDashboardBentoStore } from "../state/dashboardBentoStore";
-import { DASHBOARD_WIDGET_IDS, useDashboardLayout } from "../hooks/useDashboardLayout";
+import {
+  getRenderableDashboardLayout,
+  useDashboardLayout,
+} from "../hooks/useDashboardLayout";
 import { useDashboardNow } from "../hooks/useDashboardNow";
 
 const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
@@ -54,8 +54,14 @@ export interface DashboardBentoProps {
 
 export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const { locale: resolvedLocale } = useAppLocale(locale);
-  const { dashboardLayout, persistDashboardLayout } = useDashboardLayout();
+  const {
+    addDashboardWidget,
+    dashboardLayout,
+    persistDashboardLayout,
+    removeDashboardWidget,
+  } = useDashboardLayout();
   const now = useDashboardNow();
+  const [isInlineWidgetPickerOpen, setInlineWidgetPickerOpen] = useState(false);
   const incrementRefreshToken = useDashboardBentoStore(
     (state) => state.incrementRefreshToken,
   );
@@ -117,20 +123,30 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     timelineEvents,
     worldViewCache,
   });
-  const cards = buildDashboardCards({
+  const cards = buildDashboardCardLayouts({
+    addDashboardWidget,
     currentSelection,
+    dashboardLayout,
     importController,
+    isInlineWidgetPickerOpen,
     locale: resolvedLocale,
     now,
+    onInlineWidgetPickerOpenChange: setInlineWidgetPickerOpen,
+    onRemoveDashboardWidget: removeDashboardWidget,
     providerSessionState,
     selectedTrace,
     selectedTraceID,
     selectedWorkExecutionDetails,
+    setInlineWidgetPickerOpen,
     setSelectedTraceID,
     snapshot,
     traceGridState,
     workChartModel,
   });
+  const renderableLayout = getRenderableDashboardLayout(
+    dashboardLayout,
+    cards.map((card) => card.widgetType),
+  );
 
   if (!selectedSnapshot) {
     return null;
@@ -140,7 +156,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     <>
       <AgentBentoLayout
         cards={cards}
-        layout={dashboardLayout}
+        layout={renderableLayout}
         locale={resolvedLocale}
         onLayoutChange={persistDashboardLayout}
       />
@@ -148,143 +164,73 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
         activationState={importController.activationState}
         importPreviewState={importController.importPreviewState}
         locale={resolvedLocale}
-        onCancel={() => {
-          importController.clearActivationError();
-          importController.closeImportPreview();
-        }}
-        onConfirm={(value) => {
-          void importController.activateImport(value);
-        }}
+        onCancel={createDashboardImportPreviewCancelHandler(importController)}
+        onConfirm={createDashboardImportPreviewConfirmHandler(importController)}
       />
     </>
   );
 }
 
-interface DashboardCardBuilderArgs {
-  currentSelection: ReturnType<typeof useCurrentSelection>;
-  importController: ReturnType<typeof useCurrentActivityImportController>;
-  locale?: string;
-  now: number;
-  providerSessionState: ReturnType<typeof useSelectedProviderSessionState>;
-  selectedTrace: ReturnType<typeof useTraceDrilldown>["selectedTrace"];
-  selectedTraceID: string | null;
-  selectedWorkExecutionDetails: ReturnType<
-    typeof useCurrentSelectionDetails
-  >["selectedWorkExecutionDetails"];
-  setSelectedTraceID: (traceID: string | null) => void;
-  snapshot: DashboardSnapshot;
-  traceGridState: ReturnType<typeof useTraceDrilldown>["traceGridState"];
-  workChartModel: ReturnType<typeof useWorkOutcomeChart>;
-}
-
-function buildDashboardCards({
+function buildDashboardCardLayouts({
+  addDashboardWidget,
   currentSelection,
+  dashboardLayout,
   importController,
+  isInlineWidgetPickerOpen,
   locale,
   now,
+  onInlineWidgetPickerOpenChange,
+  onRemoveDashboardWidget,
   providerSessionState,
   selectedTrace,
   selectedTraceID,
   selectedWorkExecutionDetails,
+  setInlineWidgetPickerOpen,
   setSelectedTraceID,
   snapshot,
   traceGridState,
   workChartModel,
-}: DashboardCardBuilderArgs): AgentBentoLayoutCard[] {
-  return [
-    {
-      id: DASHBOARD_WIDGET_IDS.workTotals,
-      children: <WorkTotalsWidget locale={locale} snapshot={snapshot} />,
+}: Omit<DashboardCardBuilderArgs, "onSelectInlineWidget"> & {
+  addDashboardWidget: ReturnType<typeof useDashboardLayout>["addDashboardWidget"];
+  setInlineWidgetPickerOpen: (open: boolean) => void;
+}) {
+  return buildDashboardCards({
+    currentSelection,
+    dashboardLayout,
+    importController,
+    isInlineWidgetPickerOpen,
+    locale,
+    now,
+    onInlineWidgetPickerOpenChange,
+    onRemoveDashboardWidget,
+    onSelectInlineWidget: (widgetType) => {
+      addDashboardWidget(widgetType);
+      setInlineWidgetPickerOpen(false);
     },
-    {
-      id: DASHBOARD_WIDGET_IDS.workGraph,
-      children: (
-        <WorkflowActivityWidget
-          importController={importController}
-          locale={locale}
-          now={now}
-          onSelectStateNode={currentSelection.selectStateNode}
-          onSelectWorkID={currentSelection.selectWorkByID}
-          onSelectWorkstation={currentSelection.selectWorkstation}
-          selection={currentSelection.selection}
-          snapshot={snapshot}
-        />
-      ),
-    },
-    {
-      id: DASHBOARD_WIDGET_IDS.terminalWork,
-      children: (
-        <TerminalWorkWidget
-          completedItems={currentSelection.completedWorkItems}
-          failedItems={currentSelection.failedWorkItems}
-          locale={locale}
-          onSelectItem={currentSelection.openTerminalWorkDetail}
-          selectedItem={currentSelection.terminalWorkDetail}
-          widgetId={DASHBOARD_WIDGET_IDS.terminalWork}
-        />
-      ),
-    },
-    {
-      id: DASHBOARD_WIDGET_IDS.workOutcomeChart,
-      children: (
-        <WorkOutcomeWidget
-          locale={locale}
-          model={workChartModel}
-          widgetId={DASHBOARD_WIDGET_IDS.workOutcomeChart}
-        />
-      ),
-    },
-    {
-      id: DASHBOARD_WIDGET_IDS.currentSelection,
-      children: (
-        <CurrentSelectionWidget
-          activeTraceID={selectedTraceID ?? selectedTrace?.trace_id ?? null}
-          currentSelection={currentSelection}
-          failedWorkDetailsByWorkID={
-            snapshot.runtime.session.failed_work_details_by_work_id
-          }
-          locale={locale}
-          now={now}
-          onSelectProviderSession={providerSessionState.setSelectedProviderSession}
-          onSelectTraceID={setSelectedTraceID}
-          selectedProviderSessionKey={
-            providerSessionState.selectedProviderSessionKey
-          }
-          selectedTrace={selectedTrace}
-          selectedWorkExecutionDetails={selectedWorkExecutionDetails}
-          widgetId={DASHBOARD_WIDGET_IDS.currentSelection}
-        />
-      ),
-    },
-    {
-      id: DASHBOARD_WIDGET_IDS.providerSession,
-      children: (
-        <ProviderSessionWidget
-          locale={locale}
-          selectedProviderSession={providerSessionState.selectedProviderSession}
-          widgetId={DASHBOARD_WIDGET_IDS.providerSession}
-        />
-      ),
-    },
-    {
-      id: DASHBOARD_WIDGET_IDS.submitWork,
-      children: (
-        <SubmitWorkWidget
-          locale={locale}
-          submitWorkTypes={snapshot.topology.submit_work_types}
-        />
-      ),
-    },
-    {
-      id: DASHBOARD_WIDGET_IDS.trace,
-      children: (
-        <TraceDrilldownWidget
-          locale={locale}
-          onSelectWorkID={currentSelection.selectWorkByID}
-          state={traceGridState}
-          widgetId={DASHBOARD_WIDGET_IDS.trace}
-        />
-      ),
-    },
-  ];
+    providerSessionState,
+    selectedTrace,
+    selectedTraceID,
+    selectedWorkExecutionDetails,
+    setSelectedTraceID,
+    snapshot,
+    traceGridState,
+    workChartModel,
+  });
+}
+
+function createDashboardImportPreviewCancelHandler(
+  importController: ReturnType<typeof useCurrentActivityImportController>,
+) {
+  return () => {
+    importController.clearActivationError();
+    importController.closeImportPreview();
+  };
+}
+
+function createDashboardImportPreviewConfirmHandler(
+  importController: ReturnType<typeof useCurrentActivityImportController>,
+) {
+  return (value: FactoryPngImportValue) => {
+    void importController.activateImport(value);
+  };
 }

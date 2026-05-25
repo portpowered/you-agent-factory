@@ -10,6 +10,8 @@ import {
 import { formatList } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
 import {
+  CURRENT_SELECTION_FIELD_PANEL_CLASS,
+  CURRENT_SELECTION_WARNING_PANEL_CLASS,
   HISTORY_HEADER_CLASS,
   HISTORY_TOGGLE_CLASS,
   WORKSTATION_SUMMARY_ITEM_CLASS,
@@ -72,20 +74,20 @@ export function EditableConfigurationSection({
       {expanded ? (
         <div className="grid gap-2.5" id={contentId}>
           {state?.status === "loading" ? (
-            <p className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
               {messages.editableConfigurationLoading}
             </p>
           ) : null}
           {state?.status === "error" ? (
             <p
-              className={cn("m-0 text-af-danger", DASHBOARD_BODY_TEXT_CLASS)}
+              className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
               role="alert"
             >
               {messages.editableConfigurationErrorPrefix} {state.errorMessage}
             </p>
           ) : null}
           {state?.status === "empty" ? (
-            <p className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
               {state.message || messages.editableConfigurationEmpty}
             </p>
           ) : null}
@@ -175,7 +177,7 @@ function EditableConfigurationSaveFeedback({
   if (saveState?.status === "success") {
     return (
       <p
-        className={cn("m-0 text-af-success-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-af-success-text", DASHBOARD_BODY_TEXT_CLASS)}
         role="status"
       >
         {messages.editableConfigurationSaveSuccess}
@@ -186,7 +188,7 @@ function EditableConfigurationSaveFeedback({
   if (saveState?.status === "error") {
     return (
       <p
-        className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationSaveErrorPrefix} {saveState.errorMessage}
@@ -208,11 +210,11 @@ function EditableConfigurationDraftStatus({
   >;
 }) {
   return (
-    <div className="grid gap-2 rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-3">
+    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
       <p
         className={cn(
           "m-0",
-          state.hasValidationErrors ? "text-af-danger-ink" : "text-af-ink/72",
+          state.hasValidationErrors ? "text-af-danger-text" : "text-af-text-muted",
           DASHBOARD_BODY_TEXT_CLASS,
         )}
         role={state.hasValidationErrors ? "alert" : "status"}
@@ -223,7 +225,7 @@ function EditableConfigurationDraftStatus({
             ? messages.editableConfigurationDirtyStatus
             : messages.editableConfigurationDraftNote}
       </p>
-      <p className={cn("m-0 text-af-ink/58", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
         {messages.editableConfigurationDraftNote}
       </p>
     </div>
@@ -247,14 +249,14 @@ function EditableConfigurationOverwriteWarning({
   );
 
   return (
-    <div className="grid gap-2 rounded-2xl border border-af-warning/35 bg-af-warning/8 p-3">
+    <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
       <p
-        className={cn("m-0 text-af-warning-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
       </p>
-      <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
         {messages.editableConfigurationOverwriteWarningDetail}
       </p>
     </div>
@@ -273,7 +275,7 @@ function EditableConfigurationWorkerInput({
 }) {
   if (state.workerOptionsState.status === "empty") {
     return (
-      <p className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
         {state.workerOptionsState.message}
       </p>
     );
@@ -282,7 +284,7 @@ function EditableConfigurationWorkerInput({
   if (state.workerOptionsState.status === "error") {
     return (
       <p
-        className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationWorkerUnavailablePrefix}{" "}
@@ -406,7 +408,7 @@ function EditableConfigurationField({
   supportingContent?: ReactNode;
 }) {
   return (
-    <div className="grid gap-2 rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-3">
+    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
       <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
         {label}
       </label>
@@ -415,7 +417,7 @@ function EditableConfigurationField({
       {errorMessage ? (
         <p
           className={cn(
-            "m-0 text-af-danger-ink",
+            "m-0 text-af-danger-text",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
           id={`${fieldId}-error`}
@@ -431,7 +433,7 @@ function WorkstationSummaryItem({ label, value }: WorkstationSummaryItemProps) {
   return (
     <li className={WORKSTATION_SUMMARY_ITEM_CLASS}>
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <strong className="min-w-0 text-sm text-af-ink [overflow-wrap:anywhere]">
+      <strong className="min-w-0 text-sm text-af-text [overflow-wrap:anywhere]">
         {value}
       </strong>
     </li>

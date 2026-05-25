@@ -42,7 +42,35 @@ class DashboardDOMMatrixReadOnly {
   }
 }
 
-export function installDashboardBrowserTestShims(): () => void {
+function installAnimationFrameShim() {
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  const cancelAnimationFrame = globalThis.cancelAnimationFrame;
+  let nextAnimationFrameHandle = 1;
+  const cancelledAnimationFrames = new Set<number>();
+
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    const handle = nextAnimationFrameHandle++;
+
+    queueMicrotask(() => {
+      if (cancelledAnimationFrames.delete(handle)) {
+        return;
+      }
+      callback(performance.now());
+    });
+
+    return handle;
+  }) as typeof requestAnimationFrame;
+  globalThis.cancelAnimationFrame = ((handle: number) => {
+    cancelledAnimationFrames.add(handle);
+  }) as typeof cancelAnimationFrame;
+
+  return () => {
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+    globalThis.cancelAnimationFrame = cancelAnimationFrame;
+  };
+}
+
+function installElementMeasurementShims() {
   const resizeObserver = globalThis.ResizeObserver;
   const domMatrixReadOnly = globalThis.DOMMatrixReadOnly;
   const offsetParentDescriptor = Object.getOwnPropertyDescriptor(
@@ -168,3 +196,12 @@ export function installDashboardBrowserTestShims(): () => void {
   };
 }
 
+export function installDashboardBrowserTestShims(): () => void {
+  const restoreAnimationFrame = installAnimationFrameShim();
+  const restoreElementMeasurements = installElementMeasurementShims();
+
+  return () => {
+    restoreAnimationFrame();
+    restoreElementMeasurements();
+  };
+}

@@ -6,23 +6,80 @@
   --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
   --font-display: "Space Grotesk", "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", "Consolas", monospace;
-  --color-af-bg: #0a1117;
-  --color-af-bg-start: #101c23;
-  --color-af-bg-mid: #132c37;
-  --color-af-canvas: #050b10;
-  --color-af-surface: #091117;
-  --color-af-ink: #f7f2e8;
-  --color-af-accent: #f5c76f;
-  --color-af-accent-glow: #ecbf58;
-  --color-af-info: #5ccadd;
-  --color-af-info-glow: #5097be;
-  --color-af-info-bright: #7dd3fc;
-  --color-af-info-ink: #b5edf4;
-  --color-af-success: #57c18b;
-  --color-af-success-ink: #a7f0c4;
-  --color-af-danger: #f05f5f;
-  --color-af-danger-bright: #ff8a8a;
-  --color-af-danger-ink: #ffb2b2;
+  --color-af-foundation-background: #0a1117;
+  --color-af-foundation-background-start: #101c23;
+  --color-af-foundation-background-mid: #132c37;
+  --color-af-foundation-canvas: #050b10;
+  --color-af-foundation-surface: #091117;
+  --color-af-foundation-ink: #f7f2e8;
+  --color-af-foundation-code-ink: #d5fbff;
+  --color-af-foundation-overlay: #ffffff;
+  --color-af-foundation-accent: #f5c76f;
+  --color-af-foundation-accent-strong: #ecbf58;
+  --color-af-foundation-info: #5ccadd;
+  --color-af-foundation-info-strong: #5097be;
+  --color-af-foundation-info-bright: #7dd3fc;
+  --color-af-foundation-info-ink: #b5edf4;
+  --color-af-foundation-success: #57c18b;
+  --color-af-foundation-success-ink: #a7f0c4;
+  --color-af-foundation-warning: #f0b15a;
+  --color-af-foundation-warning-ink: #ffd8a3;
+  --color-af-foundation-danger: #f05f5f;
+  --color-af-foundation-danger-bright: #ff8a8a;
+  --color-af-foundation-danger-ink: #ffb2b2;
+  --color-af-background: var(--color-af-foundation-background);
+  --color-af-surface: var(--color-af-foundation-surface);
+  --color-af-surface-subtle: rgb(from var(--color-af-foundation-overlay) r g b / 0.04);
+  --color-af-surface-raised: rgb(from var(--color-af-foundation-surface) r g b / 0.94);
+  --color-af-border: rgb(from var(--color-af-foundation-overlay) r g b / 0.1);
+  --color-af-border-strong: rgb(from var(--color-af-foundation-overlay) r g b / 0.18);
+  --color-af-overlay: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
+  --color-af-overlay-strong: rgb(from var(--color-af-foundation-background) r g b / 0.78);
+  --color-af-focus-ring: rgb(from var(--color-af-foundation-accent) r g b / 0.25);
+  --color-af-text: var(--color-af-foundation-ink);
+  --color-af-text-muted: rgb(from var(--color-af-foundation-ink) r g b / 0.78);
+  --color-af-text-subtle: rgb(from var(--color-af-foundation-ink) r g b / 0.58);
+  --color-af-text-disabled: rgb(from var(--color-af-foundation-ink) r g b / 0.42);
+  --color-af-text-inverse: var(--color-af-foundation-canvas);
+  --color-af-accent: var(--color-af-foundation-accent);
+  --color-af-accent-hover: var(--color-af-foundation-accent-strong);
+  --color-af-accent-surface: rgb(from var(--color-af-foundation-accent) r g b / 0.18);
+  --color-af-accent-border: rgb(from var(--color-af-foundation-accent) r g b / 0.28);
+  --color-af-on-accent: var(--color-af-text-inverse);
+  --color-af-success: var(--color-af-foundation-success);
+  --color-af-success-surface: rgb(from var(--color-af-foundation-success) r g b / 0.12);
+  --color-af-success-border: rgb(from var(--color-af-foundation-success) r g b / 0.28);
+  --color-af-success-text: var(--color-af-foundation-success-ink);
+  --color-af-on-success: var(--color-af-text-inverse);
+  --color-af-warning: var(--color-af-foundation-warning);
+  --color-af-warning-surface: rgb(from var(--color-af-foundation-warning) r g b / 0.14);
+  --color-af-warning-border: rgb(from var(--color-af-foundation-warning) r g b / 0.3);
+  --color-af-warning-text: var(--color-af-foundation-warning-ink);
+  --color-af-on-warning: var(--color-af-text-inverse);
+  --color-af-danger: var(--color-af-foundation-danger);
+  --color-af-danger-hover: var(--color-af-foundation-danger-bright);
+  --color-af-danger-surface: rgb(from var(--color-af-foundation-danger) r g b / 0.18);
+  --color-af-danger-border: rgb(from var(--color-af-foundation-danger) r g b / 0.3);
+  --color-af-danger-text: var(--color-af-foundation-danger-ink);
+  --color-af-on-danger: var(--color-af-text-inverse);
+  --color-af-info: var(--color-af-foundation-info);
+  --color-af-info-surface: rgb(from var(--color-af-foundation-info) r g b / 0.12);
+  --color-af-info-border: rgb(from var(--color-af-foundation-info) r g b / 0.28);
+  --color-af-info-text: var(--color-af-foundation-info-ink);
+  --color-af-on-info: var(--color-af-text-inverse);
+  --color-af-bg: var(--color-af-foundation-background);
+  --color-af-bg-start: var(--color-af-foundation-background-start);
+  --color-af-bg-mid: var(--color-af-foundation-background-mid);
+  --color-af-canvas: var(--color-af-foundation-canvas);
+  --color-af-ink: var(--color-af-text);
+  --color-af-accent-glow: var(--color-af-foundation-accent-strong);
+  --color-af-info-glow: var(--color-af-foundation-info-strong);
+  --color-af-info-bright: var(--color-af-foundation-info-bright);
+  --color-af-info-ink: var(--color-af-foundation-info-ink);
+  --color-af-success-ink: var(--color-af-foundation-success-ink);
+  --color-af-danger-bright: var(--color-af-foundation-danger-bright);
+  --color-af-danger-ink: var(--color-af-foundation-danger-ink);
+  --color-af-chart-grid-line: rgb(from var(--color-af-foundation-overlay) r g b / 0.032);
   --color-af-chart-queued: var(--color-af-accent-glow);
   --color-af-chart-in-flight: var(--color-af-info-ink);
   --color-af-chart-completed: var(--color-af-success-ink);
@@ -30,12 +87,21 @@
   --color-af-chart-failure-trend: var(--color-af-danger-bright);
   --color-af-chart-rework-trend: var(--color-af-accent);
   --color-af-chart-timing-trend: var(--color-af-info-bright);
-  --color-af-code-ink: #d5fbff;
-  --color-af-overlay: #ffffff;
-  --color-on-foreground: var(--color-af-ink);
-  --color-af-edge-muted: rgb(from var(--color-af-overlay) r g b / 0.24);
-  --color-af-edge-muted-soft: rgb(from var(--color-af-overlay) r g b / 0.12);
+  --color-af-chart-selection-fill: var(--color-af-accent-surface);
+  --color-af-chart-selection-stroke: var(--color-af-accent-border);
+  --color-af-chart-cursor: var(--color-af-border-strong);
+  --color-af-chart-active-dot-stroke: var(--color-af-background);
+  --color-af-code-ink: var(--color-af-foundation-code-ink);
+  --color-on-foreground: var(--color-af-text-inverse);
+  --color-af-edge-muted: var(--color-af-border-strong);
+  --color-af-edge-muted-soft: var(--color-af-border);
   --color-af-edge-danger-muted: rgb(from var(--color-af-danger) r g b / 0.32);
+  --color-af-graph-controls-surface: var(--color-af-surface);
+  --color-af-graph-controls-button-surface: var(--color-af-surface-raised);
+  --color-af-graph-controls-button-surface-hover: var(--color-af-overlay);
+  --color-af-graph-controls-border: var(--color-af-border);
+  --color-af-graph-controls-text: var(--color-af-text-muted);
+  --color-af-graph-controls-text-hover: var(--color-af-text);
   --color-af-shadow: #000000;
   --shadow-af-card: 0 12px 28px rgb(from var(--color-af-shadow) r g b / 0.2);
   --shadow-af-panel: 0 18px 48px rgb(from var(--color-af-shadow) r g b / 0.24);
@@ -53,7 +119,7 @@
 
 @layer base {
   :root {
-    @apply bg-af-bg text-af-ink font-sans leading-normal;
+    @apply bg-af-background text-af-text font-sans leading-normal;
     background:
       radial-gradient(circle at top left, rgb(from var(--color-af-accent-glow) r g b / 0.18), transparent 34%),
       radial-gradient(circle at bottom right, rgb(from var(--color-af-info-glow) r g b / 0.14), transparent 28%),
@@ -94,68 +160,87 @@
   }
 
   .af-dashboard-page-heading {
-    @apply font-display text-[clamp(1.85rem,4vw,3rem)] leading-none tracking-[-0.035em] text-af-ink;
+    @apply font-display text-[clamp(1.85rem,4vw,3rem)] leading-none tracking-[-0.035em] text-af-text;
   }
 
   .af-dashboard-section-heading {
-    @apply text-[1.02rem] font-semibold leading-tight text-af-ink;
+    @apply text-[1.02rem] font-semibold leading-tight text-af-text;
   }
 
   .af-dashboard-body-text {
-    @apply text-[0.9rem] leading-[1.55] text-af-ink/78;
+    @apply text-[0.9rem] leading-[1.55] text-af-text-muted;
   }
 
   .af-dashboard-supporting-text {
-    @apply text-[0.8rem] leading-[1.45] text-af-ink/66;
+    @apply text-[0.8rem] leading-[1.45] text-af-text-muted;
   }
 
   .af-dashboard-supporting-label {
-    @apply text-[0.8rem] font-bold uppercase tracking-[0.08em] text-af-ink/58;
+    @apply text-[0.8rem] font-bold uppercase tracking-[0.08em] text-af-text-subtle;
   }
 
   .af-dashboard-body-code {
-    @apply font-mono text-[0.9rem] leading-[1.55] text-af-code-ink/78;
+    @apply font-mono text-[0.9rem] leading-[1.55] text-af-code-ink;
   }
 
   .af-dashboard-supporting-code {
-    @apply font-mono text-[0.8rem] leading-[1.45] text-af-code-ink/78;
+    @apply font-mono text-[0.8rem] leading-[1.45] text-af-code-ink;
+  }
+
+  .af-chart-grid-surface {
+    background-image:
+      linear-gradient(var(--color-af-chart-grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-af-chart-grid-line) 1px, transparent 1px);
+    background-size: 48px 32px;
   }
 
   .af-dashboard-widget-subtitle {
-    @apply font-mono text-2xl text-af-ink/76;
+    @apply font-mono text-2xl text-af-text-muted;
     overflow-wrap: anywhere;
   }
 
   .af-dashboard-supporting-labels {
     dt {
-      @apply text-[0.8rem] font-bold uppercase tracking-[0.08em] text-af-ink/58;
+      @apply text-[0.8rem] font-bold uppercase tracking-[0.08em] text-af-text-subtle;
     }
   }
 
+  .af-provider-session-sans {
+    font-family:
+      "Inter",
+      "Noto Sans",
+      "Noto Sans SC",
+      "Noto Sans TC",
+      "Noto Sans JP",
+      "Noto Sans KR",
+      "Segoe UI",
+      sans-serif;
+  }
+
   [data-current-activity-flow] .react-flow {
-    @apply rounded-lg border border-af-overlay/6 bg-af-canvas/32;
+    @apply rounded-lg border border-af-border bg-af-surface-subtle;
     --xy-controls-box-shadow: none;
-    --xy-controls-button-background-color: rgb(from var(--color-af-surface) r g b / 0.94);
-    --xy-controls-button-background-color-hover: rgb(from var(--color-af-overlay) r g b / 0.1);
-    --xy-controls-button-border-color: rgb(from var(--color-af-overlay) r g b / 0.08);
-    --xy-controls-button-color: rgb(from var(--color-af-ink) r g b / 0.72);
-    --xy-controls-button-color-hover: var(--color-af-ink);
+    --xy-controls-button-background-color: var(--color-af-surface-raised);
+    --xy-controls-button-background-color-hover: var(--color-af-overlay);
+    --xy-controls-button-border-color: var(--color-af-border);
+    --xy-controls-button-color: var(--color-af-text-muted);
+    --xy-controls-button-color-hover: var(--color-af-text);
   }
 
   [data-current-activity-flow] .react-flow__controls {
-    @apply overflow-hidden rounded-lg border border-af-overlay/8 bg-af-surface/88 shadow-none;
+    @apply overflow-hidden rounded-lg border border-af-border bg-af-surface-raised shadow-none;
   }
 
   [data-current-activity-flow] .react-flow__controls-button {
-    @apply border-b border-af-overlay/8 bg-af-surface/94 text-af-ink/72 transition-colors;
+    @apply border-b border-af-border bg-af-surface-raised text-af-text-muted transition-colors;
   }
 
   [data-current-activity-flow] .react-flow__controls-button:hover {
-    @apply bg-af-overlay/10 text-af-ink;
+    @apply bg-af-overlay text-af-text;
   }
 
   [data-current-activity-flow] .react-flow__controls-button:disabled {
-    @apply text-af-ink/28;
+    @apply text-af-text-disabled;
   }
 
   [data-current-activity-flow] .react-flow__controls-button svg {
@@ -163,11 +248,11 @@
   }
 
   [data-current-activity-flow] .react-flow__edge-textbg {
-    @apply stroke-af-overlay/10;
+    @apply stroke-af-border;
   }
 
   [data-current-activity-flow] .react-flow__edge-text {
-    @apply fill-af-ink/52 text-xs;
+    @apply fill-af-text-subtle text-xs;
   }
 
   [data-current-activity-flow] .react-flow__edge.agent-flow-edge--active .react-flow__edge-path {
@@ -176,15 +261,15 @@
   }
 
   [data-current-activity-flow] .react-flow__edge.agent-flow-edge--active .react-flow__edge-text {
-    @apply fill-af-success-ink font-bold;
+    @apply fill-af-success-text font-bold;
   }
 
   [data-current-activity-flow] .react-flow__edge.agent-flow-edge--semantic .react-flow__edge-text {
-    @apply fill-af-danger-ink font-bold;
+    @apply fill-af-danger-text font-bold;
   }
 
   [data-current-activity-flow] .react-flow__edge.agent-flow-edge--muted .react-flow__edge-text {
-    @apply opacity-50;
+    @apply fill-af-text-disabled;
   }
 
   [data-current-activity-flow] .agent-factory-editor-edge:focus-visible .react-flow__edge-path,
@@ -225,31 +310,31 @@
   }
 
   [data-bento-card-id] > .react-resizable-handle::after {
-    @apply border-af-ink/55;
+    @apply border-af-text-subtle;
   }
 
   [data-bento-card-id] > .react-resizable-handle-e {
-    @apply right-0 top-1/2 h-10 w-3 -translate-y-1/2 bg-af-overlay/8;
+    @apply right-0 top-1/2 h-10 w-3 -translate-y-1/2 bg-af-overlay;
   }
 
   [data-bento-card-id] > .react-resizable-handle-s {
-    @apply bottom-0 left-1/2 h-3 w-10 -translate-x-1/2 bg-af-overlay/8;
+    @apply bottom-0 left-1/2 h-3 w-10 -translate-x-1/2 bg-af-overlay;
   }
 
   [data-bento-card-id] > .react-resizable-handle-se {
-    @apply bottom-0 right-0 h-5 w-5 bg-af-overlay/10;
+    @apply bottom-0 right-0 h-5 w-5 bg-af-overlay;
   }
 
   [data-chart-container] .recharts-cartesian-axis-tick-text {
-    @apply fill-af-ink/58;
+    @apply fill-af-text-subtle;
   }
 
   [data-chart-container] .recharts-cartesian-grid line {
-    stroke: rgb(from var(--color-af-overlay) r g b / 0.12);
+    stroke: var(--color-af-border);
   }
 
   [data-chart-container] .recharts-legend-item-text {
-    color: rgb(from var(--color-af-ink) r g b / 0.66);
+    color: var(--color-af-text-muted);
   }
 }
 

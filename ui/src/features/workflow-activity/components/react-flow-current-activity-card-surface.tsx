@@ -15,6 +15,7 @@ export function CurrentActivityGraphSurface({
   editor,
   editorGraph,
   graph,
+  headingID,
   imports,
   locale,
   snapshot,
@@ -22,6 +23,7 @@ export function CurrentActivityGraphSurface({
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
   editorGraph: ReturnType<typeof useFactoryGraphEditorViewModel>;
   graph: ReturnType<typeof useCurrentActivityGraphViewModel>;
+  headingID: string;
   imports: CurrentActivityImportController;
   locale?: string;
   snapshot: DashboardSnapshot;
@@ -103,6 +105,7 @@ export function CurrentActivityGraphSurface({
         graphKey={activeGraph.graphKey}
         handleNodesChange={activeGraph.handleNodesChange}
         hasPendingChanges={editor.draftState.hasChanges}
+        headingID={headingID}
         imports={imports}
         initialFitViewKey={activeGraph.initialFitViewKey}
         initialFitViewOptions={activeGraph.initialFitViewOptions}
@@ -129,7 +132,7 @@ export function CurrentActivityGraphSurface({
 function EmptyCurrentActivityState({ locale }: { locale?: string }) {
   const messages = getFactoryGraphEditorMessages(locale);
   return (
-    <div className="grid min-h-60 items-start gap-1 rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
+    <div className="grid min-h-60 items-start gap-1 rounded-2xl border border-dashed border-af-border-strong bg-af-surface-subtle p-5 [&_h3]:m-0">
       <h3>{messages.noticeEmptyTitle}</h3>
       <p>{messages.noticeEmptyMessage}</p>
     </div>

@@ -24,7 +24,7 @@ func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, 
 		}
 
 		selection := interfaces.ResolveRunnerSelection(workstation.Runner, factoryRunnerID, workerModelProvider)
-		if !runnerSelectionRequiresValidation(selection, workstation.Runner, factoryRunnerID, workerModelProvider) {
+		if !runnerSelectionRequiresValidation(selection) {
 			continue
 		}
 		if err := validateResolvedRunnerSelection(selection, preflight); err != nil {
@@ -38,11 +38,8 @@ type runnerSelectionPreflight struct {
 	skipCommandAvailability bool
 }
 
-func runnerSelectionRequiresValidation(selection interfaces.ResolvedRunnerSelection, workstationRunner, factoryRunnerID, workerModelProvider string) bool {
-	if workstationRunner != "" || factoryRunnerID != "" {
-		return true
-	}
-	return interfaces.IsBuiltInRunnerID(workerModelProvider) && selection.RunnerID != ""
+func runnerSelectionRequiresValidation(selection interfaces.ResolvedRunnerSelection) bool {
+	return selection.Source != interfaces.RunnerSelectionSourceDefault
 }
 
 func validateResolvedRunnerSelection(selection interfaces.ResolvedRunnerSelection, preflight runnerSelectionPreflight) error {

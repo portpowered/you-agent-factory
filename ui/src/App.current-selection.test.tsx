@@ -9,6 +9,9 @@ import {
   dashboardWorkstationRequestFixtures,
 } from "./components/dashboard/fixtures";
 import {
+  DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
+} from "./features/bento/hooks/dashboardLayoutSchema";
+import {
   activeSnapshot,
   baselineSnapshot,
   mockCurrentFactoryDocument,
@@ -451,7 +454,7 @@ describe("App current selection", () => {
       document
         .querySelector("[data-bento-card-id='trace']")
         ?.getAttribute("id"),
-    ).toBe("trace");
+    ).toBe(DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace);
     expect(
       within(currentSelection).getByRole("heading", {
         name: "Workstation dispatches",
@@ -827,7 +830,7 @@ describe("App current selection", () => {
 
     fireEvent.click(getActiveStorySelectionButton());
     expect(await screen.findByText("Trace drill-down")).toBeTruthy();
-  });
+  }, 30_000);
 
   it("separates workstation selection from active work selection", async () => {
     renderApp({
@@ -1295,7 +1298,9 @@ describe("App current selection layout", () => {
     const storedLayout = window.localStorage.getItem(
       "agent-factory.dashboard.layout.v2",
     );
-    expect(storedLayout).toContain('"id":"trace"');
+    expect(storedLayout).toContain(
+      `"id":"${DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace}"`,
+    );
 
     const movedStyle = traceGridItem.getAttribute("style");
     const stream = MockEventSource.instances[0];

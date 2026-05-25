@@ -73,11 +73,11 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
   const workTypeID = "ui-foundation-showcase-work-type";
 
   return (
-    <div className="grid gap-6 rounded-2xl border border-af-overlay/10 bg-af-surface/52 p-6 text-af-ink">
+    <div className="grid gap-6 rounded-2xl border border-af-border bg-af-surface-subtle p-6 text-af-text">
       <section className="grid gap-3">
         <div>
           <h2 className="m-0 font-display text-3xl tracking-[-0.03em]">Shared UI primitives</h2>
-          <p className="m-0 pt-2 text-sm text-af-ink/66">
+          <p className="m-0 pt-2 text-sm text-af-text-muted">
             Shared button, field, dialog, chart, table, skeleton, collapsible, calendar, and resizable building blocks.
           </p>
         </div>
@@ -92,14 +92,14 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
 
       <section className="grid gap-3 md:grid-cols-2">
         <div className="grid gap-2">
-          <label className="text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58" htmlFor={requestNameID}>
+          <label className="text-xs font-bold uppercase tracking-[0.08em] text-af-text-subtle" htmlFor={requestNameID}>
             Request name
           </label>
           <Input id={requestNameID} placeholder="Name this request" />
         </div>
 
         <div className="grid gap-2">
-          <label className="text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58" htmlFor={workTypeID}>
+          <label className="text-xs font-bold uppercase tracking-[0.08em] text-af-text-subtle" htmlFor={workTypeID}>
             Work type
           </label>
           <Select defaultValue="story" id={workTypeID}>
@@ -109,7 +109,7 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
         </div>
 
         <div className="grid gap-2 md:col-span-2">
-          <label className="text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58" htmlFor={requestTextID}>
+          <label className="text-xs font-bold uppercase tracking-[0.08em] text-af-text-subtle" htmlFor={requestTextID}>
             Request text
           </label>
           <Textarea id={requestTextID} placeholder="Describe the work to run" />
@@ -120,16 +120,21 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
         <div className="grid gap-3">
           <ChartContainer config={chartConfig} title="Primitive chart showcase">
             <AreaChart data={chartData} margin={{ left: 8, right: 8, top: 12 }}>
-              <CartesianGrid stroke="rgb(from var(--color-af-overlay) r g b / 0.12)" vertical={false} />
-              <XAxis axisLine={false} dataKey="day" tickLine={false} tick={{ fill: "rgb(from var(--color-af-ink) r g b / 0.58)", fontSize: 12 }} />
+              <CartesianGrid stroke="var(--color-af-border)" vertical={false} />
+              <XAxis
+                axisLine={false}
+                dataKey="day"
+                tick={{ fill: "var(--color-af-text-subtle)", fontSize: 12 }}
+                tickLine={false}
+              />
               <ChartTooltip
                 content={(props) => <ChartTooltipContent {...props} />}
-                cursor={{ stroke: "rgb(from var(--color-af-overlay) r g b / 0.16)" }}
+                cursor={{ stroke: "var(--color-af-border-strong)" }}
               />
               <ChartLegend content={<ChartLegendContent />} />
               <Area
                 dataKey="completed"
-                fill="rgb(from var(--color-af-chart-completed) r g b / 0.2)"
+                fill="var(--color-af-success-surface)"
                 fillOpacity={1}
                 stroke="var(--color-af-chart-completed)"
                 strokeWidth={2}
@@ -137,7 +142,7 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
               />
               <Area
                 dataKey="failed"
-                fill="rgb(from var(--color-af-chart-failed) r g b / 0.18)"
+                fill="var(--color-af-danger-surface)"
                 fillOpacity={1}
                 stroke="var(--color-af-chart-failed)"
                 strokeWidth={2}
@@ -179,14 +184,14 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
             ]}
             data={showcaseDispatchRows}
             getRowKey={(row) => row.dispatch}
-            rowClassName={(row) => (row.status === "FAILED" ? "data-[state=selected]:bg-af-accent/10" : undefined)}
+            rowClassName={(row) => (row.status === "FAILED" ? "data-[state=selected]:bg-af-danger-surface" : undefined)}
           />
         </div>
 
         <div className="grid gap-3">
-          <div className="grid gap-3 rounded-2xl border border-af-overlay/10 bg-af-surface/60 p-4">
+          <div className="grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4">
             <div className="grid gap-2">
-              <p className="m-0 text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58">
+              <p className="m-0 text-xs font-bold uppercase tracking-[0.08em] text-af-text-subtle">
                 Loading
               </p>
               <Skeleton className="h-5 w-40" />
@@ -203,7 +208,7 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
                 </CollapsibleTrigger>
               </div>
               <CollapsibleContent className="pt-3">
-                <p className="m-0 text-sm leading-6 text-af-ink/72">
+                <p className="m-0 text-sm leading-6 text-af-text-muted">
                   Shared disclosure state is ready for section toggles and drill-down controls.
                 </p>
               </CollapsibleContent>
@@ -247,19 +252,19 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
 
       {includeResizable ? (
         <section className="grid gap-3">
-          <p className="m-0 text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58">
+          <p className="m-0 text-xs font-bold uppercase tracking-[0.08em] text-af-text-subtle">
             Resizable panels
           </p>
-          <div className="h-44 overflow-hidden rounded-2xl border border-af-overlay/10 bg-af-surface/56">
+          <div className="h-44 overflow-hidden rounded-2xl border border-af-border bg-af-surface-subtle">
             <ResizablePanelGroup orientation="horizontal">
               <ResizablePanel defaultSize={45} minSize={30}>
-                <div className="flex h-full items-center justify-center bg-af-canvas/52 px-4 text-sm text-af-ink/72">
+                <div className="flex h-full items-center justify-center bg-af-surface-raised px-4 text-sm text-af-text-muted">
                   Sidebar panel
                 </div>
               </ResizablePanel>
               <ResizableHandle withHandle />
               <ResizablePanel defaultSize={55} minSize={30}>
-                <div className="flex h-full items-center justify-center px-4 text-sm text-af-ink/72">
+                <div className="flex h-full items-center justify-center px-4 text-sm text-af-text-muted">
                   Detail panel
                 </div>
               </ResizablePanel>

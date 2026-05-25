@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { formatNumber } from "../../../i18n";
 import { cn } from "../../../lib/cn";
 import { AgentBentoCard } from "../../../components/ui";
@@ -7,6 +9,7 @@ interface WorkTotalsCardProps {
   completedCount: number;
   dispatchedCount: number;
   failedCount: number;
+  headerAction?: ReactNode;
   inFlightDispatchCount: number;
   locale?: string;
 }
@@ -20,19 +23,24 @@ interface StatCardProps {
 }
 
 const STAT_CARD_CLASS =
-  "min-h-0 rounded-lg border bg-af-surface/72 p-2 px-3 backdrop-blur-lg";
+  "min-h-0 rounded-lg border bg-af-surface-raised p-2 px-3";
 
 export function WorkTotalsCard({
   completedCount,
   dispatchedCount,
   failedCount,
+  headerAction,
   inFlightDispatchCount,
   locale,
 }: WorkTotalsCardProps) {
   const messages = getWorkTotalsMessages(locale);
 
   return (
-    <AgentBentoCard chromeDensity="compact" title={messages.cardTitle}>
+    <AgentBentoCard
+      chromeDensity="compact"
+      headerAction={headerAction}
+      title={messages.cardTitle}
+    >
       <section
         className="grid grid-cols-2 gap-2 md:grid-cols-4"
         aria-label={messages.regionLabel}
@@ -88,13 +96,13 @@ function StatCard({ label, locale, value, valueLabel, tone }: StatCardProps) {
       aria-label={valueLabel}
       className={cn(
         STAT_CARD_CLASS,
-        tone === "neutral" && "border-af-overlay/10",
-        tone === "live" && "border-af-info/30",
-        tone === "success" && "border-af-success/30",
-        tone === "danger" && "border-af-danger/30",
+        tone === "neutral" && "border-af-border",
+        tone === "live" && "border-af-info-border bg-af-info-surface",
+        tone === "success" && "border-af-success-border bg-af-success-surface",
+        tone === "danger" && "border-af-danger-border bg-af-danger-surface",
       )}
     >
-      <span className="mb-1 block text-[0.68rem] uppercase text-af-ink/64">
+      <span className="mb-1 block text-[0.68rem] uppercase text-af-text-subtle">
         {label}
       </span>
       <strong className="font-display text-[1.35rem] leading-none">

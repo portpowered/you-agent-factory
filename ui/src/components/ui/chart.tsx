@@ -27,11 +27,8 @@ export type ChartConfig = Record<string, ChartConfigEntry>;
 const ChartContext = createContext<ChartConfig | null>(null);
 // tailwind-exception: intrinsic-sizing
 const CHART_CONTAINER_CLASS =
-  "relative h-[18rem] rounded-2xl border border-af-overlay/10 bg-af-surface/56 p-4 text-af-ink";
-const DEFAULT_RESPONSIVE_CHART_DIMENSION = {
-  height: 288,
-  width: 960,
-} as const;
+  "relative h-[18rem] rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-af-text";
+const TEST_CHART_INITIAL_DIMENSION = { height: 288, width: 640 } as const;
 
 function useChartConfig() {
   const context = useContext(ChartContext);
@@ -62,6 +59,11 @@ export function ChartContainer({
   style?: CSSProperties;
   title: string;
 }) {
+  const initialDimension =
+    typeof navigator !== "undefined" && navigator.userAgent.includes("jsdom")
+      ? TEST_CHART_INITIAL_DIMENSION
+      : undefined;
+
   return (
     <ChartContext.Provider value={config}>
       <div
@@ -88,7 +90,7 @@ export function ChartContainer({
         ) : null}
         <ResponsiveContainer
           height="100%"
-          initialDimension={DEFAULT_RESPONSIVE_CHART_DIMENSION}
+          initialDimension={initialDimension}
           minHeight={0}
           minWidth={0}
           width="100%"
@@ -118,11 +120,11 @@ export function ChartTooltipContent({
   return (
     <div
       className={cn(
-        "grid min-w-40 gap-2 rounded-xl border border-af-overlay/10 bg-af-surface/96 px-3 py-2 text-sm shadow-af-card",
+        "grid min-w-40 gap-2 rounded-xl border border-af-border bg-af-surface-raised px-3 py-2 text-sm shadow-af-card",
         className,
       )}
     >
-      <p className="m-0 font-semibold text-af-ink">{String(label)}</p>
+      <p className="m-0 font-semibold text-af-text">{String(label)}</p>
       <div className="grid gap-1">
         {payload.map((entry) => {
           const key = entry.dataKey?.toString() ?? "";
@@ -130,7 +132,7 @@ export function ChartTooltipContent({
 
           return (
             <div
-              className="flex items-center justify-between gap-3 text-af-ink/78"
+              className="flex items-center justify-between gap-3 text-af-text-muted"
               key={key}
             >
               <div className="flex items-center gap-2">
@@ -143,7 +145,7 @@ export function ChartTooltipContent({
                 />
                 <span>{item?.label ?? key}</span>
               </div>
-              <span className="font-medium text-af-ink">{entry.value}</span>
+              <span className="font-medium text-af-text">{entry.value}</span>
             </div>
           );
         })}
@@ -165,7 +167,7 @@ export function ChartLegendContent({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-4 pt-3 text-xs text-af-ink/66",
+        "flex flex-wrap items-center gap-4 pt-3 text-xs text-af-text-muted",
         className,
       )}
     >

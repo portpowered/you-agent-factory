@@ -61,6 +61,15 @@ describe("DashboardImportPreviewDialog", () => {
         .getByRole("img", { name: messages.previewImageAlt("Dropped Factory") })
         .getAttribute("src"),
     ).toBe("blob:factory-preview");
+    expect(
+      within(
+        within(previewDialog)
+          .getByText(messages.embeddedFactoryLabel)
+          .closest("div") as HTMLElement,
+      )
+        .getByText("Dropped Factory")
+        .className,
+    ).toContain("text-af-text");
 
     fireEvent.click(within(previewDialog).getByRole("button", { name: messages.cancelAction }));
 
@@ -100,7 +109,10 @@ describe("DashboardImportPreviewDialog", () => {
     const messages = getImportPreviewDialogMessages("en");
     const previewDialog = await screen.findByRole("dialog", { name: messages.title });
 
-    expect(within(previewDialog).getByRole("alert")).toBeTruthy();
+    const alert = within(previewDialog).getByRole("alert");
+    expect(alert).toBeTruthy();
+    expect(alert.className).toContain("border-af-danger-border");
+    expect(alert.className).toContain("bg-af-danger-surface");
 
     const results = await axe(baseElement);
 

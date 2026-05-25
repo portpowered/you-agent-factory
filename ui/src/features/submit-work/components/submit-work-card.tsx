@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import {
   Button,
   DashboardWidgetFrame,
@@ -31,6 +33,7 @@ export interface SubmitWorkStatus {
 
 export interface SubmitWorkCardProps {
   draft: SubmitWorkDraft;
+  headerAction?: ReactNode;
   isSubmitting?: boolean;
   locale?: string;
   onRequestNameChange: (value: string) => void;
@@ -48,23 +51,24 @@ const FIELD_GROUP_CLASS = "grid gap-2";
 const FIELD_LABEL_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
 const ACTION_ROW_CLASS = "mt-auto flex items-start gap-3";
 const HELP_TEXT_CLASS = cn(
-  "max-w-xl leading-relaxed text-af-ink/66",
+  "max-w-xl leading-relaxed text-af-text-muted",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 const VALIDATION_TEXT_CLASS = cn(
-  "text-af-danger-ink",
+  "text-af-danger-text",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 const STATUS_TONE_CLASS_BY_KIND: Record<SubmitWorkStatus["kind"], string> = {
-  error: "text-af-danger-ink",
-  guidance: "text-on-foreground/66",
-  submitting: "text-on-foreground",
-  success: "text-af-success-ink",
-  "validation-error": "text-af-danger-ink",
+  error: "text-af-danger-text",
+  guidance: "text-af-text-subtle",
+  submitting: "text-af-text",
+  success: "text-af-success-text",
+  "validation-error": "text-af-danger-text",
 };
 
 export function SubmitWorkCard({
   draft,
+  headerAction,
   isSubmitting = false,
   locale,
   onRequestNameChange,
@@ -96,7 +100,11 @@ export function SubmitWorkCard({
   const statusID = `${widgetId}-status`;
 
   return (
-    <DashboardWidgetFrame title={messages.cardTitle} widgetId={widgetId}>
+    <DashboardWidgetFrame
+      headerAction={headerAction}
+      title={messages.cardTitle}
+      widgetId={widgetId}
+    >
       <form
         className={FORM_CLASS}
         onSubmit={(event) => {

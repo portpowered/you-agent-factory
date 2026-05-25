@@ -316,6 +316,47 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 	}
 }
 
+func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
+	targetID := "missing"
+	field := "folderPath"
+	mf := &testutil.MockFactory{
+		OpenFactorySessionErr: apiTestSessionValidationError{
+			message: "folder validation failed",
+			targets: []factoryapi.ErrorTarget{
+				{
+					Kind:  "factory-session-validation",
+					Id:    &targetID,
+					Field: &field,
+				},
+			},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/missing","validateOnly":true}`))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /factory-sessions validation status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+
+	var response factoryapi.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode open factory session error response: %v", err)
+	}
+	if response.Code != factoryapi.BADREQUEST {
+		t.Fatalf("open factory session error code = %q, want BAD_REQUEST", response.Code)
+	}
+	if response.Targets == nil || len(*response.Targets) != 1 {
+		t.Fatalf("open factory session error targets = %#v, want one target", response.Targets)
+	}
+	target := (*response.Targets)[0]
+	if target.Kind != "factory-session-validation" || target.Id == nil || *target.Id != "missing" || target.Field == nil || *target.Field != "folderPath" {
+		t.Fatalf("open factory session error target = %#v, want structured folder validation target", target)
+	}
+}
+
 func TestFactorySessionsAPI_CloseFactorySession(t *testing.T) {
 	mf := &testutil.MockFactory{}
 	srv := newTestServer(mf)
@@ -330,6 +371,19 @@ func TestFactorySessionsAPI_CloseFactorySession(t *testing.T) {
 	if len(mf.ClosedFactorySessions) != 1 || mf.ClosedFactorySessions[0] != "session-beta" {
 		t.Fatalf("closed factory sessions = %#v, want [session-beta]", mf.ClosedFactorySessions)
 	}
+}
+
+type apiTestSessionValidationError struct {
+	message string
+	targets []factoryapi.ErrorTarget
+}
+
+func (e apiTestSessionValidationError) Error() string {
+	return e.message
+}
+
+func (e apiTestSessionValidationError) ErrorTargets() []factoryapi.ErrorTarget {
+	return e.targets
 }
 
 func TestFactorySessionsAPI_CloseFactorySession_NotFound(t *testing.T) {

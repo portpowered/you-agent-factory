@@ -615,10 +615,10 @@ describe("WorkItemDetailCard summary", () => {
     expect(within(activeCard).getByText("Current dispatch")).toBeTruthy();
     expect(
       within(activeCard).getByText("Current dispatch").className,
-    ).toContain("text-on-foreground");
-    expect(activeCard.className).toContain("border-on-foreground");
+    ).toContain("text-af-text");
+    expect(activeCard.className).toContain("border-af-accent-border");
     expect(within(historicalCard).queryByText("Current dispatch")).toBeNull();
-    expect(historicalCard.className).not.toContain("border-on-foreground");
+    expect(historicalCard.className).not.toContain("border-af-accent-border");
   });
 
   it("renders unavailable execution details with clear operator copy", () => {
@@ -826,7 +826,7 @@ describe("WorkItemDetailCard summary", () => {
     expect(within(relationshipGraph).getByText("Selected work")).toBeTruthy();
     expect(
       within(relationshipGraph).getByText("Active Story").className,
-    ).toContain("text-on-foreground");
+    ).toContain("text-af-text");
     expect(
       within(relationshipGraph).getByRole("region", {
         name: "Parent relationships",
@@ -1898,13 +1898,13 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     });
     expect(selectedWorkButton).toBeTruthy();
     expect(selectedWorkButton.textContent).toContain("Active Story");
-    expect(selectedWorkButton.className).toContain("text-on-foreground");
+    expect(selectedWorkButton.className).toContain("text-af-text");
     expect(within(dispatchCard).getByText("Trace IDs")).toBeTruthy();
     const selectedTraceLink = within(dispatchCard).getByRole("link", {
       name: "trace-active-story (selected)",
     });
     expect(selectedTraceLink).toBeTruthy();
-    expect(selectedTraceLink.className).toContain("text-on-foreground");
+    expect(selectedTraceLink.className).toContain("text-af-text");
   });
 
   it("renders selected-work script success details from the dispatch-history row", () => {

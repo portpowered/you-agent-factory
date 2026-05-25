@@ -431,12 +431,22 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.FolderPath) == "" {
-		s.writeError(w, http.StatusBadRequest, "folderPath is required", "BAD_REQUEST")
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "folderPath is required", "BAD_REQUEST", []factoryapi.ErrorTarget{
+			errorTarget("factory-session-validation", "required", "folderPath"),
+		})
 		return
 	}
 	response, err := sessionRuntime.OpenFactorySession(r.Context(), req)
 	if err != nil {
 		s.logger.Debug("open factory session rejected", zap.Error(err))
+		var targetedErr interface {
+			error
+			ErrorTargets() []factoryapi.ErrorTarget
+		}
+		if errors.As(err, &targetedErr) {
+			s.writeErrorWithTargets(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST", targetedErr.ErrorTargets())
+			return
+		}
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		return
 	}

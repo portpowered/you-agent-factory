@@ -83,7 +83,7 @@ describe("CompletedFailedWorkstationCard", () => {
           name: messages.iconLabel("completed"),
         })
         .getAttribute("class"),
-    ).toContain("text-on-foreground");
+    ).toContain("text-af-on-info");
     expect(
       within(failedTitle as HTMLElement)
         .getByRole("img", { name: messages.iconLabel("failed") })
@@ -95,17 +95,17 @@ describe("CompletedFailedWorkstationCard", () => {
           name: messages.iconLabel("failed"),
         })
         .getAttribute("class"),
-    ).toContain("text-on-foreground");
+    ).toContain("text-af-on-danger");
     const doneStoryButton = screen.getByRole("button", { name: /Done Story/ });
     expect(doneStoryButton.getAttribute("aria-label")).toBe("Done Story");
     expect(doneStoryButton.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
-    expect(doneStoryButton.className).toContain("text-on-foreground");
+    expect(doneStoryButton.className).toContain("text-af-on-info");
     expect(doneStoryButton).toBeTruthy();
     const failedStoryButton = screen.getByRole("button", {
       name: /Failed Story/,
     });
     expect(failedStoryButton.getAttribute("aria-label")).toBe("Failed Story");
-    expect(failedStoryButton.className).toContain("text-on-foreground");
+    expect(failedStoryButton.className).toContain("text-af-on-danger");
     expect(failedStoryButton).toBeTruthy();
     const failedMeta = screen.getByText("Failed at setup-workspace");
     expect(failedMeta.className).toContain(DASHBOARD_SUPPORTING_TEXT_CLASS);
@@ -221,6 +221,73 @@ describe("CompletedFailedWorkstationCard", () => {
     ).toBeTruthy();
   });
 
+  it("keeps disclosure ids and labels distinct across duplicate terminal-work cards", () => {
+    const messages = getTerminalWorkMessages("en");
+
+    render(
+      <>
+        <CompletedFailedWorkstationCard
+          completedItems={[
+            { label: "Done Story", traceWorkID: "work-done-story" },
+          ]}
+          failedItems={[
+            { label: "Failed Story", traceWorkID: "work-failed-story" },
+          ]}
+          onSelectItem={vi.fn()}
+          widgetId="terminal-work::one"
+        />
+        <CompletedFailedWorkstationCard
+          completedItems={[
+            { label: "Done Story 2", traceWorkID: "work-done-story-2" },
+          ]}
+          failedItems={[
+            { label: "Failed Story 2", traceWorkID: "work-failed-story-2" },
+          ]}
+          onSelectItem={vi.fn()}
+          widgetId="terminal-work::two"
+        />
+      </>,
+    );
+
+    const completedToggles = screen.getAllByRole("button", {
+      name: messages.disclosureLabel(true),
+    });
+    expect(completedToggles).toHaveLength(4);
+
+    expect(completedToggles[0]?.getAttribute("aria-controls")).toBe(
+      "terminal-work::one-completed-items",
+    );
+    expect(completedToggles[2]?.getAttribute("aria-controls")).toBe(
+      "terminal-work::two-completed-items",
+    );
+
+    const firstCompletedRegion = document.getElementById(
+      "terminal-work::one-completed-items",
+    );
+    const secondCompletedRegion = document.getElementById(
+      "terminal-work::two-completed-items",
+    );
+    expect(firstCompletedRegion).toBeTruthy();
+    expect(secondCompletedRegion).toBeTruthy();
+    expect(firstCompletedRegion?.id).not.toBe(secondCompletedRegion?.id);
+
+    const firstCompletedHeading = screen.getAllByRole("heading", {
+      level: 4,
+      name: messages.rowTitle("completed"),
+    })[0];
+    const secondCompletedHeading = screen.getAllByRole("heading", {
+      level: 4,
+      name: messages.rowTitle("completed"),
+    })[1];
+    expect(firstCompletedHeading?.id).toBe(
+      "terminal-work::one-completed-items-heading",
+    );
+    expect(secondCompletedHeading?.id).toBe(
+      "terminal-work::two-completed-items-heading",
+    );
+    expect(firstCompletedHeading?.id).not.toBe(secondCompletedHeading?.id);
+  });
+
   it("marks the selected outcome item through the shared button state", () => {
     render(
       <CompletedFailedWorkstationCard
@@ -242,10 +309,10 @@ describe("CompletedFailedWorkstationCard", () => {
     ).toBe("true");
     expect(
       screen.getByRole("button", { name: /Failed Story/ }).className,
-    ).toContain("text-on-foreground");
+    ).toContain("text-af-text");
     expect(
       screen.getByRole("button", { name: /Failed Story/ }).className,
-    ).toContain("border-on-foreground");
+    ).toContain("border-af-accent-border");
     expect(
       screen
         .getByRole("button", { name: /Done Story/ })

@@ -367,7 +367,7 @@ func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factor
 			Name: targetName,
 		}
 	}
-	result, err := fs.OpenFactorySessionFromFolder(ctx, request.FolderPath, target)
+	result, err := fs.OpenFactorySessionFromFolder(ctx, request.FolderPath, target, request.ValidateOnly != nil && *request.ValidateOnly)
 	if err != nil {
 		return factoryapi.OpenFactorySessionResponse{}, err
 	}
@@ -416,6 +416,7 @@ func (fs *FactoryService) OpenFactorySessionFromFolder(
 	ctx context.Context,
 	folderPath string,
 	target *FactorySessionTargetRef,
+	validateOnly bool,
 ) (*FactorySessionOpenResult, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("factory service is required")
@@ -431,6 +432,9 @@ func (fs *FactoryService) OpenFactorySessionFromFolder(
 		return nil, err
 	}
 	if selectedTarget == nil {
+		return &FactorySessionOpenResult{Targets: cloneFactorySessionTargets(targets)}, nil
+	}
+	if validateOnly {
 		return &FactorySessionOpenResult{Targets: cloneFactorySessionTargets(targets)}, nil
 	}
 
@@ -663,6 +667,13 @@ func (fs *FactoryService) discoverFactorySessionTargets(folderPath string) ([]Fa
 
 	childEntries, err := os.ReadDir(resolvedFolder)
 	if err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			return nil, newFactorySessionValidationError(
+				factorySessionValidationReasonUnreadable,
+				"folderPath",
+				fmt.Errorf("read factory session folder %s: %w", resolvedFolder, err),
+			)
+		}
 		return nil, fmt.Errorf("read factory session folder %s: %w", resolvedFolder, err)
 	}
 	for _, entry := range childEntries {
@@ -695,7 +706,11 @@ func (fs *FactoryService) discoverFactorySessionTargets(folderPath string) ([]Fa
 		return left.Ref.Name < right.Ref.Name
 	})
 	if len(targets) == 0 {
-		return nil, fmt.Errorf("folder %q does not expose any runnable factory targets", resolvedFolder)
+		return nil, newFactorySessionValidationError(
+			factorySessionValidationReasonNotRunnable,
+			"folderPath",
+			fmt.Errorf("folder %q does not expose any runnable factory targets", resolvedFolder),
+		)
 	}
 	return targets, nil
 }
@@ -737,20 +752,64 @@ func (fs *FactoryService) loadFactorySessionTarget(
 func resolveFactorySessionFolder(folderPath string) (string, error) {
 	trimmed := strings.TrimSpace(folderPath)
 	if trimmed == "" {
-		return "", fmt.Errorf("factory session folder is required")
+		return "", newFactorySessionValidationError(
+			factorySessionValidationReasonRequired,
+			"folderPath",
+			fmt.Errorf("factory session folder is required"),
+		)
 	}
-	resolved, err := filepath.Abs(trimmed)
+	expanded, err := expandFactorySessionFolderHome(trimmed)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.Abs(expanded)
 	if err != nil {
 		return "", fmt.Errorf("resolve factory session folder %q: %w", folderPath, err)
 	}
 	info, err := os.Stat(resolved)
 	if err != nil {
-		return "", fmt.Errorf("stat factory session folder %q: %w", resolved, err)
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			return "", newFactorySessionValidationError(
+				factorySessionValidationReasonMissing,
+				"folderPath",
+				fmt.Errorf("stat factory session folder %q: %w", resolved, err),
+			)
+		case errors.Is(err, os.ErrPermission):
+			return "", newFactorySessionValidationError(
+				factorySessionValidationReasonUnreadable,
+				"folderPath",
+				fmt.Errorf("stat factory session folder %q: %w", resolved, err),
+			)
+		default:
+			return "", fmt.Errorf("stat factory session folder %q: %w", resolved, err)
+		}
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("factory session folder %q must be a directory", resolved)
+		return "", newFactorySessionValidationError(
+			factorySessionValidationReasonNotDirectory,
+			"folderPath",
+			fmt.Errorf("factory session folder %q must be a directory", resolved),
+		)
 	}
 	return resolved, nil
+}
+
+func expandFactorySessionFolderHome(path string) (string, error) {
+	if path != "~" &&
+		!strings.HasPrefix(path, "~/") &&
+		!strings.HasPrefix(path, `~\`) {
+		return path, nil
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user home for factory session folder %q: %w", path, err)
+	}
+	if path == "~" {
+		return homeDir, nil
+	}
+	return filepath.Join(homeDir, path[2:]), nil
 }
 
 func selectFactorySessionTarget(
@@ -789,7 +848,11 @@ func selectFactorySessionTarget(
 			return &target, nil
 		}
 	}
-	return nil, fmt.Errorf("factory session target %q was not found", factorySessionTargetDisplayName(normalized))
+	return nil, newFactorySessionValidationError(
+		factorySessionValidationReasonTargetNotFound,
+		"target.name",
+		fmt.Errorf("factory session target %q was not found", factorySessionTargetDisplayName(normalized)),
+	)
 }
 
 func factorySessionTargetDisplayName(ref FactorySessionTargetRef) string {

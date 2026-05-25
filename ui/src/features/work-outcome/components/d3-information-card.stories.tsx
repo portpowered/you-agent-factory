@@ -143,7 +143,14 @@ const WORK_OUTCOME_CHART_SERIES = getDashboardWorkChartSeriesDefinitions([
   { key: "failed", label: "Failed/retried" },
 ]);
 const RESIZABLE_WORK_OUTCOME_LAYOUT: AgentBentoLayoutItem[] = [
-  { id: "work-outcome-chart", x: 0, y: 0, w: 6, h: 3 },
+  {
+    h: 3,
+    id: "work-outcome-chart",
+    widgetType: "work-outcome-chart",
+    w: 6,
+    x: 0,
+    y: 0,
+  },
 ];
 
 async function expectWorkOutcomeChartContract(card: HTMLElement): Promise<void> {
@@ -243,6 +250,7 @@ function renderResizableWorkOutcomeStoryShell({
         cards={[
           {
             id: "work-outcome-chart",
+            widgetType: "work-outcome-chart",
             children: chartState ? (
               <D3CompletionInformationCard
                 chartState={chartState}

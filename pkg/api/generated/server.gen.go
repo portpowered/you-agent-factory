@@ -1537,6 +1537,9 @@ type ModelSummary struct {
 type OpenFactorySessionRequest struct {
 	FolderPath string                   `json:"folderPath"`
 	Target     *FactorySessionTargetRef `json:"target,omitempty"`
+
+	// ValidateOnly When true, validate the folder and optional target selection without creating a live session.
+	ValidateOnly *bool `json:"validateOnly,omitempty"`
 }
 
 // OpenFactorySessionResponse defines model for OpenFactorySessionResponse.

@@ -138,6 +138,65 @@ describe("factory sessions API", () => {
     );
   });
 
+  it("posts validateOnly when checking a folder before launch", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          targets: [
+            {
+              factoryDir: "/workspace/project",
+              folderPath: "/workspace/project",
+              label: "default",
+              project: "project",
+              ref: {
+                kind: "default",
+              },
+            },
+          ],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      openFactorySession({
+        folderPath: "/workspace/project",
+        validateOnly: true,
+      }),
+    ).resolves.toEqual({
+      targets: [
+        {
+          factoryDir: "/workspace/project",
+          folderPath: "/workspace/project",
+          label: "default",
+          project: "project",
+          ref: {
+            kind: "default",
+          },
+        },
+      ],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions",
+      expect.objectContaining({
+        body: JSON.stringify({
+          folderPath: "/workspace/project",
+          validateOnly: true,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      }),
+    );
+  });
+
   it("maps validation failures into typed API errors", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -181,6 +240,63 @@ describe("factory sessions API", () => {
           "Content-Type": "application/json",
         },
         method: "POST",
+      }),
+    );
+  });
+
+  it("preserves structured validation targets on typed API errors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "BAD_REQUEST",
+          message: "folder validation failed",
+          targets: [
+            {
+              kind: "factory-session-validation",
+              id: "missing",
+              field: "folderPath",
+            },
+          ],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 400,
+          statusText: "Bad Request",
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      openFactorySession({
+        folderPath: "/workspace/missing",
+        validateOnly: true,
+      }),
+    ).rejects.toEqual(
+      new FactorySessionsAPIError("folder validation failed", {
+        code: "BAD_REQUEST",
+        responseBody: {
+          code: "BAD_REQUEST",
+          message: "folder validation failed",
+          targets: [
+            {
+              kind: "factory-session-validation",
+              id: "missing",
+              field: "folderPath",
+            },
+          ],
+        },
+        status: 400,
+        statusText: "Bad Request",
+        targets: [
+          {
+            kind: "factory-session-validation",
+            id: "missing",
+            field: "folderPath",
+          },
+        ],
       }),
     );
   });

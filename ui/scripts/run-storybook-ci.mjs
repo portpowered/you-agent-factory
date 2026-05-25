@@ -136,7 +136,11 @@ export async function verifyStorybookIframe({
 } = {}) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const response = await fetchFn(url);
+      const response = await fetchFn(url, {
+        headers: {
+          Accept: "text/html",
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`Received ${response.status} from ${url}.`);

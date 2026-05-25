@@ -15,11 +15,13 @@ import { getAgentBentoMessages } from "../messages/agent-bento";
 
 export interface AgentBentoLayoutItem {
   h: number;
+  hidden?: boolean;
   id: string;
   maxH?: number;
   maxW?: number;
   minH?: number;
   minW?: number;
+  widgetType: string;
   w: number;
   x: number;
   y: number;
@@ -28,6 +30,7 @@ export interface AgentBentoLayoutItem {
 export interface AgentBentoLayoutCard {
   children: ReactNode;
   id: string;
+  widgetType: string;
 }
 
 export interface AgentBentoLayoutProps {
@@ -62,7 +65,7 @@ const BENTO_GRID_CLASS = "min-h-px";
 const BENTO_ITEM_CLASS = "min-w-0";
 const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
-  "flex min-h-13 cursor-move items-center justify-between gap-3 border-af-overlay/10 px-3.5 py-3";
+  "flex min-h-13 cursor-move items-center justify-between gap-3 border-af-border px-3.5 py-3";
 const BENTO_CARD_HEADER_COMPACT_CLASS =
   "min-h-11 gap-2 px-3 py-2.5";
 const BENTO_CARD_TITLE_CLASS = cn(
@@ -73,14 +76,19 @@ const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS = "gap-1.5";
 const BENTO_DRAG_HANDLE_CLASS =
-  "inline-grid size-9 shrink-0 cursor-grab place-items-center rounded-lg border border-af-overlay/18 bg-af-overlay/8 text-af-ink/68 outline-af-ink/55 transition-colors hover:border-af-overlay/28 hover:bg-af-overlay/12 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 active:cursor-grabbing";
+  "inline-grid size-9 shrink-0 cursor-grab place-items-center rounded-lg border border-af-border bg-af-surface-raised text-af-text-muted outline-af-accent transition-colors hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 active:cursor-grabbing";
 const BENTO_DRAG_HANDLE_COMPACT_CLASS =
-  "size-8 rounded-md border-af-overlay/12 bg-transparent text-af-ink/54 hover:border-af-overlay/20 hover:bg-af-overlay/8 hover:text-af-ink/80";
+  "size-8 rounded-md border-af-border bg-transparent text-af-text-subtle hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
 const BENTO_CARD_BODY_CLASS = cn(
   "grid h-full min-h-0 flex-1 gap-2.5 overflow-auto p-3.5 [&_p]:m-0",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 const BENTO_CARD_BODY_COMPACT_CLASS = "gap-2 p-3";
+
+interface AgentBentoDragHandleProps {
+  compact?: boolean;
+  title: string;
+}
 
 function toGridLayout(layout: AgentBentoLayoutItem[]): Layout {
   return layout.map((item) => ({
@@ -97,7 +105,10 @@ function toGridLayout(layout: AgentBentoLayoutItem[]): Layout {
   }));
 }
 
-function toBentoLayout(layout: Layout): AgentBentoLayoutItem[] {
+function toBentoLayout(
+  layout: Layout,
+  existingLayoutById: ReadonlyMap<string, AgentBentoLayoutItem>,
+): AgentBentoLayoutItem[] {
   return layout.map((item: LayoutItem) => ({
     h: item.h,
     id: item.i,
@@ -105,6 +116,7 @@ function toBentoLayout(layout: Layout): AgentBentoLayoutItem[] {
     maxW: item.maxW,
     minH: item.minH,
     minW: item.minW,
+    widgetType: existingLayoutById.get(item.i)?.widgetType ?? item.i,
     w: item.w,
     x: item.x,
     y: item.y,
@@ -113,7 +125,7 @@ function toBentoLayout(layout: Layout): AgentBentoLayoutItem[] {
 
 function layoutSignature(layout: AgentBentoLayoutItem[]): string {
   return layout
-    .map((item) => `${item.id}:${item.x}:${item.y}:${item.w}:${item.h}`)
+    .map((item) => `${item.widgetType}:${item.x}:${item.y}:${item.w}:${item.h}`)
     .join("|");
 }
 
@@ -142,6 +154,10 @@ export function AgentBentoLayout({
 }: AgentBentoLayoutProps) {
   const messages = getAgentBentoMessages(locale);
   const normalizedLayout = useMemo(() => toGridLayout(layout), [layout]);
+  const layoutByID = useMemo(
+    () => new Map(layout.map((item) => [item.id, item])),
+    [layout],
+  );
   const [currentLayout, setCurrentLayout] = useState<Layout>(normalizedLayout);
   const { containerRef, width } = useContainerWidth({ initialWidth });
   const renderedLayout = hasSameLayoutItems(currentLayout, normalizedLayout)
@@ -160,7 +176,7 @@ export function AgentBentoLayout({
     }
 
     setCurrentLayout(nextLayout);
-    onLayoutChange?.(toBentoLayout(nextLayout));
+    onLayoutChange?.(toBentoLayout(nextLayout, layoutByID));
   };
 
   const layoutClassName = cn(BENTO_LAYOUT_CLASS, className);
@@ -194,9 +210,12 @@ export function AgentBentoLayout({
         {cards.map((card) => (
           <div
             className={BENTO_ITEM_CLASS}
-            data-bento-card-id={card.id}
+            data-bento-card-id={card.widgetType}
+            data-bento-instance-id={card.id}
             data-layout-signature={layoutSignature(
-              toBentoLayout(currentLayout),
+              toBentoLayout(currentLayout, layoutByID).filter(
+                (item) => item.id === card.id,
+              ),
             )}
             id={card.id}
             key={card.id}
@@ -246,35 +265,44 @@ export function AgentBentoCard({
           )}
         >
           {headerAction}
-          <button
-            aria-label={`Move ${title}`}
-            className={cn(
-              BENTO_DRAG_HANDLE_CLASS,
-              compactChrome && BENTO_DRAG_HANDLE_COMPACT_CLASS,
-            )}
-            data-bento-drag-handle="true"
-            type="button"
-          >
-            <svg
-              aria-hidden="true"
-              fill="none"
-              height="18"
-              viewBox="0 0 18 18"
-              width="18"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M9 1.5v15M9 1.5 6.75 3.75M9 1.5l2.25 2.25M9 16.5l-2.25-2.25M9 16.5l2.25-2.25M1.5 9h15M1.5 9l2.25-2.25M1.5 9l2.25 2.25M16.5 9l-2.25-2.25M16.5 9l-2.25 2.25"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.7"
-              />
-            </svg>
-          </button>
+          <AgentBentoDragHandle compact={compactChrome} title={title} />
         </div>
       </header>
       <div className={cardBodyClassName}>{children}</div>
     </DashboardPanelShell>
+  );
+}
+
+export function AgentBentoDragHandle({
+  compact = false,
+  title,
+}: AgentBentoDragHandleProps) {
+  return (
+    <button
+      aria-label={`Move ${title}`}
+      className={cn(
+        BENTO_DRAG_HANDLE_CLASS,
+        compact && BENTO_DRAG_HANDLE_COMPACT_CLASS,
+      )}
+      data-bento-drag-handle="true"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        fill="none"
+        height="18"
+        viewBox="0 0 18 18"
+        width="18"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M9 1.5v15M9 1.5 6.75 3.75M9 1.5l2.25 2.25M9 16.5l-2.25-2.25M9 16.5l2.25-2.25M1.5 9h15M1.5 9l2.25-2.25M1.5 9l2.25 2.25M16.5 9l-2.25-2.25M16.5 9l-2.25 2.25"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.7"
+        />
+      </svg>
+    </button>
   );
 }

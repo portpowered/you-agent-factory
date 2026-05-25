@@ -55,11 +55,11 @@ const COLUMN_BY_KIND: Record<FactoryGraphNodeKind, number> = {
   "work-state": 4,
 };
 const KIND_CLASS: Record<FactoryGraphNodeKind, string> = {
-  resource: "border-af-overlay/22 bg-af-canvas",
-  worker: "border-af-info/24 bg-af-surface/88",
-  workstation: "border-2 border-af-info/28 bg-af-surface/88",
-  "work-type": "border-af-overlay/18 bg-af-overlay/4",
-  "work-state": "border-af-overlay/22 bg-af-canvas",
+  resource: "border-af-success-border bg-af-success-surface",
+  worker: "border-af-info-border bg-af-info-surface",
+  workstation: "border-af-accent-border bg-af-accent-surface",
+  "work-type": "border-af-border bg-af-surface-subtle",
+  "work-state": "border-af-border-strong bg-af-surface-raised",
 };
 const EDGE_COLOR_BY_KIND = {
   "worker-assignment": "var(--color-af-info)",
@@ -67,8 +67,8 @@ const EDGE_COLOR_BY_KIND = {
   "work-type-state": "var(--color-af-overlay)",
   "workstation-input": "var(--color-af-accent)",
   "workstation-on-continue": "var(--color-af-info)",
-  "workstation-on-failure": "var(--color-af-danger-ink)",
-  "workstation-on-rejection": "var(--color-af-warning-ink)",
+  "workstation-on-failure": "var(--color-af-danger-text)",
+  "workstation-on-rejection": "var(--color-af-warning-text)",
   "workstation-output": "var(--color-af-accent)",
   "workstation-resource": "var(--color-af-success)",
 } as const;
@@ -211,9 +211,9 @@ function buildFactoryGraphEditorEdge(
     interactionWidth: 24,
     markerEnd: {
       color: pendingRemoval
-        ? "var(--color-af-danger-ink)"
+        ? "var(--color-af-danger-text)"
         : pendingAddition
-          ? "var(--color-af-warning-ink)"
+          ? "var(--color-af-warning-text)"
           : color,
       type: MarkerType.ArrowClosed,
     },
@@ -222,9 +222,9 @@ function buildFactoryGraphEditorEdge(
     style: {
       opacity: pendingRemoval ? 0.48 : 1,
       stroke: pendingRemoval
-        ? "var(--color-af-danger-ink)"
+        ? "var(--color-af-danger-text)"
         : pendingAddition
-          ? "var(--color-af-warning-ink)"
+          ? "var(--color-af-warning-text)"
           : color,
       strokeDasharray: pendingRemoval
         ? "7 5"
@@ -283,9 +283,9 @@ function FactoryGraphEditorNodeView({
       className={cn(
         "min-w-0 w-full justify-start overflow-hidden text-left shadow-none",
         KIND_CLASS[data.kind],
-        data.draftStatus === "addition" && "ring-2 ring-af-warning/34",
+        data.draftStatus === "addition" && "ring-2 ring-af-warning-border",
         data.draftStatus === "removal" &&
-          "border-af-danger/28 bg-af-danger/8 opacity-70 ring-2 ring-af-danger/24",
+          "border-af-danger-border bg-af-danger-surface ring-2 ring-af-danger-border",
       )}
       handles={data.connectionAnchors}
       incomingHandleCount={data.incomingHandleCount}
@@ -356,7 +356,7 @@ function FactoryGraphEditorNodeView({
           {data.label}
         </p>
         {data.canEditConnections ? (
-          <p className="m-0 text-[0.68rem] leading-5 text-af-ink/60">
+          <p className="m-0 text-[0.65rem] leading-5 text-af-text-subtle">
             {data.connectionHint}
           </p>
         ) : null}
@@ -470,15 +470,15 @@ function semanticIconKind(kind: FactoryGraphNodeKind): GraphSemanticIconKind {
 function semanticIconClassName(kind: FactoryGraphNodeKind) {
   switch (kind) {
     case "resource":
-      return "text-af-success-ink/76";
+      return "text-af-success";
     case "worker":
-      return "text-af-info/78";
+      return "text-af-info";
     case "workstation":
-      return "text-af-ink/62";
+      return "text-af-text";
     case "work-type":
-      return "text-af-info/74";
+      return "text-af-info";
     case "work-state":
-      return "text-af-ink/58";
+      return "text-af-text-muted";
   }
 }
 

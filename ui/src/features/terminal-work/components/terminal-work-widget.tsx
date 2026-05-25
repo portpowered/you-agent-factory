@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { resolveSupportedLocale } from "../../../i18n";
 import {
   CompletedFailedWorkstationCard,
@@ -11,6 +13,7 @@ import type {
 export interface TerminalWorkWidgetProps {
   completedItems: TerminalWorkItem[];
   failedItems: TerminalWorkItem[];
+  headerAction?: ReactNode;
   locale?: string;
   onSelectItem: (status: TerminalWorkStatus, item: TerminalWorkItem) => void;
   selectedItem: TerminalWorkDetail | null;
@@ -20,6 +23,7 @@ export interface TerminalWorkWidgetProps {
 export function TerminalWorkWidget({
   completedItems,
   failedItems,
+  headerAction,
   locale,
   onSelectItem,
   selectedItem,
@@ -31,6 +35,7 @@ export function TerminalWorkWidget({
     <CompletedFailedWorkstationCard
       completedItems={completedItems}
       failedItems={failedItems}
+      headerAction={headerAction}
       locale={resolvedLocale}
       selectedItem={selectedItem}
       widgetId={widgetId}

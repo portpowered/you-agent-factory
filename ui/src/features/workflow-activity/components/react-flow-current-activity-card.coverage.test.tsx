@@ -336,6 +336,12 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         "The factory has not published any workstation graph yet.",
       ),
     ).toBeTruthy();
+    expect(
+      screen.getByText("No workflow topology loaded").parentElement?.className,
+    ).toContain("border-af-border-strong");
+    expect(
+      screen.getByText("No workflow topology loaded").parentElement?.className,
+    ).toContain("bg-af-surface-subtle");
     expect(screen.queryByTestId("mock-react-flow")).toBeNull();
   });
 
@@ -345,17 +351,30 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     const onSelectStateNode = vi.fn();
     const onSelectWorkID = vi.fn();
     const onSelectWorkstation = vi.fn();
+    const loadedLayout: GraphLayout = {
+      edges: [],
+      height: 196,
+      nodes: [
+        {
+          column: 0,
+          height: 196,
+          nodeId: "workstation:intake",
+          nodeKind: "workstation",
+          row: 0,
+          width: 156,
+          workstationNodeId: "intake",
+          x: 0,
+          y: 0,
+        },
+      ],
+      width: 156,
+    };
 
     mockBuildGraphLayout.mockImplementation(async (topology) => {
       if (topology === rejectedSnapshot.topology) {
         throw new Error("layout failed");
       }
-
-      if (actualBuildGraphLayoutRef.current === null) {
-        throw new Error("expected buildGraphLayout to be available");
-      }
-
-      return actualBuildGraphLayoutRef.current(topology);
+      return loadedLayout;
     });
 
     const { result, rerender } = renderHook(
@@ -424,7 +443,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     ).toBe("1");
     expect(
       screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
-    ).toContain("\"backgroundColor\":\"rgb(from var(--color-af-surface) r g b / 0.88)\"");
+    ).toContain("\"backgroundColor\":\"var(--color-af-graph-controls-surface)\"");
     expect(
       screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
     ).toContain("\"borderRadius\":8");
@@ -511,6 +530,52 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     });
     expect(onEditorEdgeClick).toHaveBeenCalledWith("edge-review-done");
     expect(onEditorNodeClick).toHaveBeenCalledWith("workstation:review");
+  });
+
+  it("rejects editor connections when the target node cannot be found", () => {
+    renderViewport({
+      activeTool: "connect",
+      editorMode: true,
+      graphKey: "graph-key",
+      nodes: [
+        {
+          data: { kind: "workstation" },
+          id: "workstation:review",
+          position: { x: 0, y: 0 },
+          type: "workstation",
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("valid-workstation-output").textContent).toBe(
+      "false",
+    );
+  });
+
+  it("rejects editor connections when a participating node omits its graph kind", () => {
+    renderViewport({
+      activeTool: "connect",
+      editorMode: true,
+      graphKey: "graph-key",
+      nodes: [
+        {
+          data: {},
+          id: "workstation:review",
+          position: { x: 0, y: 0 },
+          type: "workstation",
+        },
+        {
+          data: { kind: "work-state" },
+          id: "work-state:story:done",
+          position: { x: 240, y: 0 },
+          type: "workState",
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("valid-workstation-output").textContent).toBe(
+      "false",
+    );
   });
 
   it("keeps editor edges focusable outside delete mode so hidden labels stay reachable", () => {

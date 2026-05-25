@@ -83,7 +83,7 @@ function createRoleLookup({
   globalActions,
   heading,
   languageButton,
-  pauseButton,
+  openSessionButton,
   rootTab,
   sessionTabs,
   slider,
@@ -95,8 +95,8 @@ function createRoleLookup({
     if (role === "navigation") return sessionTabs;
     if (role === "tab" && options == null) return { count: vi.fn().mockResolvedValue(3) };
     if (role === "tab" && options?.name === "root") return rootTab;
-    if (role === "button" && options?.name === "Pause root updates") {
-      return pauseButton;
+    if (role === "button" && options?.name === "Open another session") {
+      return openSessionButton;
     }
     if (role === "button" && options?.name === "Close root session") {
       return closeSelectedSessionButton;
@@ -139,7 +139,7 @@ function createPage({
   const { exportButton, heading, languageButton, sessionTabs, slider, streamStatus } =
     createHeaderFixture(isDesktop, headingWordmarkClassName);
   const rootTab = createLocator();
-  const pauseButton = createLocator();
+  const openSessionButton = createLocator();
   const closeSelectedSessionButton = createLocator();
   const currentButton = createLocator({
     isVisible: vi.fn().mockResolvedValue(returnToCurrentVisible),
@@ -162,7 +162,7 @@ function createPage({
       globalActions,
       heading,
       languageButton,
-      pauseButton,
+      openSessionButton,
       rootTab,
       sessionTabs,
       slider,
@@ -228,9 +228,6 @@ describe("verifyDashboardSessionTabs", () => {
     const betaTab = {
       isVisible: vi.fn().mockResolvedValue(true),
     };
-    const pauseButton = {
-      isVisible: vi.fn().mockResolvedValue(true),
-    };
     const closeRootButton = {
       isVisible: vi.fn().mockResolvedValue(true),
     };
@@ -242,12 +239,6 @@ describe("verifyDashboardSessionTabs", () => {
     };
     const page = {
       evaluate: vi.fn().mockResolvedValue({ clientWidth: 768, scrollWidth: 768 }),
-      getByText: vi.fn((text) => {
-        if (text === "/workspace/root") {
-          return { isVisible: vi.fn().mockResolvedValue(true) };
-        }
-        return { isVisible: vi.fn().mockResolvedValue(true) };
-      }),
       getByRole: vi.fn((role, options) => {
         if (role === "navigation") {
           return { isVisible: vi.fn().mockResolvedValue(true) };
@@ -257,9 +248,6 @@ describe("verifyDashboardSessionTabs", () => {
         }
         if (role === "tab" && options?.name === "beta") {
           return betaTab;
-        }
-        if (role === "button" && options?.name === "Pause root updates") {
-          return pauseButton;
         }
         if (role === "button" && options?.name === "Close root session") {
           return closeRootButton;
@@ -298,10 +286,10 @@ describe("verifyDashboardSessionTabs", () => {
     expect(page.getByRole).toHaveBeenCalledWith("tab", { name: "root" });
     expect(page.getByRole).toHaveBeenCalledWith("tab", { name: "beta" });
     expect(page.getByRole).toHaveBeenCalledWith("button", {
-      name: "Pause root updates",
+      name: "Close root session",
     });
     expect(page.getByRole).toHaveBeenCalledWith("button", {
-      name: "Close root session",
+      name: "Open another session",
     });
     expect(page.getByRole).toHaveBeenCalledWith("button", {
       name: "Close beta session",
@@ -310,36 +298,50 @@ describe("verifyDashboardSessionTabs", () => {
 });
 
 describe("verifyDashboardSessionSwitching", () => {
-  test("verifyDashboardSessionSwitching exercises tab switching without state leakage", async () => {
-    const betaStoryButton = {
+  test("verifies switching between multiple dashboard session tabs", async () => {
+    const rootTab = {
+      isVisible: vi.fn().mockResolvedValue(true),
+      click: vi.fn().mockResolvedValue(undefined),
+    };
+    const betaTab = {
+      isVisible: vi.fn().mockResolvedValue(true),
+      click: vi.fn().mockResolvedValue(undefined),
+      getAttribute: vi.fn().mockResolvedValue("true"),
+    };
+    const rootPanel = {
+      isVisible: vi.fn().mockResolvedValue(true),
+    };
+    const betaPanel = {
       isVisible: vi.fn().mockResolvedValue(true),
     };
     const activeStoryButton = {
       count: vi.fn().mockResolvedValue(0),
     };
-    const betaTab = {
-      click: vi.fn().mockResolvedValue(undefined),
-      getAttribute: vi.fn().mockResolvedValue("true"),
-    };
     const page = {
-      evaluate: vi.fn().mockResolvedValue({ clientWidth: 1440, scrollWidth: 1440 }),
       getByRole: vi.fn((role, options) => {
+        if (role === "tab" && options?.name === "root") {
+          return rootTab;
+        }
         if (role === "tab" && options?.name === "beta") {
           return betaTab;
         }
-        if (role === "button" && String(options?.name) === String(/Active Story/)) {
+        if (role === "tabpanel" && options?.name === "root") {
+          return rootPanel;
+        }
+        if (role === "tabpanel" && options?.name === "beta") {
+          return betaPanel;
+        }
+        if (role === "button" && String(options?.name) === "/Active Story/") {
           return activeStoryButton;
         }
-        if (role === "button" && String(options?.name) === String(/Beta Story/)) {
-          return betaStoryButton;
-        }
-        throw new Error(`unexpected role ${role}`);
+        return createLocator();
       }),
     };
+    const expectNoHorizontalOverflow = vi.fn().mockResolvedValue(undefined);
 
     await verifyDashboardSessionSwitching(
       {
-        expectNoHorizontalOverflow: async () => {},
+        expectNoHorizontalOverflow,
         expectVisible: async (locator) => {
           if (!(await locator.isVisible())) {
             throw new Error("Locator was not visible.");
@@ -347,13 +349,14 @@ describe("verifyDashboardSessionSwitching", () => {
         },
       },
       page,
-      {
-        height: 900,
-        label: "desktop",
-        width: 1440,
-      },
+      { label: "desktop" },
     );
 
+    expect(rootTab.click).not.toHaveBeenCalled();
     expect(betaTab.click).toHaveBeenCalledTimes(1);
+    expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
+      page,
+      "Dashboard session switching at desktop",
+    );
   });
 });

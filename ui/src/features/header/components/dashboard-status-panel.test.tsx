@@ -38,7 +38,7 @@ describe("DashboardStatusPanel", () => {
     );
     expect(
       screen.getByText("Waiting for more timeline data.").className,
-    ).toContain("text-af-danger-ink");
+    ).toContain("text-af-danger-text");
   });
 
   it("resolves brand copy from the requested locale catalog", () => {

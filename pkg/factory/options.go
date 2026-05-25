@@ -75,7 +75,7 @@ type SubmissionHook interface {
 // execution and tick-owned result delivery.
 type DispatchResultHook interface {
 	SubmitDispatch(ctx context.Context, dispatch interfaces.WorkDispatch) error
-	OnTick(ctx context.Context, input interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.DispatchResultHookResult, error)
+	OnTick(ctx context.Context, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error)
 	WaitCh() <-chan struct{}
 }
 

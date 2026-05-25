@@ -15,6 +15,8 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import {
+  CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
+  CURRENT_SELECTION_BADGE_CLASS,
   EXECUTION_PILL_CLASS,
   HISTORY_HEADER_CLASS,
   HISTORY_TOGGLE_CLASS,
@@ -77,7 +79,7 @@ export function CollapsibleProviderSessionAttempts({
           <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={`${historyID}-heading`}>
             {resolvedTitle}
           </h4>
-          <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
             {itemCountLabel}
           </p>
         </div>
@@ -191,7 +193,7 @@ function ProviderSessionAttemptList({
           <article
             className={cn(
               PROVIDER_SESSION_CARD_CLASS,
-              isCurrentDispatch && "border-on-foreground/30 bg-on-foreground/6",
+              isCurrentDispatch && CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
             )}
             key={`${attempt.dispatch_id}-${attempt.provider_session?.id}`}
           >
@@ -201,22 +203,17 @@ function ProviderSessionAttemptList({
             </div>
             <div className="mt-2 grid gap-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+                <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
                   {outcome.label}
                 </p>
                 {isCurrentDispatch ? (
-                  <span
-                    className={cn(
-                      "inline-flex rounded-full border border-on-foreground/35 bg-on-foreground/10 px-2 py-0.5 text-on-foreground",
-                      DASHBOARD_SUPPORTING_TEXT_CLASS,
-                    )}
-                  >
+                  <span className={CURRENT_SELECTION_BADGE_CLASS}>
                     {messages.currentDispatchLabel}
                   </span>
                 ) : null}
               </div>
               {outcome.rawOutcomeLabel ? (
-                <p className={cn("m-0 text-af-code-ink/72", DASHBOARD_SUPPORTING_CODE_CLASS)}>
+                <p className={DASHBOARD_SUPPORTING_CODE_CLASS}>
                   {outcome.rawOutcomeLabel}
                 </p>
               ) : null}
@@ -231,8 +228,7 @@ function ProviderSessionAttemptList({
                 className={cn(
                   "mt-2",
                   PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
-                  providerSessionSelected &&
-                    "border-on-foreground/35 bg-on-foreground/10 text-on-foreground",
+                  providerSessionSelected && CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
                 )}
                 onClick={() => onSelectProviderSession(loadableProviderSession)}
                 type="button"
@@ -246,9 +242,7 @@ function ProviderSessionAttemptList({
               </button>
             ) : (
               <div className="mt-2 grid gap-1">
-                <code className={cn("text-af-code-ink/72", DASHBOARD_BODY_CODE_CLASS)}>
-                  {providerSessionLabel}
-                </code>
+                <code className={DASHBOARD_BODY_CODE_CLASS}>{providerSessionLabel}</code>
                 <p className={REQUEST_SELECTION_STATUS_CLASS}>
                   {messages.providerSessionSelectionUnavailable}
                 </p>
@@ -340,7 +334,7 @@ function ProviderSessionLogAccess({
           {messages.providerSessionLogAction}
         </a>
       ) : (
-        <span className={cn("font-bold text-af-ink/78", DASHBOARD_BODY_TEXT_CLASS)}>
+        <span className={cn("font-bold text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
           {messages.providerSessionLogUnavailable}
         </span>
       )}
