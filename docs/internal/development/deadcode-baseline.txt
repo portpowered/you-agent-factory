@@ -1,4 +1,0 @@
-pkg/workers/provider_compat.go:33:6: unreachable func: ContainsStopToken
-pkg/workers/provider_compat.go:45:6: unreachable func: ClassifyProviderFailure
-pkg/workers/provider_compat.go:53:6: unreachable func: ProviderFailureMetadataFromError
-pkg/workers/provider_compat.go:57:6: unreachable func: LoadProviderErrorCorpus

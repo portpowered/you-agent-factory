@@ -30,10 +30,6 @@ const (
 	codexWindowsProcessFailureExitCode = 4294967295
 )
 
-func ContainsStopToken(output, stopToken string) bool {
-	return workerprovider.ContainsStopToken(output, stopToken)
-}
-
 func NewProviderError(errorType interfaces.ProviderErrorType, message string, cause error) *ProviderError {
 	return workerprovider.NewProviderError(errorType, message, cause)
 }
@@ -42,18 +38,6 @@ func NewProviderErrorWithSession(errorType interfaces.ProviderErrorType, message
 	return workerprovider.NewProviderErrorWithSession(errorType, message, cause, session)
 }
 
-func ClassifyProviderFailure(err *ProviderError) interfaces.ProviderFailureDecision {
-	return workerprovider.ClassifyProviderFailure(err)
-}
-
 func ProviderFailureDecisionFromMetadata(metadata *interfaces.ProviderFailureMetadata) interfaces.ProviderFailureDecision {
 	return workerprovider.ProviderFailureDecisionFromMetadata(metadata)
-}
-
-func ProviderFailureMetadataFromError(err *ProviderError) *interfaces.ProviderFailureMetadata {
-	return workerprovider.WorkFailureMetadataFromError(err)
-}
-
-func LoadProviderErrorCorpus() (ProviderErrorCorpus, error) {
-	return workerprovider.LoadProviderErrorCorpus()
 }
