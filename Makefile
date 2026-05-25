@@ -107,6 +107,7 @@ test-functional-long:
 
 test-ui-coverage:
 	$(MAKE) ui-test-coverage
+	$(MAKE) ui-replay-coverage-check
 
 test-ui-browser-integration:
 ifeq ($(BUN_BIN),)
@@ -182,7 +183,6 @@ verify-build-contracts:
 
 verify-tests:
 	$(MAKE) test-ui-coverage
-	$(MAKE) ui-replay-coverage-check
 	$(MAKE) test-ui-browser-integration
 	$(MAKE) test-backend-verification
 
@@ -213,7 +213,6 @@ ci-verify-build-contracts: ci-typecheck
 ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) ui-install-playwright
 	$(MAKE) test-ui-coverage
-	$(MAKE) ui-replay-coverage-check
 	$(MAKE) test-ui-browser-integration
 	$(MAKE) test-backend-verification
 
@@ -256,11 +255,7 @@ else
 endif
 
 ui-test-coverage:
-ifeq ($(BUN_BIN),)
-	cd ui && $(NPM) exec vitest run --coverage --exclude integration/event-stream-replay.integration.test.mjs
-else
 	cd ui && $(UI_SCRIPT) test:coverage
-endif
 
 ui-replay-coverage-check:
 ifeq ($(BUN_BIN),)

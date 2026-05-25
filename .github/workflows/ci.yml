@@ -161,13 +161,9 @@ jobs:
         timeout-minutes: 10
         run: make ui-deps
 
-      - name: Run dashboard coverage suite
+      - name: Run dashboard coverage lane
         timeout-minutes: 30
         run: make test-ui-coverage
-
-      - name: Run replay coverage verification
-        timeout-minutes: 10
-        run: make ui-replay-coverage-check
 
   ui-browser-integration:
     name: UI Browser Integration
