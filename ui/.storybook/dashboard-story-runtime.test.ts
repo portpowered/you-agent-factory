@@ -107,6 +107,45 @@ describe("withDashboardStoryRuntime", () => {
     });
   });
 
+  it("installs dashboard fetch mocks even when the story does not seed timeline data", async () => {
+    withDashboardStoryRuntime(() => null, {
+      args: {},
+      globals: {},
+      hooks: {} as never,
+      id: "dashboard-runtime-fetch-only",
+      initialArgs: {},
+      name: "Dashboard runtime fetch-only",
+      parameters: {
+        dashboardApi: {
+          fetchMocks: [
+            {
+              path: "/factory-sessions",
+              response: {
+                body: {
+                  sessions: [],
+                },
+              },
+            },
+          ],
+        },
+      },
+      title: "storybook/runtime",
+      viewMode: "story",
+    });
+
+    const response = await window.fetch("http://example.test/factory-sessions");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      sessions: [],
+    });
+    expect(useFactoryTimelineStore.getState()).toMatchObject({
+      latestTick: 0,
+      mode: "current",
+      selectedTick: 0,
+    });
+  });
+
   it("replaces timeline events when story parameters provide event history directly", () => {
     const events = [
       timelineEvent("tick-2", 2),

@@ -20,6 +20,14 @@ describe("verifyStorybookIframe", () => {
 
     await expect(verifyStorybookIframe({ fetchFn })).resolves.toBeUndefined();
     expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(fetchFn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: {
+          Accept: "text/html",
+        },
+      }),
+    );
   });
 
   test("retries until the iframe shell contains the storybook root", async () => {

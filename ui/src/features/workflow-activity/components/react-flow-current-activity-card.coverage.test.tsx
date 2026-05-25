@@ -351,17 +351,30 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     const onSelectStateNode = vi.fn();
     const onSelectWorkID = vi.fn();
     const onSelectWorkstation = vi.fn();
+    const loadedLayout: GraphLayout = {
+      edges: [],
+      height: 196,
+      nodes: [
+        {
+          column: 0,
+          height: 196,
+          nodeId: "workstation:intake",
+          nodeKind: "workstation",
+          row: 0,
+          width: 156,
+          workstationNodeId: "intake",
+          x: 0,
+          y: 0,
+        },
+      ],
+      width: 156,
+    };
 
     mockBuildGraphLayout.mockImplementation(async (topology) => {
       if (topology === rejectedSnapshot.topology) {
         throw new Error("layout failed");
       }
-
-      if (actualBuildGraphLayoutRef.current === null) {
-        throw new Error("expected buildGraphLayout to be available");
-      }
-
-      return actualBuildGraphLayoutRef.current(topology);
+      return loadedLayout;
     });
 
     const { result, rerender } = renderHook(

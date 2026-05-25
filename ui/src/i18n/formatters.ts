@@ -39,6 +39,23 @@ export function formatTime(
   }).format(date);
 }
 
+export function formatDateTime(
+  value: DateInput,
+  locale?: string | null,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  const date = toValidDate(value);
+  if (!date) {
+    return String(value);
+  }
+
+  return new Intl.DateTimeFormat(resolveSupportedLocale(locale), {
+    dateStyle: "medium",
+    timeStyle: "short",
+    ...options,
+  }).format(date);
+}
+
 export function formatNumber(
   value: number,
   locale?: string | null,

@@ -259,15 +259,19 @@ function resetDashboardStoryStores(): void {
 function installDashboardApiMock(parameters: DashboardApiMockParameters | undefined): void {
   captureBrowserRuntime();
   resetDashboardStoryStores();
+  const fetchMocks = parameters?.fetchMocks ?? [];
   installedEventSourceMocks = parameters?.eventSourceMocks ?? [];
+  const hasTimelineData =
+    parameters?.snapshot != null ||
+    parameters?.timelineSnapshots != null ||
+    parameters?.timelineEvents != null;
 
-  if (!parameters?.snapshot && !parameters?.timelineSnapshots && !parameters?.timelineEvents) {
+  if (!hasTimelineData && fetchMocks.length === 0 && installedEventSourceMocks.length === 0) {
     window.fetch = originalFetch ?? window.fetch;
     window.EventSource = originalEventSource;
     return;
   }
 
-  const fetchMocks = parameters.fetchMocks ?? [];
   const tracesByWorkID = parameters.tracesByWorkID ?? {};
   const workstationRequestsByDispatchID = parameters.workstationRequestsByDispatchID ?? {};
   if (parameters.timelineEvents) {

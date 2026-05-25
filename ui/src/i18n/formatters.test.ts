@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatCount,
   formatDate,
+  formatDateTime,
   formatList,
   formatNumber,
   formatPercent,
@@ -32,6 +33,11 @@ describe("shared locale formatters", () => {
         timeZone: "UTC",
       }),
     ).toBe("9:30");
+    expect(
+      formatDateTime(fixedTimestamp, "en", {
+        timeZone: "UTC",
+      }),
+    ).toBe("May 18, 2026, 9:30 AM");
   });
 
   it("formats numbers, percentages, and lists with Intl APIs", () => {
