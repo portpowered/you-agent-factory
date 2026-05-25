@@ -309,7 +309,9 @@ func (p *huggingFaceModelAssetPuller) fetchManifest(ctx context.Context, spec mo
 	if err != nil {
 		return modelAssetManifest{}, fmt.Errorf("pull model manifest for %q: %w", spec.ModelName, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return modelAssetManifest{}, fmt.Errorf("pull model manifest for %q failed (%d): %s", spec.ModelName, resp.StatusCode, strings.TrimSpace(string(body)))
@@ -556,7 +558,9 @@ func (p *huggingFaceModelAssetPuller) downloadFile(ctx context.Context, remote m
 	if err != nil {
 		return fmt.Errorf("download model asset %q: %w", remote.Path, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("download model asset %q failed (%d): %s", remote.Path, resp.StatusCode, strings.TrimSpace(string(body)))
@@ -596,7 +600,9 @@ func fileSHA256(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer input.Close()
+	defer func() {
+		_ = input.Close()
+	}()
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, input); err != nil {
 		return "", err

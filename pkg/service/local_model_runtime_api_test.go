@@ -126,7 +126,9 @@ func invokeLocalModelHTTP(t *testing.T, server *httptest.Server, body []byte) fa
 	if err != nil {
 		t.Fatalf("POST /models/.../invocations: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		payload := new(bytes.Buffer)
 		_, _ = payload.ReadFrom(resp.Body)

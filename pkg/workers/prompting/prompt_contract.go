@@ -143,7 +143,7 @@ func ValidatePromptTemplate(tmpl string, inputCount int) PromptTemplateValidatio
 		bindings: make(map[string]promptValidationValue),
 		dot:      promptValidationValue{kind: promptValidationValueRoot},
 	}
-	validator.walkList(parsed.Tree.Root, rootScope)
+	validator.walkList(parsed.Root, rootScope)
 	validator.addRuntimeExecutionDiagnostic(parsed, tmpl)
 
 	return PromptTemplateValidationResult{

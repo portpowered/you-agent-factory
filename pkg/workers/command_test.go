@@ -375,7 +375,7 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 	switch mode {
 	case "success":
 		assertCommandHelperInputs()
-		fmt.Fprintln(os.Stdout, "command helper success")
+		_, _ = fmt.Fprintln(os.Stdout, "command helper success")
 		os.Exit(0)
 	case "fail":
 		fmt.Fprintln(os.Stderr, "command helper failed")
