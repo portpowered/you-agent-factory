@@ -149,15 +149,7 @@ describe("DashboardSessionTabs launch target selection", () => {
       });
     });
 
-    fireEvent.change(
-      screen.getByRole("combobox", {
-        name: messages.selectSessionTargetLabel,
-      }),
-      { target: { value: "named:beta" } },
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /beta/i }));
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({

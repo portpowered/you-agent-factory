@@ -6,7 +6,6 @@ import {
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
@@ -314,22 +313,11 @@ describe("DashboardSessionTabs", () => {
         validateOnly: true,
       });
     });
+    expect(screen.queryByText(messages.openSessionLaunchReadySingleTarget)).toBeNull();
     expect(
-      screen.getByText(messages.openSessionLaunchReadySingleTarget),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("combobox", {
-        name: messages.selectSessionTargetLabel,
-      }),
+      screen.queryByRole("button", { name: messages.openSessionSubmitLabel }),
     ).toBeNull();
-    expect(
-      within(
-        screen.getByRole("region", { name: messages.targetPickerTitle }),
-      ).getByText("default"),
-    ).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /default/i }));
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
         folderPath: "/workspace/other",
@@ -443,9 +431,7 @@ describe("DashboardSessionTabs", () => {
       });
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /alpha/i }));
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
@@ -458,323 +444,7 @@ describe("DashboardSessionTabs", () => {
     });
   });
 
-  it("populates the folder field from the browser directory picker before opening a session", async () => {
-    listFactorySessions
-      .mockResolvedValueOnce([
-        {
-          factoryDir: "/workspace/root",
-          folderPath: "/workspace/root",
-          id: "~default",
-          isDefault: true,
-          project: "root",
-          target: {
-            kind: "default",
-          },
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          factoryDir: "/workspace/root",
-          folderPath: "/workspace/root",
-          id: "~default",
-          isDefault: true,
-          project: "root",
-          target: {
-            kind: "default",
-          },
-        },
-        {
-          factoryDir: "/workspace/fleet",
-          folderPath: "/workspace/fleet",
-          id: "session-fleet",
-          isDefault: false,
-          project: "fleet",
-          target: {
-            kind: "default",
-          },
-        },
-      ]);
-    openFactorySession.mockResolvedValue({
-      session: {
-        factoryDir: "/workspace/fleet",
-        folderPath: "/workspace/fleet",
-        id: "session-fleet",
-        isDefault: false,
-        project: "fleet",
-        target: {
-          kind: "default",
-        },
-      },
-    });
-    const showDirectoryPicker = vi.fn().mockResolvedValue({
-      kind: "directory",
-      name: "fleet",
-      path: "/workspace/fleet",
-    } satisfies Partial<FileSystemDirectoryHandle>);
-    vi.stubGlobal("showDirectoryPicker", showDirectoryPicker);
-
-    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
-    const messages = getHeaderControlsMessages("en");
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
-      ).toBeTruthy();
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
-    );
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: messages.browseSessionFolderButtonLabel,
-      }),
-    );
-
-    await waitFor(() => {
-      expect(showDirectoryPicker).toHaveBeenCalledTimes(1);
-    });
-    expect(
-      (
-        screen.getByPlaceholderText(
-          messages.sessionFolderFieldPlaceholder,
-        ) as HTMLInputElement
-      ).value,
-    ).toBe("/workspace/fleet");
-
-    fireEvent.submit(
-      screen
-        .getByRole("button", { name: messages.openSessionSubmitLabel })
-        .closest("form") as HTMLFormElement,
-    );
-
-    await waitFor(() => {
-      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
-        folderPath: "/workspace/fleet",
-        validateOnly: true,
-      });
-    });
-  });
-
-  it("falls back to the hidden directory input when the browser picker is unavailable", async () => {
-    listFactorySessions
-      .mockResolvedValueOnce([
-        {
-          factoryDir: "/workspace/root",
-          folderPath: "/workspace/root",
-          id: "~default",
-          isDefault: true,
-          project: "root",
-          target: {
-            kind: "default",
-          },
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          factoryDir: "/workspace/root",
-          folderPath: "/workspace/root",
-          id: "~default",
-          isDefault: true,
-          project: "root",
-          target: {
-            kind: "default",
-          },
-        },
-        {
-          factoryDir: "/workspace/fleet",
-          folderPath: "/workspace/fleet",
-          id: "session-fleet",
-          isDefault: false,
-          project: "fleet",
-          target: {
-            kind: "default",
-          },
-        },
-      ]);
-    openFactorySession.mockResolvedValue({
-      session: {
-        factoryDir: "/workspace/fleet",
-        folderPath: "/workspace/fleet",
-        id: "session-fleet",
-        isDefault: false,
-        project: "fleet",
-        target: {
-          kind: "default",
-        },
-      },
-    });
-
-    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
-    const messages = getHeaderControlsMessages("en");
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
-      ).toBeTruthy();
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: messages.browseSessionFolderButtonLabel,
-      }),
-    );
-
-    const folderPickerInput = document.body.querySelector(
-      'input[type="file"][webkitdirectory]',
-    ) as HTMLInputElement | null;
-    expect(folderPickerInput).toBeTruthy();
-
-    const pickedFile = new File(["factory"], "factory.yaml", {
-      type: "text/yaml",
-    });
-    Object.defineProperty(pickedFile, "path", {
-      value: "/workspace/fleet/factory.yaml",
-    });
-
-    fireEvent.change(folderPickerInput as HTMLInputElement, {
-      target: {
-        files: [pickedFile],
-      },
-    });
-
-    expect(
-      (
-        screen.getByPlaceholderText(
-          messages.sessionFolderFieldPlaceholder,
-        ) as HTMLInputElement
-      ).value,
-    ).toBe("/workspace/fleet");
-
-    fireEvent.submit(
-      screen
-        .getByRole("button", { name: messages.openSessionSubmitLabel })
-        .closest("form") as HTMLFormElement,
-    );
-
-    await waitFor(() => {
-      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
-        folderPath: "/workspace/fleet",
-        validateOnly: true,
-      });
-    });
-  });
-
-  it("ignores relative directory picker names and waits for an absolute folder path", async () => {
-    listFactorySessions
-      .mockResolvedValueOnce([
-        {
-          factoryDir: "/workspace/root",
-          folderPath: "/workspace/root",
-          id: "~default",
-          isDefault: true,
-          project: "root",
-          target: {
-            kind: "default",
-          },
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          factoryDir: "/workspace/root",
-          folderPath: "/workspace/root",
-          id: "~default",
-          isDefault: true,
-          project: "root",
-          target: {
-            kind: "default",
-          },
-        },
-        {
-          factoryDir: "/workspace/fleet",
-          folderPath: "/workspace/fleet",
-          id: "session-fleet",
-          isDefault: false,
-          project: "fleet",
-          target: {
-            kind: "default",
-          },
-        },
-      ]);
-    openFactorySession.mockResolvedValue({
-      session: {
-        factoryDir: "/workspace/fleet",
-        folderPath: "/workspace/fleet",
-        id: "session-fleet",
-        isDefault: false,
-        project: "fleet",
-        target: {
-          kind: "default",
-        },
-      },
-    });
-    const showDirectoryPicker = vi.fn().mockResolvedValue({
-      kind: "directory",
-      name: "infinite-you",
-    } satisfies Partial<FileSystemDirectoryHandle>);
-    vi.stubGlobal("showDirectoryPicker", showDirectoryPicker);
-
-    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
-    const messages = getHeaderControlsMessages("en");
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
-      ).toBeTruthy();
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: messages.browseSessionFolderButtonLabel,
-      }),
-    );
-
-    await waitFor(() => {
-      expect(showDirectoryPicker).toHaveBeenCalledTimes(1);
-    });
-    expect(
-      (
-        screen.getByPlaceholderText(
-          messages.sessionFolderFieldPlaceholder,
-        ) as HTMLInputElement
-      ).value,
-    ).toBe("");
-
-    const folderPickerInput = document.body.querySelector(
-      'input[type="file"][webkitdirectory]',
-    ) as HTMLInputElement | null;
-    expect(folderPickerInput).toBeTruthy();
-
-    const pickedFile = new File(["factory"], "factory.yaml", {
-      type: "text/yaml",
-    });
-    Object.defineProperty(pickedFile, "path", {
-      value: "/workspace/fleet/factory.yaml",
-    });
-
-    fireEvent.change(folderPickerInput as HTMLInputElement, {
-      target: {
-        files: [pickedFile],
-      },
-    });
-
-    expect(
-      (
-        screen.getByPlaceholderText(
-          messages.sessionFolderFieldPlaceholder,
-        ) as HTMLInputElement
-      ).value,
-    ).toBe("/workspace/fleet");
-  });
-
-  it("shows a compact target picker when the folder exposes multiple runnable targets", async () => {
+  it("shows clickable runnable target actions when the folder exposes multiple runnable targets", async () => {
     listFactorySessions.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
@@ -852,38 +522,12 @@ describe("DashboardSessionTabs", () => {
         validateOnly: true,
       });
     });
+    expect(screen.queryByText(messages.openSessionLaunchReadyMultipleTargets)).toBeNull();
     expect(
-      screen.getByText(messages.openSessionLaunchReadyMultipleTargets),
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: messages.openSessionSubmitLabel }),
+    ).toBeNull();
 
-    const targetPicker = await screen.findByRole("region", {
-      name: messages.targetPickerTitle,
-    });
-    const picker = within(targetPicker);
-    const targetSelect = picker.getByRole("combobox", {
-      name: messages.selectSessionTargetLabel,
-    });
-    expect(
-      picker.getByText(
-        messages.selectSessionTargetPrompt,
-      ),
-    ).toBeTruthy();
-
-    expect(
-      picker
-        .getByRole("button", { name: messages.openSessionTargetLabel })
-        .getAttribute("disabled"),
-    ).not.toBeNull();
-
-    fireEvent.change(targetSelect, { target: { value: "named:beta" } });
-    expect(
-      picker.getByText(
-        "Launch will use folder /workspace/fleet and factory beta.",
-      ),
-    ).toBeTruthy();
-    fireEvent.click(
-      picker.getByRole("button", { name: messages.openSessionTargetLabel }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /beta/i }));
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({

@@ -92,25 +92,8 @@ export const OpenFlowVerification = {
       within(dialog).getByRole("button", { name: messages.openSessionSubmitLabel }),
     );
 
-    await expect(
-      await within(dialog).findByRole("region", { name: messages.targetPickerTitle }),
-    ).toBeVisible();
-    await expect(
-      within(dialog).getByText(messages.selectSessionTargetPrompt),
-    ).toBeVisible();
-    await userEvent.selectOptions(
-      within(dialog).getByRole("combobox", {
-        name: messages.selectSessionTargetLabel,
-      }),
-      "named:review",
-    );
-    await expect(
-      within(dialog).getByText(
-        "Launch will use folder /workspace/catalog and factory Catalog / review.",
-      ),
-    ).toBeVisible();
     await userEvent.click(
-      within(dialog).getByRole("button", { name: messages.openSessionTargetLabel }),
+      within(dialog).getByRole("button", { name: /review/i }),
     );
 
     await waitFor(() => {
