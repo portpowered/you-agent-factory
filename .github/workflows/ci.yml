@@ -200,7 +200,7 @@ jobs:
       - name: Set up Node for dashboard runtime
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Restore Bun package cache
         uses: actions/cache@v4
@@ -237,6 +237,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
         uses: actions/setup-go@v5
