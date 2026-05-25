@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { DashboardMutationDialog } from "../../../components/dashboard";
 import {
   Button,
+  DashboardActionButton,
+  DashboardStatusPill,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -53,9 +55,6 @@ const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
   neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
   warning: "border-af-warning-border bg-af-warning-surface text-af-warning-text",
 };
-
-const STATUS_PILL_CLASS =
-  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold max-md:min-w-0 max-md:flex-1 max-md:justify-center";
 
 export function FactoryGraphEditorToolbar({
   activeTool,
@@ -130,19 +129,16 @@ export function FactoryGraphEditorToolbar({
         }
         tone={activeTool === "connect" ? "secondary" : "outline"}
       />
-      <p
+      <DashboardStatusPill
         aria-live="polite"
-        className={cn(
-          STATUS_PILL_CLASS,
-          hasPendingChanges
-            ? "border-af-warning-border bg-af-warning-surface text-af-warning-text"
-            : "border-af-border bg-af-surface-subtle text-af-text-muted",
-        )}
+        className="max-md:min-w-0 max-md:flex-1 max-md:justify-center"
+        role="status"
+        tone={hasPendingChanges ? "warning" : "neutral"}
       >
         {hasPendingChanges
           ? messages.toolbarPendingChanges
           : messages.toolbarNoPendingChanges}
-      </p>
+      </DashboardStatusPill>
       {hasPendingChanges ? (
         <div className={TOOLBAR_ACTIONS_CLASS}>
           <Button
@@ -197,17 +193,17 @@ export function FactoryGraphEditorVisibilityPanel({
       className={VISIBILITY_PANEL_CLASS}
     >
       {options.map((option) => (
-        <Button
+        <DashboardActionButton
           aria-pressed={option.selected}
           className="min-w-20"
+          iconOnly={false}
           key={option.key}
           onClick={() => onSelectPreset(option.key)}
-          size="sm"
           tone={option.selected ? "secondary" : "outline"}
           type="button"
         >
           {option.label}
-        </Button>
+        </DashboardActionButton>
       ))}
     </section>
   );
@@ -234,7 +230,11 @@ function FactoryGraphEditorToolbarButton({
     <FactoryGraphEditorTooltipButton
       aria-label={label}
       aria-pressed={active}
-      className={buttonVariants({ size: "icon", tone })}
+      className={buttonVariants({
+        className: "h-10 w-10 rounded-lg px-0 py-0",
+        size: "icon",
+        tone,
+      })}
       disabled={disabled}
       onClick={onClick}
       tooltip={description}
