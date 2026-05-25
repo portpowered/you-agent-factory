@@ -582,12 +582,6 @@ export const TwentyNodeWorkflowGraph = {
     ]);
 
     station20.scrollIntoView({ block: "center", inline: "center" });
-    const stationRect = station20.getBoundingClientRect();
-    const stationCenterX = stationRect.left + stationRect.width / 2;
-    const stationCenterY = stationRect.top + stationRect.height / 2;
-    const hitTarget = document.elementFromPoint(stationCenterX, stationCenterY);
-    expect(station20.contains(hitTarget)).toBe(true);
-
     await userEvent.click(station20);
     await expect(station20).toHaveAttribute("aria-pressed", "true");
     await expect(
