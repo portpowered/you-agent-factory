@@ -10,12 +10,15 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -138,6 +141,105 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission
 	if firstPart.Text != "Alpha " || secondPart.Text != "Beta" {
 		t.Fatalf("GET /work content parts = %#v, want ordered text items Alpha / Beta", content)
 	}
+}
+
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
+	stagedImagePath := writeGeneratedSubmitFixtureFile(t, t.TempDir(), "review.png", []byte("png-bytes"))
+
+	server := startFunctionalServerWithConfig(
+		t,
+		dir,
+		false,
+		func(cfg *service.FactoryServiceConfig) {
+			cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("Done. COMPLETE")
+		},
+		factory.WithServiceMode(),
+	)
+
+	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         "generated-api-items-mixed",
+		WorkTypeName: "task",
+		Items: &[]factoryapi.SubmitWorkItem{
+			mustSubmitWorkTextItem(t, "Review this screenshot."),
+			mustSubmitWorkImageItem(t, stagedImagePath, "review.png", "image/png"),
+		},
+	})
+
+	work := waitForGeneratedWorkComplete(t, server.URL(), traceID, 10*time.Second)
+	item := requireGeneratedWorkByTrace(t, work, traceID)
+	content := item.Content
+	if content == nil || len(*content) != 2 {
+		t.Fatalf("GET /work content = %#v, want ordered text and image content parts", content)
+	}
+	textPart, err := (*content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode projected text content: %v", err)
+	}
+	imagePart, err := (*content)[1].AsWorkImageContentPart()
+	if err != nil {
+		t.Fatalf("decode projected image content: %v", err)
+	}
+	if textPart.Text != "Review this screenshot." {
+		t.Fatalf("projected text part = %#v, want authored text", textPart)
+	}
+	if imagePart.File != stagedImagePath || stringPointerValue(imagePart.ContentType) != "image/png" {
+		t.Fatalf("projected image part = %#v, want staged image reference and media type", imagePart)
+	}
+}
+
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderGemini, "gemini-1.5-pro"))
+	stagedImagePath := writeGeneratedSubmitFixtureFile(t, t.TempDir(), "review.png", []byte("png-bytes"))
+	runner := support.NewRecordingCommandRunner("unused")
+
+	server := startFunctionalServerWithConfig(
+		t,
+		dir,
+		false,
+		func(cfg *service.FactoryServiceConfig) {
+			cfg.ProviderCommandRunnerOverride = runner
+		},
+		factory.WithServiceMode(),
+	)
+
+	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         "generated-api-items-unsupported-mixed",
+		WorkTypeName: "task",
+		Items: &[]factoryapi.SubmitWorkItem{
+			mustSubmitWorkTextItem(t, "Review this screenshot."),
+			mustSubmitWorkImageItem(t, stagedImagePath, "review.png", "image/png"),
+		},
+	})
+
+	work := waitForGeneratedWorkAtPlace(t, server.URL(), traceID, "task:failed", 10*time.Second)
+	item := requireGeneratedWorkByTrace(t, work, traceID)
+	if generatedWorkStateName(item.State) != "failed" {
+		t.Fatalf("GET /work state = %#v, want failed work state", item.State)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want 0 because capability rejection should happen before subprocess launch", runner.CallCount())
+	}
+
+	workID := stringPointerValue(item.WorkId)
+	snapshot := server.GetEngineStateSnapshot(t)
+	for _, token := range snapshot.Marking.TokensInPlace("task:failed") {
+		if token.Color.WorkID != workID {
+			continue
+		}
+		if token.History.LastError == "" {
+			t.Fatalf("failed token history = %#v, want last error evidence", token.History)
+		}
+		const want = "image input is not supported by the gemini runner in v1"
+		if !strings.Contains(token.History.LastError, want) {
+			t.Fatalf("failed token last error = %q, want substring %q", token.History.LastError, want)
+		}
+		return
+	}
+
+	t.Fatalf("failed token for work %q not found in task:failed", workID)
 }
 
 func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
@@ -375,11 +477,60 @@ func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []str
 	return nil
 }
 
+func requireGeneratedWorkByTrace(t *testing.T, work factoryapi.ListWorkResponse, traceID string) factoryapi.Work {
+	t.Helper()
+	for _, item := range work.Results {
+		if stringPointerValue(item.TraceId) == traceID {
+			return item
+		}
+	}
+	t.Fatalf("trace %q missing from generated work response: %#v", traceID, work)
+	return factoryapi.Work{}
+}
+
 func generatedWorkPlaceID(work factoryapi.Work) string {
 	if work.State == nil {
 		return stringPointerValue(work.WorkTypeName) + ":"
 	}
 	return stringPointerValue(work.WorkTypeName) + ":" + work.State.Name
+}
+
+func mustSubmitWorkTextItem(t *testing.T, text string) factoryapi.SubmitWorkItem {
+	t.Helper()
+
+	var item factoryapi.SubmitWorkItem
+	if err := item.FromSubmitWorkTextItem(factoryapi.SubmitWorkTextItem{
+		Type: factoryapi.SubmitWorkItemTypeText,
+		Text: text,
+	}); err != nil {
+		t.Fatalf("encode submit-work text item: %v", err)
+	}
+	return item
+}
+
+func mustSubmitWorkImageItem(t *testing.T, stagedFileRef string, fileName string, mediaType string) factoryapi.SubmitWorkItem {
+	t.Helper()
+
+	var item factoryapi.SubmitWorkItem
+	if err := item.FromSubmitWorkImageItem(factoryapi.SubmitWorkImageItem{
+		Type:          factoryapi.SubmitWorkItemTypeImage,
+		StagedFileRef: stagedFileRef,
+		FileName:      fileName,
+		MediaType:     mediaType,
+	}); err != nil {
+		t.Fatalf("encode submit-work image item: %v", err)
+	}
+	return item
+}
+
+func writeGeneratedSubmitFixtureFile(t *testing.T, dir string, name string, content []byte) string {
+	t.Helper()
+
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write generated submit fixture file: %v", err)
+	}
+	return path
 }
 
 func functionalServerPort(t *testing.T, rawURL string) int {
