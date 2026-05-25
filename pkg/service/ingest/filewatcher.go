@@ -1,5 +1,5 @@
-// Package listeners provides event listener implementations for the factory engine.
-package listeners
+// Package ingest provides filesystem-backed external input ingestion for the factory runtime.
+package ingest
 
 import (
 	"context"

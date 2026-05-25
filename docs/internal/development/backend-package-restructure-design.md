@@ -41,7 +41,8 @@ pkg/
 │   ├── events/             # Canonical event history, generated event helpers, subscriptions
 │   ├── projections/        # Read models and derived runtime views
 │   ├── requests/           # Work-request normalization, relation indexing, trace propagation
-│   ├── runtime/            # Runtime loop, dispatch wiring, runtime-owned buffers
+│   ├── runtime/            # Runtime loop, dispatch wiring, runtime-owned helpers
+│   │   └── buffers/        # Runtime-owned non-blocking typed buffers shared by engine/runtime slices
 │   ├── scheduler/          # Transition selection and queueing behavior
 │   ├── state/              # Net topology and validation primitives
 │   ├── subsystems/         # Dispatcher, transitioner, circuit-breaker, termination internals
@@ -136,15 +137,17 @@ Rationale:
 
 ### `pkg/buffers`
 
-Target: move to `pkg/factory/runtime`.
+Target: move to `pkg/factory/runtime/buffers`.
 
 Rationale:
 
 - the generic typed buffer is currently used only by the factory engine/runtime
   dispatch path as the runtime result channel
 - it is not a demonstrated cross-domain backend boundary yet
-- keeping the implementation under `factory/runtime` matches the actual owner
-  of buffer capacity, drop behavior, and runtime lifecycle decisions
+- keeping the implementation under the runtime-owned `factory/runtime/buffers`
+  subpackage matches the actual owner of buffer capacity, drop behavior, and
+  runtime lifecycle decisions without forcing `factory/engine` to import the
+  top-level `factory/runtime` package and create an import cycle
 
 ### `pkg/workcontent`
 
@@ -249,4 +252,3 @@ Every package-motion phase should include:
 - behavior-focused tests at the existing observable seam for the moved logic
 - compile or type validation plus affected test execution
 - a progress note that maps the moved files to the target package named here
-

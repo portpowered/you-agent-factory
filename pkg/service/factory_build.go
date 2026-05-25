@@ -16,9 +16,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/listeners"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
@@ -309,7 +309,7 @@ func buildRuntimeListener(
 	activeFactory factory.Factory,
 	logger *zap.Logger,
 	net *state.Net,
-) (*listeners.FileWatcher, error) {
+) (*ingest.FileWatcher, error) {
 	inputsDir := filepath.Join(factoryDir, interfaces.InputsDir)
 	if !dirExists(inputsDir) {
 		if err := os.MkdirAll(inputsDir, 0o755); err != nil {
@@ -318,11 +318,11 @@ func buildRuntimeListener(
 	} else {
 		logger.Info("using inputs/ directory", zap.String("dir", inputsDir))
 	}
-	return listeners.NewFileWatcher(
+	return ingest.NewFileWatcher(
 		inputsDir,
 		activeFactory,
 		logger,
-		listeners.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)),
+		ingest.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)),
 	), nil
 }
 

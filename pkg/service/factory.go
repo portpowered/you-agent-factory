@@ -18,10 +18,10 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/listeners"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/workers"
 
 	"go.uber.org/zap"
@@ -69,7 +69,7 @@ type replacementFactoryRuntime struct {
 	folderPath     string
 	eventHistory   *factoryevents.FactoryEventHistory
 	factory        factory.Factory
-	listener       *listeners.FileWatcher
+	listener       *ingest.FileWatcher
 	net            *state.Net
 	runtimeCfg     *factoryconfig.LoadedFactoryConfig
 	modelResources *localModelResourceLimiter
@@ -124,7 +124,7 @@ type FactoryService struct {
 	sessions       *liveRuntimeSessionManager
 	factoryRootDir string
 	factory        factory.Factory
-	listener       *listeners.FileWatcher
+	listener       *ingest.FileWatcher
 	net            *state.Net
 	cfg            *FactoryServiceConfig
 	runtimeCfg     *factoryconfig.LoadedFactoryConfig
@@ -407,7 +407,7 @@ func (fs *FactoryService) startRunSidecars(runCtx context.Context, sidecars *syn
 func (fs *FactoryService) startListenerSidecar(
 	runCtx context.Context,
 	sidecars *sync.WaitGroup,
-	listener *listeners.FileWatcher,
+	listener *ingest.FileWatcher,
 	logger *zap.Logger,
 ) {
 	sidecars.Add(1)

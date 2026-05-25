@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"github.com/portpowered/infinite-you/pkg/buffers"
+	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
