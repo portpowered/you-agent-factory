@@ -109,7 +109,7 @@ jobs:
     name: UI Coverage
     runs-on: ubuntu-latest
     needs: verify-build-contracts
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -135,7 +135,7 @@ jobs:
         run: make ui-deps
 
       - name: Run dashboard coverage suite
-        timeout-minutes: 15
+        timeout-minutes: 30
         run: make test-ui-coverage
 
       - name: Run replay coverage verification

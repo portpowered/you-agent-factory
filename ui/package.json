@@ -26,7 +26,7 @@
     "storybook:serve-static": "http-server storybook-static -p 6008 -a 127.0.0.1 -s",
     "storybook:wait-for-index": "wait-on --timeout 30000 http://127.0.0.1:6008/index.json",
     "storybook:test-runner:ci": "vitest run --config vitest.storybook.config.ts --project=storybook",
-    "test:coverage": "mkdir -p coverage/.tmp && vitest run --coverage --maxWorkers=2 --exclude integration/event-stream-replay.integration.test.mjs",
+    "test:coverage": "mkdir -p coverage/.tmp && vitest run --coverage --maxWorkers=1 --exclude integration/event-stream-replay.integration.test.mjs --exclude scripts/dashboard-shell-storybook-responsive.test.mjs && vitest run scripts/dashboard-shell-storybook-responsive.test.mjs --maxWorkers=1",
     "test:integration": "vitest run integration/event-stream-replay.integration.test.mjs",
     "test:unit": "vitest run --exclude integration/event-stream-replay.integration.test.mjs",
     "test": "vitest run --exclude integration/event-stream-replay.integration.test.mjs && vitest run integration/event-stream-replay.integration.test.mjs",
