@@ -335,7 +335,7 @@ describe.sequential("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { name: "You Agent Factory" })
+          .getByRole("heading", { level: 1, name: "U", exact: true })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,

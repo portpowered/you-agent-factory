@@ -101,7 +101,7 @@ export async function verifyDashboardShellConsolidation(
   });
   const timelineStatus = toolbar.getByText(/^\d+\/\d+$/);
   const streamStatus = toolbar.getByRole("status", {
-    name: /You Agent Factory event stream (connecting|live)/,
+    name: /Event stream (connecting|live)/,
   });
   const moveButton = board.getByRole("button", {
     exact: true,

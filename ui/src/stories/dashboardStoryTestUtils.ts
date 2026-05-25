@@ -252,7 +252,7 @@ export async function expectTimelineToolbarAlignment(
   );
 
   expect(sliderShell.className).toContain("gap-1.5");
-  expect(sliderShell.className).toContain("px-2.5");
+  expect(sliderShell.className).toContain("px-1");
   expect(streamStatus.className).toContain("inline-flex");
   expect(streamStatus.className).toContain("rounded-full");
   expect(streamStatus.className).not.toContain("sr-only");
@@ -262,9 +262,9 @@ export async function expectTimelineToolbarAlignment(
   ).toBeNull();
   expect(headerControls).toHaveLength(4);
   expect(headerControls[0]).toBe(streamStatus);
-  expect(headerControls[1]).toBe(exportButton);
-  expect(headerControls[2]).toBe(languageButton);
-  expect(headerControls[3]).toBe(slider);
+  expect(headerControls[1]).toBe(languageButton);
+  expect(headerControls[2]).toBe(slider);
+  expect(headerControls[3]).toBe(exportButton);
   expect(primaryRowRect.top).toBeLessThan(secondaryRowRect.top);
   expect(sliderRect.top).toBeGreaterThanOrEqual(headingRect.bottom - 1);
   expect(sliderRect.top).toBeGreaterThanOrEqual(activeTabRect.bottom - 1);

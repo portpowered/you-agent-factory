@@ -235,7 +235,13 @@ async function assertReplayScenarioRenders(preview, replayFixture) {
       browserPage.consoleErrors,
       expect,
     );
-    await browserPage.page.getByRole("heading", { name: headingName }).waitFor();
+    await browserPage.page
+      .getByRole("heading", {
+        level: 1,
+        name: headingName,
+        exact: true,
+      })
+      .waitFor();
     await browserPage.page
       .getByRole("region", { name: "you-agent-factory bento board" })
       .waitFor();
@@ -318,7 +324,11 @@ describe.sequential("captured event stream replay", () => {
     try {
       await browserPage.page.goto(preview.previewURL, { waitUntil: "domcontentloaded" });
       await browserPage.page
-        .getByRole("heading", { name: replayFixtures[0].browserIntegration.headingName })
+        .getByRole("heading", {
+          level: 1,
+          name: replayFixtures[0].browserIntegration.headingName,
+          exact: true,
+        })
         .waitFor();
       await expect
         .poll(

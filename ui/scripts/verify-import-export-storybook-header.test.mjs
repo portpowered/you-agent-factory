@@ -31,19 +31,14 @@ function createDesktopLocator(isDesktop, box, overrides = {}) {
   });
 }
 
-function createHeaderFixture(isDesktop, headingWordmarkClassName) {
+function createHeaderFixture(isDesktop) {
   return {
-    heading: createDesktopLocator(
-      isDesktop,
-      { height: 20, width: 120, x: 10, y: 0 },
-      {
-        getByText: vi.fn().mockReturnValue(
-          createLocator({
-            getAttribute: vi.fn().mockResolvedValue(headingWordmarkClassName),
-          }),
-        ),
-      },
-    ),
+    heading: createDesktopLocator(isDesktop, {
+      height: 20,
+      width: 120,
+      x: 10,
+      y: 0,
+    }),
     slider: createDesktopLocator(
       isDesktop,
       { height: 20, width: 200, x: 160, y: 0 },
@@ -124,12 +119,11 @@ function createTextLookup(timelineStatus) {
 
 function createPage({
   timelineStatus = createCurrentTickLocator(),
-  headingWordmarkClassName = "truncate text-lg font-semibold",
   isDesktop = false,
   returnToCurrentVisible = false,
 } = {}) {
   const { exportButton, heading, languageButton, sessionTabs, slider, streamStatus } =
-    createHeaderFixture(isDesktop, headingWordmarkClassName);
+    createHeaderFixture(isDesktop);
   const rootTab = createLocator();
   const currentButton = createLocator({
     isVisible: vi.fn().mockResolvedValue(returnToCurrentVisible),
@@ -173,23 +167,8 @@ describe("verifyDashboardHeader", () => {
       width: 1440,
     });
 
-    expect(page.heading.getByText).toHaveBeenCalledWith("You Agent Factory");
     expect(page.slider.focus).not.toHaveBeenCalled();
     expect(page.keyboard.press).not.toHaveBeenCalled();
-  });
-
-  test("verifyDashboardHeader rejects a hidden sr-only heading wordmark", async () => {
-    const page = createPage({ headingWordmarkClassName: "sr-only" });
-
-    await expect(
-      verifyDashboardHeader(page, null, {
-        height: 844,
-        label: "mobile",
-        width: 390,
-      }),
-    ).rejects.toThrow(
-      "Dashboard heading wordmark should remain visible instead of sr-only.",
-    );
   });
 
   test("verifyDashboardHeader rejects the retired return-to-current button when it is still visible", async () => {
