@@ -114,13 +114,6 @@ test-ui-coverage:
 test-ui-browser-integration:
 	$(MAKE) ui-integration-test
 
-ui-integration-test:
-ifeq ($(BUN_BIN),)
-	cd ui && $(NPM) run test:integration
-else
-	cd ui && $(UI_SCRIPT) test:integration
-endif
-
 test-backend-coverage:
 	$(MAKE) test-backend-verification
 

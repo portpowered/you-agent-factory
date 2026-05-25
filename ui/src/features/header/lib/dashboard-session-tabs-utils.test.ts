@@ -4,7 +4,6 @@ import {
   classifyFactorySessionFolderValidationError,
   factorySessionTargetOptionValue,
   folderValidationStatusMessage,
-  manualFactorySessionTargetRef,
   normalizeFactorySessionsError,
   selectedFactorySessionTarget,
   sessionCloseLabel,
@@ -122,11 +121,6 @@ describe("dashboard session tabs utils", () => {
       targets[1],
     );
     expect(selectedFactorySessionTarget([...targets], "named:missing")).toBeNull();
-    expect(manualFactorySessionTargetRef("  review  ")).toEqual({
-      kind: "named",
-      name: "review",
-    });
-    expect(manualFactorySessionTargetRef("   ")).toBeNull();
 
     const wrappedError = normalizeFactorySessionsError("boom");
     expect(wrappedError).toBeInstanceOf(FactorySessionsAPIError);

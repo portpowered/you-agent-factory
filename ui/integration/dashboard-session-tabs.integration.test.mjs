@@ -124,20 +124,17 @@ describe.sequential("dashboard session tabs browser integration", () => {
           .click();
 
         const dialog = browserPage.page.getByRole("dialog", {
-          name: "Open a factory folder",
+          name: "Factory Session",
         });
         await dialog.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await dialog.getByLabel("Factory folder").fill("/workspace/project");
-        await dialog.getByRole("button", { name: "Check folder" }).click();
+        await dialog.getByRole("button", { name: "Start Factory" }).click();
 
         await dialog
-          .getByRole("region", { name: "Pick a runnable target" })
+          .getByRole("button", { name: "Review factory" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await dialog
-          .getByRole("button", { name: "Open selected target" })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-        await dialog
-          .getByRole("button", { name: "Open selected target" })
+          .getByRole("button", { name: "Review factory" })
           .click();
 
         await dialog.waitFor({
