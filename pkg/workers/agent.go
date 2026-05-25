@@ -96,8 +96,7 @@ func missingWorkerWorkResult(dispatch interfaces.WorkDispatch, workerType string
 }
 
 func inferenceErrorWorkResult(dispatch interfaces.WorkDispatch, err error, diagnostics *interfaces.WorkDiagnostics, retryCount int, start time.Time) interfaces.WorkResult {
-	var providerErr *ProviderError
-	errors.As(err, &providerErr)
+	providerErr := NormalizeProviderExecutionError(err)
 	failureMetadata := WorkFailureMetadataFromError(providerErr)
 	return interfaces.WorkResult{
 		DispatchID:      dispatch.DispatchID,
@@ -285,14 +284,14 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req interfaces.Prov
 			return resp, retryCount, nil
 		}
 
-		var providerErr *ProviderError
-		if !errors.As(err, &providerErr) {
+		providerErr := NormalizeProviderExecutionError(err)
+		if providerErr == nil {
 			return interfaces.InferenceResponse{}, retryCount, err
 		}
 
 		decision := ClassifyProviderFailure(providerErr)
 		if !decision.Retryable || retryCount >= ae.retryConfig.maxRetries {
-			return interfaces.InferenceResponse{}, retryCount, err
+			return interfaces.InferenceResponse{}, retryCount, providerErr
 		}
 
 		baseDelay := ae.retryConfig.initialBackoff << retryCount

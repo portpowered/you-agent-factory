@@ -1,6 +1,8 @@
 package workers
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -114,4 +116,21 @@ func WorkFailureMetadataFromError(err *ProviderError) *interfaces.WorkFailureMet
 		Family: err.Family,
 		Type:   err.Type,
 	}
+}
+
+// NormalizeProviderExecutionError projects raw execution failures that affect
+// retry policy onto the shared provider failure contract before retry decisions
+// are made.
+func NormalizeProviderExecutionError(err error) *ProviderError {
+	if err == nil {
+		return nil
+	}
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) {
+		return providerErr
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return NewProviderError(interfaces.ProviderErrorTypeTimeout, "execution timeout", err)
+	}
+	return nil
 }
