@@ -68,8 +68,8 @@ state, workstation-request projection, and dashboard replay/detail UI.
 | State | Owner | Allowed transitions | Terminal? | Evidence |
 | --- | --- | --- | --- | --- |
 | pending script request | canonical selected-tick reducer | request arrives, no matching response at selected tick | No | `world_state_test.go` pending script coverage and request-detail pending UI tests |
-| successful script response | canonical event payload plus reducer/projection | pending script request -> success response | Yes | workstation-request projection tests, `workstation-request-detail.test.tsx`, mixed replay smoke |
-| failed script response | canonical event payload plus reducer/projection | pending script request -> failed response | Yes | workstation-request projection tests, `workstation-request-detail.test.tsx`, mixed replay smoke |
+| successful script response | canonical event payload plus reducer/projection | pending script request -> success response | Yes | workstation-request projection tests, `workstation-request-detail.script-attempts.test.tsx`, mixed replay smoke |
+| failed script response | canonical event payload plus reducer/projection | pending script request -> failed response | Yes | workstation-request projection tests, `workstation-request-detail.script-attempts.test.tsx`, mixed replay smoke |
 
 ## Configuration Shapes
 
