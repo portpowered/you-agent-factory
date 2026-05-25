@@ -1,10 +1,7 @@
-import { buttonVariants } from "../../../components/ui";
+import { DashboardStatusPill } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
-import { FactoryGraphEditorTooltipButton } from "./factory-graph-editor-tooltip-button";
-
-const STATUS_PILL_CLASS =
-  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold";
+import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
 function EditModeIcon() {
   return (
@@ -46,25 +43,19 @@ export function FactoryGraphEditorModeToggle({
     (editorMode ? messages.modeLeaveEditor : messages.modeEnterEditor);
 
   return (
-    <FactoryGraphEditorTooltipButton
+    <FactoryGraphEditorTooltipActionButton
       aria-label={label}
       aria-pressed={editorMode}
-      className={buttonVariants({
-        className: cn(
-          "shrink-0",
-          disabled && "cursor-not-allowed",
-          className,
-        ),
-        size: "icon",
-        tone: editorMode ? "secondary" : "outline",
-      })}
+      className={cn("shrink-0", disabled && "cursor-not-allowed", className)}
       disabled={disabled}
+      iconOnly
       onClick={onClick}
       tooltip={label}
+      tone={editorMode ? "secondary" : "outline"}
       type="button"
     >
       <EditModeIcon />
-    </FactoryGraphEditorTooltipButton>
+    </FactoryGraphEditorTooltipActionButton>
   );
 }
 
@@ -88,78 +79,58 @@ export function FactoryGraphEditorStatus({
   const messages = getFactoryGraphEditorMessages(locale);
   if (editorUnavailableReason) {
     return (
-      <p
+      <DashboardStatusPill
         aria-live="polite"
-        className={cn(
-          STATUS_PILL_CLASS,
-          className,
-          "border-af-danger-border bg-af-danger-surface text-af-danger-text",
-        )}
+        className={className}
         role="status"
+        tone="danger"
       >
         {messages.modeUnavailablePrefix}: {editorUnavailableReason}
-      </p>
+      </DashboardStatusPill>
     );
   }
 
   if (!editorMode) {
     return (
-      <p
-        className={cn(
-          STATUS_PILL_CLASS,
-          className,
-          "border-af-border bg-af-surface-subtle text-af-text-muted",
-        )}
-      >
+      <DashboardStatusPill className={className} tone="neutral">
         {messages.modeObserve}
-      </p>
+      </DashboardStatusPill>
     );
   }
 
   if (isDefinitionLoading) {
     return (
-      <p
+      <DashboardStatusPill
         aria-live="polite"
-        className={cn(
-          STATUS_PILL_CLASS,
-          className,
-          "border-af-accent-border bg-af-accent-surface text-af-text",
-        )}
+        className={className}
+        tone="active"
       >
         {messages.modeLoadingDefinition}
-      </p>
+      </DashboardStatusPill>
     );
   }
 
   if (loadErrorMessage) {
     return (
-      <p
+      <DashboardStatusPill
         aria-live="polite"
-        className={cn(
-          STATUS_PILL_CLASS,
-          className,
-          "border-af-danger-border bg-af-danger-surface text-af-danger-text",
-        )}
+        className={className}
         role="status"
+        tone="danger"
       >
         {messages.modeUnavailablePrefix}: {loadErrorMessage}
-      </p>
+      </DashboardStatusPill>
     );
   }
 
   return (
-    <p
+    <DashboardStatusPill
       aria-live="polite"
-      className={cn(
-        STATUS_PILL_CLASS,
-        className,
-        hasChanges
-          ? "border-af-warning-border bg-af-warning-surface text-af-warning-text"
-          : "border-af-accent-border bg-af-accent-surface text-af-text",
-      )}
+      className={className}
       role="status"
+      tone={hasChanges ? "warning" : "active"}
     >
       {hasChanges ? messages.modeUnsavedChanges : messages.modeActive}
-    </p>
+    </DashboardStatusPill>
   );
 }

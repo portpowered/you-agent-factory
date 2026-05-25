@@ -5,6 +5,7 @@ import { GridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
+import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
 import { cn } from "../../../lib/cn";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import {
@@ -60,9 +61,14 @@ const BENTO_RESIZE_HANDLES = ["se", "s", "e"] as const;
 const BENTO_DRAG_HANDLE_SELECTOR = "[data-bento-drag-handle='true']";
 const BENTO_DRAG_CANCEL_SELECTOR =
   "a,input,select,textarea,.react-resizable-handle";
-const BENTO_LAYOUT_CLASS = "min-w-0 w-full";
+const BENTO_SINGLE_COLUMN_BREAKPOINT_PX = 800;
+const BENTO_LAYOUT_CLASS = "min-w-0 w-full overflow-x-hidden";
+const BENTO_LAYOUT_HANDLE_CLASS =
+  "[&_.react-resizable-handle-e]:right-0 [&_.react-resizable-handle-se]:right-0";
 const BENTO_GRID_CLASS = "min-h-px";
 const BENTO_ITEM_CLASS = "min-w-0";
+const BENTO_STACK_CLASS = "grid gap-4";
+const BENTO_STACK_ITEM_CLASS = "min-w-0";
 const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
   "flex min-h-13 cursor-move items-center justify-between gap-3 border-af-border px-3.5 py-3";
@@ -75,10 +81,8 @@ const BENTO_CARD_TITLE_CLASS = cn(
 const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS = "gap-1.5";
-const BENTO_DRAG_HANDLE_CLASS =
-  "inline-grid size-9 shrink-0 cursor-grab place-items-center rounded-lg border border-af-border bg-af-surface-raised text-af-text-muted outline-af-accent transition-colors hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 active:cursor-grabbing";
 const BENTO_DRAG_HANDLE_COMPACT_CLASS =
-  "size-8 rounded-md border-af-border bg-transparent text-af-text-subtle hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
+  "size-8 rounded-md bg-transparent text-af-text-subtle";
 const BENTO_CARD_BODY_CLASS = cn(
   "grid h-full min-h-0 flex-1 gap-2.5 overflow-auto p-3.5 [&_p]:m-0",
   DASHBOARD_BODY_TEXT_CLASS,
@@ -144,6 +148,70 @@ function hasSameLayoutItems(left: Layout, right: Layout): boolean {
   return left.every((item) => rightIDs.has(item.i));
 }
 
+function collapseLayoutToSingleColumn(layout: Layout): Layout {
+  let nextY = 0;
+
+  return [...layout]
+    .sort((left, right) => {
+      if (left.y !== right.y) {
+        return left.y - right.y;
+      }
+      if (left.x !== right.x) {
+        return left.x - right.x;
+      }
+
+      return left.i.localeCompare(right.i);
+    })
+    .map((item) => {
+      const collapsedItem = {
+        ...item,
+        maxW: 1,
+        minW: 1,
+        w: 1,
+        x: 0,
+        y: nextY,
+      };
+      nextY += item.h;
+      return collapsedItem;
+    });
+}
+
+function useAlignedBentoResizeHandles(
+  containerRef: ReturnType<typeof useContainerWidth>["containerRef"],
+  useSingleColumnLayout: boolean,
+) {
+  useEffect(() => {
+    if (useSingleColumnLayout) {
+      return;
+    }
+
+    const container = containerRef.current;
+    if (!(container instanceof HTMLElement)) {
+      return;
+    }
+
+    const syncResizeHandles = () => {
+      for (const handle of container.querySelectorAll<HTMLElement>(
+        ".react-resizable-handle-e, .react-resizable-handle-se",
+      )) {
+        handle.style.right = "4px";
+      }
+    };
+
+    syncResizeHandles();
+    const frame = window.requestAnimationFrame(syncResizeHandles);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      for (const handle of container.querySelectorAll<HTMLElement>(
+        ".react-resizable-handle-e, .react-resizable-handle-se",
+      )) {
+        handle.style.right = "";
+      }
+    };
+  }, [containerRef, useSingleColumnLayout]);
+}
+
 export function AgentBentoLayout({
   cards,
   className = "",
@@ -160,15 +228,21 @@ export function AgentBentoLayout({
   );
   const [currentLayout, setCurrentLayout] = useState<Layout>(normalizedLayout);
   const { containerRef, width } = useContainerWidth({ initialWidth });
+  const useSingleColumnLayout = width < BENTO_SINGLE_COLUMN_BREAKPOINT_PX;
   const renderedLayout = hasSameLayoutItems(currentLayout, normalizedLayout)
     ? currentLayout
     : normalizedLayout;
+  const singleColumnLayout = collapseLayoutToSingleColumn(renderedLayout);
+  useAlignedBentoResizeHandles(containerRef, useSingleColumnLayout);
 
   useEffect(() => {
     setCurrentLayout(normalizedLayout);
   }, [normalizedLayout]);
 
   const handleLayoutChange = (nextLayout: Layout) => {
+    if (useSingleColumnLayout) {
+      return;
+    }
     if (
       gridLayoutSignature(nextLayout) === gridLayoutSignature(renderedLayout)
     ) {
@@ -179,51 +253,84 @@ export function AgentBentoLayout({
     onLayoutChange?.(toBentoLayout(nextLayout, layoutByID));
   };
 
-  const layoutClassName = cn(BENTO_LAYOUT_CLASS, className);
+  const layoutClassName = cn(
+    BENTO_LAYOUT_CLASS,
+    BENTO_LAYOUT_HANDLE_CLASS,
+    className,
+  );
   const renderedWidth = Math.max(width, 320);
+  const cardsByID = new Map(cards.map((card) => [card.id, card]));
 
   return (
     <section
       aria-label={messages.boardLabel}
+      data-bento-board="true"
+      data-bento-single-column={useSingleColumnLayout || undefined}
       className={layoutClassName}
       ref={containerRef}
     >
-      <GridLayout
-        autoSize
-        className={BENTO_GRID_CLASS}
-        dragConfig={{
-          cancel: BENTO_DRAG_CANCEL_SELECTOR,
-          enabled: true,
-          handle: BENTO_DRAG_HANDLE_SELECTOR,
-        }}
-        gridConfig={{
-          cols: BENTO_COLUMNS,
-          containerPadding: BENTO_CONTAINER_PADDING,
-          margin: BENTO_MARGIN,
-          rowHeight: BENTO_ROW_HEIGHT,
-        }}
-        layout={renderedLayout}
-        onLayoutChange={handleLayoutChange}
-        resizeConfig={{ enabled: true, handles: [...BENTO_RESIZE_HANDLES] }}
-        width={renderedWidth}
-      >
-        {cards.map((card) => (
-          <div
-            className={BENTO_ITEM_CLASS}
-            data-bento-card-id={card.widgetType}
-            data-bento-instance-id={card.id}
-            data-layout-signature={layoutSignature(
-              toBentoLayout(currentLayout, layoutByID).filter(
-                (item) => item.id === card.id,
-              ),
-            )}
-            id={card.id}
-            key={card.id}
-          >
-            {card.children}
-          </div>
-        ))}
-      </GridLayout>
+      {useSingleColumnLayout ? (
+        <div className={BENTO_STACK_CLASS}>
+          {singleColumnLayout.map((item) => {
+            const card = cardsByID.get(item.i);
+            if (!card) {
+              return null;
+            }
+
+            return (
+              <div
+                className={BENTO_STACK_ITEM_CLASS}
+                data-bento-card-id={card.widgetType}
+                data-bento-instance-id={card.id}
+                id={card.id}
+                key={card.id}
+              >
+                {card.children}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <GridLayout
+          autoSize
+          className={BENTO_GRID_CLASS}
+          dragConfig={{
+            cancel: BENTO_DRAG_CANCEL_SELECTOR,
+            enabled: true,
+            handle: BENTO_DRAG_HANDLE_SELECTOR,
+          }}
+          gridConfig={{
+            cols: BENTO_COLUMNS,
+            containerPadding: BENTO_CONTAINER_PADDING,
+            margin: BENTO_MARGIN,
+            rowHeight: BENTO_ROW_HEIGHT,
+          }}
+          layout={renderedLayout}
+          onLayoutChange={handleLayoutChange}
+          resizeConfig={{
+            enabled: true,
+            handles: [...BENTO_RESIZE_HANDLES],
+          }}
+          width={renderedWidth}
+        >
+          {cards.map((card) => (
+            <div
+              className={BENTO_ITEM_CLASS}
+              data-bento-card-id={card.widgetType}
+              data-bento-instance-id={card.id}
+              data-layout-signature={layoutSignature(
+                toBentoLayout(currentLayout, layoutByID).filter(
+                  (item) => item.id === card.id,
+                ),
+              )}
+              id={card.id}
+              key={card.id}
+            >
+              {card.children}
+            </div>
+          ))}
+        </GridLayout>
+      )}
     </section>
   );
 }
@@ -278,14 +385,15 @@ export function AgentBentoDragHandle({
   title,
 }: AgentBentoDragHandleProps) {
   return (
-    <button
+    <DashboardActionButton
       aria-label={`Move ${title}`}
       className={cn(
-        BENTO_DRAG_HANDLE_CLASS,
+        "cursor-grab bg-af-surface-raised text-af-text-muted active:cursor-grabbing",
         compact && BENTO_DRAG_HANDLE_COMPACT_CLASS,
       )}
       data-bento-drag-handle="true"
-      type="button"
+      iconOnly
+      tone="outline"
     >
       <svg
         aria-hidden="true"
@@ -303,6 +411,6 @@ export function AgentBentoDragHandle({
           strokeWidth="1.7"
         />
       </svg>
-    </button>
+    </DashboardActionButton>
   );
 }

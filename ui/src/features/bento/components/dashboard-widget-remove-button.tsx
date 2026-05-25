@@ -1,11 +1,7 @@
 import type { ReactElement } from "react";
 
-import { cn } from "../../../lib/cn";
+import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
 import { getAgentBentoMessages } from "../messages/agent-bento";
-
-const REMOVE_BUTTON_CLASS = cn(
-  "inline-grid size-8 shrink-0 place-items-center rounded-md border border-af-border bg-transparent text-af-text-subtle transition-colors hover:border-af-danger-border hover:bg-af-danger-surface hover:text-af-danger-text focus-visible:ring-2 focus-visible:ring-af-focus-ring focus-visible:ring-offset-0",
-);
 
 export interface DashboardWidgetRemoveButtonProps {
   locale?: string | null;
@@ -21,11 +17,12 @@ export function DashboardWidgetRemoveButton({
   const messages = getAgentBentoMessages(locale);
 
   return (
-    <button
+    <DashboardActionButton
       aria-label={messages.removeWidgetLabel(widgetTitle)}
-      className={REMOVE_BUTTON_CLASS}
+      className="size-8 rounded-md"
+      iconOnly
       onClick={onClick}
-      type="button"
+      tone="destructive"
     >
       <svg
         aria-hidden="true"
@@ -43,6 +40,6 @@ export function DashboardWidgetRemoveButton({
           strokeWidth="1.7"
         />
       </svg>
-    </button>
+    </DashboardActionButton>
   );
 }

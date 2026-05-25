@@ -11,9 +11,11 @@ import { cn } from "../../../lib/cn";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import {
   DASHBOARD_PAGE_HEADING_CLASS,
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import {
+  DashboardActionRow,
+  DashboardStatusPill,
+} from "../../../components/ui";
 import {
   getNativeLanguageLabel,
   SUPPORTED_LOCALES,
@@ -44,15 +46,10 @@ const DASHBOARD_BRAND_SLOT_CLASS = "min-w-0 self-end pb-2";
 const DASHBOARD_TAB_STRIP_CLASS = "flex min-w-0 flex-1 items-stretch px-2 pt-1";
 const DASHBOARD_TIMELINE_ROW_CLASS = "flex min-w-0 justify-end";
 const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
-const DASHBOARD_STREAM_STATUS_CLASS = cn(
-  "sr-only shrink-0 whitespace-nowrap text-sm text-af-text-muted",
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-);
-const DASHBOARD_CONTROLS_CLASS = cn(
-  "flex shrink-0 items-center gap-2 self-end pb-2",
-  "max-md:w-full max-md:justify-end",
-);
+const DASHBOARD_CONTROLS_CLASS = "shrink-0 self-end pb-2";
+const DASHBOARD_HEADER_ACTION_ROW_CLASS = "justify-end max-md:w-full";
+const DASHBOARD_HEADER_ACTION_ROW_ACTIONS_CLASS =
+  "max-md:w-full max-md:justify-end";
 const LOCALE_MENU_PANEL_CLASS =
   "absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-af-border bg-af-surface-raised p-1 text-af-text shadow-af-panel backdrop-blur-lg";
 const LOCALE_MENU_ITEM_CLASS = cn(
@@ -101,45 +98,55 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
               state={sessionTabsState}
             />
           </div>
-          <p
-            aria-label={streamStatusLabel(streamStatus, headerMessages)}
-            className={DASHBOARD_STREAM_STATUS_CLASS}
-            role="status"
-          >
-            {streamStatusLabel(streamStatus, headerMessages)}
-          </p>
-          <fieldset
-            aria-label={headerMessages.globalHeaderActionsLabel}
-            className={DASHBOARD_CONTROLS_CLASS}
-          >
-            <DashboardHeaderActionButton
-              aria-label={exportMessages.triggerLabel}
-              aria-expanded={isExportDialogOpen}
-              aria-haspopup="dialog"
-              compact
-              onClick={openExportDialog}
-            >
-              <svg
-                aria-hidden="true"
-                fill="none"
-                height="18"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.8"
-                viewBox="0 0 24 24"
-                width="18"
+          <DashboardActionRow
+            actions={
+              <fieldset
+                aria-label={headerMessages.globalHeaderActionsLabel}
+                className={DASHBOARD_CONTROLS_CLASS}
               >
-                <path d="M14 5h5v5" />
-                <path d="M10 14 19 5" />
-                <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
-              </svg>
-            </DashboardHeaderActionButton>
-            <DashboardLocaleMenu
-              locale={resolvedLocale}
-              onChangeLocale={setLocale}
-            />
-          </fieldset>
+                <div className="flex items-center gap-2">
+                  <DashboardHeaderActionButton
+                    aria-label={exportMessages.triggerLabel}
+                    aria-expanded={isExportDialogOpen}
+                    aria-haspopup="dialog"
+                    compact
+                    onClick={openExportDialog}
+                  >
+                    <svg
+                      aria-hidden="true"
+                      fill="none"
+                      height="18"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                      viewBox="0 0 24 24"
+                      width="18"
+                    >
+                      <path d="M14 5h5v5" />
+                      <path d="M10 14 19 5" />
+                      <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+                    </svg>
+                  </DashboardHeaderActionButton>
+                  <DashboardLocaleMenu
+                    locale={resolvedLocale}
+                    onChangeLocale={setLocale}
+                  />
+                </div>
+              </fieldset>
+            }
+            actionsClassName={DASHBOARD_HEADER_ACTION_ROW_ACTIONS_CLASS}
+            className={DASHBOARD_HEADER_ACTION_ROW_CLASS}
+            statuses={
+              <DashboardStatusPill
+                aria-label={streamStatusLabel(streamStatus, headerMessages)}
+                role="status"
+                tone={streamStatusTone(streamStatus)}
+              >
+                {streamStatusLabel(streamStatus, headerMessages)}
+              </DashboardStatusPill>
+            }
+          />
         </div>
         <div className={DASHBOARD_SECONDARY_ROW_CLASS}>
           <div className={DASHBOARD_TIMELINE_ROW_CLASS}>
@@ -163,6 +170,19 @@ function streamStatusLabel(
   }
 
   return messages.streamStatusConnectingLabel;
+}
+
+function streamStatusTone(
+  status: ReturnType<typeof useDashboardStreamStore.getState>["streamState"]["status"],
+) {
+  if (status === "live") {
+    return "active";
+  }
+  if (status === "offline") {
+    return "danger";
+  }
+
+  return "neutral";
 }
 
 function resolveLanguageSwitcherValue(locale: string): SupportedLocale {
