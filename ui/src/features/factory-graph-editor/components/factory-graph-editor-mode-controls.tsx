@@ -1,7 +1,7 @@
-import { DashboardStatusPill, buttonVariants } from "../../../components/ui";
+import { DashboardStatusPill } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
-import { FactoryGraphEditorTooltipButton } from "./factory-graph-editor-tooltip-button";
+import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
 function EditModeIcon() {
   return (
@@ -43,25 +43,19 @@ export function FactoryGraphEditorModeToggle({
     (editorMode ? messages.modeLeaveEditor : messages.modeEnterEditor);
 
   return (
-    <FactoryGraphEditorTooltipButton
+    <FactoryGraphEditorTooltipActionButton
       aria-label={label}
       aria-pressed={editorMode}
-      className={buttonVariants({
-        className: cn(
-          "h-10 w-10 shrink-0 rounded-lg px-0 py-0",
-          disabled && "cursor-not-allowed",
-          className,
-        ),
-        size: "icon",
-        tone: editorMode ? "secondary" : "outline",
-      })}
+      className={cn("shrink-0", disabled && "cursor-not-allowed", className)}
       disabled={disabled}
+      iconOnly
       onClick={onClick}
       tooltip={label}
+      tone={editorMode ? "secondary" : "outline"}
       type="button"
     >
       <EditModeIcon />
-    </FactoryGraphEditorTooltipButton>
+    </FactoryGraphEditorTooltipActionButton>
   );
 }
 

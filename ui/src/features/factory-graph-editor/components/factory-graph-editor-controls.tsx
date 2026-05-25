@@ -17,7 +17,10 @@ export {
   FactoryGraphEditorModeToggle,
   FactoryGraphEditorStatus,
 } from "./factory-graph-editor-mode-controls";
-import { FactoryGraphEditorTooltipButton } from "./factory-graph-editor-tooltip-button";
+import {
+  FactoryGraphEditorTooltipActionButton,
+  FactoryGraphEditorTooltipButton,
+} from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
 export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
@@ -135,30 +138,28 @@ export function FactoryGraphEditorToolbar({
         actions={
           hasPendingChanges ? (
             <>
-              <Button
+              <DashboardActionButton
                 disabled={!canDiscard || isSaving}
                 onClick={onDiscard}
-                size="sm"
                 tone="outline"
                 type="button"
               >
                 {messages.draftActionsDiscard}
-              </Button>
-              <FactoryGraphEditorTooltipButton
+              </DashboardActionButton>
+              <FactoryGraphEditorTooltipActionButton
                 aria-label={
                   isSaving ? messages.draftActionsSaving : messages.draftActionsSave
                 }
-                className={buttonVariants({
-                  size: "icon",
-                  tone: canSave && !isSaving ? "default" : "outline",
-                })}
                 disabled={!canSave || isSaving}
+                executing={isSaving}
+                iconOnly
                 onClick={onSave}
                 tooltip={saveDisabledReason ?? messages.draftActionsSave}
+                tone={canSave && !isSaving ? "default" : "outline"}
                 type="button"
               >
                 <SaveIcon />
-              </FactoryGraphEditorTooltipButton>
+              </FactoryGraphEditorTooltipActionButton>
             </>
           ) : null
         }

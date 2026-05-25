@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 
+import { DashboardActionRow } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import {
   applyFactoryGraphAddEntityDraft,
@@ -89,8 +90,9 @@ export function useFactoryGraphAddEntityController({
 }
 
 const FACTORY_GRAPH_HEADER_ACTIONS_CLASS =
-  "flex min-w-0 flex-wrap items-center justify-end gap-2";
+  "min-w-0 justify-end";
 const FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS = "gap-1.5";
+const FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS = "gap-1.5";
 const STATUS_PILL_COMPACT_CLASS = "px-2.5 py-0.5 text-[0.7rem]";
 const MODE_TOGGLE_COMPACT_CLASS =
   "size-8 rounded-md border-af-border bg-transparent text-af-text-muted hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
@@ -123,13 +125,24 @@ export function CurrentActivityGraphHeaderActions({
         );
 
   return (
-    <div
+    <DashboardActionRow
+      actions={
+        <FactoryGraphEditorModeToggle
+          className={compact ? MODE_TOGGLE_COMPACT_CLASS : undefined}
+          disabled={!editorMode && editorUnavailableReason !== undefined}
+          editorMode={editorMode}
+          locale={locale}
+          onClick={onToggle}
+          tooltipOverride={editorUnavailableReason}
+        />
+      }
+      actionsClassName={compact ? FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS : undefined}
       className={cn(
         FACTORY_GRAPH_HEADER_ACTIONS_CLASS,
         compact && FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS,
       )}
-    >
-      <FactoryGraphEditorStatus
+      statuses={
+        <FactoryGraphEditorStatus
         className={compact ? STATUS_PILL_COMPACT_CLASS : undefined}
         editorMode={editorMode}
         editorUnavailableReason={editorUnavailableReason}
@@ -138,14 +151,8 @@ export function CurrentActivityGraphHeaderActions({
         locale={locale}
         loadErrorMessage={loadErrorMessage}
       />
-      <FactoryGraphEditorModeToggle
-        className={compact ? MODE_TOGGLE_COMPACT_CLASS : undefined}
-        disabled={!editorMode && editorUnavailableReason !== undefined}
-        editorMode={editorMode}
-        locale={locale}
-        onClick={onToggle}
-        tooltipOverride={editorUnavailableReason}
-      />
-    </div>
+      }
+      statusesClassName={compact ? FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS : undefined}
+    />
   );
 }
