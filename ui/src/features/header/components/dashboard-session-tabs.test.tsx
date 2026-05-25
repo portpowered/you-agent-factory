@@ -103,6 +103,11 @@ describe("DashboardSessionTabs", () => {
     expect(screen.getByRole("tablist")).toBeTruthy();
     expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "beta" })).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: messages.openSessionButtonLabel })
+        .closest('[role="tablist"]'),
+    ).toBe(screen.getByRole("tablist"));
     expect(screen.getByRole("tabpanel")).toBeTruthy();
   });
 

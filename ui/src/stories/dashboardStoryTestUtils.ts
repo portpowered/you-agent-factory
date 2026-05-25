@@ -145,17 +145,14 @@ export async function expectTypographyRegressionSurface(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
-  const heading = await canvas.findByRole("heading", { name: "You Agent Factory" });
-  const wordmark = within(heading).getByText("You Agent Factory");
+  const heading = await canvas.findByRole("heading", { name: "U" });
   const toolbar = canvas.getByRole("region", { name: "dashboard summary" });
   const streamStatus = canvas.getByRole("status", {
-    name: /You Agent Factory event stream (connecting|live)/,
+    name: /Event stream (connecting|live)/,
   });
 
   expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
-  expect(wordmark.className).not.toContain("sr-only");
-  expect(heading.textContent).toContain("∞");
-  expect(heading.textContent).toContain("U");
+  expect(heading.textContent).toBe("U");
   expect(streamStatus.className).toContain("inline-flex");
   expect(streamStatus.className).toContain("rounded-full");
   expect(streamStatus.className).not.toContain("sr-only");
@@ -205,9 +202,9 @@ export async function expectTimelineToolbarAlignment(
   const toolbar = await canvas.findByRole("region", {
     name: "dashboard summary",
   });
-  const heading = within(toolbar).getByRole("heading", { name: "You Agent Factory" });
+  const heading = within(toolbar).getByRole("heading", { name: "U" });
   const streamStatus = within(toolbar).getByRole("status", {
-    name: /You Agent Factory event stream (connecting|live)/,
+    name: /Event stream (connecting|live)/,
   });
   const activeTab = within(toolbar).getByRole("tab", { name: "root" });
   const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {

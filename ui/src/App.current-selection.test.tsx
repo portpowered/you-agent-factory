@@ -1331,7 +1331,7 @@ describe("App current selection layout", () => {
   it("renders queued, in-flight, completed, and failed work in one ranged outcome chart", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
     const dashboardGrid = screen.getByRole("region", {
       name: "you-agent-factory bento board",
     });
@@ -1499,7 +1499,7 @@ describe("App current selection layout", () => {
       traceFixtures: activeStoryReworkTraceFixtures,
     });
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
     const dashboardGrid = screen.getByRole("region", {
       name: "you-agent-factory bento board",
     });
@@ -1598,7 +1598,7 @@ describe("App current selection layout", () => {
       traceFixtures: activeStoryTraceFixtures,
     });
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
     expect(
       screen.getAllByRole("region", { name: "you-agent-factory bento board" }),
     ).toHaveLength(1);
@@ -1734,7 +1734,7 @@ describe("App current selection terminal states", () => {
       traceFixtures: terminalStateTraceFixtures,
     });
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
     const dashboardGrid = screen.getByRole("region", {
       name: "you-agent-factory bento board",
     });
@@ -1835,7 +1835,7 @@ describe("App current selection terminal states", () => {
       timelineSnapshots: terminalTimelineSnapshots,
     });
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
     const dashboardGrid = screen.getByRole("region", {
       name: "you-agent-factory bento board",
     });

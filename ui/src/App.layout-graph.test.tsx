@@ -42,7 +42,7 @@ describe("App layout behavior", () => {
     });
 
     expect(
-      await screen.findByRole("heading", { name: "You Agent Factory" }),
+      await screen.findByRole("heading", { name: "U" }),
     ).toBeTruthy();
     expect(screen.queryByText("Loading dashboard")).toBeNull();
     expect(
@@ -66,7 +66,7 @@ describe("App layout behavior", () => {
   it("starts with full-width totals above a full-width Factory graph card", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
 
     const dashboardGrid = screen.getByRole("region", {
       name: "you-agent-factory bento board",
@@ -109,7 +109,7 @@ describe("App layout migration behavior", () => {
 
     renderApp({ snapshot: activeSnapshot });
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
 
     const dashboardGrid = screen.getByRole("region", {
       name: "you-agent-factory bento board",
@@ -150,7 +150,7 @@ describe("App layout migration behavior", () => {
 
     renderApp({ snapshot: activeSnapshot });
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
 
     const dashboardGrid = screen.getByRole("region", {
       name: "you-agent-factory bento board",
@@ -179,7 +179,7 @@ describe("App layout migration behavior", () => {
 
     renderApp({ snapshot: activeSnapshot });
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
 
     const dashboardGrid = screen.getByRole("region", {
       name: "you-agent-factory bento board",
@@ -277,7 +277,7 @@ describe("App graph behavior", () => {
   it("uses React Flow controls for work graph zoom interaction", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "You Agent Factory" });
+    await screen.findByRole("heading", { name: "U" });
 
     const workGraphViewport = screen.getByRole("region", {
       name: "Work graph viewport",

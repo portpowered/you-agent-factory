@@ -125,9 +125,13 @@ describe("TickSliderControl", () => {
     expect(slider.getAttribute("aria-describedby")).toBe(statusText.id);
     expect(slider.getAttribute("aria-valuetext")).toBe("9/9");
     expect(sliderShell?.className).toContain("gap-1.5");
-    expect(sliderShell?.className).toContain("px-2.5");
-    expect(sliderShell?.className).toContain("border-af-border");
-    expect(sliderShell?.className).toContain("bg-af-surface-subtle");
+    expect(sliderShell?.className).toContain("px-1");
+    expect(sliderShell?.className).toContain("py-1");
+    expect(sliderShell?.className).not.toContain("border-af-border");
+    expect(sliderShell?.className).not.toContain("bg-af-surface-subtle");
+    expect(sliderShell?.className).not.toContain("rounded-lg");
+    expect(sliderShell?.className).not.toContain("md:w-auto");
+    expect(sliderShell?.className).not.toContain("md:max-w-lg");
     expect(screen.queryByText("Current")).toBeNull();
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
     expect(
