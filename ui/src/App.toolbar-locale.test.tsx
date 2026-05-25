@@ -1,10 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_PAGE_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-} from "./components/ui/dashboard-typography";
+import { DASHBOARD_PAGE_HEADING_CLASS } from "./components/ui/dashboard-typography";
 import { useDashboardStreamStore } from "./features/dashboard/state";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
 import {
@@ -170,8 +166,8 @@ describe("App shell locale and toolbar flows", () => {
     const exportButton = screen.getByRole("button", { name: "Export PNG" });
 
     expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
-    expect(streamStatus.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
-    expect(streamStatus.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
+    expect(streamStatus.className).toContain("rounded-full");
+    expect(streamStatus.className).toContain("border");
     expect(within(toolbar).queryByText("Factory state")).toBeNull();
     expect(within(toolbar).queryByText(terminalSnapshot.factory_state)).toBeNull();
     expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
