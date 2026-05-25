@@ -31,6 +31,7 @@ type WorkResult struct {
 	Error                       string                   `json:"error,omitempty"`
 	Feedback                    string                   `json:"feedback,omitempty"`
 	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
+	FailureMetadata             *WorkFailureMetadata     `json:"failure_metadata,omitempty"`
 	ProviderFailure             *ProviderFailureMetadata `json:"provider_failure,omitempty"`
 	ProviderSession             *ProviderSessionMetadata `json:"provider_session,omitempty"`
 	Diagnostics                 *WorkDiagnostics         `json:"diagnostics,omitempty"`

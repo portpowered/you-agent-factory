@@ -333,6 +333,7 @@ func replayCompletionFromEvent(event factoryapi.FactoryEvent, inference replayIn
 	for _, work := range generatedWorksValue(payload.OutputWork) {
 		recordedOutputWork = append(recordedOutputWork, factoryWorkItemFromGeneratedWork(work))
 	}
+	failureMetadata := interfaces.WorkFailureMetadataFromGenerated(payload.ProviderFailure)
 	return replayCompletion{
 		eventID:      event.Id,
 		completionID: completionID,
@@ -347,7 +348,8 @@ func replayCompletionFromEvent(event factoryapi.FactoryEvent, inference replayIn
 			Feedback:                    stringValue(payload.Feedback),
 			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
 			RecordedOutputWork:          recordedOutputWork,
-			ProviderFailure:             interfaces.ProviderFailureMetadataFromGenerated(payload.ProviderFailure),
+			FailureMetadata:             interfaces.CloneWorkFailureMetadata(failureMetadata),
+			ProviderFailure:             interfaces.CloneProviderFailureMetadata(failureMetadata),
 			ProviderSession:             interfaces.CloneProviderSessionMetadata(inference.providerSession),
 			Metrics:                     replayWorkMetricsFromGenerated(payload.Metrics),
 			Diagnostics:                 diagnostics,

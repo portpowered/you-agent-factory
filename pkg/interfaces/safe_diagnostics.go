@@ -103,6 +103,12 @@ func WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *W
 // GeneratedProviderFailureMetadata converts canonical provider-failure metadata
 // into the generated event contract.
 func GeneratedProviderFailureMetadata(failure *ProviderFailureMetadata) *factoryapi.ProviderFailureMetadata {
+	return GeneratedWorkFailureMetadata(failure)
+}
+
+// GeneratedWorkFailureMetadata converts canonical work-failure metadata into
+// the generated event contract.
+func GeneratedWorkFailureMetadata(failure *WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
 	if failure == nil {
 		return nil
 	}
@@ -112,15 +118,15 @@ func GeneratedProviderFailureMetadata(failure *ProviderFailureMetadata) *factory
 	}
 }
 
-// ProviderFailureMetadataFromGenerated converts the generated provider-failure
-// contract into canonical provider-failure metadata.
-func ProviderFailureMetadataFromGenerated(failure *factoryapi.ProviderFailureMetadata) *ProviderFailureMetadata {
+// WorkFailureMetadataFromGenerated converts the generated provider-failure
+// contract into canonical work-failure metadata.
+func WorkFailureMetadataFromGenerated(failure *factoryapi.ProviderFailureMetadata) *WorkFailureMetadata {
 	if failure == nil {
 		return nil
 	}
-	return &ProviderFailureMetadata{
-		Family: ProviderErrorFamily(safeDiagnosticsStringValue(failure.Family)),
-		Type:   ProviderErrorType(safeDiagnosticsStringValue(failure.Type)),
+	return &WorkFailureMetadata{
+		Family: WorkFailureFamily(safeDiagnosticsStringValue(failure.Family)),
+		Type:   WorkFailureType(safeDiagnosticsStringValue(failure.Type)),
 	}
 }
 

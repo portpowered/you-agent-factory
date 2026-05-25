@@ -487,15 +487,17 @@ func resolveExecutionTimeout(workerDef *interfaces.WorkerConfig, workstationDef 
 }
 
 func timeoutWorkResult(dispatch interfaces.WorkDispatch, duration time.Duration) interfaces.WorkResult {
+	failureMetadata := &interfaces.WorkFailureMetadata{
+		Family: interfaces.WorkFailureFamilyRetryable,
+		Type:   interfaces.WorkFailureTypeTimeout,
+	}
 	return interfaces.WorkResult{
-		DispatchID:   dispatch.DispatchID,
-		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
-		Error:        "execution timeout",
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyRetryable,
-			Type:   interfaces.ProviderErrorTypeTimeout,
-		},
-		Metrics: interfaces.WorkMetrics{Duration: duration},
+		DispatchID:      dispatch.DispatchID,
+		TransitionID:    dispatch.TransitionID,
+		Outcome:         interfaces.OutcomeFailed,
+		Error:           "execution timeout",
+		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
+		ProviderFailure: interfaces.CloneProviderFailureMetadata(failureMetadata),
+		Metrics:         interfaces.WorkMetrics{Duration: duration},
 	}
 }

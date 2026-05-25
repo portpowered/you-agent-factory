@@ -302,7 +302,8 @@ func scriptResponseStderr(result interfaces.WorkResult) string {
 }
 
 func scriptCommandTimedOut(result interfaces.WorkResult) bool {
-	if result.ProviderFailure != nil && result.ProviderFailure.Type == interfaces.ProviderErrorTypeTimeout {
+	failureMetadata := interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)
+	if failureMetadata != nil && failureMetadata.Type == interfaces.WorkFailureTypeTimeout {
 		return true
 	}
 	command, ok := scriptCommandDiagnostic(result)

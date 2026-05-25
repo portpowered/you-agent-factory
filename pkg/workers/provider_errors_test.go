@@ -188,6 +188,21 @@ func TestProviderFailureDecisionFromMetadata_UsesNormalizedTypeAsCanonicalRetryC
 	}
 }
 
+func TestWorkFailureMetadataFromError_ProducesGeneralizedFailureMetadata(t *testing.T) {
+	providerErr := NewProviderError(interfaces.ProviderErrorTypeTimeout, "execution timeout", nil)
+
+	metadata := WorkFailureMetadataFromError(providerErr)
+	if metadata == nil {
+		t.Fatal("WorkFailureMetadataFromError() = nil, want timeout metadata")
+	}
+	if metadata.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("Type = %q, want %q", metadata.Type, interfaces.WorkFailureTypeTimeout)
+	}
+	if metadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("Family = %q, want %q", metadata.Family, interfaces.WorkFailureFamilyRetryable)
+	}
+}
+
 func TestClassifyProviderFailure_SharedCodexAndCursorCorpusEntriesFollowExpectedRuntimeDecisions(t *testing.T) {
 	testCases := []ProviderErrorCorpusEntry{
 		providerErrorCorpusEntryForTest(t, "codex_status_429_too_many_requests"),

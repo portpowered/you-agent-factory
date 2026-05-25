@@ -178,6 +178,7 @@ type WorkstationResult struct {
 	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
 	FailureReason               string                   `json:"failure_reason,omitempty"`
 	FailureMessage              string                   `json:"failure_message,omitempty"`
+	FailureMetadata             *WorkFailureMetadata     `json:"failure_metadata,omitempty"`
 	ProviderFailure             *ProviderFailureMetadata `json:"provider_failure,omitempty"`
 }
 

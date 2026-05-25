@@ -98,12 +98,14 @@ func missingWorkerWorkResult(dispatch interfaces.WorkDispatch, workerType string
 func inferenceErrorWorkResult(dispatch interfaces.WorkDispatch, err error, diagnostics *interfaces.WorkDiagnostics, retryCount int, start time.Time) interfaces.WorkResult {
 	var providerErr *ProviderError
 	errors.As(err, &providerErr)
+	failureMetadata := WorkFailureMetadataFromError(providerErr)
 	return interfaces.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
 		Outcome:         interfaces.OutcomeFailed,
 		Error:           formatAgentProviderError(err),
-		ProviderFailure: ProviderFailureMetadataFromError(providerErr),
+		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
+		ProviderFailure: interfaces.CloneProviderFailureMetadata(failureMetadata),
 		ProviderSession: providerSessionFromError(providerErr),
 		Diagnostics:     mergeWorkDiagnostics(withInferenceErrorDiagnostics(diagnostics, err, retryCount), providerDiagnosticsFromError(providerErr)),
 		Metrics:         agentWorkMetrics(start, retryCount),

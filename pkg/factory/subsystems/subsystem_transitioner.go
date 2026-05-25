@@ -44,7 +44,7 @@ type resolvedWorkResult struct {
 	recordedOutputWork          []interfaces.FactoryWorkItem
 	err                         string
 	feedback                    string
-	providerFailure             *interfaces.ProviderFailureMetadata
+	failureMetadata             *interfaces.WorkFailureMetadata
 }
 
 type generatedBatchWork struct {
@@ -240,7 +240,8 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		Outcome:                     resolved.outcome,
 		SelectedClassificationLabel: resolved.selectedClassificationLabel,
 		Reason:                      completedDispatchReason(resolved),
-		ProviderFailure:             interfaces.CloneProviderFailureMetadata(result.ProviderFailure),
+		FailureMetadata:             interfaces.CloneWorkFailureMetadata(interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)),
+		ProviderFailure:             interfaces.CloneProviderFailureMetadata(interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)),
 		ProviderSession:             interfaces.CloneProviderSessionMetadata(result.ProviderSession),
 		EndTime:                     endTime,
 		ConsumedTokens:              interfaces.CloneTokens(consumedTokens),
@@ -409,7 +410,7 @@ func resolveWorkResult(transition *petri.Transition, result *interfaces.WorkResu
 		recordedOutputWork: cloneFactoryWorkItems(result.RecordedOutputWork),
 		err:                result.Error,
 		feedback:           result.Feedback,
-		providerFailure:    result.ProviderFailure,
+		failureMetadata:    interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure),
 	}
 	if workstation, ok := workstationconfig.Workstation(transition, runtimeConfig); ok && workstation != nil && len(workstation.StopWords) > 0 {
 		resolved.outcome = evaluateStopWords(workstation.StopWords, result.Output)
@@ -418,10 +419,10 @@ func resolveWorkResult(transition *petri.Transition, result *interfaces.WorkResu
 }
 
 func shouldRequeueIntermittentFailureResult(result resolvedWorkResult) bool {
-	if result.outcome != interfaces.OutcomeFailed || result.providerFailure == nil {
+	if result.outcome != interfaces.OutcomeFailed || result.failureMetadata == nil {
 		return false
 	}
-	return workers.ProviderFailureDecisionFromMetadata(result.providerFailure).Retryable
+	return workers.WorkFailureDecisionFromMetadata(result.failureMetadata).Retryable
 }
 
 func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult, inputColors []interfaces.TokenColor) (generatedBatchWork, bool, error) {

@@ -80,14 +80,20 @@ func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSes
 	return &clone
 }
 
-// CloneProviderFailureMetadata returns a detached copy of canonical provider
-// failure metadata.
-func CloneProviderFailureMetadata(failure *ProviderFailureMetadata) *ProviderFailureMetadata {
+// CloneWorkFailureMetadata returns a detached copy of canonical work failure
+// metadata.
+func CloneWorkFailureMetadata(failure *WorkFailureMetadata) *WorkFailureMetadata {
 	if failure == nil {
 		return nil
 	}
 	clone := *failure
 	return &clone
+}
+
+// CloneProviderFailureMetadata retains the legacy helper name while runtime
+// paths migrate to generalized failure metadata.
+func CloneProviderFailureMetadata(failure *ProviderFailureMetadata) *ProviderFailureMetadata {
+	return CloneWorkFailureMetadata(failure)
 }
 
 // CloneSafeWorkDiagnostics returns a detached copy of the canonical safe
@@ -106,7 +112,9 @@ func CloneSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *SafeWorkDiagnos
 // selected-tick dispatch completion record.
 func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompletion) FactoryWorldDispatchCompletion {
 	clone := completion
-	clone.Result.ProviderFailure = CloneProviderFailureMetadata(completion.Result.ProviderFailure)
+	failureMetadata := CanonicalWorkFailureMetadata(completion.Result.FailureMetadata, completion.Result.ProviderFailure)
+	clone.Result.FailureMetadata = CloneWorkFailureMetadata(failureMetadata)
+	clone.Result.ProviderFailure = CloneProviderFailureMetadata(failureMetadata)
 	clone.WorkItemIDs = cloneStringSlice(completion.WorkItemIDs)
 	clone.ConsumedInputs = cloneWorkstationInputs(completion.ConsumedInputs)
 	clone.InputWorkItems = cloneFactoryWorkItems(completion.InputWorkItems)
