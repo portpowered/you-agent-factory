@@ -168,6 +168,99 @@ describe("SubmitWorkWidget", () => {
     expect(within(submissionItems).getAllByRole("listitem")).toHaveLength(1);
     expect(seededTextItem.value).toBe("");
     expect(screen.getByText("Text")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Add input",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("adds typed items from the shared add-input control and renders their type cues", () => {
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Add input",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Image",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Add input",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Text",
+      }),
+    );
+
+    const submissionItems = screen.getByRole<HTMLOListElement>("list", {
+      name: "Submission items",
+    });
+
+    expect(within(submissionItems).getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getByText("Image")).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Text item 3" })).toBeTruthy();
+  });
+
+  it("removes only the targeted item and restores one blank text item when the last item is removed", () => {
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Add input",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Image",
+      }),
+    );
+
+    const originalTextItem = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Text item 1",
+    });
+    fireEvent.change(originalTextItem, {
+      target: { value: "Keep this text item." },
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Remove image item 2",
+      }),
+    );
+
+    expect(screen.queryByText("Image")).toBeNull();
+    expect(
+      screen.getByRole<HTMLTextAreaElement>("textbox", {
+        name: "Text item 1",
+      }).value,
+    ).toBe("Keep this text item.");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Remove text item 1",
+      }),
+    );
+
+    const fallbackSubmissionItems = screen.getByRole<HTMLOListElement>("list", {
+      name: "Submission items",
+    });
+    const fallbackTextItem = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Text item 1",
+    });
+
+    expect(within(fallbackSubmissionItems).getAllByRole("listitem")).toHaveLength(1);
+    expect(fallbackTextItem.value).toBe("");
   });
 
   it("submits work with a request name, clears only request fields on success, and shows the returned trace", async () => {
@@ -367,6 +460,56 @@ describe("SubmitWorkWidget", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       name: "Empty payload request",
       payload: "",
+      workTypeName: "story",
+    });
+  });
+
+  it("preserves authored text-item order in the temporary legacy payload while structured submit is still pending", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 201,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Add input",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Text",
+      }),
+    );
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Work type" }), {
+      target: { value: "story" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Request name" }), {
+      target: { value: "Ordered text payload" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Text item 1" }), {
+      target: { value: "First authored part." },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Text item 2" }), {
+      target: { value: "Second authored part." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      name: "Ordered text payload",
+      payload: "First authored part.\n\nSecond authored part.",
       workTypeName: "story",
     });
   });

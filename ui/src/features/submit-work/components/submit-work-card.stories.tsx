@@ -95,7 +95,9 @@ export const FailureRetry = {
         requestName: "Retry dashboard request",
         workTypeName: "story",
       }}
+      onAddItem={() => {}}
       onItemTextChange={() => {}}
+      onRemoveItem={() => {}}
       onRequestNameChange={() => {}}
       onSubmit={() => {}}
       onWorkTypeNameChange={() => {}}
@@ -174,7 +176,9 @@ export const StableActionAlignment = {
             requestName: "Driver review",
             workTypeName: "story",
           }}
+          onAddItem={() => {}}
           onItemTextChange={() => {}}
+          onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
@@ -195,7 +199,9 @@ export const StableActionAlignment = {
             workTypeName: "story",
           }}
           isSubmitting
+          onAddItem={() => {}}
           onItemTextChange={() => {}}
+          onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
@@ -215,7 +221,9 @@ export const StableActionAlignment = {
             requestName: "",
             workTypeName: "story",
           }}
+          onAddItem={() => {}}
           onItemTextChange={() => {}}
+          onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
@@ -235,7 +243,9 @@ export const StableActionAlignment = {
             requestName: "Retry dashboard request",
             workTypeName: "story",
           }}
+          onAddItem={() => {}}
           onItemTextChange={() => {}}
+          onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
@@ -255,7 +265,9 @@ export const StableActionAlignment = {
             requestName: "",
             workTypeName: "",
           }}
+          onAddItem={() => {}}
           onItemTextChange={() => {}}
+          onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}

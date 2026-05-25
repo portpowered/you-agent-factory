@@ -1,11 +1,12 @@
 import { useMutation } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DashboardSubmitWorkType } from "../../../api/dashboard/types";
 import { isSubmitWorkAPIError, submitWork } from "../../../api/work";
 import type { SubmitWorkMessages } from "../messages/submit-work";
 import type {
   SubmitWorkDraft,
   SubmitWorkDraftItem,
+  SubmitWorkDraftItemType,
   SubmitWorkStatus,
   SubmitWorkValidationErrors,
 } from "../components/submit-work-card";
@@ -28,6 +29,26 @@ function createDefaultTextItem(): SubmitWorkDraftItem {
   };
 }
 
+function createDraftItem(
+  type: SubmitWorkDraftItemType,
+  sequence: number,
+): SubmitWorkDraftItem {
+  const id = `submission-item-${sequence}`;
+
+  if (type === "text") {
+    return {
+      id,
+      text: "",
+      type,
+    };
+  }
+
+  return {
+    id,
+    type,
+  };
+}
+
 const EMPTY_DRAFT: SubmitWorkDraft = createDefaultDraft();
 
 function resetDraftPreservingWorkType(workTypeName: string): SubmitWorkDraft {
@@ -38,7 +59,11 @@ function resetDraftPreservingWorkType(workTypeName: string): SubmitWorkDraft {
 }
 
 function draftRequestText(draft: SubmitWorkDraft): string {
-  return draft.items[0]?.text ?? "";
+  return draft.items
+    .filter((item): item is Extract<SubmitWorkDraftItem, { type: "text" }> => item.type === "text")
+    .map((item) => item.text.trim())
+    .filter((itemText) => itemText.length > 0)
+    .join("\n\n");
 }
 
 const LEGACY_EMPTY_PAYLOAD = "";
@@ -50,6 +75,7 @@ export function useSubmitWorkWidget(
 ) {
   const [draft, setDraft] = useState<SubmitWorkDraft>(EMPTY_DRAFT);
   const [showValidation, setShowValidation] = useState(false);
+  const nextItemSequenceRef = useRef(2);
   const submitWorkTypeNames = submitWorkTypes.map(
     (workType) => workType.work_type_name,
   );
@@ -70,6 +96,7 @@ export function useSubmitWorkWidget(
     if (sessionID.trim().length === 0) {
       return;
     }
+    nextItemSequenceRef.current = 2;
     setDraft(createDefaultDraft());
     setShowValidation(false);
     resetMutation();
@@ -92,6 +119,17 @@ export function useSubmitWorkWidget(
   return {
     draft,
     isSubmitting: mutation.isPending,
+    onAddItem: (type: SubmitWorkDraftItemType) => {
+      if (mutation.isError || mutation.isSuccess) {
+        mutation.reset();
+      }
+      const nextItem = createDraftItem(type, nextItemSequenceRef.current);
+      nextItemSequenceRef.current += 1;
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        items: [...currentDraft.items, nextItem],
+      }));
+    },
     onItemTextChange: (itemId: string, value: string) => {
       if (mutation.isError || mutation.isSuccess) {
         mutation.reset();
@@ -116,6 +154,19 @@ export function useSubmitWorkWidget(
         ...currentDraft,
         requestName: value,
       }));
+    },
+    onRemoveItem: (itemId: string) => {
+      if (mutation.isError || mutation.isSuccess) {
+        mutation.reset();
+      }
+      setDraft((currentDraft) => {
+        const remainingItems = currentDraft.items.filter((item) => item.id !== itemId);
+
+        return {
+          ...currentDraft,
+          items: remainingItems.length > 0 ? remainingItems : [createDefaultTextItem()],
+        };
+      });
     },
     onSubmit: () => {
       setShowValidation(true);

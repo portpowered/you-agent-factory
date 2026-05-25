@@ -17,6 +17,7 @@ export type AsyncRoleQuery = SyncRoleQuery & {
 };
 
 export const submitWorkCardQueryContract = {
+  addInputButtonName: "Add input",
   dashboardRegionName: "you-agent-factory bento board",
   requestNameFieldName: "Request name",
   requestFieldName: "Text item 1",

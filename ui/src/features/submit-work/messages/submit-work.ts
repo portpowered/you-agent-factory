@@ -4,7 +4,13 @@ import {
 } from "../../../i18n";
 
 export interface SubmitWorkMessages {
+  addItemAction: string;
+  addItemMenuLabel: string;
+  addItemMenuDescription: string;
+  addItemOptionLabel: (type: SubmitWorkItemTypeLabelKey) => string;
   cardTitle: string;
+  fileItemPlaceholder: (typeLabel: string) => string;
+  removeItemLabel: (typeLabel: string, position: number) => string;
   requestHint?: string;
   requestItemLabel: (position: number) => string;
   requestNameLabel: string;
@@ -34,9 +40,31 @@ export interface SubmitWorkMessages {
   };
 }
 
+export type SubmitWorkItemTypeLabelKey =
+  | "audio"
+  | "document"
+  | "image"
+  | "text"
+  | "video";
+
 const submitWorkMessagesByLocale = {
   en: {
+    addItemAction: "Add input",
+    addItemMenuDescription: "Choose the next item to append to this submission.",
+    addItemMenuLabel: "Add input menu",
+    addItemOptionLabel: (type) =>
+      ({
+        audio: "Audio",
+        document: "Document",
+        image: "Image",
+        text: "Text",
+        video: "Video",
+      })[type],
     cardTitle: "Submit work",
+    fileItemPlaceholder: (typeLabel) =>
+      `${typeLabel} upload support is staged in the next step. You can remove this item or keep shaping the request list.`,
+    removeItemLabel: (typeLabel, position) =>
+      `Remove ${typeLabel.toLowerCase()} item ${position}`,
     requestNameLabel: "Request name",
     requestNamePlaceholder: "Add a name for this request.",
     requestPlaceholder:
@@ -68,7 +96,21 @@ const submitWorkMessagesByLocale = {
     },
   },
   "zh-CN": {
+    addItemAction: "添加输入",
+    addItemMenuDescription: "选择要追加到此提交中的下一项。",
+    addItemMenuLabel: "添加输入菜单",
+    addItemOptionLabel: (type) =>
+      ({
+        audio: "音频",
+        document: "文档",
+        image: "图像",
+        text: "文本",
+        video: "视频",
+      })[type],
     cardTitle: "提交工作",
+    fileItemPlaceholder: (typeLabel) =>
+      `${typeLabel} 上传能力将在下一步接入。你可以先移除此项，或继续整理请求列表。`,
+    removeItemLabel: (typeLabel, position) => `移除${typeLabel}项 ${position}`,
     requestNameLabel: "请求名称",
     requestNamePlaceholder: "为此请求添加名称。",
     requestPlaceholder: "可选：描述你希望这个请求完成什么。",
