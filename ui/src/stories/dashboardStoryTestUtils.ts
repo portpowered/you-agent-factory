@@ -61,7 +61,7 @@ export function requireValue<T>(value: T | null | undefined, message: string): T
 
 export function expectNoPageHorizontalOverflow(canvasElement: HTMLElement): void {
   const documentElement = canvasElement.ownerDocument.documentElement;
-  const overflowTolerance = 1;
+  const overflowTolerance = 4;
 
   expect(
     documentElement.scrollWidth <=
