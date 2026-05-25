@@ -1,10 +1,7 @@
 package workers
 
 import (
-	"time"
-
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -33,22 +30,6 @@ const (
 	codexWindowsProcessFailureExitCode = 4294967295
 )
 
-func WithSkipPermissions(skip bool) ScriptWrapProviderOption {
-	return workerprovider.WithSkipPermissions(skip)
-}
-
-func WithProviderLogger(logger logging.Logger) ScriptWrapProviderOption {
-	return workerprovider.WithProviderLogger(logger)
-}
-
-func WithProviderCommandRunner(runner CommandRunner) ScriptWrapProviderOption {
-	return workerprovider.WithProviderCommandRunner(runner)
-}
-
-func NewScriptWrapProvider(opts ...ScriptWrapProviderOption) *ScriptWrapProvider {
-	return workerprovider.NewScriptWrapProvider(opts...)
-}
-
 func ContainsStopToken(output, stopToken string) bool {
 	return workerprovider.ContainsStopToken(output, stopToken)
 }
@@ -75,12 +56,4 @@ func ProviderFailureMetadataFromError(err *ProviderError) *interfaces.ProviderFa
 
 func LoadProviderErrorCorpus() (ProviderErrorCorpus, error) {
 	return workerprovider.LoadProviderErrorCorpus()
-}
-
-func WithRecordingProviderClock(now func() time.Time) RecordingProviderOption {
-	return workerprovider.WithRecordingProviderClock(now)
-}
-
-func NewRecordingProvider(inner Provider, recorder InferenceEventRecorder, opts ...RecordingProviderOption) *RecordingProvider {
-	return workerprovider.NewRecordingProvider(inner, recorder, opts...)
 }
