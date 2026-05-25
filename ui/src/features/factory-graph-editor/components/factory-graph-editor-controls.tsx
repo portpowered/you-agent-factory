@@ -9,7 +9,6 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  buttonVariants,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
@@ -19,7 +18,6 @@ export {
 } from "./factory-graph-editor-mode-controls";
 import {
   FactoryGraphEditorTooltipActionButton,
-  FactoryGraphEditorTooltipButton,
 } from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
@@ -238,21 +236,18 @@ function FactoryGraphEditorToolbarButton({
   tone: "outline" | "secondary";
 }) {
   return (
-    <FactoryGraphEditorTooltipButton
+    <FactoryGraphEditorTooltipActionButton
       aria-label={label}
       aria-pressed={active}
-      className={buttonVariants({
-        className: "h-10 w-10 rounded-lg px-0 py-0",
-        size: "icon",
-        tone,
-      })}
       disabled={disabled}
+      iconOnly
       onClick={onClick}
       tooltip={description}
+      tone={tone}
       type="button"
     >
       {icon}
-    </FactoryGraphEditorTooltipButton>
+    </FactoryGraphEditorTooltipActionButton>
   );
 }
 
@@ -278,26 +273,29 @@ function FactoryGraphEditorAddMenu({
 
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
-      <PopoverTrigger
-        aria-label={messages.toolbarOpenAddMenuLabel}
-        className={buttonVariants({ size: "icon", tone: "ghost" })}
-        disabled={!canInteract}
-        type="button"
-      >
-        <svg
-          aria-hidden="true"
-          fill="none"
-          height="18"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.8"
-          viewBox="0 0 24 24"
-          width="18"
+      <PopoverTrigger asChild>
+        <DashboardActionButton
+          aria-label={messages.toolbarOpenAddMenuLabel}
+          disabled={!canInteract}
+          iconOnly
+          tone={open ? "secondary" : "outline"}
+          type="button"
         >
-          <path d="M12 5v14" />
-          <path d="M5 12h14" />
-        </svg>
+          <svg
+            aria-hidden="true"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+            viewBox="0 0 24 24"
+            width="18"
+          >
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
+          </svg>
+        </DashboardActionButton>
       </PopoverTrigger>
       <PopoverContent
         align="start"

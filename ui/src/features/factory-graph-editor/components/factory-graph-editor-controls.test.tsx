@@ -53,11 +53,18 @@ describe("factory graph editor toolbar controls", () => {
 
     renderToolbar();
 
+    const addMenuButton = screen.getByRole("button", {
+      name: "Open add entity menu",
+    });
+    expect(addMenuButton.textContent).toBe("");
+    expect(addMenuButton.getAttribute("aria-expanded")).toBe("false");
+
     await user.tab();
     await user.keyboard("{Enter}");
 
     const menu = await screen.findByLabelText("Add graph entity menu");
     expect(menu).toBeTruthy();
+    expect(addMenuButton.getAttribute("aria-expanded")).toBe("true");
     expect(
       within(menu).getByRole("button", { name: "Workstation" }),
     ).toBeTruthy();
@@ -80,7 +87,9 @@ describe("factory graph editor toolbar controls", () => {
     const connectButton = screen.getByRole("button", { name: "Connect" });
     const deleteButton = screen.getByRole("button", { name: "Delete" });
     const saveButton = screen.getByRole("button", { name: "Save changes" });
+    const addButton = screen.getByRole("button", { name: "Open add entity menu" });
 
+    expect(addButton.textContent).toBe("");
     expect(connectButton.textContent).toBe("");
     expect(deleteButton.textContent).toBe("");
     expect(saveButton.textContent).toBe("");
@@ -89,6 +98,9 @@ describe("factory graph editor toolbar controls", () => {
     expect(
       screen.getByRole("button", { name: "Discard changes" }),
     ).toBeTruthy();
+    expect(addButton.className).toContain("h-10");
+    expect(connectButton.className).toContain("h-10");
+    expect(deleteButton.className).toContain("h-10");
 
     await user.click(connectButton);
     expect(connectButton.getAttribute("aria-pressed")).toBe("true");
