@@ -82,7 +82,7 @@ const headerControlsMessagesByLocale = {
     loadingDashboardTitle: "Loading dashboard",
     openSessionButtonLabel: "Open another session",
     openSessionDialogDescription:
-      "Choose or enter a local factory folder. The folder must contain a runnable factory before you can open a session.",
+      "Enter an absolute local factory folder path. The folder must contain a runnable factory before you can open a session.",
     openSessionFolderRequiredError:
       "Enter a local factory folder path, then check the folder before launch.",
     openSessionFolderMissingError:
@@ -103,12 +103,12 @@ const headerControlsMessagesByLocale = {
       "Folder is ready. Open the runnable target shown below to continue.",
     openSessionLaunchSummaryTemplate:
       "Launch will use folder {{folderPath}} and factory {{factoryName}}.",
-    openSessionDialogTitle: "Open a factory folder",
-    openSessionSubmitLabel: "Check folder",
+    openSessionDialogTitle: "Factory Session",
+    openSessionSubmitLabel: "Start Factory",
     openSessionSubmitPendingLabel: "Checking folder...",
     openSessionTargetLabel: "Open selected target",
     openSessionTargetPendingLabel: "Opening target...",
-    manualFactoryNameFieldLabel: "Manual factory override",
+    manualFactoryNameFieldLabel: "Factory Name",
     manualFactoryNameFieldPlaceholder: "named-factory",
     manualFactoryNameHelperText:
       "Optional. Leave this blank to launch a detected target, or enter a named factory when you want an explicit override.",
@@ -126,8 +126,8 @@ const headerControlsMessagesByLocale = {
       "Choose a runnable target before opening a session from this folder.",
     sessionFolderFieldLabel: "Factory folder",
     sessionFolderHelperText:
-      "Enter a local factory folder path or choose a folder from your machine. The folder must contain a runnable factory.",
-    sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
+      "Please pass in an absolute path like /home/bob/my-project/factory. The folder must contain a runnable factory.",
+    sessionFolderFieldPlaceholder: "/home/bob/my-project/factory",
     sessionTabCloseLabelTemplate: "Close {{sessionLabel}} session",
     sessionTabsLabel: "factory sessions",
     sessionsEmptyTitle: "No live sessions",

@@ -13,7 +13,6 @@ import { useDashboardSessionStore } from "../../dashboard/state/dashboardSession
 import {
   classifyFactorySessionFolderValidationError,
   factorySessionTargetOptionValue,
-  manualFactorySessionTargetRef,
   type FolderValidationState,
   normalizeFactorySessionsError,
 } from "../lib/dashboard-session-tabs-utils";
@@ -113,7 +112,6 @@ function useOpenSessionDialogState({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogError, setDialogError] = useState<FactorySessionsAPIError | null>(null);
   const [folderPath, setFolderPath] = useState("");
-  const [manualFactoryName, setManualFactoryName] = useState("");
   const [validatedFolderPath, setValidatedFolderPath] = useState<string | null>(null);
   const [discoveredTargets, setDiscoveredTargets] = useState<FactorySessionTarget[]>([]);
   const [selectedTargetValue, setSelectedTargetValue] = useState<string>("");
@@ -130,7 +128,6 @@ function useOpenSessionDialogState({
     try {
       await inspectFolderCandidate({
         folderPath,
-        manualFactoryName,
         setDiscoveredTargets,
         setFolderValidation,
         setSelectedTargetValue,
@@ -148,15 +145,14 @@ function useOpenSessionDialogState({
     }
   }
 
-  async function handleOpenTarget() {
+  async function handleOpenTarget(targetValue?: string) {
     setDialogError(null);
     try {
       const response = await openValidatedTarget({
         discoveredTargets,
         folderPath,
-        manualFactoryName,
         openSession: openSessionMutation.mutateAsync,
-        selectedTargetValue,
+        selectedTargetValue: targetValue ?? selectedTargetValue,
         validatedFolderPath,
       });
       if (response.session) {
@@ -178,7 +174,6 @@ function useOpenSessionDialogState({
     setDiscoveredTargets([]);
     setFolderValidation({ status: "idle" });
     setFolderPath("");
-    setManualFactoryName("");
     setSelectedTargetValue("");
     setValidatedFolderPath(null);
   }
@@ -192,25 +187,14 @@ function useOpenSessionDialogState({
     setFolderValidation({ status: "idle" });
   }
 
-  function handleChangeManualFactoryName(value: string) {
-    setManualFactoryName(value);
-    setDialogError(null);
-    setValidatedFolderPath(null);
-    setSelectedTargetValue("");
-    setDiscoveredTargets([]);
-    setFolderValidation({ status: "idle" });
-  }
-
   return {
     dialogError,
     dialogOpen,
     discoveredTargets,
     folderValidation,
     folderPath,
-    manualFactoryName,
     selectedTargetValue,
     handleChangeFolderPath,
-    handleChangeManualFactoryName,
     handleInspectFolder,
     handleOpenTarget,
     setSelectedTargetValue,
@@ -248,7 +232,6 @@ async function finishOpeningSession(
 
 async function inspectFolderCandidate({
   folderPath,
-  manualFactoryName,
   setDiscoveredTargets,
   setFolderValidation,
   setSelectedTargetValue,
@@ -256,7 +239,6 @@ async function inspectFolderCandidate({
   validateFolder,
 }: {
   folderPath: string;
-  manualFactoryName: string;
   setDiscoveredTargets: (targets: FactorySessionTarget[]) => void;
   setFolderValidation: (state: FolderValidationState) => void;
   setSelectedTargetValue: (value: string) => void;
@@ -265,17 +247,13 @@ async function inspectFolderCandidate({
     input: ValidateFolderInput,
   ) => ReturnType<typeof openFactorySession>;
 }) {
-  const requestedTarget = manualFactorySessionTargetRef(manualFactoryName);
   const response = await validateFolder({
     folderPath,
-    target: requestedTarget ?? undefined,
   });
   const targets = response.targets ?? [];
   const resolvedFolderPath = targets[0]?.folderPath ?? folderPath;
   setDiscoveredTargets(targets);
-  setSelectedTargetValue(
-    validatedTargetValue(targets, requestedTarget),
-  );
+  setSelectedTargetValue(validatedTargetValue(targets));
   setValidatedFolderPath(resolvedFolderPath);
   setFolderValidation({ status: "ready", targets });
 }
@@ -283,26 +261,23 @@ async function inspectFolderCandidate({
 async function openValidatedTarget({
   discoveredTargets,
   folderPath,
-  manualFactoryName,
   openSession,
   selectedTargetValue,
   validatedFolderPath,
 }: {
   discoveredTargets: FactorySessionTarget[];
   folderPath: string;
-  manualFactoryName: string;
   openSession: (
     input: Parameters<typeof openFactorySession>[0],
   ) => ReturnType<typeof openFactorySession>;
   selectedTargetValue: string;
   validatedFolderPath: string | null;
 }) {
-  const requestedTarget = manualFactorySessionTargetRef(manualFactoryName);
   const selectedTarget = selectedFactorySessionTarget(
     discoveredTargets,
     selectedTargetValue,
   );
-  const launchTarget = requestedTarget ?? selectedTarget?.ref ?? null;
+  const launchTarget = selectedTarget?.ref ?? null;
   if (launchTarget == null) {
     return { session: undefined };
   }
@@ -315,19 +290,7 @@ async function openValidatedTarget({
 
 function validatedTargetValue(
   targets: FactorySessionTarget[],
-  requestedTarget: ReturnType<typeof manualFactorySessionTargetRef>,
 ): string {
-  const validatedTarget =
-    requestedTarget == null
-      ? null
-      : targets.find(
-          (target) =>
-            target.ref.kind === requestedTarget.kind &&
-            target.ref.name === requestedTarget.name,
-        ) ?? null;
-  if (validatedTarget != null) {
-    return factorySessionTargetOptionValue(validatedTarget);
-  }
   return targets.length === 1 ? factorySessionTargetOptionValue(targets[0]) : "";
 }
 

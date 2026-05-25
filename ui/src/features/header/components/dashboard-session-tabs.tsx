@@ -97,12 +97,10 @@ function DashboardSessionTabsView({
     discoveredTargets,
     folderValidation,
     folderPath,
-    handleChangeManualFactoryName,
     handleChangeFolderPath,
     handleCloseSession,
     handleInspectFolder,
     handleOpenTarget,
-    manualFactoryName,
     openSessionMutation,
     resetDialogState,
     selectedTargetValue,
@@ -173,13 +171,10 @@ function DashboardSessionTabsView({
           isPending={
             openSessionMutation.isPending || validateFolderMutation.isPending
           }
-          manualFactoryName={manualFactoryName}
           messages={messages}
           onChangeFolderPath={handleChangeFolderPath}
-          onChangeManualFactoryName={handleChangeManualFactoryName}
           onInspectFolder={handleInspectFolder}
           onOpenTarget={handleOpenTarget}
-          onSelectTarget={setSelectedTargetValue}
           selectedTargetValue={selectedTargetValue}
         />
       </Dialog>
