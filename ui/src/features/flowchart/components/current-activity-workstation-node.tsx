@@ -11,19 +11,22 @@ import {
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+import { workstationIconMetadata } from "../lib/workstation-icon-metadata";
 import {
   ActivityGraphNodeBadge,
   activityGraphNodeTitleClassName,
 } from "./current-activity-node-chrome";
+import type { ActivityGraphNodeHandle } from "./current-activity-node-shell";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
-import { workstationIconMetadata } from "../lib/workstation-icon-metadata";
 
 export interface WorkstationNodeData extends Record<string, unknown> {
   active: boolean;
   activeFlow: boolean;
   executions: DashboardActiveExecution[];
+  handles?: ActivityGraphNodeHandle[];
   incomingHandleCount: number;
+  kind?: "workstation";
   locale?: string;
   muted: boolean;
   now: number;
@@ -95,6 +98,7 @@ export function WorkstationNodeView({
   return (
     <ActivityGraphNodeShell
       className={nodeClassName}
+      handles={data.handles}
       incomingHandleCount={data.incomingHandleCount}
       nodeType="workstation"
       outgoingHandleCount={data.outgoingHandleCount}

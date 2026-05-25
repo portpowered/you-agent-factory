@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -43,6 +44,10 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 	t.Helper()
 
 	rootDir := t.TempDir()
+	runtimeLogDir := options.runtimeLogDir
+	if runtimeLogDir == "" {
+		runtimeLogDir = filepath.Join(t.TempDir(), "runtime-logs")
+	}
 	if options.rootConfig != nil {
 		writeFactoryJSON(t, rootDir, options.rootConfig)
 	}
@@ -63,7 +68,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 		RuntimeMode:       interfaces.RuntimeModeService,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
-		RuntimeLogDir:     options.runtimeLogDir,
+		RuntimeLogDir:     runtimeLogDir,
 		RecordPath:        options.recordPath,
 	})
 	if err != nil {

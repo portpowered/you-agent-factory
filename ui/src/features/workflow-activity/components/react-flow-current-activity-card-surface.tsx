@@ -1,19 +1,14 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import {
-  FactoryGraphEditorNotice,
-  FactoryGraphEditorVisibilityPanel,
-} from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
-import type { useFactoryGraphEditorViewModel } from "../hooks/react-flow-current-activity-card-editor-graph";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 export function CurrentActivityGraphSurface({
   editor,
-  editorGraph,
   graph,
   headingID,
   imports,
@@ -21,7 +16,6 @@ export function CurrentActivityGraphSurface({
   snapshot,
 }: {
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
-  editorGraph: ReturnType<typeof useFactoryGraphEditorViewModel>;
   graph: ReturnType<typeof useCurrentActivityGraphViewModel>;
   headingID: string;
   imports: CurrentActivityImportController;
@@ -35,8 +29,6 @@ export function CurrentActivityGraphSurface({
   ) {
     return <EmptyCurrentActivityState locale={locale} />;
   }
-
-  const activeGraph = editor.editorMode ? editorGraph : graph;
 
   return (
     <div className="grid min-h-0 flex-1 gap-3">
@@ -89,33 +81,28 @@ export function CurrentActivityGraphSurface({
           {messages.noticeSaveSuccessDescription}
         </FactoryGraphEditorNotice>
       ) : null}
-      <FactoryGraphEditorVisibilityPanel
-        locale={locale}
-        onSelectPreset={editorGraph.selectVisibilityPreset}
-        options={editorGraph.visibilityPresetOptions}
-        visible={editor.editorMode}
-      />
       <CurrentActivityGraphViewport
         activeTool={editor.activeTool}
         addMenuActions={editor.addMenuActions}
         canInteractWithEditor={editor.canInteractWithEditor}
+        canSaveDraft={editor.canSaveDraft}
         editorMode={editor.editorMode}
-        edges={activeGraph.edges}
-        edgeTypes={editor.editorMode ? editorGraph.edgeTypes : undefined}
-        graphKey={activeGraph.graphKey}
-        handleNodesChange={activeGraph.handleNodesChange}
+        edges={graph.edges}
+        graphKey={graph.graphKey}
+        handleDiscardPendingChanges={editor.handleDiscardPendingChanges}
+        handleNodesChange={graph.handleNodesChange}
+        handleSaveDraft={() => {
+          editor.setIsConfirmingSave(true);
+        }}
         hasPendingChanges={editor.draftState.hasChanges}
         headingID={headingID}
         imports={imports}
-        initialFitViewKey={activeGraph.initialFitViewKey}
-        initialFitViewOptions={activeGraph.initialFitViewOptions}
+        initialFitViewKey={graph.initialFitViewKey}
+        initialFitViewOptions={graph.initialFitViewOptions}
+        isSavingDraft={editor.saveEditableDefinition.status === "pending"}
         locale={locale}
-        nodeTypes={
-          editor.editorMode
-            ? editorGraph.nodeTypes
-            : CURRENT_ACTIVITY_NODE_TYPES
-        }
-        nodes={activeGraph.nodes}
+        nodeTypes={CURRENT_ACTIVITY_NODE_TYPES}
+        nodes={graph.nodes}
         onAddAction={editor.handleAddEntityAction}
         onAddMenuOpenChange={editor.setAddMenuOpen}
         onConnect={editor.handleEditorConnect}
@@ -123,7 +110,8 @@ export function CurrentActivityGraphSurface({
         onEditorNodeClick={editor.handleEditorNodeDelete}
         onSelectTool={editor.setActiveTool}
         openAddMenu={editor.addMenuOpen}
-        setStoredNodePosition={activeGraph.setStoredNodePosition}
+        saveDisabledReason={editor.saveBlockedReason}
+        setStoredNodePosition={graph.setStoredNodePosition}
       />
     </div>
   );

@@ -85,10 +85,12 @@ function edgeLabel(
 export function buildGraphEdges(
   activeGraphHighlights: ActiveGraphHighlights,
   handleAssignments: HandleAssignments,
+  pendingAdditionEdgeIds: ReadonlySet<string>,
   visibleGraphEdges: PositionedEdge[],
 ): Edge[] {
   return visibleGraphEdges.map((edge) => {
     const activeFlow = activeGraphHighlights.activeEdgeIds.has(edge.edgeId);
+    const pendingAddition = pendingAdditionEdgeIds.has(edge.edgeId);
     const semantic = edgeSemantic(edge);
     const muted =
       activeGraphHighlights.hasActiveFlow &&
@@ -103,6 +105,7 @@ export function buildGraphEdges(
         activeFlow ? "agent-flow-edge--active" : "",
         semantic ? "agent-flow-edge--semantic" : "",
         muted ? "agent-flow-edge--muted" : "",
+        pendingAddition ? "agent-flow-edge--pending-addition" : "",
       ]
         .filter(Boolean)
         .join(" "),
@@ -114,12 +117,20 @@ export function buildGraphEdges(
       },
       labelStyle: { fill: "var(--color-af-text)" },
       markerEnd: {
-        color: edgeMarkerColor(edge, activeFlow),
+        color: pendingAddition
+          ? "var(--color-af-warning-text)"
+          : edgeMarkerColor(edge, activeFlow),
         type: MarkerType.ArrowClosed,
       },
       source: edge.fromNodeId,
       sourceHandle: handleAssignments.sourceHandlesByEdgeId.get(edge.edgeId),
-      style: edgeStyle(edge, activeFlow, muted),
+      style: pendingAddition
+        ? {
+            stroke: "var(--color-af-warning-text)",
+            strokeDasharray: "9 4",
+            strokeWidth: 2,
+          }
+        : edgeStyle(edge, activeFlow, muted),
       target: edge.toNodeId,
       targetHandle: handleAssignments.targetHandlesByEdgeId.get(edge.edgeId),
       type: "default",

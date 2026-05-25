@@ -15,9 +15,8 @@ import type { FactoryValue } from "../../../api/named-factory";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
-import { FactoryGraphEditorDraftActions } from "../../factory-graph-editor/components/factory-graph-editor-draft-actions";
+import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
-import { buildGraphLayout, type GraphLayout } from "../../flowchart/lib/layout";
 import type {
   FactoryPngImportValue,
   ReadFactoryImportFile,
@@ -31,40 +30,30 @@ import {
   useActiveExecutions,
 } from "../hooks/react-flow-current-activity-card-active-executions";
 import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
-import {
-  createWorkflowTopologyAsyncCache,
-  useWorkflowTopologyAsyncCache,
-} from "../hooks/workflow-topology-async-cache";
-import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
-import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
-import { useFactoryGraphEditorViewModel } from "../hooks/react-flow-current-activity-card-editor-graph";
+import { useCurrentActivityGraphLayout } from "../hooks/react-flow-current-activity-card-graph-layout";
 import {
   buildGraphEdges,
   initialFocusNodes,
 } from "../lib/react-flow-current-activity-card-edges";
-import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
   buildCurrentActivityNodes,
   buildHandleAssignments,
-  buildVisibleGraphEdges,
-  EMPTY_GRAPH_LAYOUT,
   EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
-import {
-  currentActivityGraphKey,
-  currentActivityTopologyKey,
-} from "../lib/react-flow-current-activity-card-keys";
+import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
+import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
+import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
+import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
+import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
 export {
   currentActivityGraphKey,
   currentActivityTopologyKey,
 } from "../lib/react-flow-current-activity-card-keys";
-
-const GRAPH_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<GraphLayout>();
 const CURRENT_ACTIVITY_CARD_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
   "relative flex h-full min-h-0 min-w-0 flex-col p-4 md:p-5",
@@ -131,32 +120,11 @@ interface ReactFlowCurrentActivityCardProps {
   widgetInstanceID?: string;
 }
 
-function useGraphLayout(snapshot: DashboardSnapshot) {
-  const topologyKey = useMemo(
-    () => currentActivityTopologyKey(snapshot.topology),
-    [snapshot.topology],
-  );
-  const layoutTopology = useMemo(() => snapshot.topology, [snapshot.topology]);
-
-  return useWorkflowTopologyAsyncCache({
-    cache: GRAPH_LAYOUT_CACHE,
-    dependencies: [layoutTopology],
-    fallbackValue: EMPTY_GRAPH_LAYOUT,
-    initialValue: EMPTY_GRAPH_LAYOUT,
-    loadLayout: () => buildGraphLayout(layoutTopology),
-    mapResolvedLayout: identityGraphLayout,
-    topologyKey,
-  });
-}
-
-function identityGraphLayout(layout: GraphLayout) {
-  return layout;
-}
-
 function useCurrentActivityBaseNodes({
   activeExecutionsByWorkstationNodeID,
   activeGraphHighlights,
   activeItemLabelsByPlaceId,
+  editor,
   graphLayout,
   handleAssignments,
   now,
@@ -181,6 +149,7 @@ function useCurrentActivityBaseNodes({
   >;
   activeGraphHighlights: ReturnType<typeof buildActiveGraphHighlights>;
   activeItemLabelsByPlaceId: ReturnType<typeof buildActiveItemLabelsByPlaceId>;
+  editor: ReturnType<typeof useCurrentActivityGraphEditor>;
   graphLayout: GraphLayout;
   handleAssignments: ReturnType<typeof buildHandleAssignments>;
   storedNodePositions: typeof EMPTY_NODE_POSITIONS;
@@ -191,6 +160,13 @@ function useCurrentActivityBaseNodes({
         activeExecutionsByWorkstationNodeID,
         activeGraphHighlights,
         activeItemLabelsByPlaceId,
+        editor: {
+          activeTool: editor.activeTool,
+          canInteractWithEditor: editor.canInteractWithEditor,
+          editorMode: editor.editorMode,
+          onConnectionAnchorClick: editor.handleConnectionAnchorClick,
+          pendingConnectionSource: editor.pendingConnectionSource,
+        },
         graphLayout,
         handleAssignments,
         now,
@@ -205,6 +181,7 @@ function useCurrentActivityBaseNodes({
       activeExecutionsByWorkstationNodeID,
       activeGraphHighlights,
       activeItemLabelsByPlaceId,
+      editor,
       graphLayout,
       handleAssignments,
       now,
@@ -219,6 +196,7 @@ function useCurrentActivityBaseNodes({
 }
 
 export function useCurrentActivityGraphViewModel({
+  editor,
   now,
   onSelectStateNode,
   onSelectWorkID,
@@ -233,13 +211,15 @@ export function useCurrentActivityGraphViewModel({
   | "onSelectWorkstation"
   | "selection"
   | "snapshot"
->) {
+> & {
+  editor: ReturnType<typeof useCurrentActivityGraphEditor>;
+}) {
   const activeExecutions = useActiveExecutions(snapshot);
   const activeExecutionsByWorkstationNodeID = useMemo(
     () => groupActiveExecutionsByWorkstationNodeID(activeExecutions),
     [activeExecutions],
   );
-  const graphLayout = useGraphLayout(snapshot);
+  const graphLayout = useCurrentActivityGraphLayout(snapshot);
   const graphKey = useMemo(
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],
@@ -250,13 +230,20 @@ export function useCurrentActivityGraphViewModel({
   const setStoredNodePosition = useCurrentActivityGraphStore(
     (state) => state.setNodePosition,
   );
-  const visibleGraphEdges = useMemo(
-    () => buildVisibleGraphEdges(graphLayout),
-    [graphLayout],
+  const { pendingAdditionEdgeIds, visibleGraphEdges } = useMemo(
+    () =>
+      buildVisibleGraphEdgesWithDraft({
+        draft: editor.draftState.draft,
+        graphLayout,
+      }),
+    [editor.draftState.draft, graphLayout],
   );
   const handleAssignments = useMemo(
-    () => buildHandleAssignments(visibleGraphEdges),
-    [visibleGraphEdges],
+    () =>
+      buildHandleAssignments(visibleGraphEdges, {
+        editorMode: editor.editorMode,
+      }),
+    [editor.editorMode, visibleGraphEdges],
   );
   const activeGraphHighlights = useMemo(
     () => buildActiveGraphHighlights(activeExecutions, visibleGraphEdges),
@@ -270,6 +257,7 @@ export function useCurrentActivityGraphViewModel({
     activeExecutionsByWorkstationNodeID,
     activeGraphHighlights,
     activeItemLabelsByPlaceId,
+    editor,
     graphLayout,
     handleAssignments,
     now,
@@ -305,9 +293,15 @@ export function useCurrentActivityGraphViewModel({
       buildGraphEdges(
         activeGraphHighlights,
         handleAssignments,
+        pendingAdditionEdgeIds,
         visibleGraphEdges,
       ),
-    [activeGraphHighlights, handleAssignments, visibleGraphEdges],
+    [
+      activeGraphHighlights,
+      handleAssignments,
+      pendingAdditionEdgeIds,
+      visibleGraphEdges,
+    ],
   );
   const initialFitViewOptions = useMemo<FitViewOptions>(
     () => ({
@@ -355,12 +349,7 @@ export function ReactFlowCurrentActivityCardView(
   const { headingID } = useCurrentActivityAccessibilityIDs(
     props.widgetInstanceID,
   );
-  const graph = useCurrentActivityGraphViewModel(props);
-  const editorGraph = useFactoryGraphEditorViewModel(
-    editor,
-    props.snapshot,
-    props.locale,
-  );
+  const graph = useCurrentActivityGraphViewModel({ ...props, editor });
   const fallbackImportController = useCurrentActivityImportController({
     activateFactory: props.activateFactory,
     onFactoryActivated: props.onFactoryActivated,
@@ -405,21 +394,8 @@ export function ReactFlowCurrentActivityCardView(
           locale={props.locale}
         />
       )}
-      <FactoryGraphEditorDraftActions
-        canSave={editor.canSaveDraft}
-        description={editor.saveSummary.description}
-        isSaving={editor.saveEditableDefinition.status === "pending"}
-        locale={props.locale}
-        onDiscard={editor.handleDiscardPendingChanges}
-        onSave={() => {
-          editor.setIsConfirmingSave(true);
-        }}
-        saveDisabledReason={editor.saveBlockedReason}
-        visible={editor.editorMode && editor.draftState.hasChanges}
-      />
       <CurrentActivityGraphSurface
         editor={editor}
-        editorGraph={editorGraph}
         graph={graph}
         headingID={headingID}
         imports={imports}

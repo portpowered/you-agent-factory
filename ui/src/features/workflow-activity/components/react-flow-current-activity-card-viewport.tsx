@@ -37,63 +37,55 @@ import {
 const CURRENT_ACTIVITY_LEGEND_CLASS =
   "absolute left-7 top-7 z-10 max-md:left-4 max-md:right-4 max-md:top-4";
 
-export function CurrentActivityGraphViewport({
-  activeTool,
-  addMenuActions,
-  canInteractWithEditor,
-  editorMode,
-  edges,
-  graphKey,
-  handleNodesChange,
-  hasPendingChanges,
-  headingID,
-  imports,
-  initialFitViewKey,
-  initialFitViewOptions,
-  edgeTypes,
-  locale,
-  nodeTypes,
-  nodes,
-  onAddAction,
-  onAddMenuOpenChange,
-  onConnect,
-  onEditorEdgeClick,
-  onEditorNodeClick,
-  onSelectTool,
-  openAddMenu,
-  setStoredNodePosition,
-}: {
+function CurrentActivityEditorToolbar(props: {
   activeTool: "add" | "connect" | "delete" | null;
   addMenuActions?: FactoryGraphEditorMenuAction[];
   canInteractWithEditor: boolean;
+  canSaveDraft: boolean;
   editorMode: boolean;
-  edges: Edge[];
-  graphKey: string;
-  handleNodesChange: (changes: NodeChange[]) => void;
+  handleDiscardPendingChanges: () => void;
+  handleSaveDraft: () => void;
   hasPendingChanges: boolean;
-  headingID: string;
-  imports: CurrentActivityImportController;
-  initialFitViewKey: string;
-  initialFitViewOptions: FitViewOptions;
-  edgeTypes?: EdgeTypes;
+  isSavingDraft?: boolean;
   locale?: string;
-  nodeTypes: NodeTypes;
-  nodes: Node[];
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
-  onConnect?: (connection: Connection) => void;
-  onEditorEdgeClick?: (edgeId: string) => void;
-  onEditorNodeClick?: (nodeId: string) => void;
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
   openAddMenu?: boolean;
-  setStoredNodePosition: (
-    graphKey: string,
-    nodeId: string,
-    position: XYPosition,
-  ) => void;
+  saveDisabledReason?: string;
 }) {
-  const editorMessages = getFactoryGraphEditorMessages(locale);
-  const isValidConnection: IsValidConnection = (connection) => {
+  return (
+    <FactoryGraphEditorToolbar
+      activeTool={props.activeTool}
+      addMenuActions={props.addMenuActions}
+      canDiscard={props.hasPendingChanges}
+      canInteract={props.canInteractWithEditor}
+      canSave={props.canSaveDraft}
+      hasPendingChanges={props.hasPendingChanges}
+      isSaving={props.isSavingDraft}
+      locale={props.locale}
+      onAddAction={props.onAddAction}
+      onAddMenuOpenChange={props.onAddMenuOpenChange}
+      onDiscard={props.handleDiscardPendingChanges}
+      onSave={props.handleSaveDraft}
+      onSelectTool={props.onSelectTool}
+      openAddMenu={props.openAddMenu}
+      saveDisabledReason={props.saveDisabledReason}
+      visible={props.editorMode}
+    />
+  );
+}
+
+function buildCurrentActivityIsValidConnection({
+  activeTool,
+  editorMode,
+  nodes,
+}: {
+  activeTool: "add" | "connect" | "delete" | null;
+  editorMode: boolean;
+  nodes: Node[];
+}): IsValidConnection {
+  return (connection) => {
     if (
       !editorMode ||
       activeTool !== "connect" ||
@@ -110,8 +102,10 @@ export function CurrentActivityGraphViewport({
     if (!sourceNode || !targetNode) {
       return false;
     }
-    const sourceNodeKind = (sourceNode.data as { kind?: FactoryGraphNodeKind }).kind;
-    const targetNodeKind = (targetNode.data as { kind?: FactoryGraphNodeKind }).kind;
+    const sourceNodeKind = (sourceNode.data as { kind?: FactoryGraphNodeKind })
+      .kind;
+    const targetNodeKind = (targetNode.data as { kind?: FactoryGraphNodeKind })
+      .kind;
     if (!sourceNodeKind || !targetNodeKind) {
       return false;
     }
@@ -123,6 +117,79 @@ export function CurrentActivityGraphViewport({
       targetNodeKind,
     });
   };
+}
+
+export function CurrentActivityGraphViewport({
+  activeTool,
+  addMenuActions,
+  canInteractWithEditor,
+  canSaveDraft,
+  handleDiscardPendingChanges,
+  handleSaveDraft,
+  editorMode,
+  edges,
+  graphKey,
+  handleNodesChange,
+  hasPendingChanges,
+  headingID,
+  imports,
+  initialFitViewKey,
+  initialFitViewOptions,
+  isSavingDraft = false,
+  edgeTypes,
+  locale,
+  nodeTypes,
+  nodes,
+  onAddAction,
+  onAddMenuOpenChange,
+  onConnect,
+  onEditorEdgeClick,
+  onEditorNodeClick,
+  onSelectTool,
+  openAddMenu,
+  saveDisabledReason,
+  setStoredNodePosition,
+}: {
+  activeTool: "add" | "connect" | "delete" | null;
+  addMenuActions?: FactoryGraphEditorMenuAction[];
+  canInteractWithEditor: boolean;
+  canSaveDraft: boolean;
+  handleDiscardPendingChanges: () => void;
+  handleSaveDraft: () => void;
+  editorMode: boolean;
+  edges: Edge[];
+  graphKey: string;
+  handleNodesChange: (changes: NodeChange[]) => void;
+  hasPendingChanges: boolean;
+  headingID: string;
+  imports: CurrentActivityImportController;
+  initialFitViewKey: string;
+  initialFitViewOptions: FitViewOptions;
+  isSavingDraft?: boolean;
+  edgeTypes?: EdgeTypes;
+  locale?: string;
+  nodeTypes: NodeTypes;
+  nodes: Node[];
+  onAddAction?: (actionID: string) => void;
+  onAddMenuOpenChange?: (open: boolean) => void;
+  onConnect?: (connection: Connection) => void;
+  onEditorEdgeClick?: (edgeId: string) => void;
+  onEditorNodeClick?: (nodeId: string) => void;
+  onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
+  openAddMenu?: boolean;
+  saveDisabledReason?: string;
+  setStoredNodePosition: (
+    graphKey: string,
+    nodeId: string,
+    position: XYPosition,
+  ) => void;
+}) {
+  const editorMessages = getFactoryGraphEditorMessages(locale);
+  const isValidConnection = buildCurrentActivityIsValidConnection({
+    activeTool,
+    editorMode,
+    nodes,
+  });
 
   return (
     <div className="relative min-h-0 flex-1">
@@ -155,6 +222,10 @@ export function CurrentActivityGraphViewport({
         onDrop={imports.onDrop}
       >
         <ReactFlow
+          connectionLineStyle={{
+            stroke: "var(--color-af-accent)",
+            strokeWidth: 2.4,
+          }}
           edges={edges}
           edgeTypes={edgeTypes}
           fitView
@@ -194,17 +265,22 @@ export function CurrentActivityGraphViewport({
             fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
           />
         </ReactFlow>
-        <FactoryGraphEditorToolbar
+        <CurrentActivityEditorToolbar
           activeTool={activeTool}
           addMenuActions={addMenuActions}
-          canInteract={canInteractWithEditor}
+          canInteractWithEditor={canInteractWithEditor}
+          canSaveDraft={canSaveDraft}
+          editorMode={editorMode}
+          handleDiscardPendingChanges={handleDiscardPendingChanges}
+          handleSaveDraft={handleSaveDraft}
           hasPendingChanges={hasPendingChanges}
+          isSavingDraft={isSavingDraft}
           locale={locale}
           onAddAction={onAddAction}
           onAddMenuOpenChange={onAddMenuOpenChange}
           onSelectTool={onSelectTool}
           openAddMenu={openAddMenu}
-          visible={editorMode}
+          saveDisabledReason={saveDisabledReason}
         />
         <GraphDropOverlay dropState={imports.dropState} locale={locale} />
       </section>
