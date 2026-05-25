@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
 const (
@@ -463,7 +464,7 @@ func buildKiroPrompt(req interfaces.ProviderInferenceRequest) string {
 }
 
 func buildBaseProviderCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
-	commandReq := subprocessRequestBase(req.Dispatch)
+	commandReq := workerprocess.SubprocessRequestBase(req.Dispatch)
 	commandReq.Command = string(req.ModelProvider)
 	commandReq.Args = append([]string(nil), args...)
 	commandReq.Env = buildProviderEnv(req.EnvVars)

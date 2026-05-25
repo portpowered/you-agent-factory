@@ -212,6 +212,6 @@ func assertEnvEntryCount(t *testing.T, env []string, name string, want int) {
 func assertProviderAutomationDefaults(t *testing.T, env []string) {
 	t.Helper()
 	for _, entry := range providerAutomationEnvDefaults {
-		assertEnvValue(t, env, entry.name, entry.value)
+		assertEnvValue(t, env, entry.Name, entry.Value)
 	}
 }

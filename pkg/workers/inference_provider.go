@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
 // Provider abstracts LLM inference calls. Implementations handle the
@@ -42,13 +43,13 @@ const (
 	providerSessionKindResponseID     = "response_id"
 )
 
-var providerAutomationEnvDefaults = []commandEnvEntry{
-	{name: "GIT_EDITOR", value: "true"},
-	{name: "GIT_SEQUENCE_EDITOR", value: "true"},
-	{name: "GIT_MERGE_AUTOEDIT", value: "no"},
-	{name: "GIT_TERMINAL_PROMPT", value: "0"},
-	{name: "EDITOR", value: "true"},
-	{name: "VISUAL", value: "true"},
+var providerAutomationEnvDefaults = []workerprocess.CommandEnvEntry{
+	{Name: "GIT_EDITOR", Value: "true"},
+	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
+	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
+	{Name: "GIT_TERMINAL_PROMPT", Value: "0"},
+	{Name: "EDITOR", Value: "true"},
+	{Name: "VISUAL", Value: "true"},
 }
 
 var providerSessionPatterns = []struct {
@@ -105,16 +106,16 @@ var _ Runner = (*ScriptWrapProvider)(nil)
 
 func (p *ScriptWrapProvider) commandExec() CommandRunner {
 	if p.exec != nil {
-		return commandRunnerWithLogging(p.exec, p.Logger)
+		return workerprocess.CommandRunnerWithLogging(p.exec, p.Logger)
 	}
-	return commandRunnerWithLogging(ExecCommandRunner{}, p.Logger)
+	return workerprocess.CommandRunnerWithLogging(workerprocess.ExecCommandRunner{}, p.Logger)
 }
 
 // NewScriptWrapProvider creates a ScriptWrapProvider with functional options.
 func NewScriptWrapProvider(opts ...ScriptWrapProviderOption) *ScriptWrapProvider {
 	p := &ScriptWrapProvider{
 		Logger: logging.NoopLogger{},
-		exec:   ExecCommandRunner{},
+		exec:   workerprocess.ExecCommandRunner{},
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -233,7 +234,7 @@ func ContainsStopToken(output, stopToken string) bool {
 // buildProviderEnv merges subprocess environment sources with deterministic
 // precedence: process environment, provider env vars, then automation defaults.
 func buildProviderEnv(envVars map[string]string) []string {
-	return mergeCommandEnv(os.Environ(), commandEnvEntriesFromMap(envVars), providerAutomationEnvDefaults)
+	return workerprocess.MergeCommandEnv(os.Environ(), workerprocess.CommandEnvEntriesFromMap(envVars), providerAutomationEnvDefaults)
 }
 
 // TODO: right now the stderr/stdout for the print prints out the entire response log for the stdout....

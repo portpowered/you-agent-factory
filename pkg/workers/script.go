@@ -14,6 +14,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
 const (
@@ -64,9 +65,9 @@ func WithScriptFactoryDir(factoryDir string) ScriptExecutorOption {
 // ExecCommandRunner when none was provided.
 func (se *ScriptExecutor) commandRunner() CommandRunner {
 	if se.CommandRunner != nil {
-		return commandRunnerWithLogging(se.CommandRunner, se.Logger)
+		return workerprocess.CommandRunnerWithLogging(se.CommandRunner, se.Logger)
 	}
-	return commandRunnerWithLogging(ExecCommandRunner{}, se.Logger)
+	return workerprocess.CommandRunnerWithLogging(workerprocess.ExecCommandRunner{}, se.Logger)
 }
 
 // NewScriptExecutor creates a ScriptExecutor from a WorkerConfig.
@@ -143,7 +144,7 @@ func (se *ScriptExecutor) commandRequest(request interfaces.WorkstationExecution
 	if err != nil {
 		return CommandRequest{}, err
 	}
-	commandReq := subprocessRequestBase(request.Dispatch)
+	commandReq := workerprocess.SubprocessRequestBase(request.Dispatch)
 	commandReq.Command = resolvePortableFactoryScriptReference(se.FactoryDir, se.Command)
 	commandReq.Args = resolvePortableFactoryScriptReferences(se.FactoryDir, resolvedArgs)
 	commandReq.Env = buildEnv(request)
@@ -451,7 +452,7 @@ func resolveArgs(args []string, data any) ([]string, error) {
 
 // buildEnv merges dispatch env vars into the current process environment.
 func buildEnv(request interfaces.WorkstationExecutionRequest) []string {
-	return mergeCommandEnv(os.Environ(), commandEnvEntriesFromMap(request.EnvVars))
+	return workerprocess.MergeCommandEnv(os.Environ(), workerprocess.CommandEnvEntriesFromMap(request.EnvVars))
 }
 
 func executionWorkDir(request interfaces.WorkstationExecutionRequest) string {

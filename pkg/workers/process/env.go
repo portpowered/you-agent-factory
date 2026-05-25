@@ -1,16 +1,16 @@
-package workers
+package process
 
 import (
 	"sort"
 	"strings"
 )
 
-type commandEnvEntry struct {
-	name  string
-	value string
+type CommandEnvEntry struct {
+	Name  string
+	Value string
 }
 
-func commandEnvEntriesFromMap(envVars map[string]string) []commandEnvEntry {
+func CommandEnvEntriesFromMap(envVars map[string]string) []CommandEnvEntry {
 	if len(envVars) == 0 {
 		return nil
 	}
@@ -21,14 +21,14 @@ func commandEnvEntriesFromMap(envVars map[string]string) []commandEnvEntry {
 	}
 	sort.Strings(keys)
 
-	entries := make([]commandEnvEntry, 0, len(keys))
+	entries := make([]CommandEnvEntry, 0, len(keys))
 	for _, name := range keys {
-		entries = append(entries, commandEnvEntry{name: name, value: envVars[name]})
+		entries = append(entries, CommandEnvEntry{Name: name, Value: envVars[name]})
 	}
 	return entries
 }
 
-func mergeCommandEnv(base []string, overlays ...[]commandEnvEntry) []string {
+func MergeCommandEnv(base []string, overlays ...[]CommandEnvEntry) []string {
 	values := make(map[string]string)
 	order := make([]string, 0, len(base))
 	setEnv := func(name, value string) {
@@ -51,7 +51,7 @@ func mergeCommandEnv(base []string, overlays ...[]commandEnvEntry) []string {
 
 	for _, overlay := range overlays {
 		for _, entry := range overlay {
-			setEnv(entry.name, entry.value)
+			setEnv(entry.Name, entry.Value)
 		}
 	}
 

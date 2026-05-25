@@ -236,7 +236,7 @@ func TestScriptWrapProvider_Infer_CommandCanObserveAutomationDefaultsInEnvironme
 	}
 
 	for _, entry := range providerAutomationEnvDefaults {
-		want := entry.name + "=" + entry.value
+		want := entry.Name + "=" + entry.Value
 		if !strings.Contains(resp.Content, want) {
 			t.Fatalf("expected provider command output to contain %q, got:\n%s", want, resp.Content)
 		}

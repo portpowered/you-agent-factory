@@ -597,8 +597,8 @@ func TestScriptExecutor_DirectCommandEnvironmentDoesNotAddProviderAutomationDefa
 		}
 	}
 	for _, entry := range providerAutomationEnvDefaults {
-		if got := observed[entry.name]; got == entry.value {
-			t.Fatalf("script worker env %s unexpectedly used provider automation default %q", entry.name, entry.value)
+		if got := observed[entry.Name]; got == entry.Value {
+			t.Fatalf("script worker env %s unexpectedly used provider automation default %q", entry.Name, entry.Value)
 		}
 	}
 }
