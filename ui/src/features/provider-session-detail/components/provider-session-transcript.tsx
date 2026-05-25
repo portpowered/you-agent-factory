@@ -7,7 +7,10 @@ import {
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { cn } from "../../../lib/cn";
 import { formatDateTime } from "../../../i18n/formatters";
-import { AuthoredBodyText, PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
+import {
+  AuthoredBodyText,
+  PROVIDER_SESSION_CARD_CLASS,
+} from "../../current-selection/components/detail-card-shared";
 import { FriendlyExecCommandOutput } from "./exec-command-output";
 import { CodePanel, ExpandableCodeBlock } from "./transcript-code-block";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
