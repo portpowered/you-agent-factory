@@ -453,6 +453,8 @@ export interface components {
             currentChainingTraceId?: string;
             /** @description Legacy trace identifier retained for compatibility; prefer currentChainingTraceId. */
             traceId?: string;
+            /** @description Ordered submit-work items authored by the dashboard for structured multimodal submission. */
+            items?: components["schemas"]["SubmitWorkItemList"];
             /** @description Optional canonical ordered work content parts for this submission. */
             content?: components["schemas"]["WorkContent"];
             /** @description Opaque work payload forwarded as raw JSON. */
@@ -467,6 +469,50 @@ export interface components {
             targetWorkId: string;
             /** @description Required target state before the dependency can proceed. */
             requiredState?: string;
+        };
+        /** @description Ordered dashboard-authored submit-work items preserved for one submission. */
+        SubmitWorkItemList: components["schemas"]["SubmitWorkItem"][];
+        /** @description One ordered dashboard-authored submit-work item. */
+        SubmitWorkItem: components["schemas"]["SubmitWorkTextItem"] | components["schemas"]["SubmitWorkImageItem"] | components["schemas"]["SubmitWorkVideoItem"] | components["schemas"]["SubmitWorkAudioItem"] | components["schemas"]["SubmitWorkDocumentItem"];
+        /**
+         * @description Supported dashboard submit-work item types for multimodal submission.
+         * @enum {string}
+         */
+        SubmitWorkItemType: "text" | "image" | "video" | "audio" | "document";
+        SubmitWorkFileItemCommonFields: {
+            /** @description Backend-owned staged file reference preserved for later dispatch. */
+            stagedFileRef?: string;
+            /** @description Browser-authored filename preserved for inline identification and validation. */
+            fileName?: string;
+            /** @description Browser-authored MIME type preserved for validation and dispatch decisions. */
+            mediaType?: string;
+        };
+        /** @description Ordered inline text submission item. */
+        SubmitWorkTextItem: {
+            /** @enum {unknown} */
+            type: "text";
+            /** @description Authored inline text preserved in item order. */
+            text: string;
+        };
+        /** @description Ordered image submission item backed by one staged file reference. */
+        SubmitWorkImageItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+            /** @enum {unknown} */
+            type: "image";
+        };
+        /** @description Ordered video submission item backed by one staged file reference. */
+        SubmitWorkVideoItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+            /** @enum {unknown} */
+            type: "video";
+        };
+        /** @description Ordered audio submission item backed by one staged file reference. */
+        SubmitWorkAudioItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+            /** @enum {unknown} */
+            type: "audio";
+        };
+        /** @description Ordered document submission item backed by one staged file reference. */
+        SubmitWorkDocumentItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+            /** @enum {unknown} */
+            type: "document";
         };
         SubmitWorkResponse: {
             traceId: string;

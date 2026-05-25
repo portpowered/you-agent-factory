@@ -62,13 +62,22 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	content, err := submitWorkContent(req)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
 
 	submitReq := interfaces.SubmitRequest{
 		Name:                   strings.TrimSpace(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
 		TraceID:                factoryrequests.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
-		Content:                workcontent.PartsFromGenerated(req.Content),
+		Content:                content,
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
@@ -115,13 +124,22 @@ func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, s
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	content, err := submitWorkContent(req)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
 
 	submitReq := interfaces.SubmitRequest{
 		Name:                   strings.TrimSpace(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
 		TraceID:                factoryrequests.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
-		Content:                workcontent.PartsFromGenerated(req.Content),
+		Content:                content,
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
@@ -1488,6 +1506,9 @@ func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkJSONReque
 
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
+		return factoryapi.SubmitWorkJSONRequestBody{}, err
+	}
+	if err := validateSubmitWorkStructuredInputFields(fields); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err
 	}
 	if err := validateWorkContentField(fields, ""); err != nil {

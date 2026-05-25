@@ -276,6 +276,15 @@ const (
 	ScriptFailureTypeTimeout      ScriptFailureType = "TIMEOUT"
 )
 
+// Defines values for SubmitWorkItemType.
+const (
+	SubmitWorkItemTypeAudio    SubmitWorkItemType = "audio"
+	SubmitWorkItemTypeDocument SubmitWorkItemType = "document"
+	SubmitWorkItemTypeImage    SubmitWorkItemType = "image"
+	SubmitWorkItemTypeText     SubmitWorkItemType = "text"
+	SubmitWorkItemTypeVideo    SubmitWorkItemType = "video"
+)
+
 // Defines values for WorkContentPartType.
 const (
 	WorkContentPartTypeAudio      WorkContentPartType = "AUDIO"
@@ -1926,6 +1935,68 @@ type SubmitRelation struct {
 	Type RelationType `json:"type"`
 }
 
+// SubmitWorkAudioItem defines model for SubmitWorkAudioItem.
+type SubmitWorkAudioItem struct {
+	// FileName Browser-authored filename preserved for inline identification and validation.
+	FileName string `json:"fileName"`
+
+	// MediaType Browser-authored MIME type preserved for validation and dispatch decisions.
+	MediaType string `json:"mediaType"`
+
+	// StagedFileRef Backend-owned staged file reference preserved for later dispatch.
+	StagedFileRef string             `json:"stagedFileRef"`
+	Type          SubmitWorkItemType `json:"type"`
+}
+
+// SubmitWorkDocumentItem defines model for SubmitWorkDocumentItem.
+type SubmitWorkDocumentItem struct {
+	// FileName Browser-authored filename preserved for inline identification and validation.
+	FileName string `json:"fileName"`
+
+	// MediaType Browser-authored MIME type preserved for validation and dispatch decisions.
+	MediaType string `json:"mediaType"`
+
+	// StagedFileRef Backend-owned staged file reference preserved for later dispatch.
+	StagedFileRef string             `json:"stagedFileRef"`
+	Type          SubmitWorkItemType `json:"type"`
+}
+
+// SubmitWorkFileItemCommonFields defines model for SubmitWorkFileItemCommonFields.
+type SubmitWorkFileItemCommonFields struct {
+	// FileName Browser-authored filename preserved for inline identification and validation.
+	FileName *string `json:"fileName,omitempty"`
+
+	// MediaType Browser-authored MIME type preserved for validation and dispatch decisions.
+	MediaType *string `json:"mediaType,omitempty"`
+
+	// StagedFileRef Backend-owned staged file reference preserved for later dispatch.
+	StagedFileRef *string `json:"stagedFileRef,omitempty"`
+}
+
+// SubmitWorkImageItem defines model for SubmitWorkImageItem.
+type SubmitWorkImageItem struct {
+	// FileName Browser-authored filename preserved for inline identification and validation.
+	FileName string `json:"fileName"`
+
+	// MediaType Browser-authored MIME type preserved for validation and dispatch decisions.
+	MediaType string `json:"mediaType"`
+
+	// StagedFileRef Backend-owned staged file reference preserved for later dispatch.
+	StagedFileRef string             `json:"stagedFileRef"`
+	Type          SubmitWorkItemType `json:"type"`
+}
+
+// SubmitWorkItem One ordered dashboard-authored submit-work item.
+type SubmitWorkItem struct {
+	union json.RawMessage
+}
+
+// SubmitWorkItemList Ordered dashboard-authored submit-work items preserved for one submission.
+type SubmitWorkItemList = []SubmitWorkItem
+
+// SubmitWorkItemType Supported dashboard submit-work item types for multimodal submission.
+type SubmitWorkItemType string
+
 // SubmitWorkRequest defines model for SubmitWorkRequest.
 type SubmitWorkRequest struct {
 	// Content Ordered canonical content parts for one work item.
@@ -1933,6 +2004,9 @@ type SubmitWorkRequest struct {
 
 	// CurrentChainingTraceId Explicit chaining-trace identifier for the submitted work.
 	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
+
+	// Items Ordered dashboard-authored submit-work items preserved for one submission.
+	Items *SubmitWorkItemList `json:"items,omitempty"`
 
 	// Name Required authored name for this single-work submission.
 	Name string `json:"name"`
@@ -1954,6 +2028,26 @@ type SubmitWorkRequest struct {
 // SubmitWorkResponse defines model for SubmitWorkResponse.
 type SubmitWorkResponse struct {
 	TraceId string `json:"traceId"`
+}
+
+// SubmitWorkTextItem Ordered inline text submission item.
+type SubmitWorkTextItem struct {
+	// Text Authored inline text preserved in item order.
+	Text string             `json:"text"`
+	Type SubmitWorkItemType `json:"type"`
+}
+
+// SubmitWorkVideoItem defines model for SubmitWorkVideoItem.
+type SubmitWorkVideoItem struct {
+	// FileName Browser-authored filename preserved for inline identification and validation.
+	FileName string `json:"fileName"`
+
+	// MediaType Browser-authored MIME type preserved for validation and dispatch decisions.
+	MediaType string `json:"mediaType"`
+
+	// StagedFileRef Backend-owned staged file reference preserved for later dispatch.
+	StagedFileRef string             `json:"stagedFileRef"`
+	Type          SubmitWorkItemType `json:"type"`
 }
 
 // TokenHistory defines model for TokenHistory.
@@ -3022,6 +3116,146 @@ func (t FactoryEvent_Payload) MarshalJSON() ([]byte, error) {
 }
 
 func (t *FactoryEvent_Payload) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsSubmitWorkTextItem returns the union data inside the SubmitWorkItem as a SubmitWorkTextItem
+func (t SubmitWorkItem) AsSubmitWorkTextItem() (SubmitWorkTextItem, error) {
+	var body SubmitWorkTextItem
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSubmitWorkTextItem overwrites any union data inside the SubmitWorkItem as the provided SubmitWorkTextItem
+func (t *SubmitWorkItem) FromSubmitWorkTextItem(v SubmitWorkTextItem) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSubmitWorkTextItem performs a merge with any union data inside the SubmitWorkItem, using the provided SubmitWorkTextItem
+func (t *SubmitWorkItem) MergeSubmitWorkTextItem(v SubmitWorkTextItem) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSubmitWorkImageItem returns the union data inside the SubmitWorkItem as a SubmitWorkImageItem
+func (t SubmitWorkItem) AsSubmitWorkImageItem() (SubmitWorkImageItem, error) {
+	var body SubmitWorkImageItem
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSubmitWorkImageItem overwrites any union data inside the SubmitWorkItem as the provided SubmitWorkImageItem
+func (t *SubmitWorkItem) FromSubmitWorkImageItem(v SubmitWorkImageItem) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSubmitWorkImageItem performs a merge with any union data inside the SubmitWorkItem, using the provided SubmitWorkImageItem
+func (t *SubmitWorkItem) MergeSubmitWorkImageItem(v SubmitWorkImageItem) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSubmitWorkVideoItem returns the union data inside the SubmitWorkItem as a SubmitWorkVideoItem
+func (t SubmitWorkItem) AsSubmitWorkVideoItem() (SubmitWorkVideoItem, error) {
+	var body SubmitWorkVideoItem
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSubmitWorkVideoItem overwrites any union data inside the SubmitWorkItem as the provided SubmitWorkVideoItem
+func (t *SubmitWorkItem) FromSubmitWorkVideoItem(v SubmitWorkVideoItem) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSubmitWorkVideoItem performs a merge with any union data inside the SubmitWorkItem, using the provided SubmitWorkVideoItem
+func (t *SubmitWorkItem) MergeSubmitWorkVideoItem(v SubmitWorkVideoItem) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSubmitWorkAudioItem returns the union data inside the SubmitWorkItem as a SubmitWorkAudioItem
+func (t SubmitWorkItem) AsSubmitWorkAudioItem() (SubmitWorkAudioItem, error) {
+	var body SubmitWorkAudioItem
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSubmitWorkAudioItem overwrites any union data inside the SubmitWorkItem as the provided SubmitWorkAudioItem
+func (t *SubmitWorkItem) FromSubmitWorkAudioItem(v SubmitWorkAudioItem) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSubmitWorkAudioItem performs a merge with any union data inside the SubmitWorkItem, using the provided SubmitWorkAudioItem
+func (t *SubmitWorkItem) MergeSubmitWorkAudioItem(v SubmitWorkAudioItem) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSubmitWorkDocumentItem returns the union data inside the SubmitWorkItem as a SubmitWorkDocumentItem
+func (t SubmitWorkItem) AsSubmitWorkDocumentItem() (SubmitWorkDocumentItem, error) {
+	var body SubmitWorkDocumentItem
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSubmitWorkDocumentItem overwrites any union data inside the SubmitWorkItem as the provided SubmitWorkDocumentItem
+func (t *SubmitWorkItem) FromSubmitWorkDocumentItem(v SubmitWorkDocumentItem) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSubmitWorkDocumentItem performs a merge with any union data inside the SubmitWorkItem, using the provided SubmitWorkDocumentItem
+func (t *SubmitWorkItem) MergeSubmitWorkDocumentItem(v SubmitWorkDocumentItem) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t SubmitWorkItem) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *SubmitWorkItem) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }

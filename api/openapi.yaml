@@ -879,6 +879,9 @@ components:
         traceId:
           type: string
           description: Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
+        items:
+          $ref: '#/components/schemas/SubmitWorkItemList'
+          description: Ordered submit-work items authored by the dashboard for structured multimodal submission.
         content:
           $ref: '#/components/schemas/WorkContent'
           description: Optional canonical ordered work content parts for this submission.
@@ -906,6 +909,133 @@ components:
         requiredState:
           type: string
           description: Required target state before the dependency can proceed.
+    SubmitWorkItemList:
+      type: array
+      description: Ordered dashboard-authored submit-work items preserved for one submission.
+      items:
+        $ref: '#/components/schemas/SubmitWorkItem'
+    SubmitWorkItem:
+      description: One ordered dashboard-authored submit-work item.
+      oneOf:
+        - $ref: '#/components/schemas/SubmitWorkTextItem'
+        - $ref: '#/components/schemas/SubmitWorkImageItem'
+        - $ref: '#/components/schemas/SubmitWorkVideoItem'
+        - $ref: '#/components/schemas/SubmitWorkAudioItem'
+        - $ref: '#/components/schemas/SubmitWorkDocumentItem'
+    SubmitWorkItemType:
+      type: string
+      description: Supported dashboard submit-work item types for multimodal submission.
+      x-enum-varnames:
+        - SubmitWorkItemTypeText
+        - SubmitWorkItemTypeImage
+        - SubmitWorkItemTypeVideo
+        - SubmitWorkItemTypeAudio
+        - SubmitWorkItemTypeDocument
+      enum:
+        - text
+        - image
+        - video
+        - audio
+        - document
+    SubmitWorkFileItemCommonFields:
+      type: object
+      properties:
+        stagedFileRef:
+          type: string
+          minLength: 1
+          description: Backend-owned staged file reference preserved for later dispatch.
+        fileName:
+          type: string
+          minLength: 1
+          description: Browser-authored filename preserved for inline identification and validation.
+        mediaType:
+          type: string
+          minLength: 1
+          description: Browser-authored MIME type preserved for validation and dispatch decisions.
+    SubmitWorkTextItem:
+      description: Ordered inline text submission item.
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - text
+      properties:
+        type:
+          allOf:
+            - $ref: '#/components/schemas/SubmitWorkItemType'
+          enum:
+            - text
+        text:
+          type: string
+          description: Authored inline text preserved in item order.
+    SubmitWorkImageItem:
+      description: Ordered image submission item backed by one staged file reference.
+      allOf:
+        - $ref: '#/components/schemas/SubmitWorkFileItemCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - stagedFileRef
+            - fileName
+            - mediaType
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/SubmitWorkItemType'
+              enum:
+                - image
+    SubmitWorkVideoItem:
+      description: Ordered video submission item backed by one staged file reference.
+      allOf:
+        - $ref: '#/components/schemas/SubmitWorkFileItemCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - stagedFileRef
+            - fileName
+            - mediaType
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/SubmitWorkItemType'
+              enum:
+                - video
+    SubmitWorkAudioItem:
+      description: Ordered audio submission item backed by one staged file reference.
+      allOf:
+        - $ref: '#/components/schemas/SubmitWorkFileItemCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - stagedFileRef
+            - fileName
+            - mediaType
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/SubmitWorkItemType'
+              enum:
+                - audio
+    SubmitWorkDocumentItem:
+      description: Ordered document submission item backed by one staged file reference.
+      allOf:
+        - $ref: '#/components/schemas/SubmitWorkFileItemCommonFields'
+        - type: object
+          additionalProperties: false
+          required:
+            - type
+            - stagedFileRef
+            - fileName
+            - mediaType
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/SubmitWorkItemType'
+              enum:
+                - document
     SubmitWorkResponse:
       type: object
       additionalProperties: false

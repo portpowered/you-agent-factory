@@ -63,6 +63,83 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
 }
 
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+
+	req := map[string]any{
+		"name":         "generated-api-empty-items",
+		"workTypeName": "task",
+		"items": []map[string]any{
+			{"type": "text", "text": "   "},
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal generated submit request: %v", err)
+	}
+	resp, err := http.Post(server.URL()+"/work", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work status = %d, want 400: %s", resp.StatusCode, string(payload))
+	}
+}
+
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+
+	req := map[string]any{
+		"name":         "generated-api-items-text",
+		"workTypeName": "task",
+		"items": []map[string]any{
+			{"type": "text", "text": "Alpha "},
+			{"type": "text", "text": "Beta"},
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal generated submit request: %v", err)
+	}
+	resp, err := http.Post(server.URL()+"/work", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work status = %d, want 201: %s", resp.StatusCode, string(payload))
+	}
+	var submitted factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(resp.Body).Decode(&submitted); err != nil {
+		t.Fatalf("decode submit response: %v", err)
+	}
+
+	work := waitForGeneratedWorkComplete(t, server.URL(), submitted.TraceId, 10*time.Second)
+	if len(work.Results) != 1 {
+		t.Fatalf("GET /work result count = %d, want 1", len(work.Results))
+	}
+	content := work.Results[0].Content
+	if content == nil || len(*content) != 2 {
+		t.Fatalf("GET /work content = %#v, want two ordered text content parts", content)
+	}
+	firstPart, err := (*content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode first projected text content: %v", err)
+	}
+	secondPart, err := (*content)[1].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode second projected text content: %v", err)
+	}
+	if firstPart.Text != "Alpha " || secondPart.Text != "Beta" {
+		t.Fatalf("GET /work content parts = %#v, want ordered text items Alpha / Beta", content)
+	}
+}
+
 func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
 	support.SkipLongFunctional(t, "slow CLI submit generated API smoke")
 

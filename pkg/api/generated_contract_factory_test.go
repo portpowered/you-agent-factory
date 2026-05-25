@@ -67,9 +67,9 @@ func generatedSubmitRequestFixture(t *testing.T) factoryapi.SubmitWorkRequest {
 	}}
 	if err := json.Unmarshal([]byte(`[
 		{"type":"text","text":"Draft a summary."},
-		{"type":"image","file":"fixtures/work-item.png"}
-	]`), &submitRequest.Content); err != nil {
-		t.Fatalf("unmarshal generated submit request content: %v", err)
+		{"type":"image","stagedFileRef":"staged://work-item.png","fileName":"work-item.png","mediaType":"image/png"}
+	]`), &submitRequest.Items); err != nil {
+		t.Fatalf("unmarshal generated submit request items: %v", err)
 	}
 	return submitRequest
 }
@@ -181,8 +181,8 @@ func assertGeneratedSubmitRequestJSON(t *testing.T, submitRequest factoryapi.Sub
 	if !strings.Contains(string(submitRequestJSON), `"relations"`) || !strings.Contains(string(submitRequestJSON), `"targetWorkId":"work-1"`) {
 		t.Fatalf("generated submit request JSON must preserve token-level relations: %s", submitRequestJSON)
 	}
-	if !strings.Contains(string(submitRequestJSON), `"content"`) || !strings.Contains(string(submitRequestJSON), `"file":"fixtures/work-item.png"`) {
-		t.Fatalf("generated submit request JSON must preserve canonical content parts: %s", submitRequestJSON)
+	if !strings.Contains(string(submitRequestJSON), `"items"`) || !strings.Contains(string(submitRequestJSON), `"stagedFileRef":"staged://work-item.png"`) {
+		t.Fatalf("generated submit request JSON must preserve structured submit-work items: %s", submitRequestJSON)
 	}
 }
 

@@ -85,6 +85,34 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	}
 }
 
+func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","items":[{"type":"text","text":"Review this UI."},{"type":"image","stagedFileRef":"staged://ui.png","fileName":"ui.png","mediaType":"image/png"}]}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	}
+	if string(mf.Submitted[0].Payload) != "Review this UI." {
+		t.Fatalf("payload = %q, want legacy text fallback", mf.Submitted[0].Payload)
+	}
+	if len(mf.Submitted[0].Content) != 2 {
+		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
+	}
+	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
+		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
+	}
+	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].File != "staged://ui.png" || mf.Submitted[0].Content[1].ContentType != "image/png" {
+		t.Fatalf("submitted content[1] = %#v, want canonical staged image content", mf.Submitted[0].Content[1])
+	}
+	if mf.Submitted[0].Content[1].Metadata[submitWorkItemTypeMetadataKey] != "image" || mf.Submitted[0].Content[1].Metadata[submitWorkFileNameMetadataKey] != "ui.png" {
+		t.Fatalf("submitted content[1].metadata = %#v, want item type and file name metadata", mf.Submitted[0].Content[1].Metadata)
+	}
+}
+
 func TestSubmitWork_AcceptsUppercaseAndExtendedCanonicalContent(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
@@ -150,6 +178,30 @@ func TestSubmitWork_RejectsConflictingContentAndPayload(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
 	rec := submitWorkRequest(t, srv, `{"name":"conflicting-content","workTypeName":"prd","content":[{"type":"text","text":"canonical"}],"payload":"different"}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", `work_request: works[0] ("conflicting-content") has invalid content/payload: payload conflicts with explicit content`)
+}
+
+func TestSubmitWork_RejectsStructuredItemsCombinedWithPayload(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	rec := submitWorkRequest(t, srv, `{"name":"conflicting-items","workTypeName":"prd","items":[{"type":"text","text":"canonical"}],"payload":"different"}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with payload")
+}
+
+func TestSubmitWork_RejectsEmptyStructuredItems(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	rec := submitWorkRequest(t, srv, `{"name":"empty-items","workTypeName":"prd","items":[]}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items must contain at least one item")
+}
+
+func TestSubmitWork_RejectsBlankOnlyStructuredItems(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	rec := submitWorkRequest(t, srv, `{"name":"blank-items","workTypeName":"prd","items":[{"type":"text","text":"   \t"}]}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items must contain at least one non-empty item")
+}
+
+func TestSubmitWork_RejectsStructuredFileItemWithoutStagedReference(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	rec := submitWorkRequest(t, srv, `{"name":"missing-staged-ref","workTypeName":"prd","items":[{"type":"document","stagedFileRef":"","fileName":"spec.pdf","mediaType":"application/pdf"}]}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0].stagedFileRef must be a non-empty string")
 }
 
 func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
