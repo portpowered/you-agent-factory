@@ -3,6 +3,7 @@ import {
   act,
   fireEvent,
   render,
+  renderHook,
   screen,
   waitFor,
   within,
@@ -10,6 +11,8 @@ import {
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
+import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmitWorkCard } from "./submit-work-card";
 import { SubmitWorkWidget } from "./submit-work-widget";
 
@@ -276,7 +279,7 @@ describe("SubmitWorkWidget", () => {
         onItemTextChange={() => {}}
         onRemoveItem={() => {}}
         onRequestNameChange={() => {}}
-        onStageFileItem={() => {}}
+        onStageFileItems={() => {}}
         onSubmit={() => {}}
         onWorkTypeNameChange={() => {}}
         status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
@@ -319,7 +322,7 @@ describe("SubmitWorkWidget", () => {
         onItemTextChange={() => {}}
         onRemoveItem={() => {}}
         onRequestNameChange={() => {}}
-        onStageFileItem={() => {}}
+        onStageFileItems={() => {}}
         onSubmit={() => {}}
         onWorkTypeNameChange={() => {}}
         status={{ kind: "guidance", message: "Ready to submit." }}
@@ -352,7 +355,7 @@ describe("SubmitWorkWidget", () => {
         onItemTextChange={() => {}}
         onRemoveItem={() => {}}
         onRequestNameChange={() => {}}
-        onStageFileItem={() => {}}
+        onStageFileItems={() => {}}
         onSubmit={() => {}}
         onWorkTypeNameChange={() => {}}
         status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
@@ -369,6 +372,122 @@ describe("SubmitWorkWidget", () => {
     expect(screen.getByRole("button", { name: "Submit work" }).disabled).toBe(
       true,
     );
+  });
+
+  it("stages multiple selected files as independent ordered sibling items and removes them independently", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            fileName: "first.png",
+            mediaType: "image/png",
+            stagedFileRef: "/tmp/submit-work-stage/first.png",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 201,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            fileName: "second.png",
+            mediaType: "image/png",
+            stagedFileRef: "/tmp/submit-work-stage/second.png",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 201,
+          },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(
+      () =>
+        useSubmitWorkWidget(
+          DEFAULT_FACTORY_SESSION_ID,
+          [{ work_type_name: "story" }],
+          getSubmitWorkMessages("en"),
+        ),
+      {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={new QueryClient()}>
+            {children}
+          </QueryClientProvider>
+        ),
+      },
+    );
+
+    act(() => {
+      result.current.onAddItem("image");
+    });
+    await waitFor(() => {
+      expect(result.current.draft.items).toHaveLength(2);
+    });
+
+    const firstFile = createStageableFile("first", "first.png", "image/png");
+    const secondFile = createStageableFile("second", "second.png", "image/png");
+
+    await act(async () => {
+      await result.current.onStageFileItems("submission-item-2", [
+        firstFile,
+        secondFile,
+      ]);
+    });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(result.current.draft.items).toEqual([
+        { id: "submission-item-1", text: "", type: "text" },
+        {
+          fileName: "first.png",
+          id: "submission-item-2",
+          mediaType: "image/png",
+          stagedFileRef: "/tmp/submit-work-stage/first.png",
+          stagingError: undefined,
+          stagingStatus: "ready",
+          type: "image",
+        },
+        {
+          fileName: "second.png",
+          id: "submission-item-3",
+          mediaType: "image/png",
+          stagedFileRef: "/tmp/submit-work-stage/second.png",
+          stagingError: undefined,
+          stagingStatus: "ready",
+          type: "image",
+        },
+      ]);
+    });
+    expect(
+      fetchMock.mock.calls.map((call) =>
+        JSON.parse(String((call[1] as RequestInit).body)).fileName,
+      ),
+    ).toEqual(["first.png", "second.png"]);
+
+    act(() => {
+      result.current.onRemoveItem("submission-item-2");
+    });
+
+    expect(result.current.draft.items).toEqual([
+      { id: "submission-item-1", text: "", type: "text" },
+      {
+        fileName: "second.png",
+        id: "submission-item-3",
+        mediaType: "image/png",
+        stagedFileRef: "/tmp/submit-work-stage/second.png",
+        stagingError: undefined,
+        stagingStatus: "ready",
+        type: "image",
+      },
+    ]);
   });
 
   it("submits work with a request name, clears only request fields on success, and shows the returned trace", async () => {
@@ -798,4 +917,16 @@ function renderSubmitWorkWidget(element: React.ReactElement) {
   return render(
     <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
   );
+}
+
+function createStageableFile(
+  content: string,
+  fileName: string,
+  mediaType: string,
+): File {
+  const file = new File([content], fileName, { type: mediaType });
+  Object.defineProperty(file, "arrayBuffer", {
+    value: async () => new TextEncoder().encode(content).buffer,
+  });
+  return file;
 }

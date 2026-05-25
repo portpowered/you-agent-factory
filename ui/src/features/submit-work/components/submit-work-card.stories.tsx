@@ -99,7 +99,7 @@ export const FailureRetry = {
       onItemTextChange={() => {}}
       onRemoveItem={() => {}}
       onRequestNameChange={() => {}}
-      onStageFileItem={() => {}}
+      onStageFileItems={() => {}}
       onSubmit={() => {}}
       onWorkTypeNameChange={() => {}}
       status={{
@@ -181,7 +181,7 @@ export const StableActionAlignment = {
           onItemTextChange={() => {}}
           onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
-          onStageFileItem={() => {}}
+          onStageFileItems={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
           status={{
@@ -205,7 +205,7 @@ export const StableActionAlignment = {
           onItemTextChange={() => {}}
           onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
-          onStageFileItem={() => {}}
+          onStageFileItems={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
           status={{
@@ -228,7 +228,7 @@ export const StableActionAlignment = {
           onItemTextChange={() => {}}
           onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
-          onStageFileItem={() => {}}
+          onStageFileItems={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
           status={{
@@ -251,7 +251,7 @@ export const StableActionAlignment = {
           onItemTextChange={() => {}}
           onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
-          onStageFileItem={() => {}}
+          onStageFileItems={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
           status={{
@@ -274,7 +274,7 @@ export const StableActionAlignment = {
           onItemTextChange={() => {}}
           onRemoveItem={() => {}}
           onRequestNameChange={() => {}}
-          onStageFileItem={() => {}}
+          onStageFileItems={() => {}}
           onSubmit={() => {}}
           onWorkTypeNameChange={() => {}}
           status={{

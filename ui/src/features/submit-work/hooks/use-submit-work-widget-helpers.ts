@@ -278,7 +278,23 @@ export async function fileToBase64(file: File): Promise<string> {
   for (const value of bytes) {
     binary += String.fromCharCode(value);
   }
-  return btoa(binary);
+
+  if (typeof btoa === "function") {
+    return btoa(binary);
+  }
+
+  const nodeBuffer = (
+    globalThis as typeof globalThis & {
+      Buffer?: {
+        from: (input: Uint8Array) => { toString: (encoding: string) => string };
+      };
+    }
+  ).Buffer;
+  if (nodeBuffer) {
+    return nodeBuffer.from(bytes).toString("base64");
+  }
+
+  throw new Error("Base64 encoding is unavailable in this environment.");
 }
 
 function hasMeaningfulSubmissionItems(draft: SubmitWorkDraft): boolean {

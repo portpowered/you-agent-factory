@@ -12,7 +12,7 @@ export function FileSubmissionItemEditor({
   inputID,
   item,
   messages,
-  onStageFileItem,
+  onStageFileItems,
   validationTextClassName,
 }: {
   disabled: boolean;
@@ -21,7 +21,7 @@ export function FileSubmissionItemEditor({
   inputID: string;
   item: SubmitWorkDraftFileItem;
   messages: SubmitWorkMessages;
-  onStageFileItem: (file: File) => void;
+  onStageFileItems: (files: File[]) => void;
   validationTextClassName: string;
 }) {
   const [isDragActive, setIsDragActive] = useState(false);
@@ -35,12 +35,13 @@ export function FileSubmissionItemEditor({
         className="sr-only"
         disabled={disabled}
         id={inputID}
+        multiple
         onChange={(event) => {
-          const nextFile = event.target.files?.[0];
-          if (!nextFile) {
+          const nextFiles = Array.from(event.target.files ?? []);
+          if (nextFiles.length === 0) {
             return;
           }
-          onStageFileItem(nextFile);
+          onStageFileItems(nextFiles);
           event.currentTarget.value = "";
         }}
         type="file"
@@ -86,11 +87,11 @@ export function FileSubmissionItemEditor({
           }
           event.preventDefault();
           setIsDragActive(false);
-          const nextFile = event.dataTransfer.files?.[0];
-          if (!nextFile) {
+          const nextFiles = Array.from(event.dataTransfer.files ?? []);
+          if (nextFiles.length === 0) {
             return;
           }
-          onStageFileItem(nextFile);
+          onStageFileItems(nextFiles);
         }}
       >
         <div className="flex flex-wrap items-center gap-3">

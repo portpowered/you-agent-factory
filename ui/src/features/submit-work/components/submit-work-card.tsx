@@ -65,7 +65,7 @@ export interface SubmitWorkCardProps {
   onItemTextChange: (itemId: string, value: string) => void;
   onRemoveItem: (itemId: string) => void;
   onRequestNameChange: (value: string) => void;
-  onStageFileItem: (itemId: string, file: File) => void;
+  onStageFileItems: (itemId: string, files: File[]) => void;
   onSubmit: () => void;
   onWorkTypeNameChange: (value: string) => void;
   status: SubmitWorkStatus;
@@ -112,7 +112,7 @@ export function SubmitWorkCard({
   onItemTextChange,
   onRemoveItem,
   onRequestNameChange,
-  onStageFileItem,
+  onStageFileItems,
   onSubmit,
   onWorkTypeNameChange,
   status,
@@ -225,7 +225,7 @@ export function SubmitWorkCard({
             messages={messages}
             onItemTextChange={onItemTextChange}
             onRemoveItem={onRemoveItem}
-            onStageFileItem={onStageFileItem}
+            onStageFileItems={onStageFileItems}
             submissionItemsID={submissionItemsID}
             widgetId={widgetId}
           />
@@ -332,7 +332,7 @@ function SubmissionItemsList({
   messages,
   onItemTextChange,
   onRemoveItem,
-  onStageFileItem,
+  onStageFileItems,
   submissionItemsID,
   widgetId,
 }: {
@@ -341,7 +341,7 @@ function SubmissionItemsList({
   messages: ReturnType<typeof getSubmitWorkMessages>;
   onItemTextChange: (itemId: string, value: string) => void;
   onRemoveItem: (itemId: string) => void;
-  onStageFileItem: (itemId: string, file: File) => void;
+  onStageFileItems: (itemId: string, files: File[]) => void;
   submissionItemsID: string;
   widgetId: string;
 }) {
@@ -373,7 +373,7 @@ function SubmissionItemsList({
                 disabled={controlsDisabled}
                 item={item}
                 messages={messages}
-                onStageFileItem={onStageFileItem}
+                onStageFileItems={onStageFileItems}
                 widgetId={widgetId}
               />
             )}
@@ -479,13 +479,13 @@ function FileSubmissionItemEditorShell({
   disabled,
   item,
   messages,
-  onStageFileItem,
+  onStageFileItems,
   widgetId,
 }: {
   disabled: boolean;
   item: SubmitWorkDraftFileItem;
   messages: ReturnType<typeof getSubmitWorkMessages>;
-  onStageFileItem: (itemId: string, file: File) => void;
+  onStageFileItems: (itemId: string, files: File[]) => void;
   widgetId: string;
 }) {
   return (
@@ -496,7 +496,7 @@ function FileSubmissionItemEditorShell({
       inputID={`${widgetId}-${item.id}-file`}
       item={item}
       messages={messages}
-      onStageFileItem={(file: File) => onStageFileItem(item.id, file)}
+      onStageFileItems={(files: File[]) => onStageFileItems(item.id, files)}
       validationTextClassName={VALIDATION_TEXT_CLASS}
     />
   );

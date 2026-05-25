@@ -74,6 +74,80 @@ export function useSubmitWorkWidget(
 
   const validationErrors = showValidation ? validateDraft(draft, messages) : {};
 
+  const stageFileItem = async (
+    itemId: string,
+    itemType: SubmitWorkDraftFileItem["type"],
+    file: File,
+  ) => {
+    const mediaType = normalizeMediaType(file);
+    const requestID = (fileStageRequestIDsRef.current[itemId] ?? 0) + 1;
+    fileStageRequestIDsRef.current[itemId] = requestID;
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      items: currentDraft.items.map((item) =>
+        item.id === itemId && item.type !== "text"
+          ? {
+              ...item,
+              fileName: file.name,
+              mediaType,
+              stagedFileRef: undefined,
+              stagingError: undefined,
+              stagingStatus: "staging",
+            }
+          : item,
+      ),
+    }));
+
+    try {
+      const response = await stageSubmitWorkFile(
+        {
+          contentBase64: await fileToBase64(file),
+          fileName: file.name,
+          itemType,
+          mediaType,
+        },
+        { sessionID },
+      );
+      if (fileStageRequestIDsRef.current[itemId] !== requestID) {
+        return;
+      }
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        items: currentDraft.items.map((item) =>
+          item.id === itemId && item.type !== "text"
+            ? {
+                ...item,
+                fileName: response.fileName,
+                mediaType: response.mediaType,
+                stagedFileRef: response.stagedFileRef,
+                stagingError: undefined,
+                stagingStatus: "ready",
+              }
+            : item,
+        ),
+      }));
+    } catch (error) {
+      if (fileStageRequestIDsRef.current[itemId] !== requestID) {
+        return;
+      }
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        items: currentDraft.items.map((item) =>
+          item.id === itemId && item.type !== "text"
+            ? {
+                ...item,
+                fileName: file.name,
+                mediaType,
+                stagedFileRef: undefined,
+                stagingError: stageSubmitWorkErrorMessage(error, messages),
+                stagingStatus: "failure",
+              }
+            : item,
+        ),
+      }));
+    }
+  };
+
   return {
     draft,
     isSubmitting: mutation.isPending,
@@ -119,82 +193,50 @@ export function useSubmitWorkWidget(
         requestName: value,
       }));
     },
-    onStageFileItem: async (itemId: string, file: File) => {
+    onStageFileItems: async (itemId: string, files: File[]) => {
       resetSubmitMutation(mutation);
       const targetItem = draft.items.find(
         (item): item is SubmitWorkDraftFileItem =>
           item.id === itemId && item.type !== "text",
       );
-      if (!targetItem) {
+      if (!targetItem || files.length === 0) {
         return;
       }
-
-      const mediaType = normalizeMediaType(file);
-      const requestID = (fileStageRequestIDsRef.current[itemId] ?? 0) + 1;
-      fileStageRequestIDsRef.current[itemId] = requestID;
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        items: currentDraft.items.map((item) =>
-          item.id === itemId && item.type !== "text"
-            ? {
-                ...item,
-                fileName: file.name,
-                mediaType,
-                stagedFileRef: undefined,
-                stagingError: undefined,
-                stagingStatus: "staging",
-              }
-            : item,
-        ),
+      const [firstFile, ...additionalFiles] = files;
+      const additionalItems = additionalFiles.map((file, index) => ({
+        file,
+        item: createDraftItem(
+          targetItem.type,
+          nextItemSequenceRef.current + index,
+        ) as SubmitWorkDraftFileItem,
       }));
+      nextItemSequenceRef.current += additionalItems.length;
 
-      try {
-        const response = await stageSubmitWorkFile(
-          {
-            contentBase64: await fileToBase64(file),
-            fileName: file.name,
-            itemType: targetItem.type,
-            mediaType,
-          },
-          { sessionID },
+      if (additionalItems.length > 0) {
+        setDraft((currentDraft) => {
+          const targetIndex = currentDraft.items.findIndex((item) => item.id === itemId);
+          if (targetIndex < 0) {
+            return currentDraft;
+          }
+
+          return {
+            ...currentDraft,
+            items: [
+              ...currentDraft.items.slice(0, targetIndex + 1),
+              ...additionalItems.map(({ item }) => item),
+              ...currentDraft.items.slice(targetIndex + 1),
+            ],
+          };
+        });
+      }
+
+      void stageFileItem(itemId, targetItem.type, firstFile);
+      for (const additionalItem of additionalItems) {
+        void stageFileItem(
+          additionalItem.item.id,
+          additionalItem.item.type,
+          additionalItem.file,
         );
-        if (fileStageRequestIDsRef.current[itemId] !== requestID) {
-          return;
-        }
-        setDraft((currentDraft) => ({
-          ...currentDraft,
-          items: currentDraft.items.map((item) =>
-            item.id === itemId && item.type !== "text"
-              ? {
-                  ...item,
-                  fileName: response.fileName,
-                  mediaType: response.mediaType,
-                  stagedFileRef: response.stagedFileRef,
-                  stagingError: undefined,
-                  stagingStatus: "ready",
-                }
-              : item,
-          ),
-        }));
-      } catch (error) {
-        if (fileStageRequestIDsRef.current[itemId] !== requestID) {
-          return;
-        }
-        setDraft((currentDraft) => ({
-          ...currentDraft,
-          items: currentDraft.items.map((item) =>
-            item.id === itemId && item.type !== "text"
-              ? {
-                  ...item,
-                  fileName: file.name,
-                  mediaType,
-                  stagedFileRef: undefined,
-                  stagingError: stageSubmitWorkErrorMessage(error, messages),
-                  stagingStatus: "failure",
-                }
-              : item,
-          ),
-        }));
       }
     },
     onSubmit: () => {
