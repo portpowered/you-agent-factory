@@ -1,7 +1,12 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: shared graph-handle and pending-edge coverage stays grouped around one layout fixture seam.
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import { buildVisibleGraphEdgesWithDraft } from "./react-flow-current-activity-card-draft-edges";
+import {
+  buildEditorHandles,
+  supportedEditorHandleIdsForEdge,
+} from "./react-flow-current-activity-card-editor-handles";
 import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
@@ -110,6 +115,78 @@ describe("current activity graph editor handles", () => {
     expect(outputEdge).toMatchObject({
       sourceHandle: "workstation-output-source",
       targetHandle: "workstation-output-target",
+    });
+  });
+
+  it("maps rejected and failed observer edges onto the supported shared handle ids", () => {
+    expect(
+      supportedEditorHandleIdsForEdge({
+        edgeId: "rejected",
+        fromNodeId: "workstation:review",
+        label: "",
+        labelX: 0,
+        labelY: 0,
+        outcomeKind: "rejected",
+        path: "",
+        sourcePlaceKind: undefined,
+        stateCategory: undefined,
+        targetPlaceKind: "work_state",
+        toNodeId: "place:story:blocked",
+      }),
+    ).toEqual({
+      sourceHandleId: "workstation-on-rejection-source",
+      targetHandleId: "workstation-on-rejection-target",
+    });
+
+    expect(
+      supportedEditorHandleIdsForEdge({
+        edgeId: "failed",
+        fromNodeId: "workstation:review",
+        label: "",
+        labelX: 0,
+        labelY: 0,
+        outcomeKind: "accepted",
+        path: "",
+        sourcePlaceKind: undefined,
+        stateCategory: "FAILED",
+        targetPlaceKind: "work_state",
+        toNodeId: "place:story:blocked",
+      }),
+    ).toEqual({
+      sourceHandleId: "workstation-on-failure-source",
+      targetHandleId: "workstation-on-failure-target",
+    });
+  });
+
+  it("wires shared handle click actions back through the editor anchor callback", () => {
+    const onConnectionAnchorClick = vi.fn();
+
+    const handles = buildEditorHandles({
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick,
+        pendingConnectionSource: {
+          anchorId: "workstation-output-source",
+          nodeId: "workstation:review",
+        },
+      },
+      nodeId: "place:story:done",
+      nodeKind: "work-state",
+    });
+
+    const successTarget = handles.find(
+      (handle) => handle.id === "workstation-output-target",
+    );
+
+    expect(successTarget?.variant).toBe("valid-target");
+
+    successTarget?.onButtonClick();
+
+    expect(onConnectionAnchorClick).toHaveBeenCalledWith({
+      anchorId: "workstation-output-target",
+      nodeId: "place:story:done",
     });
   });
 
