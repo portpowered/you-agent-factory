@@ -1,4 +1,4 @@
-package workers
+package provider
 
 import (
 	"context"
@@ -11,6 +11,75 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+func InputTokens(tokens ...interfaces.Token) []any {
+	if len(tokens) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(tokens))
+	for _, token := range tokens {
+		out = append(out, token)
+	}
+	return out
+}
+
+func CommandRequestInputTokens(request CommandRequest) []interfaces.Token {
+	return cloneInputTokens(request.InputTokens)
+}
+
+func envSliceToMap(env []string) map[string]string {
+	if len(env) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(env))
+	for _, pair := range env {
+		name, value, ok := strings.Cut(pair, "=")
+		if !ok {
+			continue
+		}
+		out[name] = value
+	}
+	return out
+}
+
+func mapValues(values map[string]string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, value)
+	}
+	return out
+}
+
+func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMetadata) {
+	t.Helper()
+	if got.DispatchCreatedTick != want.DispatchCreatedTick {
+		t.Fatalf("DispatchCreatedTick = %d, want %d", got.DispatchCreatedTick, want.DispatchCreatedTick)
+	}
+	if got.CurrentTick != want.CurrentTick {
+		t.Fatalf("CurrentTick = %d, want %d", got.CurrentTick, want.CurrentTick)
+	}
+	if got.RequestID != want.RequestID {
+		t.Fatalf("RequestID = %q, want %q", got.RequestID, want.RequestID)
+	}
+	if got.TraceID != want.TraceID {
+		t.Fatalf("TraceID = %q, want %q", got.TraceID, want.TraceID)
+	}
+	if got.ReplayKey != want.ReplayKey {
+		t.Fatalf("ReplayKey = %q, want %q", got.ReplayKey, want.ReplayKey)
+	}
+	if len(got.WorkIDs) != len(want.WorkIDs) {
+		t.Fatalf("WorkIDs length = %d, want %d: %#v", len(got.WorkIDs), len(want.WorkIDs), got.WorkIDs)
+	}
+	for i := range want.WorkIDs {
+		if got.WorkIDs[i] != want.WorkIDs[i] {
+			t.Fatalf("WorkIDs[%d] = %q, want %q; full WorkIDs: %#v", i, got.WorkIDs[i], want.WorkIDs[i], got.WorkIDs)
+		}
+	}
+}
+
+func intPtr(value int) *int {
+	return &value
+}
 
 type april11FailureShapeFixture struct {
 	Samples []april11FailureShapeSample `json:"samples"`

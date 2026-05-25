@@ -1,4 +1,4 @@
-package workers
+package provider
 
 import (
 	"context"
@@ -102,8 +102,6 @@ type ScriptWrapProvider struct {
 	exec   CommandRunner
 }
 
-var _ Runner = (*ScriptWrapProvider)(nil)
-
 func (p *ScriptWrapProvider) commandExec() CommandRunner {
 	if p.exec != nil {
 		return workerprocess.CommandRunnerWithLogging(p.exec, p.Logger)
@@ -146,7 +144,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	logger := logging.EnsureLogger(p.Logger)
 
 	logger.Info("inferencer: request starting",
-		WorkLogFields(req.Dispatch.Execution,
+		workLogFields(req.Dispatch.Execution,
 			"dispatcher", string(req.ModelProvider),
 			"model", req.Model)...)
 
@@ -154,7 +152,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	args, err := behavior.BuildArgs(req, p.SkipPermissions)
 	if err != nil {
 		logger.Error("inferencer: request argument validation failed",
-			WorkLogFields(req.Dispatch.Execution,
+			workLogFields(req.Dispatch.Execution,
 				"dispatcher", string(req.ModelProvider),
 				"error", err.Error())...)
 		return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
@@ -166,11 +164,11 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 		)
 	}
 	logger.Info("inferencer: request arguments",
-		WorkLogFields(req.Dispatch.Execution, "arguments", args)...)
+		workLogFields(req.Dispatch.Execution, "arguments", args)...)
 	execReq := behavior.BuildCommandRequest(req, args)
 
 	logger.Debug("inferencer: request input",
-		WorkLogFields(req.Dispatch.Execution, "request", req.UserMessage)...)
+		workLogFields(req.Dispatch.Execution, "request", req.UserMessage)...)
 	started := time.Now()
 	result, err := p.commandExec().Run(ctx, execReq)
 	duration := time.Since(started)
@@ -178,7 +176,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	providerSession := effectiveProviderSession(req, result)
 	if err != nil {
 		logger.Error("inferencer: request failed",
-			WorkLogFields(req.Dispatch.Execution,
+			workLogFields(req.Dispatch.Execution,
 				"dispatcher", string(req.ModelProvider),
 				"error", err.Error(),
 				"output", string(result.Stdout),
@@ -187,7 +185,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	}
 	if result.ExitCode != 0 {
 		logger.Error("inferencer: request failed",
-			WorkLogFields(req.Dispatch.Execution,
+			workLogFields(req.Dispatch.Execution,
 				"dispatcher", string(req.ModelProvider),
 				"exit_code", result.ExitCode,
 				"output", string(result.Stdout),
@@ -197,9 +195,9 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 
 	content := string(result.Stdout)
 	logger.Debug("inference results:",
-		WorkLogFields(req.Dispatch.Execution, "output", result.Stdout)...)
+		workLogFields(req.Dispatch.Execution, "output", result.Stdout)...)
 	logger.Info("inferencer: request completed",
-		WorkLogFields(req.Dispatch.Execution,
+		workLogFields(req.Dispatch.Execution,
 			"dispatcher", string(req.ModelProvider),
 			"output_len", len(content))...)
 
@@ -209,17 +207,6 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 		Diagnostics:     commandDiagnostics,
 	}, nil
 }
-
-type ModelProvider string
-
-const (
-	ModelProviderClaude   ModelProvider = "claude"
-	ModelProviderCodex    ModelProvider = "codex"
-	ModelProviderGemini   ModelProvider = "gemini"
-	ModelProviderKiro     ModelProvider = "kiro-cli"
-	ModelProviderCursor   ModelProvider = "cursor-agent"
-	ModelProviderOpenCode ModelProvider = "opencode"
-)
 
 // ContainsStopToken checks whether the output text contains the given stop token.
 // The check is case-sensitive and looks for the token as a substring.
@@ -272,6 +259,12 @@ func normalizeProviderExitFailure(provider string, result CommandResult, session
 	message := formatProviderExitFailure(provider, result)
 	errorType := classifyProviderExitFailure(provider, result)
 	return newProviderErrorWithDiagnostics(errorType, message, nil, session, diagnostics)
+}
+
+// NormalizeProviderExitFailure exposes the canonical provider exit-failure
+// normalization path for compatibility shims and behavior-focused tests.
+func NormalizeProviderExitFailure(provider string, result CommandResult, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
+	return normalizeProviderExitFailure(provider, result, session, diagnostics)
 }
 
 func classifyProviderExitFailure(provider string, result CommandResult) interfaces.ProviderErrorType {

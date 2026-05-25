@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 // dirExists returns true if the path exists and is a directory.
@@ -37,11 +38,11 @@ func loadWorkersFromConfig(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	logger logging.Logger,
 	skipBuiltInRunnerPrerequisiteValidation bool,
-	providerOverride workers.Provider,
+	providerOverride workerprovider.Provider,
 	providerCommandRunner workers.CommandRunner,
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
-	inferenceRecorder workers.InferenceEventRecorder,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
 	now func() time.Time,
 	modelResources *localModelResourceLimiter,
@@ -102,11 +103,11 @@ func buildWorkerExecutor(
 	workerName string,
 	factoryRunnerID string,
 	logger logging.Logger,
-	providerOverride workers.Provider,
+	providerOverride workerprovider.Provider,
 	providerCommandRunner workers.CommandRunner,
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
-	inferenceRecorder workers.InferenceEventRecorder,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
 	now func() time.Time,
 	modelResources *localModelResourceLimiter,
@@ -123,27 +124,27 @@ func buildWorkerExecutor(
 		if providerOverride != nil {
 			runner = workers.RunnerFromProvider(providerOverride)
 		} else {
-			var providerOpts []workers.ScriptWrapProviderOption
-			providerOpts = append(providerOpts, workers.WithSkipPermissions(def.SkipPermissions))
-			providerOpts = append(providerOpts, workers.WithProviderLogger(logger))
+			var providerOpts []workerprovider.ScriptWrapProviderOption
+			providerOpts = append(providerOpts, workerprovider.WithSkipPermissions(def.SkipPermissions))
+			providerOpts = append(providerOpts, workerprovider.WithProviderLogger(logger))
 			if providerCommandRunner != nil {
-				providerOpts = append(providerOpts, workers.WithProviderCommandRunner(providerCommandRunner))
+				providerOpts = append(providerOpts, workerprovider.WithProviderCommandRunner(providerCommandRunner))
 			}
-			runner = workers.NewScriptWrapProvider(providerOpts...)
+			runner = workerprovider.NewScriptWrapProvider(providerOpts...)
 		}
 		if inferenceRecorder != nil {
 			if providerOverride != nil {
-				provider := workers.NewRecordingProvider(
+				provider := workerprovider.NewRecordingProvider(
 					providerOverride,
 					inferenceRecorder,
-					workers.WithRecordingProviderClock(now),
+					workerprovider.WithRecordingProviderClock(now),
 				)
 				runner = workers.RunnerFromProvider(provider)
-			} else if providerRunner, ok := runner.(*workers.ScriptWrapProvider); ok {
-				provider := workers.NewRecordingProvider(
+			} else if providerRunner, ok := runner.(*workerprovider.ScriptWrapProvider); ok {
+				provider := workerprovider.NewRecordingProvider(
 					providerRunner,
 					inferenceRecorder,
-					workers.WithRecordingProviderClock(now),
+					workerprovider.WithRecordingProviderClock(now),
 				)
 				runner = workers.RunnerFromProvider(provider)
 			}

@@ -17,7 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 // TransitionerSubsystem routes tokens to the correct arc set based on outcome,
@@ -422,7 +422,7 @@ func shouldRequeueIntermittentFailureResult(result resolvedWorkResult) bool {
 	if result.outcome != interfaces.OutcomeFailed || result.failureMetadata == nil {
 		return false
 	}
-	return workers.WorkFailureDecisionFromMetadata(result.failureMetadata).Retryable
+	return workerprovider.WorkFailureDecisionFromMetadata(result.failureMetadata).Retryable
 }
 
 func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult, inputColors []interfaces.TokenColor) (generatedBatchWork, bool, error) {
