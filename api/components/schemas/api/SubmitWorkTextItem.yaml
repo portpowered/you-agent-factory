@@ -1,0 +1,15 @@
+description: Ordered inline text submission item.
+type: object
+additionalProperties: false
+required:
+  - type
+  - text
+properties:
+  type:
+    allOf:
+      - $ref: './SubmitWorkItemType.yaml'
+    enum:
+      - text
+  text:
+    type: string
+    description: Authored inline text preserved in item order.

@@ -961,6 +961,14 @@ components:
         requiredState:
           type: string
           description: Required target state before the dependency can proceed.
+    SubmitWorkResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - traceId
+      properties:
+        traceId:
+          type: string
     SubmitWorkItemList:
       type: array
       description: Ordered dashboard-authored submit-work items preserved for one submission.
@@ -1088,14 +1096,6 @@ components:
                 - $ref: '#/components/schemas/SubmitWorkItemType'
               enum:
                 - document
-    SubmitWorkResponse:
-      type: object
-      additionalProperties: false
-      required:
-        - traceId
-      properties:
-        traceId:
-          type: string
     StageSubmitWorkFileRequest:
       type: object
       additionalProperties: false

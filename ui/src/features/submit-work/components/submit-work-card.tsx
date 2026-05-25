@@ -353,6 +353,7 @@ function SubmissionItemsList({
 
         return (
           <SubmitWorkItemShell
+            disabled={controlsDisabled}
             itemLabel={requestItemLabel}
             itemTypeLabel={typeLabel}
             key={item.id}
@@ -386,12 +387,14 @@ function SubmissionItemsList({
 
 function SubmitWorkItemShell({
   children,
+  disabled = false,
   itemLabel,
   itemTypeLabel,
   onRemove,
   removeLabel,
 }: {
   children: ReactNode;
+  disabled?: boolean;
   itemLabel: string;
   itemTypeLabel: string;
   onRemove: () => void;
@@ -407,7 +410,13 @@ function SubmitWorkItemShell({
         <button
           aria-label={removeLabel}
           className="inline-grid size-8 shrink-0 place-items-center rounded-md border border-af-border bg-transparent text-af-text-subtle transition-colors hover:border-af-danger-border hover:bg-af-danger-surface hover:text-af-danger-text focus-visible:ring-2 focus-visible:ring-af-focus-ring focus-visible:ring-offset-0"
-          onClick={onRemove}
+          disabled={disabled}
+          onClick={() => {
+            if (disabled) {
+              return;
+            }
+            onRemove();
+          }}
           type="button"
         >
           <svg

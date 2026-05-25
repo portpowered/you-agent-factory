@@ -1,0 +1,14 @@
+type: object
+properties:
+  stagedFileRef:
+    type: string
+    minLength: 1
+    description: Backend-owned staged file reference preserved for later dispatch.
+  fileName:
+    type: string
+    minLength: 1
+    description: Browser-authored filename preserved for inline identification and validation.
+  mediaType:
+    type: string
+    minLength: 1
+    description: Browser-authored MIME type preserved for validation and dispatch decisions.

@@ -16,6 +16,9 @@ properties:
   traceId:
     type: string
     description: Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
+  items:
+    $ref: './SubmitWorkItemList.yaml'
+    description: Ordered submit-work items authored by the dashboard for structured multimodal submission.
   content:
     $ref: '../data-models/WorkContent.yaml'
     description: Optional canonical ordered work content parts for this submission.

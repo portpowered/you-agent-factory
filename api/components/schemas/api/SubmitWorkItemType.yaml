@@ -1,0 +1,14 @@
+type: string
+description: Supported dashboard submit-work item types for multimodal submission.
+x-enum-varnames:
+  - SubmitWorkItemTypeText
+  - SubmitWorkItemTypeImage
+  - SubmitWorkItemTypeVideo
+  - SubmitWorkItemTypeAudio
+  - SubmitWorkItemTypeDocument
+enum:
+  - text
+  - image
+  - video
+  - audio
+  - document

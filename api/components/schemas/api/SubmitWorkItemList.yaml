@@ -1,0 +1,4 @@
+type: array
+description: Ordered dashboard-authored submit-work items preserved for one submission.
+items:
+  $ref: './SubmitWorkItem.yaml'

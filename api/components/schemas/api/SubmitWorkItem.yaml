@@ -1,0 +1,7 @@
+description: One ordered dashboard-authored submit-work item.
+oneOf:
+  - $ref: './SubmitWorkTextItem.yaml'
+  - $ref: './SubmitWorkImageItem.yaml'
+  - $ref: './SubmitWorkVideoItem.yaml'
+  - $ref: './SubmitWorkAudioItem.yaml'
+  - $ref: './SubmitWorkDocumentItem.yaml'

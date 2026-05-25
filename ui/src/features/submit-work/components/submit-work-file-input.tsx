@@ -28,6 +28,7 @@ export function FileSubmissionItemEditor({
   const typeLabel = messages.addItemOptionLabel(item.type);
   const inputLabel = messages.fileItemInputLabel(typeLabel);
   const stateDescription = fileItemDescription(messages, item, typeLabel, isDragActive);
+  const canStageFiles = !disabled;
 
   return (
     <div className="grid gap-3">
@@ -37,6 +38,10 @@ export function FileSubmissionItemEditor({
         id={inputID}
         multiple
         onChange={(event) => {
+          if (!canStageFiles) {
+            event.currentTarget.value = "";
+            return;
+          }
           const nextFiles = Array.from(event.target.files ?? []);
           if (nextFiles.length === 0) {
             return;
@@ -56,14 +61,14 @@ export function FileSubmissionItemEditor({
         )}
         htmlFor={inputID}
         onDragEnter={(event) => {
-          if (!hasDraggedFiles(event)) {
+          if (!canHandleDraggedFiles(event, canStageFiles)) {
             return;
           }
           event.preventDefault();
           setIsDragActive(true);
         }}
         onDragLeave={(event) => {
-          if (!hasDraggedFiles(event)) {
+          if (!canHandleDraggedFiles(event, canStageFiles)) {
             return;
           }
           event.preventDefault();
@@ -74,7 +79,7 @@ export function FileSubmissionItemEditor({
           setIsDragActive(false);
         }}
         onDragOver={(event) => {
-          if (!hasDraggedFiles(event)) {
+          if (!canHandleDraggedFiles(event, canStageFiles)) {
             return;
           }
           event.preventDefault();
@@ -82,7 +87,7 @@ export function FileSubmissionItemEditor({
           setIsDragActive(true);
         }}
         onDrop={(event) => {
-          if (!hasDraggedFiles(event)) {
+          if (!canHandleDraggedFiles(event, canStageFiles)) {
             return;
           }
           event.preventDefault();
@@ -151,4 +156,11 @@ function hasDraggedFiles(event: Pick<DragEvent, "dataTransfer">): boolean {
     return false;
   }
   return Array.from(dragTypes).includes("Files");
+}
+
+function canHandleDraggedFiles(
+  event: Pick<DragEvent, "dataTransfer">,
+  canStageFiles: boolean,
+): boolean {
+  return canStageFiles && hasDraggedFiles(event);
 }

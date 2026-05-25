@@ -374,6 +374,90 @@ describe("SubmitWorkWidget", () => {
     );
   });
 
+  it("blocks drag-drop staging while file-backed inputs are disabled", () => {
+    const onStageFileItems = vi.fn();
+
+    render(
+      <SubmitWorkCard
+        draft={{
+          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          requestName: "Image review",
+          workTypeName: "story",
+        }}
+        isSubmitting
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItems={onStageFileItems}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "submitting", message: "Sending your request..." }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+
+    const dropzoneLabel = screen.getByText("Image file");
+    const dropzone = dropzoneLabel.closest("label");
+    if (!(dropzone instanceof HTMLLabelElement)) {
+      throw new Error("expected image upload dropzone label");
+    }
+
+    fireEvent.dragOver(dropzone, {
+      dataTransfer: {
+        dropEffect: "copy",
+        files: [],
+        types: ["Files"],
+      },
+    });
+    fireEvent.drop(dropzone, {
+      dataTransfer: {
+        files: [createStageableFile("blocked", "blocked.png", "image/png")],
+        types: ["Files"],
+      },
+    });
+
+    expect(onStageFileItems).not.toHaveBeenCalled();
+    expect(screen.queryByText("Drop the image file to stage it.")).toBeNull();
+  });
+
+  it("blocks item removal while the widget is submitting", () => {
+    const onRemoveItem = vi.fn();
+
+    render(
+      <SubmitWorkCard
+        draft={{
+          items: [{ id: "submission-item-1", text: "Keep this item", type: "text" }],
+          requestName: "Driver review",
+          workTypeName: "story",
+        }}
+        isSubmitting
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={onRemoveItem}
+        onRequestNameChange={() => {}}
+        onStageFileItems={() => {}}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "submitting", message: "Sending your request..." }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+
+    const removeButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Remove text item 1",
+    });
+    fireEvent.click(removeButton);
+
+    expect(removeButton.disabled).toBe(true);
+    expect(onRemoveItem).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole<HTMLTextAreaElement>("textbox", {
+        name: "Text item 1",
+      }).value,
+    ).toBe("Keep this item");
+  });
+
   it("stages multiple selected files as independent ordered sibling items and removes them independently", async () => {
     const fetchMock = vi
       .fn()

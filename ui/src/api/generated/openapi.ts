@@ -510,6 +510,9 @@ export interface components {
             /** @description Required target state before the dependency can proceed. */
             requiredState?: string;
         };
+        SubmitWorkResponse: {
+            traceId: string;
+        };
         /** @description Ordered dashboard-authored submit-work items preserved for one submission. */
         SubmitWorkItemList: components["schemas"]["SubmitWorkItem"][];
         /** @description One ordered dashboard-authored submit-work item. */
@@ -553,9 +556,6 @@ export interface components {
         SubmitWorkDocumentItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
             /** @enum {unknown} */
             type: "document";
-        };
-        SubmitWorkResponse: {
-            traceId: string;
         };
         StageSubmitWorkFileRequest: {
             /** @description Structured submit-work item kind this file will back. Text is not allowed. */
