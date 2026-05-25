@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
 const (
@@ -139,7 +140,7 @@ func (se *ScriptExecutor) commandRequest(request interfaces.WorkstationExecution
 	if err := unsupportedImageContentError(request.InputTokens, "script executor"); err != nil {
 		return CommandRequest{}, err
 	}
-	data := buildPromptData(executionRequestInputTokens(request), executionRequestContext(request))
+	data := workerprompting.BuildPromptData(executionRequestInputTokens(request), executionRequestContext(request))
 	resolvedArgs, err := resolveArgs(se.Args, data)
 	if err != nil {
 		return CommandRequest{}, err

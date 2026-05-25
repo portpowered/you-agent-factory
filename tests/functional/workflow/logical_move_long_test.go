@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,7 +28,7 @@ func TestLogicalMove_Success(t *testing.T) {
 				"router":         {Type: interfaces.WorkstationTypeLogical},
 			},
 		},
-		Renderer: &workers.DefaultPromptRenderer{},
+		Renderer: &workerprompting.DefaultPromptRenderer{},
 	})
 
 	h.RunUntilComplete(t, 5*time.Second)
@@ -50,7 +51,7 @@ func TestLogicalMove_PreservesTokenColor(t *testing.T) {
 				"router":         {Type: interfaces.WorkstationTypeLogical},
 			},
 		},
-		Renderer: &workers.DefaultPromptRenderer{},
+		Renderer: &workerprompting.DefaultPromptRenderer{},
 	})
 
 	capExec := &capturePayloadExecutor{}

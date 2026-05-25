@@ -11,6 +11,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
 type portableCopyRoundTrip struct {
@@ -167,7 +168,7 @@ func assertPortableExpandedExecution(t *testing.T, targetDir string, loaded *fac
 	executor := &workers.WorkstationExecutor{
 		RuntimeConfig: loaded,
 		Executor:      workers.NewScriptExecutorWithRunner(worker, runner, nil),
-		Renderer:      &workers.DefaultPromptRenderer{},
+		Renderer:      &workerprompting.DefaultPromptRenderer{},
 	}
 
 	result, err := executor.Execute(context.Background(), portableWorkDispatch())

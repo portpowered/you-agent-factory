@@ -15,6 +15,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
 // AgentContext is the merged execution context assembled from
@@ -46,7 +47,7 @@ type WorkstationExecutor struct {
 	RuntimeConfig   interfaces.RuntimeConfigLookup
 	DefaultRunnerID string
 	Executor        WorkstationRequestExecutor
-	Renderer        PromptRenderer
+	Renderer        workerprompting.PromptRenderer
 	Parser          OutputParser
 	Logger          logging.Logger // optional; nil → noop
 }
@@ -153,7 +154,7 @@ func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch inter
 	}
 
 	if workstationDef.WorkingDirectory != "" || workstationDef.Worktree != "" || len(workstationDef.Env) > 0 {
-		resolved, err := ResolveTemplateFields(
+		resolved, err := workerprompting.ResolveTemplateFields(
 			workstationDef.WorkingDirectory,
 			workstationDef.Env,
 			requestContext.InputTokens,
@@ -182,7 +183,7 @@ func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch inter
 		}
 		resolved.WorkingDirectory = resolveRuntimePath(runtimeBaseDir, resolved.WorkingDirectory)
 
-		appliedContext := applyResolvedFields(requestContext.factoryContext(), resolved)
+		appliedContext := workerprompting.ApplyResolvedFields(requestContext.factoryContext(), resolved)
 		if appliedContext != nil {
 			requestContext.ProjectID = appliedContext.ProjectID
 			requestContext.WorkingDirectory = appliedContext.WorkDirectory

@@ -23,7 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 )
 
@@ -512,7 +512,7 @@ func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w
 		return
 	}
 
-	contract := workers.BuildPromptTemplateContract(len(workstation.Inputs))
+	contract := workerprompting.BuildPromptTemplateContract(len(workstation.Inputs))
 	s.writeJSON(w, http.StatusOK, promptTemplateContractResponse(contract))
 }
 
@@ -536,7 +536,7 @@ func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w ht
 		return
 	}
 
-	result := workers.ValidatePromptTemplate(req.Prompt, len(workstation.Inputs))
+	result := workerprompting.ValidatePromptTemplate(req.Prompt, len(workstation.Inputs))
 	s.writeJSON(w, http.StatusOK, promptTemplateValidationResultResponse(result))
 }
 
@@ -1646,7 +1646,7 @@ func currentFactoryWorkstation(factory factoryapi.Factory, workstationName strin
 	return factoryapi.Workstation{}, false
 }
 
-func promptTemplateContractResponse(contract workers.PromptTemplateContract) factoryapi.PromptTemplateContract {
+func promptTemplateContractResponse(contract workerprompting.PromptTemplateContract) factoryapi.PromptTemplateContract {
 	availableVariables := make([]factoryapi.PromptTemplateVariableReference, 0, len(contract.AvailableVariables))
 	for _, reference := range contract.AvailableVariables {
 		availableVariables = append(availableVariables, factoryapi.PromptTemplateVariableReference{
@@ -1671,7 +1671,7 @@ func promptTemplateContractResponse(contract workers.PromptTemplateContract) fac
 	}
 }
 
-func promptTemplateValidationResultResponse(result workers.PromptTemplateValidationResult) factoryapi.PromptTemplateValidationResult {
+func promptTemplateValidationResultResponse(result workerprompting.PromptTemplateValidationResult) factoryapi.PromptTemplateValidationResult {
 	diagnostics := make([]factoryapi.PromptTemplateDiagnostic, 0, len(result.Diagnostics))
 	for _, diagnostic := range result.Diagnostics {
 		diagnostics = append(diagnostics, factoryapi.PromptTemplateDiagnostic{

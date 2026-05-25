@@ -17,6 +17,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 )
 
@@ -251,7 +252,7 @@ func scriptPollerCommandRequest(
 	}
 
 	requestContext := &factory_context.FactoryContext{}
-	if resolved, err := workers.ResolveTemplateFields(
+	if resolved, err := workerprompting.ResolveTemplateFields(
 		workstation.WorkingDirectory,
 		workstation.Env,
 		nil,

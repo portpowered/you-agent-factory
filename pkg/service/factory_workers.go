@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
 // dirExists returns true if the path exists and is a directory.
@@ -86,7 +87,7 @@ func loadWorkersFromConfig(
 		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workers.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
-			Renderer:        &workers.DefaultPromptRenderer{},
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
 		}))
 	}
@@ -159,14 +160,14 @@ func buildWorkerExecutor(
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
 			Executor:        agentExec,
-			Renderer:        &workers.DefaultPromptRenderer{},
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
 		}
 	case interfaces.WorkstationTypeLogical:
 		return &workers.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
-			Renderer:        &workers.DefaultPromptRenderer{},
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
 		}
 	case interfaces.WorkerTypeScript:
@@ -187,7 +188,7 @@ func buildWorkerExecutor(
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
 			Executor:        scriptExec,
-			Renderer:        &workers.DefaultPromptRenderer{},
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
 		}
 	default:
