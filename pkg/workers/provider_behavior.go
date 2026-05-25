@@ -123,6 +123,28 @@ func (sharedNonCodexProviderBehavior) FormatTimeoutFailure(result CommandResult)
 	return formatProviderOutputOrDefault(result, "execution timeout")
 }
 
+func (sharedNonCodexProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
+	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
+}
+
+func (sharedNonCodexProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
+	switch {
+	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
+		return interfaces.ProviderErrorTypeAuthFailure
+	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
+		return interfaces.ProviderErrorTypePermanentBadRequest
+	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
+		return interfaces.ProviderErrorTypeThrottled
+	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
+		return interfaces.ProviderErrorTypeInternalServerError
+	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
+		return interfaces.ProviderErrorTypeTimeout
+	default:
+		return interfaces.ProviderErrorTypeUnknown
+	}
+}
+
 func (b claudeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
 	logger := logging.EnsureLogger(b.logger)
 	if err := unsupportedImageContentError(req.InputTokens, "model provider claude"); err != nil {
@@ -267,25 +289,11 @@ func (b geminiProviderBehavior) BuildArgs(req interfaces.ProviderInferenceReques
 }
 
 func (b geminiProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
+	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
 }
 
 func (b geminiProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
-	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
-	switch {
-	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
-		return interfaces.ProviderErrorTypeAuthFailure
-	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
-		return interfaces.ProviderErrorTypePermanentBadRequest
-	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
-		return interfaces.ProviderErrorTypeThrottled
-	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
-		return interfaces.ProviderErrorTypeInternalServerError
-	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
-		return interfaces.ProviderErrorTypeTimeout
-	default:
-		return interfaces.ProviderErrorTypeUnknown
-	}
+	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
 }
 
 func (b kiroProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
@@ -306,25 +314,11 @@ func (b kiroProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest,
 }
 
 func (b kiroProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
+	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
 }
 
 func (b kiroProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
-	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
-	switch {
-	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
-		return interfaces.ProviderErrorTypeAuthFailure
-	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
-		return interfaces.ProviderErrorTypePermanentBadRequest
-	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
-		return interfaces.ProviderErrorTypeThrottled
-	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
-		return interfaces.ProviderErrorTypeInternalServerError
-	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
-		return interfaces.ProviderErrorTypeTimeout
-	default:
-		return interfaces.ProviderErrorTypeUnknown
-	}
+	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
 }
 
 func (b cursorProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
@@ -374,25 +368,11 @@ func (b openCodeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequ
 }
 
 func (b openCodeProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
+	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
 }
 
 func (b openCodeProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
-	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
-	switch {
-	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
-		return interfaces.ProviderErrorTypeAuthFailure
-	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
-		return interfaces.ProviderErrorTypePermanentBadRequest
-	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
-		return interfaces.ProviderErrorTypeThrottled
-	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
-		return interfaces.ProviderErrorTypeInternalServerError
-	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
-		return interfaces.ProviderErrorTypeTimeout
-	default:
-		return interfaces.ProviderErrorTypeUnknown
-	}
+	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
 }
 
 func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {

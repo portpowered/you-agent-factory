@@ -550,3 +550,155 @@ func TestCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
+	for _, providerName := range []string{
+		string(ModelProviderGemini),
+		string(ModelProviderKiro),
+		string(ModelProviderOpenCode),
+	} {
+		behavior := providerBehaviorForErrorClassification(providerName)
+		t.Run(providerName, func(t *testing.T) {
+			assertProviderExitFailureFormatting(t, behavior, providerName)
+			assertProviderExitFailureClassification(t, behavior)
+		})
+	}
+}
+
+func TestCursorAndCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
+	cursorBehavior := providerBehaviorForErrorClassification(string(ModelProviderCursor))
+	codexBehavior := providerBehaviorForErrorClassification(string(ModelProviderCodex))
+
+	assertCodexDerivedExitFailureFormatting(t, cursorBehavior, string(ModelProviderCursor))
+	assertCodexDerivedExitFailureFormatting(t, codexBehavior, string(ModelProviderCodex))
+
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("ERROR: unexpected status 500 from codex upstream"),
+	}
+	if got := cursorBehavior.ClassifyExitFailure(result); got != interfaces.ProviderErrorTypeInternalServerError {
+		t.Fatalf("cursor ClassifyExitFailure() = %q, want %q", got, interfaces.ProviderErrorTypeInternalServerError)
+	}
+	if got := codexBehavior.ClassifyExitFailure(result); got != interfaces.ProviderErrorTypeInternalServerError {
+		t.Fatalf("codex ClassifyExitFailure() = %q, want %q", got, interfaces.ProviderErrorTypeInternalServerError)
+	}
+}
+
+func assertCodexDerivedExitFailureFormatting(t *testing.T, behavior providerBehavior, providerName string) {
+	t.Helper()
+
+	testCases := []struct {
+		name   string
+		result CommandResult
+		want   string
+	}{
+		{
+			name:   "ExtractsCodexErrorLine",
+			result: CommandResult{ExitCode: 17, Stderr: []byte("noise before\nERROR: upstream rejected the request")},
+			want:   "ERROR: upstream rejected the request",
+		},
+		{
+			name:   "FallsBackToProviderExitCode",
+			result: CommandResult{ExitCode: 17, Stderr: []byte("stderr detail"), Stdout: []byte("stdout detail")},
+			want:   providerName + " exited with code 17",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := behavior.FormatExitFailure(providerName, tc.result); got != tc.want {
+				t.Fatalf("FormatExitFailure() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func assertProviderExitFailureFormatting(t *testing.T, behavior providerBehavior, providerName string) {
+	t.Helper()
+
+	testCases := []struct {
+		name   string
+		result CommandResult
+		want   string
+	}{
+		{
+			name: "PrefersTrimmedStderr",
+			result: CommandResult{
+				ExitCode: 17,
+				Stderr:   []byte("  stderr detail  \n"),
+				Stdout:   []byte("stdout fallback"),
+			},
+			want: "stderr detail",
+		},
+		{
+			name: "FallsBackToStdout",
+			result: CommandResult{
+				ExitCode: 17,
+				Stdout:   []byte("stdout detail"),
+			},
+			want: "stdout detail",
+		},
+		{
+			name:   "UsesProviderSpecificFallback",
+			result: CommandResult{ExitCode: 17},
+			want:   providerName + " exited with code 17",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := behavior.FormatExitFailure(providerName, tc.result); got != tc.want {
+				t.Fatalf("FormatExitFailure() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func assertProviderExitFailureClassification(t *testing.T, behavior providerBehavior) {
+	t.Helper()
+
+	testCases := []struct {
+		name   string
+		result CommandResult
+		want   interfaces.ProviderErrorType
+	}{
+		{
+			name:   "AuthFailure",
+			result: CommandResult{ExitCode: 1, Stderr: []byte("login required for this API key")},
+			want:   interfaces.ProviderErrorTypeAuthFailure,
+		},
+		{
+			name:   "PermanentBadRequest",
+			result: CommandResult{ExitCode: 1, Stderr: []byte("invalid argument in request payload")},
+			want:   interfaces.ProviderErrorTypePermanentBadRequest,
+		},
+		{
+			name:   "Throttled",
+			result: CommandResult{ExitCode: 1, Stderr: []byte("resource exhausted by 429 quota")},
+			want:   interfaces.ProviderErrorTypeThrottled,
+		},
+		{
+			name:   "InternalServerError",
+			result: CommandResult{ExitCode: 1, Stderr: []byte("unexpected status 503 from upstream")},
+			want:   interfaces.ProviderErrorTypeInternalServerError,
+		},
+		{
+			name:   "Timeout",
+			result: CommandResult{ExitCode: 124},
+			want:   interfaces.ProviderErrorTypeTimeout,
+		},
+		{
+			name:   "Unknown",
+			result: CommandResult{ExitCode: 1, Stderr: []byte("provider stopped without classification markers")},
+			want:   interfaces.ProviderErrorTypeUnknown,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := behavior.ClassifyExitFailure(tc.result); got != tc.want {
+				t.Fatalf("ClassifyExitFailure() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
