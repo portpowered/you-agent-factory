@@ -11,13 +11,14 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 // TransitionerSubsystem routes tokens to the correct arc set based on outcome,
@@ -422,7 +423,7 @@ func shouldRequeueIntermittentFailureResult(result resolvedWorkResult) bool {
 	if result.outcome != interfaces.OutcomeFailed || result.failureMetadata == nil {
 		return false
 	}
-	return workers.WorkFailureDecisionFromMetadata(result.failureMetadata).Retryable
+	return workerprovider.WorkFailureDecisionFromMetadata(result.failureMetadata).Retryable
 }
 
 func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult, inputColors []interfaces.TokenColor) (generatedBatchWork, bool, error) {
@@ -472,7 +473,7 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 		Metadata:    metadata,
 		Submissions: envelope.Submissions,
 	}
-	normalized, err := factory.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
 		ValidWorkTypes: t.validWorkTypes(),
 	})
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 const directModelInvocationTransitionID = "direct-model-invocation"
@@ -48,7 +49,7 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 		Operation:         strings.TrimSpace(request.Operation),
 		OperationBindings: modelInvocationBindingsFromGenerated(request.Bindings),
 	}
-	resolvedBindings, err := workers.ResolveModelOperationBindings(workstationDef, workerDef, inputTokens)
+	resolvedBindings, err := workerexecutor.ResolveModelOperationBindings(workstationDef, workerDef, inputTokens)
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
@@ -127,7 +128,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		fs.modelResources,
 		fs.localModels,
 	)
-	workstationExecutor, ok := executor.(*workers.WorkstationExecutor)
+	workstationExecutor, ok := executor.(*workerexecutor.WorkstationExecutor)
 	if !ok || workstationExecutor.Executor == nil {
 		return nil, fmt.Errorf("model worker %q does not support direct invocation", workerName)
 	}

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/buffers"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
@@ -203,7 +203,7 @@ func (h *threeStageHarness) SetExecutor(workerType string, exec workers.WorkerEx
 
 func (h *threeStageHarness) submitWork(workTypeID, workID string) {
 	h.t.Helper()
-	request := factory.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{WorkTypeID: workTypeID, WorkID: workID}})
+	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{WorkTypeID: workTypeID, WorkID: workID}})
 	if _, err := h.eng.SubmitWorkRequest(context.Background(), request); err != nil {
 		h.t.Fatalf("failed to submit work: %v", err)
 	}

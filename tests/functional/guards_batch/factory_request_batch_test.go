@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -120,7 +120,7 @@ func TestFactoryRequestBatch_BatchSubmissionAtomic(t *testing.T) {
 	if err := json.Unmarshal(payload, &invalidRequest); err != nil {
 		t.Fatalf("failed to unmarshal input: %v", err)
 	}
-	_, err = factory.NormalizeWorkRequest(invalidRequest, interfaces.WorkRequestNormalizeOptions{
+	_, err = requests.NormalizeWorkRequest(invalidRequest, interfaces.WorkRequestNormalizeOptions{
 		ValidWorkTypes: validWorkTypes,
 	})
 	if err == nil {
@@ -146,7 +146,7 @@ func TestFactoryRequestBatch_BatchSubmissionAtomic(t *testing.T) {
 	if err := json.Unmarshal(payload, &validRequest); err != nil {
 		t.Fatalf("failed to unmarshal input: %v", err)
 	}
-	expanded, err := factory.NormalizeWorkRequest(validRequest, interfaces.WorkRequestNormalizeOptions{
+	expanded, err := requests.NormalizeWorkRequest(validRequest, interfaces.WorkRequestNormalizeOptions{
 		ValidWorkTypes: validWorkTypes,
 	})
 	if err != nil {
@@ -172,7 +172,7 @@ func assertInvalidBatchPayload(t *testing.T, payload string, wantErr string) {
 	var request interfaces.WorkRequest
 	err := json.Unmarshal([]byte(payload), &request)
 	if err == nil {
-		_, err = factory.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{
+		_, err = requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{
 			ValidWorkTypes: map[string]bool{"task": true},
 			ValidStatesByType: map[string]map[string]bool{
 				"task": {"init": true, "complete": true},

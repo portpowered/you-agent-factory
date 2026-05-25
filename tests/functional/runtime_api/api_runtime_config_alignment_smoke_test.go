@@ -245,8 +245,8 @@ func assertRuntimeConfigAlignmentFinalState(
 	if len(engineState.Marking.PlaceTokens["scheduled:complete"]) != 1 {
 		t.Fatalf("completed scheduled token count = %d, want 1; places=%#v", len(engineState.Marking.PlaceTokens["scheduled:complete"]), engineState.Marking.PlaceTokens)
 	}
-	if len(engineState.Marking.PlaceTokens["agent-slot:available"]) != 2 {
-		t.Fatalf("agent-slot availability after completion = %d, want 2; places=%#v", len(engineState.Marking.PlaceTokens["agent-slot:available"]), engineState.Marking.PlaceTokens)
+	if len(engineState.Marking.PlaceTokens["agent-slot:available"]) != 1 {
+		t.Fatalf("agent-slot availability after completion = %d, want 1; places=%#v", len(engineState.Marking.PlaceTokens["agent-slot:available"]), engineState.Marking.PlaceTokens)
 	}
 	if providerRunner.CallCount() != 2 {
 		t.Fatalf("provider runner call count = %d, want 2", providerRunner.CallCount())

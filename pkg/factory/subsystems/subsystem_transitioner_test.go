@@ -526,3 +526,74 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 		t.Fatalf("completed output mutation payload = %q, want detached original", completed.OutputMutations[0].Token.Color.Payload)
 	}
 }
+
+func workerBatchTestNet() *state.Net {
+	return &state.Net{
+		Places: map[string]*petri.Place{
+			"task:init":      {ID: "task:init", TypeID: "task", State: "init"},
+			"task:complete":  {ID: "task:complete", TypeID: "task", State: "complete"},
+			"task:failed":    {ID: "task:failed", TypeID: "task", State: "failed"},
+			"child:init":     {ID: "child:init", TypeID: "child", State: "init"},
+			"child:complete": {ID: "child:complete", TypeID: "child", State: "complete"},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "complete", Category: state.StateCategoryTerminal},
+					{Value: "failed", Category: state.StateCategoryFailed},
+				},
+			},
+			"child": {
+				ID: "child",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "complete", Category: state.StateCategoryTerminal},
+				},
+			},
+		},
+		Transitions: map[string]*petri.Transition{
+			"t1": {
+				ID: "t1",
+				OutputArcs: []petri.Arc{
+					{ID: "accepted", PlaceID: "task:complete"},
+				},
+				FailureArcs: []petri.Arc{
+					{ID: "failed", PlaceID: "task:failed"},
+				},
+			},
+		},
+	}
+}
+
+func workerBatchSnapshot(output string) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"dispatch-1": {
+				DispatchID:   "dispatch-1",
+				TransitionID: "t1",
+				ConsumedTokens: []interfaces.Token{{
+					ID:        "tok-source",
+					PlaceID:   "task:init",
+					CreatedAt: time.Date(2026, time.April, 16, 21, 0, 0, 0, time.UTC),
+					Color: interfaces.TokenColor{
+						Name:       "source",
+						RequestID:  "request-source",
+						WorkID:     "work-source",
+						WorkTypeID: "task",
+						DataType:   interfaces.DataTypeWork,
+						TraceID:    "trace-source",
+						Tags:       map[string]string{"tenant": "port"},
+					},
+				}},
+			},
+		},
+		Results: []interfaces.WorkResult{{
+			DispatchID:   "dispatch-1",
+			TransitionID: "t1",
+			Outcome:      interfaces.OutcomeAccepted,
+			Output:       output,
+		}},
+	}
+}

@@ -13,10 +13,11 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 )
 
@@ -251,7 +252,7 @@ func scriptPollerCommandRequest(
 	}
 
 	requestContext := &factory_context.FactoryContext{}
-	if resolved, err := workers.ResolveTemplateFields(
+	if resolved, err := workerprompting.ResolveTemplateFields(
 		workstation.WorkingDirectory,
 		workstation.Env,
 		nil,
@@ -326,7 +327,7 @@ func parseScriptPollerOutput(stdout []byte) (interfaces.WorkRequest, bool, error
 		return interfaces.WorkRequest{}, true, fmt.Errorf("script poller stdout must contain either request or submissions, not both")
 	}
 	if len(envelope.Request) > 0 {
-		request, err := factory.ParseCanonicalWorkRequestJSON(envelope.Request)
+		request, err := requests.ParseCanonicalWorkRequestJSON(envelope.Request)
 		if err != nil {
 			return interfaces.WorkRequest{}, true, fmt.Errorf("script poller emitted malformed stdout: %w", err)
 		}
@@ -343,7 +344,7 @@ func parseScriptPollerOutput(stdout []byte) (interfaces.WorkRequest, bool, error
 		return request, true, nil
 	}
 
-	request, err := factory.ParseCanonicalWorkRequestJSON(trimmed)
+	request, err := requests.ParseCanonicalWorkRequestJSON(trimmed)
 	if err != nil {
 		return interfaces.WorkRequest{}, true, fmt.Errorf("script poller emitted malformed stdout: %w", err)
 	}
@@ -368,7 +369,7 @@ func scriptPollerWorkRequestFromSubmissions(data []byte) (interfaces.WorkRequest
 		return interfaces.WorkRequest{}, fmt.Errorf("script poller emitted malformed stdout: submissions must contain at least one item")
 	}
 
-	request := factory.WorkRequestFromSubmitRequests(submissions)
+	request := requests.WorkRequestFromSubmitRequests(submissions)
 	if strings.TrimSpace(request.RequestID) == "" {
 		return interfaces.WorkRequest{}, fmt.Errorf("script poller emitted malformed stdout: submissions must share a non-empty requestId")
 	}

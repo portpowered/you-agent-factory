@@ -18,12 +18,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factorypkg "github.com/portpowered/infinite-you/pkg/factory"
+	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 )
 
@@ -67,13 +67,13 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		Name:                   strings.TrimSpace(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
-		TraceID:                factorypkg.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
+		TraceID:                factoryrequests.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
 		Content:                workcontent.PartsFromGenerated(req.Content),
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
 	}
-	workRequest := factorypkg.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
+	workRequest := factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
 
 	result, err := s.runtime.SubmitWorkRequest(r.Context(), workRequest)
 	if err != nil {
@@ -120,13 +120,13 @@ func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, s
 		Name:                   strings.TrimSpace(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
-		TraceID:                factorypkg.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
+		TraceID:                factoryrequests.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
 		Content:                workcontent.PartsFromGenerated(req.Content),
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
 	}
-	workRequest := factorypkg.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
+	workRequest := factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
 
 	result, err := sessionRuntime.SubmitWorkRequestForSession(r.Context(), string(sessionID), workRequest)
 	if err != nil {
@@ -512,7 +512,7 @@ func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w
 		return
 	}
 
-	contract := workers.BuildPromptTemplateContract(len(workstation.Inputs))
+	contract := workerprompting.BuildPromptTemplateContract(len(workstation.Inputs))
 	s.writeJSON(w, http.StatusOK, promptTemplateContractResponse(contract))
 }
 
@@ -536,7 +536,7 @@ func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w ht
 		return
 	}
 
-	result := workers.ValidatePromptTemplate(req.Prompt, len(workstation.Inputs))
+	result := workerprompting.ValidatePromptTemplate(req.Prompt, len(workstation.Inputs))
 	s.writeJSON(w, http.StatusOK, promptTemplateValidationResultResponse(result))
 }
 
@@ -1628,7 +1628,7 @@ func ensureSingleJSONObject(dec *json.Decoder) error {
 }
 
 func validateCanonicalWorkRequestJSONForAPI(data []byte) error {
-	if err := factorypkg.ValidateCanonicalWorkRequestJSON(data); err != nil {
+	if err := factoryrequests.ValidateCanonicalWorkRequestJSON(data); err != nil {
 		return translateCanonicalWorkRequestValidationError(err)
 	}
 	return nil
@@ -1646,7 +1646,7 @@ func currentFactoryWorkstation(factory factoryapi.Factory, workstationName strin
 	return factoryapi.Workstation{}, false
 }
 
-func promptTemplateContractResponse(contract workers.PromptTemplateContract) factoryapi.PromptTemplateContract {
+func promptTemplateContractResponse(contract workerprompting.PromptTemplateContract) factoryapi.PromptTemplateContract {
 	availableVariables := make([]factoryapi.PromptTemplateVariableReference, 0, len(contract.AvailableVariables))
 	for _, reference := range contract.AvailableVariables {
 		availableVariables = append(availableVariables, factoryapi.PromptTemplateVariableReference{
@@ -1671,7 +1671,7 @@ func promptTemplateContractResponse(contract workers.PromptTemplateContract) fac
 	}
 }
 
-func promptTemplateValidationResultResponse(result workers.PromptTemplateValidationResult) factoryapi.PromptTemplateValidationResult {
+func promptTemplateValidationResultResponse(result workerprompting.PromptTemplateValidationResult) factoryapi.PromptTemplateValidationResult {
 	diagnostics := make([]factoryapi.PromptTemplateDiagnostic, 0, len(result.Diagnostics))
 	for _, diagnostic := range result.Diagnostics {
 		diagnostics = append(diagnostics, factoryapi.PromptTemplateDiagnostic{

@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 const (
@@ -325,7 +326,7 @@ func modelEventDiagnostics(success *interfaces.WorkDiagnostics, err error) *fact
 	if success != nil {
 		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
 	}
-	var providerErr *workers.ProviderError
+	var providerErr *workerprovider.ProviderError
 	if errors.As(err, &providerErr) {
 		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
 	}
@@ -333,7 +334,7 @@ func modelEventDiagnostics(success *interfaces.WorkDiagnostics, err error) *fact
 }
 
 func modelEventErrorClass(err error) string {
-	var providerErr *workers.ProviderError
+	var providerErr *workerprovider.ProviderError
 	if errors.As(err, &providerErr) && providerErr.Type != "" {
 		return string(providerErr.Type)
 	}

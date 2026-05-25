@@ -53,7 +53,7 @@ func runtimeConfigAlignmentWorkTypes() []map[string]any {
 func runtimeConfigAlignmentResources() []map[string]any {
 	return []map[string]any{{
 		"name":     "agent-slot",
-		"capacity": 2,
+		"capacity": 1,
 	}}
 }
 
@@ -143,9 +143,6 @@ func writeRuntimeConfigAlignmentAgentConfigs(t *testing.T, dir string) {
 type: MODEL_WORKER
 model: claude-sonnet-4-20250514
 modelProvider: claude
-resources:
-  - name: agent-slot
-    capacity: 1
 stopToken: COMPLETE
 ---
 You are the review worker.
@@ -153,9 +150,6 @@ You are the review worker.
 	support.WriteAgentConfig(t, dir, "executor", `---
 type: SCRIPT_WORKER
 command: echo
-resources:
-  - name: agent-slot
-    capacity: 1
 ---
 You are the execution worker.
 `)

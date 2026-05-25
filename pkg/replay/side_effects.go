@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 // SideEffects replays recorded provider and script-command behavior through
@@ -86,7 +87,7 @@ func (s *SideEffects) Infer(ctx context.Context, req interfaces.ProviderInferenc
 	result := record.completion.result
 	failureMetadata := interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)
 	if result.Outcome == interfaces.OutcomeFailed && failureMetadata != nil {
-		return interfaces.InferenceResponse{}, workers.NewProviderError(
+		return interfaces.InferenceResponse{}, workerprovider.NewProviderError(
 			failureMetadata.Type,
 			result.Error,
 			errors.New(result.Error),

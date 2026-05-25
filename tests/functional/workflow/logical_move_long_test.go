@@ -10,7 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -20,14 +21,14 @@ func TestLogicalMove_Success(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte("my-payload"))
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	h.SetCustomExecutor("logical-router", &workers.WorkstationExecutor{
+	h.SetCustomExecutor("logical-router", &workerexecutor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"logical-router": {Type: interfaces.WorkstationTypeLogical},
 				"router":         {Type: interfaces.WorkstationTypeLogical},
 			},
 		},
-		Renderer: &workers.DefaultPromptRenderer{},
+		Renderer: &workerprompting.DefaultPromptRenderer{},
 	})
 
 	h.RunUntilComplete(t, 5*time.Second)
@@ -43,14 +44,14 @@ func TestLogicalMove_PreservesTokenColor(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte("preserved-payload"))
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	h.SetCustomExecutor("logical-router", &workers.WorkstationExecutor{
+	h.SetCustomExecutor("logical-router", &workerexecutor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"logical-router": {Type: interfaces.WorkstationTypeLogical},
 				"router":         {Type: interfaces.WorkstationTypeLogical},
 			},
 		},
-		Renderer: &workers.DefaultPromptRenderer{},
+		Renderer: &workerprompting.DefaultPromptRenderer{},
 	})
 
 	capExec := &capturePayloadExecutor{}

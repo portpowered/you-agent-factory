@@ -6,14 +6,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
-func ProviderErrorCorpusEntry(t *testing.T, name string) workers.ProviderErrorCorpusEntry {
+func ProviderErrorCorpusEntry(t *testing.T, name string) workerprovider.ProviderErrorCorpusEntry {
 	t.Helper()
 
-	corpus, err := workers.LoadProviderErrorCorpus()
+	corpus, err := workerprovider.LoadProviderErrorCorpus()
 	if err != nil {
-		t.Fatalf("workers.LoadProviderErrorCorpus() error = %v", err)
+		t.Fatalf("provider.LoadProviderErrorCorpus() error = %v", err)
 	}
 	entry, ok := corpus.Entry(name)
 	if !ok {

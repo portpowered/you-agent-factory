@@ -8,6 +8,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -85,7 +86,7 @@ func (m *MockFactory) SubmitWorkRequest(_ context.Context, request interfaces.Wo
 		}
 		opts.ValidStatesByType = state.ValidStatesByType(m.Net.WorkTypes)
 	}
-	normalized, err := factory.NormalizeWorkRequest(request, opts)
+	normalized, err := requests.NormalizeWorkRequest(request, opts)
 	if err != nil {
 		return interfaces.WorkRequestSubmitResult{}, err
 	}

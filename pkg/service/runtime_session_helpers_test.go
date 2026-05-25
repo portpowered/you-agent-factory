@@ -11,7 +11,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"go.uber.org/zap"
@@ -264,7 +264,7 @@ func submitSessionWork(t *testing.T, session *liveFactorySession, workID, traceI
 	if session == nil || session.handle == nil || session.handle.runtime == nil {
 		t.Fatal("live session runtime is required")
 	}
-	request := factory.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
 		WorkID:     workID,
 		Name:       workID,
 		WorkTypeID: "task",
@@ -279,7 +279,7 @@ func submitSessionWork(t *testing.T, session *liveFactorySession, workID, traceI
 func submitCompatWork(t *testing.T, svc *FactoryService, workID, traceID string) {
 	t.Helper()
 
-	request := factory.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
 		WorkID:     workID,
 		Name:       workID,
 		WorkTypeID: "task",

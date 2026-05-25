@@ -10,6 +10,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
 const defaultMockWorkerAcceptedOutput = "mock worker accepted"
@@ -70,7 +71,7 @@ func (r *MockWorkerCommandRunner) runScript(ctx context.Context, req CommandRequ
 	scriptReq := req
 	scriptReq.Command = cfg.Command
 	scriptReq.Args = append([]string(nil), cfg.Args...)
-	scriptReq.Env = mergeCommandEnv(req.Env, commandEnvEntriesFromMap(cfg.Env))
+	scriptReq.Env = workerprocess.MergeCommandEnv(req.Env, workerprocess.CommandEnvEntriesFromMap(cfg.Env))
 	scriptReq.Stdin = []byte(cfg.Stdin)
 	if cfg.WorkingDirectory != "" {
 		scriptReq.WorkDir = cfg.WorkingDirectory
@@ -81,7 +82,7 @@ func (r *MockWorkerCommandRunner) runScript(ctx context.Context, req CommandRequ
 func (r *MockWorkerCommandRunner) runNext(ctx context.Context, req CommandRequest) (CommandResult, error) {
 	next := r.Next
 	if next == nil {
-		next = ExecCommandRunner{}
+		next = workerprocess.ExecCommandRunner{}
 	}
 	return next.Run(ctx, req)
 }

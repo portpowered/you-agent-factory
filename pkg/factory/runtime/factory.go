@@ -10,10 +10,11 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
@@ -22,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 const defaultRuntimeBufferSize = 64
@@ -45,7 +47,7 @@ type factoryImpl struct {
 	logger       logging.Logger
 	resultBuffer *buffers.TypedBuffer[interfaces.WorkResult]
 	dispatchHook *workerPoolDispatchResultHook
-	eventHistory *factory.FactoryEventHistory
+	eventHistory *factoryevents.FactoryEventHistory
 	state        interfaces.FactoryState
 	startedAt    time.Time
 	clock        factory.Clock
@@ -143,10 +145,10 @@ func buildRuntimeMarking(cfg *factory.FactoryConfig) *petri.Marking {
 	return marking
 }
 
-func ensureEventHistory(cfg *factory.FactoryConfig) *factory.FactoryEventHistory {
+func ensureEventHistory(cfg *factory.FactoryConfig) *factoryevents.FactoryEventHistory {
 	eventHistory := cfg.EventHistory
 	if eventHistory == nil {
-		eventHistory = factory.NewFactoryEventHistory(cfg.GetNet(), cfg.Clock.Now, cfg.RuntimeConfig)
+		eventHistory = factoryevents.NewFactoryEventHistory(cfg.GetNet(), cfg.Clock.Now, cfg.RuntimeConfig)
 	}
 	eventHistory.RecordRunRequest()
 	eventHistory.AddGeneratedRecorder(cfg.FactoryEventRecorder)
@@ -154,7 +156,7 @@ func ensureEventHistory(cfg *factory.FactoryConfig) *factory.FactoryEventHistory
 	return eventHistory
 }
 
-func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger, sharedTransformer *token_transformer.Transformer, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], eventHistory *factory.FactoryEventHistory) []engine.Option {
+func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger, sharedTransformer *token_transformer.Transformer, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], eventHistory *factoryevents.FactoryEventHistory) []engine.Option {
 	engineOpts := []engine.Option{
 		engine.WithLogger(logger),
 		engine.WithClock(cfg.Clock),
@@ -193,7 +195,7 @@ func configureRuntimeDispatch(cfg *factory.FactoryConfig, logger logging.Logger,
 		return nil, nil, append(engineOpts, engine.WithDispatchHandler(inlineDispatchHandler(cfg, resultBuffer)))
 	}
 
-	pool := workers.NewWorkerPool(logger)
+	pool := workerexecutor.NewWorkerPool(logger)
 	for typ, exec := range cfg.WorkerExecutors {
 		pool.Register(typ, exec)
 	}
@@ -219,7 +221,7 @@ func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.Typ
 	}
 }
 
-func newFactoryImpl(cfg *factory.FactoryConfig, eng *engine.FactoryEngine, pool *workers.WorkerPool, logger logging.Logger, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], dispatchHook *workerPoolDispatchResultHook, eventHistory *factory.FactoryEventHistory, usePool bool) *factoryImpl {
+func newFactoryImpl(cfg *factory.FactoryConfig, eng *engine.FactoryEngine, pool *workers.WorkerPool, logger logging.Logger, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], dispatchHook *workerPoolDispatchResultHook, eventHistory *factoryevents.FactoryEventHistory, usePool bool) *factoryImpl {
 	return &factoryImpl{
 		engine:       eng,
 		pool:         pool,

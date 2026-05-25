@@ -10,7 +10,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -209,14 +209,14 @@ func withServicePayloadVersion(t *testing.T, payload []byte, version factoryapi.
 }
 
 func submitWorkRequestsToService(ctx context.Context, svc *FactoryService, reqs []interfaces.SubmitRequest) error {
-	workRequest := factory.WorkRequestFromSubmitRequests(reqs)
+	workRequest := requests.WorkRequestFromSubmitRequests(reqs)
 	_, err := svc.SubmitWorkRequest(ctx, workRequest)
 	return err
 }
 
 func writeWorkRequestFile(t *testing.T, path string, req interfaces.SubmitRequest) {
 	t.Helper()
-	data, err := json.Marshal(factory.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{req}))
+	data, err := json.Marshal(requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{req}))
 	if err != nil {
 		t.Fatalf("marshal work request file: %v", err)
 	}
@@ -266,7 +266,7 @@ type aggregateSnapshotFactory struct {
 
 func (f *aggregateSnapshotFactory) Run(context.Context) error { return nil }
 func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	normalized, err := factory.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
 	if err != nil {
 		return interfaces.WorkRequestSubmitResult{}, err
 	}

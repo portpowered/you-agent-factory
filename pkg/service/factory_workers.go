@@ -9,6 +9,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 // dirExists returns true if the path exists and is a directory.
@@ -36,11 +39,11 @@ func loadWorkersFromConfig(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	logger logging.Logger,
 	skipBuiltInRunnerPrerequisiteValidation bool,
-	providerOverride workers.Provider,
+	providerOverride workerprovider.Provider,
 	providerCommandRunner workers.CommandRunner,
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
-	inferenceRecorder workers.InferenceEventRecorder,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
 	now func() time.Time,
 	modelResources *localModelResourceLimiter,
@@ -62,7 +65,7 @@ func loadWorkersFromConfig(
 		def, ok := runtimeCfg.Worker(workerCfg.Name)
 		if !ok || def == nil || def.Type == "" {
 			logger.Debug("no AGENTS.md for worker; using noop executor", "worker", workerCfg.Name)
-			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workers.NoopExecutor{}))
+			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
 			continue
 		}
 		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelResources, localModels)
@@ -83,10 +86,10 @@ func loadWorkersFromConfig(
 			continue
 		}
 		logger.Info("loading workerless logical workstation", "workstation", workstationCfg.Name)
-		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workers.WorkstationExecutor{
+		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
-			Renderer:        &workers.DefaultPromptRenderer{},
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
 		}))
 	}
@@ -101,11 +104,11 @@ func buildWorkerExecutor(
 	workerName string,
 	factoryRunnerID string,
 	logger logging.Logger,
-	providerOverride workers.Provider,
+	providerOverride workerprovider.Provider,
 	providerCommandRunner workers.CommandRunner,
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
-	inferenceRecorder workers.InferenceEventRecorder,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
 	now func() time.Time,
 	modelResources *localModelResourceLimiter,
@@ -122,72 +125,72 @@ func buildWorkerExecutor(
 		if providerOverride != nil {
 			runner = workers.RunnerFromProvider(providerOverride)
 		} else {
-			var providerOpts []workers.ScriptWrapProviderOption
-			providerOpts = append(providerOpts, workers.WithSkipPermissions(def.SkipPermissions))
-			providerOpts = append(providerOpts, workers.WithProviderLogger(logger))
+			var providerOpts []workerprovider.ScriptWrapProviderOption
+			providerOpts = append(providerOpts, workerprovider.WithSkipPermissions(def.SkipPermissions))
+			providerOpts = append(providerOpts, workerprovider.WithProviderLogger(logger))
 			if providerCommandRunner != nil {
-				providerOpts = append(providerOpts, workers.WithProviderCommandRunner(providerCommandRunner))
+				providerOpts = append(providerOpts, workerprovider.WithProviderCommandRunner(providerCommandRunner))
 			}
-			runner = workers.NewScriptWrapProvider(providerOpts...)
+			runner = workerprovider.NewScriptWrapProvider(providerOpts...)
 		}
 		if inferenceRecorder != nil {
 			if providerOverride != nil {
-				provider := workers.NewRecordingProvider(
+				provider := workerprovider.NewRecordingProvider(
 					providerOverride,
 					inferenceRecorder,
-					workers.WithRecordingProviderClock(now),
+					workerprovider.WithRecordingProviderClock(now),
 				)
 				runner = workers.RunnerFromProvider(provider)
-			} else if providerRunner, ok := runner.(*workers.ScriptWrapProvider); ok {
-				provider := workers.NewRecordingProvider(
+			} else if providerRunner, ok := runner.(*workerprovider.ScriptWrapProvider); ok {
+				provider := workerprovider.NewRecordingProvider(
 					providerRunner,
 					inferenceRecorder,
-					workers.WithRecordingProviderClock(now),
+					workerprovider.WithRecordingProviderClock(now),
 				)
 				runner = workers.RunnerFromProvider(provider)
 			}
 		}
 
-		agentOpts := []workers.AgentExecutorOption{
-			workers.WithLogger(logger),
+		agentOpts := []workerexecutor.AgentExecutorOption{
+			workerexecutor.WithLogger(logger),
 		}
 		runner = localModels.wrapRunner(runner, runtimeCfg, factoryCfg, def)
 		runner = modelResources.wrapRunner(runner, factoryCfg, def)
 		runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
-		agentExec := workers.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
-		return &workers.WorkstationExecutor{
+		agentExec := workerexecutor.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
+		return &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
 			Executor:        agentExec,
-			Renderer:        &workers.DefaultPromptRenderer{},
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
 		}
 	case interfaces.WorkstationTypeLogical:
-		return &workers.WorkstationExecutor{
+		return &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
-			Renderer:        &workers.DefaultPromptRenderer{},
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
 		}
 	case interfaces.WorkerTypeScript:
-		var scriptOpts []workers.ScriptExecutorOption
+		var scriptOpts []workerexecutor.ScriptExecutorOption
 		if runtimeCfg != nil && runtimeCfg.FactoryDir() != "" {
-			scriptOpts = append(scriptOpts, workers.WithScriptFactoryDir(runtimeCfg.FactoryDir()))
+			scriptOpts = append(scriptOpts, workerexecutor.WithScriptFactoryDir(runtimeCfg.FactoryDir()))
 		}
 		if scriptRecorder != nil {
-			scriptOpts = append(scriptOpts, workers.WithScriptEventRecorder(scriptRecorder))
+			scriptOpts = append(scriptOpts, workerexecutor.WithScriptEventRecorder(scriptRecorder))
 		}
 		var scriptExec workers.WorkstationRequestExecutor
 		if cmdRunner != nil {
-			scriptExec = workers.NewScriptExecutorWithRunner(def, cmdRunner, logger, scriptOpts...)
+			scriptExec = workerexecutor.NewScriptExecutorWithRunner(def, cmdRunner, logger, scriptOpts...)
 		} else {
-			scriptExec = workers.NewScriptExecutor(def, logger, scriptOpts...)
+			scriptExec = workerexecutor.NewScriptExecutor(def, logger, scriptOpts...)
 		}
-		return &workers.WorkstationExecutor{
+		return &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
 			Executor:        scriptExec,
-			Renderer:        &workers.DefaultPromptRenderer{},
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
 		}
 	default:

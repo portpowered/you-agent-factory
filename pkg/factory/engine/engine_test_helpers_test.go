@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -30,7 +30,7 @@ func (m *mockSubsystem) Execute(ctx context.Context, snap *interfaces.EngineStat
 }
 
 func submitWorkRequests(ctx context.Context, engine *FactoryEngine, reqs []interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
-	return engine.SubmitWorkRequest(ctx, factory.WorkRequestFromSubmitRequests(reqs))
+	return engine.SubmitWorkRequest(ctx, requests.WorkRequestFromSubmitRequests(reqs))
 }
 
 type testSubmissionHook struct {

@@ -13,6 +13,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -216,7 +217,7 @@ func NewServiceTestHarness(t *testing.T, dir string, opts ...ServiceTestHarnessO
 
 // submit delegates to the underlying FactoryService.
 func (h *ServiceTestHarness) submit(ctx context.Context, reqs []interfaces.SubmitRequest) error {
-	request := factory.WorkRequestFromSubmitRequests(reqs)
+	request := requests.WorkRequestFromSubmitRequests(reqs)
 	_, err := h.svc.SubmitWorkRequest(ctx, request)
 	return err
 }

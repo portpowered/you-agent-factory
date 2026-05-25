@@ -17,6 +17,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
 func TestGeneratedFactoryFromLoadedConfig_EmbedsLoadedFactoryAndRuntimeConfig(t *testing.T) {
@@ -131,10 +133,10 @@ Work from {{ .Context.WorkDir }}
 	executor := &captureReplayWorkstationExecutor{
 		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"},
 	}
-	we := &workers.WorkstationExecutor{
+	we := &workerexecutor.WorkstationExecutor{
 		RuntimeConfig: runtimeCfg,
 		Executor:      executor,
-		Renderer:      &workers.DefaultPromptRenderer{},
+		Renderer:      &workerprompting.DefaultPromptRenderer{},
 	}
 
 	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{

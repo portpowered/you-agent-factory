@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"go.uber.org/zap"
 )
@@ -245,7 +245,7 @@ func runHostedLinearPollCycle(
 		return linearPollCycleResult{}, err
 	}
 	if len(submissions) > 0 {
-		request := factory.WorkRequestFromSubmitRequests(submissions)
+		request := requests.WorkRequestFromSubmitRequests(submissions)
 		if err := submitter(ctx, request); err != nil {
 			return linearPollCycleResult{}, err
 		}

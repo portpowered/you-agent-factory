@@ -6,8 +6,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
@@ -204,7 +205,7 @@ func (e *FactoryEngine) SubmitWorkRequest(context context.Context, request inter
 	}
 	e.mu.Unlock()
 
-	normalized, err := factory.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{
 		ValidWorkTypes:    e.validWorkTypes(),
 		ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes),
 	})
@@ -742,7 +743,7 @@ func generatedSubmissionSource(batch interfaces.GeneratedSubmissionBatch, defaul
 }
 
 func (e *FactoryEngine) normalizeGeneratedSubmissionBatch(batch interfaces.GeneratedSubmissionBatch) ([]interfaces.SubmitRequest, string, error) {
-	normalized, err := factory.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
 		ValidWorkTypes:    e.validWorkTypes(),
 		ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes),
 	})
@@ -795,7 +796,7 @@ func (e *FactoryEngine) recordGeneratedSubmissionRequest(
 	if e.recordWorkRequest == nil {
 		return
 	}
-	record := factory.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
+	record := requests.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
 	record.ParentLineage = append([]string(nil), batch.Metadata.ParentLineage...)
 	e.recordWorkRequest(e.runtimeState.TickCount, record)
 }
