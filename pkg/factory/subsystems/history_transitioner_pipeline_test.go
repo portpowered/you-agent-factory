@@ -244,11 +244,16 @@ func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesConsumedWorkToOrigina
 	if result == nil || len(result.Mutations) != 1 {
 		t.Fatalf("expected 1 mutation, got %+v", result)
 	}
+	assertTimeoutFailureRequeueResult(t, result, createdAt, "w-timeout", "execution timeout")
+}
+
+func assertTimeoutFailureRequeueResult(t *testing.T, result *interfaces.TickResult, createdAt time.Time, workID string, errorText string) {
+	t.Helper()
 	if result.Mutations[0].ToPlace != "wt-code:init" {
 		t.Fatalf("ToPlace = %s, want wt-code:init", result.Mutations[0].ToPlace)
 	}
-	if result.Mutations[0].NewToken.Color.WorkID != "w-timeout" {
-		t.Fatalf("WorkID = %s, want w-timeout", result.Mutations[0].NewToken.Color.WorkID)
+	if result.Mutations[0].NewToken.Color.WorkID != workID {
+		t.Fatalf("WorkID = %s, want %s", result.Mutations[0].NewToken.Color.WorkID, workID)
 	}
 	if !result.Mutations[0].NewToken.CreatedAt.Equal(createdAt) {
 		t.Fatalf("CreatedAt = %v, want %v", result.Mutations[0].NewToken.CreatedAt, createdAt)
@@ -259,7 +264,7 @@ func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesConsumedWorkToOrigina
 	if got := result.Mutations[0].NewToken.History.ConsecutiveFailures["t1"]; got != 1 {
 		t.Fatalf("ConsecutiveFailures[t1] = %d, want 1", got)
 	}
-	if result.Mutations[0].NewToken.History.LastError != "execution timeout" {
+	if result.Mutations[0].NewToken.History.LastError != errorText {
 		t.Fatalf("LastError = %q", result.Mutations[0].NewToken.History.LastError)
 	}
 	if len(result.Mutations[0].NewToken.History.FailureLog) != 1 {
