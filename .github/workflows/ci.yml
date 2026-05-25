@@ -207,6 +207,11 @@ jobs:
         timeout-minutes: 10
         run: make ui-deps
 
+      # This lane intentionally does not download a prebuilt UI artifact.
+      # The owned browser harness rebuilds with a lane-specific API origin and
+      # starts its own vite preview process, so reusing verify-build-contracts
+      # output would add upload/download coupling without removing the lane's
+      # local build/preview responsibility or making retries clearer.
       # Playwright recommends against caching browser binaries in CI because restore
       # time is usually comparable to a fresh download on hosted runners.
       - name: Install Playwright browser for dashboard integration tests
