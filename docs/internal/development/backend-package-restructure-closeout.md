@@ -16,12 +16,15 @@ bundle for the backend package restructure PRD.
 ### Phase 1: Canonical target tree
 
 - Preserved behavior:
-  the phase only defined the approved destination tree, dependency rules, and
-  stable-versus-implementation package boundaries.
+  the phase defined the approved destination tree, dependency rules, and
+  stable-versus-implementation package boundaries without changing runtime
+  behavior, and it established the single package-placement contract every
+  later migration followed.
 - Regression evidence:
-  the design doc plus `progress.txt` recorded the target homes for
-  `pkg/workers`, `pkg/factory`, `pkg/listeners`, `pkg/buffers`,
-  `pkg/workcontent`, and `pkg/apisurface`.
+  the design doc plus this closeout show that every later package move landed
+  in the documented destination for `pkg/workers`, `pkg/factory`,
+  `pkg/listeners`, `pkg/buffers`, `pkg/workcontent`, and `pkg/apisurface`,
+  with no reviewed phase introducing an out-of-contract package home.
 
 ### Phase 2: `pkg/workers/process`
 
@@ -93,7 +96,8 @@ bundle for the backend package restructure PRD.
 - Preserved behavior:
   file-watcher ingestion behavior moved under `pkg/service/ingest`, and the
   typed runtime buffer moved under `pkg/factory/runtime/buffers` without
-  changing runtime dispatch semantics.
+  changing watcher lifecycle behavior, runtime dispatch gating, or typed-buffer
+  drop semantics.
 - Regression evidence:
   `go test ./pkg/service/ingest/... ./pkg/service/... ./pkg/factory/runtime/... ./pkg/factory/engine/... ./pkg/factory/subsystems/...`
   `go vet ./...`

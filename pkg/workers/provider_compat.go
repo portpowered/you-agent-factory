@@ -84,7 +84,3 @@ func WithRecordingProviderClock(now func() time.Time) RecordingProviderOption {
 func NewRecordingProvider(inner Provider, recorder InferenceEventRecorder, opts ...RecordingProviderOption) *RecordingProvider {
 	return workerprovider.NewRecordingProvider(inner, recorder, opts...)
 }
-
-func normalizeProviderExitFailure(provider string, result CommandResult, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
-	return workerprovider.NormalizeProviderExitFailure(provider, result, session, diagnostics)
-}

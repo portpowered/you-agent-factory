@@ -5,7 +5,6 @@ package workers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -75,13 +74,6 @@ func clonePetriInputTokens(inputTokens []interfaces.Token) []any {
 	return out
 }
 
-func cloneRawInputTokens(inputTokens []any) []any {
-	if len(inputTokens) == 0 {
-		return nil
-	}
-	return append([]any(nil), inputTokens...)
-}
-
 func decodeToken(raw any) (interfaces.Token, bool) {
 	if token, ok := raw.(interfaces.Token); ok {
 		return token, true
@@ -112,61 +104,4 @@ func WorkDispatchInputTokens(dispatch interfaces.WorkDispatch) []interfaces.Toke
 // petri tokens.
 func CommandRequestInputTokens(request CommandRequest) []interfaces.Token {
 	return cloneInputTokens(request.InputTokens)
-}
-
-func workDispatchNonResourceTokensForWorkstation(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []interfaces.Token {
-	var tokens []interfaces.Token
-	for _, token := range orderedWorkDispatchTokensForWorkstation(dispatch, workstationDef) {
-		if token.Color.DataType != interfaces.DataTypeResource {
-			tokens = append(tokens, token)
-		}
-	}
-	return tokens
-}
-
-func orderedWorkDispatchTokensForWorkstation(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []interfaces.Token {
-	tokens := WorkDispatchInputTokens(dispatch)
-	if workstationDef == nil || len(tokens) < 2 {
-		return tokens
-	}
-
-	byPlace := make(map[string][]int)
-	for i, token := range tokens {
-		byPlace[token.PlaceID] = append(byPlace[token.PlaceID], i)
-	}
-
-	ordered := make([]interfaces.Token, 0, len(tokens))
-	used := make([]bool, len(tokens))
-	appendPlaceTokens := func(placeID string) {
-		for _, index := range byPlace[placeID] {
-			used[index] = true
-			ordered = append(ordered, tokens[index])
-		}
-	}
-
-	for _, input := range workstationDef.Inputs {
-		appendPlaceTokens(fmt.Sprintf("%s:%s", input.WorkTypeName, input.StateName))
-	}
-	for _, resource := range workstationDef.Resources {
-		appendPlaceTokens(fmt.Sprintf("%s:%s", resource.Name, interfaces.ResourceStateAvailable))
-	}
-	for i, token := range tokens {
-		if used[i] {
-			continue
-		}
-		ordered = append(ordered, token)
-	}
-
-	return ordered
-}
-
-func cloneEnvVars(envVars map[string]string) map[string]string {
-	if len(envVars) == 0 {
-		return nil
-	}
-	clone := make(map[string]string, len(envVars))
-	for key, value := range envVars {
-		clone[key] = value
-	}
-	return clone
 }
