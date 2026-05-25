@@ -16,7 +16,7 @@ import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmitWorkCard } from "./submit-work-card";
 import { SubmitWorkWidget } from "./submit-work-widget";
 
-describe("SubmitWorkWidget", () => {
+describe("SubmitWorkWidget form behavior", () => {
   beforeEach(() => {
     useDashboardSessionStore.setState({
       selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
@@ -265,6 +265,18 @@ describe("SubmitWorkWidget", () => {
 
     expect(within(fallbackSubmissionItems).getAllByRole("listitem")).toHaveLength(1);
     expect(fallbackTextItem.value).toBe("");
+  });
+});
+
+describe("SubmitWorkWidget file-backed item behavior", () => {
+  beforeEach(() => {
+    useDashboardSessionStore.setState({
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("renders drag-active and ready file states through the shared upload primitive", async () => {
@@ -962,6 +974,18 @@ describe("SubmitWorkWidget", () => {
         type: "image",
       },
     ]);
+  });
+});
+
+describe("SubmitWorkWidget submission behavior", () => {
+  beforeEach(() => {
+    useDashboardSessionStore.setState({
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("submits work with a request name, clears only request fields on success, and shows the returned trace", async () => {
