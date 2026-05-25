@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 type providerCallRecorder struct {
@@ -796,7 +797,7 @@ func loadWorkersFromConfigForServiceTest(
 	providerCommandRunner workers.CommandRunner,
 	commandRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
-	inferenceRecorder workers.InferenceEventRecorder,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
 ) ([]factory.FactoryOption, error) {
 	return loadWorkersFromConfig(
 		factoryDir,
