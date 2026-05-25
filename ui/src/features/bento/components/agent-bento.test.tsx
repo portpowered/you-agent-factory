@@ -14,10 +14,11 @@ import {
   AgentBentoLayout,
   type AgentBentoLayoutItem,
 } from "./agent-bento";
+import { InlineAddWidgetCard } from "./inline-add-widget-card";
 
 const defaultLayout: AgentBentoLayoutItem[] = [
-  { id: "activity", x: 0, y: 0, w: 6, h: 2 },
-  { id: "trace", x: 6, y: 0, w: 6, h: 2 },
+  { h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 },
+  { h: 2, id: "trace", widgetType: "trace", w: 6, x: 6, y: 0 },
 ];
 
 function renderBentoBoard(onLayoutChange = vi.fn()) {
@@ -26,6 +27,7 @@ function renderBentoBoard(onLayoutChange = vi.fn()) {
       cards={[
         {
           id: "activity",
+          widgetType: "activity",
           children: (
             <AgentBentoCard title="Current activity">
               <p>Active workstation graph goes here.</p>
@@ -34,6 +36,7 @@ function renderBentoBoard(onLayoutChange = vi.fn()) {
         },
         {
           id: "trace",
+          widgetType: "trace",
           children: (
             <AgentBentoCard title="Trace grid">
               <p>Trace dispatches stay visible.</p>
@@ -173,6 +176,7 @@ describe("AgentBentoLayout", () => {
         cards={[
           {
             id: "activity",
+            widgetType: "activity",
             children: (
               <AgentBentoCard title="Current activity">
                 <p>Active workstation graph goes here.</p>
@@ -181,7 +185,7 @@ describe("AgentBentoLayout", () => {
           },
         ]}
         initialWidth={960}
-        layout={[{ id: "activity", x: 0, y: 0, w: 6, h: 2 }]}
+        layout={[{ h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 }]}
         locale="zh-CN"
       />,
     );
@@ -228,12 +232,106 @@ describe("AgentBentoLayout", () => {
     });
   });
 
+  it("lets the inline add-widget card move through the shared grid handle and keeps a single add-widget instance", async () => {
+    const onLayoutChange = vi.fn();
+
+    render(
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "activity",
+            widgetType: "activity",
+            children: (
+              <AgentBentoCard title="Current activity">
+                <p>Active workstation graph goes here.</p>
+              </AgentBentoCard>
+            ),
+          },
+          {
+            id: "add-widget::inline-add",
+            widgetType: "add-widget",
+            children: <InlineAddWidgetCard />,
+          },
+        ]}
+        initialWidth={960}
+        layout={[
+          { h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 },
+          {
+            h: 4,
+            id: "add-widget::inline-add",
+            widgetType: "add-widget",
+            w: 4,
+            x: 6,
+            y: 0,
+          },
+        ]}
+        onLayoutChange={onLayoutChange}
+      />,
+    );
+
+    const addWidgetItem = getGridItem("Add widget");
+    const initialStyle = addWidgetItem.getAttribute("style");
+    const dragHandle = within(addWidgetItem).getByRole("button", {
+      name: "Move Add widget",
+    });
+
+    fireEvent.mouseDown(dragHandle, {
+      button: 0,
+      buttons: 1,
+      clientX: 640,
+      clientY: 48,
+    });
+
+    await waitFor(() => {
+      expect(addWidgetItem.classList.contains("react-draggable-dragging")).toBe(
+        true,
+      );
+    });
+
+    fireEvent.mouseMove(document, {
+      buttons: 1,
+      clientX: 360,
+      clientY: 196,
+    });
+    fireEvent.mouseUp(document, {
+      button: 0,
+      clientX: 360,
+      clientY: 196,
+    });
+
+    await waitFor(() => {
+      expect(addWidgetItem.getAttribute("style")).not.toBe(initialStyle);
+      expect(onLayoutChange).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "add-widget::inline-add",
+            widgetType: "add-widget",
+          }),
+        ]),
+      );
+    });
+
+    const latestLayout = onLayoutChange.mock.calls.at(-1)?.[0] as
+      | AgentBentoLayoutItem[]
+      | undefined;
+
+    expect(
+      latestLayout?.filter((item) => item.widgetType === "add-widget"),
+    ).toHaveLength(1);
+    expect(
+      within(addWidgetItem).getByText(
+        "Browse available dashboard widgets without leaving this grid.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("renders real dashboard feature cards through the shared bento seam", () => {
     render(
       <AgentBentoLayout
         cards={[
           {
             id: "work-totals",
+            widgetType: "work-totals",
             children: (
               <WorkTotalsCard
                 completedCount={3}
@@ -245,13 +343,14 @@ describe("AgentBentoLayout", () => {
           },
           {
             id: "current-selection",
+            widgetType: "current-selection",
             children: <NoSelectionDetailCard />,
           },
         ]}
         initialWidth={1180}
         layout={[
-          { id: "work-totals", x: 0, y: 0, w: 4, h: 2 },
-          { id: "current-selection", x: 4, y: 0, w: 8, h: 4 },
+          { h: 2, id: "work-totals", widgetType: "work-totals", w: 4, x: 0, y: 0 },
+          { h: 4, id: "current-selection", widgetType: "current-selection", w: 8, x: 4, y: 0 },
         ]}
       />,
     );

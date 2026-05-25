@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { TraceGridBentoCard } from "./trace-grid-card";
 import type { TraceGridState } from "./trace-grid-card";
 
@@ -5,6 +7,7 @@ import type { TraceGridState } from "./trace-grid-card";
 const TRACE_DRILLDOWN_WIDGET_CLASS = "h-full min-h-[34rem]";
 
 export interface TraceDrilldownWidgetProps {
+  headerAction?: ReactNode;
   locale?: string;
   onSelectWorkID?: (workID: string) => void;
   state: TraceGridState;
@@ -12,6 +15,7 @@ export interface TraceDrilldownWidgetProps {
 }
 
 export function TraceDrilldownWidget({
+  headerAction,
   locale,
   onSelectWorkID,
   state,
@@ -20,6 +24,7 @@ export function TraceDrilldownWidget({
   return (
     <TraceGridBentoCard
       className={TRACE_DRILLDOWN_WIDGET_CLASS}
+      headerAction={headerAction}
       locale={locale}
       onSelectWorkID={onSelectWorkID}
       state={state}

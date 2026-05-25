@@ -15,6 +15,7 @@ export function CurrentActivityGraphSurface({
   editor,
   editorGraph,
   graph,
+  headingID,
   imports,
   locale,
   snapshot,
@@ -22,6 +23,7 @@ export function CurrentActivityGraphSurface({
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
   editorGraph: ReturnType<typeof useFactoryGraphEditorViewModel>;
   graph: ReturnType<typeof useCurrentActivityGraphViewModel>;
+  headingID: string;
   imports: CurrentActivityImportController;
   locale?: string;
   snapshot: DashboardSnapshot;
@@ -103,6 +105,7 @@ export function CurrentActivityGraphSurface({
         graphKey={activeGraph.graphKey}
         handleNodesChange={activeGraph.handleNodesChange}
         hasPendingChanges={editor.draftState.hasChanges}
+        headingID={headingID}
         imports={imports}
         initialFitViewKey={activeGraph.initialFitViewKey}
         initialFitViewOptions={activeGraph.initialFitViewOptions}

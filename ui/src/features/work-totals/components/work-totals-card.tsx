@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { formatNumber } from "../../../i18n";
 import { cn } from "../../../lib/cn";
 import { AgentBentoCard } from "../../../components/ui";
@@ -7,6 +9,7 @@ interface WorkTotalsCardProps {
   completedCount: number;
   dispatchedCount: number;
   failedCount: number;
+  headerAction?: ReactNode;
   inFlightDispatchCount: number;
   locale?: string;
 }
@@ -26,13 +29,18 @@ export function WorkTotalsCard({
   completedCount,
   dispatchedCount,
   failedCount,
+  headerAction,
   inFlightDispatchCount,
   locale,
 }: WorkTotalsCardProps) {
   const messages = getWorkTotalsMessages(locale);
 
   return (
-    <AgentBentoCard chromeDensity="compact" title={messages.cardTitle}>
+    <AgentBentoCard
+      chromeDensity="compact"
+      headerAction={headerAction}
+      title={messages.cardTitle}
+    >
       <section
         className="grid grid-cols-2 gap-2 md:grid-cols-4"
         aria-label={messages.regionLabel}

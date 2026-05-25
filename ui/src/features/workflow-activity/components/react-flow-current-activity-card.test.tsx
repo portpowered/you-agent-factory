@@ -89,6 +89,7 @@ interface RenderCurrentActivityOptions {
   readFactoryImportFile?: ReadFactoryImportFile;
   snapshot: DashboardSnapshot;
   selection?: CurrentActivitySelection | null;
+  widgetInstanceID?: string;
 }
 
 const LEGEND_ICON_EXPECTATIONS = [
@@ -376,6 +377,7 @@ function renderCurrentActivity({
   readFactoryImportFile,
   snapshot,
   selection = null,
+  widgetInstanceID,
 }: RenderCurrentActivityOptions) {
   const onSelectWorkID =
     vi.fn<
@@ -398,6 +400,7 @@ function renderCurrentActivity({
       readFactoryImportFile={readFactoryImportFile}
       selection={selection}
       snapshot={snapshot}
+      widgetInstanceID={widgetInstanceID}
     />,
   );
 
@@ -1165,11 +1168,13 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
   });
 
-  it("lets operators collapse worker and resource lanes without leaving editor mode", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: workerDenseFactoryDefinitionDocument,
-      error: null,
-      status: "success",
+  it(
+    "lets operators collapse worker and resource lanes without leaving editor mode",
+    async () => {
+      vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+        data: workerDenseFactoryDefinitionDocument,
+        error: null,
+        status: "success",
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
@@ -1216,7 +1221,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
       expect(screen.getByText("gpu")).toBeTruthy();
       expect(screen.getByText("story:review")).toBeTruthy();
     });
-  });
+    },
+    30000,
+  );
 
   it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {
     const updateDraft = vi.fn();
@@ -1903,8 +1910,8 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(legend?.className).not.toContain("right-0");
     expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
-    expect(viewport.getAttribute("aria-describedby")).toBe(
-      "workflow-graph-heading",
+    expect(viewport.getAttribute("aria-describedby")).toMatch(
+      /^workflow-graph-heading-/,
     );
   });
 

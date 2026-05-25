@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { useState } from "react";
 import {
   DASHBOARD_WIDGET_CLASS,
@@ -27,6 +29,7 @@ export interface CompletedFailedWorkstationCardProps {
   className?: string;
   completedItems: TerminalWorkItem[];
   failedItems: TerminalWorkItem[];
+  headerAction?: ReactNode;
   locale?: string;
   onMove?: (widgetId: "terminal-work", direction: "left" | "right") => void;
   onSelectItem: (status: TerminalWorkStatus, item: TerminalWorkItem) => void;
@@ -50,6 +53,7 @@ interface TerminalWorkRowProps {
   summary: (status: TerminalWorkStatus, workstation: string) => string;
   title: string;
   toggleLabel: string;
+  widgetId: string;
 }
 
 const TERMINAL_ROWS_CLASS = "grid gap-3";
@@ -91,10 +95,12 @@ export function CompletedFailedWorkstationCard({
   className = "",
   completedItems,
   failedItems,
+  headerAction,
   locale,
   onSelectItem,
   selectedItem = null,
   title,
+  widgetId = "terminal-work",
 }: CompletedFailedWorkstationCardProps) {
   const [completedExpanded, setCompletedExpanded] = useState(true);
   const [failedExpanded, setFailedExpanded] = useState(true);
@@ -107,7 +113,11 @@ export function CompletedFailedWorkstationCard({
   const resolvedTitle = title ?? messages.cardTitle;
 
   return (
-    <AgentBentoCard className={cardClassName} title={resolvedTitle}>
+    <AgentBentoCard
+      className={cardClassName}
+      headerAction={headerAction}
+      title={resolvedTitle}
+    >
       <fieldset className={TERMINAL_ROWS_CLASS}>
         <legend className="sr-only">{messages.legendLabel}</legend>
         <TerminalWorkRow
@@ -128,6 +138,7 @@ export function CompletedFailedWorkstationCard({
           status="completed"
           summary={messages.summary}
           title={messages.rowTitle("completed")}
+          widgetId={widgetId}
         />
         <TerminalWorkRow
           emptyMessage={messages.emptyState("failed")}
@@ -145,6 +156,7 @@ export function CompletedFailedWorkstationCard({
           status="failed"
           summary={messages.summary}
           title={messages.rowTitle("failed")}
+          widgetId={widgetId}
         />
       </fieldset>
     </AgentBentoCard>
@@ -165,8 +177,9 @@ function TerminalWorkRow({
   summary,
   title,
   toggleLabel,
+  widgetId,
 }: TerminalWorkRowProps) {
-  const rowId = `terminal-work-${status}-items`;
+  const rowId = `${widgetId}-${status}-items`;
 
   return (
     <section

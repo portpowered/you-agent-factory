@@ -103,7 +103,10 @@ export async function verifyDashboardShellConsolidation(
   const streamStatus = toolbar.getByRole("status", {
     name: /you-agent-factory event stream (connecting|live)/,
   });
-  const moveButton = board.getByRole("button", { name: "Move Work totals" });
+  const moveButton = board.getByRole("button", {
+    exact: true,
+    name: "Move Work totals",
+  });
 
   await expectVisible(toolbar, "Dashboard summary shell");
   await expectVisible(workTotalsCard, "Work totals grid-card shell");
