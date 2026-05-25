@@ -2,6 +2,7 @@ package runtime_api
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net"
@@ -146,7 +147,6 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
-	stagedImagePath := writeGeneratedSubmitFixtureFile(t, t.TempDir(), "review.png", []byte("png-bytes"))
 
 	server := startFunctionalServerWithConfig(
 		t,
@@ -157,13 +157,14 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 		},
 		factory.WithServiceMode(),
 	)
+	stagedImageRef := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         "generated-api-items-mixed",
 		WorkTypeName: "task",
 		Items: &[]factoryapi.SubmitWorkItem{
 			mustSubmitWorkTextItem(t, "Review this screenshot."),
-			mustSubmitWorkImageItem(t, stagedImagePath, "review.png", "image/png"),
+			mustSubmitWorkImageItem(t, stagedImageRef, "review.png", "image/png"),
 		},
 	})
 
@@ -184,15 +185,21 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 	if textPart.Text != "Review this screenshot." {
 		t.Fatalf("projected text part = %#v, want authored text", textPart)
 	}
-	if imagePart.File != stagedImagePath || stringPointerValue(imagePart.ContentType) != "image/png" {
+	if stringPointerValue(imagePart.ContentType) != "image/png" {
 		t.Fatalf("projected image part = %#v, want staged image reference and media type", imagePart)
+	}
+	imageContent, err := os.ReadFile(imagePart.File)
+	if err != nil {
+		t.Fatalf("read staged image content: %v", err)
+	}
+	if string(imageContent) != "png-bytes" {
+		t.Fatalf("staged image content = %q, want png-bytes", imageContent)
 	}
 }
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderGemini, "gemini-1.5-pro"))
-	stagedImagePath := writeGeneratedSubmitFixtureFile(t, t.TempDir(), "review.png", []byte("png-bytes"))
 	runner := support.NewRecordingCommandRunner("unused")
 
 	server := startFunctionalServerWithConfig(
@@ -204,13 +211,14 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubm
 		},
 		factory.WithServiceMode(),
 	)
+	stagedImageRef := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         "generated-api-items-unsupported-mixed",
 		WorkTypeName: "task",
 		Items: &[]factoryapi.SubmitWorkItem{
 			mustSubmitWorkTextItem(t, "Review this screenshot."),
-			mustSubmitWorkImageItem(t, stagedImagePath, "review.png", "image/png"),
+			mustSubmitWorkImageItem(t, stagedImageRef, "review.png", "image/png"),
 		},
 	})
 
@@ -240,6 +248,32 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubm
 	}
 
 	t.Fatalf("failed token for work %q not found in task:failed", workID)
+}
+
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileReference(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+
+	req := factoryapi.SubmitWorkRequest{
+		Name:         "generated-api-forged-staged-ref",
+		WorkTypeName: "task",
+		Items: &[]factoryapi.SubmitWorkItem{
+			mustSubmitWorkImageItem(t, "staged://forged-review.png", "review.png", "image/png"),
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal forged staged-ref request: %v", err)
+	}
+	resp, err := http.Post(server.URL()+"/work", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work with forged staged ref: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work status = %d, want 400: %s", resp.StatusCode, string(payload))
+	}
 }
 
 func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
@@ -361,6 +395,42 @@ func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWork
 		t.Fatalf("decode generated submit response: %v", err)
 	}
 	return out.TraceId
+}
+
+func stageGeneratedSubmitWorkFile(
+	t *testing.T,
+	baseURL string,
+	itemType string,
+	fileName string,
+	mediaType string,
+	content []byte,
+) string {
+	t.Helper()
+
+	req := map[string]string{
+		"itemType":      itemType,
+		"fileName":      fileName,
+		"mediaType":     mediaType,
+		"contentBase64": base64.StdEncoding.EncodeToString(content),
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal stage submit-work request: %v", err)
+	}
+	resp, err := http.Post(baseURL+"/work/staged-files", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work/staged-files: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work/staged-files status = %d, want 201: %s", resp.StatusCode, string(payload))
+	}
+	var out factoryapi.StageSubmitWorkFileResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode staged-file response: %v", err)
+	}
+	return out.StagedFileRef
 }
 
 func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req factoryapi.WorkRequest) factoryapi.UpsertWorkRequestResponse {
@@ -521,16 +591,6 @@ func mustSubmitWorkImageItem(t *testing.T, stagedFileRef string, fileName string
 		t.Fatalf("encode submit-work image item: %v", err)
 	}
 	return item
-}
-
-func writeGeneratedSubmitFixtureFile(t *testing.T, dir string, name string, content []byte) string {
-	t.Helper()
-
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, content, 0o644); err != nil {
-		t.Fatalf("write generated submit fixture file: %v", err)
-	}
-	return path
 }
 
 func functionalServerPort(t *testing.T, rawURL string) int {

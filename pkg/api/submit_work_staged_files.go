@@ -1,7 +1,9 @@
 package api
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -11,11 +13,20 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"go.uber.org/zap"
 )
+
+const (
+	submitWorkStagedFileRefPrefix    = "submit-work-stage:v1:"
+	submitWorkStagedFileTokenDivider = "."
+	submitWorkStageDirPrefix         = "submit-work-stage-"
+)
+
+var submitWorkStagedFileRefSecret = mustReadSubmitWorkStagedFileRefSecret()
 
 func (s *Server) StageSubmitWorkFile(w http.ResponseWriter, r *http.Request) {
 	response, err := stageSubmitWorkFileRequest(r)
@@ -213,7 +224,7 @@ func validateStageSubmitWorkMediaType(itemType factoryapi.SubmitWorkItemType, me
 }
 
 func writeStagedSubmitWorkFile(content []byte, fileName string) (string, error) {
-	stageDir, err := os.MkdirTemp("", "submit-work-stage-*")
+	stageDir, err := os.MkdirTemp("", submitWorkStageDirPrefix+"*")
 	if err != nil {
 		return "", err
 	}
@@ -222,7 +233,7 @@ func writeStagedSubmitWorkFile(content []byte, fileName string) (string, error) 
 	if err := os.WriteFile(targetPath, content, 0o600); err != nil {
 		return "", err
 	}
-	return targetPath, nil
+	return encodeSubmitWorkStagedFileRef(targetPath), nil
 }
 
 func safeSubmitWorkFileName(fileName string) string {
@@ -239,4 +250,65 @@ func randomSubmitWorkFileName() string {
 		return "submit-work-file.bin"
 	}
 	return "submit-work-" + hex.EncodeToString(buf) + ".bin"
+}
+
+func mustReadSubmitWorkStagedFileRefSecret() []byte {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		panic(fmt.Sprintf("generate submit-work staged file secret: %v", err))
+	}
+	return buf
+}
+
+func encodeSubmitWorkStagedFileRef(path string) string {
+	cleanPath := filepath.Clean(path)
+	payload := base64.RawURLEncoding.EncodeToString([]byte(cleanPath))
+	signature := submitWorkStagedFileRefSignature(cleanPath)
+	return submitWorkStagedFileRefPrefix + payload + submitWorkStagedFileTokenDivider + signature
+}
+
+func resolveSubmitWorkStagedFileRef(ref string) (string, error) {
+	const invalidMessage = "stagedFileRef must be a backend-issued staged file reference"
+
+	if !strings.HasPrefix(ref, submitWorkStagedFileRefPrefix) {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+
+	unsignedRef := strings.TrimPrefix(ref, submitWorkStagedFileRefPrefix)
+	payload, signature, ok := strings.Cut(unsignedRef, submitWorkStagedFileTokenDivider)
+	if !ok || payload == "" || signature == "" {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+
+	pathBytes, err := base64.RawURLEncoding.DecodeString(payload)
+	if err != nil {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+	path := string(pathBytes)
+	if path == "" {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+	if signature != submitWorkStagedFileRefSignature(path) {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+
+	cleanPath := filepath.Clean(path)
+	if cleanPath != path || !filepath.IsAbs(cleanPath) {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+	if !strings.HasPrefix(filepath.Base(filepath.Dir(cleanPath)), submitWorkStageDirPrefix) {
+		return "", requestFieldValidationError{message: invalidMessage}
+	}
+
+	info, err := os.Stat(cleanPath)
+	if err != nil || info.IsDir() {
+		return "", requestFieldValidationError{message: "stagedFileRef must reference an existing staged submit-work file"}
+	}
+	return cleanPath, nil
+}
+
+func submitWorkStagedFileRefSignature(path string) string {
+	mac := hmac.New(sha256.New, submitWorkStagedFileRefSecret)
+	_, _ = mac.Write([]byte(path))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }

@@ -55,10 +55,14 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 
 	imageItem, imageErr := item.AsSubmitWorkImageItem()
 	if imageErr == nil && imageItem.Type == factoryapi.SubmitWorkItemTypeImage {
+		stagedFilePath, err := resolveSubmitWorkStagedFileRef(imageItem.StagedFileRef)
+		if err != nil {
+			return interfaces.WorkContentPart{}, false, err
+		}
 		return submitWorkFileItemContentPart(
 			interfaces.WorkContentPartTypeImage,
 			string(imageItem.Type),
-			imageItem.StagedFileRef,
+			stagedFilePath,
 			imageItem.FileName,
 			imageItem.MediaType,
 		), true, nil
@@ -66,10 +70,14 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 
 	videoItem, videoErr := item.AsSubmitWorkVideoItem()
 	if videoErr == nil && videoItem.Type == factoryapi.SubmitWorkItemTypeVideo {
+		stagedFilePath, err := resolveSubmitWorkStagedFileRef(videoItem.StagedFileRef)
+		if err != nil {
+			return interfaces.WorkContentPart{}, false, err
+		}
 		return submitWorkFileItemContentPart(
 			interfaces.WorkContentPartTypeBinary,
 			string(videoItem.Type),
-			videoItem.StagedFileRef,
+			stagedFilePath,
 			videoItem.FileName,
 			videoItem.MediaType,
 		), true, nil
@@ -77,10 +85,14 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 
 	audioItem, audioErr := item.AsSubmitWorkAudioItem()
 	if audioErr == nil && audioItem.Type == factoryapi.SubmitWorkItemTypeAudio {
+		stagedFilePath, err := resolveSubmitWorkStagedFileRef(audioItem.StagedFileRef)
+		if err != nil {
+			return interfaces.WorkContentPart{}, false, err
+		}
 		return submitWorkFileItemContentPart(
 			interfaces.WorkContentPartTypeAudio,
 			string(audioItem.Type),
-			audioItem.StagedFileRef,
+			stagedFilePath,
 			audioItem.FileName,
 			audioItem.MediaType,
 		), true, nil
@@ -88,10 +100,14 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 
 	documentItem, documentErr := item.AsSubmitWorkDocumentItem()
 	if documentErr == nil && documentItem.Type == factoryapi.SubmitWorkItemTypeDocument {
+		stagedFilePath, err := resolveSubmitWorkStagedFileRef(documentItem.StagedFileRef)
+		if err != nil {
+			return interfaces.WorkContentPart{}, false, err
+		}
 		return submitWorkFileItemContentPart(
 			interfaces.WorkContentPartTypeBinary,
 			string(documentItem.Type),
-			documentItem.StagedFileRef,
+			stagedFilePath,
 			documentItem.FileName,
 			documentItem.MediaType,
 		), true, nil

@@ -91,7 +91,9 @@ func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","items":[{"type":"text","text":"Review this UI."},{"type":"image","stagedFileRef":"staged://ui.png","fileName":"ui.png","mediaType":"image/png"}]}`)
+	staged := stageSubmitWorkTestFile(t, srv, "image", "ui.png", "image/png", []byte("png-bytes"))
+
+	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","items":[{"type":"text","text":"Review this UI."},{"type":"image","stagedFileRef":"`+staged.StagedFileRef+`","fileName":"ui.png","mediaType":"image/png"}]}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -107,8 +109,15 @@ func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
 	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
 		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].File != "staged://ui.png" || mf.Submitted[0].Content[1].ContentType != "image/png" {
+	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].ContentType != "image/png" {
 		t.Fatalf("submitted content[1] = %#v, want canonical staged image content", mf.Submitted[0].Content[1])
+	}
+	stagedContent, err := os.ReadFile(mf.Submitted[0].Content[1].File)
+	if err != nil {
+		t.Fatalf("read submitted staged file: %v", err)
+	}
+	if string(stagedContent) != "png-bytes" {
+		t.Fatalf("submitted staged file content = %q, want png-bytes", stagedContent)
 	}
 	if mf.Submitted[0].Content[1].Metadata[submitWorkItemTypeMetadataKey] != "image" || mf.Submitted[0].Content[1].Metadata[submitWorkFileNameMetadataKey] != "ui.png" {
 		t.Fatalf("submitted content[1].metadata = %#v, want item type and file name metadata", mf.Submitted[0].Content[1].Metadata)
@@ -206,33 +215,56 @@ func TestSubmitWork_RejectsStructuredFileItemWithoutStagedReference(t *testing.T
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0].stagedFileRef must be a non-empty string")
 }
 
+func TestSubmitWork_RejectsForgedStructuredFileReference(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+
+	rec := submitWorkRequest(t, srv, `{"name":"forged-staged-ref","workTypeName":"prd","items":[{"type":"image","stagedFileRef":"staged://forged-ui.png","fileName":"ui.png","mediaType":"image/png"}]}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0]: stagedFileRef must be a backend-issued staged file reference")
+}
+
 func TestStageSubmitWorkFile(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 
-	rec := submitWorkStageFileRequest(t, srv, "/work/staged-files", `{
-		"itemType":"image",
-		"fileName":"ui.png",
-		"mediaType":"image/png",
-		"contentBase64":"`+base64.StdEncoding.EncodeToString([]byte("png-bytes"))+`"
-	}`)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	response := decodeJSONResponse[factoryapi.StageSubmitWorkFileResponse](t, rec)
+	response := stageSubmitWorkTestFile(t, srv, "image", "ui.png", "image/png", []byte("png-bytes"))
 	if response.FileName != "ui.png" || response.MediaType != "image/png" {
 		t.Fatalf("stage response = %#v, want identifying metadata", response)
 	}
 	if response.StagedFileRef == "" {
 		t.Fatalf("stagedFileRef must be non-empty")
 	}
-	stagedContent, err := os.ReadFile(response.StagedFileRef)
+	stagedPath, err := resolveSubmitWorkStagedFileRef(response.StagedFileRef)
+	if err != nil {
+		t.Fatalf("resolve staged file ref: %v", err)
+	}
+	stagedContent, err := os.ReadFile(stagedPath)
 	if err != nil {
 		t.Fatalf("read staged file: %v", err)
 	}
 	if string(stagedContent) != "png-bytes" {
 		t.Fatalf("staged file content = %q, want png-bytes", stagedContent)
 	}
+}
+
+func stageSubmitWorkTestFile(
+	t *testing.T,
+	srv *Server,
+	itemType string,
+	fileName string,
+	mediaType string,
+	content []byte,
+) factoryapi.StageSubmitWorkFileResponse {
+	t.Helper()
+
+	rec := submitWorkStageFileRequest(t, srv, "/work/staged-files", `{
+		"itemType":"`+itemType+`",
+		"fileName":"`+fileName+`",
+		"mediaType":"`+mediaType+`",
+		"contentBase64":"`+base64.StdEncoding.EncodeToString(content)+`"
+	}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	return decodeJSONResponse[factoryapi.StageSubmitWorkFileResponse](t, rec)
 }
 
 func TestStageSubmitWorkFile_RejectsTextItemType(t *testing.T) {
