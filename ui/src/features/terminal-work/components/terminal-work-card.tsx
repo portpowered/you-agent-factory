@@ -53,6 +53,7 @@ interface TerminalWorkRowProps {
   summary: (status: TerminalWorkStatus, workstation: string) => string;
   title: string;
   toggleLabel: string;
+  widgetId: string;
 }
 
 const TERMINAL_ROWS_CLASS = "grid gap-3";
@@ -99,6 +100,7 @@ export function CompletedFailedWorkstationCard({
   onSelectItem,
   selectedItem = null,
   title,
+  widgetId = "terminal-work",
 }: CompletedFailedWorkstationCardProps) {
   const [completedExpanded, setCompletedExpanded] = useState(true);
   const [failedExpanded, setFailedExpanded] = useState(true);
@@ -136,6 +138,7 @@ export function CompletedFailedWorkstationCard({
           status="completed"
           summary={messages.summary}
           title={messages.rowTitle("completed")}
+          widgetId={widgetId}
         />
         <TerminalWorkRow
           emptyMessage={messages.emptyState("failed")}
@@ -153,6 +156,7 @@ export function CompletedFailedWorkstationCard({
           status="failed"
           summary={messages.summary}
           title={messages.rowTitle("failed")}
+          widgetId={widgetId}
         />
       </fieldset>
     </AgentBentoCard>
@@ -173,8 +177,9 @@ function TerminalWorkRow({
   summary,
   title,
   toggleLabel,
+  widgetId,
 }: TerminalWorkRowProps) {
-  const rowId = `terminal-work-${status}-items`;
+  const rowId = `${widgetId}-${status}-items`;
 
   return (
     <section

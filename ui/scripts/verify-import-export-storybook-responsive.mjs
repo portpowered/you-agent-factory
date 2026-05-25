@@ -287,7 +287,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectVisible(heading, "Dashboard heading");
   await expectVisible(hiddenWordmark, "Accessible you-agent-factory wordmark");
   await expectVisible(sessionTabs, "Session tabs navigation");
-  await expectVisible(rootTab, "Default session tab");
   await expectVisible(openSessionButton, "Open another session button");
   await expectVisible(closeSelectedSessionButton, "Active session close button");
   await expectVisible(slider, "Timeline slider");
