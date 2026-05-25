@@ -29,7 +29,7 @@ export async function expectCompactedTopDashboardSection(
     name: "Export PNG",
   });
   const streamStatus = within(toolbar).getByRole("status", {
-    name: /You Agent Factory event stream (connecting|live)/,
+    name: /Event stream (connecting|live)/,
   });
 
   await expect(toolbar).toBeVisible();

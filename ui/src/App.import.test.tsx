@@ -32,7 +32,7 @@ describe("App shell import flows", () => {
     renderApp({ snapshot: baselineSnapshot });
 
     expect(
-      await screen.findByRole("heading", { name: "You Agent Factory" }),
+      await screen.findByRole("heading", { name: "U" }),
     ).toBeTruthy();
     expectNoRetiredDashboardBranding();
     expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();

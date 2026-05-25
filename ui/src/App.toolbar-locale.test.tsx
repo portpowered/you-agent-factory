@@ -160,12 +160,10 @@ describe("App shell locale and toolbar flows", () => {
   it("applies the shared typography helpers to the dashboard toolbar summary shell", async () => {
     renderApp({ snapshot: terminalSnapshot });
 
-    const heading = await screen.findByRole("heading", {
-      name: "You Agent Factory",
-    });
+    const heading = await screen.findByRole("heading", { name: "U" });
     const toolbar = screen.getByRole("region", { name: "dashboard summary" });
     const streamStatus = screen.getByRole("status", {
-      name: "You Agent Factory event stream connecting",
+      name: "Event stream connecting",
     });
     const exportButton = screen.getByRole("button", { name: "Export PNG" });
 
@@ -188,7 +186,7 @@ describe("App shell locale and toolbar flows", () => {
 
     expect(
       within(toolbar).getByRole("status", {
-        name: "You Agent Factory event stream connecting",
+        name: "Event stream connecting",
       }),
     ).toBeTruthy();
     expect(within(toolbar).queryByText("Factory state")).toBeNull();
@@ -208,7 +206,7 @@ describe("App shell locale and toolbar flows", () => {
     await waitFor(() => {
       expect(
         within(toolbar).getByRole("status", {
-          name: "You Agent Factory event stream live",
+          name: "Event stream live",
         }),
       ).toBeTruthy();
     });
@@ -229,7 +227,7 @@ describe("App shell locale and toolbar flows", () => {
     await waitFor(() => {
       expect(
         within(toolbar).getByRole("status", {
-          name: "You Agent Factory event stream offline",
+          name: "Event stream offline",
         }),
       ).toBeTruthy();
     });

@@ -11,7 +11,6 @@ import { Button, Dialog } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
-import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
 import {
   normalizeFactorySessionsError,
@@ -26,49 +25,61 @@ import {
   useDashboardSessionTabsState,
 } from "../hooks/use-dashboard-session-tabs-state";
 
-const SESSION_TABS_SHELL_CLASS = "grid min-w-0 flex-1 gap-2";
-const SESSION_TABS_ROW_CLASS = "flex min-w-0 items-center gap-1.5";
-const SESSION_TAB_LIST_CLASS = "flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pb-1";
+const SESSION_TABS_SHELL_CLASS = "grid min-w-0 w-full flex-1 gap-2";
+const SESSION_TABS_ROW_CLASS = "flex min-w-0 w-full items-stretch overflow-visible";
+const SESSION_TAB_LIST_CLASS =
+  "flex min-w-0 flex-1 items-end h-full gap-1 overflow-x-visible overflow-y-visible ";
 const SESSION_TAB_ITEM_CLASS =
-  "group relative flex min-w-0 shrink-0 items-stretch rounded-t-xl rounded-b-md border border-b-0 transition-colors";
+  "group relative flex min-h-0 h-full min-w-0 shrink-0 items-stretch self-stretch transition-colors";
 const SESSION_TAB_BUTTON_CLASS =
-  "min-w-0 flex-1 rounded-bl-md rounded-tl-xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+  "min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TAB_CLOSE_BUTTON_CLASS =
-  "rounded-br-md rounded-tr-xl px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
-const SESSION_TAB_ACTIVE_CLASS =
-  "z-10 border-af-border-strong bg-af-surface-raised text-af-text shadow-af-card";
+  "px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+const OPEN_SESSION_TAB_BUTTON_CLASS = cn(
+  "flex shrink-0 self-stretch items-center rounded-t-2xl bg-transparent px-3 py-2 text-af-text-muted transition-colors",
+  "hover:bg-af-overlay/4 hover:text-af-text",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring",
+);
+const SESSION_TAB_ACTIVE_CLASS = cn(
+  "z-10 -mb-0.5 overflow-visible rounded-t-2xl rounded-b-none bg-af-surface-subtle text-af-text",
+  "before:pointer-events-none before:absolute before:-left-[1rem] before:-bottom-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_top_left,transparent_1rem,var(--color-af-surface-subtle)_1rem)]",
+  "after:pointer-events-none after:absolute after:right-[-1rem] after:-bottom-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_top_right,transparent_1rem,var(--color-af-surface-subtle)_1rem)]",
+);
 const SESSION_TAB_INACTIVE_CLASS =
-  "border-af-border bg-af-surface-subtle text-af-text-muted hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
+  "rounded-t-xl rounded-b-none bg-af-surface-subtle/70 text-af-text-muted hover:bg-af-overlay hover:text-af-text";
+const SESSION_TAB_ACTIVE_BUTTON_CLASS =
+  "flex min-w-0 flex-1 flex-col items-start rounded-tl-xl px-3 py-2";
+const SESSION_TAB_INACTIVE_BUTTON_CLASS =
+  "flex min-w-0 flex-1 flex-col items-start rounded-tl-xl px-3 py-2";
+const SESSION_TAB_ACTIVE_CONTROL_BUTTON_CLASS =
+  "flex items-center justify-center text-af-text-subtle transition-colors hover:text-af-text";
+const SESSION_TAB_INACTIVE_CLOSE_BUTTON_CLASS = cn(
+  "rounded-tr-xl text-af-text-disabled transition-colors",
+  "group-hover:text-af-text-muted",
+  "hover:bg-af-overlay/8 hover:text-af-text-muted",
+  "group-focus-within:bg-af-overlay/10 group-focus-within:text-af-text",
+  "focus-visible:bg-af-overlay/10 focus-visible:text-af-text",
+);
 const SESSION_DIALOG_ERROR_CLASS =
   "rounded-xl border border-af-danger-border bg-af-danger-surface px-3 py-2 text-sm text-af-danger-text";
 
 export function DashboardSessionTabs({
-  hideOpenButton = false,
   locale,
   state,
 }: {
-  hideOpenButton?: boolean;
   locale: string;
   state?: DashboardSessionTabsState;
 }) {
   const fallbackState = useDashboardSessionTabsState();
   const sessionTabsState = state ?? fallbackState;
 
-  return (
-    <DashboardSessionTabsView
-      hideOpenButton={hideOpenButton}
-      locale={locale}
-      state={sessionTabsState}
-    />
-  );
+  return <DashboardSessionTabsView locale={locale} state={sessionTabsState} />;
 }
 
 function DashboardSessionTabsView({
-  hideOpenButton,
   locale,
   state,
 }: {
-  hideOpenButton: boolean;
   locale: string;
   state: DashboardSessionTabsState;
 }) {
@@ -131,18 +142,13 @@ function DashboardSessionTabsView({
             onRetry={() => {
               void sessionsQuery.refetch();
             }}
+            onOpenSession={() => {
+              setDialogOpen(true);
+            }}
             onSelectSession={setActiveSessionID}
             sessions={sessions}
             streamStatus={streamStatus}
           />
-          {hideOpenButton ? null : (
-            <OpenSessionButton
-              label={messages.openSessionButtonLabel}
-              onClick={() => {
-                setDialogOpen(true);
-              }}
-            />
-          )}
         </div>
         {closeError ? (
           <p className={SESSION_DIALOG_ERROR_CLASS} role="alert">
@@ -189,15 +195,15 @@ function OpenSessionButton({
   onClick: () => void;
 }) {
   return (
-    <DashboardHeaderActionButton
+    <button
       aria-haspopup="dialog"
       aria-label={label}
-      className="self-center"
-      compact
+      className={OPEN_SESSION_TAB_BUTTON_CLASS}
       onClick={onClick}
+      type="button"
     >
-      <span aria-hidden="true" className="text-lg leading-none">+</span>
-    </DashboardHeaderActionButton>
+        <span aria-hidden="true" className="text-lg leading-none">+</span>
+    </button>
   );
 }
 
@@ -208,6 +214,7 @@ function SessionTabsContent({
   isPending,
   messages,
   onCloseSession,
+  onOpenSession,
   onRetry,
   onSelectSession,
   sessions,
@@ -219,6 +226,7 @@ function SessionTabsContent({
   isPending: boolean;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onCloseSession: (sessionID: string) => void;
+  onOpenSession: () => void;
   onRetry: () => void;
   onSelectSession: (sessionID: string) => void;
   sessions: FactorySessionSummary[];
@@ -250,9 +258,15 @@ function SessionTabsContent({
   }
   if (sessions.length === 0) {
     return (
-      <p className={cn("text-sm text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
-        {messages.sessionsEmptyTitle}
-      </p>
+      <>
+        <p className={cn("text-sm text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
+          {messages.sessionsEmptyTitle}
+        </p>
+        <OpenSessionButton
+          label={messages.openSessionButtonLabel}
+          onClick={onOpenSession}
+        />
+      </>
     );
   }
 
@@ -330,6 +344,10 @@ function SessionTabsContent({
               tabID={sessionTabID(sessionTabsID, session.id)}
             />
           ))}
+          <OpenSessionButton
+            label={messages.openSessionButtonLabel}
+            onClick={onOpenSession}
+          />
         </div>
       </nav>
       {activeSession ? (
@@ -401,7 +419,10 @@ function SessionTabButton({
         aria-controls={controlsID}
         aria-label={label}
         aria-selected={active}
-        className={SESSION_TAB_BUTTON_CLASS}
+        className={cn(
+          SESSION_TAB_BUTTON_CLASS,
+          active ? SESSION_TAB_ACTIVE_BUTTON_CLASS : SESSION_TAB_INACTIVE_BUTTON_CLASS,
+        )}
         id={tabID}
         onClick={onClick}
         onKeyDown={onKeyDown}
@@ -423,8 +444,8 @@ function SessionTabButton({
         className={cn(
           SESSION_TAB_CLOSE_BUTTON_CLASS,
           active
-            ? "text-af-text-subtle hover:text-af-text"
-            : "text-af-text-disabled group-hover:text-af-text-muted",
+            ? SESSION_TAB_ACTIVE_CONTROL_BUTTON_CLASS
+            : SESSION_TAB_INACTIVE_CLOSE_BUTTON_CLASS,
         )}
         disabled={closeDisabled}
         onClick={onClose}
