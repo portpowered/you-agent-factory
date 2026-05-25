@@ -23,6 +23,7 @@ import {
   requireValue,
   submitWorkCardControls,
 } from "./stories/dashboardStorySupport";
+import { submitWorkCardQueryContract } from "./testing/submit-work-card-queries";
 
 const editableConfigurationFactoryDefinition =
   buildEditableConfigurationFactoryDefinition();
@@ -622,7 +623,14 @@ export const DashboardImprovementsSmoke = {
       within(submitWorkCard).getByRole("textbox", { name: "Request name" }),
     ).toBeVisible();
     await expect(
-      within(submitWorkCard).getByRole("textbox", { name: "Request" }),
+      within(submitWorkCard).getByRole("list", {
+        name: submitWorkCardQueryContract.submissionItemsListName,
+      }),
+    ).toBeVisible();
+    await expect(
+      within(submitWorkCard).getByRole("textbox", {
+        name: submitWorkCardQueryContract.requestFieldName,
+      }),
     ).toBeVisible();
     await expect(
       within(submitWorkCard).getByRole("button", { name: "Submit work" }),

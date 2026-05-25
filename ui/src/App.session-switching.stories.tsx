@@ -114,15 +114,6 @@ export const Verification = {
     const refreshedCurrentSelection = await canvas.findByRole("article", {
       name: "Current selection",
     });
-    const refreshedRequestNameField = canvas.getByRole("textbox", {
-      name: "Request name",
-    });
-    const refreshedRequestField = canvas.getByRole("textbox", {
-      name: "Request",
-    });
-    const refreshedWorkTypeField = canvas.getByRole("combobox", {
-      name: "Work type",
-    });
     await expect(
       await within(refreshedCurrentSelection).findByText("Beta Story"),
     ).toBeVisible();
@@ -134,6 +125,11 @@ export const Verification = {
         within(refreshedCurrentSelection).queryByText("work-active-story"),
       ).toBeNull();
     });
+    const {
+      requestField: refreshedRequestField,
+      requestNameField: refreshedRequestNameField,
+      workTypeField: refreshedWorkTypeField,
+    } = await submitWorkCardControls(canvasElement);
     await expect(refreshedRequestNameField).toHaveValue("");
     await expect(refreshedRequestField).toHaveValue("");
     await expect(refreshedWorkTypeField).toHaveValue("");
