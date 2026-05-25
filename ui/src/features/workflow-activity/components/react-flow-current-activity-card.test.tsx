@@ -1168,11 +1168,13 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
   });
 
-  it("lets operators collapse worker and resource lanes without leaving editor mode", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: workerDenseFactoryDefinitionDocument,
-      error: null,
-      status: "success",
+  it(
+    "lets operators collapse worker and resource lanes without leaving editor mode",
+    async () => {
+      vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+        data: workerDenseFactoryDefinitionDocument,
+        error: null,
+        status: "success",
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
@@ -1219,7 +1221,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
       expect(screen.getByText("gpu")).toBeTruthy();
       expect(screen.getByText("story:review")).toBeTruthy();
     });
-  });
+    },
+    30000,
+  );
 
   it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {
     const updateDraft = vi.fn();

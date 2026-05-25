@@ -5,6 +5,7 @@ import {
   DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
   DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
+  DASHBOARD_LAYOUT_STORAGE_KEY,
   reloadDashboardLayoutFromStorage,
   useDashboardLayout,
 } from "./useDashboardLayout";
@@ -121,6 +122,129 @@ describe("useDashboardLayout defaults and migrations", () => {
         y: 3,
       }),
     );
+  });
+
+});
+
+describe("useDashboardLayout migration-specific layout compaction", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("migrates legacy compacted widget positions and restores the provider-session primary card", () => {
+    window.localStorage.setItem(
+      DASHBOARD_LAYOUT_STORAGE_KEY,
+      JSON.stringify([
+        { h: 10, id: DASHBOARD_WIDGET_IDS.workGraph, w: 12, x: 0, y: 2 },
+        { h: 5, id: DASHBOARD_WIDGET_IDS.currentSelection, w: 4, x: 0, y: 12 },
+        { h: 5, id: DASHBOARD_WIDGET_IDS.terminalWork, w: 4, x: 4, y: 12 },
+        { h: 6, id: DASHBOARD_WIDGET_IDS.workOutcomeChart, w: 4, x: 8, y: 17 },
+        { h: 6, id: DASHBOARD_WIDGET_IDS.submitWork, w: 4, x: 8, y: 23 },
+        { h: 9, id: DASHBOARD_WIDGET_IDS.trace, w: 8, x: 0, y: 18 },
+      ]),
+    );
+
+    act(() => {
+      reloadDashboardLayoutFromStorage();
+    });
+
+    const { result } = renderHook(() => useDashboardLayout());
+    const migratedLayout = result.current.dashboardLayout;
+
+    expect(
+      migratedLayout.find(
+        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workGraph,
+      ),
+    ).toMatchObject({ h: 8, y: 2 });
+    expect(
+      migratedLayout.find(
+        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
+      ),
+    ).toMatchObject({ y: 10 });
+    expect(
+      migratedLayout.find(
+        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.terminalWork,
+      ),
+    ).toMatchObject({ x: 8, y: 10 });
+    expect(
+      migratedLayout.find(
+        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
+      ),
+    ).toMatchObject({ y: 15 });
+    expect(
+      migratedLayout.find(
+        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.submitWork,
+      ),
+    ).toMatchObject({ y: 21 });
+    expect(
+      migratedLayout.find((item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace),
+    ).toMatchObject({ y: 15 });
+    expect(
+      migratedLayout.find(
+        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
+      ),
+    ).toEqual(
+      expect.objectContaining(
+        DEFAULT_DASHBOARD_LAYOUT.find(
+          (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
+        ),
+      ),
+    );
+  });
+
+  it("widens legacy trace cards and drops stale max-width constraints during reload migration", () => {
+    window.localStorage.setItem(
+      DASHBOARD_LAYOUT_STORAGE_KEY,
+      JSON.stringify([
+        {
+          h: 7,
+          id: DASHBOARD_WIDGET_IDS.trace,
+          maxW: 8,
+          w: 4,
+          x: 0,
+          y: 18,
+        },
+        {
+          h: 9,
+          id: "trace::instance-1",
+          maxW: 9,
+          widgetType: DASHBOARD_WIDGET_IDS.trace,
+          w: 8,
+          x: 0,
+          y: 15,
+        },
+      ]),
+    );
+
+    act(() => {
+      reloadDashboardLayoutFromStorage();
+    });
+
+    const { result } = renderHook(() => useDashboardLayout());
+    const primaryTrace = result.current.dashboardLayout.find(
+      (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace,
+    );
+    const duplicateTrace = result.current.dashboardLayout.find(
+      (item) => item.id === "trace::instance-1",
+    );
+
+    expect(primaryTrace).toMatchObject({
+      h: 9,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace,
+      maxW: undefined,
+      minH: 7,
+      minW: 5,
+      w: 8,
+      widgetType: DASHBOARD_WIDGET_IDS.trace,
+      x: 0,
+      y: 15,
+    });
+    expect(duplicateTrace).toMatchObject({
+      id: "trace::instance-1",
+      maxW: undefined,
+      widgetType: DASHBOARD_WIDGET_IDS.trace,
+      w: 8,
+      x: 0,
+      y: 15,
+    });
   });
 });
 
