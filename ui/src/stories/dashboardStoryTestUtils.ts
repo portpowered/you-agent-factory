@@ -4,6 +4,11 @@ import type { DashboardWorkstationRequest } from "../api/dashboard";
 import { dashboardWorkstationRequestFixtures } from "../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import {
+  findSubmitWorkCard,
+  getSubmitWorkCardControls,
+  submitWorkCardQueryContract,
+} from "../testing/submit-work-card-queries";
+import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -84,33 +89,27 @@ export function buttonVisibleStyle(button: HTMLElement): {
 }
 
 export async function submitWorkCardControls(canvasElement: HTMLElement): Promise<{
-  requestNameField: HTMLElement;
-  requestField: HTMLElement;
+  requestNameField: HTMLInputElement;
+  requestField: HTMLTextAreaElement;
   scope: ReturnType<typeof within>;
-  submitButton: HTMLElement;
-  workTypeField: HTMLElement;
+  submitButton: HTMLButtonElement;
+  workTypeField: HTMLSelectElement;
 }> {
   const canvas = within(canvasElement);
-  const submitWorkCard = await canvas.findByRole("article", {
-    name: "Submit work",
+  const dashboardGrid = await canvas.findByRole("region", {
+    name: submitWorkCardQueryContract.dashboardRegionName,
   });
+  const submitWorkCard = await findSubmitWorkCard(within(dashboardGrid));
   const submitWorkScope = within(submitWorkCard);
-  const workTypeField = submitWorkScope.getByRole("combobox", {
-    name: "Work type",
-  });
-  const requestNameField = submitWorkScope.getByRole("textbox", {
-    name: "Request name",
-  });
-  const requestField = submitWorkScope.getByRole("textbox", {
-    name: "Request",
-  });
+  const { requestName, requestText, submitButton, workType } =
+    getSubmitWorkCardControls(submitWorkScope);
 
   return {
-    requestNameField,
-    requestField,
+    requestField: requestText,
+    requestNameField: requestName,
     scope: submitWorkScope,
-    submitButton: submitWorkScope.getByRole("button", { name: "Submit work" }),
-    workTypeField,
+    submitButton,
+    workTypeField: workType,
   };
 }
 
@@ -119,11 +118,11 @@ export async function fillSubmitWorkCard(
   requestName: string,
   requestText: string,
 ): Promise<{
-  requestNameField: HTMLElement;
-  requestField: HTMLElement;
+  requestNameField: HTMLInputElement;
+  requestField: HTMLTextAreaElement;
   scope: ReturnType<typeof within>;
-  submitButton: HTMLElement;
-  workTypeField: HTMLElement;
+  submitButton: HTMLButtonElement;
+  workTypeField: HTMLSelectElement;
 }> {
   const { requestField, requestNameField, scope, submitButton, workTypeField } =
     await submitWorkCardControls(canvasElement);
