@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { expect, within } from "storybook/test";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { formatDateTime } from "../../../i18n/formatters";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 
 const providerSessionVerificationSessionID =
@@ -102,6 +104,7 @@ export const TimestampPrefixedSessionSuccess = {
 };
 
 export const MixedTranscript = {
+  tags: ["test"],
   parameters: {
     dashboardApi: {
       fetchMocks: [
@@ -126,7 +129,12 @@ export const MixedTranscript = {
                 ],
                 lineCount: 6,
                 malformedLineCount: 0,
-                parseErrors: [],
+                parseErrors: [
+                  {
+                    lineNumber: 7,
+                    message: "unexpected end of JSON input",
+                  },
+                ],
                 reasoning: [
                   {
                     order: 3,
@@ -152,8 +160,14 @@ export const MixedTranscript = {
                     startedAt: "2026-05-20T17:35:24Z",
                   },
                 ],
-                unknownEventCount: 0,
-                unknownEvents: [],
+                unknownEventCount: 1,
+                unknownEvents: [
+                  {
+                    lineNumber: 8,
+                    payloadType: "mystery_payload",
+                    type: "mystery_event",
+                  },
+                ],
               },
               providerSession: {
                 id: providerSessionVerificationSessionID,
@@ -184,6 +198,7 @@ export const MixedTranscript = {
                   type: "assistant_message",
                 },
                 {
+                  encrypted: true,
                   lineNumber: 3,
                   order: 3,
                   sourceType: "reasoning",
@@ -206,8 +221,17 @@ export const MixedTranscript = {
                 {
                   callId: "call_1",
                   lineNumber: 5,
+                  name: "exec_command",
                   order: 5,
-                  output: "{\"lines\":128}",
+                  output: [
+                    "Chunk ID: exec-123",
+                    "Wall time: 0.6289 seconds",
+                    "Process exited with code 0",
+                    "Original token count: 22",
+                    "Output:",
+                    "provider-session parsing verified successfully",
+                    `details:${"y".repeat(360)}`,
+                  ].join("\n"),
                   status: "completed",
                   timestamp: "2026-05-20T17:35:28Z",
                   turnIndex: 1,
@@ -230,5 +254,123 @@ export const MixedTranscript = {
       snapshot: semanticWorkflowDashboardSnapshot,
     },
   },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole("heading", { name: "Transcript" });
+    const expectedTranscriptTimestamp = formatDateTime("2026-05-20T17:35:27Z");
+    const headingNames = (await canvas.findAllByRole("heading")).map(
+      (heading) => heading.textContent ?? "",
+    );
+    const transcriptIndex = headingNames.indexOf("Transcript");
+
+    expect(transcriptIndex).toBeGreaterThan(-1);
+
+    for (const headingName of [
+      "Session analysis",
+      "Token usage",
+      "Turns",
+      "Function calls",
+      "Reasoning",
+      "Maintainer diagnostics",
+    ]) {
+      const headingIndex = headingNames.indexOf(headingName);
+      if (headingIndex !== -1) {
+        expect(transcriptIndex).toBeLessThan(headingIndex);
+      }
+    }
+
+    expect(
+      canvas.getAllByText("{\"path\":\"pkg/api/provider_session_details.go\"}"),
+    ).toHaveLength(1);
+    expect(canvas.getAllByText("Inspect the parser branch before retrying.")).toHaveLength(1);
+    expect(canvas.getAllByText("Encrypted reasoning").length).toBeGreaterThan(0);
+    const panel = canvas.getByLabelText("Selected session details");
+    expect(panel.className).toContain("af-provider-session-sans");
+
+    expect(canvas.getByText("Command result")).toBeTruthy();
+    expect(canvas.getByText("Exit code")).toBeTruthy();
+    expect(canvas.getByText("0.6289 seconds")).toBeTruthy();
+    expect(
+      canvas.getByText("provider-session parsing verified successfully"),
+    ).toBeTruthy();
+    const rawToolOutputToggle = canvas.getByRole("button", {
+      name: "Expand Raw exec_command output",
+    });
+    expect(rawToolOutputToggle).toBeTruthy();
+    expect(
+      canvas.getByText(
+        "Reasoning occurred for this step, but plaintext content is intentionally unavailable.",
+      ),
+    ).toBeTruthy();
+    expect(canvas.getByText("unexpected end of JSON input")).toBeTruthy();
+    expect(canvas.getByText("Unknown event on line 8")).toBeTruthy();
+    expect(
+      canvas
+        .getAllByTitle("2026-05-20T17:35:27Z")
+        .some((element) => element.textContent === expectedTranscriptTimestamp),
+    ).toBe(true);
+  },
   render: TimestampPrefixedSessionSuccess.render,
+};
+
+export const ZhCnLocalizedChrome = {
+  tags: ["test"],
+  args: {
+    locale: "zh-CN",
+  },
+  parameters: MixedTranscript.parameters,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    await canvas.findByRole("heading", { name: "令牌用量" });
+
+    expect(canvas.getByRole("heading", { name: "会话分析" })).toBeTruthy();
+    expect(canvas.getByText("提供方会话")).toBeTruthy();
+    expect(canvas.getByText("提供方")).toBeTruthy();
+    expect(canvas.getAllByText("类型").length).toBeGreaterThan(0);
+    expect(canvas.getAllByText("用户").length).toBeGreaterThan(0);
+    expect(canvas.getAllByText("助手").length).toBeGreaterThan(0);
+    expect(canvas.getAllByText("工具输出").length).toBeGreaterThan(0);
+    expect(canvas.getByRole("heading", { name: "令牌用量" })).toBeTruthy();
+    expect(canvas.getByRole("heading", { name: "维护诊断" })).toBeTruthy();
+    expect(
+      canvas.getByText(
+        "此步骤确实发生了推理，但明文内容会被有意隐藏，无法直接查看。",
+      ),
+    ).toBeTruthy();
+    expect(canvas.getByText("命令结果")).toBeTruthy();
+    expect(canvas.getByText("退出代码")).toBeTruthy();
+    expect(canvas.getByText("0.6289 seconds")).toBeTruthy();
+    expect(
+      canvas.getByText("provider-session parsing verified successfully"),
+    ).toBeTruthy();
+    expect(canvas.getAllByText("原始 ISO 时间戳").length).toBeGreaterThan(0);
+    expect(
+      canvas.getByRole("button", { name: "展开原始 exec_command 输出" }),
+    ).toBeTruthy();
+    expect(canvas.getByLabelText("已选会话详情").className).toContain(
+      "af-provider-session-sans",
+    );
+  },
+  render: ({ locale }: { locale?: string }) => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+
+    return (
+      <div style={{ maxWidth: "100%", width: "960px" }}>
+        <QueryClientProvider client={queryClient}>
+          <ProviderSessionDetailPanel
+            locale={locale}
+            selectedProviderSession={selectedProviderSession}
+          />
+        </QueryClientProvider>
+      </div>
+    );
+  },
 };

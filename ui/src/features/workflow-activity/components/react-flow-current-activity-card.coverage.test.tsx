@@ -8,7 +8,10 @@ import {
   within,
 } from "@testing-library/react";
 
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import {
+  semanticWorkflowDashboardSnapshot,
+  singleNodeDashboardSnapshot,
+} from "../../../components/dashboard/test-fixtures";
 import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
@@ -19,8 +22,11 @@ import {
 } from "../../factory-graph-editor/public";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
-import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
-import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
+import {
+  ReactFlowCurrentActivityCard,
+  type CurrentActivitySelection,
+  useCurrentActivityGraphViewModel,
+} from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 type BuildGraphLayout = (
@@ -335,6 +341,66 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(screen.queryByTestId("mock-react-flow")).toBeNull();
   });
 
+  it("falls back to the empty graph outcome when a replacement current-activity layout fails", async () => {
+    const loadedSnapshot = structuredClone(singleNodeDashboardSnapshot);
+    const rejectedSnapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    const onSelectStateNode = vi.fn();
+    const onSelectWorkID = vi.fn();
+    const onSelectWorkstation = vi.fn();
+    const loadedLayout: GraphLayout = {
+      edges: [],
+      height: 196,
+      nodes: [
+        {
+          column: 0,
+          height: 196,
+          nodeId: "workstation:intake",
+          nodeKind: "workstation",
+          row: 0,
+          width: 156,
+          workstationNodeId: "intake",
+          x: 0,
+          y: 0,
+        },
+      ],
+      width: 156,
+    };
+
+    mockBuildGraphLayout.mockImplementation(async (topology) => {
+      if (topology === rejectedSnapshot.topology) {
+        throw new Error("layout failed");
+      }
+      return loadedLayout;
+    });
+
+    const { result, rerender } = renderHook(
+      ({ snapshot }) =>
+        useCurrentActivityGraphViewModel({
+          now: Date.parse("2026-04-08T12:00:00Z"),
+          onSelectStateNode,
+          onSelectWorkID,
+          onSelectWorkstation,
+          selection: null,
+          snapshot,
+        }),
+      {
+        initialProps: {
+          snapshot: loadedSnapshot,
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.nodes.length).toBeGreaterThan(0);
+    });
+
+    rerender({ snapshot: rejectedSnapshot });
+
+    await waitFor(() => {
+      expect(result.current.nodes).toHaveLength(0);
+      expect(result.current.edges).toHaveLength(0);
+    });
+  });
   it("persists node positions after drag-stop when the viewport provides a graph key", () => {
     renderViewport({ graphKey: "graph-key" });
 

@@ -1,25 +1,20 @@
-import { useId, useState } from "react";
 import {
+  DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { cn } from "../../../lib/cn";
-import {
-  AuthoredBodyText,
-  PROVIDER_SESSION_CARD_CLASS,
-  PROVIDER_SESSION_CODE_PANEL_CLASS,
-  PROVIDER_SESSION_STATUS_PILL_CLASS,
-  REQUEST_SELECTION_STATUS_CLASS,
-} from "./detail-card-shared";
+import { formatDateTime } from "../../../i18n/formatters";
+import { AuthoredBodyText, PROVIDER_SESSION_CARD_CLASS } from "./detail-card-shared";
+import { FriendlyExecCommandOutput } from "./exec-command-output";
+import { CodePanel, ExpandableCodeBlock } from "./transcript-code-block";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 
 type SessionDetail = ProviderSessionDetailResponse;
 type TranscriptEntry = SessionDetail["transcript"][number];
 
-const TRANSCRIPT_COLLAPSE_CHAR_LIMIT = 320;
 const TRANSCRIPT_ENTRY_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
   assistant_message: "border-af-border bg-af-surface-subtle",
   reasoning: "border-af-info-border bg-af-info-surface",
@@ -38,16 +33,23 @@ const TRANSCRIPT_BADGE_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
 };
 
 export function TranscriptSection({
+  className,
   detail,
   locale,
 }: {
+  className?: string;
   detail: SessionDetail;
   locale?: string;
 }) {
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section className="grid gap-2.5">
+    <section
+      className={cn(
+        "grid gap-3 rounded-xl border border-af-accent-border bg-af-accent-surface p-4",
+        className,
+      )}
+    >
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.transcriptHeading}</h5>
       <div className="grid gap-3">
         {detail.transcript.map((entry) => (
@@ -55,6 +57,37 @@ export function TranscriptSection({
         ))}
       </div>
     </section>
+  );
+}
+
+export function EncryptedReasoningNotice({
+  className,
+  locale,
+}: {
+  className?: string;
+  locale?: string;
+}) {
+  const messages = getProviderSessionDetailMessages(locale);
+
+  return (
+    <div
+      className={cn(
+        "grid gap-2 rounded-lg border border-af-info-border bg-af-info-surface p-3",
+        className,
+      )}
+    >
+      <span
+        className={cn(
+          "inline-flex w-fit rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info-text",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
+        {messages.encryptedReasoningStateLabel}
+      </span>
+      <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+        {messages.encryptedReasoningDescription}
+      </p>
+    </div>
   );
 }
 
@@ -72,13 +105,11 @@ function TranscriptEntryCard({
       order: entry.order,
       turnIndex: entry.turnIndex,
     }),
-    entry.timestamp
-      ? messages.transcriptTimestampLabel({ timestamp: entry.timestamp })
-      : null,
     entry.lineNumber
       ? messages.transcriptLineNumberLabel({ lineNumber: entry.lineNumber })
       : null,
   ].filter(Boolean);
+  const formattedTimestamp = formatTranscriptTimestamp(entry.timestamp, locale);
 
   return (
     <article
@@ -104,22 +135,85 @@ function TranscriptEntryCard({
             {entry.status ? (
               <span
                 className={cn(
-                  PROVIDER_SESSION_STATUS_PILL_CLASS,
+                  "inline-flex rounded-full border border-af-border bg-af-surface-raised px-2 py-0.5 text-af-text-subtle",
+                  DASHBOARD_SUPPORTING_TEXT_CLASS,
                 )}
               >
                 {entry.status}
               </span>
             ) : null}
           </div>
-          {metadata.length > 0 ? (
-            <p className={REQUEST_SELECTION_STATUS_CLASS}>
-              {metadata.join(messages.transcriptMetadataSeparator)}
-            </p>
+          {metadata.length > 0 || formattedTimestamp ? (
+            <div className="grid gap-1">
+              <div
+                className={cn(
+                  "flex flex-wrap items-center gap-x-2 gap-y-1 text-af-text-subtle",
+                  DASHBOARD_SUPPORTING_TEXT_CLASS,
+                )}
+              >
+                {metadata.map((item) => (
+                  <span key={item}>{item}</span>
+                ))}
+                {formattedTimestamp ? (
+                  <span title={entry.timestamp}>{formattedTimestamp}</span>
+                ) : null}
+              </div>
+              {entry.timestamp ? (
+                <TimestampDetails
+                  locale={locale}
+                  timestamp={entry.timestamp}
+                  title={formattedTimestamp}
+                />
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>
       <TranscriptEntryBody entry={entry} locale={locale} />
     </article>
+  );
+}
+
+function formatTranscriptTimestamp(timestamp: string | undefined, locale?: string) {
+  if (!timestamp) {
+    return null;
+  }
+
+  return formatDateTime(timestamp, locale, {
+  });
+}
+
+function TimestampDetails({
+  locale,
+  timestamp,
+  title,
+}: {
+  locale?: string;
+  timestamp: string;
+  title: string | null;
+}) {
+  const messages = getProviderSessionDetailMessages(locale);
+
+  return (
+    <details className="grid gap-1">
+      <summary
+        className={cn(
+          "w-fit cursor-pointer text-af-text-subtle underline decoration-dotted underline-offset-2",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
+        <span title={timestamp}>{messages.rawTimestampDetailsLabel}</span>
+      </summary>
+      <code
+        className={cn(
+          "w-fit rounded-md border border-af-border bg-af-surface-subtle px-2 py-1",
+          DASHBOARD_BODY_CODE_CLASS,
+        )}
+        title={title ?? timestamp}
+      >
+        {timestamp}
+      </code>
+    </details>
   );
 }
 
@@ -139,12 +233,17 @@ function TranscriptEntryBody({
     case "reasoning":
       return (
         <div className="grid gap-2">
+          {entry.encrypted && !entry.text ? (
+            <EncryptedReasoningNotice locale={locale} />
+          ) : null}
           {entry.summary ? (
             <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{entry.summary}</p>
           ) : null}
           {entry.text ? <CodePanel value={entry.text} /> : null}
           {entry.encrypted && !entry.text ? (
-            <p className={REQUEST_SELECTION_STATUS_CLASS}>{messages.encryptedReasoningOnly}</p>
+            <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+              {messages.encryptedReasoningOnly}
+            </p>
           ) : null}
         </div>
       );
@@ -162,6 +261,17 @@ function TranscriptEntryBody({
         </div>
       );
     case "tool_output":
+      if (entry.name === "exec_command" && entry.output) {
+        return (
+          <FriendlyExecCommandOutput
+            locale={locale}
+            output={entry.output}
+            status={entry.status}
+            text={entry.text}
+          />
+        );
+      }
+
       return (
         <div className="grid gap-3">
           {entry.text ? <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{entry.text}</p> : null}
@@ -225,60 +335,4 @@ function getTranscriptEntryClassName(entryType: TranscriptEntry["type"]) {
 
 function getTranscriptBadgeClassName(entryType: TranscriptEntry["type"]) {
   return TRANSCRIPT_BADGE_CLASS_NAMES[entryType];
-}
-
-function ExpandableCodeBlock({
-  label,
-  locale,
-  value,
-}: {
-  label: string;
-  locale?: string;
-  value: string;
-}) {
-  const messages = getProviderSessionDetailMessages(locale);
-  const [expanded, setExpanded] = useState(false);
-  const panelID = useId();
-  const shouldCollapse = value.length > TRANSCRIPT_COLLAPSE_CHAR_LIMIT;
-
-  return (
-    <div className="grid gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-        {shouldCollapse ? (
-          <button
-            aria-controls={panelID}
-            aria-expanded={expanded}
-            className={cn(
-              "inline-flex w-fit rounded-lg border border-af-border bg-af-surface-raised px-2.5 py-2 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
-            onClick={() => setExpanded((current) => !current)}
-            type="button"
-          >
-            {messages.transcriptToggleLabel({ expanded, section: label })}
-          </button>
-        ) : null}
-      </div>
-      <div id={panelID}>
-        <CodePanel
-          value={
-            shouldCollapse && !expanded
-              ? `${value.slice(0, TRANSCRIPT_COLLAPSE_CHAR_LIMIT)}…`
-              : value
-          }
-        />
-      </div>
-    </div>
-  );
-}
-
-function CodePanel({ value }: { value: string }) {
-  return (
-    <pre
-      className={PROVIDER_SESSION_CODE_PANEL_CLASS}
-    >
-      {value}
-    </pre>
-  );
 }

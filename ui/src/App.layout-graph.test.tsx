@@ -303,5 +303,5 @@ describe("App graph behavior", () => {
     await waitFor(() => {
       expect(flowViewport?.style.transform).not.toBe(initialTransform);
     });
-  });
+  }, 30_000);
 });

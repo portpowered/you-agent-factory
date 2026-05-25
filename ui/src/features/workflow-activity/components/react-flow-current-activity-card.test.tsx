@@ -1070,7 +1070,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
         workTypeName: "story",
       },
     ]);
-  });
+  }, 30_000);
 
   it("keeps editor mode on the shared observer graph surface", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({

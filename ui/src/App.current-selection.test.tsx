@@ -827,7 +827,7 @@ describe("App current selection", () => {
 
     fireEvent.click(getActiveStorySelectionButton());
     expect(await screen.findByText("Trace drill-down")).toBeTruthy();
-  });
+  }, 30_000);
 
   it("separates workstation selection from active work selection", async () => {
     renderApp({

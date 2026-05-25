@@ -83,7 +83,7 @@ function createRoleLookup({
   globalActions,
   heading,
   languageButton,
-  pauseButton,
+  openSessionButton,
   rootTab,
   sessionTabs,
   slider,
@@ -95,8 +95,8 @@ function createRoleLookup({
     if (role === "navigation") return sessionTabs;
     if (role === "tab" && options == null) return { count: vi.fn().mockResolvedValue(3) };
     if (role === "tab" && options?.name === "root") return rootTab;
-    if (role === "button" && options?.name === "Pause root updates") {
-      return pauseButton;
+    if (role === "button" && options?.name === "Open another session") {
+      return openSessionButton;
     }
     if (role === "button" && options?.name === "Close root session") {
       return closeSelectedSessionButton;
@@ -139,7 +139,7 @@ function createPage({
   const { exportButton, heading, languageButton, sessionTabs, slider, streamStatus } =
     createHeaderFixture(isDesktop, headingWordmarkClassName);
   const rootTab = createLocator();
-  const pauseButton = createLocator();
+  const openSessionButton = createLocator();
   const closeSelectedSessionButton = createLocator();
   const currentButton = createLocator({
     isVisible: vi.fn().mockResolvedValue(returnToCurrentVisible),
@@ -162,7 +162,7 @@ function createPage({
       globalActions,
       heading,
       languageButton,
-      pauseButton,
+      openSessionButton,
       rootTab,
       sessionTabs,
       slider,
@@ -252,7 +252,7 @@ describe("verifyDashboardSessionTabs", () => {
         if (role === "button" && options?.name === "Close root session") {
           return closeRootButton;
         }
-        if (role === "button" && options?.name === "Open factory folder") {
+        if (role === "button" && options?.name === "Open another session") {
           return openButton;
         }
         if (role === "button" && options?.name === "Close beta session") {
@@ -289,7 +289,7 @@ describe("verifyDashboardSessionTabs", () => {
       name: "Close root session",
     });
     expect(page.getByRole).toHaveBeenCalledWith("button", {
-      name: "Open factory folder",
+      name: "Open another session",
     });
     expect(page.getByRole).toHaveBeenCalledWith("button", {
       name: "Close beta session",

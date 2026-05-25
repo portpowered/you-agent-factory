@@ -1,29 +1,22 @@
 import { screen, within } from "@testing-library/react";
 
+import {
+  getSubmitWorkCard,
+  getSubmitWorkCardControls,
+  submitWorkCardQueryContract,
+} from "./submit-work-card-queries";
+
 export const activeWorkLabel = "Active Story";
 
 export function submitWorkCardControls() {
   const dashboardGrid = screen.getByRole("region", {
-    name: "you-agent-factory bento board",
+    name: submitWorkCardQueryContract.dashboardRegionName,
   });
-  const submitWorkCard = within(dashboardGrid).getByRole("article", {
-    name: "Submit work",
-  });
+  const submitWorkCard = getSubmitWorkCard(within(dashboardGrid));
   const submitWorkScope = within(submitWorkCard);
 
   return {
-    requestName: submitWorkScope.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
-    }),
-    requestText: submitWorkScope.getByRole<HTMLTextAreaElement>("textbox", {
-      name: "Request",
-    }),
-    submitButton: submitWorkScope.getByRole<HTMLButtonElement>("button", {
-      name: "Submit work",
-    }),
+    ...getSubmitWorkCardControls(submitWorkScope),
     submitWorkScope,
-    workType: submitWorkScope.getByRole<HTMLSelectElement>("combobox", {
-      name: "Work type",
-    }),
   };
 }

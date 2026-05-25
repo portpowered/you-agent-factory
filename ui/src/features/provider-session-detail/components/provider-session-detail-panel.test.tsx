@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
+import { formatDateTime } from "../../../i18n/formatters";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 
 const SELECTED_SESSION = {
@@ -34,8 +35,6 @@ describe("ProviderSessionDetailPanel", () => {
     );
     expect(screen.getByText("dispatch-review-active")).toBeTruthy();
     expect(screen.getByText("sess_active")).toBeTruthy();
-    expect(screen.getByRole("status").className).toContain("border-af-border");
-    expect(screen.getByRole("status").className).toContain("bg-af-surface-subtle");
   });
 
   it("renders zh-CN provider-session loading and missing states", async () => {
@@ -163,8 +162,9 @@ describe("ProviderSessionDetailPanel", () => {
         "The selected session file could not be parsed into Codex events. Review the malformed-line diagnostics below.",
       );
     });
-    expect(screen.getByRole("alert").className).toContain("border-af-danger-border");
-    expect(screen.getByRole("alert").className).toContain("bg-af-danger-surface");
+    expect(
+      screen.getByRole("heading", { name: "Maintainer diagnostics" }),
+    ).toBeTruthy();
     expect(
       screen.getByText("invalid character '}' after object key:value pair"),
     ).toBeTruthy();
@@ -219,8 +219,11 @@ describe("ProviderSessionDetailPanel", () => {
         "The selected session was parsed, but it did not contain any transcript-visible entries.",
       );
     });
-    expect(screen.getByRole("heading", { name: "Parse diagnostics" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Session analysis" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Token usage" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Maintainer diagnostics" }),
+    ).toBeTruthy();
     expect(screen.getByText("Unknown event on line 1")).toBeTruthy();
     expect(screen.getByText("Unknown event on line 2")).toBeTruthy();
   });
@@ -299,10 +302,12 @@ describe("ProviderSessionDetailPanel", () => {
     });
 
     expect(screen.getByText("2026/05/18/rollout-sess_active.jsonl")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Session analysis" })).toBeTruthy();
     expect(screen.getByText("Turn 1")).toBeTruthy();
     expect(screen.getByText("list_dir")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Reasoning" })).toBeTruthy();
     expect(
-      screen.getByText("Inspect the provider-session diff before retrying."),
+      screen.getByRole("heading", { name: "Maintainer diagnostics" }),
     ).toBeTruthy();
     expect(screen.getByText("182")).toBeTruthy();
     expect(screen.getByText("unexpected end of JSON input")).toBeTruthy();
@@ -314,10 +319,15 @@ describe("ProviderSessionDetailPanel", () => {
       "{\"path\":\"pkg/api/provider_session_details.go\",\"mode\":\"diff\",\"note\":\"" +
       "x".repeat(360) +
       "\"}";
-    const longOutput =
-      "{\"summary\":\"provider session parsed\",\"details\":\"" +
-      "y".repeat(360) +
-      "\"}";
+    const longOutput = [
+      "Chunk ID: exec-123",
+      "Wall time: 0.6289 seconds",
+      "Process exited with code 0",
+      "Original token count: 22",
+      "Output:",
+      "provider-session parsing verified successfully",
+      `details:${"y".repeat(360)}`,
+    ].join("\n");
 
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse(
@@ -362,6 +372,7 @@ describe("ProviderSessionDetailPanel", () => {
             {
               callId: "call_tool_1",
               lineNumber: 5,
+              name: "exec_command",
               order: 5,
               output: longOutput,
               status: "completed",
@@ -391,35 +402,47 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
     });
 
+    const transcriptTimestamp = formatDateTime("2026-05-18T14:10:04Z");
+
     expect(screen.getByText("Summarize the rollout state for this work item.")).toBeTruthy();
     expect(screen.getByText("The failing edge is in provider-session parsing.")).toBeTruthy();
+    expect(screen.getAllByText("Encrypted reasoning").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        "Reasoning occurred for this step, but plaintext content is intentionally unavailable.",
+      ),
+    ).toBeTruthy();
     expect(screen.getByText("Encrypted reasoning content only.")).toBeTruthy();
     expect(screen.getByText("read_file")).toBeTruthy();
     expect(screen.getByText("call_tool_1")).toBeTruthy();
     expect(screen.getByText("Retry attempt scheduled.")).toBeTruthy();
+    expect(screen.getByText("Command result")).toBeTruthy();
+    expect(screen.getByText("Exit code")).toBeTruthy();
+    expect(screen.getAllByText("0").length).toBeGreaterThan(0);
+    expect(screen.getByText("Wall time")).toBeTruthy();
+    expect(screen.getByText("0.6289 seconds")).toBeTruthy();
+    expect(screen.getByText("Summary")).toBeTruthy();
     expect(
-      screen.getByText("Order 4 / Turn 1 / 2026-05-18T14:10:04Z / Session line 4"),
+      screen.getByText("provider-session parsing verified successfully"),
     ).toBeTruthy();
+    expect(screen.getByText("Order 4 / Turn 1")).toBeTruthy();
+    expect(screen.getByText("Session line 4")).toBeTruthy();
     expect(
       screen
-        .getByText("Summarize the rollout state for this work item.")
-        .closest("article")?.className,
-    ).toContain("border-af-accent-border");
+        .getAllByTitle("2026-05-18T14:10:04Z")
+        .some((element) => element.textContent === transcriptTimestamp),
+    ).toBe(
+      true,
+    );
     expect(
-      screen
-        .getByText("Summarize the rollout state for this work item.")
-        .closest("article")?.className,
-    ).toContain("bg-af-accent-surface");
-    expect(screen.getAllByText("completed")[0].className).toContain("border-af-border");
-    expect(screen.getAllByText("completed")[0].className).toContain("bg-af-surface-raised");
+      screen.getAllByText("Raw ISO timestamp").length,
+    ).toBeGreaterThan(0);
 
     const expandArguments = screen.getByRole("button", {
       name: "Expand Arguments",
     });
     expect(expandArguments.getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByText(`${longArguments.slice(0, 320)}…`)).toBeTruthy();
-    expect(expandArguments.className).toContain("border-af-border");
-    expect(expandArguments.className).toContain("bg-af-surface-raised");
 
     fireEvent.click(expandArguments);
 
@@ -428,11 +451,351 @@ describe("ProviderSessionDetailPanel", () => {
     );
     expect(screen.getByText(longArguments)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand Output" }));
-    expect(screen.getByText(longOutput)).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Expand Raw exec_command output" }),
+    );
+    expect(
+      screen.getByText((content) => content.includes("Chunk ID: exec-123")),
+    ).toBeTruthy();
+    expect(
+      screen.getAllByText((content) =>
+        content.includes("provider-session parsing verified successfully"),
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("uses the provider-session sans stack for customer-facing content while preserving monospace raw blocks", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          transcript: [
+            {
+              arguments: "{\"path\":\"pkg/api/provider_session_details.go\"}",
+              callId: "call_tool_1",
+              lineNumber: 1,
+              name: "read_file",
+              order: 1,
+              status: "completed",
+              timestamp: "2026-05-18T14:10:04Z",
+              turnIndex: 1,
+              type: "tool_call",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
+    });
+
+    const panel = screen.getByLabelText("Selected session details");
+    expect(panel.className).toContain("af-provider-session-sans");
+
+    const transcriptHeading = screen.getByRole("heading", { name: "Transcript" });
+    expect(panel.contains(transcriptHeading)).toBe(true);
+
+    const rawArguments = screen.getByText(
+      "{\"path\":\"pkg/api/provider_session_details.go\"}",
+    );
+    expect(rawArguments.tagName).toBe("PRE");
+    expect(rawArguments.className).toContain("af-dashboard-body-code");
+  });
+
+  it("formats source, transcript, and turn timestamps in the local timezone while preserving raw ISO access", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 2,
+            functionCalls: [],
+            lineCount: 2,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [],
+            turns: [
+              {
+                eventCount: 2,
+                functionCallCount: 0,
+                index: 1,
+                reasoningCount: 0,
+                responseItemCount: 2,
+                startedAt: "2026-05-18T14:10:00Z",
+              },
+            ],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+          source: {
+            modifiedAt: "2026-05-18T14:09:59Z",
+            relativePath: "2026/05/18/rollout-sess_active.jsonl",
+            sizeBytes: 2048,
+          },
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              text: "Summarize the rollout state for this work item.",
+              timestamp: "2026-05-18T14:10:01Z",
+              turnIndex: 1,
+              type: "user_message",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
+    });
+
+    const modifiedAt = formatDateTime("2026-05-18T14:09:59Z");
+    const turnStartedAt = formatDateTime("2026-05-18T14:10:00Z");
+    const transcriptTimestamp = formatDateTime("2026-05-18T14:10:01Z");
+
+    expect(
+      screen
+        .getAllByTitle("2026-05-18T14:09:59Z")
+        .some((element) => element.textContent === modifiedAt),
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByTitle("2026-05-18T14:10:00Z")
+        .some((element) => element.textContent === turnStartedAt),
+    ).toBe(
+      true,
+    );
+    expect(
+      screen
+        .getAllByTitle("2026-05-18T14:10:01Z")
+        .some((element) => element.textContent === transcriptTimestamp),
+    ).toBe(
+      true,
+    );
+
+    fireEvent.click(screen.getAllByText("Raw ISO timestamp")[0]);
+
+    expect(screen.getByText("2026-05-18T14:09:59Z")).toBeTruthy();
+    expect(screen.getByText("2026-05-18T14:10:00Z")).toBeTruthy();
+    expect(screen.getByText("2026-05-18T14:10:01Z")).toBeTruthy();
+  });
+
+  it("renders the transcript before summary sections in the success state", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 4,
+            functionCalls: [
+              {
+                arguments: "{\"path\":\"pkg/api\"}",
+                callId: "call_1",
+                name: "list_dir",
+                order: 3,
+                output: "{\"entries\":3}",
+                status: "completed",
+                turnIndex: 1,
+                type: "function_call",
+              },
+            ],
+            lineCount: 4,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [
+              {
+                order: 2,
+                sourceType: "reasoning",
+                summary: "Trace the transcript chronology first.",
+                turnIndex: 1,
+              },
+            ],
+            tokenUsage: {
+              cachedInputTokens: 0,
+              inputTokens: 12,
+              outputTokens: 8,
+              reasoningOutputTokens: 2,
+              totalTokens: 22,
+            },
+            turns: [
+              {
+                eventCount: 4,
+                functionCallCount: 1,
+                index: 1,
+                reasoningCount: 1,
+                responseItemCount: 3,
+                startedAt: "2026-05-18T14:10:00Z",
+              },
+            ],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
+    });
+
+    const headingNames = screen
+      .getAllByRole("heading")
+      .map((heading) => heading.textContent ?? "");
+    const transcriptIndex = headingNames.indexOf("Transcript");
+    const supportingHeadings = [
+      "Session analysis",
+      "Token usage",
+      "Turns",
+      "Function calls",
+      "Reasoning",
+      "Maintainer diagnostics",
+    ];
+
+    expect(transcriptIndex).toBeGreaterThan(-1);
+    for (const headingName of supportingHeadings) {
+      const headingIndex = headingNames.indexOf(headingName);
+      if (headingIndex !== -1) {
+        expect(transcriptIndex).toBeLessThan(headingIndex);
+      }
+    }
+  });
+
+  it("keeps reasoning and tool bodies in the transcript without duplicating them in summaries", async () => {
+    const reasoningSummary = "Inspect the provider-session diff before retrying.";
+    const reasoningText = "Investigate the failed response stream.";
+    const callArguments = "{\"path\":\"pkg/api/provider_session_details.go\"}";
+    const callOutput = "{\"lines\":128}";
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 5,
+            functionCalls: [
+              {
+                arguments: callArguments,
+                callId: "call_1",
+                name: "read_file",
+                order: 4,
+                output: callOutput,
+                status: "completed",
+                turnIndex: 1,
+                type: "function_call",
+              },
+            ],
+            lineCount: 5,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [
+              {
+                order: 3,
+                sourceType: "reasoning",
+                summary: reasoningSummary,
+                text: reasoningText,
+                turnIndex: 1,
+              },
+            ],
+            turns: [
+              {
+                eventCount: 5,
+                functionCallCount: 1,
+                index: 1,
+                reasoningCount: 1,
+                responseItemCount: 4,
+                startedAt: "2026-05-18T14:10:00Z",
+              },
+            ],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+          transcript: [
+            {
+              order: 1,
+              text: "Summarize the rollout state for this work item.",
+              turnIndex: 1,
+              type: "user_message",
+            },
+            {
+              lineNumber: 2,
+              order: 2,
+              text: "The current failure is isolated to provider-session parsing.",
+              timestamp: "2026-05-18T14:10:02Z",
+              turnIndex: 1,
+              type: "assistant_message",
+            },
+            {
+              lineNumber: 3,
+              order: 3,
+              sourceType: "reasoning",
+              summary: reasoningSummary,
+              text: reasoningText,
+              timestamp: "2026-05-18T14:10:03Z",
+              turnIndex: 1,
+              type: "reasoning",
+            },
+            {
+              arguments: callArguments,
+              callId: "call_1",
+              lineNumber: 4,
+              name: "read_file",
+              order: 4,
+              status: "completed",
+              timestamp: "2026-05-18T14:10:04Z",
+              turnIndex: 1,
+              type: "tool_call",
+            },
+            {
+              callId: "call_1",
+              lineNumber: 5,
+              order: 5,
+              output: callOutput,
+              status: "completed",
+              timestamp: "2026-05-18T14:10:05Z",
+              turnIndex: 1,
+              type: "tool_output",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Reasoning" })).toBeTruthy();
+    });
+
+    expect(screen.getAllByText(reasoningSummary)).toHaveLength(1);
+    expect(screen.getAllByText(reasoningText)).toHaveLength(1);
+    expect(screen.getAllByText(callArguments)).toHaveLength(1);
+    expect(screen.getAllByText(callOutput)).toHaveLength(1);
+    expect(screen.getAllByText("read_file")).toHaveLength(2);
+    expect(screen.getAllByText("Order 4 / Turn 1").length).toBeGreaterThan(0);
   });
 
   it("renders provider-session detail labels and templates from the zh-CN catalog", async () => {
+    const execCommandOutput = [
+      "Chunk ID: exec-456",
+      "Wall time: 0.3000 seconds",
+      "Process exited with code 0",
+      "Original token count: 12",
+      "Output:",
+      "命令执行成功",
+    ].join("\n");
+
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse(
         buildProviderSessionDetailResponse({
@@ -492,6 +855,25 @@ describe("ProviderSessionDetailPanel", () => {
               },
             ],
           },
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              text: "请总结当前状态。",
+              timestamp: "2026-05-18T14:10:01Z",
+              turnIndex: 2,
+              type: "user_message",
+            },
+            {
+              lineNumber: 2,
+              order: 2,
+              name: "exec_command",
+              output: execCommandOutput,
+              timestamp: "2026-05-18T14:10:02Z",
+              turnIndex: 2,
+              type: "tool_output",
+            },
+          ],
         }),
       ),
     );
@@ -504,9 +886,15 @@ describe("ProviderSessionDetailPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Token 用量" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "令牌用量" })).toBeTruthy();
     });
 
+    expect(screen.getByRole("heading", { name: "已选会话详情" })).toBeTruthy();
+    expect(screen.getByText("提供方会话")).toBeTruthy();
+    expect(screen.getByText("提供方")).toBeTruthy();
+    expect(screen.getAllByText("类型").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("用户").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("工具输出").length).toBeGreaterThan(0);
     expect(screen.getByText("输入")).toBeTruthy();
     expect(screen.getByText("缓存输入")).toBeTruthy();
     expect(screen.getByText("轮次 2")).toBeTruthy();
@@ -514,9 +902,230 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getAllByText("顺序 3 / 轮次 2").length).toBeGreaterThan(0);
     expect(screen.getByText("调用 ID")).toBeTruthy();
     expect(screen.getAllByText("不可用").length).toBeGreaterThan(0);
-    expect(screen.getByText("仅包含加密的推理内容。")).toBeTruthy();
+    expect(screen.getAllByText("加密推理").length).toBeGreaterThan(0);
+    expect(screen.getByText("命令结果")).toBeTruthy();
+    expect(screen.getByText("退出代码")).toBeTruthy();
+    expect(screen.getByText("耗时")).toBeTruthy();
+    expect(screen.getByText("摘要")).toBeTruthy();
+    expect(screen.getByText("命令执行成功")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "此步骤确实发生了推理，但明文内容会被有意隐藏，无法直接查看。",
+      ),
+    ).toBeTruthy();
     expect(screen.getByText("第 3 行")).toBeTruthy();
     expect(screen.getByText("第 2 行的未知事件")).toBeTruthy();
+  });
+
+  it("keeps zh-CN transcript prose on the provider-session sans stack", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              text: "请总结当前状态。",
+              timestamp: "2026-05-18T14:10:01Z",
+              turnIndex: 1,
+              type: "user_message",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel
+        locale="zh-CN"
+        selectedProviderSession={SELECTED_SESSION}
+      />,
+    );
+
+    const panel = await screen.findByLabelText("已选会话详情");
+    expect(panel.className).toContain("af-provider-session-sans");
+  });
+
+  it("holds the zh-CN transcript reading model together across hierarchy, localization, timestamps, encrypted reasoning, and exec_command formatting", async () => {
+    const execCommandOutput = [
+      "Chunk ID: exec-789",
+      "Wall time: 0.4821 seconds",
+      "Process exited with code 0",
+      "Original token count: 16",
+      "Output:",
+      "命令执行成功",
+      `details:${"z".repeat(360)}`,
+    ].join("\n");
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 5,
+            functionCalls: [
+              {
+                arguments: "{\"path\":\"pkg/api/provider_session_details.go\"}",
+                callId: "call_exec_1",
+                name: "exec_command",
+                order: 4,
+                output: execCommandOutput,
+                status: "completed",
+                turnIndex: 2,
+                type: "function_call",
+              },
+            ],
+            lineCount: 5,
+            malformedLineCount: 1,
+            parseErrors: [
+              {
+                lineNumber: 6,
+                message: "unexpected end of JSON input",
+              },
+            ],
+            reasoning: [
+              {
+                encrypted: true,
+                order: 3,
+                sourceType: "reasoning",
+                turnIndex: 2,
+              },
+            ],
+            turns: [
+              {
+                eventCount: 5,
+                functionCallCount: 1,
+                index: 2,
+                reasoningCount: 1,
+                responseItemCount: 4,
+                startedAt: "2026-05-18T14:10:00Z",
+              },
+            ],
+            unknownEventCount: 1,
+            unknownEvents: [
+              {
+                lineNumber: 7,
+                payloadType: "mystery_payload",
+                type: "mystery_event",
+              },
+            ],
+          },
+          source: {
+            modifiedAt: "2026-05-18T14:09:59Z",
+            relativePath: "2026/05/18/rollout-sess_active.jsonl",
+            sizeBytes: 2048,
+          },
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              text: "请总结当前状态。",
+              timestamp: "2026-05-18T14:10:01Z",
+              turnIndex: 2,
+              type: "user_message",
+            },
+            {
+              lineNumber: 2,
+              order: 2,
+              text: "当前故障集中在 provider-session 解析。",
+              timestamp: "2026-05-18T14:10:02Z",
+              turnIndex: 2,
+              type: "assistant_message",
+            },
+            {
+              encrypted: true,
+              lineNumber: 3,
+              order: 3,
+              sourceType: "reasoning",
+              timestamp: "2026-05-18T14:10:03Z",
+              turnIndex: 2,
+              type: "reasoning",
+            },
+            {
+              callId: "call_exec_1",
+              lineNumber: 4,
+              name: "exec_command",
+              order: 4,
+              output: execCommandOutput,
+              status: "completed",
+              timestamp: "2026-05-18T14:10:04Z",
+              turnIndex: 2,
+              type: "tool_output",
+            },
+            {
+              lineNumber: 5,
+              order: 5,
+              sourceType: "task_started",
+              summary: "重试已计划。",
+              timestamp: "2026-05-18T14:10:05Z",
+              turnIndex: 2,
+              type: "system_event",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel
+        locale="zh-CN"
+        selectedProviderSession={SELECTED_SESSION}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "会话记录" })).toBeTruthy();
+    });
+
+    const headingNames = screen
+      .getAllByRole("heading")
+      .map((heading) => heading.textContent ?? "");
+    const transcriptIndex = headingNames.indexOf("会话记录");
+    const analysisIndex = headingNames.indexOf("会话分析");
+
+    expect(transcriptIndex).toBeGreaterThan(-1);
+    expect(analysisIndex).toBeGreaterThan(transcriptIndex);
+    expect(screen.getByText("提供方")).toBeTruthy();
+    expect(screen.getAllByText("类型").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("用户").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("助手").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("工具输出").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("加密推理").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(
+        "此步骤确实发生了推理，但明文内容会被有意隐藏，无法直接查看。",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("命令结果")).toBeTruthy();
+    expect(screen.getByText("退出代码")).toBeTruthy();
+    expect(screen.getByText("0.4821 seconds")).toBeTruthy();
+    expect(screen.getByText("命令执行成功")).toBeTruthy();
+    expect(screen.getByText("unexpected end of JSON input")).toBeTruthy();
+    expect(screen.getByText("第 7 行的未知事件")).toBeTruthy();
+    expect(
+      screen
+        .getAllByTitle("2026-05-18T14:10:04Z")
+        .some(
+          (element) =>
+            element.textContent === formatDateTime("2026-05-18T14:10:04Z", "zh-CN"),
+        ),
+    ).toBe(true);
+
+    fireEvent.click(screen.getAllByText("原始 ISO 时间戳")[0]);
+
+    expect(screen.getByText("2026-05-18T14:09:59Z")).toBeTruthy();
+    expect(screen.getByText("2026-05-18T14:10:04Z")).toBeTruthy();
+
+    const rawOutputButton = screen.getByRole("button", {
+      name: "展开原始 exec_command 输出",
+    });
+    expect(rawOutputButton.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(rawOutputButton);
+
+    expect(
+      screen.getByText((content) => content.includes("Chunk ID: exec-789")),
+    ).toBeTruthy();
+    expect(screen.getAllByText("命令执行成功").length).toBeGreaterThan(0);
   });
 });
 
