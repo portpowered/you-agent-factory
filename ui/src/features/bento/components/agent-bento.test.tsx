@@ -171,6 +171,49 @@ describe("AgentBentoLayout", () => {
     }
   });
 
+  it("collapses the board to a single non-resizable column at narrow widths", () => {
+    const onLayoutChange = vi.fn();
+
+    render(
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "activity",
+            widgetType: "activity",
+            children: (
+              <AgentBentoCard title="Current activity">
+                <p>Active workstation graph goes here.</p>
+              </AgentBentoCard>
+            ),
+          },
+          {
+            id: "trace",
+            widgetType: "trace",
+            children: (
+              <AgentBentoCard title="Trace grid">
+                <p>Trace dispatches stay visible.</p>
+              </AgentBentoCard>
+            ),
+          },
+        ]}
+        initialWidth={360}
+        layout={defaultLayout}
+        onLayoutChange={onLayoutChange}
+      />,
+    );
+
+    const board = screen.getByRole("region", {
+      name: "you-agent-factory bento board",
+    });
+
+    expect(board.dataset.bentoSingleColumn).toBe("true");
+    expect(board.querySelector(".react-grid-layout")).toBeNull();
+    expect(screen.getByRole("article", { name: "Current activity" })).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Trace grid" })).toBeTruthy();
+    expect(board.querySelector(".react-resizable-handle")).toBeNull();
+    expect(onLayoutChange).not.toHaveBeenCalled();
+  });
+
   it("renders a localized accessible name for the movable board", () => {
     render(
       <AgentBentoLayout
