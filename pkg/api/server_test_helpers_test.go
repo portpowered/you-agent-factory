@@ -438,6 +438,21 @@ func submitWorkRequest(t *testing.T, srv *Server, body string) *httptest.Respons
 	return rec
 }
 
+func submitWorkStageFileRequest(
+	t *testing.T,
+	srv *Server,
+	path string,
+	body string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
 func upsertWorkRequest(t *testing.T, srv *Server, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 

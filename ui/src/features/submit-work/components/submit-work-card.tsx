@@ -18,6 +18,7 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
 import { getSubmitWorkMessages } from "../messages/submit-work";
+import { FileSubmissionItemEditor } from "./submit-work-file-input";
 
 export interface SubmitWorkDraft {
   items: SubmitWorkDraftItem[];
@@ -32,7 +33,12 @@ export interface SubmitWorkDraftTextItem {
 }
 
 export interface SubmitWorkDraftFileItem {
+  fileName?: string;
   id: string;
+  mediaType?: string;
+  stagedFileRef?: string;
+  stagingError?: string;
+  stagingStatus: "failure" | "idle" | "ready" | "staging";
   type: "audio" | "document" | "image" | "video";
 }
 
@@ -40,6 +46,7 @@ export type SubmitWorkDraftItem = SubmitWorkDraftFileItem | SubmitWorkDraftTextI
 export type SubmitWorkDraftItemType = SubmitWorkDraftItem["type"];
 
 export interface SubmitWorkValidationErrors {
+  submissionItems?: string;
   requestName?: string;
   workTypeName?: string;
 }
@@ -55,9 +62,10 @@ export interface SubmitWorkCardProps {
   isSubmitting?: boolean;
   locale?: string;
   onAddItem: (type: SubmitWorkDraftItemType) => void;
-  onRemoveItem: (itemId: string) => void;
   onItemTextChange: (itemId: string, value: string) => void;
+  onRemoveItem: (itemId: string) => void;
   onRequestNameChange: (value: string) => void;
+  onStageFileItem: (itemId: string, file: File) => void;
   onSubmit: () => void;
   onWorkTypeNameChange: (value: string) => void;
   status: SubmitWorkStatus;
@@ -101,9 +109,10 @@ export function SubmitWorkCard({
   isSubmitting = false,
   locale,
   onAddItem,
-  onRemoveItem,
   onItemTextChange,
+  onRemoveItem,
   onRequestNameChange,
+  onStageFileItem,
   onSubmit,
   onWorkTypeNameChange,
   status,
@@ -114,11 +123,15 @@ export function SubmitWorkCard({
   const messages = getSubmitWorkMessages(locale);
   const [isAddItemMenuOpen, setIsAddItemMenuOpen] = useState(false);
   const hasConfiguredWorkTypes = submitWorkTypeNames.length > 0;
+  const hasIncompleteFileItems = draft.items.some(
+    (item) => item.type !== "text" && item.stagingStatus !== "ready",
+  );
   const hasSelectedWorkType = draft.workTypeName.length > 0;
   const hasValidRequestName = draft.requestName.trim().length > 0;
   const controlsDisabled = !hasConfiguredWorkTypes || isSubmitting;
   const canSubmit =
     hasConfiguredWorkTypes &&
+    !hasIncompleteFileItems &&
     hasSelectedWorkType &&
     hasValidRequestName &&
     !isSubmitting;
@@ -212,9 +225,15 @@ export function SubmitWorkCard({
             messages={messages}
             onItemTextChange={onItemTextChange}
             onRemoveItem={onRemoveItem}
+            onStageFileItem={onStageFileItem}
             submissionItemsID={submissionItemsID}
             widgetId={widgetId}
           />
+          {validationErrors?.submissionItems ? (
+            <p className={VALIDATION_TEXT_CLASS}>
+              {validationErrors.submissionItems}
+            </p>
+          ) : null}
         </div>
 
         <div className={ACTION_ROW_CLASS}>
@@ -313,6 +332,7 @@ function SubmissionItemsList({
   messages,
   onItemTextChange,
   onRemoveItem,
+  onStageFileItem,
   submissionItemsID,
   widgetId,
 }: {
@@ -321,6 +341,7 @@ function SubmissionItemsList({
   messages: ReturnType<typeof getSubmitWorkMessages>;
   onItemTextChange: (itemId: string, value: string) => void;
   onRemoveItem: (itemId: string) => void;
+  onStageFileItem: (itemId: string, file: File) => void;
   submissionItemsID: string;
   widgetId: string;
 }) {
@@ -348,9 +369,13 @@ function SubmissionItemsList({
                 widgetId={widgetId}
               />
             ) : (
-              <p className={HELP_TEXT_CLASS}>
-                {messages.fileItemPlaceholder(typeLabel)}
-              </p>
+              <FileSubmissionItemEditorShell
+                disabled={controlsDisabled}
+                item={item}
+                messages={messages}
+                onStageFileItem={onStageFileItem}
+                widgetId={widgetId}
+              />
             )}
           </SubmitWorkItemShell>
         );
@@ -447,6 +472,33 @@ function TextSubmissionItemEditor({
         </p>
       ) : null}
     </>
+  );
+}
+
+function FileSubmissionItemEditorShell({
+  disabled,
+  item,
+  messages,
+  onStageFileItem,
+  widgetId,
+}: {
+  disabled: boolean;
+  item: SubmitWorkDraftFileItem;
+  messages: ReturnType<typeof getSubmitWorkMessages>;
+  onStageFileItem: (itemId: string, file: File) => void;
+  widgetId: string;
+}) {
+  return (
+    <FileSubmissionItemEditor
+      disabled={disabled}
+      fieldLabelClassName={FIELD_LABEL_CLASS}
+      helpTextClassName={HELP_TEXT_CLASS}
+      inputID={`${widgetId}-${item.id}-file`}
+      item={item}
+      messages={messages}
+      onStageFileItem={(file: File) => onStageFileItem(item.id, file)}
+      validationTextClassName={VALIDATION_TEXT_CLASS}
+    />
   );
 }
 

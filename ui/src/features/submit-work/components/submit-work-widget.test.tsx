@@ -10,6 +10,7 @@ import {
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import { SubmitWorkCard } from "./submit-work-card";
 import { SubmitWorkWidget } from "./submit-work-widget";
 
 describe("SubmitWorkWidget", () => {
@@ -263,6 +264,113 @@ describe("SubmitWorkWidget", () => {
     expect(fallbackTextItem.value).toBe("");
   });
 
+  it("renders drag-active and ready file states through the shared upload primitive", async () => {
+    const view = render(
+      <SubmitWorkCard
+        draft={{
+          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          requestName: "Image review",
+          workTypeName: "story",
+        }}
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItem={() => {}}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+
+    const dropzoneLabel = screen.getByText("Image file");
+    const dropzone = dropzoneLabel.closest("label");
+    if (!(dropzone instanceof HTMLLabelElement)) {
+      throw new Error("expected image upload dropzone label");
+    }
+    fireEvent.dragOver(dropzone, {
+      dataTransfer: {
+        dropEffect: "copy",
+        files: [],
+        types: ["Files"],
+      },
+    });
+    expect(screen.getByText("Drop the image file to stage it.")).toBeTruthy();
+
+    view.unmount();
+    render(
+      <SubmitWorkCard
+        draft={{
+          items: [
+            {
+              fileName: "ui.png",
+              id: "submission-item-2",
+              mediaType: "image/png",
+              stagedFileRef: "/tmp/submit-work-stage/ui.png",
+              stagingStatus: "ready",
+              type: "image",
+            },
+          ],
+          requestName: "Image review",
+          workTypeName: "story",
+        }}
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItem={() => {}}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "guidance", message: "Ready to submit." }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+
+    expect(screen.getByText("ui.png (image/png)")).toBeTruthy();
+    expect(screen.getByText("Replace file")).toBeTruthy();
+  });
+
+  it("renders file-staging failures as item-scoped errors and keeps submit disabled", () => {
+    render(
+      <SubmitWorkCard
+        draft={{
+          items: [
+            {
+              fileName: "ui.png",
+              id: "submission-item-2",
+              mediaType: "application/pdf",
+              stagingError: "mediaType must start with image/ for image items",
+              stagingStatus: "failure",
+              type: "image",
+            },
+          ],
+          requestName: "Image review",
+          workTypeName: "story",
+        }}
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItem={() => {}}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
+        submitWorkTypeNames={["story"]}
+      />,
+    );
+
+    expect(
+      screen.getByText("mediaType must start with image/ for image items"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Retry staging this image file or choose a different file."),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Submit work" }).disabled).toBe(
+      true,
+    );
+  });
+
   it("submits work with a request name, clears only request fields on success, and shows the returned trace", async () => {
     const pendingResponse = {
       resolve: null as ((value: Response) => void) | null,
@@ -321,8 +429,13 @@ describe("SubmitWorkWidget", () => {
       method: "POST",
     });
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      items: [
+        {
+          text: "Review the queue and summarize the failure.",
+          type: "text",
+        },
+      ],
       name: "Driver incident review",
-      payload: "Review the queue and summarize the failure.",
       workTypeName: "story",
     });
 
@@ -425,15 +538,8 @@ describe("SubmitWorkWidget", () => {
     expect(requestName.getAttribute("aria-invalid")).toBe("true");
   });
 
-  it("submits a blank request as an explicit empty payload", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
-        headers: {
-          "Content-Type": "application/json",
-        },
-        status: 201,
-      }),
-    );
+  it("blocks obviously empty submissions before the network request", async () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     renderSubmitWorkWidget(
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
@@ -453,18 +559,14 @@ describe("SubmitWorkWidget", () => {
     fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
 
     expect(
-      await screen.findByText(
-        "Your request was submitted. Trace ID: trace-submit-story.",
+      await screen.findAllByText(
+        "Add at least one non-empty text item or one staged file before submitting.",
       ),
-    ).toBeTruthy();
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      name: "Empty payload request",
-      payload: "",
-      workTypeName: "story",
-    });
+    ).toHaveLength(2);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("preserves authored text-item order in the temporary legacy payload while structured submit is still pending", async () => {
+  it("preserves authored text-item order in the structured submit request", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
         headers: {
@@ -508,8 +610,17 @@ describe("SubmitWorkWidget", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      items: [
+        {
+          text: "First authored part.",
+          type: "text",
+        },
+        {
+          text: "Second authored part.",
+          type: "text",
+        },
+      ],
       name: "Ordered text payload",
-      payload: "First authored part.\n\nSecond authored part.",
       workTypeName: "story",
     });
   });
@@ -605,6 +716,9 @@ describe("SubmitWorkWidget", () => {
     fireEvent.change(workType, { target: { value: "story" } });
     fireEvent.change(requestName, {
       target: { value: "Beta submission" },
+    });
+    fireEvent.change(requestText, {
+      target: { value: "Submit the beta session request." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
 

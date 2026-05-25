@@ -1903,6 +1903,33 @@ type ScriptResponseEventPayload struct {
 	TransitionId string `json:"transitionId"`
 }
 
+// StageSubmitWorkFileRequest defines model for StageSubmitWorkFileRequest.
+type StageSubmitWorkFileRequest struct {
+	// ContentBase64 Base64-encoded file payload to stage behind a backend-owned reference.
+	ContentBase64 string `json:"contentBase64"`
+
+	// FileName Browser-authored filename preserved for inline identification and staging.
+	FileName string `json:"fileName"`
+
+	// ItemType Supported dashboard submit-work item types for multimodal submission.
+	ItemType SubmitWorkItemType `json:"itemType"`
+
+	// MediaType Browser-authored MIME type preserved for validation and dispatch decisions.
+	MediaType string `json:"mediaType"`
+}
+
+// StageSubmitWorkFileResponse defines model for StageSubmitWorkFileResponse.
+type StageSubmitWorkFileResponse struct {
+	// FileName Browser-authored filename preserved for inline identification after staging.
+	FileName string `json:"fileName"`
+
+	// MediaType Browser-authored MIME type preserved for inline identification after staging.
+	MediaType string `json:"mediaType"`
+
+	// StagedFileRef Backend-owned staged file reference returned for later structured submit-work items.
+	StagedFileRef string `json:"stagedFileRef"`
+}
+
 // StatusCategories defines model for StatusCategories.
 type StatusCategories struct {
 	Failed     int `json:"failed"`
@@ -2711,6 +2738,9 @@ type SubmitWorkBySessionIdJSONRequestBody = SubmitWorkRequest
 // UpsertWorkRequestBySessionIdJSONRequestBody defines body for UpsertWorkRequestBySessionId for application/json ContentType.
 type UpsertWorkRequestBySessionIdJSONRequestBody = WorkRequest
 
+// StageSubmitWorkFileBySessionIdJSONRequestBody defines body for StageSubmitWorkFileBySessionId for application/json ContentType.
+type StageSubmitWorkFileBySessionIdJSONRequestBody = StageSubmitWorkFileRequest
+
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
 
@@ -2719,6 +2749,9 @@ type SubmitWorkJSONRequestBody = SubmitWorkRequest
 
 // UpsertWorkRequestJSONRequestBody defines body for UpsertWorkRequest for application/json ContentType.
 type UpsertWorkRequestJSONRequestBody = WorkRequest
+
+// StageSubmitWorkFileJSONRequestBody defines body for StageSubmitWorkFile for application/json ContentType.
+type StageSubmitWorkFileJSONRequestBody = StageSubmitWorkFileRequest
 
 // AsRunRequestEventPayload returns the union data inside the FactoryEvent_Payload as a RunRequestEventPayload
 func (t FactoryEvent_Payload) AsRunRequestEventPayload() (RunRequestEventPayload, error) {
@@ -3444,6 +3477,9 @@ type ServerInterface interface {
 	// Upsert work request for one session
 	// (PUT /factory-sessions/{session_id}/work-requests/{request_id})
 	UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, requestId string)
+	// Stage one submit-work file for one session
+	// (POST /factory-sessions/{session_id}/work/staged-files)
+	StageSubmitWorkFileBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get work token for one session
 	// (GET /factory-sessions/{session_id}/work/{id})
 	GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, id WorkOrTokenID)
@@ -3474,6 +3510,9 @@ type ServerInterface interface {
 	// Upsert work request
 	// (PUT /work-requests/{request_id})
 	UpsertWorkRequest(w http.ResponseWriter, r *http.Request, requestId string)
+	// Stage one submit-work file
+	// (POST /work/staged-files)
+	StageSubmitWorkFile(w http.ResponseWriter, r *http.Request)
 	// Get work token
 	// (GET /work/{id})
 	GetWork(w http.ResponseWriter, r *http.Request, id WorkOrTokenID)
@@ -3864,6 +3903,31 @@ func (siw *ServerInterfaceWrapper) UpsertWorkRequestBySessionId(w http.ResponseW
 	handler.ServeHTTP(w, r)
 }
 
+// StageSubmitWorkFileBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) StageSubmitWorkFileBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StageSubmitWorkFileBySessionId(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetWorkBySessionId operation middleware
 func (siw *ServerInterfaceWrapper) GetWorkBySessionId(w http.ResponseWriter, r *http.Request) {
 
@@ -4163,6 +4227,20 @@ func (siw *ServerInterfaceWrapper) UpsertWorkRequest(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// StageSubmitWorkFile operation middleware
+func (siw *ServerInterfaceWrapper) StageSubmitWorkFile(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StageSubmitWorkFile(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetWork operation middleware
 func (siw *ServerInterfaceWrapper) GetWork(w http.ResponseWriter, r *http.Request) {
 
@@ -4329,6 +4407,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work-requests/{request_id}", wrapper.UpsertWorkRequestBySessionId).Methods("PUT")
 
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work/staged-files", wrapper.StageSubmitWorkFileBySessionId).Methods("POST")
+
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work/{id}", wrapper.GetWorkBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/models", wrapper.ListModels).Methods("GET")
@@ -4348,6 +4428,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/work", wrapper.SubmitWork).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/work-requests/{request_id}", wrapper.UpsertWorkRequest).Methods("PUT")
+
+	r.HandleFunc(options.BaseURL+"/work/staged-files", wrapper.StageSubmitWorkFile).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/work/{id}", wrapper.GetWork).Methods("GET")
 

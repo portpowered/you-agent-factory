@@ -3,11 +3,13 @@ package api
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -202,6 +204,59 @@ func TestSubmitWork_RejectsStructuredFileItemWithoutStagedReference(t *testing.T
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
 	rec := submitWorkRequest(t, srv, `{"name":"missing-staged-ref","workTypeName":"prd","items":[{"type":"document","stagedFileRef":"","fileName":"spec.pdf","mediaType":"application/pdf"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0].stagedFileRef must be a non-empty string")
+}
+
+func TestStageSubmitWorkFile(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	rec := submitWorkStageFileRequest(t, srv, "/work/staged-files", `{
+		"itemType":"image",
+		"fileName":"ui.png",
+		"mediaType":"image/png",
+		"contentBase64":"`+base64.StdEncoding.EncodeToString([]byte("png-bytes"))+`"
+	}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	response := decodeJSONResponse[factoryapi.StageSubmitWorkFileResponse](t, rec)
+	if response.FileName != "ui.png" || response.MediaType != "image/png" {
+		t.Fatalf("stage response = %#v, want identifying metadata", response)
+	}
+	if response.StagedFileRef == "" {
+		t.Fatalf("stagedFileRef must be non-empty")
+	}
+	stagedContent, err := os.ReadFile(response.StagedFileRef)
+	if err != nil {
+		t.Fatalf("read staged file: %v", err)
+	}
+	if string(stagedContent) != "png-bytes" {
+		t.Fatalf("staged file content = %q, want png-bytes", stagedContent)
+	}
+}
+
+func TestStageSubmitWorkFile_RejectsTextItemType(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	rec := submitWorkStageFileRequest(t, srv, "/work/staged-files", `{
+		"itemType":"text",
+		"fileName":"notes.txt",
+		"mediaType":"text/plain",
+		"contentBase64":"`+base64.StdEncoding.EncodeToString([]byte("text"))+`"
+	}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "itemType must be one of image, video, audio, or document")
+}
+
+func TestStageSubmitWorkFileBySessionId_NotFound(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	rec := submitWorkStageFileRequest(t, srv, "/factory-sessions/session-missing/work/staged-files", `{
+		"itemType":"document",
+		"fileName":"spec.pdf",
+		"mediaType":"application/pdf",
+		"contentBase64":"`+base64.StdEncoding.EncodeToString([]byte("pdf"))+`"
+	}`)
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
 }
 
 func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {

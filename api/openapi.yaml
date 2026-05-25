@@ -92,6 +92,30 @@ paths:
                 $ref: '#/components/schemas/ListWorkResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /work/staged-files:
+    post:
+      tags:
+        - Work
+      operationId: stageSubmitWorkFile
+      summary: Stage one submit-work file
+      description: Accepts one dashboard-authored file payload, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StageSubmitWorkFileRequest'
+      responses:
+        '201':
+          description: File payload staged successfully for later submit-work use.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StageSubmitWorkFileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work:
     post:
       tags:
@@ -140,6 +164,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListWorkResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/work/staged-files:
+    post:
+      tags:
+        - Work
+      operationId: stageSubmitWorkFileBySessionId
+      summary: Stage one submit-work file for one session
+      description: Accepts one dashboard-authored file payload for the selected factory session, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StageSubmitWorkFileRequest'
+      responses:
+        '201':
+          description: File payload staged successfully for later session-scoped submit-work use.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StageSubmitWorkFileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -1044,6 +1096,50 @@ components:
       properties:
         traceId:
           type: string
+    StageSubmitWorkFileRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - contentBase64
+        - fileName
+        - itemType
+        - mediaType
+      properties:
+        itemType:
+          $ref: '#/components/schemas/SubmitWorkItemType'
+          description: Structured submit-work item kind this file will back. Text is not allowed.
+        fileName:
+          type: string
+          minLength: 1
+          description: Browser-authored filename preserved for inline identification and staging.
+        mediaType:
+          type: string
+          minLength: 1
+          description: Browser-authored MIME type preserved for validation and dispatch decisions.
+        contentBase64:
+          type: string
+          minLength: 1
+          description: Base64-encoded file payload to stage behind a backend-owned reference.
+    StageSubmitWorkFileResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - fileName
+        - mediaType
+        - stagedFileRef
+      properties:
+        stagedFileRef:
+          type: string
+          minLength: 1
+          description: Backend-owned staged file reference returned for later structured submit-work items.
+        fileName:
+          type: string
+          minLength: 1
+          description: Browser-authored filename preserved for inline identification after staging.
+        mediaType:
+          type: string
+          minLength: 1
+          description: Browser-authored MIME type preserved for inline identification after staging.
     UpsertWorkRequestResponse:
       type: object
       additionalProperties: false

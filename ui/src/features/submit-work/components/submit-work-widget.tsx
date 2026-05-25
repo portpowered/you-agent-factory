@@ -29,6 +29,7 @@ export function SubmitWorkWidget({
     onItemTextChange,
     onRemoveItem,
     onRequestNameChange,
+    onStageFileItem,
     onSubmit,
     onWorkTypeNameChange,
     status,
@@ -50,6 +51,7 @@ export function SubmitWorkWidget({
       onItemTextChange={onItemTextChange}
       onRemoveItem={onRemoveItem}
       onRequestNameChange={onRequestNameChange}
+      onStageFileItem={onStageFileItem}
       onSubmit={onSubmit}
       onWorkTypeNameChange={onWorkTypeNameChange}
       status={status}

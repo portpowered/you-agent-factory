@@ -71,21 +71,10 @@ describe("App follow-up submit request flows", () => {
 
   it("submits configured and empty work requests, while preserving failed form state", async () => {
     const { fetchMock } = renderApp({ snapshot: activeSnapshot });
-    fetchMock
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
-          headers: { "Content-Type": "application/json" },
-          status: 201,
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
-          headers: { "Content-Type": "application/json" },
-          status: 201,
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
+    fetchMock.mockImplementation(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      if (body.name === "Retry dashboard request") {
+        return new Response(
           JSON.stringify({
             code: "BAD_REQUEST",
             message: "work_type_name is required",
@@ -95,8 +84,14 @@ describe("App follow-up submit request flows", () => {
             status: 400,
             statusText: "Bad Request",
           },
-        ),
-      );
+        );
+      }
+
+      return new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 201,
+      });
+    });
 
     await screen.findByRole("heading", { name: "You Agent Factory" });
 
@@ -128,8 +123,13 @@ describe("App follow-up submit request flows", () => {
       await submitWorkScope.findByText("Your request was submitted. Trace ID: trace-submit-story."),
     ).toBeTruthy();
     expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
+      items: [
+        {
+          text: "Review the failed dashboard submission smoke.",
+          type: "text",
+        },
+      ],
       name: "Dashboard smoke request",
-      payload: "Review the failed dashboard submission smoke.",
       workTypeName: "story",
     });
 
@@ -139,13 +139,10 @@ describe("App follow-up submit request flows", () => {
     fireEvent.click(submitButton);
 
     expect(
-      await submitWorkScope.findByText("Your request was submitted. Trace ID: trace-submit-story."),
-    ).toBeTruthy();
-    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
-      name: "Dashboard empty payload request",
-      payload: "",
-      workTypeName: "story",
-    });
+      await submitWorkScope.findAllByText(
+        "Add at least one non-empty text item or one staged file before submitting.",
+      ),
+    ).toHaveLength(2);
 
     fireEvent.change(requestName, { target: { value: "Retry dashboard request" } });
     fireEvent.change(requestText, {
@@ -155,7 +152,6 @@ describe("App follow-up submit request flows", () => {
 
     expect(await submitWorkScope.findByText("work_type_name is required")).toBeTruthy();
     expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
     ]);
