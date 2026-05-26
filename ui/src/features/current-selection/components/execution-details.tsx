@@ -5,7 +5,10 @@ import {
   formatDurationFromISO,
   formatDurationMillis,
 } from "../../../components/ui/formatters";
-import { useCurrentSelectionShellMessages } from "./current-selection-locale";
+import {
+  useCurrentSelectionLocale,
+  useCurrentSelectionShellMessages,
+} from "./current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   InferenceAttemptDetail,
@@ -29,6 +32,7 @@ export function ExecutionDetailsSection({
   traceTargetId,
 }: ExecutionDetailsSectionProps) {
   const messages = useCurrentSelectionShellMessages();
+  const locale = useCurrentSelectionLocale();
   const hasTraceIDs = details.traceIDs.length > 0;
 
   return (
@@ -62,7 +66,12 @@ export function ExecutionDetailsSection({
           <dt>{messages.elapsedLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
             {details.elapsedStartTimestamp
-              ? formatDurationFromISO(details.elapsedStartTimestamp, now)
+              ? formatDurationFromISO(
+                  details.elapsedStartTimestamp,
+                  now,
+                  locale,
+                  messages.elapsedUnavailable,
+                )
               : messages.elapsedUnavailable}
           </dd>
         </div>
@@ -150,6 +159,7 @@ function WorkstationRequestProjectionSection({
   details,
 }: Pick<ExecutionDetailsSectionProps, "details">) {
   const messages = useCurrentSelectionShellMessages();
+  const locale = useCurrentSelectionLocale();
   const requestProjection = details.workstationRequest;
   if (!requestProjection) {
     return null;
@@ -159,6 +169,7 @@ function WorkstationRequestProjectionSection({
   const startedAt = formatLocalDateTime(
     request.startedAt ?? request.started_at,
     messages.elapsedUnavailable,
+    locale,
   );
 
   return (
@@ -198,6 +209,7 @@ function WorkstationRequestProjectionSection({
             undefined
               ? formatDurationMillis(
                   response?.durationMillis ?? response?.duration_millis ?? 0,
+                  locale,
                 )
               : undefined
           }

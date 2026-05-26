@@ -28,29 +28,43 @@ export interface WorkstationRunOutcomeContext {
   workstationKind?: string;
 }
 
-export function formatDurationMillis(durationMillis: number): string {
-  return formatDuration(durationMillis, "en", {
+export function formatDurationMillis(
+  durationMillis: number,
+  locale?: string | null,
+): string {
+  return formatDuration(durationMillis, locale, {
     style: "compact",
   });
 }
 
-export function formatDurationMillisVerbose(durationMillis: number): string {
-  return formatDuration(durationMillis, "en", {
+export function formatDurationMillisVerbose(
+  durationMillis: number,
+  locale?: string | null,
+): string {
+  return formatDuration(durationMillis, locale, {
     style: "verbose",
   });
 }
 
-export function formatDurationFromISO(startedAt: string, now: number): string {
+export function formatDurationFromISO(
+  startedAt: string,
+  now: number,
+  locale?: string | null,
+  fallback = "Unavailable",
+): string {
   const startedAtMs = Date.parse(startedAt);
   if (Number.isNaN(startedAtMs)) {
-    return "Unavailable";
+    return fallback;
   }
 
-  return formatDurationMillis(now - startedAtMs);
+  return formatDurationMillis(now - startedAtMs, locale);
 }
 
-export function formatTimeOfDay(isoTimestamp: string): string {
-  return formatTime(isoTimestamp, "en", {
+export function formatTimeOfDay(
+  isoTimestamp: string,
+  locale?: string | null,
+): string {
+  return formatTime(isoTimestamp, locale, {
     fallback: isoTimestamp,
   }).replace(/\s/g, "");
 }
@@ -58,6 +72,7 @@ export function formatTimeOfDay(isoTimestamp: string): string {
 export function formatLocalDateTime(
   timestamp: string | undefined,
   unavailableLabel: string,
+  locale?: string | null,
 ): string {
   const normalizedTimestamp = timestamp?.trim();
   if (!normalizedTimestamp) {
@@ -69,7 +84,7 @@ export function formatLocalDateTime(
     return unavailableLabel;
   }
 
-  return formatDateTime(timestampMs, "en", {
+  return formatDateTime(timestampMs, locale, {
     fallback: unavailableLabel,
   });
 }

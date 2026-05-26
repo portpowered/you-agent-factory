@@ -24,7 +24,10 @@ import {
   buildWorkstationRequestDetailView,
   type WorkstationRequestDetailView,
 } from "./workstation-request-detail-view";
-import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
+import {
+  useCurrentSelectionDetailMessages,
+  useCurrentSelectionLocale,
+} from "./current-selection-locale";
 import { WorkItemPayloadList } from "./work-item-payload-details";
 import {
   getRunnerDisplayName,
@@ -86,6 +89,7 @@ function WorkstationRequestSummary({
   view: WorkstationRequestDetailView;
 }) {
   const messages = useCurrentSelectionDetailMessages();
+  const locale = useCurrentSelectionLocale();
   const requestRunnerMetadata = resolveSelectedRunnerMetadata(
     view.requestRunner,
   );
@@ -146,7 +150,7 @@ function WorkstationRequestSummary({
           <dt>{messages.totalDurationLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
             {view.totalDurationMillis !== undefined
-              ? formatDurationMillis(view.totalDurationMillis)
+              ? formatDurationMillis(view.totalDurationMillis, locale)
               : messages.totalDurationUnavailable}
           </dd>
         </div>

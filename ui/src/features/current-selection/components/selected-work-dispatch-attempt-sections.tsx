@@ -21,7 +21,10 @@ import {
 } from "./detail-card-shared";
 import { InferenceAttemptCard } from "./inference-attempt";
 import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
-import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
+import {
+  useCurrentSelectionDispatchHistoryMessages,
+  useCurrentSelectionLocale,
+} from "./current-selection-locale";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
 import {
   requestModel,
@@ -245,6 +248,7 @@ function ScriptResponseAttemptCard({
   const exitCode = scriptResponseExitCode(scriptResponse);
   const failureType = scriptResponseFailureType(scriptResponse);
   const messages = useCurrentSelectionDispatchHistoryMessages();
+  const locale = useCurrentSelectionLocale();
 
   return (
     <article className={PROVIDER_SESSION_CARD_CLASS}>
@@ -303,7 +307,7 @@ function ScriptResponseAttemptCard({
           label={messages.durationLabel}
           value={
             durationMillis !== undefined
-              ? formatDurationMillis(durationMillis)
+              ? formatDurationMillis(durationMillis, locale)
               : undefined
           }
         />
