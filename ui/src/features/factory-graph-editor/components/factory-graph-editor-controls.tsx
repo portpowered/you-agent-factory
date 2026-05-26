@@ -303,6 +303,7 @@ function FactoryGraphEditorAddMenu({
         avoidCollisions={false}
         className="grid gap-2"
         side="top"
+        sideOffset={12}
       >
         <div className="grid gap-1">
           <p className="m-0 text-sm font-semibold text-af-text">
