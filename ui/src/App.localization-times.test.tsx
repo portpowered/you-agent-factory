@@ -7,7 +7,6 @@ import {
 import {
   formatDurationMillis,
   formatLocalDateTime,
-  formatRelativeTimeFromISO,
 } from "./components/ui/formatters";
 import type { DashboardTrace } from "./api/dashboard";
 import {

@@ -336,6 +336,41 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
   });
 
+  it("saves a localized behavior selection using the canonical enum value", async () => {
+    const savedFactory = buildEditableFactoryDefinition({
+      behavior: "REPEATER",
+    });
+    saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
+
+    renderWorkstationSelection("zh-CN");
+    expandEditableConfiguration("展开可编辑配置", "配置");
+
+    fireEvent.change(screen.getByLabelText("类型"), {
+      target: { value: "REPEATER" },
+    });
+    expect(
+      screen.getByRole("option", { name: "重复器" }).getAttribute("value"),
+    ).toBe("REPEATER");
+
+    fireEvent.click(screen.getByRole("button", { name: "保存更改" }));
+    fireEvent.click(screen.getByRole("button", { name: "覆盖工厂" }));
+
+    await waitFor(() => {
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          factoryDefinition: expect.objectContaining({
+            workstations: [
+              expect.objectContaining({
+                behavior: "REPEATER",
+                name: "Review",
+              }),
+            ],
+          }),
+        }),
+      );
+    });
+  });
+
   it("warns in the save confirmation when newer server values would be overwritten", () => {
     const refreshedFactory = buildEditableFactoryDefinition({
       prompt: "Server changed prompt",
@@ -1055,9 +1090,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 });
 
-function expandEditableConfiguration() {
+function expandEditableConfiguration(
+  buttonName = "Expand editable configuration",
+  headingName = "Configuration",
+) {
   const section = screen
-    .getAllByRole("heading", { name: "Configuration" })
+    .getAllByRole("heading", { name: headingName })
     .at(-1)
     ?.closest("section");
   if (!section) {
@@ -1066,12 +1104,12 @@ function expandEditableConfiguration() {
 
   fireEvent.click(
     within(section).getByRole("button", {
-      name: "Expand editable configuration",
+      name: buttonName,
     }),
   );
 }
 
-function renderWorkstationSelection() {
+function renderWorkstationSelection(locale?: string) {
   const snapshot = semanticWorkflowDashboardSnapshot;
   const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
@@ -1081,6 +1119,7 @@ function renderWorkstationSelection() {
         selectedNode,
         selection: { kind: "node", nodeId: selectedNode.node_id },
       })}
+      locale={locale}
       now={DETAIL_CARD_NOW}
       selectedWorkExecutionDetails={null}
     />,
@@ -1154,6 +1193,7 @@ function buildEditableDefinitionResult(
 }
 
 function buildEditableFactoryDefinition(overrides?: {
+  behavior?: "STANDARD" | "REPEATER" | "POLLER";
   prompt?: string;
   workerName?: string;
   workerOptions?: string[];
@@ -1173,6 +1213,7 @@ function buildEditableFactoryDefinition(overrides?: {
     ),
     workstations: [
       {
+        behavior: overrides?.behavior ?? "STANDARD",
         body:
           overrides?.prompt ??
           "Review the latest story changes before approval.",

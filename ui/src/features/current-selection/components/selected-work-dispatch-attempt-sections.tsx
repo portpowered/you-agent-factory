@@ -23,6 +23,7 @@ import { InferenceAttemptCard } from "./inference-attempt";
 import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
 import {
   useCurrentSelectionDispatchHistoryMessages,
+  useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionLocale,
 } from "./current-selection-locale";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
@@ -164,6 +165,7 @@ function ScriptRequestAttemptCard({
   const attemptNumber = scriptAttemptNumber(scriptRequest);
   const requestID = scriptRequestID(scriptRequest);
   const messages = useCurrentSelectionDispatchHistoryMessages();
+  const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   return (
     <article className={PROVIDER_SESSION_CARD_CLASS}>
@@ -175,7 +177,7 @@ function ScriptRequestAttemptCard({
             )}
           </strong>
           <p className={`m-0 text-af-text-muted ${DASHBOARD_BODY_TEXT_CLASS}`}>
-            {messages.pendingOutcome}
+            {enumMessages.localizeOutcome("PENDING")}
           </p>
         </div>
         <span className={EXECUTION_PILL_CLASS}>
@@ -248,6 +250,7 @@ function ScriptResponseAttemptCard({
   const exitCode = scriptResponseExitCode(scriptResponse);
   const failureType = scriptResponseFailureType(scriptResponse);
   const messages = useCurrentSelectionDispatchHistoryMessages();
+  const enumMessages = useCurrentSelectionOperationalEnumMessages();
   const locale = useCurrentSelectionLocale();
 
   return (
@@ -260,7 +263,9 @@ function ScriptResponseAttemptCard({
             )}
           </strong>
           <p className={`m-0 text-af-text-muted ${DASHBOARD_BODY_TEXT_CLASS}`}>
-            {scriptResponse.outcome ?? messages.recordedAttemptStatus}
+            {scriptResponse.outcome
+              ? enumMessages.localizeOutcome(scriptResponse.outcome)
+              : enumMessages.localizeOutcome("RECORDED")}
           </p>
         </div>
         <span className={EXECUTION_PILL_CLASS}>
@@ -301,7 +306,11 @@ function ScriptResponseAttemptCard({
         />
         <InferenceAttemptDetail
           label={messages.outcomeLabel}
-          value={scriptResponse.outcome}
+          value={
+            scriptResponse.outcome
+              ? enumMessages.localizeOutcome(scriptResponse.outcome)
+              : undefined
+          }
         />
         <InferenceAttemptDetail
           label={messages.durationLabel}

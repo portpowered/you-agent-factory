@@ -427,7 +427,7 @@ describe("CurrentSelectionWidget", () => {
       name: "Current selection",
     });
     const selectSessionButton = within(currentSelection).getByRole("button", {
-      name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+      name: "Select provider session codex / Session ID / sess_active for dispatch dispatch-review-active",
     });
 
     expect(selectSessionButton.getAttribute("aria-pressed")).toBe("false");
@@ -438,7 +438,7 @@ describe("CurrentSelectionWidget", () => {
     expect(
       within(currentSelection)
         .getByRole("button", {
-          name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+          name: "Select provider session codex / Session ID / sess_active for dispatch dispatch-review-active",
         })
         .getAttribute("aria-pressed"),
     ).toBe("true");
@@ -531,10 +531,10 @@ describe("CurrentSelectionWidget", () => {
       name: "Current selection",
     });
     const firstButton = within(currentSelection).getByRole("button", {
-      name: "Select provider session codex / session_id / sess_first for dispatch dispatch-review-active",
+      name: "Select provider session codex / Session ID / sess_first for dispatch dispatch-review-active",
     });
     const secondButton = within(currentSelection).getByRole("button", {
-      name: "Select provider session codex / session_id / sess_second for dispatch dispatch-review-active-retry",
+      name: "Select provider session codex / Session ID / sess_second for dispatch dispatch-review-active-retry",
     });
 
     await user.click(firstButton);

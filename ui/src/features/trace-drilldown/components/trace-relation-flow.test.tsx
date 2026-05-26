@@ -1,7 +1,13 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
-import { within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { DashboardWorkRelation } from "../../api/dashboard/types";
 import { TraceRelationFlow } from "./trace-relation-flow";
@@ -65,7 +71,10 @@ vi.mock("@xyflow/react", async () => {
         style?: Record<string, string | number | undefined>;
         target: string;
       }>;
-      nodeTypes: Record<string, (props: { data: Record<string, unknown> }) => ReactNode>;
+      nodeTypes: Record<
+        string,
+        (props: { data: Record<string, unknown> }) => ReactNode
+      >;
       nodes: Array<{
         data: Record<string, unknown>;
         id: string;
@@ -182,21 +191,21 @@ describe("TraceRelationFlow", () => {
       screen
         .getByTestId("trace-relation-flow-controls")
         .getAttribute("data-controls-style"),
-    ).toContain("\"backgroundColor\":\"var(--color-af-graph-controls-surface)\"");
+    ).toContain('"backgroundColor":"var(--color-af-graph-controls-surface)"');
     expect(
       screen
         .getByTestId("trace-relation-flow-controls")
         .getAttribute("data-controls-style"),
-    ).toContain("\"borderRadius\":8");
+    ).toContain('"borderRadius":8');
 
     const implementButton = screen.getByRole("button", {
       name: "Implement story",
     });
     expect(implementButton.className).toContain("border-af-success-border");
     expect(implementButton.className).toContain("bg-af-success-surface");
-    expect(within(implementButton).getByText("PARENT CHILD")).toBeTruthy();
-    expect(within(implementButton).getByText("DONE")).toBeTruthy();
-    expect(screen.getByText("FAILED")).toBeTruthy();
+    expect(within(implementButton).getByText("Parent-child")).toBeTruthy();
+    expect(within(implementButton).getByText("Done")).toBeTruthy();
+    expect(screen.getByText("Failed")).toBeTruthy();
 
     fireEvent.click(implementButton);
     expect(onSelectWorkID).toHaveBeenCalledWith("work-implement");
@@ -211,10 +220,41 @@ describe("TraceRelationFlow", () => {
 
     const edges = renderedEdges();
     expect(edges[0]?.ariaLabel).toBe(
-      "PARENT CHILD relation from Plan story to Implement story, requiring DONE",
+      "Parent-child relation from Plan story to Implement story, requiring Done",
     );
     expect(edges[0]?.style?.stroke).toBe("var(--color-af-success)");
     expect(edges[0]?.style?.strokeDasharray).toBe("7 5");
     expect(edges[1]?.style?.stroke).toBe("var(--color-af-danger-text)");
+  });
+
+  it("localizes relation enums in zh-CN and preserves raw values in unknown fallbacks", async () => {
+    render(
+      <TraceRelationFlow
+        locale="zh-CN"
+        relations={[
+          {
+            request_id: "request-unknown-state",
+            required_state: "escalated_review",
+            source_work_id: "work-review",
+            source_work_name: "Review story",
+            target_work_id: "work-fix",
+            target_work_name: "Fix story",
+            type: "SPAWNED_BY",
+          },
+        ]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "批次关系图" })).toBeTruthy();
+    });
+
+    expect(screen.getAllByText("派生自").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("未知状态：escalated_review").length,
+    ).toBeGreaterThan(0);
+    expect(renderedEdges()[0]?.ariaLabel).toBe(
+      "派生自关系：从 Review story 到 Fix story，要求 未知状态：escalated_review",
+    );
   });
 });

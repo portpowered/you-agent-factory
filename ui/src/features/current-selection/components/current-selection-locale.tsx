@@ -13,12 +13,17 @@ import {
   type CurrentSelectionShellMessages,
   getCurrentSelectionShellMessages,
 } from "../messages/current-selection-shell";
+import {
+  type CurrentSelectionOperationalEnumMessages,
+  getCurrentSelectionOperationalEnumMessages,
+} from "../messages/current-selection-operational-enums";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 interface CurrentSelectionLocaleMessages {
   detail: CurrentSelectionDetailMessages;
   dispatchHistory: CurrentSelectionDispatchHistoryMessages;
+  operationalEnums: CurrentSelectionOperationalEnumMessages;
   locale?: string | null;
   shell: CurrentSelectionShellMessages;
   workstationDetail: WorkstationDetailMessages;
@@ -41,6 +46,7 @@ export function CurrentSelectionLocaleProvider({
       value={{
         detail: getCurrentSelectionDetailMessages(locale),
         dispatchHistory: getCurrentSelectionDispatchHistoryMessages(locale),
+        operationalEnums: getCurrentSelectionOperationalEnumMessages(locale),
         locale,
         shell: getCurrentSelectionShellMessages(locale),
         workstationDetail: getWorkstationDetailMessages(locale),
@@ -69,6 +75,13 @@ export function useCurrentSelectionDetailMessages(): CurrentSelectionDetailMessa
   return (
     useContext(CurrentSelectionLocaleContext)?.detail ??
     getCurrentSelectionDetailMessages(undefined)
+  );
+}
+
+export function useCurrentSelectionOperationalEnumMessages(): CurrentSelectionOperationalEnumMessages {
+  return (
+    useContext(CurrentSelectionLocaleContext)?.operationalEnums ??
+    getCurrentSelectionOperationalEnumMessages(undefined)
   );
 }
 

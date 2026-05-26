@@ -61,13 +61,40 @@ describe("ProviderSessionDetailPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("status").textContent).toContain("正在加载会话详情...");
+    expect(screen.getByRole("status").textContent).toContain(
+      "正在加载会话详情...",
+    );
+    expect(
+      screen.getAllByText("codex / 会话 ID / sess_active").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("会话 ID").length).toBeGreaterThan(0);
+    expect(screen.queryByText("session_id")).toBeNull();
 
     await waitFor(() => {
       expect(screen.getByRole("status").textContent).toContain(
         "无法在已配置的 Codex sessions 目录下找到所选 provider-session 文件。",
       );
     });
+  });
+
+  it("falls back to a localized unknown-kind wrapper while preserving the raw provider-session kind", () => {
+    vi.mocked(globalThis.fetch).mockReturnValue(new Promise(() => undefined));
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel
+        locale="zh-CN"
+        selectedProviderSession={{
+          ...SELECTED_SESSION,
+          kind: "mystery_kind",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getAllByText("codex / 未知种类：mystery_kind / sess_active")
+        .length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("未知种类：mystery_kind")).toBeTruthy();
   });
 
   it("shows a not-found state when the session file is missing", async () => {
@@ -126,7 +153,9 @@ describe("ProviderSessionDetailPanel", () => {
         "The selected session file did not contain any Codex event records.",
       );
     });
-    expect(screen.getByText("2026/05/18/rollout-sess_active.jsonl")).toBeTruthy();
+    expect(
+      screen.getByText("2026/05/18/rollout-sess_active.jsonl"),
+    ).toBeTruthy();
   });
 
   it("shows parse-error diagnostics when no session events can be parsed", async () => {
@@ -219,7 +248,9 @@ describe("ProviderSessionDetailPanel", () => {
         "The selected session was parsed, but it did not contain any transcript-visible entries.",
       );
     });
-    expect(screen.getByRole("heading", { name: "Session analysis" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Session analysis" }),
+    ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Token usage" })).toBeTruthy();
     expect(
       screen.getByRole("heading", { name: "Maintainer diagnostics" }),
@@ -236,11 +267,11 @@ describe("ProviderSessionDetailPanel", () => {
             eventCount: 6,
             functionCalls: [
               {
-                arguments: "{\"path\":\"pkg/api\"}",
+                arguments: '{"path":"pkg/api"}',
                 callId: "call_1",
                 name: "list_dir",
                 order: 1,
-                output: "{\"entries\":3}",
+                output: '{"entries":3}',
                 status: "completed",
                 turnIndex: 1,
                 type: "function_call",
@@ -301,8 +332,12 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "Token usage" })).toBeTruthy();
     });
 
-    expect(screen.getByText("2026/05/18/rollout-sess_active.jsonl")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Session analysis" })).toBeTruthy();
+    expect(
+      screen.getByText("2026/05/18/rollout-sess_active.jsonl"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Session analysis" }),
+    ).toBeTruthy();
     expect(screen.getByText("Turn 1")).toBeTruthy();
     expect(screen.getByText("list_dir")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Reasoning" })).toBeTruthy();
@@ -316,9 +351,9 @@ describe("ProviderSessionDetailPanel", () => {
 
   it("renders chronological transcript entries with expandable tool payloads", async () => {
     const longArguments =
-      "{\"path\":\"pkg/api/provider_session_details.go\",\"mode\":\"diff\",\"note\":\"" +
+      '{"path":"pkg/api/provider_session_details.go","mode":"diff","note":"' +
       "x".repeat(360) +
-      "\"}";
+      '"}';
     const longOutput = [
       "Chunk ID: exec-123",
       "Wall time: 0.6289 seconds",
@@ -404,9 +439,15 @@ describe("ProviderSessionDetailPanel", () => {
 
     const transcriptTimestamp = formatDateTime("2026-05-18T14:10:04Z");
 
-    expect(screen.getByText("Summarize the rollout state for this work item.")).toBeTruthy();
-    expect(screen.getByText("The failing edge is in provider-session parsing.")).toBeTruthy();
-    expect(screen.getAllByText("Encrypted reasoning").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("Summarize the rollout state for this work item."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("The failing edge is in provider-session parsing."),
+    ).toBeTruthy();
+    expect(screen.getAllByText("Encrypted reasoning").length).toBeGreaterThan(
+      0,
+    );
     expect(
       screen.getByText(
         "Reasoning occurred for this step, but plaintext content is intentionally unavailable.",
@@ -431,12 +472,8 @@ describe("ProviderSessionDetailPanel", () => {
       screen
         .getAllByTitle("2026-05-18T14:10:04Z")
         .some((element) => element.textContent === transcriptTimestamp),
-    ).toBe(
-      true,
-    );
-    expect(
-      screen.getAllByText("Raw ISO timestamp").length,
-    ).toBeGreaterThan(0);
+    ).toBe(true);
+    expect(screen.getAllByText("Raw ISO timestamp").length).toBeGreaterThan(0);
 
     const expandArguments = screen.getByRole("button", {
       name: "Expand Arguments",
@@ -446,9 +483,11 @@ describe("ProviderSessionDetailPanel", () => {
 
     fireEvent.click(expandArguments);
 
-    expect(screen.getByRole("button", { name: "Collapse Arguments" }).getAttribute("aria-expanded")).toBe(
-      "true",
-    );
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse Arguments" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
     expect(screen.getByText(longArguments)).toBeTruthy();
 
     fireEvent.click(
@@ -470,7 +509,7 @@ describe("ProviderSessionDetailPanel", () => {
         buildProviderSessionDetailResponse({
           transcript: [
             {
-              arguments: "{\"path\":\"pkg/api/provider_session_details.go\"}",
+              arguments: '{"path":"pkg/api/provider_session_details.go"}',
               callId: "call_tool_1",
               lineNumber: 1,
               name: "read_file",
@@ -496,11 +535,13 @@ describe("ProviderSessionDetailPanel", () => {
     const panel = screen.getByLabelText("Selected session details");
     expect(panel.className).toContain("af-provider-session-sans");
 
-    const transcriptHeading = screen.getByRole("heading", { name: "Transcript" });
+    const transcriptHeading = screen.getByRole("heading", {
+      name: "Transcript",
+    });
     expect(panel.contains(transcriptHeading)).toBe(true);
 
     const rawArguments = screen.getByText(
-      "{\"path\":\"pkg/api/provider_session_details.go\"}",
+      '{"path":"pkg/api/provider_session_details.go"}',
     );
     expect(rawArguments.tagName).toBe("PRE");
     expect(rawArguments.className).toContain("af-dashboard-body-code");
@@ -570,16 +611,12 @@ describe("ProviderSessionDetailPanel", () => {
       screen
         .getAllByTitle("2026-05-18T14:10:00Z")
         .some((element) => element.textContent === turnStartedAt),
-    ).toBe(
-      true,
-    );
+    ).toBe(true);
     expect(
       screen
         .getAllByTitle("2026-05-18T14:10:01Z")
         .some((element) => element.textContent === transcriptTimestamp),
-    ).toBe(
-      true,
-    );
+    ).toBe(true);
 
     fireEvent.click(screen.getAllByText("Raw ISO timestamp")[0]);
 
@@ -781,11 +818,11 @@ describe("ProviderSessionDetailPanel", () => {
             eventCount: 4,
             functionCalls: [
               {
-                arguments: "{\"path\":\"pkg/api\"}",
+                arguments: '{"path":"pkg/api"}',
                 callId: "call_1",
                 name: "list_dir",
                 order: 3,
-                output: "{\"entries\":3}",
+                output: '{"entries":3}',
                 status: "completed",
                 turnIndex: 1,
                 type: "function_call",
@@ -857,10 +894,11 @@ describe("ProviderSessionDetailPanel", () => {
   });
 
   it("keeps reasoning and tool bodies in the transcript without duplicating them in summaries", async () => {
-    const reasoningSummary = "Inspect the provider-session diff before retrying.";
+    const reasoningSummary =
+      "Inspect the provider-session diff before retrying.";
     const reasoningText = "Investigate the failed response stream.";
-    const callArguments = "{\"path\":\"pkg/api/provider_session_details.go\"}";
-    const callOutput = "{\"lines\":128}";
+    const callArguments = '{"path":"pkg/api/provider_session_details.go"}';
+    const callOutput = '{"lines":128}';
 
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse(
@@ -988,11 +1026,11 @@ describe("ProviderSessionDetailPanel", () => {
             eventCount: 2,
             functionCalls: [
               {
-                arguments: "{\"path\":\"pkg/api\"}",
+                arguments: '{"path":"pkg/api"}',
                 callId: null,
                 name: "list_dir",
                 order: 3,
-                output: "{\"entries\":3}",
+                output: '{"entries":3}',
                 status: "completed",
                 turnIndex: 2,
                 type: "function_call",
@@ -1149,7 +1187,7 @@ describe("ProviderSessionDetailPanel", () => {
             eventCount: 5,
             functionCalls: [
               {
-                arguments: "{\"path\":\"pkg/api/provider_session_details.go\"}",
+                arguments: '{"path":"pkg/api/provider_session_details.go"}',
                 callId: "call_exec_1",
                 name: "exec_command",
                 order: 4,
@@ -1291,7 +1329,8 @@ describe("ProviderSessionDetailPanel", () => {
         .getAllByTitle("2026-05-18T14:10:04Z")
         .some(
           (element) =>
-            element.textContent === formatDateTime("2026-05-18T14:10:04Z", "zh-CN"),
+            element.textContent ===
+            formatDateTime("2026-05-18T14:10:04Z", "zh-CN"),
         ),
     ).toBe(true);
 

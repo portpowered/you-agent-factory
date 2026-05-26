@@ -77,7 +77,7 @@ describe("ExecutionDetailsSection", () => {
     );
     expect(within(workstationRequest).getByText("2")).toBeTruthy();
     expect(within(workstationRequest).getAllByText("1")).toHaveLength(2);
-    expect(within(workstationRequest).getByText("FAILED")).toBeTruthy();
+    expect(within(workstationRequest).getByText("Failed")).toBeTruthy();
     expect(within(workstationRequest).getByText("640ms")).toBeTruthy();
     expect(within(workstationRequest).getByText(expectedStartedAt)).toBeTruthy();
     expect(within(workstationRequest).queryByText("2026-04-08T12:00:00Z")).toBeNull();
@@ -251,6 +251,8 @@ describe("InferenceAttemptsSection", () => {
 
     expect(within(section).getByText("Attempt 1")).toBeTruthy();
     expect(within(section).getByText("Attempt 2")).toBeTruthy();
+    expect(within(section).getByText("Succeeded")).toBeTruthy();
+    expect(within(section).getByText("Failed")).toBeTruthy();
     expect(expandAttempt1.getAttribute("aria-expanded")).toBe("false");
     expect(expandAttempt2.getAttribute("aria-expanded")).toBe("false");
     expect(
@@ -353,6 +355,64 @@ describe("InferenceAttemptsSection", () => {
     ).toBeTruthy();
     expect(
       within(section).getByText("Awaiting provider response."),
+    ).toBeTruthy();
+    expect(within(section).getByText("Pending")).toBeTruthy();
+  });
+
+  it("localizes current-selection operational outcomes and unknown fallbacks in zh-CN", () => {
+    const details: SelectedWorkItemExecutionDetails = {
+      dispatchID: "dispatch-review",
+      elapsedStartTimestamp: "2026-04-08T12:00:00Z",
+      inferenceAttempts: [
+        inferenceAttempt("dispatch-review", {
+          attempt: 1,
+          inference_request_id: "dispatch-review/inference-request/1",
+          outcome: "BLOCKED_FOR_REVIEW",
+        }),
+      ],
+      traceIDs: ["trace-alpha"],
+      workstationName: "Review",
+      workstationRequest: {
+        counts: {
+          dispatchedCount: 1,
+          errored_count: 0,
+          responded_count: 1,
+        },
+        dispatch_id: "dispatch-review",
+        request: {
+          startedAt: "2026-04-08T12:00:00Z",
+        },
+        response: {
+          outcome: "FAILED",
+        },
+        transition_id: "review",
+        workstation_name: "Review",
+      },
+      workID: "work-1",
+    };
+
+    render(
+      <CurrentSelectionLocaleProvider locale="zh-CN">
+        <ExecutionDetailsSection
+          activeTraceID="trace-alpha"
+          details={details}
+          now={DETAIL_CARD_NOW}
+          traceTargetId="trace"
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const section = screen.getByRole("region", { name: "执行详情" });
+    const workstationRequest = within(section).getByRole("region", {
+      name: "工作站请求",
+    });
+    expect(within(workstationRequest).getByText("失败")).toBeTruthy();
+
+    const inferenceAttempts = within(section).getByRole("region", {
+      name: "推理尝试",
+    });
+    expect(
+      within(inferenceAttempts).getByText("未知结果：BLOCKED_FOR_REVIEW"),
     ).toBeTruthy();
   });
 });

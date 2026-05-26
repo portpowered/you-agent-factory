@@ -1,4 +1,7 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: existing provider-session detail panel remains oversized while this story localizes enum-backed labels without a broader panel split.
 import type { ReactNode } from "react";
+import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
+import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
@@ -7,18 +10,16 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { LocalizedTimezoneNote } from "../../../components/ui/localized-timezone-note";
-import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import { formatDateTime } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
-import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { PROVIDER_SESSION_CARD_CLASS } from "../../current-selection/components/detail-card-shared";
+import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
+import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
+import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 import {
   EncryptedReasoningNotice,
   TranscriptSection,
 } from "./provider-session-transcript";
-import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
-import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
-import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
 
 export interface ProviderSessionDetailPanelProps {
   locale?: string;
@@ -53,9 +54,12 @@ function LoadedProviderSessionDetailPanel({
 }) {
   const messages = getProviderSessionDetailMessages(locale);
   const detailState = useProviderSessionDetail(selectedProviderSession);
+  const localizedSessionKind = messages.localizeSessionKind(
+    selectedProviderSession.kind,
+  );
   const sessionLabel = [
     selectedProviderSession.provider,
-    selectedProviderSession.kind,
+    localizedSessionKind,
     selectedProviderSession.id,
   ].join(" / ");
   const detail =
@@ -94,8 +98,7 @@ function LoadedProviderSessionDetailPanel({
           />
           <DetailMetric
             label={messages.kindLabel}
-            value={selectedProviderSession.kind}
-            code
+            value={localizedSessionKind}
           />
           <DetailMetric
             label={messages.sessionIdLabel}
@@ -117,7 +120,8 @@ function LoadedProviderSessionDetailPanel({
       ) : null}
       {detailState.status === "error" ? (
         <StatusNotice tone="error">
-          {messages.errorPrefix} {detailState.message ?? messages.unavailableState}
+          {messages.errorPrefix}{" "}
+          {detailState.message ?? messages.unavailableState}
         </StatusNotice>
       ) : null}
       {detail ? (
@@ -144,7 +148,9 @@ function LoadedProviderSessionDetailPanel({
           ) : null}
           {detailState.status === "parse-error" ? (
             <>
-              <StatusNotice tone="error">{messages.parseErrorState}</StatusNotice>
+              <StatusNotice tone="error">
+                {messages.parseErrorState}
+              </StatusNotice>
               <ParseDiagnosticsSection detail={detail} locale={locale} />
             </>
           ) : null}
@@ -270,7 +276,10 @@ function ParseOverview({
           label={messages.eventCountLabel}
           value={detail.parse.eventCount}
         />
-        <DetailMetric label={messages.lineCountLabel} value={detail.parse.lineCount} />
+        <DetailMetric
+          label={messages.lineCountLabel}
+          value={detail.parse.lineCount}
+        />
         <DetailMetric
           label={messages.malformedLineCountLabel}
           value={detail.parse.malformedLineCount}
@@ -306,12 +315,18 @@ function TokenUsageSection({
             label={messages.cachedInputLabel}
             value={tokenUsage.cachedInputTokens ?? 0}
           />
-          <DetailMetric label={messages.outputLabel} value={tokenUsage.outputTokens ?? 0} />
+          <DetailMetric
+            label={messages.outputLabel}
+            value={tokenUsage.outputTokens ?? 0}
+          />
           <DetailMetric
             label={messages.reasoningCountLabel}
             value={tokenUsage.reasoningOutputTokens ?? 0}
           />
-          <DetailMetric label={messages.totalLabel} value={tokenUsage.totalTokens ?? 0} />
+          <DetailMetric
+            label={messages.totalLabel}
+            value={tokenUsage.totalTokens ?? 0}
+          />
         </div>
       ) : (
         <p className={DETAIL_COPY_CLASS}>{messages.tokenUsageUnavailable}</p>
@@ -331,7 +346,9 @@ function TurnsSection({
 
   return (
     <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.turnsHeading}</h5>
+      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.turnsHeading}
+      </h5>
       {detail.parse.turns.length > 0 ? (
         <div className="grid gap-3">
           {detail.parse.turns.map((turn) => (
@@ -519,7 +536,9 @@ function ParseDiagnosticsSection({
               className={PROVIDER_SESSION_CARD_CLASS}
               key={`parse-error-${error.lineNumber}`}
             >
-              <strong>{messages.lineLabel({ lineNumber: error.lineNumber })}</strong>
+              <strong>
+                {messages.lineLabel({ lineNumber: error.lineNumber })}
+              </strong>
               <p className={cn("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
                 {error.message}
               </p>
@@ -531,7 +550,9 @@ function ParseDiagnosticsSection({
               key={`unknown-event-${event.lineNumber}`}
             >
               <strong>
-                {messages.unknownEventOnLineLabel({ lineNumber: event.lineNumber })}
+                {messages.unknownEventOnLineLabel({
+                  lineNumber: event.lineNumber,
+                })}
               </strong>
               <p
                 className={cn(
@@ -567,13 +588,16 @@ function SecondarySection({
     <section className="grid gap-4 rounded-xl border border-af-border bg-af-surface-subtle p-4">
       <div className="grid gap-1">
         <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{heading}</h5>
-        <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-af-text-subtle",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+        >
           {description}
         </p>
       </div>
-      <div className="grid gap-3">
-        {children}
-      </div>
+      <div className="grid gap-3">{children}</div>
     </section>
   );
 }
