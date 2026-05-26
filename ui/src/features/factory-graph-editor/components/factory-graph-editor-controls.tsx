@@ -302,7 +302,7 @@ function FactoryGraphEditorAddMenu({
         aria-label={messages.toolbarVisibilityMenuAriaLabel}
         avoidCollisions={false}
         // tailwind-exception: intrinsic-sizing
-        className="grid max-h-[calc(100vh-8rem)] gap-2 overflow-y-auto"
+        className="grid max-h-[min(var(--radix-popover-content-available-height),calc(100vh-8rem))] gap-2 overflow-y-auto"
         side="top"
         sideOffset={12}
       >
