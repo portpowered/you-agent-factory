@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import type { DashboardWorkstationRequest } from "../../../api/dashboard/types";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,

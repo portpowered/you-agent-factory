@@ -1,9 +1,12 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import {
+  formatDurationMillis,
+  formatLocalDateTime,
+} from "../../../components/ui/formatters";
 import type { DashboardWorkItemRef } from "../../../api/dashboard/types";
 import { dashboardWorkstationRequestFixtures } from "../../../components/dashboard/fixtures";
-import { formatLocalDateTime } from "../../../components/ui/formatters";
 import { providerSessionSelectionKey } from "../../provider-session-detail/lib/provider-session-ref";
 import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
 import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
@@ -1645,6 +1648,59 @@ describe("WorkItemDetailCard localization", () => {
     expect(
       inferenceAttempts.getByText("セッション詳細は利用できません"),
     ).toBeTruthy();
+  });
+
+  it("localizes dispatch-history started-at and duration rows for zh-CN", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <CurrentSelectionLocaleProvider locale="zh-CN">
+        <WorkItemDetailCard
+          dispatchAttempts={[]}
+          executionDetails={selectWorkItemExecutionDetails({
+            activeExecution: execution,
+            dispatchID,
+            selectedNode,
+            workItem,
+          })}
+          now={DETAIL_CARD_NOW}
+          selectedNode={selectedNode}
+          selection={{
+            dispatchId: dispatchID,
+            execution,
+            kind: "work-item",
+            nodeId: selectedNode.node_id,
+            workItem,
+          }}
+          workstationRequests={[dashboardWorkstationRequestFixtures.ready]}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const dispatchCard = within(
+      screen.getByRole("region", { name: "工作站分派" }),
+    )
+      .getByText("Active Story", { selector: "strong" })
+      .closest("article");
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected localized dispatch history card");
+    }
+
+    expect(within(dispatchCard).getByText("开始时间")).toBeTruthy();
+    expect(
+      within(getDetailRow(dispatchCard, "开始时间")).getByText(
+        formatLocalDateTime("2026-04-08T12:00:01Z", "不可用", "zh-CN"),
+      ),
+    ).toBeTruthy();
+    expect(within(dispatchCard).getByText("耗时")).toBeTruthy();
+    expect(
+      within(getDetailRow(dispatchCard, "耗时")).getByText(
+        formatDurationMillis(63_000, "zh-CN"),
+      ),
+    ).toBeTruthy();
+    expect(within(dispatchCard).queryByText("2026-04-08T12:00:01Z")).toBeNull();
   });
 });
 

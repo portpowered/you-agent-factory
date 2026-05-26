@@ -2,7 +2,10 @@ import { formatDurationMillis } from "../../../components/ui/formatters";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
-import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
+import {
+  useCurrentSelectionDetailMessages,
+  useCurrentSelectionLocale,
+} from "./current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   REQUEST_HISTORY_TEXT_CLASS,
@@ -79,6 +82,7 @@ function ScriptResponseDetails({
   view: WorkstationRequestDetailView;
 }) {
   const messages = useCurrentSelectionDetailMessages();
+  const locale = useCurrentSelectionLocale();
   const scriptResponse = request.script_response;
 
   return (
@@ -115,7 +119,7 @@ function ScriptResponseDetails({
               <dt>{messages.durationLabel}</dt>
               <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
                 {scriptResponse.duration_millis !== undefined
-                  ? formatDurationMillis(scriptResponse.duration_millis)
+                  ? formatDurationMillis(scriptResponse.duration_millis, locale)
                   : messages.durationUnavailable}
               </dd>
             </div>

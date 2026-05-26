@@ -2,6 +2,8 @@ import { expect, userEvent, within } from "storybook/test";
 
 import { App } from "./App";
 import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
+import { DashboardScreen } from "./features/dashboard/public";
+import { AppLocaleProvider, useAppLocale } from "./i18n";
 import {
   currentSelectionCard,
   dispatchHistoryCard,
@@ -22,6 +24,44 @@ function formatExpectedLocalDateTime(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(Date.parse(value));
+}
+
+function formatExpectedLocalizedDateTime(
+  value: string,
+  locale: string,
+): string {
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(Date.parse(value));
+}
+
+function WorkstationRequestLocaleStory() {
+  return (
+    <AppLocaleProvider initialLocale="en">
+      <WorkstationRequestLocaleControls />
+      <div style={{ maxWidth: "100%", width: "1280px" }}>
+        <DashboardScreen />
+      </div>
+    </AppLocaleProvider>
+  );
+}
+
+function WorkstationRequestLocaleControls() {
+  const { locale, setLocale } = useAppLocale();
+
+  return (
+    <fieldset style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem" }}>
+      <legend>Locale verification controls</legend>
+      <span>Current locale: {locale}</span>
+      <button onClick={() => setLocale("en")} type="button">
+        Switch to English
+      </button>
+      <button onClick={() => setLocale("zh-CN")} type="button">
+        Switch to zh-CN
+      </button>
+    </fieldset>
+  );
 }
 
 export const WorkstationRequestSelection = {
@@ -139,6 +179,107 @@ export const WorkstationRequestSelection = {
       }),
     ).toBeNull();
     expectCurrentSelectionCardID(canvasElement);
+  },
+};
+
+export const WorkstationRequestLocalePropagation = {
+  parameters: workstationRequestStoryParameters(
+    markdownReadyWorkstationRequest,
+  ),
+  tags: ["test"],
+  render: () => <WorkstationRequestLocaleStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const controls = await canvas.findByRole("group", {
+      name: "Locale verification controls",
+    });
+
+    await expect(
+      within(controls).getByText("Current locale: en"),
+    ).toBeVisible();
+
+    await selectWorkstationRequest(
+      canvasElement,
+      markdownReadyWorkstationRequest,
+    );
+
+    const englishSelection = within(currentSelectionCard(canvasElement));
+    const englishInferenceAttempts = within(
+      englishSelection.getByRole("region", { name: "Inference attempts" }),
+    );
+    const englishAttempt = within(
+      englishInferenceAttempts.getByRole("article", {
+        name: "Inference attempt 2",
+      }),
+    );
+
+    await userEvent.click(
+      englishAttempt.getByRole("button", { name: "Expand attempt 2" }),
+    );
+
+    const englishRequestTime = formatExpectedLocalizedDateTime(
+      "2026-04-08T12:00:03Z",
+      "en",
+    );
+    const englishResponseTime = formatExpectedLocalizedDateTime(
+      "2026-04-08T12:00:04Z",
+      "en",
+    );
+
+    await expect(
+      englishAttempt.getByText("Request time").closest("div")?.textContent,
+    ).toContain(englishRequestTime);
+    await expect(
+      englishAttempt.getByText("Response time").closest("div")?.textContent,
+    ).toContain(englishResponseTime);
+    expect(englishAttempt.queryByText("2026-04-08T12:00:03Z")).toBeNull();
+    expect(englishAttempt.queryByText("2026-04-08T12:00:04Z")).toBeNull();
+
+    await userEvent.click(
+      within(controls).getByRole("button", {
+        name: "Switch to zh-CN",
+      }),
+    );
+
+    await expect(
+      within(controls).getByText("Current locale: zh-CN"),
+    ).toBeVisible();
+
+    const localizedSelection = within(canvasElement).getByRole("article", {
+      name: "当前选择",
+    });
+    const localizedSelectionScope = within(localizedSelection);
+    const localizedInferenceAttempts = within(
+      localizedSelectionScope.getByRole("region", { name: "推理尝试" }),
+    );
+    const localizedAttempt = within(
+      localizedInferenceAttempts.getByRole("article", {
+        name: "推理尝试 2",
+      }),
+    );
+    const localizedRequestTime = formatExpectedLocalizedDateTime(
+      "2026-04-08T12:00:03Z",
+      "zh-CN",
+    );
+    const localizedResponseTime = formatExpectedLocalizedDateTime(
+      "2026-04-08T12:00:04Z",
+      "zh-CN",
+    );
+
+    await expect(
+      localizedAttempt.getByText("请求时间").closest("div")?.textContent,
+    ).toContain(localizedRequestTime);
+    await expect(
+      localizedAttempt.getByText("响应时间").closest("div")?.textContent,
+    ).toContain(localizedResponseTime);
+    expect(localizedAttempt.queryByText(englishRequestTime)).toBeNull();
+    expect(localizedAttempt.queryByText(englishResponseTime)).toBeNull();
+    expect(localizedAttempt.queryByText("2026-04-08T12:00:03Z")).toBeNull();
+    expect(localizedAttempt.queryByText("2026-04-08T12:00:04Z")).toBeNull();
+    expect(
+      localizedSelection.closest<HTMLElement>("[data-bento-card-id]")?.dataset
+        .bentoCardId,
+    ).toBe("current-selection");
   },
 };
 

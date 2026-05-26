@@ -1,4 +1,5 @@
 import { formatDurationMillis } from "../../../components/ui/formatters";
+import { LocalizedTimezoneNote } from "../../../components/ui/localized-timezone-note";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -24,7 +25,10 @@ import {
   buildWorkstationRequestDetailView,
   type WorkstationRequestDetailView,
 } from "./workstation-request-detail-view";
-import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
+import {
+  useCurrentSelectionDetailMessages,
+  useCurrentSelectionLocale,
+} from "./current-selection-locale";
 import { WorkItemPayloadList } from "./work-item-payload-details";
 import {
   getRunnerDisplayName,
@@ -86,6 +90,7 @@ function WorkstationRequestSummary({
   view: WorkstationRequestDetailView;
 }) {
   const messages = useCurrentSelectionDetailMessages();
+  const locale = useCurrentSelectionLocale();
   const requestRunnerMetadata = resolveSelectedRunnerMetadata(
     view.requestRunner,
   );
@@ -93,6 +98,9 @@ function WorkstationRequestSummary({
   return (
     <>
       <p className={WIDGET_SUBTITLE_CLASS}>{view.requestTitle}</p>
+      <LocalizedTimezoneNote>
+        {messages.localizedTimezoneContext}
+      </LocalizedTimezoneNote>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <div>
           <dt>{messages.dispatchIdLabel}</dt>
@@ -146,7 +154,7 @@ function WorkstationRequestSummary({
           <dt>{messages.totalDurationLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
             {view.totalDurationMillis !== undefined
-              ? formatDurationMillis(view.totalDurationMillis)
+              ? formatDurationMillis(view.totalDurationMillis, locale)
               : messages.totalDurationUnavailable}
           </dd>
         </div>
