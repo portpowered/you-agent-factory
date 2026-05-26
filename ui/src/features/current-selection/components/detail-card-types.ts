@@ -229,6 +229,7 @@ export interface WorkstationActiveWorkListProps {
   now: number;
   onSelectWorkID?: (workID: string) => void;
   onSelectWorkstationRequest?: (request: DashboardWorkstationRequest) => void;
+  selectedNode: DashboardWorkstationNode;
   selectedRequest?: DashboardWorkstationRequest | null;
   selectedWorkID?: string | null;
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
