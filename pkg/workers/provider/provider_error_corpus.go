@@ -25,6 +25,7 @@ type ProviderErrorCorpusEntry struct {
 	Retryable             bool                           `json:"retryable"`
 	TriggersThrottlePause bool                           `json:"triggers_throttle_pause"`
 	Supported             bool                           `json:"supported"`
+	RejectMessageContains []string                       `json:"reject_message_contains,omitempty"`
 	Notes                 string                         `json:"notes,omitempty"`
 }
 

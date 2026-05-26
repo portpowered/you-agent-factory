@@ -40,7 +40,7 @@ import {
 
 // tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
-  "h-[36rem] min-h-[36rem] border-transparent bg-af-surface-subtle";
+  "h-[20rem] min-h-[16rem] border-transparent bg-af-surface-subtle";
 const PATH_NODE_CLASS =
   "flex h-full min-w-0 w-full flex-col gap-1.5 overflow-hidden rounded-lg border px-3 py-3 text-left text-af-text shadow-af-card";
 const DISPATCH_NODE_WIDTH = 240;

@@ -23,7 +23,7 @@ interface StatCardProps {
 }
 
 const STAT_CARD_CLASS =
-  "min-h-0 rounded-lg border bg-af-surface-raised p-2 px-3";
+  "min-h-0 rounded-lg border bg-af-surface-raised p-2";
 
 export function WorkTotalsCard({
   completedCount,
@@ -42,7 +42,7 @@ export function WorkTotalsCard({
       title={messages.cardTitle}
     >
       <section
-        className="grid grid-cols-2 gap-2 md:grid-cols-4"
+        className="grid grid-cols-2 gap-2"
         aria-label={messages.regionLabel}
       >
         <StatCard
@@ -102,7 +102,7 @@ function StatCard({ label, locale, value, valueLabel, tone }: StatCardProps) {
         tone === "danger" && "border-af-danger-border bg-af-danger-surface",
       )}
     >
-      <span className="mb-1 block text-[0.68rem] uppercase text-af-text-subtle">
+      <span className="mb-1 block text-[0.68rem] leading-tight uppercase text-af-text-subtle [overflow-wrap:anywhere]">
         {label}
       </span>
       <strong className="font-display text-[1.35rem] leading-none">

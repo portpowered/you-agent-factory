@@ -110,27 +110,21 @@ func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(
 // portos:func-length-exception owner=agent-factory reason=provider-worker-pool-error-smoke review=2026-07-19 removal=split-codex-timeout-and-worker-pool-assertions-before-next-provider-error-smoke-change
 func TestProviderErrorSmoke_CodexAndTimeoutFailuresNormalizeThroughWorkerPool(t *testing.T) {
 	support.SkipLongFunctional(t, "slow provider worker-pool smoke")
-	capacityEntry := providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model")
+	capacityEntry := providerErrorCorpusEntryForTest(t, "codex_model_capacity_cleanup_noise")
 	t.Run(providerErrorCorpusEntryLabel(capacityEntry)+"_BoundedErrorLine_RequeuesWithConciseFailureReason", func(t *testing.T) {
 		assertCodexCapacityFailureNormalizesThroughWorkerPool(t, capacityEntry)
 	})
 
-	t.Run("CodexTimeoutLine_RetriesAndRecordsRetryableTimeout", assertCodexTimeoutFailureNormalizesThroughWorkerPool)
+	timeoutEntry := providerErrorCorpusEntryForTest(t, "codex_timeout_cleanup_noise")
+	t.Run(providerErrorCorpusEntryLabel(timeoutEntry)+"_RetriesAndRecordsRetryableTimeout", func(t *testing.T) {
+		assertCodexTimeoutFailureNormalizesThroughWorkerPool(t, timeoutEntry)
+	})
 }
 
 func assertCodexCapacityFailureNormalizesThroughWorkerPool(t *testing.T, capacityEntry workers.ProviderErrorCorpusEntry) {
 	t.Helper()
 
 	conciseError := providerErrorCorpusLastErrorLine(t, capacityEntry)
-	const transcriptMarker = "full inference transcript should not be retained"
-	rawOutput := strings.Join([]string{
-		"OpenAI Codex v0.118.0 (research preview)",
-		transcriptMarker,
-		strings.Repeat("reasoning transcript ", 200),
-		conciseError,
-		"cleanup complete",
-	}, "\n")
-
 	smokeHarness := testutil.NewProviderErrorSmokeHarness(
 		t,
 		support.LegacyFixtureDir(t, "worktree_passthrough"),
@@ -146,9 +140,7 @@ func assertCodexCapacityFailureNormalizesThroughWorkerPool(t *testing.T, capacit
 		3*time.Second,
 	)
 	smokeHarness.QueueProviderResults(
-		workers.CommandResult{ExitCode: capacityEntry.ExitCode, Stdout: []byte(rawOutput)},
-		workers.CommandResult{ExitCode: capacityEntry.ExitCode, Stdout: []byte(rawOutput)},
-		workers.CommandResult{ExitCode: capacityEntry.ExitCode, Stdout: []byte(rawOutput)},
+		capacityEntry.RepeatedCommandResults(3)...,
 	)
 	work := providerErrorSmokeWork("codex-late-error-line", "codex late error smoke payload")
 	smokeHarness.SeedWork(t, work)
@@ -165,23 +157,17 @@ func assertCodexCapacityFailureNormalizesThroughWorkerPool(t *testing.T, capacit
 		t.Fatalf("provider failure type = %s, want %s", dispatch.ProviderFailure.Type, capacityEntry.ExpectedType)
 	}
 	assertContainsAll(t, dispatch.Reason, []string{"provider error: " + string(capacityEntry.ExpectedType), conciseError})
-	if strings.Contains(dispatch.Reason, transcriptMarker) {
-		t.Fatalf("dispatch reason retained raw transcript marker: %q", dispatch.Reason)
+	for _, reject := range capacityEntry.RejectMessageContains {
+		if strings.Contains(dispatch.Reason, reject) {
+			t.Fatalf("dispatch reason retained rejected cleanup-noise substring %q: %q", reject, dispatch.Reason)
+		}
 	}
 }
 
-func assertCodexTimeoutFailureNormalizesThroughWorkerPool(t *testing.T) {
+func assertCodexTimeoutFailureNormalizesThroughWorkerPool(t *testing.T, timeoutEntry workers.ProviderErrorCorpusEntry) {
 	t.Helper()
 
-	const conciseError = "ERROR: command timed out while waiting for codex"
-	const transcriptMarker = "timeout transcript should not be retained"
-	rawOutput := strings.Join([]string{
-		"OpenAI Codex v0.118.0 (research preview)",
-		transcriptMarker,
-		conciseError,
-		"post-error diagnostics",
-	}, "\n")
-
+	conciseError := providerErrorCorpusLastErrorLine(t, timeoutEntry)
 	smokeHarness := testutil.NewProviderErrorSmokeHarness(
 		t,
 		support.LegacyFixtureDir(t, "worktree_passthrough"),
@@ -190,9 +176,7 @@ func assertCodexTimeoutFailureNormalizesThroughWorkerPool(t *testing.T) {
 		testutil.WithProviderErrorSmokeServiceOptions(testutil.WithFullWorkerPoolAndScriptWrap()),
 	)
 	smokeHarness.QueueProviderResults(
-		workers.CommandResult{ExitCode: 1, Stderr: []byte(rawOutput)},
-		workers.CommandResult{ExitCode: 1, Stderr: []byte(rawOutput)},
-		workers.CommandResult{ExitCode: 1, Stderr: []byte(rawOutput)},
+		timeoutEntry.RepeatedCommandResults(3)...,
 	)
 	work := providerErrorSmokeWork("codex-timeout-line", "codex timeout smoke payload")
 	smokeHarness.SeedWork(t, work)
@@ -212,8 +196,10 @@ func assertCodexTimeoutFailureNormalizesThroughWorkerPool(t *testing.T) {
 		t.Fatalf("provider failure family = %s, want %s", dispatch.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
 	}
 	assertContainsAll(t, dispatch.Reason, []string{"provider error: timeout", conciseError})
-	if strings.Contains(dispatch.Reason, transcriptMarker) {
-		t.Fatalf("dispatch reason retained raw transcript marker: %q", dispatch.Reason)
+	for _, reject := range timeoutEntry.RejectMessageContains {
+		if strings.Contains(dispatch.Reason, reject) {
+			t.Fatalf("dispatch reason retained rejected cleanup-noise substring %q: %q", reject, dispatch.Reason)
+		}
 	}
 }
 

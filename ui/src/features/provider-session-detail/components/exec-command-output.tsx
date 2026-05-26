@@ -44,7 +44,7 @@ export function FriendlyExecCommandOutput({
         <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
           {messages.execCommandResultHeading}
         </span>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3">
           {friendlyOutput.exitCode !== null ? (
             <SummaryMetric
               label={messages.execCommandExitCodeLabel}
@@ -64,7 +64,6 @@ export function FriendlyExecCommandOutput({
             />
           ) : null}
           <SummaryMetric
-            className="sm:col-span-2"
             label={messages.execCommandOutputSummaryLabel}
             value={friendlyOutput.summary ?? messages.execCommandNoOutputSummary}
           />

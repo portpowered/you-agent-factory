@@ -471,7 +471,7 @@ async function expectWorkstationDetailOrderBrowserFlow(
   );
   await expect(
     currentSelectionScope.getByRole("button", {
-      name: "Select provider session codex / session_id / sess-rejected-story for dispatch dispatch-review-rejected",
+      name: "Select provider session codex / Session ID / sess-rejected-story for dispatch dispatch-review-rejected",
     }),
   ).toBeVisible();
 }

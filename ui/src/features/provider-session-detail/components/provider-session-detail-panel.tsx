@@ -85,12 +85,8 @@ function LoadedProviderSessionDetailPanel({
         <LocalizedTimezoneNote>
           {messages.localizedTimezoneContext}
         </LocalizedTimezoneNote>
-        <div className="grid gap-3 md:grid-cols-2">
-          <DetailMetric
-            label={messages.sessionLabel}
-            value={sessionLabel}
-            code
-          />
+        <div className="grid gap-3">
+          <DetailMetric label={messages.sessionLabel} value={sessionLabel} code />
           <DetailMetric
             label={messages.sessionStatusLabel}
             value={getSessionStatusText(detailState.status, messages)}
@@ -191,10 +187,8 @@ function SourceFileSection({
 
   return (
     <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.sourceHeading}
-      </h5>
-      <div className="grid gap-3 md:grid-cols-2">
+      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.sourceHeading}</h5>
+      <div className="grid gap-3">
         <DetailMetric
           label={messages.relativePathLabel}
           value={detail.source.relativePath}
@@ -276,10 +270,8 @@ function ParseOverview({
 
   return (
     <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.parseSummaryHeading}
-      </h5>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.parseSummaryHeading}</h5>
+      <div className="grid gap-3">
         <DetailMetric
           label={messages.eventCountLabel}
           value={detail.parse.eventCount}
@@ -317,11 +309,8 @@ function TokenUsageSection({
         {messages.tokenUsageHeading}
       </h5>
       {tokenUsage ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <DetailMetric
-            label={messages.inputLabel}
-            value={tokenUsage.inputTokens ?? 0}
-          />
+        <div className="grid gap-3">
+          <DetailMetric label={messages.inputLabel} value={tokenUsage.inputTokens ?? 0} />
           <DetailMetric
             label={messages.cachedInputLabel}
             value={tokenUsage.cachedInputTokens ?? 0}
@@ -361,7 +350,7 @@ function TurnsSection({
         {messages.turnsHeading}
       </h5>
       {detail.parse.turns.length > 0 ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3">
           {detail.parse.turns.map((turn) => (
             <article className={PROVIDER_SESSION_CARD_CLASS} key={turn.index}>
               <div className="grid gap-1">
@@ -379,11 +368,8 @@ function TurnsSection({
                   />
                 </div>
               </div>
-              <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                <DetailMetric
-                  label={messages.eventsLabel}
-                  value={turn.eventCount}
-                />
+              <div className="mt-2 grid gap-3">
+                <DetailMetric label={messages.eventsLabel} value={turn.eventCount} />
                 <DetailMetric
                   label={messages.responseItemsLabel}
                   value={turn.responseItemCount}
@@ -428,7 +414,7 @@ function FunctionCallsSection({
               className={PROVIDER_SESSION_CARD_CLASS}
               key={`${call.order}-${call.callId ?? call.name ?? call.type}`}
             >
-              <div className="grid gap-1 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+              <div className="grid gap-1">
                 <div className="grid gap-1">
                   <strong>{call.name ?? call.type}</strong>
                   <p
@@ -454,7 +440,7 @@ function FunctionCallsSection({
                   </span>
                 ) : null}
               </div>
-              <div className="mt-2 grid gap-3 md:grid-cols-2">
+              <div className="mt-2 grid gap-3">
                 <DetailMetric label={messages.typeLabel} value={call.type} />
                 <DetailMetric
                   label={messages.callIdLabel}
@@ -626,7 +612,9 @@ function DetailMetric({
   value: number | string | ReactNode;
 }) {
   const metricValue = code ? (
-    <code className={DASHBOARD_BODY_CODE_CLASS}>{value}</code>
+    <code className={`${DASHBOARD_BODY_CODE_CLASS} [overflow-wrap:anywhere]`}>
+      {value}
+    </code>
   ) : (
     value
   );
@@ -636,9 +624,13 @@ function DetailMetric({
     <div className={PROVIDER_SESSION_CARD_CLASS}>
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       {typeof value === "string" || typeof value === "number" ? (
-        <p className={cn("m-0", wrapperClassName)}>{metricValue}</p>
+        <p className={cn("m-0 [overflow-wrap:anywhere]", wrapperClassName)}>
+          {metricValue}
+        </p>
       ) : (
-        <div className={wrapperClassName}>{metricValue}</div>
+        <div className={cn("[overflow-wrap:anywhere]", wrapperClassName)}>
+          {metricValue}
+        </div>
       )}
     </div>
   );

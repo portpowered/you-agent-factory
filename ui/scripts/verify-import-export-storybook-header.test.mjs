@@ -74,6 +74,7 @@ function createRoleLookup({
   rootTab,
   sessionTabs,
   slider,
+  retiredStreamStatus,
 }) {
   return vi.fn((role, options) => {
     if (role === "heading") return heading;
@@ -82,7 +83,7 @@ function createRoleLookup({
     if (role === "tab" && options == null) return { count: vi.fn().mockResolvedValue(3) };
     if (role === "tab" && options?.name === "root") return rootTab;
     if (options?.name === "Change language") return languageButton;
-    if (role === "status") return { count: vi.fn().mockResolvedValue(0) };
+    if (role === "status") return retiredStreamStatus;
     if (role === "group") return globalActions;
     if (options?.name === "Return to current tick") return currentButton;
     return exportButton;
@@ -122,6 +123,7 @@ function createPage({
     isVisible: vi.fn().mockResolvedValue(returnToCurrentVisible),
   });
   const globalActions = createLocator();
+  const retiredStreamStatus = { count: vi.fn().mockResolvedValue(0) };
   const page = {
     currentButton,
     heading,
@@ -141,6 +143,7 @@ function createPage({
       rootTab,
       sessionTabs,
       slider,
+      retiredStreamStatus,
     }),
     getByText: createTextLookup(timelineStatus),
   };
