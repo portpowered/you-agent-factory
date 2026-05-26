@@ -22,6 +22,7 @@ function createViewport() {
 function createSubmitWorkHarness() {
   const workType = createVisibleLocator();
   const requestName = createVisibleLocator();
+  const submissionItems = createVisibleLocator();
   const requestBody = createVisibleLocator();
   const submitButton = createVisibleLocator();
   const guidance = createVisibleLocator();
@@ -33,6 +34,9 @@ function createSubmitWorkHarness() {
       }
       if (options?.name === "请求名称") {
         return requestName;
+      }
+      if (role === "list") {
+        return submissionItems;
       }
       if (role === "textbox") {
         return requestBody;
@@ -49,6 +53,7 @@ function createSubmitWorkHarness() {
     page: {
       getByRole: vi.fn().mockReturnValue(card),
     },
+    submissionItems,
   };
 }
 
@@ -205,7 +210,13 @@ function createCurrentSelectionHarness() {
 
 describe("verify-localized-widget-storybook-responsive", () => {
   test("verifyLocalizedSubmitWorkCard checks the localized submit-work controls", async () => {
-    const { card, expectNoHorizontalOverflow, expectVisible, page } =
+    const {
+      card,
+      expectNoHorizontalOverflow,
+      expectVisible,
+      page,
+      submissionItems,
+    } =
       createSubmitWorkHarness();
 
     await verifyLocalizedSubmitWorkCard({
@@ -219,14 +230,18 @@ describe("verify-localized-widget-storybook-responsive", () => {
     expect(card.waitFor).toHaveBeenCalledWith({ state: "visible" });
     expect(card.getByRole).toHaveBeenCalledWith("combobox", { name: "工作类型" });
     expect(card.getByRole).toHaveBeenCalledWith("textbox", { name: "请求名称" });
+    expect(card.getByRole).toHaveBeenCalledWith("list", { name: "提交项" });
     expect(card.getByRole).toHaveBeenCalledWith("textbox", {
-      exact: true,
-      name: "请求",
+      name: "文本项 1",
     });
     expect(card.getByRole).toHaveBeenCalledWith("button", {
       exact: true,
       name: "提交工作",
     });
+    expect(expectVisible).toHaveBeenCalledWith(
+      submissionItems,
+      "Localized submission-items list",
+    );
     expect(card.getByText).toHaveBeenCalledWith(
       "先选择工作类型并填写请求名称，然后即可继续。",
     );
