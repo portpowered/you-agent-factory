@@ -23,6 +23,12 @@ function requireValue<T>(value: T | null | undefined, message: string): T {
   return value;
 }
 
+function expectHeadingBefore(first: HTMLElement, second: HTMLElement) {
+  expect(
+    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+}
+
 function expectLocalizedSelectionControlNames() {
   const snapshot = semanticWorkflowDashboardSnapshot;
   const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
@@ -228,12 +234,21 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Active work" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Workstation summary" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Configuration" })).toBeTruthy();
+    const summaryHeading = screen.getByRole("heading", {
+      name: "Workstation summary",
+    });
+    const configurationHeading = screen.getByRole("heading", {
+      name: "Configuration",
+    });
+    const activeWorkHeading = screen.getByRole("heading", { name: "Active work" });
+    expect(summaryHeading).toBeTruthy();
+    expect(configurationHeading).toBeTruthy();
+    expect(activeWorkHeading).toBeTruthy();
     expect(screen.getByText("Worker type")).toBeTruthy();
     expect(screen.getByText("Selected runner")).toBeTruthy();
     expect(screen.getByText("No active work is running on this workstation.")).toBeTruthy();
+    expectHeadingBefore(summaryHeading, configurationHeading);
+    expectHeadingBefore(configurationHeading, activeWorkHeading);
 
     const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
     const resolvedRunHistorySection = requireValue(
@@ -265,17 +280,25 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("heading", { name: "アクティブな作業" }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("heading", { name: "ワークステーション概要" }),
-    ).toBeTruthy();
+    const summaryHeading = screen.getByRole("heading", {
+      name: "ワークステーション概要",
+    });
+    const configurationHeading = screen.getByRole("heading", {
+      name: "構成",
+    });
+    const activeWorkHeading = screen.getByRole("heading", {
+      name: "アクティブな作業",
+    });
+    expect(summaryHeading).toBeTruthy();
+    expect(configurationHeading).toBeTruthy();
+    expect(activeWorkHeading).toBeTruthy();
     expect(screen.getByText("ワーカータイプ")).toBeTruthy();
     expect(screen.getByText("選択中の runner")).toBeTruthy();
     expect(
       screen.getByText("このワークステーションでは現在アクティブな作業は実行されていません。"),
     ).toBeTruthy();
+    expectHeadingBefore(summaryHeading, configurationHeading);
+    expectHeadingBefore(configurationHeading, activeWorkHeading);
 
     const runHistorySection = screen
       .getByRole("heading", { name: "ラン履歴" })
@@ -439,7 +462,15 @@ describe("WorkstationDetailCard", () => {
 
     expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
     expect(screen.getAllByText(selectedNode.workstation_name).length).toBeGreaterThan(0);
-    const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
+    const summaryHeading = screen.getByRole("heading", { name: "Workstation summary" });
+    const configurationHeading = screen.getByRole("heading", { name: "Configuration" });
+    const activeWorkHeading = screen.getByRole("heading", { name: "Active work" });
+    const runHistoryHeading = screen.getByRole("heading", { name: "Run history" });
+    expectHeadingBefore(summaryHeading, configurationHeading);
+    expectHeadingBefore(configurationHeading, activeWorkHeading);
+    expectHeadingBefore(activeWorkHeading, runHistoryHeading);
+
+    const activeWorkSection = activeWorkHeading.closest("section");
     const resolvedActiveWorkSection = requireValue(
       activeWorkSection,
       "expected active work section",
@@ -451,15 +482,6 @@ describe("WorkstationDetailCard", () => {
     );
     expect(within(resolvedActiveWorkSection).getByText("4s")).toBeTruthy();
 
-    const summaryHeading = screen.getByRole("heading", { name: "Workstation summary" });
-    const runHistoryHeading = screen.getByRole("heading", { name: "Run history" });
-    expect(
-      resolvedActiveWorkSection.compareDocumentPosition(summaryHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      resolvedActiveWorkSection.compareDocumentPosition(runHistoryHeading) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Expand" }).getAttribute("aria-expanded")).toBe(
       "false",
     );
