@@ -205,6 +205,11 @@ type FactoryServiceConfig struct {
 	// APIServerStarter is an optional callback that starts an API server.
 	// If nil, no API server is started.
 	APIServerStarter APIServerStarter
+	// APIServerReady, when non-nil, is closed by the API starter once the
+	// service-mode HTTP surface is reachable. Service-mode startup work waits
+	// for this signal so external clients can observe the startup window before
+	// the initial WorkFile begins processing.
+	APIServerReady <-chan struct{}
 	// ProviderOverride, when non-nil, replaces the default
 	// ScriptWrapProvider for MODEL_WORKER executors. This allows tests
 	// to inject a mock Provider and exercise the full worker pipeline
@@ -253,6 +258,8 @@ type FactoryServiceConfig struct {
 	// load/invoke/reuse path without a live embedded backend.
 	LocalModelRuntimeOverride localModelRuntime
 }
+
+const serviceModeStartupWorkReadabilityDelay = 250 * time.Millisecond
 
 // ActivateNamedFactory builds a replacement runtime from a persisted named
 // factory directory and swaps it in only after the current runtime is idle.
@@ -368,12 +375,10 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	if err := fs.prepareRunInputs(ctx, serviceMode); err != nil {
 		return err
 	}
-	currentRuntime, err := fs.startDefaultRuntime(ctx, runCtx, serviceMode)
+	currentRuntime, err := fs.startRunRuntime(ctx, runCtx, &sidecars, serviceMode)
 	if err != nil {
 		return err
 	}
-	fs.startAPIServerSidecar(runCtx, &sidecars)
-	fs.logServiceStartup()
 
 	err = fs.waitForActiveRuntime(ctx)
 	currentRuntime = fs.currentLiveRuntime()
@@ -395,6 +400,27 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 		return fmt.Errorf("factory run: %w", err)
 	}
 	return nil
+}
+
+func (fs *FactoryService) startRunRuntime(
+	ctx context.Context,
+	runCtx context.Context,
+	sidecars *sync.WaitGroup,
+	serviceMode bool,
+) (*liveRuntimeHandle, error) {
+	currentRuntime, err := fs.startDefaultRuntime(ctx, runCtx, serviceMode)
+	if err != nil {
+		return nil, err
+	}
+	fs.startAPIServerSidecar(runCtx, sidecars)
+	if err := fs.waitForServiceModeStartupWorkReadability(ctx, serviceMode); err != nil {
+		return nil, err
+	}
+	if err := fs.submitServiceModeWorkFile(ctx, currentRuntime, serviceMode); err != nil {
+		return nil, err
+	}
+	fs.logServiceStartup()
+	return currentRuntime, nil
 }
 
 func (fs *FactoryService) startRunSidecars(runCtx context.Context, sidecars *sync.WaitGroup, serviceMode bool) {
@@ -440,12 +466,52 @@ func (fs *FactoryService) prepareRunInputs(ctx context.Context, serviceMode bool
 			return err
 		}
 	}
-	if fs.cfg.WorkFile != "" {
+	if fs.cfg.WorkFile != "" && !serviceMode {
 		if err := fs.submitWorkFile(ctx); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (fs *FactoryService) submitServiceModeWorkFile(
+	ctx context.Context,
+	currentRuntime *liveRuntimeHandle,
+	serviceMode bool,
+) error {
+	if !serviceMode || fs.cfg.WorkFile == "" {
+		return nil
+	}
+	if err := fs.submitWorkFile(ctx); err != nil {
+		fs.clearRunState()
+		fs.unregisterLiveSession(defaultFactorySessionID)
+		if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+			return errors.Join(err, stopErr)
+		}
+		return err
+	}
+	return nil
+}
+
+func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.Context, serviceMode bool) error {
+	if !serviceMode || fs.cfg.WorkFile == "" || fs.cfg.APIServerReady == nil {
+		return nil
+	}
+	select {
+	case <-fs.cfg.APIServerReady:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	timer := time.NewTimer(serviceModeStartupWorkReadabilityDelay)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (fs *FactoryService) startDefaultRuntime(

@@ -26,6 +26,7 @@ const (
 	cliHTTPStabilityPollInterval = 100 * time.Millisecond
 	cliHTTPStabilitySleepMS      = 5000
 	cliHTTPStabilityMinPolls     = 3
+	cliHTTPStabilityStartupPolls = 2
 )
 
 func TestMockWorkers_CLIServiceModeStartupWorkFileSupportsRepeatedLiveHTTPPollingBeforeCompletion(t *testing.T) {
@@ -77,7 +78,7 @@ args:
 		})
 	}()
 
-	waitForCLIHTTPStabilityPhaseReadability(t, baseURL, traceID, errCh, 10*time.Second, cliHTTPStabilityStartupPhase, 1)
+	waitForCLIHTTPStabilityPhaseReadability(t, baseURL, traceID, errCh, 10*time.Second, cliHTTPStabilityStartupPhase, cliHTTPStabilityStartupPolls)
 	waitForCLIHTTPStabilityPhaseReadability(t, baseURL, traceID, errCh, 15*time.Second, cliHTTPStabilityActivePhase, cliHTTPStabilityMinPolls)
 	idleSample := waitForCLIHTTPStabilityPhaseReadability(t, baseURL, traceID, errCh, 20*time.Second, cliHTTPStabilityIdlePhase, 1)
 	item := requireCLIHTTPStabilityWorkByTrace(t, idleSample.work, traceID)
@@ -289,7 +290,8 @@ func cliHTTPStabilitySampleInPhase(
 ) bool {
 	switch phase {
 	case cliHTTPStabilityStartupPhase:
-		return sample.status.Categories.Terminal == 0
+		return sample.status.RuntimeStatus == string(interfaces.RuntimeStatusIdle) &&
+			sample.status.Categories.Terminal == 0
 	case cliHTTPStabilityActivePhase:
 		return sample.status.Categories.Terminal == 0 &&
 			sample.status.RuntimeStatus == string(interfaces.RuntimeStatusActive)

@@ -10,8 +10,11 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"go.uber.org/zap"
 )
 
@@ -162,6 +165,98 @@ func TestBuildFactoryService_BatchModeRejectsLateSubmissionAfterTermination(t *t
 	}
 	if !strings.Contains(err.Error(), "terminated") {
 		t.Fatalf("expected terminated error, got %v", err)
+	}
+}
+
+func TestFactoryService_ServiceModeAPISurfaceStartsBeforeStartupWorkFileSubmission(t *testing.T) {
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	workFile := filepath.Join(dir, "startup-work.json")
+	if err := os.WriteFile(workFile, []byte(`{
+  "requestId": "request-startup-before-workfile",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "startup-item",
+      "workId": "work-startup-before-workfile",
+      "workTypeName": "task",
+      "traceId": "trace-startup-before-workfile",
+      "payload": {"title": "startup work"}
+    }
+  ]
+}`), 0o644); err != nil {
+		t.Fatalf("write work file: %v", err)
+	}
+
+	type starterObservation struct {
+		snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+		err      error
+	}
+
+	observedCh := make(chan starterObservation, 1)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		WorkFile:          workFile,
+		Port:              1,
+		Logger:            zap.NewNop(),
+		APIServerStarter: func(ctx context.Context, runtime apisurface.APISurface, _ int, _ *zap.Logger) error {
+			snapshot, err := runtime.GetEngineStateSnapshot(ctx)
+			if err != nil {
+				observedCh <- starterObservation{err: err}
+			} else {
+				observedCh <- starterObservation{snapshot: snapshot}
+			}
+			<-ctx.Done()
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+
+	var observation starterObservation
+	select {
+	case observation = <-observedCh:
+	case err := <-errCh:
+		t.Fatalf("Run returned before API starter observation: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for API starter observation")
+	}
+	if observation.err != nil {
+		t.Fatalf("APIServerStarter GetEngineStateSnapshot: %v", observation.err)
+	}
+	if observation.snapshot == nil {
+		t.Fatal("APIServerStarter snapshot = nil, want idle runtime snapshot")
+	}
+	if observation.snapshot.RuntimeStatus != interfaces.RuntimeStatusIdle {
+		t.Fatalf("startup runtime status = %q, want %q", observation.snapshot.RuntimeStatus, interfaces.RuntimeStatusIdle)
+	}
+	if len(observation.snapshot.Marking.Tokens) != 0 {
+		t.Fatalf("startup tokens = %#v, want no startup-work tokens before work-file submission", observation.snapshot.Marking.Tokens)
+	}
+
+	waitForTokenInPlaceByWorkID(t, svc, "task:complete", "work-startup-before-workfile", time.Second)
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service-mode factory service to stop")
 	}
 }
 

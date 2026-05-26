@@ -363,6 +363,7 @@ func buildRunServiceConfig(
 		WorkflowID:        cfg.Workflow,
 		MockWorkersConfig: mockWorkersConfig,
 		APIServerStarter:  runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
+		APIServerReady:    dashboardReady,
 	}
 	if !cfg.SuppressDashboardRendering {
 		svcCfg.SimpleDashboardRenderer = renderSimpleDashboard
