@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   DashboardSnapshot,
   DashboardTrace,
@@ -12,14 +12,21 @@ import {
   DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
 } from "./features/bento/hooks/dashboardLayoutSchema";
 import {
+  useCurrentWorkstationPromptTemplateValidation,
+} from "./features/current-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
+import {
   activeSnapshot,
   baselineSnapshot,
-  mockCurrentFactoryDocument,
   MockEventSource,
+  mockCurrentFactoryDocument,
   registerAppDashboardTestLifecycle,
   renderApp,
   terminalSnapshot,
 } from "./testing/app-shell-test-utils";
+
+vi.mock("./features/current-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
+  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+}));
 
 const activeWorkID = "work-active-story";
 const completedWorkID = "work-complete";
@@ -285,6 +292,33 @@ function getActiveStorySelectionButton(): HTMLElement {
   return activeStoryButton;
 }
 
+async function findReviewWorkstationSelectionButton(): Promise<HTMLElement> {
+  const localizedButton = screen.queryByRole("button", {
+    name: "选择 Review 工作站",
+  });
+  if (localizedButton instanceof HTMLElement) {
+    return localizedButton;
+  }
+
+  return screen.findByRole("button", {
+    name: "Select Review workstation",
+  });
+}
+
+function mockSuccessfulWorkstationPromptValidation(): void {
+  vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+    data: {
+      diagnostics: [],
+      valid: true,
+    },
+    error: null,
+    isError: false,
+    isPending: false,
+    isSuccess: true,
+    status: "success",
+  } as never);
+}
+
 function removeTraceIDFromWorkItem(
   workItem: DashboardWorkItemRef,
 ): DashboardWorkItemRef {
@@ -392,6 +426,7 @@ function buildEditableFactoryDefinitionForCurrentSelection() {
     ],
     workstations: [
       {
+        behavior: "STANDARD",
         body: "Plan the active story before implementation.",
         id: "plan",
         inputs: [{ state: "init", workType: "story" }],
@@ -401,6 +436,7 @@ function buildEditableFactoryDefinitionForCurrentSelection() {
         worker: "planner",
       },
       {
+        behavior: "STANDARD",
         body: "Implement the active story changes.",
         id: "implement",
         inputs: [{ state: "ready", workType: "story" }],
@@ -410,6 +446,7 @@ function buildEditableFactoryDefinitionForCurrentSelection() {
         worker: "implementer",
       },
       {
+        behavior: "STANDARD",
         body: "Review the active story before approval.",
         id: "review",
         inputs: [{ state: "implemented", workType: "story" }],
@@ -425,6 +462,10 @@ function buildEditableFactoryDefinitionForCurrentSelection() {
 
 describe("App current selection", () => {
   registerAppDashboardTestLifecycle();
+
+  beforeEach(() => {
+    mockSuccessfulWorkstationPromptValidation();
+  });
 
   it("renders a trace drill-down for a selected work item", async () => {
     renderApp({
@@ -805,6 +846,52 @@ describe("App current selection", () => {
     expect(await screen.findByText("Trace history unavailable")).toBeTruthy();
   });
 
+  it("switches current-selection and trace enum labels to zh-CN without changing raw IDs", async () => {
+    renderApp({
+      initialLocale: "en",
+      snapshot: activeSnapshot,
+      traceFixtures: activeStoryTraceFixtures,
+    });
+
+    fireEvent.click(getActiveStorySelectionButton());
+
+    const englishSelection = await screen.findByRole("article", {
+      name: "Current selection",
+    });
+    const englishTrace = await screen.findByRole("article", {
+      name: "Trace drill-down",
+    });
+    const englishToolbar = await screen.findByRole("region", {
+      name: "dashboard summary",
+    });
+
+    expect(within(englishSelection).getByText("Current dispatch")).toBeTruthy();
+    expect(within(englishSelection).getByText(activeWorkID)).toBeTruthy();
+    expect(within(englishSelection).getByText("dispatch-review-active")).toBeTruthy();
+    expect(within(englishTrace).getByText("Accepted · 1s")).toBeTruthy();
+
+    fireEvent.click(
+      within(englishToolbar).getByRole("button", { name: "Change language" }),
+    );
+    fireEvent.click(
+      screen.getByRole("menuitemradio", {
+        name: "简体中文",
+      }),
+    );
+
+    const localizedSelection = await screen.findByRole("article", {
+      name: "当前选择",
+    });
+    await screen.findByRole("heading", { name: "追踪下钻" });
+
+    expect(within(localizedSelection).getByText("当前分派")).toBeTruthy();
+    expect(within(localizedSelection).getByText(activeWorkID)).toBeTruthy();
+    expect(within(localizedSelection).getByText("dispatch-review-active")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "追踪下钻" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "分派关系图" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Trace drill-down" })).toBeNull();
+  });
+
   it("keeps workstation and work-item selection usable after React Flow zoom", async () => {
     renderApp({
       snapshot: activeSnapshot,
@@ -1123,6 +1210,97 @@ describe("App current selection", () => {
       worker: "reviewer",
       workstationName: "Review",
     });
+  });
+
+  it("renders localized workstation editing options with canonical values and keeps unknown fallbacks readable", async () => {
+    const snapshot = {
+      ...activeSnapshot,
+      topology: {
+        ...activeSnapshot.topology,
+        workstation_nodes_by_id: {
+          ...activeSnapshot.topology.workstation_nodes_by_id,
+          review: {
+            ...activeSnapshot.topology.workstation_nodes_by_id.review,
+            workstation_kind: "future-kind",
+          },
+        },
+      },
+    } satisfies DashboardSnapshot;
+
+    mockCurrentFactoryDocument({
+      data: buildEditableFactoryDefinitionForCurrentSelection(),
+      error: null,
+      failureCount: 0,
+      failureReason: null,
+      fetchStatus: "idle",
+      isError: false,
+      isFetched: true,
+      isFetchedAfterMount: true,
+      isFetching: false,
+      isInitialLoading: false,
+      isLoading: false,
+      isLoadingError: false,
+      isPaused: false,
+      isPending: false,
+      isPlaceholderData: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isStale: true,
+      isSuccess: true,
+      promise: Promise.resolve(buildEditableFactoryDefinitionForCurrentSelection()),
+      refetch: vi.fn(),
+      status: "success",
+    } as never);
+
+    renderApp({
+      initialLocale: "zh-CN",
+      snapshot,
+    });
+
+    fireEvent.click(await findReviewWorkstationSelectionButton());
+
+    const currentSelection = await screen.findByRole("article", {
+      name: "当前选择",
+    });
+    expect(within(currentSelection).getByRole("heading", { name: "工作站摘要" })).toBeTruthy();
+    expect(within(currentSelection).getByText("未知种类：future-kind")).toBeTruthy();
+
+    const configurationSection = within(currentSelection)
+      .getByRole("heading", { name: "配置" })
+      .closest("section");
+    if (!(configurationSection instanceof HTMLElement)) {
+      throw new Error("expected localized editable configuration section");
+    }
+
+    fireEvent.click(
+      within(configurationSection).getByRole("button", {
+        name: "展开可编辑配置",
+      }),
+    );
+
+    const kindSelect = within(currentSelection).getByLabelText(
+      "类型",
+    ) as HTMLSelectElement;
+    expect(
+      Array.from(kindSelect.options).map((option) => ({
+        label: option.textContent,
+        value: option.value,
+      })),
+    ).toEqual([
+      { label: "标准", value: "STANDARD" },
+      { label: "重复器", value: "REPEATER" },
+      { label: "轮询器", value: "POLLER" },
+    ]);
+
+    fireEvent.change(kindSelect, {
+      target: { value: "REPEATER" },
+    });
+    expect(kindSelect.value).toBe("REPEATER");
+    expect(
+      within(currentSelection)
+        .getByRole("button", { name: "保存更改" })
+        .getAttribute("disabled"),
+    ).toBeNull();
   });
 
   it("shows selected state node details from the graph", async () => {
