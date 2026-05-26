@@ -48,7 +48,7 @@ const TOOLBAR_ACTIONS_CLASS =
 const TOOLBAR_MIXED_ROW_CLASS = "min-w-0 flex-1";
 const MENU_LIST_CLASS = "grid gap-1";
 const MENU_ACTION_CLASS =
-  "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent-border hover:bg-af-accent-surface focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
+  "min-h-0 w-full justify-start rounded-2xl border-transparent px-3 py-2 text-left [&>span]:grid [&>span]:w-full [&>span]:justify-items-start";
 const MENU_ACTION_LABEL_CLASS = "text-sm font-semibold text-af-text";
 const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-text-muted";
 const VISIBILITY_PANEL_CLASS =
@@ -312,7 +312,7 @@ function FactoryGraphEditorAddMenu({
         </div>
         <div className={MENU_LIST_CLASS}>
           {actions.map((action) => (
-            <button
+            <DashboardActionButton
               aria-label={action.label}
               className={MENU_ACTION_CLASS}
               disabled={action.disabled}
@@ -321,6 +321,7 @@ function FactoryGraphEditorAddMenu({
                 onAction(action.id);
                 onOpenChange?.(false);
               }}
+              tone="ghost"
               type="button"
             >
               <span className={MENU_ACTION_LABEL_CLASS}>{action.label}</span>
@@ -329,7 +330,7 @@ function FactoryGraphEditorAddMenu({
                   {action.description}
                 </span>
               ) : null}
-            </button>
+            </DashboardActionButton>
           ))}
         </div>
       </PopoverContent>

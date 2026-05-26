@@ -68,6 +68,9 @@ describe("factory graph editor toolbar controls", () => {
     expect(
       within(menu).getByRole("button", { name: "Workstation" }),
     ).toBeTruthy();
+    expect(
+      within(menu).getByRole("button", { name: "Workstation" }).className,
+    ).toContain("rounded-lg");
     const pendingPill = screen.getByText("Draft changes pending");
     expect(pendingPill).toBeTruthy();
     expect(pendingPill.className).toContain("border-af-warning-border");

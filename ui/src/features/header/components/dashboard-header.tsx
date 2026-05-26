@@ -14,6 +14,7 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import {
   DashboardActionRow,
+  DashboardActionButton,
   DashboardStatusPill,
 } from "../../../components/ui";
 import {
@@ -59,8 +60,8 @@ const DASHBOARD_TIMELINE_ACTIONS_CLASS =
 const LOCALE_MENU_PANEL_CLASS =
   "absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-af-border bg-af-surface-raised p-1 text-af-text shadow-af-panel backdrop-blur-lg";
 const LOCALE_MENU_ITEM_CLASS = cn(
-  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-af-text-muted outline-none transition-colors hover:bg-af-overlay hover:text-af-text",
-  "focus-visible:bg-af-overlay focus-visible:text-af-text focus-visible:ring-2 focus-visible:ring-af-focus-ring",
+  "min-h-0 w-full justify-start rounded-xl border-transparent px-3 py-2 text-sm",
+  "[&>span]:grid [&>span]:w-full [&>span]:grid-cols-[minmax(0,1fr)_auto] [&>span]:items-center [&>span]:gap-2 [&>span]:text-left",
 );
 
 interface HeaderLocaleOption {
@@ -379,13 +380,12 @@ function DashboardLocaleMenuList({
         const isSelected = option.value === currentValue;
 
         return (
-          <button
+          <DashboardActionButton
             key={option.value}
             aria-checked={isSelected}
             className={cn(
               LOCALE_MENU_ITEM_CLASS,
-              isSelected &&
-                "border border-af-accent-border bg-af-accent-surface text-af-text",
+              isSelected ? "border-af-accent-border bg-af-accent-surface text-af-text" : "text-af-text-muted",
             )}
             onClick={() => {
               onChangeLocale(option.value);
@@ -393,11 +393,12 @@ function DashboardLocaleMenuList({
               buttonRef.current?.focus();
             }}
             role="menuitemradio"
+            tone={isSelected ? "secondary" : "ghost"}
             type="button"
           >
             <span>{option.label}</span>
             {isSelected ? <LocaleMenuCheckIcon /> : null}
-          </button>
+          </DashboardActionButton>
         );
       })}
     </div>
