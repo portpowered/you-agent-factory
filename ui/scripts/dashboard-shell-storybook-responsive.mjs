@@ -100,9 +100,6 @@ export async function verifyDashboardShellConsolidation(
     name: "Timeline tick",
   });
   const timelineStatus = toolbar.getByText(/^\d+\/\d+$/);
-  const streamStatus = toolbar.getByRole("status", {
-    name: /Event stream (connecting|live)/,
-  });
   const moveButton = board.getByRole("button", {
     exact: true,
     name: "Move Work totals",
@@ -113,8 +110,12 @@ export async function verifyDashboardShellConsolidation(
   await expectVisible(headerExportButton, "Dashboard export button");
   await expectVisible(timelineSlider, "Timeline slider");
   await expectVisible(timelineStatus, "Timeline status");
-  await expectVisible(streamStatus, "Dashboard stream status");
   await expectVisible(moveButton, "Work totals move button");
+  if ((await toolbar.getByRole("status", { name: /Event stream/i }).count()) > 0) {
+    throw new Error(
+      "Dashboard shell header still rendered the retired event-stream status pill.",
+    );
+  }
   if (
     await toolbar.getByRole("button", { name: "Return to current tick" }).isVisible()
   ) {

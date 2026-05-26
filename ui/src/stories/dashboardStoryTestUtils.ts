@@ -254,7 +254,7 @@ export async function expectTimelineToolbarAlignment(
   );
 
   expect(sliderShell.className).toContain("gap-1.5");
-  expect(sliderShell.className).toContain("px-2.5");
+  expect(sliderShell.className).toContain("px-1");
   expect(
     within(toolbar).queryByRole("status", { name: /Event stream/i }),
   ).toBeNull();

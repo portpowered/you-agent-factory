@@ -280,9 +280,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   const languageButton = page.getByRole("button", {
     name: "Change language",
   });
-  const streamStatus = page.getByRole("status", {
-    name: /Event stream (connecting|live)/,
-  });
   const exportButton = page.getByRole("button", { name: "Export PNG" });
   const globalActions = page.getByRole("group", {
     name: "Dashboard actions",
@@ -295,12 +292,16 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectVisible(slider, "Timeline slider");
   await expectVisible(timelineStatus, "Timeline status");
   await expectVisible(languageButton, "Language menu button");
-  await expectVisible(streamStatus, "Dashboard stream status");
   await expectVisible(exportButton, "Export PNG button");
   await expectVisible(globalActions, "Global header actions");
 
   if ((await allTabs.count()) < 3) {
     throw new Error("Dashboard header did not render the expected multi-session tab strip.");
+  }
+  if ((await page.getByRole("status", { name: /Event stream/i }).count()) > 0) {
+    throw new Error(
+      "Dashboard header still rendered the retired event-stream status pill.",
+    );
   }
 
   if (await page.getByRole("button", { name: "Return to current tick" }).isVisible()) {
