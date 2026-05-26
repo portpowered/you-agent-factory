@@ -114,14 +114,38 @@ function buildRelationshipGraph(
       },
     ],
     relatedWork: [
-      { label: "Blocked Story", workID: "work-blocked-story" },
-      { label: "Child Story", workID: "work-child-story" },
-      { label: "Dependency Story", workID: "work-dependency-story" },
-      { label: "Parent Story", workID: "work-parent-story" },
+      {
+        label: "Blocked Story",
+        state: "queued",
+        traceID: "trace-blocked-story",
+        workID: "work-blocked-story",
+        workTypeID: "story",
+      },
+      {
+        label: "Child Story",
+        state: "running",
+        traceID: "trace-child-story",
+        workID: "work-child-story",
+        workTypeID: "task",
+      },
+      {
+        label: "Dependency Story",
+        state: "ready",
+        traceID: "trace-dependency-story",
+        workID: "work-dependency-story",
+        workTypeID: "dependency",
+      },
+      {
+        label: "Parent Story",
+        state: "done",
+        traceID: "trace-parent-story",
+        workID: "work-parent-story",
+        workTypeID: "epic",
+      },
     ],
     selectedWork: {
       label: "Active Story",
-      state: workItem.state,
+      state: "in_progress",
       traceID: workItem.trace_id,
       workID: workItem.work_id,
       workTypeID: workItem.work_type_id,
@@ -1092,8 +1116,31 @@ describe("WorkItemDetailCard relationship graph", () => {
 
     expect(within(relationshipGraph).getByText("Selected work")).toBeTruthy();
     expect(
-      within(relationshipGraph).getByText("Active Story").className,
+      within(relationshipGraph).getByRole("region", {
+        name: "Relationship key",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText(
+        "Parent work above the current selection",
+      ),
+    ).toBeTruthy();
+    const selectedRelationshipNode = within(relationshipGraph)
+      .getByText("Active Story")
+      .closest('[data-selected-work-relationship-node="selected"]');
+
+    if (!(selectedRelationshipNode instanceof HTMLElement)) {
+      throw new Error("expected selected relationship node");
+    }
+
+    expect(
+      within(selectedRelationshipNode).getByText("Active Story").className,
     ).toContain("text-af-text");
+    expect(within(selectedRelationshipNode).getByText("in_progress")).toBeTruthy();
+    expect(within(selectedRelationshipNode).getByText("story")).toBeTruthy();
+    expect(
+      within(selectedRelationshipNode).getByText("trace-active-story"),
+    ).toBeTruthy();
     expect(
       within(relationshipGraph).getByRole("region", {
         name: "Parent relationships",
@@ -1121,12 +1168,15 @@ describe("WorkItemDetailCard relationship graph", () => {
         }),
       ).getByText("Parent Story"),
     ).toBeTruthy();
+    expect(within(relationshipGraph).getByText("trace-parent-story")).toBeTruthy();
     expect(
       within(relationshipGraph).getByText("Depends on (ready)"),
     ).toBeTruthy();
     expect(
       within(relationshipGraph).getByText("Required by (approved)"),
     ).toBeTruthy();
+    expect(within(relationshipGraph).getByText("queued")).toBeTruthy();
+    expect(within(relationshipGraph).getByText("dependency")).toBeTruthy();
     expect(
       within(
         within(relationshipGraph).getByRole("region", {
