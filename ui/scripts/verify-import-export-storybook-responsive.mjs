@@ -15,7 +15,10 @@ import {
   verifyEditorGraphParity as verifyEditorGraphParityImpl,
   verifyObserverGraphParity as verifyObserverGraphParityImpl,
 } from "./verify-graph-parity-storybook-responsive.mjs";
-import { verifyCurrentSelectionPromptHint as verifyCurrentSelectionPromptHintImpl } from "./verify-current-selection-storybook-responsive.mjs";
+import {
+  verifyCurrentSelectionPromptHint as verifyCurrentSelectionPromptHintImpl,
+  verifyCurrentSelectionWorkstationDetailOrder as verifyCurrentSelectionWorkstationDetailOrderImpl,
+} from "./verify-current-selection-storybook-responsive.mjs";
 import {
   createLocalizedExportDialogVerifier,
   createLocalizedImportDialogVerifier,
@@ -148,6 +151,11 @@ export const storyChecks = [
     assertions: verifyCurrentSelectionPromptHint,
     id: "you-agent-factory-workflow-dashboard--current-selection-prompt-hint-verification",
     label: "current selection prompt hinting",
+  },
+  {
+    assertions: verifyCurrentSelectionWorkstationDetailOrder,
+    id: "you-agent-factory-workflow-dashboard--current-selection-workstation-detail-order-verification",
+    label: "current selection workstation detail order",
   },
   {
     assertions: verifyObserverGraphParity,
@@ -324,6 +332,18 @@ export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
 }
 export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {
   return verifyCurrentSelectionPromptHintImpl({
+    expectNoHorizontalOverflow,
+    expectVisible,
+    page,
+    viewport,
+  });
+}
+export async function verifyCurrentSelectionWorkstationDetailOrder(
+  page,
+  _dialog,
+  viewport,
+) {
+  return verifyCurrentSelectionWorkstationDetailOrderImpl({
     expectNoHorizontalOverflow,
     expectVisible,
     page,

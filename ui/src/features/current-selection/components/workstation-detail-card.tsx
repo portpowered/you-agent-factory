@@ -60,6 +60,22 @@ export function WorkstationDetailCard({
   return (
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
       <p className={WIDGET_SUBTITLE_CLASS}>{selectedNode.workstation_name}</p>
+      <WorkstationSummary
+        activeRunCount={activeExecutions.length}
+        editableConfigurationState={editableConfigurationState}
+        historyCount={
+          hasProjectedRequestHistory
+            ? workstationRequests.length
+            : providerSessions.length
+        }
+        historyLabel={
+          hasProjectedRequestHistory
+            ? messages.historicalRequestsLabel
+            : messages.historicalRunsLabel
+        }
+        messages={messages}
+        selectedNode={selectedNode}
+      />
       <EditableConfigurationSection
         key={`editable-configuration:${selectedNode.node_id}`}
         messages={messages}
@@ -76,22 +92,6 @@ export function WorkstationDetailCard({
         selectedRequest={selectedRequest}
         selectedWorkID={selectedWorkID}
         workstationRequestsByDispatchID={workstationRequestsByDispatchID}
-      />
-      <WorkstationSummary
-        activeRunCount={activeExecutions.length}
-        editableConfigurationState={editableConfigurationState}
-        historyCount={
-          hasProjectedRequestHistory
-            ? workstationRequests.length
-            : providerSessions.length
-        }
-        historyLabel={
-          hasProjectedRequestHistory
-            ? messages.historicalRequestsLabel
-            : messages.historicalRunsLabel
-        }
-        messages={messages}
-        selectedNode={selectedNode}
       />
       {hasProjectedRequestHistory ? (
         <CollapsibleWorkstationRequests

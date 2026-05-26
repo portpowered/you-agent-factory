@@ -421,6 +421,61 @@ async function expectPromptHintBrowserFlow(
   await expect(saveButton).toBeDisabled();
 }
 
+function expectHeadingBefore(first: HTMLElement, second: HTMLElement) {
+  expect(
+    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+}
+
+async function expectWorkstationDetailOrderBrowserFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+
+  await userEvent.click(
+    await canvas.findByRole("button", { name: "Select Review workstation" }),
+  );
+
+  const currentSelection = currentSelectionCard(canvasElement);
+  const currentSelectionScope = within(currentSelection);
+  const summaryHeading = currentSelectionScope.getByRole("heading", {
+    name: "Workstation summary",
+  });
+  const configurationHeading = currentSelectionScope.getByRole("heading", {
+    name: "Configuration",
+  });
+  const activeWorkHeading = currentSelectionScope.getByRole("heading", {
+    name: "Active work",
+  });
+  const historyHeading =
+    currentSelectionScope.queryByRole("heading", {
+      name: "Request history",
+    }) ??
+    currentSelectionScope.getByRole("heading", {
+      name: "Run history",
+    });
+
+  expectHeadingBefore(summaryHeading, configurationHeading);
+  expectHeadingBefore(configurationHeading, activeWorkHeading);
+  expectHeadingBefore(activeWorkHeading, historyHeading);
+  await expect(currentSelectionScope.getByText("Input work types")).toBeVisible();
+  await expect(currentSelectionScope.getByText("Active runs")).toBeVisible();
+  await expect(
+    currentSelectionScope.getByRole("button", {
+      name: "Select work item Active Story",
+    }),
+  ).toBeVisible();
+
+  await userEvent.click(
+    currentSelectionScope.getByRole("button", { name: "Expand" }),
+  );
+  await expect(
+    currentSelectionScope.getByRole("button", {
+      name: "Select provider session codex / session_id / sess-rejected-story for dispatch dispatch-review-rejected",
+    }),
+  ).toBeVisible();
+}
+
 function LocalePropagationStory() {
   return (
     <AppLocaleProvider initialLocale="en">
@@ -911,6 +966,24 @@ export const CurrentSelectionPromptHintVerification = {
   tags: ["test"],
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await expectPromptHintBrowserFlow(canvasElement);
+    expectNoPageHorizontalOverflow(canvasElement);
+  },
+};
+
+export const CurrentSelectionWorkstationDetailOrderVerification = {
+  parameters: {
+    dashboardApi: {
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "1280px" }}>
+      <App />
+    </div>
+  ),
+  tags: ["test"],
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectWorkstationDetailOrderBrowserFlow(canvasElement);
     expectNoPageHorizontalOverflow(canvasElement);
   },
 };
