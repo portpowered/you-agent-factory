@@ -1,5 +1,5 @@
-import * as React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import * as React from "react";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/public";
 
 import { DEFAULT_DASHBOARD_LAYOUT } from "../hooks/dashboardLayoutSchema";
@@ -74,6 +74,7 @@ vi.mock("../../current-selection/public", async () => {
     useCurrentSelection: () => currentSelectionState,
     useCurrentSelectionDetails: () => ({
       selectedWorkExecutionDetails: null,
+      selectedWorkRelationshipGraph: { status: "loading" as const },
     }),
     useSelectedProviderSessionState: () => {
       const [selectedProviderSession, setSelectedProviderSession] =
@@ -109,11 +110,9 @@ vi.mock("../../import", () => ({
 }));
 
 vi.mock("../../submit-work/public", () => ({
-  SubmitWorkWidget: ({
-    headerAction,
-  }: {
-    headerAction?: React.ReactNode;
-  }) => <section>{headerAction}Submit work card</section>,
+  SubmitWorkWidget: ({ headerAction }: { headerAction?: React.ReactNode }) => (
+    <section>{headerAction}Submit work card</section>
+  ),
 }));
 
 vi.mock("../../terminal-work/public", () => ({
@@ -125,8 +124,9 @@ vi.mock("../../terminal-work/public", () => ({
 }));
 
 vi.mock("../../dashboard/state/dashboardSessionStore", () => ({
-  useDashboardSessionStore: (selector: (state: { selectedSessionID: string }) => unknown) =>
-    selector({ selectedSessionID: "session-1" }),
+  useDashboardSessionStore: (
+    selector: (state: { selectedSessionID: string }) => unknown,
+  ) => selector({ selectedSessionID: "session-1" }),
 }));
 
 vi.mock("../../timeline/state/factoryTimelineStore", () => ({
@@ -180,20 +180,16 @@ vi.mock("../../trace-drilldown/public", () => ({
 }));
 
 vi.mock("../../work-outcome/public", () => ({
-  WorkOutcomeWidget: ({
-    headerAction,
-  }: {
-    headerAction?: React.ReactNode;
-  }) => <section>{headerAction}Work outcome card</section>,
+  WorkOutcomeWidget: ({ headerAction }: { headerAction?: React.ReactNode }) => (
+    <section>{headerAction}Work outcome card</section>
+  ),
   useWorkOutcomeChart: () => ({ status: "empty" }),
 }));
 
 vi.mock("../../work-totals/public", () => ({
-  WorkTotalsWidget: ({
-    headerAction,
-  }: {
-    headerAction?: React.ReactNode;
-  }) => <section>{headerAction}Work totals card</section>,
+  WorkTotalsWidget: ({ headerAction }: { headerAction?: React.ReactNode }) => (
+    <section>{headerAction}Work totals card</section>
+  ),
 }));
 
 vi.mock("../../workflow-activity/public", () => ({
@@ -253,7 +249,8 @@ vi.mock("../hooks/useDashboardLayout", () => ({
   },
   getRenderableDashboardLayout: (layout: unknown) => layout,
   useDashboardLayout: () => {
-    const [dashboardLayout, setDashboardLayout] = React.useState(mockDashboardLayout);
+    const [dashboardLayout, setDashboardLayout] =
+      React.useState(mockDashboardLayout);
 
     return {
       addDashboardWidget: (widgetType: string) => {
@@ -279,7 +276,11 @@ vi.mock("./agent-bento", () => ({
   AgentBentoLayout: ({
     cards,
   }: {
-    cards: Array<{ children: React.ReactNode; id: string; widgetType?: string }>;
+    cards: Array<{
+      children: React.ReactNode;
+      id: string;
+      widgetType?: string;
+    }>;
   }) => (
     <div>
       {cards.map((card) => (
@@ -370,7 +371,9 @@ describe("DashboardBento", () => {
 
     render(<DashboardBento />);
 
-    expect(screen.getByText("Workflow activity card:work-graph::primary")).toBeTruthy();
+    expect(
+      screen.getByText("Workflow activity card:work-graph::primary"),
+    ).toBeTruthy();
     expect(
       screen.getByText("Workflow activity card:work-graph::instance-1"),
     ).toBeTruthy();
@@ -385,9 +388,7 @@ describe("DashboardBento", () => {
 
     expect(workTotalsRemoveButton.className).toContain("h-10");
     expect(workTotalsRemoveButton.className).toContain("w-10");
-    expect(workTotalsRemoveButton.className).toContain(
-      "focus-visible:ring-2",
-    );
+    expect(workTotalsRemoveButton.className).toContain("focus-visible:ring-2");
     expect(
       screen.queryByRole("button", {
         name: "Remove Add widget widget from dashboard",
@@ -421,13 +422,19 @@ describe("DashboardBento", () => {
     });
 
     expect(screen.getAllByText("Work outcome card")).toHaveLength(2);
-    expect(screen.getByTestId("add-widget").textContent).toContain("Add widget card");
+    expect(screen.getByTestId("add-widget").textContent).toContain(
+      "Add widget card",
+    );
 
     fireEvent.click(workOutcomeRemoveButtons[1] ?? workOutcomeRemoveButtons[0]);
 
-    expect(removeDashboardWidget).toHaveBeenCalledWith("work-outcome-chart::instance-1");
+    expect(removeDashboardWidget).toHaveBeenCalledWith(
+      "work-outcome-chart::instance-1",
+    );
     expect(screen.getAllByText("Work outcome card")).toHaveLength(1);
-    expect(screen.getByTestId("add-widget").textContent).toContain("Add widget card");
+    expect(screen.getByTestId("add-widget").textContent).toContain(
+      "Add widget card",
+    );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByText(/undo/i)).toBeNull();
   });
