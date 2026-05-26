@@ -302,6 +302,58 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
   });
 });
 
+describe("useDashboardLayout inline add-widget reload persistence", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("deduplicates persisted inline add-widget entries back to one canonical item on reload", () => {
+    window.localStorage.setItem(
+      DASHBOARD_LAYOUT_STORAGE_KEY,
+      JSON.stringify([
+        ...DEFAULT_DASHBOARD_LAYOUT,
+        {
+          h: 5,
+          id: "add-widget::duplicate",
+          minH: 3,
+          minW: 3,
+          w: 5,
+          widgetType: DASHBOARD_WIDGET_IDS.addWidget,
+          x: 4,
+          y: 31,
+        },
+        {
+          h: 4,
+          id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+          minH: 3,
+          minW: 3,
+          w: 3,
+          widgetType: DASHBOARD_WIDGET_IDS.addWidget,
+          x: 9,
+          y: 27,
+        },
+      ]),
+    );
+
+    act(() => {
+      reloadDashboardLayoutFromStorage();
+    });
+
+    const { result } = renderHook(() => useDashboardLayout());
+    const addWidgetItems = result.current.dashboardLayout.filter(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.addWidget,
+    );
+
+    expect(addWidgetItems).toHaveLength(1);
+    expect(addWidgetItems[0]).toMatchObject({
+      h: 4,
+      id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+      w: 3,
+      widgetType: DASHBOARD_WIDGET_IDS.addWidget,
+      x: 9,
+      y: 27,
+    });
+  });
+});
+
 describe("useDashboardLayout inline add-widget persistence", () => {
   beforeEach(resetDashboardLayoutStorage);
 

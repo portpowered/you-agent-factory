@@ -16,28 +16,29 @@ import { getInlineAddWidgetMessages } from "../messages/inline-add-widget";
 const INLINE_ADD_WIDGET_CARD_CLASS =
   "grid h-full min-h-0 min-w-0 place-items-stretch overflow-hidden";
 const INLINE_ADD_WIDGET_SURFACE_CLASS =
-  "grid h-full min-h-0 gap-2 rounded-2xl border border-dashed border-af-border-strong bg-linear-to-br from-af-surface-subtle via-af-surface-raised to-af-overlay p-3 text-left";
+  "grid h-full min-h-0 gap-3 rounded-2xl border border-dashed border-af-border-strong bg-linear-to-br from-af-surface-subtle via-af-surface-raised to-af-overlay p-3 text-left sm:p-4";
 const INLINE_ADD_WIDGET_HEADER_CLASS =
-  "flex flex-wrap items-start justify-between gap-2";
-const INLINE_ADD_WIDGET_HEADER_COPY_CLASS = "grid min-w-0 flex-1 content-start gap-2";
-const INLINE_ADD_WIDGET_DRAG_HANDLE_WRAP_CLASS = "shrink-0";
+  "grid min-h-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start";
+const INLINE_ADD_WIDGET_HEADER_COPY_CLASS = "grid min-h-0 content-start gap-2.5 sm:gap-3";
+const INLINE_ADD_WIDGET_DRAG_HANDLE_WRAP_CLASS =
+  "flex justify-end sm:block sm:justify-start";
 const INLINE_ADD_WIDGET_ACTION_CLASS =
-  "grid min-h-0 min-w-0 flex-1 content-start gap-2 rounded-2xl p-2 text-left outline-none transition-colors hover:bg-af-overlay focus-visible:bg-af-overlay focus-visible:ring-2 focus-visible:ring-af-focus-ring";
-const INLINE_ADD_WIDGET_COPY_CLASS = "grid min-w-0 content-start gap-1.5";
+  "grid min-h-0 min-w-0 content-start gap-3 rounded-2xl border border-af-border bg-af-surface p-3 text-left outline-none transition-colors hover:bg-af-overlay focus-visible:bg-af-overlay focus-visible:ring-2 focus-visible:ring-af-focus-ring disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled disabled:hover:bg-af-surface-subtle";
+const INLINE_ADD_WIDGET_COPY_CLASS = "grid content-start gap-2";
 const INLINE_ADD_WIDGET_BADGE_CLASS = cn(
   "inline-flex w-fit items-center rounded-full border border-af-border bg-af-surface-subtle px-2 py-1 text-xs font-medium uppercase text-af-text-subtle",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const INLINE_ADD_WIDGET_TITLE_CLASS = cn(
-  "m-0",
+  "m-0 [overflow-wrap:anywhere]",
   DASHBOARD_SECTION_HEADING_CLASS,
 );
 const INLINE_ADD_WIDGET_BODY_CLASS = cn(
-  "m-0",
+  "m-0 [overflow-wrap:anywhere]",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 const INLINE_ADD_WIDGET_HINT_CLASS = cn(
-  "m-0 text-af-text-muted",
+  "m-0 text-af-text-muted [overflow-wrap:anywhere]",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const INLINE_ADD_WIDGET_ACTION_ROW_CLASS =
@@ -47,7 +48,7 @@ const INLINE_ADD_WIDGET_ACTION_LABEL_CLASS = cn(
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const INLINE_ADD_WIDGET_ICON_CLASS =
-  "grid size-9 place-items-center rounded-xl border border-af-border bg-af-surface text-af-text-muted shadow-sm";
+  "grid size-10 place-items-center rounded-2xl border border-af-border bg-af-surface text-af-text-muted shadow-sm sm:size-11";
 
 export interface InlineAddWidgetCardProps {
   pickerAvailability?: DashboardWidgetPickerAvailability[];

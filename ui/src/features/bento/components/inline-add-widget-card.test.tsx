@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
 import { DEFAULT_DASHBOARD_LAYOUT } from "../hooks/dashboardLayoutSchema";
@@ -34,7 +35,7 @@ function renderControlledCard(
   render(<TestHarness />);
 }
 
-describe("InlineAddWidgetCard", () => {
+describe("InlineAddWidgetCard content", () => {
   it("renders discoverable add-widget copy inside a dashboard grid card", () => {
     render(
       <InlineAddWidgetCard pickerAvailability={pickerAvailability} />,
@@ -78,6 +79,28 @@ describe("InlineAddWidgetCard", () => {
     expect(screen.getByText("Ready to add")).toBeTruthy();
   });
 
+  it("supports keyboard launch and exposes visible dialog state from the primary action", async () => {
+    const user = userEvent.setup();
+
+    renderControlledCard();
+
+    const actionButton = getCardActionButton();
+
+    expect(actionButton.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(actionButton.getAttribute("aria-expanded")).toBe("false");
+    expect(actionButton.className).toContain("focus-visible:ring-2");
+
+    actionButton.focus();
+    expect(document.activeElement).toBe(actionButton);
+
+    await user.keyboard("{Enter}");
+
+    expect(
+      screen.getByRole("dialog", { name: "Add dashboard widget" }),
+    ).toBeTruthy();
+    expect(getCardActionButton().getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("localizes the visible add-widget card title", () => {
     render(
       <InlineAddWidgetCard
@@ -89,7 +112,9 @@ describe("InlineAddWidgetCard", () => {
     expect(screen.getByRole("article", { name: "添加小组件" })).toBeTruthy();
     expect(screen.getByText("从这个内联位置添加另一个仪表板卡片。")).toBeTruthy();
   });
+});
 
+describe("InlineAddWidgetCard interactions", () => {
   it("reports the selected widget type back to the dashboard seam", () => {
     const onSelectWidget = vi.fn();
 
