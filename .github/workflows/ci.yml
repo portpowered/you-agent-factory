@@ -274,9 +274,60 @@ jobs:
         run: make ui-deps
 
       - name: Run dashboard coverage lane
+        id: run_ui_coverage
         if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
+        continue-on-error: true
+        shell: bash
         timeout-minutes: 30
-        run: make test-ui-coverage
+        run: |
+          set -o pipefail
+          artifact_root=".artifacts/ui-coverage"
+          mkdir -p "$artifact_root"
+          make test-ui-coverage 2>&1 | tee "$artifact_root/command.log"
+
+      - name: Report lane execution
+        if: always() && needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
+        shell: bash
+        run: |
+          artifact_name="ui-coverage-failure-artifacts"
+          artifact_root=".artifacts/ui-coverage"
+          if [[ "${{ steps.run_ui_coverage.outcome }}" == "success" ]]; then
+            {
+              echo "### Execution result"
+              echo
+              echo "- Verified: UI coverage and replay-coverage checks through \`${{ needs.classify-pr-impact.outputs.ui_coverage_command }}\`."
+              echo "- Result: \`passed\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "### Execution result"
+            echo
+            echo "- Verified: UI coverage and replay-coverage checks through \`${{ needs.classify-pr-impact.outputs.ui_coverage_command }}\`."
+            echo "- Result: \`failed\`"
+            echo "- Retained artifact: \`$artifact_name\` for 14 days"
+            echo "- Primary log: \`$artifact_root/command.log\`"
+            echo
+            echo "#### Failing log tail"
+            echo
+            echo '```text'
+            tail -n 40 "$artifact_root/command.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload UI coverage failure artifacts
+        if: always() && needs.classify-pr-impact.outputs.run_ui_coverage == 'true' && steps.run_ui_coverage.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage-failure-artifacts
+          path: .artifacts/ui-coverage/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail for UI coverage lane errors
+        if: always() && needs.classify-pr-impact.outputs.run_ui_coverage == 'true' && steps.run_ui_coverage.outcome == 'failure'
+        run: exit 1
 
   ui-browser-integration:
     name: UI Browser Integration
@@ -351,9 +402,63 @@ jobs:
         run: make ui-install-playwright
 
       - name: Run dashboard browser integration suite
+        id: run_ui_browser_integration
         if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
+        continue-on-error: true
+        env:
+          AGENT_FACTORY_BROWSER_ARTIFACT_DIR: .artifacts/ui-browser-integration/browser
+        shell: bash
         timeout-minutes: 15
-        run: make ui-integration-test
+        run: |
+          set -o pipefail
+          artifact_root=".artifacts/ui-browser-integration"
+          mkdir -p "$artifact_root"
+          make ui-integration-test 2>&1 | tee "$artifact_root/command.log"
+
+      - name: Report lane execution
+        if: always() && needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
+        shell: bash
+        run: |
+          artifact_name="ui-browser-integration-failure-artifacts"
+          artifact_root=".artifacts/ui-browser-integration"
+          if [[ "${{ steps.run_ui_browser_integration.outcome }}" == "success" ]]; then
+            {
+              echo "### Execution result"
+              echo
+              echo "- Verified: Browser-backed dashboard integration through \`${{ needs.classify-pr-impact.outputs.ui_browser_integration_command }}\`."
+              echo "- Result: \`passed\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "### Execution result"
+            echo
+            echo "- Verified: Browser-backed dashboard integration through \`${{ needs.classify-pr-impact.outputs.ui_browser_integration_command }}\`."
+            echo "- Result: \`failed\`"
+            echo "- Retained artifact: \`$artifact_name\` for 14 days"
+            echo "- Evidence: Playwright trace, final screenshot, page HTML snapshot, diagnostics JSON, and the lane command log"
+            echo "- Primary log: \`$artifact_root/command.log\`"
+            echo
+            echo "#### Failing log tail"
+            echo
+            echo '```text'
+            tail -n 40 "$artifact_root/command.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload UI browser integration failure artifacts
+        if: always() && needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true' && steps.run_ui_browser_integration.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-browser-integration-failure-artifacts
+          path: .artifacts/ui-browser-integration/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail for UI browser integration lane errors
+        if: always() && needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true' && steps.run_ui_browser_integration.outcome == 'failure'
+        run: exit 1
 
   backend-verification:
     name: Backend Verification
@@ -390,6 +495,57 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Run merged backend coverage and functional verification
+        id: run_backend_verification
         if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        continue-on-error: true
+        shell: bash
         timeout-minutes: 15
-        run: make test-backend-verification
+        run: |
+          set -o pipefail
+          artifact_root=".artifacts/backend-verification"
+          mkdir -p "$artifact_root"
+          make test-backend-verification 2>&1 | tee "$artifact_root/command.log"
+
+      - name: Report lane execution
+        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        shell: bash
+        run: |
+          artifact_name="backend-verification-failure-artifacts"
+          artifact_root=".artifacts/backend-verification"
+          if [[ "${{ steps.run_backend_verification.outcome }}" == "success" ]]; then
+            {
+              echo "### Execution result"
+              echo
+              echo "- Verified: Backend coverage and required short functional checks through \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`."
+              echo "- Result: \`passed\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "### Execution result"
+            echo
+            echo "- Verified: Backend coverage and required short functional checks through \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`."
+            echo "- Result: \`failed\`"
+            echo "- Retained artifact: \`$artifact_name\` for 14 days"
+            echo "- Primary log: \`$artifact_root/command.log\`"
+            echo
+            echo "#### Failing log tail"
+            echo
+            echo '```text'
+            tail -n 40 "$artifact_root/command.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload backend verification failure artifacts
+        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true' && steps.run_backend_verification.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-verification-failure-artifacts
+          path: .artifacts/backend-verification/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail for backend verification lane errors
+        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true' && steps.run_backend_verification.outcome == 'failure'
+        run: exit 1
