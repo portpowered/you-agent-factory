@@ -77,10 +77,10 @@ args:
 		})
 	}()
 
-	waitForCLIHTTPStabilityStatusReadiness(t, baseURL, errCh, 10*time.Second)
-	assertCLIHTTPStabilityInFlightStatusPollingWindow(t, baseURL, errCh, 15*time.Second)
-	work := waitForCLIHTTPStabilityWorkAtPlace(t, baseURL, traceID, "task:done", errCh, 20*time.Second)
-	item := requireCLIHTTPStabilityWorkByTrace(t, work, traceID)
+	waitForCLIHTTPStabilityPhaseReadability(t, baseURL, traceID, errCh, 10*time.Second, cliHTTPStabilityStartupPhase, 1)
+	waitForCLIHTTPStabilityPhaseReadability(t, baseURL, traceID, errCh, 15*time.Second, cliHTTPStabilityActivePhase, cliHTTPStabilityMinPolls)
+	idleSample := waitForCLIHTTPStabilityPhaseReadability(t, baseURL, traceID, errCh, 20*time.Second, cliHTTPStabilityIdlePhase, 1)
+	item := requireCLIHTTPStabilityWorkByTrace(t, idleSample.work, traceID)
 	if stringPointerValue(item.WorkId) != workID {
 		t.Fatalf("GET /work work_id = %q, want %q", stringPointerValue(item.WorkId), workID)
 	}
@@ -100,6 +100,7 @@ args:
 	}
 
 	cancel()
+	assertCLIHTTPStabilityShutdownReadability(t, baseURL, 5*time.Second)
 	waitForCLIHTTPStabilityRunShutdown(t, errCh, 5*time.Second)
 }
 
@@ -165,45 +166,45 @@ func writeCLIHTTPStabilityMockWorkersConfig(t *testing.T, sideEffectPath string,
 	return path
 }
 
-func waitForCLIHTTPStabilityStatusReadiness(t *testing.T, baseURL string, errCh <-chan error, timeout time.Duration) {
-	t.Helper()
+type cliHTTPStabilityLifecyclePhase string
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		assertCLIHTTPStabilityRunStillActive(t, errCh)
-		if _, err := getCLIHTTPStabilityJSON[factoryapi.StatusResponse](baseURL + "/status"); err == nil {
-			return
-		}
-		time.Sleep(cliHTTPStabilityPollInterval)
-	}
+const (
+	cliHTTPStabilityStartupPhase  cliHTTPStabilityLifecyclePhase = "startup"
+	cliHTTPStabilityActivePhase   cliHTTPStabilityLifecyclePhase = "active"
+	cliHTTPStabilityIdlePhase     cliHTTPStabilityLifecyclePhase = "idle"
+	cliHTTPStabilityShutdownPhase cliHTTPStabilityLifecyclePhase = "shutdown"
+)
 
-	t.Fatalf("timed out waiting %s for CLI HTTP stability status readiness at %s/status", timeout, baseURL)
+type cliHTTPStabilityLifecycleSample struct {
+	status factoryapi.StatusResponse
+	work   factoryapi.ListWorkResponse
 }
 
-func assertCLIHTTPStabilityInFlightStatusPollingWindow(
+func waitForCLIHTTPStabilityPhaseReadability(
 	t *testing.T,
 	baseURL string,
+	traceID string,
 	errCh <-chan error,
 	timeout time.Duration,
-) {
+	phase cliHTTPStabilityLifecyclePhase,
+	minSuccesses int,
+) cliHTTPStabilityLifecycleSample {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
-	successfulPolls := 0
-	sawActiveRuntime := false
-	var lastStatus factoryapi.StatusResponse
+	successes := 0
+	var lastSample cliHTTPStabilityLifecycleSample
 	for time.Now().Before(deadline) {
 		assertCLIHTTPStabilityRunStillActive(t, errCh)
 
-		status := mustGetCLIHTTPStabilityJSON[factoryapi.StatusResponse](t, baseURL+"/status")
-		lastStatus = status
-		if status.Categories.Terminal == 0 {
-			successfulPolls++
-			if status.RuntimeStatus == string(interfaces.RuntimeStatusActive) {
-				sawActiveRuntime = true
-			}
-			if successfulPolls >= cliHTTPStabilityMinPolls && sawActiveRuntime {
-				return
+		sample, ok := readCLIHTTPStabilityLifecycleSample(t, baseURL, phase)
+		if ok {
+			lastSample = sample
+			if cliHTTPStabilitySampleInPhase(sample, traceID, phase) {
+				successes++
+				if successes >= minSuccesses {
+					return sample
+				}
 			}
 		}
 
@@ -211,37 +212,97 @@ func assertCLIHTTPStabilityInFlightStatusPollingWindow(
 	}
 
 	t.Fatalf(
-		"timed out waiting %s for repeated in-flight status polling window; successful_polls=%d saw_active_runtime=%t last_status=%#v",
+		"timed out waiting %s for %s readability; successful_polls=%d last_status=%#v last_work=%#v",
 		timeout,
-		successfulPolls,
-		sawActiveRuntime,
-		lastStatus,
+		phase,
+		successes,
+		lastSample.status,
+		lastSample.work,
 	)
+	return cliHTTPStabilityLifecycleSample{}
 }
 
-func waitForCLIHTTPStabilityWorkAtPlace(
+func assertCLIHTTPStabilityShutdownReadability(
 	t *testing.T,
 	baseURL string,
-	traceID string,
-	placeID string,
-	errCh <-chan error,
 	timeout time.Duration,
-) factoryapi.ListWorkResponse {
+) {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
+	statusSuccesses := 0
+	workSuccesses := 0
+	sawReachableAfterCancel := false
 	for time.Now().Before(deadline) {
-		assertCLIHTTPStabilityRunStillActive(t, errCh)
-		work := mustGetCLIHTTPStabilityJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
-		if item, found := findCLIHTTPStabilityWorkByTrace(work, traceID); found && cliHTTPStabilityWorkPlaceID(item) == placeID {
-			return work
+		statusResp := readCLIHTTPStabilityJSONResponse[factoryapi.StatusResponse](t, baseURL+"/status", cliHTTPStabilityShutdownPhase)
+		workResp := readCLIHTTPStabilityJSONResponse[factoryapi.ListWorkResponse](t, baseURL+"/work", cliHTTPStabilityShutdownPhase)
+
+		if statusResp.ok {
+			statusSuccesses++
+			sawReachableAfterCancel = true
 		}
+		if workResp.ok {
+			workSuccesses++
+			sawReachableAfterCancel = true
+		}
+		if sawReachableAfterCancel && statusSuccesses > 0 && workSuccesses > 0 {
+			return
+		}
+		if sawReachableAfterCancel && !statusResp.ok && !workResp.ok {
+			return
+		}
+
 		time.Sleep(cliHTTPStabilityPollInterval)
 	}
 
-	work := mustGetCLIHTTPStabilityJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
-	t.Fatalf("timed out waiting %s for trace %q at %s; last work response: %#v", timeout, traceID, placeID, work)
-	return factoryapi.ListWorkResponse{}
+	if sawReachableAfterCancel && (statusSuccesses == 0 || workSuccesses == 0) {
+		t.Fatalf(
+			"shutdown readability reached the server but did not observe both endpoints; status_successes=%d work_successes=%d",
+			statusSuccesses,
+			workSuccesses,
+		)
+	}
+}
+
+func readCLIHTTPStabilityLifecycleSample(
+	t *testing.T,
+	baseURL string,
+	phase cliHTTPStabilityLifecyclePhase,
+) (cliHTTPStabilityLifecycleSample, bool) {
+	t.Helper()
+
+	statusResp := readCLIHTTPStabilityJSONResponse[factoryapi.StatusResponse](t, baseURL+"/status", phase)
+	workResp := readCLIHTTPStabilityJSONResponse[factoryapi.ListWorkResponse](t, baseURL+"/work", phase)
+	if !statusResp.ok || !workResp.ok {
+		return cliHTTPStabilityLifecycleSample{}, false
+	}
+	return cliHTTPStabilityLifecycleSample{
+		status: statusResp.payload,
+		work:   workResp.payload,
+	}, true
+}
+
+func cliHTTPStabilitySampleInPhase(
+	sample cliHTTPStabilityLifecycleSample,
+	traceID string,
+	phase cliHTTPStabilityLifecyclePhase,
+) bool {
+	switch phase {
+	case cliHTTPStabilityStartupPhase:
+		return sample.status.Categories.Terminal == 0
+	case cliHTTPStabilityActivePhase:
+		return sample.status.Categories.Terminal == 0 &&
+			sample.status.RuntimeStatus == string(interfaces.RuntimeStatusActive)
+	case cliHTTPStabilityIdlePhase:
+		item, found := findCLIHTTPStabilityWorkByTrace(sample.work, traceID)
+		if !found {
+			return false
+		}
+		return sample.status.RuntimeStatus == string(interfaces.RuntimeStatusIdle) &&
+			cliHTTPStabilityWorkPlaceID(item) == "task:done"
+	default:
+		return false
+	}
 }
 
 func requireCLIHTTPStabilityWorkByTrace(t *testing.T, work factoryapi.ListWorkResponse, traceID string) factoryapi.Work {
@@ -315,22 +376,55 @@ func mustGetCLIHTTPStabilityJSON[T any](t *testing.T, endpoint string) T {
 }
 
 func getCLIHTTPStabilityJSON[T any](endpoint string) (T, error) {
+	resp := getCLIHTTPStabilityRaw[T](endpoint)
+	return resp.payload, resp.err
+}
+
+type cliHTTPStabilityJSONResponse[T any] struct {
+	payload    T
+	ok         bool
+	err        error
+	statusCode int
+}
+
+func readCLIHTTPStabilityJSONResponse[T any](
+	t *testing.T,
+	endpoint string,
+	phase cliHTTPStabilityLifecyclePhase,
+) cliHTTPStabilityJSONResponse[T] {
+	t.Helper()
+
+	resp := getCLIHTTPStabilityRaw[T](endpoint)
+	if resp.ok {
+		return resp
+	}
+	if resp.statusCode == http.StatusInternalServerError {
+		t.Fatalf("GET %s returned 500 during %s: %v", endpoint, phase, resp.err)
+	}
+	return resp
+}
+
+func getCLIHTTPStabilityRaw[T any](endpoint string) cliHTTPStabilityJSONResponse[T] {
 	var out T
 
 	client := &http.Client{Timeout: time.Second}
 	resp, err := client.Get(endpoint)
 	if err != nil {
-		return out, err
+		return cliHTTPStabilityJSONResponse[T]{payload: out, err: err}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return out, fmt.Errorf("status = %d, want 200", resp.StatusCode)
+		return cliHTTPStabilityJSONResponse[T]{
+			payload:    out,
+			err:        fmt.Errorf("status = %d, want 200", resp.StatusCode),
+			statusCode: resp.StatusCode,
+		}
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return out, err
+		return cliHTTPStabilityJSONResponse[T]{payload: out, err: err, statusCode: resp.StatusCode}
 	}
-	return out, nil
+	return cliHTTPStabilityJSONResponse[T]{payload: out, ok: true, statusCode: resp.StatusCode}
 }
 
 func unusedTCPPortForCLIHTTPStability(t *testing.T) int {
