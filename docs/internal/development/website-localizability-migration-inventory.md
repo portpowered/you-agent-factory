@@ -14,6 +14,8 @@ Product-authored copy is in scope when the website owns the words shown to users
 
 Data values are out of scope for translation. API-provided IDs, dispatch IDs, trace IDs, workstation names, place names, user-authored factory names, generated OpenAPI code, test fixture names, operational event payload values, and developer diagnostics should remain unchanged when the locale changes. Product-owned labels that introduce those values should still be localized.
 
+Enum-backed product labels use one additional contract boundary. Customer-visible conceptual enums such as status, outcome, kind, type, relation, and failure family are in scope when the UI presents them as product wording, but the canonical enum values remain unchanged in API payloads, saved config, generated models, and any deliberate raw diagnostic disclosure. When a migrated surface receives an unknown enum value, it should render one localized fallback wrapper that preserves the raw value, such as `Unknown outcome: WAITING_ON_REVIEW` in English or `未知结果：WAITING_ON_REVIEW` in `zh-CN`.
+
 ## Current Catalog Coverage
 
 | Surface | Current owner | Catalog status | Notes |

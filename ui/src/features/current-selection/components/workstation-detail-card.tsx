@@ -4,10 +4,7 @@ import {
   WIDGET_SUBTITLE_CLASS,
 } from "../../../components/dashboard/widget-board";
 import type { DashboardWorkstationRequest } from "../../../api/dashboard/types";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
+import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import {
   DashboardStatusPill,
   DashboardActionButton,

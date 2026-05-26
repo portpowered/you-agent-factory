@@ -6,6 +6,7 @@ import {
   formatDurationMillis,
 } from "../../../components/ui/formatters";
 import {
+  useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionShellMessages,
 } from "./current-selection-locale";
@@ -159,6 +160,7 @@ function WorkstationRequestProjectionSection({
   details,
 }: Pick<ExecutionDetailsSectionProps, "details">) {
   const messages = useCurrentSelectionShellMessages();
+  const enumMessages = useCurrentSelectionOperationalEnumMessages();
   const locale = useCurrentSelectionLocale();
   const requestProjection = details.workstationRequest;
   if (!requestProjection) {
@@ -200,7 +202,11 @@ function WorkstationRequestProjectionSection({
         <InferenceAttemptDetail
           code
           label="outcome"
-          value={response?.outcome}
+          value={
+            response?.outcome
+              ? enumMessages.localizeOutcome(response.outcome)
+              : undefined
+          }
         />
         <InferenceAttemptDetail
           label="duration"

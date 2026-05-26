@@ -30,6 +30,7 @@ import {
 import { WorkItemPayloadList } from "./work-item-payload-details";
 import {
   useCurrentSelectionDispatchHistoryMessages,
+  useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionLocale,
 } from "./current-selection-locale";
 import type { CurrentSelectionDispatchHistoryMessages } from "../messages/current-selection-dispatch-history";
@@ -215,6 +216,8 @@ function DispatchHistoryHeader({
   outcome: string | undefined;
   title: string | undefined;
 }) {
+  const enumMessages = useCurrentSelectionOperationalEnumMessages();
+
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="grid min-w-0 gap-1">
@@ -223,7 +226,9 @@ function DispatchHistoryHeader({
         </strong>
         <div className="flex flex-wrap items-center gap-2">
           <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
-            {outcome ?? messages.pendingOutcome}
+            {outcome
+              ? enumMessages.localizeOutcome(outcome)
+              : enumMessages.localizeOutcome("PENDING")}
           </p>
           {isCurrentDispatch ? (
             <span className={CURRENT_SELECTION_BADGE_CLASS}>
