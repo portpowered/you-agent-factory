@@ -95,6 +95,7 @@ export function WorkstationDetailCard({
         now={now}
         onSelectWorkID={onSelectWorkID}
         onSelectWorkstationRequest={onSelectWorkstationRequest}
+        selectedNode={selectedNode}
         selectedRequest={selectedRequest}
         selectedWorkID={selectedWorkID}
         workstationRequestsByDispatchID={workstationRequestsByDispatchID}
@@ -402,6 +403,7 @@ function WorkstationActiveWorkList({
   now,
   onSelectWorkID,
   onSelectWorkstationRequest,
+  selectedNode,
   selectedRequest,
   selectedWorkID,
   workstationRequestsByDispatchID,
