@@ -470,7 +470,7 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       within(runHistory).getByRole("button", { name: "Expand" }),
     );
     const selectSessionButton = within(runHistory).getByRole("button", {
-      name: "Select provider session codex / session_id / sess-active-story for dispatch dispatch-review-active",
+      name: "Select provider session codex / Session ID / sess-active-story for dispatch dispatch-review-active",
     });
 
     expect(selectSessionButton.getAttribute("aria-pressed")).toBe("false");
@@ -486,7 +486,7 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     expect(
       within(runHistory)
         .getByRole("button", {
-          name: "Select provider session codex / session_id / sess-active-story for dispatch dispatch-review-active",
+          name: "Select provider session codex / Session ID / sess-active-story for dispatch dispatch-review-active",
         })
         .getAttribute("aria-pressed"),
     ).toBe("true");

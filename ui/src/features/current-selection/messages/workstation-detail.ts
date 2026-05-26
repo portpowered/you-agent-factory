@@ -8,7 +8,9 @@ import { getWorkstationDetailEnumMessages } from "./workstation-detail-enums";
 
 type WorkstationDetailCatalogMessages = Omit<
   WorkstationDetailMessages,
-  "localizeWorkstationBehavior" | "localizeWorkstationKind"
+  | "localizeProviderSessionKind"
+  | "localizeWorkstationBehavior"
+  | "localizeWorkstationKind"
 >;
 
 const singularPlural = (count: number, singular: string, plural: string) =>
@@ -685,6 +687,7 @@ export function getWorkstationDetailMessages(
 
   return {
     ...messages,
+    localizeProviderSessionKind: enumMessages.localizeProviderSessionKind,
     localizeWorkstationBehavior: enumMessages.localizeWorkstationBehavior,
     localizeWorkstationKind: enumMessages.localizeWorkstationKind,
   };

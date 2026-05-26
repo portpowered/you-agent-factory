@@ -197,7 +197,7 @@ describe("WorkstationDetailCard provider-session selection", () => {
     );
     fireEvent.click(
       within(resolvedRunHistorySection).getByRole("button", {
-        name: "Select provider session codex / session_id / sess-active-story for dispatch dispatch-review-active",
+        name: "Select provider session codex / Session ID / sess-active-story for dispatch dispatch-review-active",
       }),
     );
 
@@ -805,7 +805,7 @@ describe("WorkstationDetailCard", () => {
     expect(sessionLogLink.getAttribute("href")).toBe(
       "file:///C:/Users/operator/codex/sess-jsonl.jsonl",
     );
-    expect(within(resolvedRunHistorySection).getByText(/codex \/ session_id \/ sess-jsonl/)).toBeTruthy();
+    expect(within(resolvedRunHistorySection).getByText(/codex \/ Session ID \/ sess-jsonl/)).toBeTruthy();
     expect(within(resolvedRunHistorySection).queryByText("Session log unavailable")).toBeNull();
   });
 
@@ -840,7 +840,7 @@ describe("WorkstationDetailCard", () => {
       0,
     );
     expect(
-      within(resolvedRunHistorySection).getByText(/codex \/ session_id \/ sess-rejected-story/),
+      within(resolvedRunHistorySection).getByText(/codex \/ Session ID \/ sess-rejected-story/),
     ).toBeTruthy();
     expect(within(resolvedRunHistorySection).queryByRole("link", { name: "Codex session log" })).toBeNull();
   });
@@ -1140,7 +1140,7 @@ describe("WorkstationDetailCard", () => {
       .find((element) => element.tagName === "SPAN");
     expect(dispatchPill?.className).toContain(DASHBOARD_SUPPORTING_CODE_CLASS);
     const sessionMetadata = within(runHistorySection as HTMLElement).getByText(
-      /codex \/ session_id \/ sess-active-story/,
+      /codex \/ Session ID \/ sess-active-story/,
     );
     expect(sessionMetadata.tagName).toBe("CODE");
     expect(sessionMetadata.className).toContain(DASHBOARD_BODY_CODE_CLASS);

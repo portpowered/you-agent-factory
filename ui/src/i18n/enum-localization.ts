@@ -2,7 +2,6 @@ import {
   type LocalizedMessageCatalog,
   resolveLocalizedMessages,
 } from "./messages";
-import type { SupportedLocale } from "./locales";
 
 export const ENUM_LOCALIZATION_CATEGORIES = [
   "status",
@@ -118,10 +117,6 @@ export function localizeEnumLabel<TValue extends string>(
     category: input.category,
     rawValue: value,
   });
-}
-
-export function getEnumLocalizationRequiredLocales(): readonly SupportedLocale[] {
-  return ["en", "zh-CN"];
 }
 
 export { enumLocalizationMessagesByLocale };

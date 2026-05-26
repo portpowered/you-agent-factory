@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
+import type { DashboardProviderSession } from "../../../api/dashboard/types";
 
 import {
-  formatProviderSession,
   formatWorkstationRunOutcome,
   getProviderSessionLogTarget,
 } from "../../../components/ui/formatters";
@@ -34,9 +34,47 @@ import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
 } from "../../provider-session-detail/lib/provider-session-ref";
-import { getWorkstationDetailMessages } from "../messages";
+import {
+  getWorkstationDetailMessages,
+  type WorkstationDetailMessages,
+} from "../messages";
 
 const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = getWorkstationDetailMessages(undefined);
+
+type ProviderSessionLabelMessages = Pick<
+  WorkstationDetailMessages,
+  "localizeProviderSessionKind" | "unavailableValue"
+>;
+
+function formatLocalizedProviderSessionLabel(
+  session: DashboardProviderSession | undefined,
+  messages: ProviderSessionLabelMessages,
+): string {
+  if (!session?.id) {
+    return messages.unavailableValue;
+  }
+
+  const parts = [session.provider, localizedProviderSessionKind(session.kind, messages)].filter(
+    (value): value is string => value !== undefined && value !== "",
+  );
+  if (parts.length === 0) {
+    return session.id;
+  }
+
+  return `${parts.join(" / ")} / ${session.id}`;
+}
+
+function localizedProviderSessionKind(
+  kind: string | undefined,
+  messages: ProviderSessionLabelMessages,
+): string | undefined {
+  const normalizedKind = kind?.trim();
+  if (!normalizedKind) {
+    return undefined;
+  }
+
+  return messages.localizeProviderSessionKind(normalizedKind);
+}
 
 export function CollapsibleProviderSessionAttempts({
   attempts,
@@ -181,7 +219,10 @@ function ProviderSessionAttemptList({
         const outcome = formatWorkstationRunOutcome(attempt.outcome, { workstationKind });
         const isCurrentDispatch = currentDispatchID === attempt.dispatch_id;
         const loadableProviderSession = getLoadableProviderSessionRef(attempt);
-        const providerSessionLabel = formatProviderSession(attempt.provider_session);
+        const providerSessionLabel = formatLocalizedProviderSessionLabel(
+          attempt.provider_session,
+          messages,
+        );
         const providerSessionSelected =
           loadableProviderSession !== null &&
           selectedProviderSessionKey ===

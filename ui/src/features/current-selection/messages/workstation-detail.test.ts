@@ -133,6 +133,19 @@ describe("getWorkstationDetailMessages", () => {
 
   it("localizes workstation behavior and kind labels with unknown fallback", () => {
     expect(
+      getWorkstationDetailMessages("en").localizeProviderSessionKind(
+        "session_id",
+      ),
+    ).toBe("Session ID");
+    expect(
+      getWorkstationDetailMessages("zh-CN").localizeProviderSessionKind("path"),
+    ).toBe("路径");
+    expect(
+      getWorkstationDetailMessages("zh-CN").localizeProviderSessionKind(
+        "future-kind",
+      ),
+    ).toBe("未知种类：future-kind");
+    expect(
       getWorkstationDetailMessages("en").localizeWorkstationBehavior(
         "STANDARD",
       ),

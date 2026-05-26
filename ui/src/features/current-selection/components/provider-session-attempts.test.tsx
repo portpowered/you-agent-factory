@@ -106,13 +106,13 @@ describe("ProviderSessionAttempts", () => {
     expect(screen.getByText("Open request details")).toBeTruthy();
     expect(
       screen.getByRole("button", {
-        name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+        name: "Select provider session codex / Session ID / sess_active for dispatch dispatch-review-active",
       }),
     ).toBeTruthy();
     expect(
       screen
         .getByRole("button", {
-          name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+          name: "Select provider session codex / Session ID / sess_active for dispatch dispatch-review-active",
         })
         .getAttribute("aria-pressed"),
     ).toBe("true");
@@ -146,12 +146,12 @@ describe("ProviderSessionAttempts", () => {
     );
     await user.click(
       screen.getByRole("button", {
-        name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+        name: "Select provider session codex / Session ID / sess_active for dispatch dispatch-review-active",
       }),
     );
     screen
       .getByRole("button", {
-        name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+        name: "Select provider session codex / Session ID / sess_active for dispatch dispatch-review-active",
       })
       .focus();
     await user.keyboard("{Enter}");
@@ -201,7 +201,7 @@ describe("ProviderSessionAttempts", () => {
     expect(screen.getByText("当前分派")).toBeTruthy();
     expect(
       screen.getByRole("button", {
-        name: "选择调度 dispatch-review-active 的 provider session codex / session_id / sess_active",
+        name: "选择调度 dispatch-review-active 的 provider session codex / 会话 ID / sess_active",
       }),
     ).toBeTruthy();
     expect(screen.getByText("查看会话详情")).toBeTruthy();

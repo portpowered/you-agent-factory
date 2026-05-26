@@ -121,6 +121,12 @@ const invokeWorkstationDetail = (
         formatter("POLLER" as never),
         formatter("FUTURE_BEHAVIOR" as never),
       ];
+    case "localizeProviderSessionKind":
+      return [
+        formatter("session_id" as never),
+        formatter("path" as never),
+        formatter("future-kind" as never),
+      ];
     case "localizeWorkstationKind":
       return [
         formatter("standard" as never),

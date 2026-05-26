@@ -200,7 +200,7 @@ describe("CurrentSelectionWidget localization", () => {
 
     await user.click(
       within(englishSelection).getByRole("button", {
-        name: "Select provider session codex / session_id / sess-active-story for dispatch dispatch-review-active",
+        name: "Select provider session codex / Session ID / sess-active-story for dispatch dispatch-review-active",
       }),
     );
     expect(
@@ -227,7 +227,7 @@ describe("CurrentSelectionWidget localization", () => {
     expect(within(localizedSelection).getByText("当前分派")).toBeTruthy();
     expect(
       within(localizedSelection).getByRole("button", {
-        name: "选择调度 dispatch-review-active 的 provider session codex / session_id / sess-active-story",
+        name: "选择调度 dispatch-review-active 的 provider session codex / 会话 ID / sess-active-story",
       }),
     ).toBeTruthy();
     expect(

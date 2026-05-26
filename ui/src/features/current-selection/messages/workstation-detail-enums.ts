@@ -5,12 +5,23 @@ import {
 } from "../../../i18n";
 
 export interface WorkstationDetailEnumMessages {
+  localizeProviderSessionKind: (value: string) => string;
   localizeWorkstationBehavior: (value: string) => string;
   localizeWorkstationKind: (value: string) => string;
 }
 
 const workstationDetailEnumMessagesByLocale = {
   en: {
+    localizeProviderSessionKind: (value: string) =>
+      localizeEnumLabel({
+        category: "kind",
+        labels: {
+          path: "Path",
+          session_id: "Session ID",
+        },
+        locale: "en",
+        value,
+      }),
     localizeWorkstationBehavior: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -37,6 +48,16 @@ const workstationDetailEnumMessagesByLocale = {
       }),
   },
   ja: {
+    localizeProviderSessionKind: (value: string) =>
+      localizeEnumLabel({
+        category: "kind",
+        labels: {
+          path: "パス",
+          session_id: "セッション ID",
+        },
+        locale: "ja",
+        value,
+      }),
     localizeWorkstationBehavior: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -63,6 +84,16 @@ const workstationDetailEnumMessagesByLocale = {
       }),
   },
   ko: {
+    localizeProviderSessionKind: (value: string) =>
+      localizeEnumLabel({
+        category: "kind",
+        labels: {
+          path: "경로",
+          session_id: "세션 ID",
+        },
+        locale: "ko",
+        value,
+      }),
     localizeWorkstationBehavior: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -89,6 +120,16 @@ const workstationDetailEnumMessagesByLocale = {
       }),
   },
   "zh-CN": {
+    localizeProviderSessionKind: (value: string) =>
+      localizeEnumLabel({
+        category: "kind",
+        labels: {
+          path: "路径",
+          session_id: "会话 ID",
+        },
+        locale: "zh-CN",
+        value,
+      }),
     localizeWorkstationBehavior: (value: string) =>
       localizeEnumLabel({
         category: "kind",

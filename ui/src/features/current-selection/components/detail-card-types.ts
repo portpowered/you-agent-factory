@@ -256,6 +256,7 @@ export interface ProviderSessionAttemptsProps {
     | "currentDispatchLabel"
     | "expandAction"
     | "historyRunCountLabel"
+    | "localizeProviderSessionKind"
     | "openNamedWorkItemAction"
     | "openRequestDetailsAction"
     | "providerSessionLogAction"
@@ -272,6 +273,7 @@ export interface ProviderSessionAttemptsProps {
     | "workDetailsUnavailable"
     | "workSelectedAction"
     | "runHistoryHeading"
+    | "unavailableValue"
   >;
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectWorkID?: (workID: string) => void;
