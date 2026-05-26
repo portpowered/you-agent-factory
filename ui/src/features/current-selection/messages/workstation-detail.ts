@@ -4,6 +4,12 @@ import {
   resolveLocalizedMessages,
 } from "../../../i18n";
 import type { WorkstationDetailMessages } from "./workstation-detail-types";
+import { getWorkstationDetailEnumMessages } from "./workstation-detail-enums";
+
+type WorkstationDetailCatalogMessages = Omit<
+  WorkstationDetailMessages,
+  "localizeWorkstationBehavior" | "localizeWorkstationKind"
+>;
 
 const singularPlural = (count: number, singular: string, plural: string) =>
   `${count} ${count === 1 ? singular : plural}`;
@@ -666,12 +672,22 @@ const workstationDetailMessagesByLocale = {
     workSelectedAction: "工作已选中",
     workerTypeLabel: "工作器类型",
   },
-} satisfies LocalizedMessages<WorkstationDetailMessages>;
+} satisfies LocalizedMessages<WorkstationDetailCatalogMessages>;
 
 export function getWorkstationDetailMessages(
   locale?: string | null,
 ): WorkstationDetailMessages {
-  return resolveLocalizedMessages(workstationDetailMessagesByLocale, locale);
+  const messages = resolveLocalizedMessages(
+    workstationDetailMessagesByLocale,
+    locale,
+  );
+  const enumMessages = getWorkstationDetailEnumMessages(locale);
+
+  return {
+    ...messages,
+    localizeWorkstationBehavior: enumMessages.localizeWorkstationBehavior,
+    localizeWorkstationKind: enumMessages.localizeWorkstationKind,
+  };
 }
 
 export type { WorkstationDetailMessages } from "./workstation-detail-types";

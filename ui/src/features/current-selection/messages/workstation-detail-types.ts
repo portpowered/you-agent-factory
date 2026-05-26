@@ -122,6 +122,8 @@ export interface WorkstationDetailMessages {
   unknownActiveWorkLabel: string;
   unavailableValue: string;
   unavailableRunnerValue: string;
+  localizeWorkstationBehavior: (value: string) => string;
+  localizeWorkstationKind: (value: string) => string;
   unknownWorkerTypeValue: string;
   unknownWorkLabel: string;
   workDetailsUnavailable: (dispatchId: string) => string;

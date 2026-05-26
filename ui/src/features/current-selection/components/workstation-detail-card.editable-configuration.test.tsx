@@ -366,6 +366,70 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(onPromptChange).toHaveBeenCalledWith("Updated prompt");
   });
 
+  it("localizes behavior options in zh-CN while keeping canonical option values", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        locale="zh-CN"
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const configurationSection = screen
+      .getByRole("heading", { name: "配置" })
+      .closest("section");
+    if (!configurationSection) {
+      throw new Error("expected localized editable configuration section");
+    }
+
+    fireEvent.click(
+      within(configurationSection).getByRole("button", {
+        name: "展开可编辑配置",
+      }),
+    );
+
+    const kindSelect = screen.getByLabelText("类型") as HTMLSelectElement;
+
+    expect(
+      Array.from(kindSelect.options).map((option) => ({
+        label: option.textContent,
+        value: option.value,
+      })),
+    ).toEqual([
+      { label: "标准", value: "STANDARD" },
+      { label: "重复器", value: "REPEATER" },
+      { label: "轮询器", value: "POLLER" },
+    ]);
+  });
+
+  it("renders localized unknown-kind fallback in the workstation summary", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      workstation_kind: "future-kind",
+    };
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        locale="zh-CN"
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "工作站摘要" })).toBeTruthy();
+    expect(screen.getByText("未知种类：future-kind")).toBeTruthy();
+  });
+
   it("shows inline Monaco guidance from the current workstation contract", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;

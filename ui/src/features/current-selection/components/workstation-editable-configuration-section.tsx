@@ -142,7 +142,12 @@ function EditableConfigurationReadyForm({
         <EditableConfigurationField
           fieldId="editable-workstation-kind"
           errorMessage={state.validationErrors.behavior}
-          input={<EditableConfigurationBehaviorInput state={state} />}
+          input={
+            <EditableConfigurationBehaviorInput
+              messages={messages}
+              state={state}
+            />
+          }
           label={messages.kindLabel}
         />
         <EditableConfigurationField
@@ -316,8 +321,10 @@ function EditableConfigurationWorkerInput({
 }
 
 function EditableConfigurationBehaviorInput({
+  messages,
   state,
 }: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
   state: Extract<
     NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
     { status: "ready" }
@@ -340,7 +347,7 @@ function EditableConfigurationBehaviorInput({
     >
       {state.initialValues.behaviorOptions.map((behavior) => (
         <option key={behavior} value={behavior}>
-          {behavior}
+          {messages.localizeWorkstationBehavior(behavior)}
         </option>
       ))}
     </Select>
@@ -374,7 +381,9 @@ export function WorkstationSummary({
         />
         <WorkstationSummaryItem
           label={messages.kindLabel}
-          value={selectedNode.workstation_kind || messages.kindDefaultValue}
+          value={messages.localizeWorkstationKind(
+            selectedNode.workstation_kind || messages.kindDefaultValue,
+          )}
         />
         <WorkstationSummaryItem
           label={messages.inputWorkTypesLabel}

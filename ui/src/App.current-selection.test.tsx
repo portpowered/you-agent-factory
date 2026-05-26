@@ -651,7 +651,7 @@ describe("App current selection", () => {
     expect(within(scriptSuccessAttempts).getAllByText("script-tool").length).toBeGreaterThan(0);
     expect(within(scriptSuccessAttempts).getAllByText("script success stdout").length).toBeGreaterThan(0);
     expect(
-      within(scriptSuccessCard).getAllByText("SUCCEEDED").length,
+      within(scriptSuccessCard).getAllByText("Succeeded").length,
     ).toBeGreaterThan(0);
 
     const scriptFailedCard = getDispatchHistoryCard(
@@ -663,7 +663,7 @@ describe("App current selection", () => {
       "Script attempts",
     );
     expect(
-      within(scriptFailedAttempts).getAllByText("TIMEOUT").length,
+      within(scriptFailedAttempts).getAllByText("Timed out").length,
     ).toBeGreaterThan(0);
     expect(
       within(scriptFailedAttempts).getAllByText("script timed out").length,

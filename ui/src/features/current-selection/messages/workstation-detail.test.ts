@@ -130,4 +130,22 @@ describe("getWorkstationDetailMessages", () => {
       messages.workDetailsUnavailable("dispatch-review-history"),
     ).toContain("dispatch-review-history");
   });
+
+  it("localizes workstation behavior and kind labels with unknown fallback", () => {
+    expect(
+      getWorkstationDetailMessages("en").localizeWorkstationBehavior(
+        "STANDARD",
+      ),
+    ).toBe("Standard");
+    expect(
+      getWorkstationDetailMessages("zh-CN").localizeWorkstationBehavior(
+        "POLLER",
+      ),
+    ).toBe("轮询器");
+    expect(
+      getWorkstationDetailMessages("zh-CN").localizeWorkstationKind(
+        "future-kind",
+      ),
+    ).toBe("未知种类：future-kind");
+  });
 });
