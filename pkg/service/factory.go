@@ -121,6 +121,7 @@ type FactoryService struct {
 	activationMu   sync.RWMutex
 	runMu          sync.RWMutex
 	runState       *serviceRunState
+	apiServerExit  <-chan error
 	sessions       *liveRuntimeSessionManager
 	factoryRootDir string
 	factory        factory.Factory
@@ -414,7 +415,7 @@ func (fs *FactoryService) startRunRuntime(
 	}
 	fs.startAPIServerSidecar(runCtx, sidecars)
 	if err := fs.waitForServiceModeStartupWorkReadability(ctx, serviceMode); err != nil {
-		return nil, err
+		return nil, fs.failServiceModeStartup(currentRuntime, err)
 	}
 	if err := fs.submitServiceModeWorkFile(ctx, currentRuntime, serviceMode); err != nil {
 		return nil, err
@@ -483,12 +484,7 @@ func (fs *FactoryService) submitServiceModeWorkFile(
 		return nil
 	}
 	if err := fs.submitWorkFile(ctx); err != nil {
-		fs.clearRunState()
-		fs.unregisterLiveSession(defaultFactorySessionID)
-		if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-			return errors.Join(err, stopErr)
-		}
-		return err
+		return fs.failServiceModeStartup(currentRuntime, err)
 	}
 	return nil
 }
@@ -497,8 +493,11 @@ func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.C
 	if !serviceMode || fs.cfg.WorkFile == "" || fs.cfg.APIServerReady == nil {
 		return nil
 	}
+	apiServerExit := fs.apiServerExit
 	select {
 	case <-fs.cfg.APIServerReady:
+	case err := <-apiServerExit:
+		return startupReadinessError(err)
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -509,9 +508,30 @@ func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.C
 	select {
 	case <-timer.C:
 		return nil
+	case err := <-apiServerExit:
+		return startupReadinessError(err)
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (fs *FactoryService) failServiceModeStartup(currentRuntime *liveRuntimeHandle, startupErr error) error {
+	fs.clearRunState()
+	fs.unregisterLiveSession(defaultFactorySessionID)
+	if currentRuntime == nil {
+		return startupErr
+	}
+	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+		return errors.Join(startupErr, stopErr)
+	}
+	return startupErr
+}
+
+func startupReadinessError(err error) error {
+	if err == nil {
+		return fmt.Errorf("wait for service-mode startup work readiness: API server stopped before signaling readiness")
+	}
+	return fmt.Errorf("wait for service-mode startup work readiness: %w", err)
 }
 
 func (fs *FactoryService) startDefaultRuntime(
@@ -558,12 +578,18 @@ func (fs *FactoryService) handleDefaultRuntimeStartFailure(
 
 func (fs *FactoryService) startAPIServerSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
 	if fs.cfg.APIServerStarter == nil || fs.cfg.Port <= 0 {
+		fs.apiServerExit = nil
 		return
 	}
+	apiServerExit := make(chan error, 1)
+	fs.apiServerExit = apiServerExit
 	sidecars.Add(1)
 	go func() {
 		defer sidecars.Done()
-		if err := fs.cfg.APIServerStarter(runCtx, fs, fs.cfg.Port, fs.logger); err != nil {
+		err := fs.cfg.APIServerStarter(runCtx, fs, fs.cfg.Port, fs.logger)
+		apiServerExit <- err
+		close(apiServerExit)
+		if err != nil {
 			fs.logger.Error("API server error", zap.Error(err))
 		}
 	}()
