@@ -40,6 +40,12 @@ const INLINE_ADD_WIDGET_HINT_CLASS = cn(
   "m-0 text-af-text-muted",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
+const INLINE_ADD_WIDGET_ACTION_ROW_CLASS =
+  "flex flex-wrap items-center gap-2";
+const INLINE_ADD_WIDGET_ACTION_LABEL_CLASS = cn(
+  "inline-flex items-center rounded-full bg-af-accent px-3 py-1.5 text-sm font-semibold text-af-accent-foreground",
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+);
 const INLINE_ADD_WIDGET_ICON_CLASS =
   "grid size-9 place-items-center rounded-xl border border-af-border bg-af-surface text-af-text-muted shadow-sm";
 
@@ -61,6 +67,16 @@ export function InlineAddWidgetCard({
   pickerOpen = false,
 }: InlineAddWidgetCardProps): ReactElement {
   const messages = getInlineAddWidgetMessages(locale);
+  const hasEnabledWidgets = pickerAvailability.some((item) => item.enabled);
+  const statusMessage = pickerOpen
+    ? messages.pickerOpenState
+    : hasEnabledWidgets
+      ? messages.readyState
+      : messages.unavailableState;
+  const supportingHint = hasEnabledWidgets ? messages.body : messages.unavailableHint;
+  const actionLabel = hasEnabledWidgets
+    ? messages.actionLabel
+    : messages.actionUnavailableLabel;
 
   return (
     <Popover onOpenChange={onPickerOpenChange} open={pickerOpen}>
@@ -76,9 +92,11 @@ export function InlineAddWidgetCard({
               <span className={INLINE_ADD_WIDGET_BADGE_CLASS}>{messages.badge}</span>
               <PopoverTrigger asChild>
                 <button
+                  aria-label={messages.title}
                   aria-expanded={pickerOpen}
                   aria-haspopup="dialog"
                   className={INLINE_ADD_WIDGET_ACTION_CLASS}
+                  disabled={!hasEnabledWidgets}
                   type="button"
                 >
                   <div className={INLINE_ADD_WIDGET_COPY_CLASS}>
@@ -102,8 +120,13 @@ export function InlineAddWidgetCard({
                       </svg>
                     </span>
                     <h3 className={INLINE_ADD_WIDGET_TITLE_CLASS}>{messages.title}</h3>
-                    <p className={INLINE_ADD_WIDGET_BODY_CLASS}>{messages.body}</p>
-                    <p className={INLINE_ADD_WIDGET_HINT_CLASS}>{messages.hint}</p>
+                    <p className={INLINE_ADD_WIDGET_BODY_CLASS}>{statusMessage}</p>
+                    <p className={INLINE_ADD_WIDGET_HINT_CLASS}>{supportingHint}</p>
+                    <div className={INLINE_ADD_WIDGET_ACTION_ROW_CLASS}>
+                      <span className={INLINE_ADD_WIDGET_ACTION_LABEL_CLASS}>
+                        {actionLabel}
+                      </span>
+                    </div>
                   </div>
                 </button>
               </PopoverTrigger>
