@@ -392,9 +392,7 @@ func TestGitChangedPathsIncludesDeletedFilesInClassifierInput(t *testing.T) {
 	}
 }
 
-func TestDevelopmentGuideDocumentsObservableCIRoutingContract(t *testing.T) {
-	t.Parallel()
-
+func TestDevelopmentGuideMatchesObservableCIRoutingContract(t *testing.T) {
 	guidePath := testpath.MustRepoPathFromCaller(t, 0, "docs", "internal", "development", "development.md")
 	body, err := os.ReadFile(guidePath)
 	if err != nil {
@@ -402,19 +400,61 @@ func TestDevelopmentGuideDocumentsObservableCIRoutingContract(t *testing.T) {
 	}
 
 	guide := string(body)
-	wantSnippets := []string{
-		"| `docs-only` | `docs/**` plus root-level docs or text files such as `README.md`, `*.md`, `*.mdx`, and `*.txt` | skip `UI Coverage`, skip `UI Browser Integration`, skip `Backend Verification` |",
-		"| `ui-only` | `ui/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | run `UI Coverage`, run `UI Browser Integration`, skip `Backend Verification` | `make test-ui-coverage` and `make ui-integration-test`",
-		"| `backend-only` | `cmd/**`, `pkg/**`, or `tests/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | skip `UI Coverage`, skip `UI Browser Integration`, run `Backend Verification` | `make test-backend-verification`",
-		"| `shared-risk` | mixed product areas or explicit shared surfaces such as `.github/workflows/**`, `api/**`, `pkg/api/**`, `pkg/apisurface/**`, `Makefile`, `go.mod`, or `go.sum` | run `UI Coverage`, run `UI Browser Integration`, run `Backend Verification` | `make verify`",
-		"| `UI Coverage` | `ui-coverage-failure-artifacts` | lane `command.log` with the failing command output |",
-		"| `UI Browser Integration` | `ui-browser-integration-failure-artifacts` | lane `command.log` plus the shared harness browser evidence: Playwright trace, final screenshot, page HTML snapshot, and diagnostics JSON |",
-		"| `Backend Verification` | `backend-verification-failure-artifacts` | lane `command.log` with the covered Go test and maintained short functional output |",
+	classificationRows := mustParseMarkdownTable(t, guide, "| Classification | Touched surfaces | Required downstream lanes | Local rerun guidance |")
+	laneRows := mustParseMarkdownTable(t, guide, "| CI lane | Owned checks | Local rerun command | Why this lane stays separate |")
+
+	scenarios := []struct {
+		name               string
+		paths              []string
+		wantClassification string
+	}{
+		{
+			name:               "docs-only",
+			paths:              []string{"docs/internal/development/development.md", "README.md"},
+			wantClassification: classificationDocsOnly,
+		},
+		{
+			name:               "ui-only",
+			paths:              []string{"ui/src/App.tsx", "docs/internal/development/development.md"},
+			wantClassification: classificationUIOnly,
+		},
+		{
+			name:               "backend-only",
+			paths:              []string{"pkg/service/server.go", "docs/internal/development/development.md"},
+			wantClassification: classificationBackendOnly,
+		},
+		{
+			name:               "shared-risk",
+			paths:              []string{"Makefile"},
+			wantClassification: classificationSharedRisk,
+		},
 	}
 
-	for _, snippet := range wantSnippets {
-		if !strings.Contains(guide, snippet) {
-			t.Fatalf("development guide missing CI routing contract snippet: %q", snippet)
+	for _, scenario := range scenarios {
+		summary := observeClassifierSummary(t, scenario.paths)
+		row := mustFindMarkdownRow(t, classificationRows, "`"+scenario.wantClassification+"`")
+		if got := row[2]; got != expectedGuideLaneMatrix(scenario.wantClassification) {
+			t.Fatalf("%s guide lanes = %q, want %q", scenario.wantClassification, got, expectedGuideLaneMatrix(scenario.wantClassification))
+		}
+		for _, want := range expectedGuideRerunGuidance(scenario.wantClassification) {
+			if !strings.Contains(row[3], want) {
+				t.Fatalf("%s guide rerun guidance = %q, want to contain %q", scenario.wantClassification, row[3], want)
+			}
+		}
+		if !strings.Contains(summary, "- Classification: `"+scenario.wantClassification+"`") {
+			t.Fatalf("%s summary = %q, want classification line", scenario.wantClassification, summary)
+		}
+		for _, want := range expectedSummaryLaneLines(scenario.wantClassification) {
+			if !strings.Contains(summary, want) {
+				t.Fatalf("%s summary = %q, want lane line %q", scenario.wantClassification, summary, want)
+			}
+		}
+	}
+
+	for _, plan := range lanePlans(classificationSharedRisk) {
+		row := mustFindMarkdownRow(t, laneRows, "`"+plan.Name+"`")
+		if got := row[2]; got != "`"+plan.Command+"`" {
+			t.Fatalf("%s guide rerun command = %q, want %q", plan.Name, got, "`"+plan.Command+"`")
 		}
 	}
 }
@@ -431,4 +471,122 @@ func TestResolveChangedPathsValidatesInputs(t *testing.T) {
 	if err == nil || err.Error() != "both -base and -head must be provided together" {
 		t.Fatalf("resolveChangedPaths() error = %v, want paired-ref error", err)
 	}
+}
+
+func observeClassifierSummary(t *testing.T, paths []string) string {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	changedFilesPath := filepath.Join(tempDir, "changed-files.txt")
+	if err := os.WriteFile(changedFilesPath, []byte(strings.Join(paths, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write changed files fixture: %v", err)
+	}
+
+	outputPath := filepath.Join(tempDir, "github-output.txt")
+	summaryPath := filepath.Join(tempDir, "github-summary.md")
+
+	t.Setenv("GITHUB_OUTPUT", outputPath)
+	t.Setenv("GITHUB_STEP_SUMMARY", summaryPath)
+
+	stdout := &bytes.Buffer{}
+	if err := run(config{changedFilesPath: changedFilesPath}, stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	summaryBytes, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read GitHub summary: %v", err)
+	}
+	return string(summaryBytes)
+}
+
+func mustParseMarkdownTable(t *testing.T, document string, header string) [][]string {
+	t.Helper()
+
+	start := strings.Index(document, header)
+	if start < 0 {
+		t.Fatalf("markdown table header %q not found", header)
+	}
+
+	lines := strings.Split(document[start:], "\n")
+	if len(lines) < 3 {
+		t.Fatalf("markdown table for %q was truncated", header)
+	}
+
+	rows := make([][]string, 0)
+	for _, line := range lines[2:] {
+		if !strings.HasPrefix(line, "|") {
+			break
+		}
+		rows = append(rows, splitMarkdownRow(line))
+	}
+	if len(rows) == 0 {
+		t.Fatalf("markdown table %q had no data rows", header)
+	}
+	return rows
+}
+
+func mustFindMarkdownRow(t *testing.T, rows [][]string, firstColumn string) []string {
+	t.Helper()
+
+	for _, row := range rows {
+		if len(row) == 0 {
+			continue
+		}
+		if row[0] == firstColumn {
+			return row
+		}
+	}
+	t.Fatalf("markdown row %q not found", firstColumn)
+	return nil
+}
+
+func splitMarkdownRow(line string) []string {
+	parts := strings.Split(line, "|")
+	cells := make([]string, 0, len(parts)-2)
+	for _, part := range parts[1 : len(parts)-1] {
+		cells = append(cells, strings.TrimSpace(part))
+	}
+	return cells
+}
+
+func expectedGuideLaneMatrix(classification string) string {
+	parts := make([]string, 0, len(lanePlans(classification)))
+	for _, plan := range lanePlans(classification) {
+		decision := "skip"
+		if plan.ShouldRun {
+			decision = "run"
+		}
+		parts = append(parts, decision+" `"+plan.Name+"`")
+	}
+	return strings.Join(parts, ", ")
+}
+
+func expectedGuideRerunGuidance(classification string) []string {
+	switch classification {
+	case classificationDocsOnly:
+		return []string{"`go run ./cmd/ciclassify ...`", "`make verify`"}
+	case classificationSharedRisk:
+		return []string{"`" + fullRunCommand + "`"}
+	default:
+		commands := make([]string, 0, len(lanePlans(classification)))
+		for _, plan := range lanePlans(classification) {
+			if plan.ShouldRun {
+				commands = append(commands, "`"+plan.Command+"`")
+			}
+		}
+		return commands
+	}
+}
+
+func expectedSummaryLaneLines(classification string) []string {
+	lines := make([]string, 0, len(lanePlans(classification)))
+	for _, plan := range lanePlans(classification) {
+		decision := "skip"
+		if plan.ShouldRun {
+			decision = "run"
+		}
+		lines = append(lines, "- `"+plan.Name+"`: `"+decision+"` via `"+plan.Command+"`")
+	}
+	return lines
 }
