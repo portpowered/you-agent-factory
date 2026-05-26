@@ -95,7 +95,7 @@ func resolveChangedPaths(cfg config) ([]string, error) {
 }
 
 func gitChangedPaths(baseRef string, headRef string) ([]string, error) {
-	cmd := execCommand("git", "diff", "--name-only", "--diff-filter=ACMR", baseRef, headRef)
+	cmd := execCommand("git", "diff", "--name-only", "--diff-filter=ACDMR", baseRef, headRef)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("read changed paths from git diff %s..%s: %w", baseRef, headRef, err)

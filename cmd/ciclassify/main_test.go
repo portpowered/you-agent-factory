@@ -3,9 +3,12 @@ package main
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/internal/testpath"
 )
 
 func TestClassifyPathsDocsOnly(t *testing.T) {
@@ -56,6 +59,51 @@ func TestClassifyPathsBackendOnlyAllowsDocumentationCompanionChanges(t *testing.
 	}
 	if got := strings.Join(result.Areas, ","); got != "backend,docs" {
 		t.Fatalf("areas = %q, want backend,docs", got)
+	}
+}
+
+func TestClassifyPathsDeletionOnlyChangesStillRouteToOwnedNarrowLanes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name               string
+		paths              []string
+		wantClassification string
+		wantAreas          string
+	}{
+		{
+			name:               "docs-only-deletions",
+			paths:              []string{"docs/internal/development/development.md", "README.md"},
+			wantClassification: classificationDocsOnly,
+			wantAreas:          "docs",
+		},
+		{
+			name:               "ui-only-deletions",
+			paths:              []string{"docs/internal/development/development.md", "ui/src/App.tsx"},
+			wantClassification: classificationUIOnly,
+			wantAreas:          "docs,ui",
+		},
+		{
+			name:               "backend-only-deletions",
+			paths:              []string{"docs/internal/development/development.md", "pkg/service/server.go"},
+			wantClassification: classificationBackendOnly,
+			wantAreas:          "backend,docs",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := classifyPaths(tc.paths)
+			if result.Classification != tc.wantClassification {
+				t.Fatalf("classification = %q, want %q", result.Classification, tc.wantClassification)
+			}
+			if got := strings.Join(result.Areas, ","); got != tc.wantAreas {
+				t.Fatalf("areas = %q, want %q", got, tc.wantAreas)
+			}
+		})
 	}
 }
 
@@ -313,6 +361,61 @@ func TestRunWritesFullRunGuidanceForSharedRisk(t *testing.T) {
 	summary := string(summaryBytes)
 	if !strings.Contains(summary, "- Full required rerun: `make verify`") {
 		t.Fatalf("GitHub summary = %q, want full required rerun guidance", summary)
+	}
+}
+
+func TestGitChangedPathsIncludesDeletedFilesInClassifierInput(t *testing.T) {
+	t.Parallel()
+
+	originalExecCommand := execCommand
+	t.Cleanup(func() {
+		execCommand = originalExecCommand
+	})
+
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		if name != "git" {
+			t.Fatalf("command = %q, want git", name)
+		}
+		wantArgs := []string{"diff", "--name-only", "--diff-filter=ACDMR", "origin/main", "HEAD"}
+		if got := strings.Join(args, "\x00"); got != strings.Join(wantArgs, "\x00") {
+			t.Fatalf("args = %#v, want %#v", args, wantArgs)
+		}
+		return exec.Command("sh", "-c", "printf 'docs/guide.md\\nui/src/App.tsx\\n'")
+	}
+
+	paths, err := gitChangedPaths("origin/main", "HEAD")
+	if err != nil {
+		t.Fatalf("gitChangedPaths() error = %v", err)
+	}
+	if got := strings.Join(paths, ","); got != "docs/guide.md,ui/src/App.tsx" {
+		t.Fatalf("gitChangedPaths() = %q, want parsed deleted-path-capable output", got)
+	}
+}
+
+func TestDevelopmentGuideDocumentsObservableCIRoutingContract(t *testing.T) {
+	t.Parallel()
+
+	guidePath := testpath.MustRepoPathFromCaller(t, 0, "docs", "internal", "development", "development.md")
+	body, err := os.ReadFile(guidePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", guidePath, err)
+	}
+
+	guide := string(body)
+	wantSnippets := []string{
+		"| `docs-only` | `docs/**` plus root-level docs or text files such as `README.md`, `*.md`, `*.mdx`, and `*.txt` | skip `UI Coverage`, skip `UI Browser Integration`, skip `Backend Verification` |",
+		"| `ui-only` | `ui/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | run `UI Coverage`, run `UI Browser Integration`, skip `Backend Verification` | `make test-ui-coverage` and `make ui-integration-test`",
+		"| `backend-only` | `cmd/**`, `pkg/**`, or `tests/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | skip `UI Coverage`, skip `UI Browser Integration`, run `Backend Verification` | `make test-backend-verification`",
+		"| `shared-risk` | mixed product areas or explicit shared surfaces such as `.github/workflows/**`, `api/**`, `pkg/api/**`, `pkg/apisurface/**`, `Makefile`, `go.mod`, or `go.sum` | run `UI Coverage`, run `UI Browser Integration`, run `Backend Verification` | `make verify`",
+		"| `UI Coverage` | `ui-coverage-failure-artifacts` | lane `command.log` with the failing command output |",
+		"| `UI Browser Integration` | `ui-browser-integration-failure-artifacts` | lane `command.log` plus the shared harness browser evidence: Playwright trace, final screenshot, page HTML snapshot, and diagnostics JSON |",
+		"| `Backend Verification` | `backend-verification-failure-artifacts` | lane `command.log` with the covered Go test and maintained short functional output |",
+	}
+
+	for _, snippet := range wantSnippets {
+		if !strings.Contains(guide, snippet) {
+			t.Fatalf("development guide missing CI routing contract snippet: %q", snippet)
+		}
 	}
 }
 
