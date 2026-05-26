@@ -488,7 +488,7 @@ describe("App current selection", () => {
     ).toBeNull();
     expect(
       within(currentSelection).getByText(
-        "codex / session_id / sess-active-story",
+        "codex / Session ID / sess-active-story",
       ),
     ).toBeTruthy();
     expect(
@@ -503,7 +503,7 @@ describe("App current selection", () => {
     ).toBeTruthy();
     expect(
       within(currentSelection).getAllByText(
-        /codex \/ session_id \/ sess-active-story/,
+        /codex \/ Session ID \/ sess-active-story/,
       )[0],
     ).toBeTruthy();
     expect(
@@ -1991,7 +1991,7 @@ describe("App current selection terminal states", () => {
       within(failedDetail).getByText("Session log unavailable"),
     ).toBeTruthy();
     expect(
-      within(failedDetail).getByText("codex / session_id / sess-failed-story"),
+      within(failedDetail).getByText("codex / Session ID / sess-failed-story"),
     ).toBeTruthy();
     expect(
       within(failedDetail).queryByText(
