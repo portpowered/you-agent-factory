@@ -6,6 +6,7 @@ import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
 import { cn } from "../../../lib/cn";
+import { DashboardIconButtonShell } from "../../../components/ui/dashboard-icon-button-shell";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
@@ -79,17 +80,14 @@ const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS = "gap-1.5";
 const BENTO_DRAG_HANDLE_CLASS =
-  "inline-grid size-9 shrink-0 cursor-grab place-items-center rounded-lg border border-af-border bg-af-surface-raised text-af-text-muted outline-af-accent transition-colors hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 active:cursor-grabbing";
-const BENTO_DRAG_HANDLE_COMPACT_CLASS =
-  "size-8 rounded-md border-af-border bg-transparent text-af-text-subtle hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
+  "cursor-grab text-af-text-muted hover:text-af-text active:cursor-grabbing";
 const BENTO_CARD_BODY_CLASS = cn(
-  "grid h-full min-h-0 flex-1 gap-2.5 overflow-auto p-3.5 [&_p]:m-0",
+  "grid h-full min-h-0 flex-1 gap-2.5 overflow-auto px-3.5 pt-3.5 pb-4 [&>*]:pb-1 [&_p]:m-0",
   DASHBOARD_BODY_TEXT_CLASS,
 );
-const BENTO_CARD_BODY_COMPACT_CLASS = "gap-2 p-3";
+const BENTO_CARD_BODY_COMPACT_CLASS = "gap-2 px-3 pt-3 pb-4 [&>*]:pb-1";
 
 interface AgentBentoDragHandleProps {
-  compact?: boolean;
   title: string;
 }
 
@@ -334,7 +332,7 @@ export function AgentBentoCard({
           )}
         >
           {headerAction}
-          <AgentBentoDragHandle compact={compactChrome} title={title} />
+          <AgentBentoDragHandle title={title} />
         </div>
       </header>
       <div className={cardBodyClassName}>{children}</div>
@@ -343,18 +341,14 @@ export function AgentBentoCard({
 }
 
 export function AgentBentoDragHandle({
-  compact = false,
   title,
 }: AgentBentoDragHandleProps) {
   return (
-    <button
+    <DashboardIconButtonShell
       aria-label={`Move ${title}`}
-      className={cn(
-        BENTO_DRAG_HANDLE_CLASS,
-        compact && BENTO_DRAG_HANDLE_COMPACT_CLASS,
-      )}
+      className={BENTO_DRAG_HANDLE_CLASS}
       data-bento-drag-handle="true"
-      type="button"
+      tone="outline"
     >
       <svg
         aria-hidden="true"
@@ -372,6 +366,6 @@ export function AgentBentoDragHandle({
           strokeWidth="1.7"
         />
       </svg>
-    </button>
+    </DashboardIconButtonShell>
   );
 }

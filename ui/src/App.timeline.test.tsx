@@ -124,25 +124,24 @@ describe("App timeline reconstruction flows", () => {
     const exportButton = within(toolbar).getByRole("button", {
       name: "Export PNG",
     });
-    const streamStatus = within(toolbar).getByRole("status", {
-      name: "Event stream connecting",
-    });
     const headerControls = Array.from(
       toolbar.querySelectorAll(
-        '[aria-label="Timeline tick"], [aria-label="Change language"], [aria-label="Export PNG"], [role="status"]',
+        '[aria-label="Timeline tick"], [aria-label="Change language"], [aria-label="Export PNG"]',
       ),
     );
 
-    expect(headerControls).toHaveLength(4);
-    expect(headerControls[0]).toBe(streamStatus);
-    expect(headerControls[1]).toBe(languageButton);
-    expect(headerControls[2]).toBe(slider);
-    expect(headerControls[3]).toBe(exportButton);
+    expect(headerControls).toHaveLength(3);
+    expect(headerControls[0]).toBe(languageButton);
+    expect(headerControls[1]).toBe(slider);
+    expect(headerControls[2]).toBe(exportButton);
     expect(within(toolbar).getByText("4/4")).toBeTruthy();
     expect(within(toolbar).queryByText(/Tick \d+ of \d+/)).toBeNull();
     expect(within(toolbar).getByText("Timeline tick").className).toContain(
       "sr-only",
     );
+    expect(
+      within(toolbar).queryByRole("status", { name: /Event stream/i }),
+    ).toBeNull();
   });
 
   it("renders totals and selection panels from the selected event tick", async () => {

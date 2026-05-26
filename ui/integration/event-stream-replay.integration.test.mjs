@@ -263,11 +263,13 @@ async function assertReplayScenarioRenders(preview, replayFixture) {
       replayServer,
     });
     const dashboardSummary = browserPage.page.locator('[aria-label="dashboard summary"]');
-    await dashboardSummary
-      .getByRole("status", {
-        name: /Event stream (live|connecting|offline)/,
-      })
-      .waitFor();
+    expect(
+      await dashboardSummary
+        .getByRole("status", {
+          name: /Event stream (live|connecting|offline)/,
+        })
+        .count(),
+    ).toBe(0);
     expect(
       await dashboardSummary.getByText("RUNNING", { exact: true }).count(),
     ).toBe(0);

@@ -1,23 +1,23 @@
-import { useCallback, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 
 import { DashboardActionRow } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
-import {
-  applyFactoryGraphAddEntityDraft,
-  createFactoryGraphAddEntityDraft,
-  type CanonicalFactoryDefinition,
-  type FactoryGraphAddEntityDraft,
-  type FactoryGraphAddEntityFieldErrors,
-  type FactoryGraphAddEntityKind,
-  type useFactoryGraphDraftState,
-  validateFactoryGraphAddEntityDraft,
-} from "../../factory-graph-editor/public";
 import {
   FactoryGraphEditorModeToggle,
   FactoryGraphEditorStatus,
   type FactoryGraphEditorTool,
 } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import {
+  applyFactoryGraphAddEntityDraft,
+  type CanonicalFactoryDefinition,
+  createFactoryGraphAddEntityDraft,
+  type FactoryGraphAddEntityDraft,
+  type FactoryGraphAddEntityFieldErrors,
+  type FactoryGraphAddEntityKind,
+  type useFactoryGraphDraftState,
+  validateFactoryGraphAddEntityDraft,
+} from "../../factory-graph-editor/public";
 
 export function useFactoryGraphAddEntityController({
   currentFactoryDefinition,
@@ -89,8 +89,7 @@ export function useFactoryGraphAddEntityController({
   };
 }
 
-const FACTORY_GRAPH_HEADER_ACTIONS_CLASS =
-  "min-w-0 justify-end";
+const FACTORY_GRAPH_HEADER_ACTIONS_CLASS = "min-w-0 justify-end";
 const FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS = "gap-1.5";
 const FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS = "gap-1.5";
 const STATUS_PILL_COMPACT_CLASS = "px-2.5 py-0.5 text-[0.7rem]";
@@ -101,6 +100,7 @@ export function CurrentActivityGraphHeaderActions({
   compact = false,
   editorMode,
   editorUnavailableClassifierWorkstationName,
+  headerActions,
   hasChanges,
   isDefinitionLoading,
   loadErrorMessage,
@@ -110,6 +110,7 @@ export function CurrentActivityGraphHeaderActions({
   compact?: boolean;
   editorMode: boolean;
   editorUnavailableClassifierWorkstationName?: string;
+  headerActions?: ReactNode;
   hasChanges: boolean;
   isDefinitionLoading: boolean;
   loadErrorMessage?: string;
@@ -127,32 +128,43 @@ export function CurrentActivityGraphHeaderActions({
   return (
     <DashboardActionRow
       actions={
-        <FactoryGraphEditorModeToggle
-          className={compact ? MODE_TOGGLE_COMPACT_CLASS : undefined}
-          disabled={!editorMode && editorUnavailableReason !== undefined}
-          editorMode={editorMode}
-          locale={locale}
-          onClick={onToggle}
-          tooltipOverride={editorUnavailableReason}
-        />
+        <>
+          <FactoryGraphEditorModeToggle
+            className={compact ? MODE_TOGGLE_COMPACT_CLASS : undefined}
+            disabled={!editorMode && editorUnavailableReason !== undefined}
+            editorMode={editorMode}
+            locale={locale}
+            onClick={onToggle}
+            tooltipOverride={editorUnavailableReason}
+          />
+          {headerActions}
+        </>
       }
-      actionsClassName={compact ? FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS : undefined}
+      actionsClassName={
+        compact
+          ? FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS
+          : undefined
+      }
       className={cn(
         FACTORY_GRAPH_HEADER_ACTIONS_CLASS,
         compact && FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS,
       )}
       statuses={
         <FactoryGraphEditorStatus
-        className={compact ? STATUS_PILL_COMPACT_CLASS : undefined}
-        editorMode={editorMode}
-        editorUnavailableReason={editorUnavailableReason}
-        hasChanges={hasChanges}
-        isDefinitionLoading={isDefinitionLoading}
-        locale={locale}
-        loadErrorMessage={loadErrorMessage}
-      />
+          className={compact ? STATUS_PILL_COMPACT_CLASS : undefined}
+          editorMode={editorMode}
+          editorUnavailableReason={editorUnavailableReason}
+          hasChanges={hasChanges}
+          isDefinitionLoading={isDefinitionLoading}
+          locale={locale}
+          loadErrorMessage={loadErrorMessage}
+        />
       }
-      statusesClassName={compact ? FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS : undefined}
+      statusesClassName={
+        compact
+          ? FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS
+          : undefined
+      }
     />
   );
 }
