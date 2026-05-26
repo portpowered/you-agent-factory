@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DASHBOARD_PAGE_HEADING_CLASS } from "./components/ui/dashboard-typography";
-import { useDashboardStreamStore } from "./features/dashboard/state";
+import { useDashboardStreamStore } from "./features/dashboard/state/dashboardStreamStore";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
 import {
   createFactoryImportValue,
