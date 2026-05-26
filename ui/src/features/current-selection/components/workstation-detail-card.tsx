@@ -10,6 +10,7 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import {
   formatDurationFromISO,
+  formatRelativeTimeFromISO,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
@@ -248,7 +249,7 @@ function CollapsibleWorkstationRequests({
                           )}
                     >
                       {messages.requestStatusStartedAgo(
-                        formatDurationFromISO(
+                        formatRelativeTimeFromISO(
                           request.started_at,
                           now,
                           locale,

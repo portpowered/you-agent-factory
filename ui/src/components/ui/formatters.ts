@@ -5,6 +5,7 @@ import type {
 import {
   formatDateTime,
   formatDuration,
+  formatRelativeTime,
   formatTime,
 } from "../../i18n/formatters";
 
@@ -58,6 +59,55 @@ export function formatDurationFromISO(
   }
 
   return formatDurationMillis(now - startedAtMs, locale);
+}
+
+export function formatRelativeTimeFromISO(
+  timestamp: string,
+  now: number,
+  locale?: string | null,
+  fallback = "Unavailable",
+): string {
+  const timestampMs = Date.parse(timestamp);
+  if (Number.isNaN(timestampMs)) {
+    return fallback;
+  }
+
+  const relativeMillis = timestampMs - now;
+  const absoluteMillis = Math.abs(relativeMillis);
+
+  if (absoluteMillis < 60_000) {
+    return formatRelativeTime(
+      Math.round(relativeMillis / 1_000),
+      "second",
+      locale,
+      { fallback },
+    );
+  }
+
+  if (absoluteMillis < 3_600_000) {
+    return formatRelativeTime(
+      Math.round(relativeMillis / 60_000),
+      "minute",
+      locale,
+      { fallback },
+    );
+  }
+
+  if (absoluteMillis < 86_400_000) {
+    return formatRelativeTime(
+      Math.round(relativeMillis / 3_600_000),
+      "hour",
+      locale,
+      { fallback },
+    );
+  }
+
+  return formatRelativeTime(
+    Math.round(relativeMillis / 86_400_000),
+    "day",
+    locale,
+    { fallback },
+  );
 }
 
 export function formatTimeOfDay(

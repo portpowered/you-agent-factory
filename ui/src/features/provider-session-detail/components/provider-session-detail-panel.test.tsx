@@ -1272,7 +1272,7 @@ describe("ProviderSessionDetailPanel", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByText("命令结果")).toBeTruthy();
     expect(screen.getByText("退出代码")).toBeTruthy();
-    expect(screen.getByText("0.4821 seconds")).toBeTruthy();
+    expect(screen.getByText("0.4821秒钟")).toBeTruthy();
     expect(screen.getByText("命令执行成功")).toBeTruthy();
     expect(screen.getByText("unexpected end of JSON input")).toBeTruthy();
     expect(screen.getByText("第 7 行的未知事件")).toBeTruthy();
