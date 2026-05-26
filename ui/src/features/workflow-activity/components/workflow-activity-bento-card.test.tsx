@@ -1,22 +1,25 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { DashboardSelection } from "../../current-selection/public";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
+import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 
 vi.mock("../../current-factory-definition/public", async () => {
-  const actual = await vi.importActual("../../current-factory-definition/public");
+  const actual = await vi.importActual(
+    "../../current-factory-definition/public",
+  );
 
   return {
     ...actual,
@@ -26,9 +29,7 @@ vi.mock("../../current-factory-definition/public", async () => {
 });
 
 vi.mock("../../factory-graph-editor/public", async () => {
-  const actual = await vi.importActual(
-    "../../factory-graph-editor/public",
-  );
+  const actual = await vi.importActual("../../factory-graph-editor/public");
 
   return {
     ...actual,
@@ -103,9 +104,11 @@ function createQueryClient(): QueryClient {
 }
 
 function renderWorkflowActivityBentoCard({
+  headerAction,
   locale = "zh-CN",
   widgetInstanceID,
 }: {
+  headerAction?: ReactNode;
   locale?: string;
   widgetInstanceID?: string;
 } = {}) {
@@ -120,6 +123,7 @@ function renderWorkflowActivityBentoCard({
   render(
     <QueryClientProvider client={queryClient}>
       <WorkflowActivityBentoCard
+        headerAction={headerAction}
         importController={createImportController()}
         locale={locale}
         now={Date.parse("2026-04-08T12:00:04Z")}
@@ -173,7 +177,7 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
   );
 }
 
-describe("WorkflowActivityBentoCard", () => {
+function registerWorkflowActivityBentoCardTestSetup() {
   let restoreBrowserTestShims: (() => void) | null = null;
 
   beforeEach(() => {
@@ -198,6 +202,10 @@ describe("WorkflowActivityBentoCard", () => {
     restoreBrowserTestShims = null;
     vi.clearAllMocks();
   });
+}
+
+describe("WorkflowActivityBentoCard", () => {
+  registerWorkflowActivityBentoCardTestSetup();
 
   it("wraps the React Flow graph without a floating inspector", async () => {
     const locale = "zh-CN";
@@ -216,7 +224,7 @@ describe("WorkflowActivityBentoCard", () => {
     ).toBeTruthy();
     expect(
       within(graphCard).getByRole("button", { name: "Move 工厂图" }).className,
-    ).toContain("size-8");
+    ).toContain("h-10");
     expect(within(graphCard).getByText("观察模式")).toBeTruthy();
     expect(graphHeader?.textContent).toContain("观察模式");
     expect(
@@ -226,7 +234,9 @@ describe("WorkflowActivityBentoCard", () => {
       screen.getByRole("region", { name: messages.viewportLabel }),
     ).toBeTruthy();
     expect(screen.queryByRole("complementary")).toBeNull();
-    expect(screen.queryByRole("button", { name: /collapse inspector/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /collapse inspector/i }),
+    ).toBeNull();
   });
 
   it("keeps the header as the visible editor entry point in observe and loading editor states", async () => {
@@ -299,5 +309,40 @@ describe("WorkflowActivityBentoCard", () => {
         headingID ? container.ownerDocument.getElementById(headingID) : null,
       ).toBeTruthy();
     }
+  });
+});
+
+describe("WorkflowActivityBentoCard header actions", () => {
+  registerWorkflowActivityBentoCardTestSetup();
+
+  it("orders the remove action with the graph header controls instead of before the status pill", async () => {
+    const locale = "zh-CN";
+    const shellMessages = getWorkflowActivityShellMessages(locale);
+    renderWorkflowActivityBentoCard({
+      headerAction: <button type="button">Remove card</button>,
+      locale,
+    });
+
+    const graphCard = await screen.findByRole("article", {
+      name: shellMessages.widgetTitle,
+    });
+    const actionSections = graphCard.querySelectorAll(
+      "[data-dashboard-action-row-section]",
+    );
+
+    expect(actionSections).toHaveLength(2);
+    expect(
+      actionSections[0]?.getAttribute("data-dashboard-action-row-section"),
+    ).toBe("statuses");
+    expect(
+      actionSections[1]?.getAttribute("data-dashboard-action-row-section"),
+    ).toBe("actions");
+
+    const actions = within(actionSections[1] as HTMLElement).getAllByRole(
+      "button",
+    );
+
+    expect(actions[0]?.getAttribute("aria-label")).toBe("进入工厂图编辑器");
+    expect(actions[1]?.textContent).toBe("Remove card");
   });
 });

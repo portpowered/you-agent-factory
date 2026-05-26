@@ -1,4 +1,4 @@
-import type { WorkstationDetailMessages } from "../messages";
+import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 import type {
   EditableWorkstationPromptDiagnostic,
   EditableWorkstationPromptHelpState,

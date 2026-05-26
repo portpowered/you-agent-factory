@@ -18,7 +18,10 @@ import {
   emptyStatePlaceMessage,
   isTerminalOrFailedPlace,
 } from "./detail-card-shared";
-import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
+import {
+  useCurrentSelectionDetailMessages,
+  useCurrentSelectionLocale,
+} from "./current-selection-locale";
 import type {
   StateNodeDetailCardProps,
   StatePositionWorkListItemProps,
@@ -108,6 +111,7 @@ function StatePositionWorkListItem({
   onSelectWorkItem,
   workItem,
 }: StatePositionWorkListItemProps) {
+  const locale = useCurrentSelectionLocale();
   const workLabel = formatWorkItemLabel(workItem);
   const workID = workItem.work_id?.trim();
   const startedAt = resolveStartedAt(workItem);
@@ -127,7 +131,7 @@ function StatePositionWorkListItem({
           dateTime={startedAt}
           title={startedAt}
         >
-          {messages.startedAtLabel} {formatTimeOfDay(startedAt)}
+          {messages.startedAtLabel} {formatTimeOfDay(startedAt, locale)}
         </time>
       ) : null}
       {hasFailureReason || hasFailureMessage ? (

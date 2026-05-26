@@ -2,17 +2,12 @@ import type { ReactNode } from "react";
 import { createContext, useContext } from "react";
 
 import { DETAIL_CARD_WIDE_CLASS } from "../../../components/dashboard/widget-board";
-import {
-  DashboardActionButton,
-  DashboardActionRow,
-  DashboardWidgetFrame,
-} from "../../../components/ui";
+import { DashboardWidgetFrame } from "../../../components/ui";
+import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
+import { CurrentSelectionHeaderActions } from "./current-selection-header-actions";
 import { useCurrentSelectionShellMessages } from "./current-selection-locale";
 import type { SelectionDetailLayoutProps } from "./detail-card-types";
-import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 
-const SELECTION_HISTORY_ACTIONS_CLASS = "justify-end";
-const SELECTION_HISTORY_ACTIONS_GROUP_CLASS = "justify-end";
 const CurrentSelectionHeaderActionContext = createContext<ReactNode>(null);
 
 export function CurrentSelectionHeaderActionProvider({
@@ -45,31 +40,19 @@ export function SelectionDetailLayout({
     <DashboardWidgetFrame
       className={DETAIL_CARD_WIDE_CLASS}
       headerAction={
-        <DashboardActionRow
-          actions={
+        <CurrentSelectionHeaderActions
+          canRedo={canRedo}
+          canUndo={canUndo}
+          headerActions={
             <>
-              {sharedHeaderAction}
               {headerAction}
-              <DashboardActionButton
-                aria-label={messages.undoAccessibleLabel}
-                disabled={!canUndo}
-                onClick={() => undoSelection()}
-                type="button"
-              >
-                {messages.undoLabel}
-              </DashboardActionButton>
-              <DashboardActionButton
-                aria-label={messages.redoAccessibleLabel}
-                disabled={!canRedo}
-                onClick={() => redoSelection()}
-                type="button"
-              >
-                {messages.redoLabel}
-              </DashboardActionButton>
+              {sharedHeaderAction}
             </>
           }
-          actionsClassName={SELECTION_HISTORY_ACTIONS_GROUP_CLASS}
-          className={SELECTION_HISTORY_ACTIONS_CLASS}
+          onRedo={() => redoSelection()}
+          onUndo={() => undoSelection()}
+          redoLabel={messages.redoAccessibleLabel}
+          undoLabel={messages.undoAccessibleLabel}
         />
       }
       title={messages.title}

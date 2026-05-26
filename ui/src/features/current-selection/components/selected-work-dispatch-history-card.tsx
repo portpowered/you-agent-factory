@@ -31,6 +31,7 @@ import { WorkItemPayloadList } from "./work-item-payload-details";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionOperationalEnumMessages,
+  useCurrentSelectionLocale,
 } from "./current-selection-locale";
 import type { CurrentSelectionDispatchHistoryMessages } from "../messages/current-selection-dispatch-history";
 import {
@@ -76,6 +77,7 @@ export function DispatchHistoryCard({
   traceTargetId,
 }: DispatchHistoryCardProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
+  const locale = useCurrentSelectionLocale();
   const view = buildDispatchHistoryView(request);
   const isCurrentDispatch = currentDispatchID === request.dispatch_id;
 
@@ -93,7 +95,12 @@ export function DispatchHistoryCard({
         outcome={view.outcome}
         title={requestTitle(request, selectedWorkID)}
       />
-      <DispatchSummaryDetails messages={messages} request={request} view={view} />
+      <DispatchSummaryDetails
+        locale={locale}
+        messages={messages}
+        request={request}
+        view={view}
+      />
       <DispatchRequestSection
         messages={messages}
         onSelectWorkID={onSelectWorkID}
@@ -236,10 +243,12 @@ function DispatchHistoryHeader({
 }
 
 function DispatchSummaryDetails({
+  locale,
   messages,
   request,
   view,
 }: {
+  locale?: string | null;
   messages: CurrentSelectionDispatchHistoryMessages;
   request: SelectedWorkRequestHistoryItem;
   view: DispatchHistoryView;
@@ -247,6 +256,7 @@ function DispatchSummaryDetails({
   const startedAt = formatLocalDateTime(
     requestStartedAt(request),
     messages.workstationUnavailableValue,
+    locale,
   );
 
   return (
@@ -255,7 +265,11 @@ function DispatchSummaryDetails({
       <InferenceAttemptDetail label={messages.startedAtLabel} value={startedAt} />
       <InferenceAttemptDetail
         label={messages.durationLabel}
-        value={view.durationMillis !== undefined ? formatDurationMillis(view.durationMillis) : undefined}
+        value={
+          view.durationMillis !== undefined
+            ? formatDurationMillis(view.durationMillis, locale)
+            : undefined
+        }
       />
     </dl>
   );

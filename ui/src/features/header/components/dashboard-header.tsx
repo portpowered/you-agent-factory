@@ -6,32 +6,25 @@ import {
   useRef,
   useState,
 } from "react";
-
-import { cn } from "../../../lib/cn";
+import { DashboardActionRow } from "../../../components/ui";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
-import {
-  DASHBOARD_PAGE_HEADING_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import {
-  DashboardActionRow,
-  DashboardStatusPill,
-} from "../../../components/ui";
+import { DASHBOARD_PAGE_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import {
   getNativeLanguageLabel,
   SUPPORTED_LOCALES,
   type SupportedLocale,
   useAppLocale,
 } from "../../../i18n";
-import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
+import { cn } from "../../../lib/cn";
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import { useExportDialogStore } from "../../export/state/exportDialogStore";
+import { useDashboardSessionTabsState } from "../hooks/use-dashboard-session-tabs-state";
+import { sessionStreamToggleLabel } from "../lib/dashboard-session-tabs-utils";
+import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { TickSliderControl } from "./tick-slider-control";
-import { sessionStreamToggleLabel } from "../lib/dashboard-session-tabs-utils";
-import { getHeaderControlsMessages } from "../messages/header-controls";
-import { useDashboardSessionTabsState } from "../hooks/use-dashboard-session-tabs-state";
 
 const DASHBOARD_TOOLBAR_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
@@ -75,7 +68,6 @@ export interface DashboardHeaderProps {
 export function DashboardHeader({ locale }: DashboardHeaderProps) {
   const { locale: resolvedLocale, setLocale } = useAppLocale(locale);
   const sessionTabsState = useDashboardSessionTabsState();
-  const streamStatus = useDashboardStreamStore((state) => state.streamState.status);
   const isExportDialogOpen = useExportDialogStore(
     (state) => state.isExportDialogOpen,
   );
@@ -120,15 +112,6 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
             }
             actionsClassName={DASHBOARD_HEADER_ACTION_ROW_ACTIONS_CLASS}
             className={DASHBOARD_HEADER_ACTION_ROW_CLASS}
-            statuses={
-              <DashboardStatusPill
-                aria-label={streamStatusLabel(streamStatus, headerMessages)}
-                role="status"
-                tone={streamStatusTone(streamStatus)}
-              >
-                {streamStatusLabel(streamStatus, headerMessages)}
-              </DashboardStatusPill>
-            }
           />
         </div>
         <div className={DASHBOARD_SECONDARY_ROW_CLASS}>
@@ -192,44 +175,13 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
   );
 }
 
-function streamStatusLabel(
-  status: ReturnType<typeof useDashboardStreamStore.getState>["streamState"]["status"],
-  messages: ReturnType<typeof getHeaderControlsMessages>,
-) {
-  if (status === "live") {
-    return messages.streamStatusLiveLabel;
-  }
-  if (status === "offline") {
-    return messages.streamStatusOfflineLabel;
-  }
-
-  return messages.streamStatusConnectingLabel;
-}
-
-function streamStatusTone(
-  status: ReturnType<typeof useDashboardStreamStore.getState>["streamState"]["status"],
-) {
-  if (status === "live") {
-    return "active";
-  }
-  if (status === "offline") {
-    return "danger";
-  }
-
-  return "neutral";
-}
-
 function resolveLanguageSwitcherValue(locale: string): SupportedLocale {
   return SUPPORTED_LOCALES.includes(locale as SupportedLocale)
     ? (locale as SupportedLocale)
     : "en";
 }
 
-function SessionStreamToggleIcon({
-  paused,
-}: {
-  paused: boolean;
-}) {
+function SessionStreamToggleIcon({ paused }: { paused: boolean }) {
   return (
     <svg
       aria-hidden="true"
@@ -510,8 +462,9 @@ function moveLocaleMenuFocus(
   }
 
   const items = Array.from(
-    menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ??
-      [],
+    menuRef.current?.querySelectorAll<HTMLButtonElement>(
+      '[role="menuitemradio"]',
+    ) ?? [],
   );
   if (items.length === 0) {
     return;

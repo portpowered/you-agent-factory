@@ -7,6 +7,12 @@ import { WorkstationDetailCard } from "./workstation-detail-card";
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 const editableConfigurationCoverageTimeoutMs = 240_000;
 
+function expectHeadingBefore(first: HTMLElement, second: HTMLElement) {
+  expect(
+    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+}
+
 function editableConfigurationSection() {
   const heading = screen
     .getAllByRole("heading", { name: "Configuration" })
@@ -185,7 +191,40 @@ function buildReadyEditableConfigurationState(overrides?: {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: main-branch mergeability change expanded this existing focused test suite past the repo threshold; keep the suite intact until a dedicated split lands.
 describe("WorkstationDetailCard editable configuration", () => {
+  it("keeps configuration immediately after the workstation summary without requiring lower sections", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const summaryHeading = screen.getByRole("heading", {
+      name: "Workstation summary",
+    });
+    const configurationHeading = screen.getByRole("heading", {
+      name: "Configuration",
+    });
+    const activeWorkHeading = screen.getByRole("heading", { name: "Active work" });
+
+    expectHeadingBefore(summaryHeading, configurationHeading);
+    expectHeadingBefore(configurationHeading, activeWorkHeading);
+    expect(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Request history" })).toBeNull();
+  });
+
   it("supports keyboard disclosure toggling for the editable configuration section", async () => {
     const user = userEvent.setup();
     const snapshot = semanticWorkflowDashboardSnapshot;
@@ -1084,6 +1123,63 @@ describe("WorkstationDetailCard editable configuration", () => {
         )
         .className,
     ).toContain("text-af-text-muted");
+  });
+
+  it("keeps save feedback inside the configuration section after the reorder", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        saveState={{ status: "success" }}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    let configuration = editableConfigurationSection();
+    expect(
+      within(configuration).getByText(
+        "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(configuration)
+        .getAllByRole("status")
+        .map((element) => element.textContent)
+        .join(" "),
+    ).toContain(
+      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+    );
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        saveState={{
+          errorMessage: "The current factory rejected the workstation update.",
+          status: "error",
+        }}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    configuration = editableConfigurationSection();
+    expect(
+      within(configuration).getByText(
+        "Saving failed. The current factory rejected the workstation update.",
+      ),
+    ).toBeTruthy();
   });
 
   it("uses semantic panels for autocomplete and diagnostics feedback", () => {

@@ -625,6 +625,191 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("2026-05-18T14:10:01Z")).toBeTruthy();
   });
 
+  it("rerenders provider-session timestamps for zh-CN without changing raw values or payload text", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 2,
+            functionCalls: [],
+            lineCount: 2,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [],
+            turns: [
+              {
+                eventCount: 2,
+                functionCallCount: 0,
+                index: 1,
+                reasoningCount: 0,
+                responseItemCount: 2,
+                startedAt: "2026-05-18T14:10:00Z",
+              },
+            ],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+          source: {
+            modifiedAt: "2026-05-18T14:09:59Z",
+            relativePath: "2026/05/18/rollout-sess_active.jsonl",
+            sizeBytes: 2048,
+          },
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              text: "Summarize the rollout state for this work item.",
+              timestamp: "2026-05-18T14:10:01Z",
+              turnIndex: 1,
+              type: "user_message",
+            },
+          ],
+        }),
+      ),
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
+    });
+
+    expect(
+      screen.getByText(
+        "Times on this card are shown in your local timezone. Expand Raw ISO timestamp when you need the machine value.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getAllByTitle("2026-05-18T14:10:01Z")
+        .some(
+          (element) =>
+            element.textContent === formatDateTime("2026-05-18T14:10:01Z", "en"),
+        ),
+    ).toBe(true);
+    expect(screen.getByText("Summarize the rollout state for this work item.")).toBeTruthy();
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ProviderSessionDetailPanel
+          locale="zh-CN"
+          selectedProviderSession={SELECTED_SESSION}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "会话记录" })).toBeTruthy();
+    });
+
+    expect(
+      screen.getByText(
+        "此卡片中的时间会按你的本地时区显示。需要机器时间值时，请展开原始 ISO 时间戳。",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getAllByTitle("2026-05-18T14:10:01Z")
+        .some(
+          (element) =>
+            element.textContent === formatDateTime("2026-05-18T14:10:01Z", "zh-CN"),
+        ),
+    ).toBe(true);
+    expect(screen.getByText("Summarize the rollout state for this work item.")).toBeTruthy();
+
+    fireEvent.click(screen.getAllByText("原始 ISO 时间戳")[0]);
+
+    expect(screen.getByText("2026-05-18T14:09:59Z")).toBeTruthy();
+    expect(screen.getByText("2026-05-18T14:10:00Z")).toBeTruthy();
+    expect(screen.getByText("2026-05-18T14:10:01Z")).toBeTruthy();
+    expect(screen.getByText("sess_active")).toBeTruthy();
+  });
+
+  it("shows localized fallback copy for invalid and missing provider-session timestamps without leaking raw invalid values", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 3,
+            functionCalls: [],
+            lineCount: 3,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [],
+            turns: [
+              {
+                eventCount: 1,
+                functionCallCount: 0,
+                index: 1,
+                reasoningCount: 0,
+                responseItemCount: 1,
+                startedAt: " definitely-not-a-date ",
+              },
+              {
+                eventCount: 1,
+                functionCallCount: 0,
+                index: 2,
+                reasoningCount: 0,
+                responseItemCount: 1,
+                startedAt: null,
+              },
+            ],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+          source: {
+            modifiedAt: " not-a-real-timestamp ",
+            relativePath: "2026/05/18/rollout-sess_active.jsonl",
+            sizeBytes: 2048,
+          },
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              text: "First row has an invalid timestamp.",
+              timestamp: " definitely-not-a-date ",
+              turnIndex: 1,
+              type: "user_message",
+            },
+            {
+              lineNumber: 2,
+              order: 2,
+              text: "Second row omitted the timestamp.",
+              turnIndex: 1,
+              type: "assistant_message",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel
+        locale="zh-CN"
+        selectedProviderSession={SELECTED_SESSION}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "会话记录" })).toBeTruthy();
+    });
+
+    expect(screen.getAllByText("不可用").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("无时间戳").length).toBeGreaterThan(0);
+    expect(screen.queryByText(" definitely-not-a-date ")).toBeNull();
+    expect(screen.queryByTitle(" definitely-not-a-date ")).toBeNull();
+    expect(screen.queryByText("原始 ISO 时间戳")).toBeNull();
+  });
+
   it("renders the transcript before summary sections in the success state", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse(
@@ -1135,7 +1320,7 @@ describe("ProviderSessionDetailPanel", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByText("命令结果")).toBeTruthy();
     expect(screen.getByText("退出代码")).toBeTruthy();
-    expect(screen.getByText("0.4821 seconds")).toBeTruthy();
+    expect(screen.getByText("0.4821秒钟")).toBeTruthy();
     expect(screen.getByText("命令执行成功")).toBeTruthy();
     expect(screen.getByText("unexpected end of JSON input")).toBeTruthy();
     expect(screen.getByText("第 7 行的未知事件")).toBeTruthy();

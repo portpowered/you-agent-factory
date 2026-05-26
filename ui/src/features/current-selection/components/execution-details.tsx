@@ -7,6 +7,7 @@ import {
 } from "../../../components/ui/formatters";
 import {
   useCurrentSelectionOperationalEnumMessages,
+  useCurrentSelectionLocale,
   useCurrentSelectionShellMessages,
 } from "./current-selection-locale";
 import {
@@ -32,6 +33,7 @@ export function ExecutionDetailsSection({
   traceTargetId,
 }: ExecutionDetailsSectionProps) {
   const messages = useCurrentSelectionShellMessages();
+  const locale = useCurrentSelectionLocale();
   const hasTraceIDs = details.traceIDs.length > 0;
 
   return (
@@ -65,7 +67,12 @@ export function ExecutionDetailsSection({
           <dt>{messages.elapsedLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
             {details.elapsedStartTimestamp
-              ? formatDurationFromISO(details.elapsedStartTimestamp, now)
+              ? formatDurationFromISO(
+                  details.elapsedStartTimestamp,
+                  now,
+                  locale,
+                  messages.elapsedUnavailable,
+                )
               : messages.elapsedUnavailable}
           </dd>
         </div>
@@ -154,6 +161,7 @@ function WorkstationRequestProjectionSection({
 }: Pick<ExecutionDetailsSectionProps, "details">) {
   const messages = useCurrentSelectionShellMessages();
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
+  const locale = useCurrentSelectionLocale();
   const requestProjection = details.workstationRequest;
   if (!requestProjection) {
     return null;
@@ -163,6 +171,7 @@ function WorkstationRequestProjectionSection({
   const startedAt = formatLocalDateTime(
     request.startedAt ?? request.started_at,
     messages.elapsedUnavailable,
+    locale,
   );
 
   return (
@@ -206,6 +215,7 @@ function WorkstationRequestProjectionSection({
             undefined
               ? formatDurationMillis(
                   response?.durationMillis ?? response?.duration_millis ?? 0,
+                  locale,
                 )
               : undefined
           }

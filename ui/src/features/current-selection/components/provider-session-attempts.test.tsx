@@ -6,7 +6,7 @@ import {
   type LoadableProviderSessionRef,
   providerSessionSelectionKey,
 } from "../../provider-session-detail/lib/provider-session-ref";
-import { getWorkstationDetailMessages } from "../messages";
+import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 describe("ProviderSessionAttempts", () => {
   it("uses the default workstation-detail helper messages when no localized messages are provided", async () => {

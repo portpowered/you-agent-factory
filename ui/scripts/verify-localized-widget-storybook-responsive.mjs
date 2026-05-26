@@ -16,8 +16,12 @@ export async function verifyLocalizedSubmitWorkCard({
     "Localized request name input",
   );
   await expectVisible(
-    card.getByRole("textbox", { exact: true, name: "请求" }),
-    "Localized request textarea",
+    card.getByRole("list", { name: "提交项" }),
+    "Localized submission-items list",
+  );
+  await expectVisible(
+    card.getByRole("textbox", { name: "文本项 1" }),
+    "Localized submission item textbox",
   );
   await expectVisible(
     card.getByRole("button", { exact: true, name: "提交工作" }),

@@ -4,13 +4,13 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { AgentBentoCard } from "../../../components/ui";
 import type { DashboardSelection } from "../../current-selection/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
+import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
+import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import {
   type CurrentActivitySelection,
   ReactFlowCurrentActivityCardView,
 } from "./react-flow-current-activity-card";
-import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
-import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 
 interface WorkflowActivityBentoCardProps {
   headerAction?: ReactNode;
@@ -49,23 +49,21 @@ export function WorkflowActivityBentoCard({
     <AgentBentoCard
       chromeDensity="compact"
       headerAction={
-        <>
-          {headerAction}
-          <CurrentActivityGraphHeaderActions
-            compact
-            editorMode={editor.editorMode}
-            editorUnavailableClassifierWorkstationName={
-              editor.editorUnavailableClassifierWorkstationName
-            }
-            hasChanges={editor.draftState.hasChanges}
-            isDefinitionLoading={
-              editor.editableDefinitionQuery.status === "pending"
-            }
-            loadErrorMessage={editor.editableDefinitionQuery.error?.message}
-            locale={locale}
-            onToggle={editor.handleEditorModeToggle}
-          />
-        </>
+        <CurrentActivityGraphHeaderActions
+          compact
+          editorMode={editor.editorMode}
+          editorUnavailableClassifierWorkstationName={
+            editor.editorUnavailableClassifierWorkstationName
+          }
+          hasChanges={editor.draftState.hasChanges}
+          headerActions={headerAction}
+          isDefinitionLoading={
+            editor.editableDefinitionQuery.status === "pending"
+          }
+          loadErrorMessage={editor.editableDefinitionQuery.error?.message}
+          locale={locale}
+          onToggle={editor.handleEditorModeToggle}
+        />
       }
       title={messages.widgetTitle}
     >

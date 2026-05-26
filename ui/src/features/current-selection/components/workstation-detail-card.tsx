@@ -10,6 +10,7 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import {
   formatDurationFromISO,
+  formatRelativeTimeFromISO,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
@@ -26,7 +27,7 @@ import type {
   WorkstationActiveWorkListProps,
   WorkstationDetailCardProps,
 } from "./detail-card-types";
-import { getWorkstationDetailMessages } from "../messages";
+import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { CollapsibleProviderSessionAttempts } from "./provider-session-attempts";
 import {
   EditableConfigurationSection,
@@ -60,23 +61,6 @@ export function WorkstationDetailCard({
   return (
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
       <p className={WIDGET_SUBTITLE_CLASS}>{selectedNode.workstation_name}</p>
-      <EditableConfigurationSection
-        key={`editable-configuration:${selectedNode.node_id}`}
-        messages={messages}
-        saveState={saveState}
-        state={editableConfigurationState}
-      />
-      <WorkstationActiveWorkList
-        executions={activeExecutions}
-        messages={messages}
-        now={now}
-        onSelectWorkID={onSelectWorkID}
-        onSelectWorkstationRequest={onSelectWorkstationRequest}
-        selectedNode={selectedNode}
-        selectedRequest={selectedRequest}
-        selectedWorkID={selectedWorkID}
-        workstationRequestsByDispatchID={workstationRequestsByDispatchID}
-      />
       <WorkstationSummary
         activeRunCount={activeExecutions.length}
         editableConfigurationState={editableConfigurationState}
@@ -93,9 +77,28 @@ export function WorkstationDetailCard({
         messages={messages}
         selectedNode={selectedNode}
       />
+      <EditableConfigurationSection
+        key={`editable-configuration:${selectedNode.node_id}`}
+        messages={messages}
+        saveState={saveState}
+        state={editableConfigurationState}
+      />
+      <WorkstationActiveWorkList
+        executions={activeExecutions}
+        locale={locale}
+        messages={messages}
+        now={now}
+        onSelectWorkID={onSelectWorkID}
+        onSelectWorkstationRequest={onSelectWorkstationRequest}
+        selectedNode={selectedNode}
+        selectedRequest={selectedRequest}
+        selectedWorkID={selectedWorkID}
+        workstationRequestsByDispatchID={workstationRequestsByDispatchID}
+      />
       {hasProjectedRequestHistory ? (
         <CollapsibleWorkstationRequests
           key={`workstation-request-history:${selectedNode.node_id}`}
+          locale={locale}
           messages={messages}
           now={now}
           onSelectWorkstationRequest={onSelectWorkstationRequest}
@@ -132,12 +135,14 @@ export function WorkstationDetailCard({
 }
 
 function CollapsibleWorkstationRequests({
+  locale,
   messages,
   now,
   onSelectWorkstationRequest,
   requests,
   resetKey,
 }: {
+  locale?: string;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   now: number;
   onSelectWorkstationRequest?: WorkstationDetailCardProps["onSelectWorkstationRequest"];
@@ -242,11 +247,16 @@ function CollapsibleWorkstationRequests({
                             "m-0 text-af-text-subtle",
                             DASHBOARD_SUPPORTING_TEXT_CLASS,
                           )}
-                        >
-                        {messages.requestStatusStartedAgo(
-                          formatDurationFromISO(request.started_at, now),
-                        )}
-                      </p>
+                    >
+                      {messages.requestStatusStartedAgo(
+                        formatRelativeTimeFromISO(
+                          request.started_at,
+                          now,
+                          locale,
+                          messages.unavailableValue,
+                        ),
+                      )}
+                    </p>
                     ) : null}
                   </div>
                   {onSelectWorkstationRequest ? (
@@ -278,6 +288,7 @@ function CollapsibleWorkstationRequests({
 
 function WorkstationActiveWorkList({
   executions,
+  locale,
   messages,
   now,
   onSelectWorkID,
@@ -344,7 +355,12 @@ function WorkstationActiveWorkList({
                     <div>
                       <dt>{messages.elapsedLabel}</dt>
                       <dd>
-                        {formatDurationFromISO(execution.started_at, now)}
+                        {formatDurationFromISO(
+                          execution.started_at,
+                          now,
+                          locale,
+                          messages.unavailableValue,
+                        )}
                       </dd>
                     </div>
                     <div>

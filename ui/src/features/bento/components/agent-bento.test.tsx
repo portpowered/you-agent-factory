@@ -449,9 +449,12 @@ describe("AgentBentoLayout", () => {
 
     expect(header?.className).toContain("min-h-11");
     expect(header?.className).toContain("px-3");
-    expect(body?.className).toContain("p-3");
+    expect(body?.className).toContain("px-3");
+    expect(body?.className).toContain("pt-3");
+    expect(body?.className).toContain("pb-4");
     expect(body?.className).toContain("gap-2");
-    expect(handle.className).toContain("size-8");
-    expect(handle.className).toContain("bg-transparent");
+    expect(handle.className).toContain("h-10");
+    expect(handle.className).toContain("w-10");
+    expect(handle.className).toContain("bg-af-surface-raised");
   });
 });

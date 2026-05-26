@@ -61,11 +61,21 @@ export interface CurrentSelectionDispatchHistoryMessages {
   responseAttemptTitle: (attemptNumber: number | undefined) => string;
   responseAttemptFallbackId: string;
   relationshipChildLabel: string;
+  relationshipChildLegend: string;
+  relationshipCurrentSelectionBadge: string;
   relationshipDependsOnLabel: string;
+  relationshipDependsOnLegend: string;
+  relationshipFocusSummaryHeading: string;
   relationshipLaneAriaLabel: (label: string) => string;
+  relationshipLegendHeading: string;
+  relationshipMetadataUnavailable: string;
+  relationshipOpenTraceAction: string;
   relationshipParentLabel: string;
+  relationshipParentLegend: string;
   relationshipRelatedLabel: string;
+  relationshipRoleLabel: string;
   relationshipRequiredByLabel: string;
+  relationshipRequiredByLegend: string;
   relatedWorkSelectLabel: (workItemLabel: string) => string;
   relationshipStateLabel: (label: string, requiredState: string) => string;
   selectedTraceSuffix: string;
@@ -94,8 +104,10 @@ export interface CurrentSelectionDispatchHistoryMessages {
   workIdLabel: string;
   workTypeLabel: string;
   selectedWorkHeading: string;
+  workRelationshipsError: string;
   workRelationshipsEmpty: string;
   workRelationshipsHeading: string;
+  workRelationshipsLoading: string;
   workstationDispatchesLabel: string;
   workstationLabel: string;
   workstationUnavailableValue: string;
@@ -173,11 +185,22 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
       `Request attempt ${attemptNumber ?? "pending"}`,
     requestAttemptFallbackId: "script-request",
     relationshipChildLabel: "Child",
+    relationshipChildLegend: "Child work below the current selection",
+    relationshipCurrentSelectionBadge: "Current selection",
     relationshipDependsOnLabel: "Depends on",
+    relationshipDependsOnLegend: "Dependencies feeding the current selection",
+    relationshipFocusSummaryHeading: "Focused work summary",
     relationshipLaneAriaLabel: (label: string) => `${label} relationships`,
+    relationshipLegendHeading: "Relationship key",
+    relationshipMetadataUnavailable: "Unavailable",
+    relationshipOpenTraceAction: "Open trace",
     relationshipParentLabel: "Parent",
+    relationshipParentLegend: "Parent work above the current selection",
     relationshipRelatedLabel: "Related",
+    relationshipRoleLabel: "Relationship role",
     relationshipRequiredByLabel: "Required by",
+    relationshipRequiredByLegend:
+      "Dependent work blocked by the current selection",
     relatedWorkSelectLabel: (workItemLabel: string) =>
       `Select related work item ${workItemLabel}`,
     relationshipStateLabel: (label: string, requiredState: string) =>
@@ -216,9 +239,13 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workIdLabel: "Work ID",
     workTypeLabel: "Work type",
     selectedWorkHeading: "Selected work",
+    workRelationshipsError:
+      "Work relationships could not be loaded for this work item.",
     workRelationshipsEmpty:
       "No parent, child, or dependency relationships are available for this work item.",
     workRelationshipsHeading: "Work relationships",
+    workRelationshipsLoading:
+      "Work relationships are still loading for this work item.",
     workstationDispatchesLabel: "Workstation dispatches",
     workstationLabel: "Workstation",
     workstationUnavailableValue: "Unavailable",
@@ -289,11 +316,21 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
       `リクエスト試行 ${attemptNumber ?? "保留中"}`,
     requestAttemptFallbackId: "script-request",
     relationshipChildLabel: "子作業",
+    relationshipChildLegend: "現在の選択の下にある子作業",
+    relationshipCurrentSelectionBadge: "現在の選択",
     relationshipDependsOnLabel: "依存先",
+    relationshipDependsOnLegend: "現在の選択に流れ込む依存作業",
+    relationshipFocusSummaryHeading: "フォーカス中の作業概要",
     relationshipLaneAriaLabel: (label: string) => `${label} の関係`,
+    relationshipLegendHeading: "関係キー",
+    relationshipMetadataUnavailable: "利用不可",
+    relationshipOpenTraceAction: "トレースを開く",
     relationshipParentLabel: "親作業",
+    relationshipParentLegend: "現在の選択の上にある親作業",
     relationshipRelatedLabel: "関連",
+    relationshipRoleLabel: "関係の役割",
     relationshipRequiredByLabel: "依存元",
+    relationshipRequiredByLegend: "現在の選択に依存する作業",
     relatedWorkSelectLabel: (workItemLabel: string) =>
       `関連する作業項目 ${workItemLabel} を選択`,
     relationshipStateLabel: (label: string, requiredState: string) =>
@@ -332,9 +369,13 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workIdLabel: "作業 ID",
     workTypeLabel: "作業タイプ",
     selectedWorkHeading: "選択中の作業",
+    workRelationshipsError:
+      "この作業項目の作業関係を読み込めませんでした。",
     workRelationshipsEmpty:
       "この作業項目では親子関係や依存関係を利用できません。",
     workRelationshipsHeading: "作業の関係",
+    workRelationshipsLoading:
+      "この作業項目の作業関係を読み込み中です。",
     workstationDispatchesLabel: "ワークステーションのディスパッチ",
     workstationLabel: "ワークステーション",
     workstationUnavailableValue: "利用不可",
@@ -404,11 +445,21 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
       `요청 시도 ${attemptNumber ?? "대기 중"}`,
     requestAttemptFallbackId: "script-request",
     relationshipChildLabel: "하위 작업",
+    relationshipChildLegend: "현재 선택 아래의 하위 작업",
+    relationshipCurrentSelectionBadge: "현재 선택",
     relationshipDependsOnLabel: "의존 대상",
+    relationshipDependsOnLegend: "현재 선택으로 들어오는 의존 작업",
+    relationshipFocusSummaryHeading: "집중된 작업 요약",
     relationshipLaneAriaLabel: (label: string) => `${label} 관계`,
+    relationshipLegendHeading: "관계 범례",
+    relationshipMetadataUnavailable: "사용할 수 없음",
+    relationshipOpenTraceAction: "추적 열기",
     relationshipParentLabel: "상위 작업",
+    relationshipParentLegend: "현재 선택 위의 상위 작업",
     relationshipRelatedLabel: "관련됨",
+    relationshipRoleLabel: "관계 역할",
     relationshipRequiredByLabel: "의존하는 작업",
+    relationshipRequiredByLegend: "현재 선택에 의존하는 작업",
     relatedWorkSelectLabel: (workItemLabel: string) =>
       `관련 작업 항목 ${workItemLabel} 선택`,
     relationshipStateLabel: (label: string, requiredState: string) =>
@@ -447,9 +498,13 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workIdLabel: "작업 ID",
     workTypeLabel: "작업 유형",
     selectedWorkHeading: "선택한 작업",
+    workRelationshipsError:
+      "이 작업 항목의 작업 관계를 불러오지 못했습니다.",
     workRelationshipsEmpty:
       "이 작업 항목에는 상하위 또는 의존 관계가 없습니다.",
     workRelationshipsHeading: "작업 관계",
+    workRelationshipsLoading:
+      "이 작업 항목의 작업 관계를 불러오는 중입니다.",
     workstationDispatchesLabel: "워크스테이션 디스패치",
     workstationLabel: "워크스테이션",
     workstationUnavailableValue: "사용할 수 없음",
@@ -508,11 +563,21 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
       `请求尝试 ${attemptNumber ?? "等待中"}`,
     requestAttemptFallbackId: "script-request",
     relationshipChildLabel: "子工作",
+    relationshipChildLegend: "位于当前选中项下方的子工作",
+    relationshipCurrentSelectionBadge: "当前选中项",
     relationshipDependsOnLabel: "依赖项",
+    relationshipDependsOnLegend: "流入当前选中项的依赖工作",
+    relationshipFocusSummaryHeading: "当前焦点工作摘要",
     relationshipLaneAriaLabel: (label: string) => `${label}关系`,
+    relationshipLegendHeading: "关系图例",
+    relationshipMetadataUnavailable: "不可用",
+    relationshipOpenTraceAction: "打开追踪",
     relationshipParentLabel: "父工作",
+    relationshipParentLegend: "位于当前选中项上方的父工作",
     relationshipRelatedLabel: "相关",
+    relationshipRoleLabel: "关系角色",
     relationshipRequiredByLabel: "依赖于此",
+    relationshipRequiredByLegend: "依赖当前选中项的工作",
     relatedWorkSelectLabel: (workItemLabel: string) =>
       `选择相关工作项 ${workItemLabel}`,
     relationshipStateLabel: (label: string, requiredState: string) =>
@@ -550,8 +615,10 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workIdLabel: "工作 ID",
     workTypeLabel: "工作类型",
     selectedWorkHeading: "已选工作",
+    workRelationshipsError: "无法加载此工作项的工作关系。",
     workRelationshipsEmpty: "这个工作项暂时没有可用的父子或依赖关系。",
     workRelationshipsHeading: "工作关系",
+    workRelationshipsLoading: "正在加载此工作项的工作关系。",
     workstationDispatchesLabel: "工作站分派",
     workstationLabel: "工作站",
     workstationUnavailableValue: "不可用",

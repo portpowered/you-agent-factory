@@ -6,6 +6,7 @@ import {
   formatLocalDateTime,
   formatDurationMillis,
   formatDurationMillisVerbose,
+  formatRelativeTimeFromISO,
   formatTimeOfDay,
   formatWorkItemLabel,
   formatWorkstationRunOutcome,
@@ -58,6 +59,25 @@ describe("formatDurationFromISO", () => {
 
   it("returns unavailable for invalid timestamps", () => {
     expect(formatDurationFromISO("not-a-date", Date.now())).toBe("Unavailable");
+  });
+});
+
+describe("formatRelativeTimeFromISO", () => {
+  it("formats relative-time labels for english and zh-CN", () => {
+    const now = Date.parse("2026-04-10T12:00:04.000Z");
+
+    expect(formatRelativeTimeFromISO("2026-04-10T12:00:00.000Z", now, "en")).toBe(
+      "4 seconds ago",
+    );
+    expect(
+      formatRelativeTimeFromISO("2026-04-10T12:00:00.000Z", now, "zh-CN"),
+    ).toBe("4秒钟前");
+  });
+
+  it("returns unavailable for invalid timestamps", () => {
+    expect(formatRelativeTimeFromISO("not-a-date", Date.now())).toBe(
+      "Unavailable",
+    );
   });
 });
 

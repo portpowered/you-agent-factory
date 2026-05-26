@@ -46,6 +46,7 @@ export interface CurrentSelectionDetailMessages {
   providerLabel: string;
   providerResponseUnavailable: string;
   providerSessionLabel: string;
+  localizedTimezoneContext: string;
   runnerLabel: string;
   runnerCapabilityImageInputLabel: string;
   runnerCapabilitySessionResumeLabel: string;
@@ -203,6 +204,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    localizedTimezoneContext:
+      "Times on this card are shown in your local timezone.",
     runnerLabel: "Runner",
     runnerCapabilityImageInputLabel: "Image input",
     runnerCapabilitySessionResumeLabel: "Session resume",
@@ -344,6 +347,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    localizedTimezoneContext:
+      "このカードの時刻は、あなたのローカルタイムゾーンで表示されます。",
     runnerLabel: "Runner",
     runnerCapabilityImageInputLabel: "画像入力",
     runnerCapabilitySessionResumeLabel: "セッション再開",
@@ -485,6 +490,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable:
       "Provider response text is not available for this inference attempt.",
     providerSessionLabel: "Provider session",
+    localizedTimezoneContext:
+      "이 카드의 시간은 사용자의 로컬 시간대로 표시됩니다.",
     runnerLabel: "Runner",
     runnerCapabilityImageInputLabel: "이미지 입력",
     runnerCapabilitySessionResumeLabel: "세션 재개",
@@ -614,6 +621,7 @@ const currentSelectionDetailMessagesByLocale = {
     providerLabel: "提供方",
     providerResponseUnavailable: "此推理尝试没有可用的提供方响应文本。",
     providerSessionLabel: "Provider session",
+    localizedTimezoneContext: "此卡片中的时间会按你的本地时区显示。",
     runnerLabel: "Runner",
     runnerCapabilityImageInputLabel: "图片输入",
     runnerCapabilitySessionResumeLabel: "会话恢复",

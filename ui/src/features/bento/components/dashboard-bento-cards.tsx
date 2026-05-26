@@ -2,44 +2,44 @@ import type { ReactNode } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { AgentBentoLayoutItem } from "../../../components/ui";
+import { getCurrentSelectionShellMessages } from "../../current-selection/messages/current-selection-shell";
 import {
   CurrentSelectionWidget,
   type useCurrentSelection,
   type useCurrentSelectionDetails,
   type useSelectedProviderSessionState,
 } from "../../current-selection/public";
-import { getCurrentSelectionShellMessages } from "../../current-selection/messages/current-selection-shell";
-import { ProviderSessionWidget } from "../../provider-session-detail/public";
 import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
-import { SubmitWorkWidget } from "../../submit-work/public";
+import { ProviderSessionWidget } from "../../provider-session-detail/public";
 import { getSubmitWorkMessages } from "../../submit-work/messages/submit-work";
-import { TerminalWorkWidget } from "../../terminal-work/public";
+import { SubmitWorkWidget } from "../../submit-work/public";
 import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
+import { TerminalWorkWidget } from "../../terminal-work/public";
+import { getTraceDrilldownMessages } from "../../trace-drilldown/messages/trace-drilldown";
 import {
   TraceDrilldownWidget,
   type useTraceDrilldown,
 } from "../../trace-drilldown/public";
-import { getTraceDrilldownMessages } from "../../trace-drilldown/messages/trace-drilldown";
+import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
 import {
   type useWorkOutcomeChart,
   WorkOutcomeWidget,
 } from "../../work-outcome/public";
-import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
+import { getWorkTotalsMessages } from "../../work-totals/messages/work-totals";
+import { WorkTotalsWidget } from "../../work-totals/public";
+import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import {
   type useCurrentActivityImportController,
   WorkflowActivityWidget,
 } from "../../workflow-activity/public";
-import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
-import { WorkTotalsWidget } from "../../work-totals/public";
-import { getWorkTotalsMessages } from "../../work-totals/messages/work-totals";
+import { DASHBOARD_WIDGET_IDS } from "../hooks/useDashboardLayout";
+import {
+  type DashboardWidgetPickerWidgetType,
+  getDashboardWidgetPickerAvailability,
+} from "../lib/dashboard-widget-picker";
 import type { AgentBentoLayoutCard } from "./agent-bento";
 import { DashboardWidgetRemoveButton } from "./dashboard-widget-remove-button";
 import { InlineAddWidgetCard } from "./inline-add-widget-card";
-import {
-  getDashboardWidgetPickerAvailability,
-  type DashboardWidgetPickerWidgetType,
-} from "../lib/dashboard-widget-picker";
-import { DASHBOARD_WIDGET_IDS } from "../hooks/useDashboardLayout";
 
 export interface DashboardCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
@@ -57,6 +57,9 @@ export interface DashboardCardBuilderArgs {
   selectedWorkExecutionDetails: ReturnType<
     typeof useCurrentSelectionDetails
   >["selectedWorkExecutionDetails"];
+  selectedWorkRelationshipGraph: ReturnType<
+    typeof useCurrentSelectionDetails
+  >["selectedWorkRelationshipGraph"];
   setSelectedTraceID: (traceID: string | null) => void;
   snapshot: DashboardSnapshot;
   traceGridState: ReturnType<typeof useTraceDrilldown>["traceGridState"];
@@ -76,6 +79,9 @@ interface DashboardWidgetCardBuilderArgs {
   selectedWorkExecutionDetails: ReturnType<
     typeof useCurrentSelectionDetails
   >["selectedWorkExecutionDetails"];
+  selectedWorkRelationshipGraph: ReturnType<
+    typeof useCurrentSelectionDetails
+  >["selectedWorkRelationshipGraph"];
   setSelectedTraceID: (traceID: string | null) => void;
   snapshot: DashboardSnapshot;
   traceGridState: ReturnType<typeof useTraceDrilldown>["traceGridState"];
@@ -96,12 +102,14 @@ export function buildDashboardCards({
   selectedTrace,
   selectedTraceID,
   selectedWorkExecutionDetails,
+  selectedWorkRelationshipGraph,
   setSelectedTraceID,
   snapshot,
   traceGridState,
   workChartModel,
 }: DashboardCardBuilderArgs): AgentBentoLayoutCard[] {
-  const pickerAvailability = getDashboardWidgetPickerAvailability(dashboardLayout);
+  const pickerAvailability =
+    getDashboardWidgetPickerAvailability(dashboardLayout);
 
   return dashboardLayout.flatMap((layoutItem) => {
     if (layoutItem.hidden) {
@@ -138,6 +146,7 @@ export function buildDashboardCards({
         selectedTrace,
         selectedTraceID,
         selectedWorkExecutionDetails,
+        selectedWorkRelationshipGraph,
         setSelectedTraceID,
         snapshot,
         traceGridState,
@@ -158,6 +167,7 @@ function buildWidgetCard({
   selectedTrace,
   selectedTraceID,
   selectedWorkExecutionDetails,
+  selectedWorkRelationshipGraph,
   setSelectedTraceID,
   snapshot,
   traceGridState,
@@ -209,6 +219,7 @@ function buildWidgetCard({
     selectedTrace,
     selectedTraceID,
     selectedWorkExecutionDetails,
+    selectedWorkRelationshipGraph,
     setSelectedTraceID,
     snapshot,
     traceGridState,
@@ -225,7 +236,12 @@ function buildOverviewWidgetCard({
   snapshot,
 }: Pick<
   DashboardWidgetCardBuilderArgs,
-  "currentSelection" | "importController" | "layoutItem" | "locale" | "now" | "snapshot"
+  | "currentSelection"
+  | "importController"
+  | "layoutItem"
+  | "locale"
+  | "now"
+  | "snapshot"
 > & {
   headerAction: ReactNode;
 }): AgentBentoLayoutCard {
@@ -262,7 +278,9 @@ function buildOverviewWidgetCard({
         ),
       };
     default:
-      throw new Error(`unsupported overview widget type: ${layoutItem.widgetType}`);
+      throw new Error(
+        `unsupported overview widget type: ${layoutItem.widgetType}`,
+      );
   }
 }
 
@@ -325,6 +343,7 @@ function buildSingletonWidgetCard({
   selectedTrace,
   selectedTraceID,
   selectedWorkExecutionDetails,
+  selectedWorkRelationshipGraph,
   setSelectedTraceID,
   snapshot,
   traceGridState,
@@ -338,6 +357,7 @@ function buildSingletonWidgetCard({
   | "selectedTrace"
   | "selectedTraceID"
   | "selectedWorkExecutionDetails"
+  | "selectedWorkRelationshipGraph"
   | "setSelectedTraceID"
   | "snapshot"
   | "traceGridState"
@@ -359,10 +379,15 @@ function buildSingletonWidgetCard({
             headerAction={headerAction}
             locale={locale}
             now={now}
-            onSelectProviderSession={providerSessionState.setSelectedProviderSession}
+            onSelectProviderSession={
+              providerSessionState.setSelectedProviderSession
+            }
             onSelectTraceID={setSelectedTraceID}
-            selectedProviderSessionKey={providerSessionState.selectedProviderSessionKey}
+            selectedProviderSessionKey={
+              providerSessionState.selectedProviderSessionKey
+            }
             selectedTrace={selectedTrace}
+            selectedWorkRelationshipGraph={selectedWorkRelationshipGraph}
             selectedWorkExecutionDetails={selectedWorkExecutionDetails}
             widgetId={layoutItem.id}
           />
@@ -376,7 +401,9 @@ function buildSingletonWidgetCard({
           <ProviderSessionWidget
             headerAction={headerAction}
             locale={locale}
-            selectedProviderSession={providerSessionState.selectedProviderSession}
+            selectedProviderSession={
+              providerSessionState.selectedProviderSession
+            }
             widgetId={layoutItem.id}
           />
         ),
@@ -408,7 +435,9 @@ function buildSingletonWidgetCard({
         ),
       };
     default:
-      throw new Error(`unsupported dashboard widget type: ${layoutItem.widgetType}`);
+      throw new Error(
+        `unsupported dashboard widget type: ${layoutItem.widgetType}`,
+      );
   }
 }
 

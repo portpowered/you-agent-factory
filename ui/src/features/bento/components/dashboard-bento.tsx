@@ -8,24 +8,24 @@ import {
   useCurrentSelectionDetails,
   useSelectedProviderSessionState,
 } from "../../current-selection/public";
-import { DashboardImportPreviewDialog } from "../../import/public";
-import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
+import { DashboardImportPreviewDialog } from "../../import/public";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { useTraceDrilldown } from "../../trace-drilldown/public";
 import { useWorkOutcomeChart } from "../../work-outcome/public";
 import { useCurrentActivityImportController } from "../../workflow-activity/public";
-import { AgentBentoLayout } from "./agent-bento";
-import {
-  buildDashboardCards,
-  type DashboardCardBuilderArgs,
-} from "./dashboard-bento-cards";
-import { useDashboardBentoStore } from "../state/dashboardBentoStore";
 import {
   getRenderableDashboardLayout,
   useDashboardLayout,
 } from "../hooks/useDashboardLayout";
 import { useDashboardNow } from "../hooks/useDashboardNow";
+import { useDashboardBentoStore } from "../state/dashboardBentoStore";
+import { AgentBentoLayout } from "./agent-bento";
+import {
+  buildDashboardCards,
+  type DashboardCardBuilderArgs,
+} from "./dashboard-bento-cards";
 
 const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
   factory_state: "IDLE",
@@ -48,6 +48,21 @@ const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
   uptime_seconds: 0,
 };
 
+function useDashboardBentoSelectionState() {
+  return {
+    incrementRefreshToken: useDashboardBentoStore(
+      (state) => state.incrementRefreshToken,
+    ),
+    resetSelectedTraceID: useDashboardBentoStore(
+      (state) => state.resetSelectedTraceID,
+    ),
+    selectedTraceID: useDashboardBentoStore((state) => state.selectedTraceID),
+    setSelectedTraceID: useDashboardBentoStore(
+      (state) => state.setSelectedTraceID,
+    ),
+  };
+}
+
 export interface DashboardBentoProps {
   locale?: string;
 }
@@ -62,18 +77,12 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   } = useDashboardLayout();
   const now = useDashboardNow();
   const [isInlineWidgetPickerOpen, setInlineWidgetPickerOpen] = useState(false);
-  const incrementRefreshToken = useDashboardBentoStore(
-    (state) => state.incrementRefreshToken,
-  );
-  const resetSelectedTraceID = useDashboardBentoStore(
-    (state) => state.resetSelectedTraceID,
-  );
-  const selectedTraceID = useDashboardBentoStore(
-    (state) => state.selectedTraceID,
-  );
-  const setSelectedTraceID = useDashboardBentoStore(
-    (state) => state.setSelectedTraceID,
-  );
+  const {
+    incrementRefreshToken,
+    resetSelectedTraceID,
+    selectedTraceID,
+    setSelectedTraceID,
+  } = useDashboardBentoSelectionState();
   const selectedSessionID = useDashboardSessionStore(
     (state) => state.selectedSessionID,
   );
@@ -110,14 +119,16 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     currentSelection.selectedWorkID,
     selectedTraceID,
   );
-  const providerSessionState = useSelectedProviderSessionState(currentSelection);
-  const { selectedWorkExecutionDetails } = useCurrentSelectionDetails({
-    currentSelection,
-    selectedTrace,
-    snapshot,
-    workstationRequestsByDispatchID:
-      snapshot.runtime.workstation_requests_by_dispatch_id,
-  });
+  const providerSessionState =
+    useSelectedProviderSessionState(currentSelection);
+  const { selectedWorkExecutionDetails, selectedWorkRelationshipGraph } =
+    useCurrentSelectionDetails({
+      currentSelection,
+      selectedTrace,
+      snapshot,
+      workstationRequestsByDispatchID:
+        snapshot.runtime.workstation_requests_by_dispatch_id,
+    });
   const workChartModel = useWorkOutcomeChart({
     selectedTimelineTick,
     timelineEvents,
@@ -137,6 +148,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     selectedTrace,
     selectedTraceID,
     selectedWorkExecutionDetails,
+    selectedWorkRelationshipGraph,
     setInlineWidgetPickerOpen,
     setSelectedTraceID,
     snapshot,
@@ -185,13 +197,16 @@ function buildDashboardCardLayouts({
   selectedTrace,
   selectedTraceID,
   selectedWorkExecutionDetails,
+  selectedWorkRelationshipGraph,
   setInlineWidgetPickerOpen,
   setSelectedTraceID,
   snapshot,
   traceGridState,
   workChartModel,
 }: Omit<DashboardCardBuilderArgs, "onSelectInlineWidget"> & {
-  addDashboardWidget: ReturnType<typeof useDashboardLayout>["addDashboardWidget"];
+  addDashboardWidget: ReturnType<
+    typeof useDashboardLayout
+  >["addDashboardWidget"];
   setInlineWidgetPickerOpen: (open: boolean) => void;
 }) {
   return buildDashboardCards({
@@ -211,6 +226,7 @@ function buildDashboardCardLayouts({
     selectedTrace,
     selectedTraceID,
     selectedWorkExecutionDetails,
+    selectedWorkRelationshipGraph,
     setSelectedTraceID,
     snapshot,
     traceGridState,

@@ -4,16 +4,16 @@ import type { DashboardWorkstationRequest } from "../api/dashboard";
 import { dashboardWorkstationRequestFixtures } from "../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import {
-  findSubmitWorkCard,
-  getSubmitWorkCardControls,
-  submitWorkCardQueryContract,
-} from "../testing/submit-work-card-queries";
-import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../components/ui/dashboard-typography";
+import {
+  findSubmitWorkCard,
+  getSubmitWorkCardControls,
+  submitWorkCardQueryContract,
+} from "../testing/submit-work-card-queries";
 import { activeStoryTrace } from "./dashboardStoryFixtures";
 
 export async function expectGraphWorkstation(
@@ -51,7 +51,10 @@ export function currentSelectionCard(canvasElement: HTMLElement): HTMLElement {
   });
 }
 
-export function requireValue<T>(value: T | null | undefined, message: string): T {
+export function requireValue<T>(
+  value: T | null | undefined,
+  message: string,
+): T {
   if (value === null || value === undefined) {
     throw new Error(message);
   }
@@ -59,7 +62,9 @@ export function requireValue<T>(value: T | null | undefined, message: string): T
   return value;
 }
 
-export function expectNoPageHorizontalOverflow(canvasElement: HTMLElement): void {
+export function expectNoPageHorizontalOverflow(
+  canvasElement: HTMLElement,
+): void {
   const documentElement = canvasElement.ownerDocument.documentElement;
   const overflowTolerance = 4;
 
@@ -87,7 +92,9 @@ export function buttonVisibleStyle(button: HTMLElement): {
   };
 }
 
-export async function submitWorkCardControls(canvasElement: HTMLElement): Promise<{
+export async function submitWorkCardControls(
+  canvasElement: HTMLElement,
+): Promise<{
   requestNameField: HTMLInputElement;
   requestField: HTMLTextAreaElement;
   scope: ReturnType<typeof within>;
@@ -147,15 +154,12 @@ export async function expectTypographyRegressionSurface(
   const canvas = within(canvasElement);
   const heading = await canvas.findByRole("heading", { name: "U" });
   const toolbar = canvas.getByRole("region", { name: "dashboard summary" });
-  const streamStatus = canvas.getByRole("status", {
-    name: /Event stream (connecting|live)/,
-  });
 
   expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
   expect(heading.textContent).toBe("U");
-  expect(streamStatus.className).toContain("inline-flex");
-  expect(streamStatus.className).toContain("rounded-full");
-  expect(streamStatus.className).not.toContain("sr-only");
+  expect(
+    within(toolbar).queryByRole("status", { name: /Event stream/i }),
+  ).toBeNull();
   expect(within(toolbar).queryByText("Factory state")).toBeNull();
   expect(
     within(toolbar).queryByText(
@@ -203,9 +207,6 @@ export async function expectTimelineToolbarAlignment(
     name: "dashboard summary",
   });
   const heading = within(toolbar).getByRole("heading", { name: "U" });
-  const streamStatus = within(toolbar).getByRole("status", {
-    name: /Event stream (connecting|live)/,
-  });
   const activeTab = within(toolbar).getByRole("tab", { name: "root" });
   const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
     name: "Timeline tick",
@@ -217,7 +218,9 @@ export async function expectTimelineToolbarAlignment(
   const actionsGroup = within(toolbar).getByRole("group", {
     name: "Dashboard actions",
   });
-  const exportButton = within(toolbar).getByRole("button", { name: "Export PNG" });
+  const exportButton = within(toolbar).getByRole("button", {
+    name: "Export PNG",
+  });
   const sliderShell = requireValue(
     slider.closest<HTMLElement>("div"),
     "expected slider shell in dashboard toolbar",
@@ -243,28 +246,26 @@ export async function expectTimelineToolbarAlignment(
   const sliderInputRect = slider.getBoundingClientRect();
   const progressTextRect = progressText.getBoundingClientRect();
   const languageButtonRect = languageButton.getBoundingClientRect();
-  const streamStatusRect = streamStatus.getBoundingClientRect();
   const exportButtonRect = exportButton.getBoundingClientRect();
   const headerControls = Array.from(
     toolbar.querySelectorAll(
-      '[aria-label="Timeline tick"], [aria-label="Change language"], [aria-label="Export PNG"], [role="status"]',
+      '[aria-label="Timeline tick"], [aria-label="Change language"], [aria-label="Export PNG"]',
     ),
   );
 
   expect(sliderShell.className).toContain("gap-1.5");
   expect(sliderShell.className).toContain("px-1");
-  expect(streamStatus.className).toContain("inline-flex");
-  expect(streamStatus.className).toContain("rounded-full");
-  expect(streamStatus.className).not.toContain("sr-only");
+  expect(
+    within(toolbar).queryByRole("status", { name: /Event stream/i }),
+  ).toBeNull();
   expect(sliderMetaGroup.contains(progressText)).toBe(true);
   expect(
     within(toolbar).queryByRole("button", { name: "Return to current tick" }),
   ).toBeNull();
-  expect(headerControls).toHaveLength(4);
-  expect(headerControls[0]).toBe(streamStatus);
-  expect(headerControls[1]).toBe(languageButton);
-  expect(headerControls[2]).toBe(slider);
-  expect(headerControls[3]).toBe(exportButton);
+  expect(headerControls).toHaveLength(3);
+  expect(headerControls[0]).toBe(languageButton);
+  expect(headerControls[1]).toBe(slider);
+  expect(headerControls[2]).toBe(exportButton);
   expect(primaryRowRect.top).toBeLessThan(secondaryRowRect.top);
   expect(sliderRect.top).toBeGreaterThanOrEqual(headingRect.bottom - 1);
   expect(sliderRect.top).toBeGreaterThanOrEqual(activeTabRect.bottom - 1);
@@ -272,11 +273,11 @@ export async function expectTimelineToolbarAlignment(
   expect(progressTextRect.width).toBeGreaterThan(0);
   expect(progressTextRect.height).toBeGreaterThan(0);
   expect(progressTextRect.top).toBeGreaterThanOrEqual(sliderInputRect.top - 1);
-  expect(exportButtonRect.left).toBeGreaterThanOrEqual(actionsGroupRect.left - 1);
+  expect(exportButtonRect.left).toBeGreaterThanOrEqual(
+    actionsGroupRect.left - 1,
+  );
   expect(languageButtonRect.width).toBeGreaterThan(0);
   expect(languageButtonRect.height).toBeGreaterThan(0);
-  expect(streamStatusRect.width).toBeGreaterThan(1);
-  expect(streamStatusRect.height).toBeGreaterThan(1);
 }
 
 export async function selectWorkstationRequest(

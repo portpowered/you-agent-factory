@@ -11,7 +11,7 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
 import type { WorkstationDetailCardProps } from "./detail-card-types";
-import type { getWorkstationDetailMessages } from "../messages";
+import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { WorkstationPromptEditor } from "./workstation-prompt-editor";
 
 export function EditableConfigurationPromptInput({

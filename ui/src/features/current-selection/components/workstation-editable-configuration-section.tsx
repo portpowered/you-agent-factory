@@ -24,7 +24,7 @@ import type {
   WorkstationSummaryProps,
 } from "./detail-card-types";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
-import type { getWorkstationDetailMessages } from "../messages";
+import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import {
   EditableConfigurationRunnerField,
   resolveWorkstationSummaryRunnerValue,

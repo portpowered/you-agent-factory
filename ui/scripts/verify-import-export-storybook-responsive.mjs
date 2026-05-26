@@ -15,7 +15,10 @@ import {
   verifyEditorGraphParity as verifyEditorGraphParityImpl,
   verifyObserverGraphParity as verifyObserverGraphParityImpl,
 } from "./verify-graph-parity-storybook-responsive.mjs";
-import { verifyCurrentSelectionPromptHint as verifyCurrentSelectionPromptHintImpl } from "./verify-current-selection-storybook-responsive.mjs";
+import {
+  verifyCurrentSelectionPromptHint as verifyCurrentSelectionPromptHintImpl,
+  verifyCurrentSelectionWorkstationDetailOrder as verifyCurrentSelectionWorkstationDetailOrderImpl,
+} from "./verify-current-selection-storybook-responsive.mjs";
 import {
   createLocalizedExportDialogVerifier,
   createLocalizedImportDialogVerifier,
@@ -150,6 +153,11 @@ export const storyChecks = [
     label: "current selection prompt hinting",
   },
   {
+    assertions: verifyCurrentSelectionWorkstationDetailOrder,
+    id: "you-agent-factory-workflow-dashboard--current-selection-workstation-detail-order-verification",
+    label: "current selection workstation detail order",
+  },
+  {
     assertions: verifyObserverGraphParity,
     id: "agent-factory-dashboard-react-flow-current-activity-card--semantic-workflow",
     label: "observer graph parity",
@@ -272,9 +280,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   const languageButton = page.getByRole("button", {
     name: "Change language",
   });
-  const streamStatus = page.getByRole("status", {
-    name: /Event stream (connecting|live)/,
-  });
   const exportButton = page.getByRole("button", { name: "Export PNG" });
   const globalActions = page.getByRole("group", {
     name: "Dashboard actions",
@@ -287,12 +292,16 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectVisible(slider, "Timeline slider");
   await expectVisible(timelineStatus, "Timeline status");
   await expectVisible(languageButton, "Language menu button");
-  await expectVisible(streamStatus, "Dashboard stream status");
   await expectVisible(exportButton, "Export PNG button");
   await expectVisible(globalActions, "Global header actions");
 
   if ((await allTabs.count()) < 3) {
     throw new Error("Dashboard header did not render the expected multi-session tab strip.");
+  }
+  if ((await page.getByRole("status", { name: /Event stream/i }).count()) > 0) {
+    throw new Error(
+      "Dashboard header still rendered the retired event-stream status pill.",
+    );
   }
 
   if (await page.getByRole("button", { name: "Return to current tick" }).isVisible()) {
@@ -324,6 +333,18 @@ export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
 }
 export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {
   return verifyCurrentSelectionPromptHintImpl({
+    expectNoHorizontalOverflow,
+    expectVisible,
+    page,
+    viewport,
+  });
+}
+export async function verifyCurrentSelectionWorkstationDetailOrder(
+  page,
+  _dialog,
+  viewport,
+) {
+  return verifyCurrentSelectionWorkstationDetailOrderImpl({
     expectNoHorizontalOverflow,
     expectVisible,
     page,

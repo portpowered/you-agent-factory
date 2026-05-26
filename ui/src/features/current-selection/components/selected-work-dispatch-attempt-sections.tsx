@@ -24,6 +24,7 @@ import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionOperationalEnumMessages,
+  useCurrentSelectionLocale,
 } from "./current-selection-locale";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
 import {
@@ -250,6 +251,7 @@ function ScriptResponseAttemptCard({
   const failureType = scriptResponseFailureType(scriptResponse);
   const messages = useCurrentSelectionDispatchHistoryMessages();
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
+  const locale = useCurrentSelectionLocale();
 
   return (
     <article className={PROVIDER_SESSION_CARD_CLASS}>
@@ -314,7 +316,7 @@ function ScriptResponseAttemptCard({
           label={messages.durationLabel}
           value={
             durationMillis !== undefined
-              ? formatDurationMillis(durationMillis)
+              ? formatDurationMillis(durationMillis, locale)
               : undefined
           }
         />
