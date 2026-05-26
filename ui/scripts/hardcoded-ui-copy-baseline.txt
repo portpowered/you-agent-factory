@@ -2,55 +2,6 @@
 # Entries are path|line|column|kind|text.
 src/api/provider-session-details/api.ts|155|14|string-literal|INTERNAL_ERROR
 src/api/work/api.ts|149|14|string-literal|INTERNAL_ERROR
-src/components/ui/data-table.tsx|37|18|string-literal|No rows available.
-src/components/ui/dialog.tsx|29|16|string-literal|Close dialog
-src/components/ui/formatters.ts|158|12|string-literal|Unknown
-src/components/ui/formatters.ts|201|12|string-literal|None
-src/components/ui/formatters.ts|245|10|string-literal|~/.codex/sessions/ / / /rollout- .jsonl
-src/components/ui/ui-foundation-showcase.tsx|47|65|string-literal|Completed
-src/components/ui/ui-foundation-showcase.tsx|48|59|string-literal|Failed
-src/components/ui/ui-foundation-showcase.tsx|79|72|jsx-text|Shared UI primitives
-src/components/ui/ui-foundation-showcase.tsx|81|13|jsx-text|Shared button, field, dialog, chart, table, skeleton, collapsible, calendar, and resizable building blocks.
-src/components/ui/ui-foundation-showcase.tsx|86|19|jsx-text|Primary action
-src/components/ui/ui-foundation-showcase.tsx|87|36|jsx-text|Secondary
-src/components/ui/ui-foundation-showcase.tsx|88|34|jsx-text|Outline
-src/components/ui/ui-foundation-showcase.tsx|89|28|jsx-text|Disabled action
-src/components/ui/ui-foundation-showcase.tsx|96|13|jsx-text|Request name
-src/components/ui/ui-foundation-showcase.tsx|98|49|jsx-attribute|Name this request
-src/components/ui/ui-foundation-showcase.tsx|98|49|jsx-prop|Name this request
-src/components/ui/ui-foundation-showcase.tsx|103|13|jsx-text|Work type
-src/components/ui/ui-foundation-showcase.tsx|106|35|jsx-text|story
-src/components/ui/ui-foundation-showcase.tsx|107|34|jsx-text|task
-src/components/ui/ui-foundation-showcase.tsx|113|13|jsx-text|Request text
-src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-attribute|Describe the work to run
-src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-prop|Describe the work to run
-src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-attribute|Primitive chart showcase
-src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-prop|Primitive chart showcase
-src/components/ui/ui-foundation-showcase.tsx|155|27|jsx-text|Primitive table foundation for trace and detail surfaces.
-src/components/ui/ui-foundation-showcase.tsx|158|28|jsx-text|Dispatch
-src/components/ui/ui-foundation-showcase.tsx|159|28|jsx-text|Status
-src/components/ui/ui-foundation-showcase.tsx|160|28|jsx-text|Duration
-src/components/ui/ui-foundation-showcase.tsx|165|28|jsx-text|dispatch-review-1
-src/components/ui/ui-foundation-showcase.tsx|166|28|jsx-text|ACCEPTED
-src/components/ui/ui-foundation-showcase.tsx|167|28|jsx-text|420ms
-src/components/ui/ui-foundation-showcase.tsx|170|28|jsx-text|dispatch-review-2
-src/components/ui/ui-foundation-showcase.tsx|171|28|jsx-text|FAILED
-src/components/ui/ui-foundation-showcase.tsx|172|28|jsx-text|1.2s
-src/components/ui/ui-foundation-showcase.tsx|178|23|jsx-prop|Primitive data table showcase
-src/components/ui/ui-foundation-showcase.tsx|195|17|jsx-text|Loading
-src/components/ui/ui-foundation-showcase.tsx|203|58|jsx-text|Collapsible section
-src/components/ui/ui-foundation-showcase.tsx|212|19|jsx-text|Shared disclosure state is ready for section toggles and drill-down controls.
-src/components/ui/ui-foundation-showcase.tsx|219|17|jsx-text|Open dialog
-src/components/ui/ui-foundation-showcase.tsx|224|34|jsx-text|Export factory
-src/components/ui/ui-foundation-showcase.tsx|226|23|jsx-text|Shared dialog chrome for export and confirmation flows.
-src/components/ui/ui-foundation-showcase.tsx|230|39|jsx-attribute|Factory name
-src/components/ui/ui-foundation-showcase.tsx|231|42|jsx-attribute|Export notes
-src/components/ui/ui-foundation-showcase.tsx|235|23|jsx-text|Cancel
-src/components/ui/ui-foundation-showcase.tsx|237|29|jsx-text|Confirm export
-src/components/ui/ui-foundation-showcase.tsx|245|24|jsx-attribute|Primitive calendar showcase
-src/components/ui/ui-foundation-showcase.tsx|256|13|jsx-text|Resizable panels
-src/components/ui/ui-foundation-showcase.tsx|262|19|jsx-text|Sidebar panel
-src/components/ui/ui-foundation-showcase.tsx|268|19|jsx-text|Detail panel
 src/features/current-selection/state/selectionHistoryStore.ts|36|14|string-literal|node:
 src/features/current-selection/state/selectionHistoryStore.ts|38|14|string-literal|state:
 src/features/current-selection/state/selectionHistoryStore.ts|40|14|string-literal|work: : :
