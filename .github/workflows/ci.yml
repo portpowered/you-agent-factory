@@ -25,9 +25,67 @@ env:
   GO_VERSION: 1.24.2
 
 jobs:
+  classify-pr-impact:
+    name: Classify PR Impact
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      classification: ${{ steps.classify.outputs.classification || steps.classify_push.outputs.classification }}
+      docs_only: ${{ steps.classify.outputs.docs_only || steps.classify_push.outputs.docs_only }}
+      ui_only: ${{ steps.classify.outputs.ui_only || steps.classify_push.outputs.ui_only }}
+      backend_only: ${{ steps.classify.outputs.backend_only || steps.classify_push.outputs.backend_only }}
+      shared_risk: ${{ steps.classify.outputs.shared_risk || steps.classify_push.outputs.shared_risk }}
+      full_run_required: ${{ steps.classify.outputs.full_run_required || steps.classify_push.outputs.full_run_required }}
+      areas: ${{ steps.classify.outputs.areas || steps.classify_push.outputs.areas }}
+      changed_files_count: ${{ steps.classify.outputs.changed_files_count || steps.classify_push.outputs.changed_files_count }}
+      reason: ${{ steps.classify.outputs.reason || steps.classify_push.outputs.reason }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Classify change impact
+        id: classify
+        if: github.event_name == 'pull_request'
+        run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha }}" -head "${{ github.event.pull_request.head.sha }}"
+
+      - name: Default push events to full verification
+        id: classify_push
+        if: github.event_name != 'pull_request'
+        run: |
+          {
+            echo "classification=shared-risk"
+            echo "docs_only=false"
+            echo "ui_only=false"
+            echo "backend_only=false"
+            echo "shared_risk=true"
+            echo "full_run_required=true"
+            echo "areas=shared-risk"
+            echo "changed_files_count=0"
+            echo "reason=Push events stay on the full shared-risk verification path."
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Pull request impact classification"
+            echo
+            echo "- Classification: \`shared-risk\`"
+            echo "- Areas touched: \`shared-risk\`"
+            echo "- Changed files: \`0\`"
+            echo "- Reason: Push events stay on the full shared-risk verification path."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
+    needs: classify-pr-impact
     timeout-minutes: 20
     steps:
       - name: Check out repository
