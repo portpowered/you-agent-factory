@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { expect, test } from "vitest";
 
 import { scanInlineComponentClassUsage } from "./check-inline-component-class-usage.mjs";
@@ -13,9 +13,12 @@ const scriptPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "check-inline-component-class-usage.mjs",
 );
+const uiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 async function createSourceTree(files) {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "inline-component-class-guard-"));
+  const tempRoot = await mkdtemp(
+    path.join(os.tmpdir(), "inline-component-class-guard-"),
+  );
   const srcDir = path.join(tempRoot, "src");
   await mkdir(srcDir, { recursive: true });
 
@@ -132,7 +135,9 @@ test("CLI output reports the offending file and constant name", async () => {
       }),
     ).rejects.toMatchObject({
       code: 1,
-      stderr: expect.stringContaining("Inline component class usage guard failed."),
+      stderr: expect.stringContaining(
+        "Inline component class usage guard failed.",
+      ),
     });
     await expect(
       execFileAsync(process.execPath, [scriptPath], {
@@ -155,6 +160,49 @@ test("CLI output reports the offending file and constant name", async () => {
       }),
     ).rejects.toMatchObject({
       stderr: expect.stringContaining("PANEL_CLASS"),
+    });
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test("package command wiring matches the direct guard result for the same violation", async () => {
+  const { srcDir, tempRoot } = await createSourceTree({
+    "features/example/panel.tsx": `
+      const PANEL_CLASS = "rounded-lg border border-af-border";
+
+      export function Panel() {
+        return <section className={PANEL_CLASS}>Body</section>;
+      }
+    `,
+  });
+
+  try {
+    await expect(
+      execFileAsync("bun", ["run", "check:inline-component-class-usage"], {
+        cwd: uiRoot,
+        env: {
+          ...process.env,
+          AGENT_FACTORY_UI_SRC_DIR: srcDir,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining("src/features/example/panel.tsx"),
+    });
+    await expect(
+      execFileAsync("bun", ["run", "check"], {
+        cwd: uiRoot,
+        env: {
+          ...process.env,
+          AGENT_FACTORY_UI_SRC_DIR: srcDir,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining(
+        "Inline component class usage guard failed.",
+      ),
     });
   } finally {
     await rm(tempRoot, { force: true, recursive: true });
