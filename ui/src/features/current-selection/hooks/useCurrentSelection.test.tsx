@@ -459,6 +459,102 @@ describe("useCurrentSelection", () => {
     });
   });
 
+  it("preserves selected work detail when the same work moves to a later workstation request", async () => {
+    const selectedWorkItem = buildWorkItem("work-reanchored", "Reanchored Story");
+    const activeExecution = buildActiveExecution(
+      "dispatch-review-active",
+      [selectedWorkItem],
+      "2026-04-08T12:00:03Z",
+    );
+    const initialProjectedRequests = {
+      "dispatch-review-active": buildProjectedWorkstationRequest({
+        dispatchID: "dispatch-review-active",
+        inputWorkItems: [selectedWorkItem],
+        startedAt: "2026-04-08T12:00:03Z",
+      }),
+    };
+    const rerenderedProjectedRequests = {
+      "dispatch-repair-completed": buildProjectedWorkstationRequest({
+        dispatchID: "dispatch-repair-completed",
+        outputWorkItems: [selectedWorkItem],
+        startedAt: "2026-04-08T12:00:09Z",
+        workstationNodeID: "repair",
+      }),
+    };
+
+    seedSelectedWork("dispatch-review-active", "review", selectedWorkItem);
+    const { rerender } = render(
+      <SelectionHarness
+        snapshot={buildSnapshot({
+          activeExecution,
+          providerSessions: [
+            buildProviderSessionAttempt({
+              dispatchID: "dispatch-review-active",
+              sessionID: "sess-review-active",
+              workItems: [selectedWorkItem],
+            }),
+          ],
+          runtimeRequestsByDispatchID: {
+            "dispatch-review-active": buildRuntimeWorkstationRequest({
+              dispatchID: "dispatch-review-active",
+              inputWorkItems: [selectedWorkItem],
+              startedAt: "2026-04-08T12:00:03Z",
+            }),
+          },
+        })}
+        workstationRequestsByDispatchID={initialProjectedRequests}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("dispatch-history").textContent).toBe(
+        "dispatch-review-active",
+      );
+      expect(screen.getByTestId("selected-work-id").textContent).toBe(
+        "work-reanchored",
+      );
+    });
+
+    rerender(
+      <SelectionHarness
+        snapshot={buildSnapshot({
+          providerSessions: [
+            buildProviderSessionAttempt({
+              dispatchID: "dispatch-repair-completed",
+              sessionID: "sess-repair-completed",
+              transitionID: "repair",
+              workItems: [selectedWorkItem],
+            }),
+          ],
+          runtimeRequestsByDispatchID: {
+            "dispatch-repair-completed": buildRuntimeWorkstationRequest({
+              dispatchID: "dispatch-repair-completed",
+              outputWorkItems: [selectedWorkItem],
+              startedAt: "2026-04-08T12:00:09Z",
+              transitionID: "repair",
+            }),
+          },
+        })}
+        workstationRequestsByDispatchID={rerenderedProjectedRequests}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("dispatch-history").textContent).toBe(
+        "dispatch-repair-completed",
+      );
+      expect(screen.getByTestId("projected-history").textContent).toBe(
+        "dispatch-repair-completed",
+      );
+      expect(screen.getByTestId("provider-history").textContent).toBe(
+        "dispatch-repair-completed",
+      );
+      expect(screen.getByTestId("selected-work-id").textContent).toBe(
+        "work-reanchored",
+      );
+    });
+  });
+
   it("orders mixed selected-work history newest-first and collapses duplicate provider attempts per dispatch", async () => {
     const selectedWorkItem = buildWorkItem("work-shared", "Shared Story");
     const unrelatedWorkItem = buildWorkItem("work-unrelated", "Unrelated Story");

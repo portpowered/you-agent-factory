@@ -13,6 +13,7 @@ import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
 } from "./features/current-selection/state/selectionHistoryStore";
+import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
 import {
   activeStoryTrace,
@@ -190,6 +191,85 @@ async function delayedSaveCurrentFactoryDocumentMock(
     body: submittedFactoryDefinitionDocument(init),
     status: 200,
   };
+}
+
+function buildReanchoredSelectionSnapshot() {
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  const activeExecution =
+    snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+  const activeWorkItem = activeExecution?.work_items?.[0];
+
+  if (!activeExecution || !activeWorkItem) {
+    throw new Error(
+      "expected semantic workflow fixture to include the active review work item",
+    );
+  }
+
+  snapshot.tick_count += 1;
+  snapshot.runtime.active_dispatch_ids = [];
+  if (snapshot.runtime.active_executions_by_dispatch_id) {
+    delete snapshot.runtime.active_executions_by_dispatch_id["dispatch-review-active"];
+  }
+  snapshot.runtime.current_work_items_by_place_id = {};
+  snapshot.runtime.place_occupancy_work_items_by_place_id = {
+    ...(snapshot.runtime.place_occupancy_work_items_by_place_id ?? {}),
+    "story:approved": [activeWorkItem],
+  };
+  snapshot.runtime.session.provider_sessions = [
+    {
+      dispatch_id: "dispatch-repair-completed",
+      outcome: "ACCEPTED",
+      provider_session: {
+        id: "sess-repair-completed",
+        kind: "session_id",
+        provider: "codex",
+      },
+      transition_id: "repair",
+      work_items: [activeWorkItem],
+      workstation_name: "Repair",
+    },
+  ];
+  snapshot.runtime.workstation_requests_by_dispatch_id = {
+    "dispatch-repair-completed": {
+      counts: {
+        dispatched_count: 1,
+        errored_count: 0,
+        responded_count: 1,
+      },
+      dispatch_id: "dispatch-repair-completed",
+      request: {
+        input_work_items: [activeWorkItem],
+        started_at: "2026-04-08T12:00:09Z",
+        trace_ids: activeWorkItem.trace_id ? [activeWorkItem.trace_id] : [],
+      },
+      response: {
+        output_work_items: [activeWorkItem],
+      },
+      transition_id: "repair",
+      workstation_name: "Repair",
+    },
+  };
+
+  return snapshot;
+}
+
+function applyStorySnapshot(snapshot: ReturnType<typeof buildReanchoredSelectionSnapshot>) {
+  useFactoryTimelineStore.setState({
+    events: [],
+    latestTick: snapshot.tick_count,
+    mode: "current",
+    receivedEventIDs: [],
+    selectedTick: snapshot.tick_count,
+    worldViewCache: {
+      [snapshot.tick_count]: {
+        ...snapshot,
+        relationsByWorkID: {},
+        tracesByWorkID: {},
+        workstationRequestsByDispatchID: {},
+        workRequestsByID: {},
+      },
+    },
+  });
 }
 
 function editableConfigurationSection(
@@ -991,6 +1071,51 @@ export const CurrentSelectionWorkstationDetailOrderVerification = {
     </div>
   ),
   tags: ["test"],
+};
+
+export const CurrentSelectionReanchoredSelectionVerification = {
+  parameters: {
+    dashboardApi: {
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "1280px" }}>
+      <App />
+    </div>
+  ),
+  tags: ["test"],
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await userEvent.click(
+      (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
+    );
+
+    const currentSelection = await canvas.findByRole("article", {
+      name: "Current selection",
+    });
+    await expect(
+      await within(currentSelection).findByText("dispatch-review-active"),
+    ).toBeVisible();
+    await expect(
+      await within(currentSelection).findByText("work-active-story"),
+    ).toBeVisible();
+
+    applyStorySnapshot(buildReanchoredSelectionSnapshot());
+
+    await waitFor(() => {
+      expect(
+        within(currentSelection).queryByText("dispatch-review-active"),
+      ).toBeNull();
+    });
+    await expect(
+      await within(currentSelection).findByText("dispatch-repair-completed"),
+    ).toBeVisible();
+    await expect(
+      await within(currentSelection).findByText("work-active-story"),
+    ).toBeVisible();
+  },
 };
 
 export const DashboardSubmitWorkIntegrationSmoke = {
