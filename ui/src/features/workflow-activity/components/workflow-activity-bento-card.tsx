@@ -28,7 +28,7 @@ interface WorkflowActivityBentoCardProps {
   widgetInstanceID?: string;
 }
 
-const GRAPH_PANEL_SHELL_CLASS = "relative h-full min-h-0";
+const GRAPH_PANEL_SHELL_CLASS = "relative h-full min-h-0 min-w-0";
 
 export function WorkflowActivityBentoCard({
   headerAction,

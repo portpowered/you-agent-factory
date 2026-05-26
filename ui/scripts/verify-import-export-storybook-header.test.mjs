@@ -56,12 +56,6 @@ function createHeaderFixture(isDesktop) {
       x: 660,
       y: 0,
     }),
-    streamStatus: createDesktopLocator(isDesktop, {
-      height: 20,
-      width: 120,
-      x: 380,
-      y: 0,
-    }),
     exportButton: createDesktopLocator(isDesktop, {
       height: 20,
       width: 120,
@@ -77,10 +71,10 @@ function createRoleLookup({
   globalActions,
   heading,
   languageButton,
+  retiredStreamStatus,
   rootTab,
   sessionTabs,
   slider,
-  streamStatus,
 }) {
   return vi.fn((role, options) => {
     if (role === "heading") return heading;
@@ -89,7 +83,7 @@ function createRoleLookup({
     if (role === "tab" && options == null) return { count: vi.fn().mockResolvedValue(3) };
     if (role === "tab" && options?.name === "root") return rootTab;
     if (options?.name === "Change language") return languageButton;
-    if (role === "status") return streamStatus;
+    if (role === "status") return retiredStreamStatus;
     if (role === "group") return globalActions;
     if (options?.name === "Return to current tick") return currentButton;
     return exportButton;
@@ -122,13 +116,14 @@ function createPage({
   isDesktop = false,
   returnToCurrentVisible = false,
 } = {}) {
-  const { exportButton, heading, languageButton, sessionTabs, slider, streamStatus } =
+  const { exportButton, heading, languageButton, sessionTabs, slider } =
     createHeaderFixture(isDesktop);
   const rootTab = createLocator();
   const currentButton = createLocator({
     isVisible: vi.fn().mockResolvedValue(returnToCurrentVisible),
   });
   const globalActions = createLocator();
+  const retiredStreamStatus = { count: vi.fn().mockResolvedValue(0) };
   const page = {
     currentButton,
     heading,
@@ -145,10 +140,10 @@ function createPage({
       globalActions,
       heading,
       languageButton,
+      retiredStreamStatus,
       rootTab,
       sessionTabs,
       slider,
-      streamStatus,
     }),
     getByText: createTextLookup(timelineStatus),
   };

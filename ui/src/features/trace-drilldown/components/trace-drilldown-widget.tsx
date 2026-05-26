@@ -4,7 +4,7 @@ import { TraceGridBentoCard } from "./trace-grid-card";
 import type { TraceGridState } from "./trace-grid-card";
 
 // tailwind-exception: intrinsic-sizing
-const TRACE_DRILLDOWN_WIDGET_CLASS = "h-full min-h-[34rem]";
+const TRACE_DRILLDOWN_WIDGET_CLASS = "h-full min-h-[24rem]";
 
 export interface TraceDrilldownWidgetProps {
   headerAction?: ReactNode;

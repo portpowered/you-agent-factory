@@ -5,7 +5,7 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
 import type { WorkstationDetailCardProps } from "./detail-card-types";
-import type { getWorkstationDetailMessages } from "../messages";
+import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import {
   getRunnerDisplayName,
   getRunnerMetadata,

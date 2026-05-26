@@ -23,12 +23,16 @@ import type {
   EditableWorkstationBehavior,
   EditableWorkstationValues,
 } from "../../current-factory-definition/public";
-import type { WorkstationDetailMessages } from "../messages";
+import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
 import type { RunnerID } from "../editing/runner-metadata";
+import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
 import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
-import type { DashboardWorkItemSelection, StatePositionWorkItem } from "../state/selection-types";
+import type {
+  DashboardWorkItemSelection,
+  StatePositionWorkItem,
+} from "../state/selection-types";
 
 export interface SelectionDetailLayoutProps {
   children: ReactNode;
@@ -110,6 +114,7 @@ export interface WorkItemDetailCardProps {
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
+  relationshipGraph?: SelectedWorkRelationshipGraph;
   selectedNode?: DashboardWorkstationNode | null;
   selectedProviderSessionKey?: string | null;
   selection: DashboardWorkItemSelection;
@@ -219,6 +224,7 @@ export type EditableWorkstationSaveState =
 
 export interface WorkstationActiveWorkListProps {
   executions: DashboardActiveExecution[];
+  locale?: string;
   messages: WorkstationDetailMessages;
   now: number;
   onSelectWorkID?: (workID: string) => void;

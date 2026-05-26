@@ -28,7 +28,7 @@ import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-w
 import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
-} from "../messages";
+} from "../messages/workstation-detail";
 import type { RunnerID } from "../editing/runner-metadata";
 import type { DashboardSelection } from "../state/selection-types";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";

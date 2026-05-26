@@ -84,10 +84,6 @@ function normalizeDashboardLayoutItem(value: unknown): AgentBentoLayoutItem | nu
     h: isFiniteNumber(candidate.h) ? candidate.h : defaultItem.h,
     hidden: candidate.hidden === true ? true : undefined,
     id,
-    maxH: isFiniteNumber(candidate.maxH) ? candidate.maxH : defaultItem.maxH,
-    maxW: isFiniteNumber(candidate.maxW) ? candidate.maxW : defaultItem.maxW,
-    minH: isFiniteNumber(candidate.minH) ? candidate.minH : defaultItem.minH,
-    minW: isFiniteNumber(candidate.minW) ? candidate.minW : defaultItem.minW,
     w: isFiniteNumber(candidate.w) ? candidate.w : defaultItem.w,
     widgetType,
     x: isFiniteNumber(candidate.x) ? candidate.x : defaultItem.x,
@@ -162,10 +158,6 @@ function mergeDashboardLayoutItem(
     ...baseItem,
     h: isFiniteNumber(item.h) ? item.h : baseItem.h,
     hidden: item.hidden === true ? true : undefined,
-    maxH: isFiniteNumber(item.maxH) ? item.maxH : baseItem.maxH,
-    maxW: isFiniteNumber(item.maxW) ? item.maxW : baseItem.maxW,
-    minH: isFiniteNumber(item.minH) ? item.minH : baseItem.minH,
-    minW: isFiniteNumber(item.minW) ? item.minW : baseItem.minW,
     w: isFiniteNumber(item.w) ? item.w : baseItem.w,
     x: isFiniteNumber(item.x) ? item.x : baseItem.x,
     y: isFiniteNumber(item.y) ? item.y : baseItem.y,
@@ -176,17 +168,14 @@ function migrateDashboardLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayou
   const normalizedLayout = layout
     .map((item) => normalizeDashboardLayoutItem(item))
     .filter((item): item is AgentBentoLayoutItem => item !== null);
-  const migratedLayout = migrateProviderSessionLayout(
-    migrateDashboardCompactionLayout(
-      migrateTraceLayout(migrateWorkOutcomeLayout(normalizedLayout)),
+  const migratedLayout = normalizeInlineAddWidgetLayout(
+    migrateProviderSessionLayout(
+      migrateDashboardCompactionLayout(
+        migrateTraceLayout(migrateWorkOutcomeLayout(normalizedLayout)),
+      ),
     ),
   );
-
-  if (migratedLayout.some((item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID)) {
-    return migratedLayout;
-  }
-
-  return [...migratedLayout, getDefaultInlineAddWidgetLayout()];
+  return migratedLayout;
 }
 
 function migrateDashboardCompactionLayout(
@@ -287,6 +276,35 @@ function migrateTraceLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutIte
 
     return item;
   });
+}
+
+function normalizeInlineAddWidgetLayout(
+  layout: AgentBentoLayoutItem[],
+): AgentBentoLayoutItem[] {
+  const inlineAddWidgetItems = layout.filter(
+    (item) => item.widgetType === DASHBOARD_WIDGET_IDS.addWidget,
+  );
+
+  if (inlineAddWidgetItems.length === 0) {
+    return [...layout, getDefaultInlineAddWidgetLayout()];
+  }
+
+  const orderedInlineAddWidgetItems = [...inlineAddWidgetItems].reverse();
+  const canonicalInlineAddWidget =
+    orderedInlineAddWidgetItems.find(
+      (item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+    ) ?? orderedInlineAddWidgetItems[0];
+  const normalizedInlineAddWidget: AgentBentoLayoutItem = {
+    ...canonicalInlineAddWidget,
+    hidden: undefined,
+    id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+    widgetType: DASHBOARD_WIDGET_IDS.addWidget,
+  };
+
+  return [
+    ...layout.filter((item) => item.widgetType !== DASHBOARD_WIDGET_IDS.addWidget),
+    normalizedInlineAddWidget,
+  ];
 }
 
 function migrateWorkOutcomeLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {

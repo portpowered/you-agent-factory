@@ -28,6 +28,7 @@ import {
 import type { InferenceAttemptCardProps } from "./detail-card-types";
 import {
   useCurrentSelectionDetailMessages,
+  useCurrentSelectionLocale,
   useCurrentSelectionWorkstationDetailMessages,
 } from "./current-selection-locale";
 import {
@@ -44,7 +45,8 @@ export function InferenceAttemptCard({
   const attemptPanelId = useId();
   const summaryHeadingId = `${attemptPanelId}-heading`;
   const detailMessages = useCurrentSelectionDetailMessages();
-  const timingSummary = getAttemptTimingSummary(attempt, detailMessages);
+  const locale = useCurrentSelectionLocale();
+  const timingSummary = getAttemptTimingSummary(attempt, detailMessages, locale);
 
   return (
     <article
@@ -201,16 +203,19 @@ function AttemptMetadataDetails({
   attempt: DashboardInferenceAttempt;
 }) {
   const detailMessages = useCurrentSelectionDetailMessages();
+  const locale = useCurrentSelectionLocale();
   const provider =
     attempt.diagnostics?.provider?.provider ?? attempt.provider_session?.provider;
   const model = attempt.diagnostics?.provider?.model;
   const requestTime = formatLocalDateTime(
     attempt.request_time,
     detailMessages.timestampUnavailable,
+    locale,
   );
   const responseTime = formatLocalDateTime(
     attempt.response_time,
     detailMessages.timestampUnavailable,
+    locale,
   );
 
   return (
@@ -246,7 +251,7 @@ function AttemptMetadataDetails({
         label={detailMessages.elapsedTimeLabel}
         value={
           attempt.duration_millis !== undefined
-            ? formatDurationMillis(attempt.duration_millis)
+            ? formatDurationMillis(attempt.duration_millis, locale)
             : undefined
         }
       />
@@ -394,10 +399,12 @@ function useAttemptProviderSessionState({
 function getAttemptTimingSummary(
   attempt: DashboardInferenceAttempt,
   detailMessages: ReturnType<typeof useCurrentSelectionDetailMessages>,
+  locale?: string | null,
 ): string | undefined {
   if (attempt.duration_millis !== undefined) {
     return `${detailMessages.elapsedTimeLabel}: ${formatDurationMillis(
       attempt.duration_millis,
+      locale,
     )}`;
   }
 
@@ -405,6 +412,7 @@ function getAttemptTimingSummary(
     return `${detailMessages.responseTimeLabel}: ${formatLocalDateTime(
       attempt.response_time,
       detailMessages.timestampUnavailable,
+      locale,
     )}`;
   }
 

@@ -111,9 +111,9 @@ export async function verifyDashboardShellConsolidation(
   await expectVisible(timelineSlider, "Timeline slider");
   await expectVisible(timelineStatus, "Timeline status");
   await expectVisible(moveButton, "Work totals move button");
-  if (await toolbar.getByRole("status", { name: /Event stream/i }).isVisible()) {
+  if ((await toolbar.getByRole("status", { name: /Event stream/i }).count()) > 0) {
     throw new Error(
-      "Dashboard shell header still rendered the retired event-stream status.",
+      "Dashboard shell header still rendered the retired event-stream status pill.",
     );
   }
   if (

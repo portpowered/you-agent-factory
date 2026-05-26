@@ -290,8 +290,19 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectVisible(exportButton, "Export PNG button");
   await expectVisible(globalActions, "Global header actions");
 
+  if ((await page.getByRole("status", { name: /Event stream/i }).count()) > 0) {
+    throw new Error(
+      "Dashboard header still rendered the retired event-stream status pill.",
+    );
+  }
+
   if ((await allTabs.count()) < 3) {
     throw new Error("Dashboard header did not render the expected multi-session tab strip.");
+  }
+  if ((await page.getByRole("status", { name: /Event stream/i }).count()) > 0) {
+    throw new Error(
+      "Dashboard header still rendered the retired event-stream status pill.",
+    );
   }
 
   if (await page.getByRole("button", { name: "Return to current tick" }).isVisible()) {

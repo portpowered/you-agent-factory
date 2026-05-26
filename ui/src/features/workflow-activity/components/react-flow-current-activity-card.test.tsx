@@ -1947,19 +1947,16 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
       name: "Work graph viewport",
     });
 
-    expect(card?.className).toContain("p-4");
-    expect(card?.className).toContain("md:p-5");
+    expect(card?.className).toContain("p-3");
+    expect(card?.className).toContain("sm:p-4");
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
     ).toBeTruthy();
     expect(screen.getByText("Observe mode")).toBeTruthy();
     expect(legend?.className).toContain("absolute");
-    expect(legend?.className).toContain("left-7");
-    expect(legend?.className).toContain("top-7");
-    expect(legend?.className).toContain("max-md:left-4");
-    expect(legend?.className).toContain("max-md:right-4");
-    expect(legend?.className).toContain("max-md:top-4");
-    expect(legend?.className).not.toContain("right-0");
+    expect(legend?.className).toContain("left-4");
+    expect(legend?.className).toContain("right-4");
+    expect(legend?.className).toContain("top-4");
     expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.getAttribute("aria-describedby")).toMatch(

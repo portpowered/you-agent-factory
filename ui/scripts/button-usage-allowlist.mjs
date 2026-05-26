@@ -99,10 +99,11 @@ export const approvedButtonUsageAllowlist = [
     relativeFilePath: "src/features/current-selection/components/state-node-detail.tsx",
   },
   {
-    rawButtonFingerprints: ['aria-label={messages.relatedWorkSelectLabel(relationship.workLabel)}'],
+    rawButtonFingerprints: ['aria-label={messages.relatedWorkSelectLabel(label)}'],
     rawButtonReason:
-      "Work-item detail action chips select related work items rather than performing ordinary button-lane actions.",
-    relativeFilePath: "src/features/current-selection/components/work-item-card.tsx",
+      "Work-item relationship nodes use selection-chip semantics to jump between related work items rather than performing ordinary button-lane actions.",
+    relativeFilePath:
+      "src/features/current-selection/components/work-item-relationship-graph.tsx",
   },
   {
     rawButtonFingerprints: ['aria-label={resolvedMessages.selectWorkItemLabel(workLabel)}'],

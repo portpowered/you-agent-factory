@@ -6,6 +6,7 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { LocalizedTimezoneNote } from "../../../components/ui/localized-timezone-note";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import { formatDateTime } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
@@ -77,7 +78,10 @@ function LoadedProviderSessionDetailPanel({
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
           {messages.selectedSessionHeading}
         </h4>
-        <div className="grid gap-3 md:grid-cols-2">
+        <LocalizedTimezoneNote>
+          {messages.localizedTimezoneContext}
+        </LocalizedTimezoneNote>
+        <div className="grid gap-3">
           <DetailMetric label={messages.sessionLabel} value={sessionLabel} code />
           <DetailMetric
             label={messages.sessionStatusLabel}
@@ -178,7 +182,7 @@ function SourceFileSection({
   return (
     <section className="grid gap-2.5">
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.sourceHeading}</h5>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3">
         <DetailMetric
           label={messages.relativePathLabel}
           value={detail.source.relativePath}
@@ -261,7 +265,7 @@ function ParseOverview({
   return (
     <section className="grid gap-2.5">
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.parseSummaryHeading}</h5>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3">
         <DetailMetric
           label={messages.eventCountLabel}
           value={detail.parse.eventCount}
@@ -296,7 +300,7 @@ function TokenUsageSection({
         {messages.tokenUsageHeading}
       </h5>
       {tokenUsage ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3">
           <DetailMetric label={messages.inputLabel} value={tokenUsage.inputTokens ?? 0} />
           <DetailMetric
             label={messages.cachedInputLabel}
@@ -329,7 +333,7 @@ function TurnsSection({
     <section className="grid gap-2.5">
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.turnsHeading}</h5>
       {detail.parse.turns.length > 0 ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3">
           {detail.parse.turns.map((turn) => (
             <article className={PROVIDER_SESSION_CARD_CLASS} key={turn.index}>
               <div className="grid gap-1">
@@ -347,7 +351,7 @@ function TurnsSection({
                   />
                 </div>
               </div>
-              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              <div className="mt-2 grid gap-3">
                 <DetailMetric label={messages.eventsLabel} value={turn.eventCount} />
                 <DetailMetric
                   label={messages.responseItemsLabel}
@@ -393,7 +397,7 @@ function FunctionCallsSection({
               className={PROVIDER_SESSION_CARD_CLASS}
               key={`${call.order}-${call.callId ?? call.name ?? call.type}`}
             >
-              <div className="grid gap-1 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+              <div className="grid gap-1">
                 <div className="grid gap-1">
                   <strong>{call.name ?? call.type}</strong>
                   <p
@@ -419,7 +423,7 @@ function FunctionCallsSection({
                   </span>
                 ) : null}
               </div>
-              <div className="mt-2 grid gap-3 md:grid-cols-2">
+              <div className="mt-2 grid gap-3">
                 <DetailMetric label={messages.typeLabel} value={call.type} />
                 <DetailMetric
                   label={messages.callIdLabel}
@@ -584,7 +588,9 @@ function DetailMetric({
   value: number | string | ReactNode;
 }) {
   const metricValue = code ? (
-    <code className={DASHBOARD_BODY_CODE_CLASS}>{value}</code>
+    <code className={`${DASHBOARD_BODY_CODE_CLASS} [overflow-wrap:anywhere]`}>
+      {value}
+    </code>
   ) : (
     value
   );
@@ -594,9 +600,13 @@ function DetailMetric({
     <div className={PROVIDER_SESSION_CARD_CLASS}>
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       {typeof value === "string" || typeof value === "number" ? (
-        <p className={cn("m-0", wrapperClassName)}>{metricValue}</p>
+        <p className={cn("m-0 [overflow-wrap:anywhere]", wrapperClassName)}>
+          {metricValue}
+        </p>
       ) : (
-        <div className={wrapperClassName}>{metricValue}</div>
+        <div className={cn("[overflow-wrap:anywhere]", wrapperClassName)}>
+          {metricValue}
+        </div>
       )}
     </div>
   );
@@ -612,17 +622,21 @@ function TimestampMetricValue({
   unavailableLabel: string;
 }) {
   const messages = getProviderSessionDetailMessages(locale);
+  const normalizedTimestamp = normalizeValidTimestamp(timestamp);
 
   if (!timestamp) {
     return unavailableLabel;
   }
 
-  const formattedTimestamp = formatDateTime(timestamp, locale, {
-  });
+  if (!normalizedTimestamp) {
+    return messages.unavailableValue;
+  }
+
+  const formattedTimestamp = formatDateTime(normalizedTimestamp, locale, { fallback: messages.unavailableValue });
 
   return (
     <span className="grid gap-1">
-      <span title={timestamp}>{formattedTimestamp}</span>
+      <span title={normalizedTimestamp}>{formattedTimestamp}</span>
       <details className="grid gap-1">
         <summary
           className={cn(
@@ -638,9 +652,14 @@ function TimestampMetricValue({
             DASHBOARD_BODY_CODE_CLASS,
           )}
         >
-          {timestamp}
+          {normalizedTimestamp}
         </code>
       </details>
     </span>
   );
+}
+
+function normalizeValidTimestamp(timestamp?: string | null): string | null {
+  const normalizedTimestamp = timestamp?.trim();
+  return !normalizedTimestamp || Number.isNaN(Date.parse(normalizedTimestamp)) ? null : normalizedTimestamp;
 }

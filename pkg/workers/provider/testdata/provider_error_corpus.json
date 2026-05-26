@@ -136,6 +136,26 @@
       "supported": true
     },
     {
+      "name": "codex_model_capacity_cleanup_noise",
+      "provider": "codex",
+      "raw_provider_family": "codex",
+      "category": "throttled",
+      "upstream_source_case": "CodexErr::ServerOverloaded after transcript and cleanup noise",
+      "exit_code": 1,
+      "stdout": "OpenAI Codex v0.118.0 (research preview)\nworking through a long inference transcript that should never become the normalized provider failure message\nfinal response draft looked complete before the provider reported the real error\nERROR: Selected model is at capacity. Please try a different model.\ncleanup complete",
+      "stderr": "",
+      "expected_type": "throttled",
+      "expected_family": "throttle",
+      "retryable": true,
+      "triggers_throttle_pause": true,
+      "supported": true,
+      "reject_message_contains": [
+        "long inference transcript",
+        "final response draft",
+        "cleanup complete"
+      ]
+    },
+    {
       "name": "codex_internal_server_status_500",
       "provider": "codex",
       "raw_provider_family": "codex",
@@ -179,6 +199,26 @@
       "retryable": true,
       "triggers_throttle_pause": false,
       "supported": true
+    },
+    {
+      "name": "codex_timeout_cleanup_noise",
+      "provider": "codex",
+      "raw_provider_family": "codex",
+      "category": "timeout",
+      "upstream_source_case": "Codex transport timeout line after diagnostics and before cleanup noise",
+      "exit_code": 1,
+      "stdout": "partial transcript before timeout",
+      "stderr": "runner diagnostics\nERROR: context deadline exceeded while waiting for codex\npost-error cleanup note",
+      "expected_type": "timeout",
+      "expected_family": "retryable",
+      "retryable": true,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": [
+        "partial transcript",
+        "runner diagnostics",
+        "post-error cleanup note"
+      ]
     },
     {
       "name": "codex_authentication_unauthorized",

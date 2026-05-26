@@ -1,12 +1,16 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { formatLocalDateTime } from "../../../components/ui/formatters";
-import type {
-  DashboardTrace,
-  DashboardWorkItemRef,
-} from "../../../api/dashboard/types";
+import {
+  formatDurationMillis,
+  formatLocalDateTime,
+} from "../../../components/ui/formatters";
+import type { DashboardWorkItemRef } from "../../../api/dashboard/types";
 import { dashboardWorkstationRequestFixtures } from "../../../components/dashboard/fixtures";
+import { providerSessionSelectionKey } from "../../provider-session-detail/lib/provider-session-ref";
+import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
+import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
+import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import {
   DETAIL_CARD_NOW,
@@ -14,9 +18,6 @@ import {
   inferenceAttempt,
   workstationRequest,
 } from "./detail-card-test-helpers";
-import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
-import { selectWorkItemExecutionDetails } from "../state/executionDetails";
-import { providerSessionSelectionKey } from "../../provider-session-detail/lib/provider-session-ref";
 import { WorkItemDetailCard } from "./work-item-card";
 
 function getDetailRow(container: HTMLElement, label: string): HTMLElement {
@@ -87,41 +88,72 @@ function expandAttemptBody(
   return within(attemptCard).getByRole("region", { name: bodyLabel });
 }
 
-function buildSelectedTrace(workItem: DashboardWorkItemRef): DashboardTrace {
+function buildRelationshipGraph(
+  workItem: DashboardWorkItemRef,
+): SelectedWorkRelationshipGraph {
   return {
-    dispatches: [],
-    relations: [
+    edges: [
       {
-        source_work_id: "work-parent-story",
-        source_work_name: "Parent Story",
-        target_work_id: workItem.work_id,
-        type: "PARENT",
+        relationship: "PARENT",
+        sourceWorkID: workItem.work_id,
+        targetWorkID: "work-parent-story",
       },
       {
-        required_state: "ready",
-        source_work_id: workItem.work_id,
-        target_work_id: "work-dependency-story",
-        target_work_name: "Dependency Story",
-        type: "DEPENDS_ON",
+        relationship: "DEPENDS_ON",
+        requiredState: "ready",
+        sourceWorkID: workItem.work_id,
+        targetWorkID: "work-dependency-story",
       },
       {
-        required_state: "approved",
-        source_work_id: "work-blocked-story",
-        source_work_name: "Blocked Story",
-        target_work_id: workItem.work_id,
-        type: "DEPENDS_ON",
+        relationship: "REQUIRED_BY",
+        requiredState: "approved",
+        sourceWorkID: workItem.work_id,
+        targetWorkID: "work-blocked-story",
       },
       {
-        source_work_id: workItem.work_id,
-        target_work_id: "work-child-story",
-        target_work_name: "Child Story",
-        type: "PARENT",
+        relationship: "CHILD",
+        sourceWorkID: workItem.work_id,
+        targetWorkID: "work-child-story",
       },
     ],
-    trace_id: workItem.trace_id ?? "trace-active-story",
-    transition_ids: [],
-    work_ids: [workItem.work_id],
-    workstation_sequence: [],
+    relatedWork: [
+      {
+        label: "Blocked Story",
+        state: "queued",
+        traceID: "trace-blocked-story",
+        workID: "work-blocked-story",
+        workTypeID: "story",
+      },
+      {
+        label: "Child Story",
+        state: "running",
+        traceID: "trace-child-story",
+        workID: "work-child-story",
+        workTypeID: "task",
+      },
+      {
+        label: "Dependency Story",
+        state: "ready",
+        traceID: "trace-dependency-story",
+        workID: "work-dependency-story",
+        workTypeID: "dependency",
+      },
+      {
+        label: "Parent Story",
+        state: "done",
+        traceID: "trace-parent-story",
+        workID: "work-parent-story",
+        workTypeID: "epic",
+      },
+    ],
+    selectedWork: {
+      label: "Active Story",
+      state: "in_progress",
+      traceID: workItem.trace_id,
+      workID: workItem.work_id,
+      workTypeID: workItem.work_type_id,
+    },
+    status: "ready",
   };
 }
 
@@ -790,131 +822,6 @@ describe("WorkItemDetailCard summary", () => {
     ).toBeTruthy();
   });
 
-  it("renders work relationships as a graph-shaped surface and keeps related work selectable", () => {
-    const { dispatchID, execution, selectedNode, workItem } =
-      getSelectedWorkItemFixture();
-    const onSelectWorkID = vi.fn();
-
-    render(
-      <WorkItemDetailCard
-        dispatchAttempts={[]}
-        executionDetails={selectWorkItemExecutionDetails({
-          activeExecution: execution,
-          dispatchID,
-          selectedNode,
-          workItem,
-        })}
-        now={DETAIL_CARD_NOW}
-        onSelectWorkID={onSelectWorkID}
-        selectedNode={selectedNode}
-        selectedTrace={buildSelectedTrace(workItem)}
-        selection={{
-          dispatchId: dispatchID,
-          execution,
-          kind: "work-item",
-          nodeId: selectedNode.node_id,
-          workItem,
-        }}
-        workstationRequests={[]}
-      />,
-    );
-
-    const relationshipGraph = screen.getByRole("region", {
-      name: "Work relationships",
-    });
-
-    expect(within(relationshipGraph).getByText("Selected work")).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByText("Active Story").className,
-    ).toContain("text-af-text");
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Parent relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Depends on relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Required by relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Child relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(
-        within(relationshipGraph).getByRole("region", {
-          name: "Parent relationships",
-        }),
-      ).getByText("Parent Story"),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByText("Depends on (ready)"),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByText("Required by (approved)"),
-    ).toBeTruthy();
-    expect(
-      within(
-        within(relationshipGraph).getByRole("region", {
-          name: "Child relationships",
-        }),
-      ).getByText("Child Story"),
-    ).toBeTruthy();
-
-    fireEvent.click(
-      within(relationshipGraph).getByRole("button", {
-        name: "Select related work item Dependency Story",
-      }),
-    );
-
-    expect(onSelectWorkID).toHaveBeenCalledWith("work-dependency-story");
-  });
-
-  it("renders an explicit empty state when no work relationships are available", () => {
-    const { dispatchID, execution, selectedNode, workItem } =
-      getSelectedWorkItemFixture();
-
-    render(
-      <WorkItemDetailCard
-        dispatchAttempts={[]}
-        executionDetails={selectWorkItemExecutionDetails({
-          activeExecution: execution,
-          dispatchID,
-          selectedNode,
-          workItem,
-        })}
-        now={DETAIL_CARD_NOW}
-        selectedNode={selectedNode}
-        selection={{
-          dispatchId: dispatchID,
-          execution,
-          kind: "work-item",
-          nodeId: selectedNode.node_id,
-          workItem,
-        }}
-        workstationRequests={[]}
-      />,
-    );
-
-    const relationshipSection = screen.getByRole("region", {
-      name: "Work relationships",
-    });
-
-    expect(
-      within(relationshipSection).getByText(
-        "No parent, child, or dependency relationships are available for this work item.",
-      ),
-    ).toBeTruthy();
-    expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
-  });
-
   it("omits the model row while preserving other execution details for historical selections", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
@@ -1176,6 +1083,496 @@ describe("WorkItemDetailCard summary", () => {
   });
 });
 
+describe("WorkItemDetailCard relationship graph", () => {
+  it("renders work relationships as a graph-shaped surface and keeps related work selectable", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const onSelectWorkID = vi.fn();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectWorkID={onSelectWorkID}
+        selectedNode={selectedNode}
+        relationshipGraph={buildRelationshipGraph(workItem)}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipGraph = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+
+    expect(within(relationshipGraph).getByText("Selected work")).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Relationship key",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText(
+        "Parent work above the current selection",
+      ),
+    ).toBeTruthy();
+    const selectedRelationshipNode = relationshipGraph.querySelector(
+      '[data-selected-work-relationship-node="selected"]',
+    );
+
+    if (!(selectedRelationshipNode instanceof HTMLElement)) {
+      throw new Error("expected selected relationship node");
+    }
+
+    expect(
+      within(selectedRelationshipNode).getByText("Active Story").className,
+    ).toContain("text-af-text");
+    expect(
+      within(selectedRelationshipNode).getByText("Current selection"),
+    ).toBeTruthy();
+    expect(selectedRelationshipNode.getAttribute("aria-current")).toBe("true");
+    expect(within(selectedRelationshipNode).getByText("in_progress")).toBeTruthy();
+    expect(within(selectedRelationshipNode).getByText("story")).toBeTruthy();
+    expect(
+      within(selectedRelationshipNode).getByText("trace-active-story"),
+    ).toBeTruthy();
+    const focusedSummary = within(relationshipGraph).getByRole("region", {
+      name: "Focused work summary",
+    });
+
+    expect(within(focusedSummary).getByText("Relationship role")).toBeTruthy();
+    expect(within(focusedSummary).getByText("Current selection")).toBeTruthy();
+    expect(within(focusedSummary).getByText("work-active-story")).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Parent relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Depends on relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Required by relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Child relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(relationshipGraph).getByRole("region", {
+          name: "Parent relationships",
+        }),
+      ).getByText("Parent Story"),
+    ).toBeTruthy();
+    expect(within(relationshipGraph).getByText("trace-parent-story")).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("Depends on (ready)"),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("Required by (approved)"),
+    ).toBeTruthy();
+    expect(within(relationshipGraph).getByText("queued")).toBeTruthy();
+    expect(within(relationshipGraph).getByText("dependency")).toBeTruthy();
+    expect(
+      within(
+        within(relationshipGraph).getByRole("region", {
+          name: "Child relationships",
+        }),
+      ).getByText("Child Story"),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(relationshipGraph).getByRole("button", {
+        name: "Select related work item Dependency Story",
+      }),
+    );
+
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-dependency-story");
+  });
+
+  it("keeps focused-node trace actions in the graph summary when trace inspection is available", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const onSelectTraceID = vi.fn();
+
+    render(
+      <WorkItemDetailCard
+        activeTraceID="trace-active-story"
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectTraceID={onSelectTraceID}
+        selectedNode={selectedNode}
+        relationshipGraph={buildRelationshipGraph(workItem)}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const focusedSummary = screen.getByRole("region", {
+      name: "Focused work summary",
+    });
+    const traceAction = within(focusedSummary).getByRole("link", {
+      name: "Open trace",
+    });
+
+    expect(within(focusedSummary).getByText("trace-active-story (selected)"))
+      .toBeTruthy();
+    expect(traceAction.getAttribute("href")).toBe("#trace");
+
+    fireEvent.click(traceAction);
+
+    expect(onSelectTraceID).toHaveBeenCalledWith("trace-active-story");
+  });
+
+  it("renders missing focused-node trace metadata explicitly when no trace is available", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectTraceID={vi.fn()}
+        selectedNode={selectedNode}
+        relationshipGraph={{
+          edges: [
+            {
+              relationship: "CHILD",
+              sourceWorkID: workItem.work_id,
+              targetWorkID: "work-child-story",
+            },
+          ],
+          relatedWork: [
+            {
+              label: "Child Story",
+              state: "running",
+              traceID: "trace-child-story",
+              workID: "work-child-story",
+              workTypeID: "task",
+            },
+          ],
+          selectedWork: {
+            label: "Active Story",
+            state: "in_progress",
+            workID: workItem.work_id,
+            workTypeID: workItem.work_type_id,
+          },
+          status: "ready",
+        }}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const focusedSummary = screen.getByRole("region", {
+      name: "Focused work summary",
+    });
+
+    expect(within(focusedSummary).getByText("Unavailable")).toBeTruthy();
+    expect(
+      within(focusedSummary).queryByRole("link", { name: "Open trace" }),
+    ).toBeNull();
+  });
+
+  it("re-centers the graph when the current work selection changes", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const onSelectWorkID = vi.fn();
+    const parentWorkItem = {
+      display_name: "Parent Story",
+      state: "done",
+      trace_id: "trace-parent-story",
+      work_id: "work-parent-story",
+      work_type_id: "epic",
+    } satisfies DashboardWorkItemRef;
+
+    const { rerender } = render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectWorkID={onSelectWorkID}
+        selectedNode={selectedNode}
+        relationshipGraph={buildRelationshipGraph(workItem)}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Select related work item Parent Story",
+      }),
+    );
+
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-parent-story");
+
+    rerender(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem: parentWorkItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectWorkID={onSelectWorkID}
+        selectedNode={selectedNode}
+        relationshipGraph={{
+          edges: [
+            {
+              relationship: "CHILD",
+              sourceWorkID: parentWorkItem.work_id,
+              targetWorkID: workItem.work_id,
+            },
+          ],
+          relatedWork: [
+            {
+              label: "Active Story",
+              state: "in_progress",
+              traceID: workItem.trace_id,
+              workID: workItem.work_id,
+              workTypeID: workItem.work_type_id,
+            },
+          ],
+          selectedWork: {
+            label: "Parent Story",
+            state: "done",
+            traceID: parentWorkItem.trace_id,
+            workID: parentWorkItem.work_id,
+            workTypeID: parentWorkItem.work_type_id,
+          },
+          status: "ready",
+        }}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem: parentWorkItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipGraph = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+    const selectedRelationshipNode = relationshipGraph.querySelector(
+      '[data-selected-work-relationship-node="selected"]',
+    );
+
+    if (!(selectedRelationshipNode instanceof HTMLElement)) {
+      throw new Error("expected recentered selected relationship node");
+    }
+
+    expect(
+      within(selectedRelationshipNode).getByText("Current selection"),
+    ).toBeTruthy();
+    expect(within(selectedRelationshipNode).getByText("done")).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("button", {
+        name: "Select related work item Active Story",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(
+        screen.getByRole("region", { name: "Focused work summary" }),
+      ).getByText(parentWorkItem.work_id),
+    ).toBeTruthy();
+  });
+
+  it("renders an explicit empty state when no work relationships are available", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        relationshipGraph={{
+          edges: [],
+          relatedWork: [],
+          selectedWork: {
+            label: "Active Story",
+            workID: workItem.work_id,
+          },
+          status: "empty",
+        }}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipSection = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+
+    expect(
+      within(relationshipSection).getByText(
+        "No parent, child, or dependency relationships are available for this work item.",
+      ),
+    ).toBeTruthy();
+    expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
+  });
+
+  it("renders an explicit loading state while work relationships are still loading", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        relationshipGraph={{ status: "loading" }}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipSection = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+    const status = within(relationshipSection).getByRole("status");
+
+    expect(status.textContent).toContain(
+      "Work relationships are still loading for this work item.",
+    );
+    expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
+  });
+
+  it("renders an explicit error state when work relationships fail to load", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        relationshipGraph={{
+          message:
+            "Work relationship data is unavailable for the selected timeline snapshot.",
+          selectedWork: {
+            label: "Active Story",
+            state: "in_progress",
+            traceID: "trace-active-story",
+            workID: "work-active-story",
+            workTypeID: "story",
+          },
+          status: "error",
+        }}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipSection = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+    const alert = within(relationshipSection).getByRole("alert");
+
+    expect(alert.textContent).toContain(
+      "Work relationships could not be loaded for this work item.",
+    );
+    expect(within(relationshipSection).getByText(/selected timeline snapshot/i))
+      .toBeTruthy();
+    expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
+  });
+});
+
 describe("WorkItemDetailCard localization", () => {
   it("renders inference-attempt provider-session controls from the localized workstation-detail catalog", () => {
     const { dispatchID, execution, selectedNode, workItem } =
@@ -1251,6 +1648,59 @@ describe("WorkItemDetailCard localization", () => {
     expect(
       inferenceAttempts.getByText("セッション詳細は利用できません"),
     ).toBeTruthy();
+  });
+
+  it("localizes dispatch-history started-at and duration rows for zh-CN", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <CurrentSelectionLocaleProvider locale="zh-CN">
+        <WorkItemDetailCard
+          dispatchAttempts={[]}
+          executionDetails={selectWorkItemExecutionDetails({
+            activeExecution: execution,
+            dispatchID,
+            selectedNode,
+            workItem,
+          })}
+          now={DETAIL_CARD_NOW}
+          selectedNode={selectedNode}
+          selection={{
+            dispatchId: dispatchID,
+            execution,
+            kind: "work-item",
+            nodeId: selectedNode.node_id,
+            workItem,
+          }}
+          workstationRequests={[dashboardWorkstationRequestFixtures.ready]}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const dispatchCard = within(
+      screen.getByRole("region", { name: "工作站分派" }),
+    )
+      .getByText("Active Story", { selector: "strong" })
+      .closest("article");
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected localized dispatch history card");
+    }
+
+    expect(within(dispatchCard).getByText("开始时间")).toBeTruthy();
+    expect(
+      within(getDetailRow(dispatchCard, "开始时间")).getByText(
+        formatLocalDateTime("2026-04-08T12:00:01Z", "不可用", "zh-CN"),
+      ),
+    ).toBeTruthy();
+    expect(within(dispatchCard).getByText("耗时")).toBeTruthy();
+    expect(
+      within(getDetailRow(dispatchCard, "耗时")).getByText(
+        formatDurationMillis(63_000, "zh-CN"),
+      ),
+    ).toBeTruthy();
+    expect(within(dispatchCard).queryByText("2026-04-08T12:00:01Z")).toBeNull();
   });
 });
 
@@ -1355,7 +1805,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(activeToggle.getAttribute("aria-expanded")).toBe("true");
     expect(historicalToggle.getAttribute("aria-expanded")).toBe("false");
     const expandedActiveAttempt = expandInferenceAttempt(activeSection, 1);
-    const activeRequestBody = expandAttemptBody(expandedActiveAttempt, "Request body");
+    const activeRequestBody = expandAttemptBody(
+      expandedActiveAttempt,
+      "Request body",
+    );
     expect(
       within(activeRequestBody).getByText("Active attempt prompt."),
     ).toBeTruthy();
@@ -1492,10 +1945,22 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(attemptCards).toHaveLength(2);
     expect(within(attemptCards[0]).getByText("Attempt 1")).toBeTruthy();
     expect(within(attemptCards[1]).getByText("Attempt 2")).toBeTruthy();
-    const firstAttemptCard = expandInferenceAttempt(inferenceAttemptsSection, 1);
-    const secondAttemptCard = expandInferenceAttempt(inferenceAttemptsSection, 2);
-    const secondRequestBody = expandAttemptBody(secondAttemptCard, "Request body");
-    const secondResponseBody = expandAttemptBody(secondAttemptCard, "Response body");
+    const firstAttemptCard = expandInferenceAttempt(
+      inferenceAttemptsSection,
+      1,
+    );
+    const secondAttemptCard = expandInferenceAttempt(
+      inferenceAttemptsSection,
+      2,
+    );
+    const secondRequestBody = expandAttemptBody(
+      secondAttemptCard,
+      "Request body",
+    );
+    const secondResponseBody = expandAttemptBody(
+      secondAttemptCard,
+      "Response body",
+    );
     expect(
       within(firstAttemptCard).getByText(`${dispatchID}/inference-request/1`),
     ).toBeTruthy();

@@ -112,7 +112,7 @@ function TranscriptEntryCard({
       ? messages.transcriptLineNumberLabel({ lineNumber: entry.lineNumber })
       : null,
   ].filter(Boolean);
-  const formattedTimestamp = formatTranscriptTimestamp(entry.timestamp, locale);
+  const timestampState = getTranscriptTimestampState(entry.timestamp, locale);
 
   return (
     <article
@@ -122,7 +122,7 @@ function TranscriptEntryCard({
         getTranscriptEntryClassName(entry.type),
       )}
     >
-      <div className="grid gap-2 md:grid-cols-[auto_minmax(0,1fr)] md:items-start md:gap-3">
+      <div className="grid gap-2">
         <span
           className={cn(
             "inline-flex w-fit rounded-full border px-2 py-0.5",
@@ -146,7 +146,7 @@ function TranscriptEntryCard({
               </span>
             ) : null}
           </div>
-          {metadata.length > 0 || formattedTimestamp ? (
+          {metadata.length > 0 || timestampState.label ? (
             <div className="grid gap-1">
               <div
                 className={cn(
@@ -157,15 +157,17 @@ function TranscriptEntryCard({
                 {metadata.map((item) => (
                   <span key={item}>{item}</span>
                 ))}
-                {formattedTimestamp ? (
-                  <span title={entry.timestamp}>{formattedTimestamp}</span>
+                {timestampState.label ? (
+                  <span title={timestampState.rawTimestamp ?? undefined}>
+                    {timestampState.label}
+                  </span>
                 ) : null}
               </div>
-              {entry.timestamp ? (
+              {timestampState.rawTimestamp ? (
                 <TimestampDetails
                   locale={locale}
-                  timestamp={entry.timestamp}
-                  title={formattedTimestamp}
+                  timestamp={timestampState.rawTimestamp}
+                  title={timestampState.label}
                 />
               ) : null}
             </div>
@@ -177,13 +179,38 @@ function TranscriptEntryCard({
   );
 }
 
-function formatTranscriptTimestamp(timestamp: string | undefined, locale?: string) {
-  if (!timestamp) {
+function getTranscriptTimestampState(timestamp: string | undefined, locale?: string) {
+  const messages = getProviderSessionDetailMessages(locale);
+  const normalizedTimestamp = normalizeValidTimestamp(timestamp);
+  if (!timestamp?.trim()) {
+    return {
+      label: messages.noTimestamp,
+      rawTimestamp: null,
+    };
+  }
+
+  if (!normalizedTimestamp) {
+    return {
+      label: messages.unavailableValue,
+      rawTimestamp: null,
+    };
+  }
+
+  return {
+    label: formatDateTime(normalizedTimestamp, locale, {
+      fallback: messages.unavailableValue,
+    }),
+    rawTimestamp: normalizedTimestamp,
+  };
+}
+
+function normalizeValidTimestamp(timestamp: string | undefined): string | null {
+  const normalizedTimestamp = timestamp?.trim();
+  if (!normalizedTimestamp) {
     return null;
   }
 
-  return formatDateTime(timestamp, locale, {
-  });
+  return Number.isNaN(Date.parse(normalizedTimestamp)) ? null : normalizedTimestamp;
 }
 
 function TimestampDetails({

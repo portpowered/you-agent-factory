@@ -5,6 +5,10 @@ import type {
   DashboardSnapshot,
   DashboardTrace,
 } from "../../../api/dashboard/types";
+import {
+  buildSelectedWorkRelationshipGraph,
+  type SelectedWorkRelationshipGraph,
+} from "../lib/selected-work-relationship-graph";
 import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import type { CurrentSelectionState } from "./useCurrentSelection";
@@ -21,6 +25,7 @@ export interface UseCurrentSelectionDetailsParams {
 
 export interface UseCurrentSelectionDetailsResult {
   selectedWorkExecutionDetails: SelectedWorkItemExecutionDetails | null;
+  selectedWorkRelationshipGraph: SelectedWorkRelationshipGraph;
 }
 
 export function useCurrentSelectionDetails({
@@ -59,7 +64,18 @@ export function useCurrentSelectionDetails({
     ],
   );
 
+  const selectedWorkRelationshipGraph = useMemo(
+    () =>
+      buildSelectedWorkRelationshipGraph({
+        selectedWorkItem:
+          selection?.kind === "work-item" ? selection.workItem : undefined,
+        snapshot,
+      }),
+    [selection, snapshot],
+  );
+
   return {
     selectedWorkExecutionDetails,
+    selectedWorkRelationshipGraph,
   };
 }
