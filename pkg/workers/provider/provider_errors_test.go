@@ -244,6 +244,47 @@ func TestClassifyProviderFailure_SharedCodexAndCursorCorpusEntriesFollowExpected
 	}
 }
 
+func TestNormalizeProviderExitFailure_CleanupHeavyCodexCorpusEntriesKeepTheDecisiveErrorLine(t *testing.T) {
+	testCases := []ProviderErrorCorpusEntry{
+		providerErrorCorpusEntryForTest(t, "codex_model_capacity_cleanup_noise"),
+		providerErrorCorpusEntryForTest(t, "codex_timeout_cleanup_noise"),
+	}
+
+	for _, entry := range testCases {
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			wantMessage := providerErrorCorpusLastErrorLine(t, entry)
+			if providerErr.Message != wantMessage {
+				t.Fatalf("%s normalized message = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Message, wantMessage)
+			}
+			for _, reject := range entry.RejectMessageContains {
+				if strings.Contains(providerErr.Message, reject) {
+					t.Fatalf("%s normalized message = %q, want decisive error line without %q", providerErrorCorpusEntryLabel(entry), providerErr.Message, reject)
+				}
+			}
+			if providerErr.Type != entry.ExpectedType {
+				t.Fatalf("%s normalized type = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Type, entry.ExpectedType)
+			}
+			if providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("%s normalized family = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Family, entry.ExpectedFamily)
+			}
+
+			decision := ClassifyProviderFailure(providerErr)
+			wantTerminal := !entry.Retryable
+			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf(
+					"%s decision = %#v, want retryable=%t terminal=%t throttlePause=%t",
+					providerErrorCorpusEntryLabel(entry),
+					decision,
+					entry.Retryable,
+					wantTerminal,
+					entry.TriggersThrottlePause,
+				)
+			}
+		})
+	}
+}
+
 func TestProviderErrorCorpus_ContainsSupportedCoverageForEachFailureCategory(t *testing.T) {
 	corpus := loadProviderErrorCorpusForTest(t)
 
