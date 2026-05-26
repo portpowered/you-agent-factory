@@ -39,6 +39,15 @@ jobs:
       areas: ${{ steps.classify.outputs.areas || steps.classify_push.outputs.areas }}
       changed_files_count: ${{ steps.classify.outputs.changed_files_count || steps.classify_push.outputs.changed_files_count }}
       reason: ${{ steps.classify.outputs.reason || steps.classify_push.outputs.reason }}
+      run_ui_coverage: ${{ steps.classify.outputs.run_ui_coverage || steps.classify_push.outputs.run_ui_coverage }}
+      ui_coverage_reason: ${{ steps.classify.outputs.ui_coverage_reason || steps.classify_push.outputs.ui_coverage_reason }}
+      ui_coverage_command: ${{ steps.classify.outputs.ui_coverage_command || steps.classify_push.outputs.ui_coverage_command }}
+      run_ui_browser_integration: ${{ steps.classify.outputs.run_ui_browser_integration || steps.classify_push.outputs.run_ui_browser_integration }}
+      ui_browser_integration_reason: ${{ steps.classify.outputs.ui_browser_integration_reason || steps.classify_push.outputs.ui_browser_integration_reason }}
+      ui_browser_integration_command: ${{ steps.classify.outputs.ui_browser_integration_command || steps.classify_push.outputs.ui_browser_integration_command }}
+      run_backend_verification: ${{ steps.classify.outputs.run_backend_verification || steps.classify_push.outputs.run_backend_verification }}
+      backend_verification_reason: ${{ steps.classify.outputs.backend_verification_reason || steps.classify_push.outputs.backend_verification_reason }}
+      backend_verification_command: ${{ steps.classify.outputs.backend_verification_command || steps.classify_push.outputs.backend_verification_command }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -72,6 +81,15 @@ jobs:
             echo "areas=shared-risk"
             echo "changed_files_count=0"
             echo "reason=Push events stay on the full shared-risk verification path."
+            echo "run_ui_coverage=true"
+            echo "ui_coverage_reason=Runs because shared-risk changes stay on the full verification safety path."
+            echo "ui_coverage_command=make test-ui-coverage"
+            echo "run_ui_browser_integration=true"
+            echo "ui_browser_integration_reason=Runs because shared-risk changes stay on the full verification safety path."
+            echo "ui_browser_integration_command=make ui-integration-test"
+            echo "run_backend_verification=true"
+            echo "backend_verification_reason=Runs because shared-risk changes stay on the full verification safety path."
+            echo "backend_verification_command=make test-backend-verification"
           } >> "$GITHUB_OUTPUT"
           {
             echo "## Pull request impact classification"
@@ -195,15 +213,30 @@ jobs:
   ui-coverage:
     name: UI Coverage
     runs-on: ubuntu-latest
-    needs: verify-build-contracts
+    needs:
+      - classify-pr-impact
+      - verify-build-contracts
     timeout-minutes: 40
     steps:
+      - name: Report lane routing
+        run: |
+          {
+            echo "## UI Coverage"
+            echo
+            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
+            echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_ui_coverage == 'true' && 'run' || 'skip' }}\`"
+            echo "- Local command: \`${{ needs.classify-pr-impact.outputs.ui_coverage_command }}\`"
+            echo "- Reason: ${{ needs.classify-pr-impact.outputs.ui_coverage_reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check out repository
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -211,16 +244,19 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Set up Bun for the dashboard workspace
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Set up Node for dashboard runtime
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Restore Bun package cache
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -229,25 +265,42 @@ jobs:
             ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
 
       - name: Install dashboard dependencies
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         timeout-minutes: 10
         run: make ui-deps
 
       - name: Run dashboard coverage lane
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         timeout-minutes: 30
         run: make test-ui-coverage
 
   ui-browser-integration:
     name: UI Browser Integration
     runs-on: ubuntu-latest
-    needs: verify-build-contracts
+    needs:
+      - classify-pr-impact
+      - verify-build-contracts
     timeout-minutes: 25
     steps:
+      - name: Report lane routing
+        run: |
+          {
+            echo "## UI Browser Integration"
+            echo
+            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
+            echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true' && 'run' || 'skip' }}\`"
+            echo "- Local command: \`${{ needs.classify-pr-impact.outputs.ui_browser_integration_command }}\`"
+            echo "- Reason: ${{ needs.classify-pr-impact.outputs.ui_browser_integration_reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check out repository
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -255,16 +308,19 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Set up Bun for the dashboard workspace
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Set up Node for dashboard runtime
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Restore Bun package cache
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -273,6 +329,7 @@ jobs:
             ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
 
       - name: Install dashboard dependencies
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         timeout-minutes: 10
         run: make ui-deps
 
@@ -284,25 +341,42 @@ jobs:
       # Playwright recommends against caching browser binaries in CI because restore
       # time is usually comparable to a fresh download on hosted runners.
       - name: Install Playwright browser for dashboard integration tests
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         timeout-minutes: 10
         run: make ui-install-playwright
 
       - name: Run dashboard browser integration suite
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         timeout-minutes: 15
         run: make ui-integration-test
 
   backend-verification:
     name: Backend Verification
     runs-on: ubuntu-latest
-    needs: verify-build-contracts
+    needs:
+      - classify-pr-impact
+      - verify-build-contracts
     timeout-minutes: 35
     steps:
+      - name: Report lane routing
+        run: |
+          {
+            echo "## Backend Verification"
+            echo
+            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
+            echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_backend_verification == 'true' && 'run' || 'skip' }}\`"
+            echo "- Local command: \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`"
+            echo "- Reason: ${{ needs.classify-pr-impact.outputs.backend_verification_reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check out repository
+        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
+        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -310,5 +384,6 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Run merged backend coverage and functional verification
+        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         timeout-minutes: 15
         run: make test-backend-verification

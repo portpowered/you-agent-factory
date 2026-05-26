@@ -103,6 +103,80 @@ func TestClassifyPathsMarksSharedRiskForCrossCuttingAndUnknownSurfaces(t *testin
 	}
 }
 
+func TestLanePlansRouteNarrowAndSharedRiskClassifications(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name           string
+		classification string
+		wantRuns       map[string]bool
+	}{
+		{
+			name:           "docs-only",
+			classification: classificationDocsOnly,
+			wantRuns: map[string]bool{
+				"UI Coverage":            false,
+				"UI Browser Integration": false,
+				"Backend Verification":   false,
+			},
+		},
+		{
+			name:           "ui-only",
+			classification: classificationUIOnly,
+			wantRuns: map[string]bool{
+				"UI Coverage":            true,
+				"UI Browser Integration": true,
+				"Backend Verification":   false,
+			},
+		},
+		{
+			name:           "backend-only",
+			classification: classificationBackendOnly,
+			wantRuns: map[string]bool{
+				"UI Coverage":            false,
+				"UI Browser Integration": false,
+				"Backend Verification":   true,
+			},
+		},
+		{
+			name:           "shared-risk",
+			classification: classificationSharedRisk,
+			wantRuns: map[string]bool{
+				"UI Coverage":            true,
+				"UI Browser Integration": true,
+				"Backend Verification":   true,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			plans := lanePlans(tc.classification)
+			if len(plans) != len(tc.wantRuns) {
+				t.Fatalf("lanePlans(%q) returned %d plans, want %d", tc.classification, len(plans), len(tc.wantRuns))
+			}
+			for _, plan := range plans {
+				want, ok := tc.wantRuns[plan.Name]
+				if !ok {
+					t.Fatalf("unexpected lane plan %q", plan.Name)
+				}
+				if plan.ShouldRun != want {
+					t.Fatalf("lane %q shouldRun = %t, want %t", plan.Name, plan.ShouldRun, want)
+				}
+				if plan.Command == "" {
+					t.Fatalf("lane %q command was empty", plan.Name)
+				}
+				if plan.Reason == "" {
+					t.Fatalf("lane %q reason was empty", plan.Name)
+				}
+			}
+		})
+	}
+}
+
 func TestRunWritesGitHubOutputsAndSummary(t *testing.T) {
 	tempDir := t.TempDir()
 	changedFilesPath := filepath.Join(tempDir, "changed-files.txt")
@@ -148,6 +222,15 @@ func TestRunWritesGitHubOutputsAndSummary(t *testing.T) {
 	if !strings.Contains(output, "changed_files_count=2") {
 		t.Fatalf("GitHub output = %q, want deduplicated changed file count", output)
 	}
+	if !strings.Contains(output, "run_ui_coverage=true") {
+		t.Fatalf("GitHub output = %q, want UI coverage route output", output)
+	}
+	if !strings.Contains(output, "run_backend_verification=false") {
+		t.Fatalf("GitHub output = %q, want backend verification route output", output)
+	}
+	if !strings.Contains(output, "backend_verification_reason=Skipped because UI-only changes do not require backend verification.") {
+		t.Fatalf("GitHub output = %q, want backend skip reason", output)
+	}
 
 	summaryBytes, err := os.ReadFile(summaryPath)
 	if err != nil {
@@ -159,6 +242,12 @@ func TestRunWritesGitHubOutputsAndSummary(t *testing.T) {
 	}
 	if !strings.Contains(summary, "- Classification: `ui-only`") {
 		t.Fatalf("GitHub summary = %q, want classification bullet", summary)
+	}
+	if !strings.Contains(summary, "### Required lane routing") {
+		t.Fatalf("GitHub summary = %q, want lane routing section", summary)
+	}
+	if !strings.Contains(summary, "- `Backend Verification`: `skip` via `make test-backend-verification`") {
+		t.Fatalf("GitHub summary = %q, want backend skip line", summary)
 	}
 	if !strings.Contains(summary, "- `ui/src/App.tsx`") {
 		t.Fatalf("GitHub summary = %q, want changed file list", summary)

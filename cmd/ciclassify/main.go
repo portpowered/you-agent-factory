@@ -39,6 +39,13 @@ type classificationResult struct {
 	Reason         string
 }
 
+type lanePlan struct {
+	Name      string
+	Command   string
+	ShouldRun bool
+	Reason    string
+}
+
 func main() {
 	cfg := parseConfig()
 	if err := run(cfg, stdoutWriter, stderrWriter); err != nil {
@@ -236,6 +243,102 @@ func writeStdoutSummary(stdout io.Writer, result classificationResult) {
 	fmt.Fprintf(stdout, "areas=%s\n", strings.Join(result.Areas, ","))
 	fmt.Fprintf(stdout, "changed_files=%d\n", len(result.ChangedPaths))
 	fmt.Fprintf(stdout, "reason=%s\n", result.Reason)
+	for _, plan := range lanePlans(result.Classification) {
+		fmt.Fprintf(stdout, "lane_%s=%t\n", githubOutputKey(plan.Name), plan.ShouldRun)
+	}
+}
+
+func lanePlans(classification string) []lanePlan {
+	switch classification {
+	case classificationDocsOnly:
+		return []lanePlan{
+			{
+				Name:      "UI Coverage",
+				Command:   "make test-ui-coverage",
+				ShouldRun: false,
+				Reason:    "Skipped because documentation-only changes do not require UI coverage.",
+			},
+			{
+				Name:      "UI Browser Integration",
+				Command:   "make ui-integration-test",
+				ShouldRun: false,
+				Reason:    "Skipped because documentation-only changes do not require UI browser integration.",
+			},
+			{
+				Name:      "Backend Verification",
+				Command:   "make test-backend-verification",
+				ShouldRun: false,
+				Reason:    "Skipped because documentation-only changes do not require backend verification.",
+			},
+		}
+	case classificationUIOnly:
+		return []lanePlan{
+			{
+				Name:      "UI Coverage",
+				Command:   "make test-ui-coverage",
+				ShouldRun: true,
+				Reason:    "Runs because UI-only changes still require the owned UI coverage lane.",
+			},
+			{
+				Name:      "UI Browser Integration",
+				Command:   "make ui-integration-test",
+				ShouldRun: true,
+				Reason:    "Runs because UI-only changes still require browser-backed UI verification.",
+			},
+			{
+				Name:      "Backend Verification",
+				Command:   "make test-backend-verification",
+				ShouldRun: false,
+				Reason:    "Skipped because UI-only changes do not require backend verification.",
+			},
+		}
+	case classificationBackendOnly:
+		return []lanePlan{
+			{
+				Name:      "UI Coverage",
+				Command:   "make test-ui-coverage",
+				ShouldRun: false,
+				Reason:    "Skipped because backend-only changes do not require UI coverage.",
+			},
+			{
+				Name:      "UI Browser Integration",
+				Command:   "make ui-integration-test",
+				ShouldRun: false,
+				Reason:    "Skipped because backend-only changes do not require UI browser integration.",
+			},
+			{
+				Name:      "Backend Verification",
+				Command:   "make test-backend-verification",
+				ShouldRun: true,
+				Reason:    "Runs because backend-only changes still require backend verification.",
+			},
+		}
+	default:
+		return []lanePlan{
+			{
+				Name:      "UI Coverage",
+				Command:   "make test-ui-coverage",
+				ShouldRun: true,
+				Reason:    "Runs because shared-risk changes stay on the full verification safety path.",
+			},
+			{
+				Name:      "UI Browser Integration",
+				Command:   "make ui-integration-test",
+				ShouldRun: true,
+				Reason:    "Runs because shared-risk changes stay on the full verification safety path.",
+			},
+			{
+				Name:      "Backend Verification",
+				Command:   "make test-backend-verification",
+				ShouldRun: true,
+				Reason:    "Runs because shared-risk changes stay on the full verification safety path.",
+			},
+		}
+	}
+}
+
+func githubOutputKey(name string) string {
+	return strings.NewReplacer(" ", "_", "-", "_").Replace(strings.ToLower(name))
 }
 
 func writeGitHubOutput(result classificationResult) error {
@@ -244,7 +347,7 @@ func writeGitHubOutput(result classificationResult) error {
 		return nil
 	}
 
-	content := strings.Join([]string{
+	lines := []string{
 		fmt.Sprintf("classification=%s", result.Classification),
 		fmt.Sprintf("docs_only=%t", result.Classification == classificationDocsOnly),
 		fmt.Sprintf("ui_only=%t", result.Classification == classificationUIOnly),
@@ -254,9 +357,17 @@ func writeGitHubOutput(result classificationResult) error {
 		fmt.Sprintf("areas=%s", strings.Join(result.Areas, ",")),
 		fmt.Sprintf("changed_files_count=%d", len(result.ChangedPaths)),
 		fmt.Sprintf("reason=%s", sanitizeGitHubValue(result.Reason)),
-		"",
-	}, "\n")
-	return appendFile(outputPath, content, "write GitHub output")
+	}
+	for _, plan := range lanePlans(result.Classification) {
+		key := githubOutputKey(plan.Name)
+		lines = append(lines,
+			fmt.Sprintf("run_%s=%t", key, plan.ShouldRun),
+			fmt.Sprintf("%s_reason=%s", key, sanitizeGitHubValue(plan.Reason)),
+			fmt.Sprintf("%s_command=%s", key, plan.Command),
+		)
+	}
+	lines = append(lines, "")
+	return appendFile(outputPath, strings.Join(lines, "\n"), "write GitHub output")
 }
 
 func writeGitHubStepSummary(result classificationResult) error {
@@ -272,6 +383,15 @@ func writeGitHubStepSummary(result classificationResult) error {
 		fmt.Sprintf("- Areas touched: `%s`", strings.Join(result.Areas, ", ")),
 		fmt.Sprintf("- Changed files: `%d`", len(result.ChangedPaths)),
 		fmt.Sprintf("- Reason: %s", result.Reason),
+	}
+	lines = append(lines, "", "### Required lane routing")
+	for _, plan := range lanePlans(result.Classification) {
+		decision := "skip"
+		if plan.ShouldRun {
+			decision = "run"
+		}
+		lines = append(lines, fmt.Sprintf("- `%s`: `%s` via `%s`", plan.Name, decision, plan.Command))
+		lines = append(lines, fmt.Sprintf("  %s", plan.Reason))
 	}
 	if len(result.ChangedPaths) > 0 {
 		lines = append(lines, "", "### Changed files")
