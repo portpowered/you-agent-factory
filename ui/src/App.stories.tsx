@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { App } from "./App";
 import type { FactoryValue } from "./api/named-factory";
@@ -8,6 +9,10 @@ import {
 } from "./components/dashboard/test-fixtures";
 import { formatTimeOfDay } from "./components/ui/formatters";
 import { DashboardScreen } from "./features/dashboard/public";
+import {
+  resetSelectionHistoryStore,
+  useSelectionHistoryStore,
+} from "./features/current-selection/state/selectionHistoryStore";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
 import {
   activeStoryTrace,
@@ -99,25 +104,29 @@ function buildEditableConfigurationDocument(
   };
 }
 
-function submittedFactoryDefinitionBody(init?: RequestInit): FactoryValue {
+function submittedFactoryDefinitionDocument(init?: RequestInit) {
   if (typeof init?.body !== "string") {
-    return buildEditableConfigurationFactoryDefinition({
-      prompt: "Browser verified prompt update.",
-      workerName: "planner",
-    });
+    return buildEditableConfigurationDocument(
+      buildEditableConfigurationFactoryDefinition({
+        prompt: "Browser verified prompt update.",
+        workerName: "planner",
+      }),
+    );
   }
 
   const requestBody = JSON.parse(init.body) as Record<string, unknown>;
   const { version: _ignoredVersion, ...factoryDefinition } = requestBody;
 
   if (typeof factoryDefinition.name === "string") {
-    return factoryDefinition as FactoryValue;
+    return buildEditableConfigurationDocument(factoryDefinition as FactoryValue);
   }
 
-  return buildEditableConfigurationFactoryDefinition({
-    prompt: "Browser verified prompt update.",
-    workerName: "planner",
-  });
+  return buildEditableConfigurationDocument(
+    buildEditableConfigurationFactoryDefinition({
+      prompt: "Browser verified prompt update.",
+      workerName: "planner",
+    }),
+  );
 }
 
 function promptTemplateValidationResponse(init?: RequestInit) {
@@ -169,6 +178,20 @@ async function delayedValidPromptTemplateValidationMock() {
   };
 }
 
+async function delayedSaveCurrentFactoryDocumentMock(
+  _input: RequestInfo | URL,
+  init?: RequestInit,
+) {
+  await new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 25);
+  });
+
+  return {
+    body: submittedFactoryDefinitionDocument(init),
+    status: 200,
+  };
+}
+
 function editableConfigurationSection(
   currentSelection: HTMLElement,
 ): HTMLElement {
@@ -195,7 +218,7 @@ async function expectSingleEditableConfigurationSection(
   return editableConfigurationSection(currentSelection);
 }
 
-async function expectEditableConfigurationBrowserFlow(
+async function prepareEditableConfigurationReadyToSave(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
@@ -273,6 +296,14 @@ async function expectEditableConfigurationBrowserFlow(
   });
   await expect(workerField).toHaveValue("planner");
   await expect(promptField).toHaveValue("Browser verified prompt update.");
+}
+
+async function expectEditableConfigurationBrowserFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+
+  await prepareEditableConfigurationReadyToSave(canvasElement);
 
   await userEvent.click(
     await canvas.findByRole("button", {
@@ -364,6 +395,29 @@ async function expectFactoryGraphHeaderBrowserFlow(
     }),
   );
   await expect(headerScope.getByText("Observe mode")).toBeVisible();
+}
+
+function CurrentSelectionEditableConfigurationSaveStory() {
+  useEffect(() => {
+    const reviewNodeID =
+      semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review
+        .node_id;
+
+    useSelectionHistoryStore.setState({
+      future: [],
+      past: [],
+      present: {
+        selection: { kind: "node", nodeId: reviewNodeID },
+        terminalWorkDetail: null,
+      },
+    });
+
+    return () => {
+      resetSelectionHistoryStore();
+    };
+  }, []);
+
+  return <App />;
 }
 
 async function expectPromptHintBrowserFlow(
@@ -864,12 +918,9 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
           response: delayedValidPromptTemplateValidationMock,
         },
         {
-          method: "POST",
-          path: "/factories",
-          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
-            body: submittedFactoryDefinitionBody(init),
-            status: 201,
-          }),
+          method: "PUT",
+          path: "/factory-sessions/~default/factory",
+          response: delayedSaveCurrentFactoryDocumentMock,
         },
       ],
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -904,12 +955,9 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
           response: delayedValidPromptTemplateValidationMock,
         },
         {
-          method: "POST",
-          path: "/factories",
-          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
-            body: submittedFactoryDefinitionBody(init),
-            status: 201,
-          }),
+          method: "PUT",
+          path: "/factory-sessions/~default/factory",
+          response: delayedSaveCurrentFactoryDocumentMock,
         },
       ],
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -926,6 +974,72 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
     await expectEditableConfigurationBrowserFlow(canvasElement);
     expectNoPageHorizontalOverflow(canvasElement);
   },
+};
+
+export const CurrentSelectionEditableConfigurationSaveDesktopVerification = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/~default/factory",
+          response: {
+            body: editableConfigurationDocument,
+          },
+        },
+        {
+          method: "POST",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
+          response: delayedValidPromptTemplateValidationMock,
+        },
+        {
+          method: "PUT",
+          path: "/factory-sessions/~default/factory",
+          response: delayedSaveCurrentFactoryDocumentMock,
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "1280px" }}>
+      <CurrentSelectionEditableConfigurationSaveStory />
+    </div>
+  ),
+  tags: ["test"],
+};
+
+export const CurrentSelectionEditableConfigurationSaveNarrowVerification = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/~default/factory",
+          response: {
+            body: editableConfigurationDocument,
+          },
+        },
+        {
+          method: "POST",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
+          response: delayedValidPromptTemplateValidationMock,
+        },
+        {
+          method: "PUT",
+          path: "/factory-sessions/~default/factory",
+          response: delayedSaveCurrentFactoryDocumentMock,
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "360px" }}>
+      <CurrentSelectionEditableConfigurationSaveStory />
+    </div>
+  ),
+  tags: ["test"],
 };
 
 export const CurrentSelectionPromptHintVerification = {
@@ -955,12 +1069,9 @@ export const CurrentSelectionPromptHintVerification = {
           }),
         },
         {
-          method: "POST",
-          path: "/factories",
-          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
-            body: submittedFactoryDefinitionBody(init),
-            status: 201,
-          }),
+          method: "PUT",
+          path: "/factory-sessions/~default/factory",
+          response: delayedSaveCurrentFactoryDocumentMock,
         },
       ],
       snapshot: semanticWorkflowDashboardSnapshot,

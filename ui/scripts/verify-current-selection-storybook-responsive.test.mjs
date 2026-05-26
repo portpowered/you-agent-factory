@@ -8,6 +8,7 @@ import {
 function createVisibleLocator(label, overrides = {}) {
   return {
     count: vi.fn().mockResolvedValue(1),
+    evaluate: vi.fn().mockResolvedValue(undefined),
     fill: vi.fn().mockResolvedValue(undefined),
     first: vi.fn(function first() {
       return this;
