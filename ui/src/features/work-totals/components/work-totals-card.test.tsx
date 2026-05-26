@@ -30,7 +30,8 @@ describe("WorkTotalsCard", () => {
     });
 
     expect(screen.getByRole("heading", { name: "Work totals" })).toBeTruthy();
-    expect(workTotals.className).toContain("md:grid-cols-4");
+    expect(workTotals.className).toContain("grid-cols-2");
+    expect(workTotals.className).not.toContain("md:grid-cols-4");
     expect(cardHeader?.className).toContain("min-h-11");
     expect(cardHeader?.className).toContain("px-3");
     expect(moveHandle.className).toContain("h-10");

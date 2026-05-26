@@ -75,11 +75,11 @@ export interface SubmitWorkCardProps {
   widgetId?: string;
 }
 
-const FORM_CLASS = "grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-4";
+const FORM_CLASS = "grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3";
 const FORM_FIELDS_CLASS = "grid min-h-0 content-start gap-4 overflow-y-auto pb-2 pr-1";
 const FIELD_GROUP_CLASS = "grid gap-2";
 const FIELD_LABEL_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
-const ACTION_ROW_CLASS = "flex items-start gap-3";
+const ACTION_ROW_CLASS = "mt-auto grid gap-3";
 const HELP_TEXT_CLASS = cn(
   "max-w-xl leading-relaxed text-af-text-muted",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -258,7 +258,7 @@ export function SubmitWorkCard({
           </p>
           <Button
             aria-busy={isSubmitting ? "true" : undefined}
-            className="ml-auto shrink-0 self-start"
+            className="w-full justify-center self-start"
             disabled={!canSubmit}
             tone={canSubmit ? "default" : "outline"}
             type="submit"

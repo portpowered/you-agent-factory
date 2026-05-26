@@ -18,7 +18,7 @@ export function WorkOutcomeWidget({
 }: WorkOutcomeWidgetProps) {
   return (
     <WorkChartCard
-      className="min-h-72"
+      className="h-full min-h-0"
       headerAction={headerAction}
       locale={locale}
       model={model}

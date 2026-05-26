@@ -116,7 +116,7 @@ function requireValue<T>(value: T | null | undefined, message: string): T {
   return value;
 }
 
-describe("TraceGridBentoCard", () => {
+function useBrowserShimsForTraceGridTests() {
   let restoreBrowserShims: (() => void) | undefined;
 
   beforeEach(() => {
@@ -128,6 +128,10 @@ describe("TraceGridBentoCard", () => {
     restoreBrowserShims?.();
     restoreBrowserShims = undefined;
   });
+}
+
+describe("TraceGridBentoCard ready state", () => {
+  useBrowserShimsForTraceGridTests();
 
   it("renders populated trace data as a bento card table", () => {
     const onSelectWorkID = vi.fn();
@@ -167,6 +171,10 @@ describe("TraceGridBentoCard", () => {
     expect(dispatchPill.className).toContain("py-0.5");
     expect(within(card).getByText("Accepted · 1s")).toBeTruthy();
     expect(within(card).getByText("Accepted · 2s")).toBeTruthy();
+    const tableScroller = card.querySelector(".overscroll-x-contain");
+    expect(tableScroller?.className).toContain("overflow-x-auto");
+    expect(tableScroller?.className).toContain("overscroll-x-contain");
+    expect(table.className).toContain("min-w-[640px]");
     const workItemsSection = within(card)
       .getAllByText("Work items")[0]
       ?.closest("div");
@@ -193,6 +201,12 @@ describe("TraceGridBentoCard", () => {
     expect(within(card).queryByRole("columnheader", { name: "Workstation run" })).toBeNull();
     fireEvent.click(within(card).getAllByRole("button", { name: 'story:"Active Story"' })[0]);
     expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story");
+    const traceIDSection = within(card)
+      .getByText("Trace ID")
+      .closest("div");
+    expect(traceIDSection?.querySelector("dd")?.className).toContain(
+      "[overflow-wrap:anywhere]",
+    );
 
     rerender(
       <TraceGridBentoCard
@@ -203,6 +217,10 @@ describe("TraceGridBentoCard", () => {
 
     expect(within(card).getByRole("region", { name: "Batch relation graph" })).toBeTruthy();
   });
+});
+
+describe("TraceGridBentoCard state handling", () => {
+  useBrowserShimsForTraceGridTests();
 
   it("renders explicit empty, loading, and error states", () => {
     const { container, rerender } = render(
@@ -220,6 +238,10 @@ describe("TraceGridBentoCard", () => {
     expect(screen.getByText("Trace lookup failed")).toBeTruthy();
     expect(screen.getByText("network failed")).toBeTruthy();
   });
+});
+
+describe("TraceGridBentoCard localization", () => {
+  useBrowserShimsForTraceGridTests();
 
   it("renders zh-CN trace shell labels and graph regions", () => {
     render(

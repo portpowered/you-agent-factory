@@ -71,14 +71,15 @@ const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
   "flex min-h-13 cursor-move items-center justify-between gap-3 border-af-border px-3.5 py-3";
 const BENTO_CARD_HEADER_COMPACT_CLASS =
-  "min-h-11 gap-2 px-3 py-2.5";
+  "min-h-11 flex-wrap items-start gap-2 px-3 py-2.5";
 const BENTO_CARD_TITLE_CLASS = cn(
-  "m-0 [overflow-wrap:anywhere]",
+  "m-0 min-w-0 flex-1 [overflow-wrap:anywhere]",
   DASHBOARD_SECTION_HEADING_CLASS,
 );
 const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
-const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS = "gap-1.5";
+const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS =
+  "w-full flex-wrap justify-between gap-1.5 sm:w-auto sm:justify-end";
 const BENTO_DRAG_HANDLE_CLASS =
   "cursor-grab text-af-text-muted hover:text-af-text active:cursor-grabbing";
 const BENTO_CARD_BODY_CLASS = cn(

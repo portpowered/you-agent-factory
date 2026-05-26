@@ -51,7 +51,7 @@ const TRACE_EXPANDER_HEADER_CLASS =
 const TRACE_EXPANDER_TOGGLE_CLASS = "min-h-9 shrink-0 px-2.5 py-2";
 const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-48";
 // tailwind-exception: intrinsic-sizing
-const TRACE_GRID_TABLE_CLASS = "min-w-[860px]";
+const TRACE_GRID_TABLE_CLASS = "min-w-[640px]";
 const TRACE_WORK_ITEM_BUTTON_CLASS = cn(
   "h-auto min-h-0 justify-start border-af-accent-border bg-af-accent-surface px-2.5 py-1.5 text-left text-af-accent",
   DASHBOARD_SUPPORTING_CODE_CLASS,
@@ -175,7 +175,9 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
       >
         <div>
           <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.traceIdLabel}</dt>
-          <dd>{trace.trace_id || messages.unavailableValue}</dd>
+          <dd className="[overflow-wrap:anywhere]">
+            {trace.trace_id || messages.unavailableValue}
+          </dd>
         </div>
         <div>
           <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.dispatchFlowLabel}</dt>
@@ -234,7 +236,9 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
         </div>
         <div>
           <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.requestIdsLabel}</dt>
-          <dd>{trace.request_ids?.join(", ") || messages.unavailableValue}</dd>
+          <dd className="[overflow-wrap:anywhere]">
+            {trace.request_ids?.join(", ") || messages.unavailableValue}
+          </dd>
         </div>
         <div>
           <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.batchRelationsLabel}</dt>
@@ -253,7 +257,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
       </dl>
 
       {trace.dispatches.length > 0 ? (
-        <div className="min-w-0 overflow-x-auto">
+        <div className="min-w-0 overflow-x-auto overscroll-x-contain">
           <Table className={cn(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}>
             <TableCaption className={cn("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
               {messages.tableCaption}
