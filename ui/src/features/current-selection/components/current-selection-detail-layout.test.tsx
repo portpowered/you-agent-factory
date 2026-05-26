@@ -47,7 +47,7 @@ describe("SelectionDetailLayout shell copy", () => {
     ).toContain("rounded-lg");
     expect(
       screen.getByRole("button", { name: "Undo selection" }).className,
-    ).toContain("min-h-10");
+    ).toContain("min-h-11");
     const actions = screen
       .getByRole("button", { name: "Undo selection" })
       .closest("[data-dashboard-action-row-section='actions']");
