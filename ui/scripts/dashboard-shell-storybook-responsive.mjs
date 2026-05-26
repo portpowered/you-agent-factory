@@ -100,6 +100,9 @@ export async function verifyDashboardShellConsolidation(
     name: "Timeline tick",
   });
   const timelineStatus = toolbar.getByText(/^\d+\/\d+$/);
+  const sessionStreamToggle = toolbar.getByRole("button", {
+    name: /(Pause|Resume) .* updates/,
+  });
   const moveButton = board.getByRole("button", {
     exact: true,
     name: "Move Work totals",
@@ -110,6 +113,7 @@ export async function verifyDashboardShellConsolidation(
   await expectVisible(headerExportButton, "Dashboard export button");
   await expectVisible(timelineSlider, "Timeline slider");
   await expectVisible(timelineStatus, "Timeline status");
+  await expectVisible(sessionStreamToggle, "Dashboard session stream toggle");
   await expectVisible(moveButton, "Work totals move button");
   if ((await toolbar.getByRole("status", { name: /Event stream/i }).count()) > 0) {
     throw new Error(

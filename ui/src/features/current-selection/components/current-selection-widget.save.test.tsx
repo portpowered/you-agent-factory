@@ -635,6 +635,51 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     ).not.toBeNull();
   });
 
+  it("disables overwrite confirmation while saving so the workstation action cannot double-submit", async () => {
+    const deferredSave = createDeferredPromise<CurrentFactoryDocument>();
+    saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
+
+    renderWorkstationSelection();
+    expandEditableConfiguration();
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Save this prompt once while the request is pending." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    const confirmButton = screen.getByRole("button", {
+      name: "Overwrite factory",
+    });
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
+    });
+    const saveDialog = screen.getByRole("dialog", {
+      name: "Overwrite the running factory definition?",
+    });
+    expect(
+      within(saveDialog).getByRole("button", { name: "Saving..." }).disabled,
+    ).toBe(true);
+
+    fireEvent.click(within(saveDialog).getByRole("button", { name: "Saving..." }));
+    expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
+
+    deferredSave.resolve(
+      buildEditableFactoryDefinition({
+        prompt: "Save this prompt once while the request is pending.",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+        ),
+      ).toBeTruthy();
+    });
+  });
+
   it("clears saved feedback after switching to another workstation and returning", async () => {
     const savedFactory = buildMultiWorkstationEditableFactoryDefinition({
       reviewPrompt: "Review the saved factory before approval.",

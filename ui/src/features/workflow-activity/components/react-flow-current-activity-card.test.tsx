@@ -1929,7 +1929,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     ).toBeTruthy();
   });
 
-  it("keeps only the outer card padding while preserving the current activity region semantics", () => {
+  it("preserves the lean outer card shell while keeping the current activity region semantics", () => {
     const legendMessages = getDashboardFlowAxisLegendMessages("en");
 
     renderCurrentActivity({
@@ -1947,8 +1947,10 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
       name: "Work graph viewport",
     });
 
-    expect(card?.className).toContain("p-3");
-    expect(card?.className).toContain("sm:p-4");
+    expect(card?.className).toContain("relative");
+    expect(card?.className).toContain("flex");
+    expect(card?.className).toContain("h-full");
+    expect(card?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
     ).toBeTruthy();

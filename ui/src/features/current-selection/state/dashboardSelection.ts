@@ -75,7 +75,11 @@ export function resolveDashboardSelection({
   }
 
   if (selection.kind === "work-item") {
-    return resolveWorkItemSelection(snapshot, selection);
+    return resolveWorkItemSelection(
+      snapshot,
+      selection,
+      workstationRequestsByDispatchID,
+    );
   }
 
   return resolveWorkstationRequestSelection(
@@ -108,27 +112,181 @@ function hasStatePlace(snapshot: DashboardSnapshot, placeId: string): boolean {
 function resolveWorkItemSelection(
   snapshot: DashboardSnapshot,
   selection: DashboardWorkItemSelection,
+  workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>,
 ): DashboardSelection | null {
+  const currentWorkID = selection.workItem.work_id;
   const currentExecution =
     selection.dispatchId === undefined
       ? undefined
       : snapshot.runtime.active_executions_by_dispatch_id?.[selection.dispatchId];
-  const currentWorkItem =
-    currentExecution?.work_items?.find(
-      (workItem) => workItem.work_id === selection.workItem.work_id,
-    ) ?? findWorkItemReference(snapshot, selection.workItem.work_id);
+  const currentWorkItem = findWorkItemReference(snapshot, currentWorkID);
+  const resolvedSelection =
+    selectionFromExecution(currentExecution, currentWorkID) ??
+    findAnyActiveExecutionSelection(snapshot, currentWorkID) ??
+    findRetainedRequestSelection(
+      snapshot,
+      currentWorkID,
+      workstationRequestsByDispatchID,
+    ) ??
+    findFailedWorkSelection(snapshot, currentWorkID) ??
+    findTrackedWorkSelection(snapshot, currentWorkID, currentWorkItem) ??
+    findProviderWorkSelection(snapshot, currentWorkID);
+  if (resolvedSelection) {
+    return resolvedSelection;
+  }
+
   if (!currentWorkItem) {
     return snapshot.topology.workstation_nodes_by_id[selection.nodeId]
       ? { kind: "node", nodeId: selection.nodeId }
       : selectDefaultSelection(snapshot);
   }
 
+  return snapshot.topology.workstation_nodes_by_id[selection.nodeId]
+    ? {
+        dispatchId: selection.dispatchId,
+        execution: currentExecution,
+        kind: "work-item",
+        nodeId: selection.nodeId,
+        workItem: currentWorkItem,
+      }
+    : selectDefaultSelection(snapshot);
+}
+
+function selectionFromExecution(
+  execution: DashboardActiveExecution | undefined,
+  workID: string,
+): DashboardWorkItemSelection | null {
+  const workItem = execution?.work_items?.find(
+    (candidate) => candidate.work_id === workID,
+  );
+  if (!execution || !workItem) {
+    return null;
+  }
+
   return {
-    dispatchId: currentExecution?.dispatch_id ?? selection.dispatchId,
-    execution: currentExecution,
+    dispatchId: execution.dispatch_id,
+    execution,
     kind: "work-item",
-    nodeId: selection.nodeId,
-    workItem: currentWorkItem,
+    nodeId: execution.workstation_node_id,
+    workItem,
+  };
+}
+
+function findAnyActiveExecutionSelection(
+  snapshot: DashboardSnapshot,
+  workID: string,
+): DashboardWorkItemSelection | null {
+  const execution = Object.values(
+    snapshot.runtime.active_executions_by_dispatch_id ?? {},
+  ).find((candidate) =>
+    candidate.work_items?.some((workItem) => workItem.work_id === workID),
+  );
+
+  return selectionFromExecution(execution, workID);
+}
+
+function findRetainedRequestSelection(
+  snapshot: DashboardSnapshot,
+  workID: string,
+  workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>,
+): DashboardWorkItemSelection | null {
+  const retainedRequest =
+    findWorkstationRequestForWork(
+      workstationRequestsByDispatchID,
+      workID,
+    ) ??
+    findWorkstationRequestForWork(
+      snapshot.runtime.workstation_requests_by_dispatch_id,
+      workID,
+    );
+  const nodeID = retainedRequest
+    ? resolveRetainedRequestNodeID(snapshot, retainedRequest)
+    : undefined;
+  const workItem = retainedRequest
+    ? workItemsFromRetainedRequest(retainedRequest).find(
+        (candidate) => candidate.work_id === workID,
+      )
+    : undefined;
+  if (!retainedRequest || !nodeID || !workItem) {
+    return null;
+  }
+
+  return {
+    dispatchId: retainedRequest.dispatch_id,
+    kind: "work-item",
+    nodeId: nodeID,
+    workItem,
+  };
+}
+
+function findFailedWorkSelection(
+  snapshot: DashboardSnapshot,
+  workID: string,
+): DashboardWorkItemSelection | null {
+  const failedDetail =
+    snapshot.runtime.session.failed_work_details_by_work_id?.[workID];
+  const nodeID = failedDetail
+    ? resolveTransitionNodeID(
+        snapshot,
+        failedDetail.transition_id,
+        failedDetail.workstation_name,
+      )
+    : undefined;
+  if (!failedDetail || !nodeID) {
+    return null;
+  }
+
+  return {
+    dispatchId: failedDetail.dispatch_id,
+    kind: "work-item",
+    nodeId: nodeID,
+    workItem: failedDetail.work_item,
+  };
+}
+
+function findTrackedWorkSelection(
+  snapshot: DashboardSnapshot,
+  workID: string,
+  workItem: DashboardWorkItemRef | undefined,
+): DashboardWorkItemSelection | null {
+  const nodeID = findTrackedWorkNodeID(snapshot, workID);
+  if (!nodeID || !workItem) {
+    return null;
+  }
+
+  return {
+    kind: "work-item",
+    nodeId: nodeID,
+    workItem,
+  };
+}
+
+function findProviderWorkSelection(
+  snapshot: DashboardSnapshot,
+  workID: string,
+): DashboardWorkItemSelection | null {
+  const providerAttempt = snapshot.runtime.session.provider_sessions?.find((attempt) =>
+    attempt.work_items?.some((workItem) => workItem.work_id === workID),
+  );
+  const nodeID = providerAttempt
+    ? resolveTransitionNodeID(
+        snapshot,
+        providerAttempt.transition_id,
+        providerAttempt.workstation_name,
+      )
+    : undefined;
+  const workItem = providerAttempt?.work_items?.find(
+    (candidate) => candidate.work_id === workID,
+  );
+  if (!providerAttempt || !nodeID || !workItem) {
+    return null;
+  }
+
+  return {
+    dispatchId: providerAttempt.dispatch_id,
+    kind: "work-item",
+    nodeId: nodeID,
+    workItem,
   };
 }
 
@@ -233,4 +391,70 @@ function workItemsFromRetainedRequest(
     ...(projectedResponseView?.output_work_items ?? []),
     ...(projectedWorkItems ?? []),
   ];
+}
+
+function findTrackedWorkNodeID(
+  snapshot: DashboardSnapshot,
+  workID: string,
+): string | undefined {
+  for (const [placeID, workItems] of Object.entries(
+    snapshot.runtime.current_work_items_by_place_id ?? {},
+  )) {
+    if (workItems.some((workItem) => workItem.work_id === workID)) {
+      return findWorkstationNodeIDForPlace(snapshot, placeID);
+    }
+  }
+
+  for (const [placeID, workItems] of Object.entries(
+    snapshot.runtime.place_occupancy_work_items_by_place_id ?? {},
+  )) {
+    if (workItems.some((workItem) => workItem.work_id === workID)) {
+      return findWorkstationNodeIDForPlace(snapshot, placeID);
+    }
+  }
+
+  return undefined;
+}
+
+function findWorkstationRequestForWork(
+  workstationRequestsByDispatchID:
+    | Record<string, DashboardRuntimeWorkstationRequest>
+    | Record<string, DashboardWorkstationRequest>
+    | undefined,
+  workID: string,
+): DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest | undefined {
+  return Object.values(workstationRequestsByDispatchID ?? {}).find((request) =>
+    workItemsFromRetainedRequest(request).some(
+      (workItem) => workItem.work_id === workID,
+    ),
+  );
+}
+
+function resolveRetainedRequestNodeID(
+  snapshot: DashboardSnapshot,
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+): string | undefined {
+  if ("workstation_node_id" in request) {
+    return request.workstation_node_id;
+  }
+
+  return resolveTransitionNodeID(
+    snapshot,
+    request.transition_id,
+    request.workstation_name,
+  );
+}
+
+function resolveTransitionNodeID(
+  snapshot: DashboardSnapshot,
+  transitionID: string | undefined,
+  workstationName: string | undefined,
+): string | undefined {
+  if (transitionID && snapshot.topology.workstation_nodes_by_id[transitionID]) {
+    return snapshot.topology.workstation_nodes_by_id[transitionID]?.node_id;
+  }
+
+  return Object.values(snapshot.topology.workstation_nodes_by_id).find(
+    (node) => node.workstation_name === workstationName,
+  )?.node_id;
 }

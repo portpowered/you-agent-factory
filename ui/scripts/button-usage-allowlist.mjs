@@ -113,13 +113,10 @@ export const approvedButtonUsageAllowlist = [
   },
   {
     rawButtonFingerprints: [
-      'aria-controls={historyID} aria-expanded={expanded}',
-      'aria-label={messages.selectRequestLabel(',
-      'aria-label={messages.selectWorkItemLabel(workLabel)}',
-      'aria-label={messages.selectWorkstationRequestLabel(',
+      'aria-controls={historyID} aria-expanded={expanded} className={HISTORY_TOGGLE_CLASS}',
     ],
     rawButtonReason:
-      "Workstation detail controls are disclosure and selection shells inside the current-selection detail surface.",
+      "Workstation detail keeps one disclosure-toggle shell inside the current-selection detail surface while ordinary actions stay on shared button primitives.",
     relativeFilePath: "src/features/current-selection/components/workstation-detail-card.tsx",
   },
   {

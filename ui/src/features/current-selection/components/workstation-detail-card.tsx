@@ -3,12 +3,18 @@ import {
   DETAIL_COPY_CLASS,
   WIDGET_SUBTITLE_CLASS,
 } from "../../../components/dashboard/widget-board";
+import type { DashboardWorkstationRequest } from "../../../api/dashboard/types";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import {
+  DashboardStatusPill,
+  DashboardActionButton,
+  DashboardActionRow,
+} from "../../../components/ui";
+import {
+  formatDurationMillis,
   formatDurationFromISO,
   formatRelativeTimeFromISO,
   formatWorkItemLabel,
@@ -16,12 +22,11 @@ import {
 import { cn } from "../../../lib/cn";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
+  CurrentSelectionSectionHeader,
   EXECUTION_PILL_CLASS,
-  HISTORY_HEADER_CLASS,
   HISTORY_TOGGLE_CLASS,
   PROVIDER_SESSION_CARD_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
-  WORK_SELECTION_BUTTON_CLASS,
 } from "./detail-card-shared";
 import type {
   WorkstationActiveWorkListProps,
@@ -101,9 +106,12 @@ export function WorkstationDetailCard({
           locale={locale}
           messages={messages}
           now={now}
+          onSelectWorkID={onSelectWorkID}
           onSelectWorkstationRequest={onSelectWorkstationRequest}
           requests={workstationRequests}
           resetKey={selectedNode.node_id}
+          selectedRequest={selectedRequest}
+          selectedWorkID={selectedWorkID}
         />
       ) : (
         <CollapsibleProviderSessionAttempts
@@ -138,16 +146,22 @@ function CollapsibleWorkstationRequests({
   locale,
   messages,
   now,
+  onSelectWorkID,
   onSelectWorkstationRequest,
   requests,
   resetKey,
+  selectedRequest,
+  selectedWorkID,
 }: {
   locale?: string;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   now: number;
+  onSelectWorkID?: WorkstationDetailCardProps["onSelectWorkID"];
   onSelectWorkstationRequest?: WorkstationDetailCardProps["onSelectWorkstationRequest"];
   requests: NonNullable<WorkstationDetailCardProps["workstationRequests"]>;
   resetKey: string;
+  selectedRequest?: WorkstationDetailCardProps["selectedRequest"];
+  selectedWorkID?: WorkstationDetailCardProps["selectedWorkID"];
 }) {
   const [expanded, setExpanded] = useState(false);
   const historyID = `workstation-request-history-${resetKey}`;
@@ -162,117 +176,37 @@ function CollapsibleWorkstationRequests({
       aria-labelledby={`${historyID}-heading`}
       className="mt-4 grid gap-2.5"
     >
-      <div className={HISTORY_HEADER_CLASS}>
-        <div className="grid min-w-0 gap-1">
-          <h4
-            className={DASHBOARD_SECTION_HEADING_CLASS}
-            id={`${historyID}-heading`}
+      <CurrentSelectionSectionHeader
+        action={
+          <button
+            aria-controls={historyID}
+            aria-expanded={expanded}
+            className={HISTORY_TOGGLE_CLASS}
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
           >
-            {messages.requestHistoryHeading}
-          </h4>
-          <p
-            className={cn(
-              "m-0 text-af-text-subtle",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
-          >
-            {itemCountLabel}
-          </p>
-        </div>
-        <button
-          aria-controls={historyID}
-          aria-expanded={expanded}
-          className={HISTORY_TOGGLE_CLASS}
-          onClick={() => setExpanded((current) => !current)}
-          type="button"
-        >
-          {expanded ? messages.collapseAction : messages.expandAction}
-        </button>
-      </div>
+            {expanded ? messages.collapseAction : messages.expandAction}
+          </button>
+        }
+        headingId={`${historyID}-heading`}
+        supportingText={itemCountLabel}
+        title={messages.requestHistoryHeading}
+      />
       {expanded ? (
         <div className="grid gap-3" id={historyID}>
           {requests.length > 0 ? (
             requests.map((request) => {
-              const requestLabel =
-                request.request_id ||
-                request.work_items.map(formatWorkItemLabel).join(", ") ||
-                request.dispatch_id;
-              const requestStatus =
-                request.script_response?.outcome ??
-                request.outcome ??
-                (request.errored_request_count > 0
-                  ? "FAILED"
-                  : request.responded_request_count > 0
-                    ? "RESPONDED"
-                    : "PENDING");
-              const requestSummary = request.script_request
-                ? messages.scriptCommandSummary(
-                    request.script_request.command ?? messages.unavailableValue,
-                  )
-                : request.provider != null
-                  ? messages.providerSummary(request.provider, request.model)
-                  : messages.projectedWorkstationRequestSummary;
-
               return (
-                <article
-                  className={PROVIDER_SESSION_CARD_CLASS}
+                <WorkstationRequestHistoryCard
                   key={request.dispatch_id}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <strong>{requestLabel}</strong>
-                    <span className={EXECUTION_PILL_CLASS}>
-                      {request.dispatch_id}
-                    </span>
-                  </div>
-                  <div className="mt-2 grid gap-1">
-                    <p
-                      className={cn(
-                        "m-0 text-af-text-muted",
-                        DASHBOARD_BODY_TEXT_CLASS,
-                      )}
-                    >
-                      {requestStatus}
-                    </p>
-                    <p
-                      className={cn(
-                        "m-0 text-af-text-subtle",
-                        DASHBOARD_SUPPORTING_TEXT_CLASS,
-                      )}
-                    >
-                      {requestSummary}
-                    </p>
-                    {request.started_at ? (
-                        <p
-                          className={cn(
-                            "m-0 text-af-text-subtle",
-                            DASHBOARD_SUPPORTING_TEXT_CLASS,
-                          )}
-                    >
-                      {messages.requestStatusStartedAgo(
-                        formatRelativeTimeFromISO(
-                          request.started_at,
-                          now,
-                          locale,
-                          messages.unavailableValue,
-                        ),
-                      )}
-                    </p>
-                    ) : null}
-                  </div>
-                  {onSelectWorkstationRequest ? (
-                    <button
-                      aria-label={messages.selectRequestLabel(
-                        requestLabel,
-                        request.dispatch_id,
-                      )}
-                      className={WORK_SELECTION_BUTTON_CLASS}
-                      onClick={() => onSelectWorkstationRequest(request)}
-                      type="button"
-                    >
-                      {messages.openRequestAction}
-                    </button>
-                  ) : null}
-                </article>
+                  messages={messages}
+                  now={now}
+                  onSelectWorkID={onSelectWorkID}
+                  onSelectWorkstationRequest={onSelectWorkstationRequest}
+                  request={request}
+                  selectedRequest={selectedRequest}
+                  selectedWorkID={selectedWorkID}
+                />
               );
             })
           ) : (
@@ -283,6 +217,182 @@ function CollapsibleWorkstationRequests({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function WorkstationRequestHistoryCard({
+  messages,
+  now,
+  onSelectWorkID,
+  onSelectWorkstationRequest,
+  request,
+  selectedRequest,
+  selectedWorkID,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  now: number;
+  onSelectWorkID?: WorkstationDetailCardProps["onSelectWorkID"];
+  onSelectWorkstationRequest?: WorkstationDetailCardProps["onSelectWorkstationRequest"];
+  request: DashboardWorkstationRequest;
+  selectedRequest?: WorkstationDetailCardProps["selectedRequest"];
+  selectedWorkID?: WorkstationDetailCardProps["selectedWorkID"];
+}) {
+  const requestLabel =
+    request.request_id ||
+    request.work_items.map(formatWorkItemLabel).join(", ") ||
+    request.dispatch_id;
+  const primaryWorkItem = request.work_items[0];
+  const requestSelected = selectedRequest?.dispatch_id === request.dispatch_id;
+  const workLabel = primaryWorkItem
+    ? formatWorkItemLabel(primaryWorkItem)
+    : requestLabel;
+  const totalDurationMillis =
+    request.total_duration_millis ?? request.script_response?.duration_millis;
+  const normalizedOutcome = (request.outcome ?? request.script_response?.outcome)
+    ?.trim()
+    .toUpperCase();
+  const hasFailedOutcome =
+    Boolean(request.failure_reason?.trim()) ||
+    Boolean(request.failure_message?.trim()) ||
+    normalizedOutcome === "FAILED" ||
+    normalizedOutcome === "FAILED_EXIT_CODE" ||
+    normalizedOutcome === "TIMED_OUT" ||
+    normalizedOutcome === "REJECTED";
+
+  return (
+    <article className={PROVIDER_SESSION_CARD_CLASS}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <strong className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+          {requestLabel}
+        </strong>
+        <DashboardActionRow
+          statuses={renderWorkstationRequestStatusPill({
+            hasFailedOutcome,
+            messages,
+            now,
+            request,
+            totalDurationMillis,
+          })}
+          statusesClassName="justify-end"
+          actions={renderWorkstationRequestActions({
+            messages,
+            onSelectWorkID,
+            onSelectWorkstationRequest,
+            primaryWorkItem,
+            request,
+            requestLabel,
+            requestSelected,
+            selectedWorkID,
+            workLabel,
+          })}
+          actionsClassName="justify-end"
+          className="justify-end"
+        />
+      </div>
+      {requestSelected ? (
+        <p className={REQUEST_SELECTION_STATUS_CLASS}>
+          {messages.selectedRequestLabel(request.dispatch_id)}
+        </p>
+      ) : null}
+    </article>
+  );
+}
+
+function renderWorkstationRequestActions({
+  messages,
+  onSelectWorkID,
+  onSelectWorkstationRequest,
+  primaryWorkItem,
+  request,
+  requestLabel,
+  requestSelected,
+  selectedWorkID,
+  workLabel,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  onSelectWorkID?: WorkstationDetailCardProps["onSelectWorkID"];
+  onSelectWorkstationRequest?: WorkstationDetailCardProps["onSelectWorkstationRequest"];
+  primaryWorkItem: DashboardWorkstationRequest["work_items"][number] | undefined;
+  request: DashboardWorkstationRequest;
+  requestLabel: string;
+  requestSelected: boolean;
+  selectedWorkID?: WorkstationDetailCardProps["selectedWorkID"];
+  workLabel: string;
+}) {
+  const workAction =
+    primaryWorkItem && onSelectWorkID ? (
+      <DashboardActionButton
+        aria-label={messages.selectWorkItemLabel(workLabel)}
+        aria-pressed={selectedWorkID === primaryWorkItem.work_id}
+        onClick={() => onSelectWorkID(primaryWorkItem.work_id)}
+        type="button"
+      >
+        {selectedWorkID === primaryWorkItem.work_id
+          ? messages.workSelectedAction
+          : messages.openWorkItemAction}
+      </DashboardActionButton>
+    ) : null;
+  const requestAction = onSelectWorkstationRequest ? (
+    <DashboardActionButton
+      aria-label={messages.selectRequestLabel(requestLabel, request.dispatch_id)}
+      aria-pressed={requestSelected}
+      onClick={() => onSelectWorkstationRequest(request)}
+      type="button"
+    >
+      {requestSelected
+        ? messages.requestSelectedAction
+        : messages.openRequestAction}
+    </DashboardActionButton>
+  ) : null;
+
+  if (!workAction && !requestAction) {
+    return undefined;
+  }
+
+  return (
+    <>
+      {workAction}
+      {requestAction}
+    </>
+  );
+}
+
+function renderWorkstationRequestStatusPill({
+  hasFailedOutcome,
+  messages,
+  now,
+  request,
+  totalDurationMillis,
+}: {
+  hasFailedOutcome: boolean;
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  now: number;
+  request: DashboardWorkstationRequest;
+  totalDurationMillis: number | undefined;
+}) {
+  if (totalDurationMillis !== undefined) {
+    return (
+      <DashboardStatusPill
+        className={cn(
+          "min-h-0",
+          !hasFailedOutcome &&
+            "border-af-success-border bg-af-success-surface text-af-success",
+        )}
+        tone={hasFailedOutcome ? "danger" : undefined}
+      >
+        {messages.totalRuntimeLabel}: {formatDurationMillis(totalDurationMillis)}
+      </DashboardStatusPill>
+    );
+  }
+
+  if (!request.started_at) {
+    return undefined;
+  }
+
+  return (
+    <span className={EXECUTION_PILL_CLASS}>
+      {messages.elapsedLabel}: {formatDurationFromISO(request.started_at, now)}
+    </span>
   );
 }
 
@@ -298,11 +408,14 @@ function WorkstationActiveWorkList({
   selectedWorkID,
   workstationRequestsByDispatchID,
 }: WorkstationActiveWorkListProps) {
+  const sectionId = `active-work-${selectedNode.node_id}`;
+
   return (
-    <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.activeWorkHeading}
-      </h4>
+    <section aria-labelledby={sectionId} className="mt-4 grid gap-2.5 [&_h4]:m-0">
+      <CurrentSelectionSectionHeader
+        headingId={sectionId}
+        title={messages.activeWorkHeading}
+      />
       {executions.length > 0 ? (
         <ul className="m-0 grid list-none gap-2.5 p-0">
           {executions.flatMap((execution) => {
@@ -322,6 +435,48 @@ function WorkstationActiveWorkList({
                 : messages.unknownActiveWorkLabel;
               const requestSelected =
                 selectedRequest?.dispatch_id === execution.dispatch_id;
+              const elapsed = formatDurationFromISO(execution.started_at, now);
+              const workAction =
+                workItem && onSelectWorkID ? (
+                  <DashboardActionButton
+                    aria-label={messages.selectWorkItemLabel(workLabel)}
+                    aria-pressed={selectedWorkID === workItem.work_id}
+                    onClick={() => onSelectWorkID(workItem.work_id)}
+                    type="button"
+                  >
+                    {selectedWorkID === workItem.work_id
+                      ? messages.workSelectedAction
+                      : messages.openWorkItemAction}
+                  </DashboardActionButton>
+                ) : null;
+              const requestAction = onSelectWorkstationRequest
+                ? request ? (
+                    <DashboardActionButton
+                      aria-label={messages.selectWorkstationRequestLabel(
+                        request.dispatch_id,
+                      )}
+                      aria-pressed={requestSelected}
+                      onClick={() => onSelectWorkstationRequest(request)}
+                      type="button"
+                    >
+                      {requestSelected
+                        ? messages.requestSelectedAction
+                        : messages.openRequestDetailsAction}
+                    </DashboardActionButton>
+                  ) : null
+                : null;
+              const headerActions =
+                workAction || requestAction ? (
+                  <>
+                    {workAction}
+                    {requestAction}
+                  </>
+                ) : undefined;
+              const headerStatus = (
+                <span className={EXECUTION_PILL_CLASS}>
+                  {messages.elapsedLabel}: {elapsed}
+                </span>
+              );
 
               return (
                 <li
@@ -331,65 +486,19 @@ function WorkstationActiveWorkList({
                   )}
                   key={`${execution.dispatch_id}-${workIdentifier}`}
                 >
-                  <strong className="min-w-0 [overflow-wrap:anywhere]">
-                    {workLabel}
-                  </strong>
-                  <dl
-                    className={cn(
-                      "m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[5.5rem_minmax(0,1fr)] [&_div]:gap-2",
-                      DASHBOARD_BODY_TEXT_CLASS,
-                    )}
-                  >
-                    <div>
-                      <dt>{messages.workIdLabel}</dt>
-                      <dd className="[overflow-wrap:anywhere]">
-                        {workIdentifier}
-                      </dd>
-                    </div>
-                    {traceID ? (
-                      <div>
-                        <dt>{messages.traceIdLabel}</dt>
-                        <dd className="[overflow-wrap:anywhere]">{traceID}</dd>
-                      </div>
-                    ) : null}
-                    <div>
-                      <dt>{messages.elapsedLabel}</dt>
-                      <dd>
-                        {formatDurationFromISO(
-                          execution.started_at,
-                          now,
-                          locale,
-                          messages.unavailableValue,
-                        )}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{messages.dispatchLabel}</dt>
-                      <dd className="[overflow-wrap:anywhere]">
-                        {execution.dispatch_id}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{messages.stationLabel}</dt>
-                      <dd className="[overflow-wrap:anywhere]">
-                        {execution.workstation_name ??
-                          selectedNode.workstation_name}
-                      </dd>
-                    </div>
-                  </dl>
-                  {workItem && onSelectWorkID ? (
-                    <button
-                      aria-label={messages.selectWorkItemLabel(workLabel)}
-                      aria-pressed={selectedWorkID === workItem.work_id}
-                      className={WORK_SELECTION_BUTTON_CLASS}
-                      onClick={() => onSelectWorkID(workItem.work_id)}
-                      type="button"
-                    >
-                      {selectedWorkID === workItem.work_id
-                        ? messages.workSelectedAction
-                        : messages.openWorkItemAction}
-                    </button>
-                  ) : workItem ? null : (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <strong className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                      {workLabel}
+                    </strong>
+                    <DashboardActionRow
+                      statuses={headerStatus}
+                      statusesClassName="justify-end"
+                      actions={headerActions}
+                      actionsClassName="justify-end"
+                      className="justify-end"
+                    />
+                  </div>
+                  {workItem ? null : (
                     <p className={REQUEST_SELECTION_STATUS_CLASS}>
                       {messages.workDetailsUnavailable(execution.dispatch_id)}
                     </p>
@@ -400,21 +509,7 @@ function WorkstationActiveWorkList({
                     </p>
                   ) : null}
                   {onSelectWorkstationRequest ? (
-                    request ? (
-                      <button
-                        aria-label={messages.selectWorkstationRequestLabel(
-                          request.dispatch_id,
-                        )}
-                        aria-pressed={requestSelected}
-                        className={WORK_SELECTION_BUTTON_CLASS}
-                        onClick={() => onSelectWorkstationRequest(request)}
-                        type="button"
-                      >
-                        {requestSelected
-                          ? messages.requestSelectedAction
-                          : messages.openRequestDetailsAction}
-                      </button>
-                    ) : (
+                    request ? null : (
                       <p className={REQUEST_SELECTION_STATUS_CLASS}>
                         {messages.requestDetailsUnavailable(
                           execution.dispatch_id,

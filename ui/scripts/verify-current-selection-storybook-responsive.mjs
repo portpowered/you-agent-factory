@@ -4,6 +4,9 @@ export async function verifyCurrentSelectionPromptHint({
   page,
   viewport,
 }) {
+  const reviewWorkstationButton = page.getByRole("button", {
+    name: "Select Review workstation",
+  });
   const currentSelection = page.getByRole("article", {
     name: "Current selection",
   });
@@ -15,6 +18,18 @@ export async function verifyCurrentSelectionPromptHint({
   const saveButton = currentSelection.getByRole("button", {
     name: "Save changes",
   });
+  const expandEditableConfigurationButton = currentSelection.getByRole("button", {
+    name: "Expand editable configuration",
+  });
+  const expandButtonCount = await expandEditableConfigurationButton.count();
+
+  if ((await promptField.count()) === 0 && expandButtonCount === 0) {
+    await reviewWorkstationButton.click({ force: true });
+  }
+
+  if ((await promptField.count()) === 0) {
+    await expandEditableConfigurationButton.click();
+  }
 
   await expectVisible(promptEditor, "Monaco prompt editor");
   await expectVisible(
@@ -94,6 +109,11 @@ function expectHeadingBeforePosition(firstRect, secondRect, label) {
   }
 }
 
+async function expectSectionHeaderFrame(expectVisible, heading, label) {
+  const headerFrame = heading.locator("xpath=ancestor::div[contains(@class, 'rounded-lg')]").first();
+  await expectVisible(headerFrame, `${label} header frame`);
+}
+
 export async function verifyCurrentSelectionWorkstationDetailOrder({
   expectNoHorizontalOverflow,
   expectVisible,
@@ -137,6 +157,18 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
   await expectVisible(configurationHeading, "Configuration heading");
   await expectVisible(activeWorkHeading, "Active work heading");
   await expectVisible(historyHeading, "History heading");
+  await expectSectionHeaderFrame(
+    expectVisible,
+    summaryHeading,
+    "Workstation summary",
+  );
+  await expectSectionHeaderFrame(
+    expectVisible,
+    configurationHeading,
+    "Configuration",
+  );
+  await expectSectionHeaderFrame(expectVisible, activeWorkHeading, "Active work");
+  await expectSectionHeaderFrame(expectVisible, historyHeading, "History");
   await expectVisible(
     currentSelection.getByText("Input work types"),
     "Workstation summary work-type label",
@@ -168,16 +200,98 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
     "Active work heading before history heading",
   );
 
-  await currentSelection.getByRole("button", { name: "Expand" }).click();
-  await expectVisible(
-    currentSelection.getByRole("button", {
-      name: "Select provider session codex / session_id / sess-rejected-story for dispatch dispatch-review-rejected",
-    }),
-    "History selection button",
-  );
-
   await expectNoHorizontalOverflow(
     page,
     `Current selection workstation detail order at ${viewport.label}`,
+  );
+}
+
+export async function verifyCurrentSelectionSaveFlow({
+  expectNoHorizontalOverflow,
+  expectVisible,
+  page,
+  viewport,
+}) {
+  const currentSelection = page.getByRole("article", {
+    name: "Current selection",
+  });
+  await currentSelection.waitFor({ state: "visible" });
+  const promptField = currentSelection.getByRole("textbox", { name: "Prompt" });
+  const workerField = currentSelection.getByRole("combobox", { name: "Worker" });
+  const saveButton = currentSelection.getByRole("button", {
+    name: "Save changes",
+  });
+
+  const expandButton = currentSelection.getByRole("button", {
+    name: "Expand editable configuration",
+  });
+  await expandButton.click();
+  await expectVisible(promptField, "Workstation prompt field");
+  await workerField.selectOption("planner");
+  await promptField.click({ force: true });
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.insertText("Browser verified prompt update.");
+  await waitForEditableConfigurationReadyToSave(currentSelection, saveButton);
+  await saveButton.click();
+
+  const confirmationDialog = page.getByRole("dialog", {
+    name: "Overwrite the running factory definition?",
+  });
+  await expectVisible(
+    confirmationDialog,
+    "Editable workstation save confirmation dialog",
+  );
+  const overwriteButton = confirmationDialog.getByRole("button", {
+    name: "Overwrite factory",
+  });
+  await overwriteButton.click();
+
+  await expectVisible(
+    currentSelection.getByText(
+      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+    ),
+    "Editable workstation save success message",
+  );
+  const overwriteDialogCount = await page
+    .getByRole("dialog", {
+      name: "Overwrite the running factory definition?",
+    })
+    .count();
+  if (overwriteDialogCount > 0) {
+    throw new Error("Save confirmation dialog should close after a successful save.");
+  }
+
+  const saveButtonDisabled = await saveButton.isDisabled();
+  if (!saveButtonDisabled) {
+    throw new Error("Save changes should disable after the saved draft is refreshed.");
+  }
+
+  await expectNoHorizontalOverflow(
+    page,
+    `Current selection save flow at ${viewport.label}`,
+  );
+}
+
+async function waitForEditableConfigurationReadyToSave(
+  currentSelection,
+  saveButton,
+) {
+  const timeoutAt = Date.now() + 30_000;
+  const validationMessage = currentSelection.getByText(
+    "Validating prompt variables for the current draft.",
+  );
+
+  while (Date.now() < timeoutAt) {
+    const saveButtonDisabled = await saveButton.isDisabled();
+    const validatingCount = await validationMessage.count();
+    if (!saveButtonDisabled && validatingCount === 0) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error(
+    "Editable configuration did not finish validation with an enabled save button before timeout.",
   );
 }

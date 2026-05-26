@@ -47,10 +47,12 @@ endif
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_MIN ?= 80.0
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode verify-build-contracts verify-tests verify test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode verify-build-contracts verify-tests verify test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+define run_verification_step
+	@printf '%s\n' "==> $(2) [make $(1)]"
+	@$(MAKE) $(1) || { status=$$?; printf '%s\n' "FAIL: $(2) [make $(1)] failed. Rerun with: make $(1)"; exit $$status; }
+endef
+
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-extended verify-build-contracts verify-tests verify test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -107,6 +109,22 @@ test-functional:
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+verify-fast:
+	@printf '%s\n' "Running fast verification tier: typecheck + short UI/unit suite + short Go suite"
+	$(call run_verification_step,typecheck,dashboard typecheck)
+	$(call run_verification_step,ui-test,short UI/unit suite)
+	$(call run_verification_step,test,short Go suite)
+
+verify-pr:
+	@printf '%s\n' "Running pull-request verification tier: build contracts + required CI-equivalent test lanes"
+	$(call run_verification_step,verify-build-contracts,build contracts and static verification)
+	$(call run_verification_step,verify-tests,required CI-equivalent test lanes)
+
+verify-extended:
+	@printf '%s\n' "Running extended verification tier: required PR verification + opt-in long and specialty suites"
+	$(call run_verification_step,verify-pr,pull-request verification tier)
+	$(call run_verification_step,long-tests,opt-in long and specialty suites)
+
 test-ui-coverage:
 	$(MAKE) ui-test-coverage
 	$(MAKE) ui-replay-coverage-check
@@ -125,8 +143,9 @@ test-backend-functional:
 	$(MAKE) test-backend-verification
 
 long-tests:
-	$(MAKE) long-tests-managed-runtime
-	$(MAKE) long-tests-functional-runtime
+	@printf '%s\n' "Running opt-in long and specialty suites: managed runtime coverage + real local inference coverage"
+	$(call run_verification_step,long-tests-managed-runtime,Managed Runtime specialty lane)
+	$(call run_verification_step,long-tests-functional-runtime,Real Local Inference specialty lane)
 
 long-tests-managed-runtime:
 	$(GO) test ./pkg/service -run 'Test(InvokeModelHTTP_UsesManagedLocalModelRuntimePath|InvokeModel_UsesManagedLocalModelRuntimeAndReusesLoadedHandle|LoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath|OmniVoiceLocalRuntime_)' -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -180,13 +199,14 @@ verify-build-contracts:
 	$(MAKE) api-smoke
 
 verify-tests:
-	$(MAKE) test-ui-coverage
-	$(MAKE) ui-integration-test
-	$(MAKE) test-backend-verification
+	@printf '%s\n' "Running required CI-equivalent test lanes: UI coverage + browser integration + backend verification"
+	$(call run_verification_step,test-ui-coverage,UI Coverage lane)
+	$(call run_verification_step,ui-integration-test,UI Browser Integration lane)
+	$(call run_verification_step,test-backend-verification,Backend Verification lane)
 
 verify:
-	$(MAKE) verify-build-contracts
-	$(MAKE) verify-tests
+	@printf '%s\n' "make verify is a compatibility alias for the canonical pull-request tier; prefer make verify-pr"
+	$(MAKE) verify-pr
 
 dashboard-verify:
 	$(MAKE) ui-build
