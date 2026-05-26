@@ -83,16 +83,15 @@ export const Verification = {
     const currentSelection = await canvas.findByRole("article", {
       name: "Current selection",
     });
-    await expect(await within(currentSelection).findByText("Active Story")).toBeVisible();
+    await expect(
+      await within(currentSelection).findByText("Active Story"),
+    ).toBeVisible();
     await userEvent.click(
       (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
     );
 
-    const {
-      requestField,
-      requestNameField,
-      workTypeField,
-    } = await submitWorkCardControls(canvasElement);
+    const { requestField, requestNameField, workTypeField } =
+      await submitWorkCardControls(canvasElement);
     await userEvent.selectOptions(workTypeField, "story");
     await userEvent.type(requestNameField, "Root session request");
     await userEvent.type(requestField, "Keep the default session isolated.");
@@ -218,10 +217,10 @@ function renameActiveStory(
   const previousWorkID = "work-active-story";
   const previousProviderSessionID = "sess-active-story";
 
-  snapshot.runtime.active_dispatch_ids = snapshot.runtime.active_dispatch_ids?.map(
-    (activeDispatchID) =>
+  snapshot.runtime.active_dispatch_ids =
+    snapshot.runtime.active_dispatch_ids?.map((activeDispatchID) =>
       activeDispatchID === previousDispatchID ? dispatchID : activeDispatchID,
-  );
+    );
   snapshot.runtime.current_work_items_by_place_id = updateWorkItemMap(
     snapshot.runtime.current_work_items_by_place_id,
     { label, traceID, workID },
@@ -234,7 +233,9 @@ function renameActiveStory(
   const previousExecution =
     snapshot.runtime.active_executions_by_dispatch_id?.[previousDispatchID];
   if (previousExecution && snapshot.runtime.active_executions_by_dispatch_id) {
-    delete snapshot.runtime.active_executions_by_dispatch_id[previousDispatchID];
+    delete snapshot.runtime.active_executions_by_dispatch_id[
+      previousDispatchID
+    ];
     snapshot.runtime.active_executions_by_dispatch_id[dispatchID] = {
       ...previousExecution,
       consumed_tokens: previousExecution.consumed_tokens?.map((token) => ({
@@ -249,9 +250,14 @@ function renameActiveStory(
       ),
       work_items: previousExecution.work_items?.map((workItem) => ({
         ...workItem,
-        display_name: workItem.display_name === "Active Story" ? label : workItem.display_name,
-        trace_id: workItem.trace_id === previousTraceID ? traceID : workItem.trace_id,
-        work_id: workItem.work_id === previousWorkID ? workID : workItem.work_id,
+        display_name:
+          workItem.display_name === "Active Story"
+            ? label
+            : workItem.display_name,
+        trace_id:
+          workItem.trace_id === previousTraceID ? traceID : workItem.trace_id,
+        work_id:
+          workItem.work_id === previousWorkID ? workID : workItem.work_id,
       })),
     };
   }
@@ -267,9 +273,16 @@ function renameActiveStory(
           ),
           active_work_items: activity.active_work_items?.map((workItem) => ({
             ...workItem,
-            display_name: workItem.display_name === "Active Story" ? label : workItem.display_name,
-            trace_id: workItem.trace_id === previousTraceID ? traceID : workItem.trace_id,
-            work_id: workItem.work_id === previousWorkID ? workID : workItem.work_id,
+            display_name:
+              workItem.display_name === "Active Story"
+                ? label
+                : workItem.display_name,
+            trace_id:
+              workItem.trace_id === previousTraceID
+                ? traceID
+                : workItem.trace_id,
+            work_id:
+              workItem.work_id === previousWorkID ? workID : workItem.work_id,
           })),
           trace_ids: activity.trace_ids?.map((value) =>
             value === previousTraceID ? traceID : value,
@@ -279,10 +292,13 @@ function renameActiveStory(
     ),
   );
 
-  snapshot.runtime.session.provider_sessions = snapshot.runtime.session.provider_sessions?.map(
-    (attempt) => ({
+  snapshot.runtime.session.provider_sessions =
+    snapshot.runtime.session.provider_sessions?.map((attempt) => ({
       ...attempt,
-      dispatch_id: attempt.dispatch_id === previousDispatchID ? dispatchID : attempt.dispatch_id,
+      dispatch_id:
+        attempt.dispatch_id === previousDispatchID
+          ? dispatchID
+          : attempt.dispatch_id,
       provider_session:
         attempt.provider_session?.id === previousProviderSessionID
           ? {
@@ -292,12 +308,16 @@ function renameActiveStory(
           : attempt.provider_session,
       work_items: attempt.work_items?.map((workItem) => ({
         ...workItem,
-        display_name: workItem.display_name === "Active Story" ? label : workItem.display_name,
-        trace_id: workItem.trace_id === previousTraceID ? traceID : workItem.trace_id,
-        work_id: workItem.work_id === previousWorkID ? workID : workItem.work_id,
+        display_name:
+          workItem.display_name === "Active Story"
+            ? label
+            : workItem.display_name,
+        trace_id:
+          workItem.trace_id === previousTraceID ? traceID : workItem.trace_id,
+        work_id:
+          workItem.work_id === previousWorkID ? workID : workItem.work_id,
       })),
-    }),
-  );
+    }));
 }
 
 function updateWorkItemMap(
@@ -321,9 +341,16 @@ function updateWorkItemMap(
       placeID,
       workItems?.map((workItem) => ({
         ...workItem,
-        display_name: workItem.display_name === "Active Story" ? label : workItem.display_name,
-        trace_id: workItem.trace_id === "trace-active-story" ? traceID : workItem.trace_id,
-        work_id: workItem.work_id === "work-active-story" ? workID : workItem.work_id,
+        display_name:
+          workItem.display_name === "Active Story"
+            ? label
+            : workItem.display_name,
+        trace_id:
+          workItem.trace_id === "trace-active-story"
+            ? traceID
+            : workItem.trace_id,
+        work_id:
+          workItem.work_id === "work-active-story" ? workID : workItem.work_id,
       })),
     ]),
   );

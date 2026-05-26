@@ -1,10 +1,10 @@
-import { cn } from "../../../lib/cn";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { useAppLocale } from "../../../i18n";
+import { cn } from "../../../lib/cn";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 
 const DETAIL_COPY_CLASS = cn("m-0 max-w-80", DASHBOARD_BODY_TEXT_CLASS);

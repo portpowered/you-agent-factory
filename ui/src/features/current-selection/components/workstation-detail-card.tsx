@@ -1,25 +1,22 @@
 import { useEffect, useState } from "react";
+import type { DashboardWorkstationRequest } from "../../../api/dashboard/types";
 import {
   DETAIL_COPY_CLASS,
   WIDGET_SUBTITLE_CLASS,
 } from "../../../components/dashboard/widget-board";
-import type { DashboardWorkstationRequest } from "../../../api/dashboard/types";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import {
-  DashboardStatusPill,
   DashboardActionButton,
   DashboardActionRow,
+  DashboardStatusPill,
 } from "../../../components/ui";
+import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import {
-  formatDurationMillis,
   formatDurationFromISO,
-  formatRelativeTimeFromISO,
+  formatDurationMillis,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
+import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
   CurrentSelectionSectionHeader,
@@ -32,7 +29,6 @@ import type {
   WorkstationActiveWorkListProps,
   WorkstationDetailCardProps,
 } from "./detail-card-types";
-import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { CollapsibleProviderSessionAttempts } from "./provider-session-attempts";
 import {
   EditableConfigurationSection,
@@ -90,7 +86,6 @@ export function WorkstationDetailCard({
       />
       <WorkstationActiveWorkList
         executions={activeExecutions}
-        locale={locale}
         messages={messages}
         now={now}
         onSelectWorkID={onSelectWorkID}
@@ -103,7 +98,6 @@ export function WorkstationDetailCard({
       {hasProjectedRequestHistory ? (
         <CollapsibleWorkstationRequests
           key={`workstation-request-history:${selectedNode.node_id}`}
-          locale={locale}
           messages={messages}
           now={now}
           onSelectWorkID={onSelectWorkID}
@@ -143,7 +137,6 @@ export function WorkstationDetailCard({
 }
 
 function CollapsibleWorkstationRequests({
-  locale,
   messages,
   now,
   onSelectWorkID,
@@ -153,7 +146,6 @@ function CollapsibleWorkstationRequests({
   selectedRequest,
   selectedWorkID,
 }: {
-  locale?: string;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   now: number;
   onSelectWorkID?: WorkstationDetailCardProps["onSelectWorkID"];
@@ -248,7 +240,9 @@ function WorkstationRequestHistoryCard({
     : requestLabel;
   const totalDurationMillis =
     request.total_duration_millis ?? request.script_response?.duration_millis;
-  const normalizedOutcome = (request.outcome ?? request.script_response?.outcome)
+  const normalizedOutcome = (
+    request.outcome ?? request.script_response?.outcome
+  )
     ?.trim()
     .toUpperCase();
   const hasFailedOutcome =
@@ -312,7 +306,9 @@ function renderWorkstationRequestActions({
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   onSelectWorkID?: WorkstationDetailCardProps["onSelectWorkID"];
   onSelectWorkstationRequest?: WorkstationDetailCardProps["onSelectWorkstationRequest"];
-  primaryWorkItem: DashboardWorkstationRequest["work_items"][number] | undefined;
+  primaryWorkItem:
+    | DashboardWorkstationRequest["work_items"][number]
+    | undefined;
   request: DashboardWorkstationRequest;
   requestLabel: string;
   requestSelected: boolean;
@@ -334,7 +330,10 @@ function renderWorkstationRequestActions({
     ) : null;
   const requestAction = onSelectWorkstationRequest ? (
     <DashboardActionButton
-      aria-label={messages.selectRequestLabel(requestLabel, request.dispatch_id)}
+      aria-label={messages.selectRequestLabel(
+        requestLabel,
+        request.dispatch_id,
+      )}
       aria-pressed={requestSelected}
       onClick={() => onSelectWorkstationRequest(request)}
       type="button"
@@ -380,7 +379,8 @@ function renderWorkstationRequestStatusPill({
         )}
         tone={hasFailedOutcome ? "danger" : undefined}
       >
-        {messages.totalRuntimeLabel}: {formatDurationMillis(totalDurationMillis)}
+        {messages.totalRuntimeLabel}:{" "}
+        {formatDurationMillis(totalDurationMillis)}
       </DashboardStatusPill>
     );
   }
@@ -398,7 +398,6 @@ function renderWorkstationRequestStatusPill({
 
 function WorkstationActiveWorkList({
   executions,
-  locale,
   messages,
   now,
   onSelectWorkID,
@@ -411,7 +410,10 @@ function WorkstationActiveWorkList({
   const sectionId = `active-work-${selectedNode.node_id}`;
 
   return (
-    <section aria-labelledby={sectionId} className="mt-4 grid gap-2.5 [&_h4]:m-0">
+    <section
+      aria-labelledby={sectionId}
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    >
       <CurrentSelectionSectionHeader
         headingId={sectionId}
         title={messages.activeWorkHeading}
@@ -449,22 +451,22 @@ function WorkstationActiveWorkList({
                       : messages.openWorkItemAction}
                   </DashboardActionButton>
                 ) : null;
-              const requestAction = onSelectWorkstationRequest
-                ? request ? (
-                    <DashboardActionButton
-                      aria-label={messages.selectWorkstationRequestLabel(
-                        request.dispatch_id,
-                      )}
-                      aria-pressed={requestSelected}
-                      onClick={() => onSelectWorkstationRequest(request)}
-                      type="button"
-                    >
-                      {requestSelected
-                        ? messages.requestSelectedAction
-                        : messages.openRequestDetailsAction}
-                    </DashboardActionButton>
-                  ) : null
-                : null;
+              const requestAction = onSelectWorkstationRequest ? (
+                request ? (
+                  <DashboardActionButton
+                    aria-label={messages.selectWorkstationRequestLabel(
+                      request.dispatch_id,
+                    )}
+                    aria-pressed={requestSelected}
+                    onClick={() => onSelectWorkstationRequest(request)}
+                    type="button"
+                  >
+                    {requestSelected
+                      ? messages.requestSelectedAction
+                      : messages.openRequestDetailsAction}
+                  </DashboardActionButton>
+                ) : null
+              ) : null;
               const headerActions =
                 workAction || requestAction ? (
                   <>

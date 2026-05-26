@@ -8,11 +8,11 @@ import {
   twentyNodeDashboardSnapshot,
 } from "./components/dashboard/test-fixtures";
 import { formatTimeOfDay } from "./components/ui/formatters";
-import { DashboardScreen } from "./features/dashboard/public";
 import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
 } from "./features/current-selection/state/selectionHistoryStore";
+import { DashboardScreen } from "./features/dashboard/public";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
 import {
@@ -119,7 +119,9 @@ function submittedFactoryDefinitionDocument(init?: RequestInit) {
   const { version: _ignoredVersion, ...factoryDefinition } = requestBody;
 
   if (typeof factoryDefinition.name === "string") {
-    return buildEditableConfigurationDocument(factoryDefinition as FactoryValue);
+    return buildEditableConfigurationDocument(
+      factoryDefinition as FactoryValue,
+    );
   }
 
   return buildEditableConfigurationDocument(
@@ -196,7 +198,9 @@ async function delayedSaveCurrentFactoryDocumentMock(
 function buildReanchoredSelectionSnapshot() {
   const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
   const activeExecution =
-    snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+    snapshot.runtime.active_executions_by_dispatch_id?.[
+      "dispatch-review-active"
+    ];
   const activeWorkItem = activeExecution?.work_items?.[0];
 
   if (!activeExecution || !activeWorkItem) {
@@ -208,7 +212,9 @@ function buildReanchoredSelectionSnapshot() {
   snapshot.tick_count += 1;
   snapshot.runtime.active_dispatch_ids = [];
   if (snapshot.runtime.active_executions_by_dispatch_id) {
-    delete snapshot.runtime.active_executions_by_dispatch_id["dispatch-review-active"];
+    delete snapshot.runtime.active_executions_by_dispatch_id[
+      "dispatch-review-active"
+    ];
   }
   snapshot.runtime.current_work_items_by_place_id = {};
   snapshot.runtime.place_occupancy_work_items_by_place_id = {
@@ -253,7 +259,9 @@ function buildReanchoredSelectionSnapshot() {
   return snapshot;
 }
 
-function applyStorySnapshot(snapshot: ReturnType<typeof buildReanchoredSelectionSnapshot>) {
+function applyStorySnapshot(
+  snapshot: ReturnType<typeof buildReanchoredSelectionSnapshot>,
+) {
   useFactoryTimelineStore.setState({
     events: [],
     latestTick: snapshot.tick_count,

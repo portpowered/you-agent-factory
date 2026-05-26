@@ -2,8 +2,8 @@ import { render, screen } from "@testing-library/react";
 
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { DASHBOARD_PAGE_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
-import { DashboardStatusPanel } from "./dashboard-status-panel";
 import { getHeaderControlsMessages } from "../messages/header-controls";
+import { DashboardStatusPanel } from "./dashboard-status-panel";
 
 describe("DashboardStatusPanel", () => {
   it("renders the default header state without optional detail copy", () => {
@@ -58,8 +58,6 @@ describe("DashboardStatusPanel", () => {
     expect(
       screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
     ).toBeTruthy();
-    expect(screen.getByText("U").className).not.toContain(
-      "sr-only",
-    );
+    expect(screen.getByText("U").className).not.toContain("sr-only");
   });
 });
