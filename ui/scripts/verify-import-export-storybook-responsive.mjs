@@ -17,7 +17,6 @@ import {
 } from "./verify-graph-parity-storybook-responsive.mjs";
 import {
   verifyCurrentSelectionPromptHint as verifyCurrentSelectionPromptHintImpl,
-  verifyCurrentSelectionWorkstationDetailOrder as verifyCurrentSelectionWorkstationDetailOrderImpl,
 } from "./verify-current-selection-storybook-responsive.mjs";
 import {
   createLocalizedExportDialogVerifier,
@@ -334,18 +333,6 @@ export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
 }
 export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {
   return verifyCurrentSelectionPromptHintImpl({
-    expectNoHorizontalOverflow,
-    expectVisible,
-    page,
-    viewport,
-  });
-}
-export async function verifyCurrentSelectionWorkstationDetailOrder(
-  page,
-  _dialog,
-  viewport,
-) {
-  return verifyCurrentSelectionWorkstationDetailOrderImpl({
     expectNoHorizontalOverflow,
     expectVisible,
     page,
