@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
+import { DASHBOARD_PAGE_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { DashboardStatusPanel } from "./dashboard-status-panel";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 
@@ -10,16 +11,19 @@ describe("DashboardStatusPanel", () => {
       <DashboardStatusPanel title="Timeline unavailable" />,
     );
     const headerEyebrow = container.querySelector("p");
+    const section = container.querySelector("section");
+    const heading = screen.getByRole("heading", {
+      name: "Timeline unavailable",
+    });
 
-    expect(
-      screen.getByRole("heading", { name: "Timeline unavailable" }),
-    ).toBeTruthy();
+    expect(heading).toBeTruthy();
     expect(screen.getByText("U").className).not.toContain("sr-only");
     expect(headerEyebrow?.textContent).toContain("U");
+    expect(headerEyebrow?.className).toContain("text-af-accent");
+    expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
     expect(screen.queryByText("Waiting for more timeline data.")).toBeNull();
-    expect(container.querySelector("section")?.className).toContain(
-      DASHBOARD_PANEL_SHELL_CLASS,
-    );
+    expect(section?.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
+    expect(section?.className).toContain("mb-4");
   });
 
   it("renders the error tone through the shared shell and optional detail copy when provided", () => {
@@ -31,13 +35,14 @@ describe("DashboardStatusPanel", () => {
       />,
     );
 
-    expect(screen.getByText("Waiting for more timeline data.")).toBeTruthy();
+    const detail = screen.getByText("Waiting for more timeline data.");
+
+    expect(detail).toBeTruthy();
     expect(container.querySelector("section")?.className).toContain(
       DASHBOARD_PANEL_SHELL_CLASS,
     );
-    expect(
-      screen.getByText("Waiting for more timeline data.").className,
-    ).toContain("text-af-danger-text");
+    expect(detail.className).toContain("max-w-80");
+    expect(detail.className).toContain("text-af-danger-text");
   });
 
   it("resolves brand copy from the requested locale catalog", () => {

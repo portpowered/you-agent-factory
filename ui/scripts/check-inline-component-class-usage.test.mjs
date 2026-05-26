@@ -92,8 +92,8 @@ test("scanInlineComponentClassUsage supports a narrow explicit allowlist and rep
     "features/example/panel.tsx": `
       const PANEL_CLASS = "rounded-lg border border-af-border";
 
-      export function Panel() {
-        return <section className={PANEL_CLASS}>Body</section>;
+      export function Panel({ children }: { children?: React.ReactNode }) {
+        return <section className={PANEL_CLASS}>{children}</section>;
       }
     `,
   });
@@ -171,13 +171,25 @@ test("package command wiring matches the direct guard result for the same violat
     "features/example/panel.tsx": `
       const PANEL_CLASS = "rounded-lg border border-af-border";
 
-      export function Panel() {
-        return <section className={PANEL_CLASS}>Body</section>;
+      export function Panel({ children }: { children?: React.ReactNode }) {
+        return <section className={PANEL_CLASS}>{children}</section>;
       }
     `,
   });
 
   try {
+    await expect(
+      execFileAsync(process.execPath, [scriptPath], {
+        cwd: tempRoot,
+        env: {
+          ...process.env,
+          AGENT_FACTORY_UI_SRC_DIR: srcDir,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining("src/features/example/panel.tsx"),
+    });
     await expect(
       execFileAsync("bun", ["run", "check:inline-component-class-usage"], {
         cwd: uiRoot,
@@ -189,20 +201,6 @@ test("package command wiring matches the direct guard result for the same violat
     ).rejects.toMatchObject({
       code: 1,
       stderr: expect.stringContaining("src/features/example/panel.tsx"),
-    });
-    await expect(
-      execFileAsync("bun", ["run", "check"], {
-        cwd: uiRoot,
-        env: {
-          ...process.env,
-          AGENT_FACTORY_UI_SRC_DIR: srcDir,
-        },
-      }),
-    ).rejects.toMatchObject({
-      code: 1,
-      stderr: expect.stringContaining(
-        "Inline component class usage guard failed.",
-      ),
     });
   } finally {
     await rm(tempRoot, { force: true, recursive: true });

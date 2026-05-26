@@ -7,13 +7,6 @@ import {
 import { useAppLocale } from "../../../i18n";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 
-const STATUS_PANEL_CLASS = cn(
-  DASHBOARD_PANEL_SHELL_CLASS,
-  "mb-4 p-4 md:p-5 md:px-6",
-);
-const EYEBROW_CLASS =
-  "mb-3 text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
-const DASHBOARD_TITLE_CLASS = cn("m-0", DASHBOARD_PAGE_HEADING_CLASS);
 const DETAIL_COPY_CLASS = cn("m-0 max-w-80", DASHBOARD_BODY_TEXT_CLASS);
 
 interface DashboardStatusPanelProps {
@@ -36,15 +29,17 @@ export function DashboardStatusPanel({
       : DETAIL_COPY_CLASS;
 
   return (
-    <section className={STATUS_PANEL_CLASS}>
-      <p className={EYEBROW_CLASS}>
+    <section
+      className={cn(DASHBOARD_PANEL_SHELL_CLASS, "mb-4 p-4 md:p-5 md:px-6")}
+    >
+      <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-af-accent">
         <DashboardBrandLockup
           className="gap-2"
           locale={resolvedLocale}
           wordmarkClassName="truncate"
         />
       </p>
-      <h1 className={DASHBOARD_TITLE_CLASS}>{title}</h1>
+      <h1 className={cn("m-0", DASHBOARD_PAGE_HEADING_CLASS)}>{title}</h1>
       {detail ? <p className={detailClassName}>{detail}</p> : null}
     </section>
   );
