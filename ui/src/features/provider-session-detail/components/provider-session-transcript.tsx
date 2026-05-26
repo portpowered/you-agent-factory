@@ -122,7 +122,7 @@ function TranscriptEntryCard({
         getTranscriptEntryClassName(entry.type),
       )}
     >
-      <div className="grid gap-2 md:grid-cols-[auto_minmax(0,1fr)] md:items-start md:gap-3">
+      <div className="grid gap-2">
         <span
           className={cn(
             "inline-flex w-fit rounded-full border px-2 py-0.5",

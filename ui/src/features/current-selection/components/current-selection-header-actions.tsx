@@ -5,8 +5,8 @@ import {
   DashboardActionRow,
 } from "../../../components/ui";
 
-const CURRENT_SELECTION_HEADER_ACTIONS_CLASS = "justify-end";
-const CURRENT_SELECTION_HEADER_ACTIONS_GROUP_CLASS = "justify-end";
+const CURRENT_SELECTION_HEADER_ACTIONS_CLASS = "w-full justify-end";
+const CURRENT_SELECTION_HEADER_ACTIONS_GROUP_CLASS = "w-full justify-end";
 const CURRENT_SELECTION_ICON_CLASS = "size-4";
 
 export function CurrentSelectionHeaderActions({

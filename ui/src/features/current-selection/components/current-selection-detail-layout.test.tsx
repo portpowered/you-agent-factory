@@ -42,10 +42,11 @@ describe("SelectionDetailLayout", () => {
     ).toContain("rounded-lg");
     expect(
       screen.getByRole("button", { name: "Undo selection" }).className,
-    ).toContain("h-10");
-    expect(
-      screen.getByRole("button", { name: "Undo selection" }).className,
-    ).toContain("w-10");
+    ).toContain("min-h-10");
+    const actions = screen
+      .getByRole("button", { name: "Undo selection" })
+      .closest("[data-dashboard-action-row-section='actions']");
+    expect(actions?.className).toContain("w-full");
   });
 
   it("renders localized history control labels and accessible names from the requested locale", () => {
