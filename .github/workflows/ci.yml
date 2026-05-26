@@ -39,6 +39,7 @@ jobs:
       areas: ${{ steps.classify.outputs.areas || steps.classify_push.outputs.areas }}
       changed_files_count: ${{ steps.classify.outputs.changed_files_count || steps.classify_push.outputs.changed_files_count }}
       reason: ${{ steps.classify.outputs.reason || steps.classify_push.outputs.reason }}
+      full_run_command: ${{ steps.classify.outputs.full_run_command || steps.classify_push.outputs.full_run_command }}
       run_ui_coverage: ${{ steps.classify.outputs.run_ui_coverage || steps.classify_push.outputs.run_ui_coverage }}
       ui_coverage_reason: ${{ steps.classify.outputs.ui_coverage_reason || steps.classify_push.outputs.ui_coverage_reason }}
       ui_coverage_command: ${{ steps.classify.outputs.ui_coverage_command || steps.classify_push.outputs.ui_coverage_command }}
@@ -78,6 +79,7 @@ jobs:
             echo "backend_only=false"
             echo "shared_risk=true"
             echo "full_run_required=true"
+            echo "full_run_command=make verify"
             echo "areas=shared-risk"
             echo "changed_files_count=0"
             echo "reason=Push events stay on the full shared-risk verification path."
@@ -98,6 +100,7 @@ jobs:
             echo "- Areas touched: \`shared-risk\`"
             echo "- Changed files: \`0\`"
             echo "- Reason: Push events stay on the full shared-risk verification path."
+            echo "- Full required rerun: \`make verify\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   typecheck:
@@ -227,6 +230,7 @@ jobs:
             echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_ui_coverage == 'true' && 'run' || 'skip' }}\`"
             echo "- Local command: \`${{ needs.classify-pr-impact.outputs.ui_coverage_command }}\`"
             echo "- Reason: ${{ needs.classify-pr-impact.outputs.ui_coverage_reason }}"
+            echo "- Full required rerun: \`${{ needs.classify-pr-impact.outputs.full_run_command }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check out repository
@@ -291,6 +295,7 @@ jobs:
             echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true' && 'run' || 'skip' }}\`"
             echo "- Local command: \`${{ needs.classify-pr-impact.outputs.ui_browser_integration_command }}\`"
             echo "- Reason: ${{ needs.classify-pr-impact.outputs.ui_browser_integration_reason }}"
+            echo "- Full required rerun: \`${{ needs.classify-pr-impact.outputs.full_run_command }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check out repository
@@ -367,6 +372,7 @@ jobs:
             echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_backend_verification == 'true' && 'run' || 'skip' }}\`"
             echo "- Local command: \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`"
             echo "- Reason: ${{ needs.classify-pr-impact.outputs.backend_verification_reason }}"
+            echo "- Full required rerun: \`${{ needs.classify-pr-impact.outputs.full_run_command }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check out repository

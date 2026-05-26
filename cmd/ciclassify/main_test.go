@@ -73,6 +73,12 @@ func TestClassifyPathsMarksSharedRiskForCrossCuttingAndUnknownSurfaces(t *testin
 			},
 		},
 		{
+			name: "generated-api-surface",
+			paths: []string{
+				"pkg/api/generated/server.gen.go",
+			},
+		},
+		{
 			name: "mixed-ui-and-backend",
 			paths: []string{
 				"ui/src/App.tsx",
@@ -83,6 +89,12 @@ func TestClassifyPathsMarksSharedRiskForCrossCuttingAndUnknownSurfaces(t *testin
 			name: "workflow",
 			paths: []string{
 				".github/workflows/ci.yml",
+			},
+		},
+		{
+			name: "root-build-config",
+			paths: []string{
+				"Makefile",
 			},
 		},
 	}
@@ -243,6 +255,9 @@ func TestRunWritesGitHubOutputsAndSummary(t *testing.T) {
 	if !strings.Contains(summary, "- Classification: `ui-only`") {
 		t.Fatalf("GitHub summary = %q, want classification bullet", summary)
 	}
+	if strings.Contains(summary, "- Full required rerun: `make verify`") {
+		t.Fatalf("GitHub summary = %q, did not want shared-risk rerun guidance for ui-only", summary)
+	}
 	if !strings.Contains(summary, "### Required lane routing") {
 		t.Fatalf("GitHub summary = %q, want lane routing section", summary)
 	}
@@ -251,6 +266,53 @@ func TestRunWritesGitHubOutputsAndSummary(t *testing.T) {
 	}
 	if !strings.Contains(summary, "- `ui/src/App.tsx`") {
 		t.Fatalf("GitHub summary = %q, want changed file list", summary)
+	}
+}
+
+func TestRunWritesFullRunGuidanceForSharedRisk(t *testing.T) {
+	tempDir := t.TempDir()
+	changedFilesPath := filepath.Join(tempDir, "changed-files.txt")
+	if err := os.WriteFile(changedFilesPath, []byte("Makefile\n"), 0o644); err != nil {
+		t.Fatalf("write changed files fixture: %v", err)
+	}
+
+	outputPath := filepath.Join(tempDir, "github-output.txt")
+	summaryPath := filepath.Join(tempDir, "github-summary.md")
+
+	t.Setenv("GITHUB_OUTPUT", outputPath)
+	t.Setenv("GITHUB_STEP_SUMMARY", summaryPath)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if err := run(config{changedFilesPath: changedFilesPath}, stdout, stderr); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+
+	outputBytes, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read GitHub output: %v", err)
+	}
+	output := string(outputBytes)
+	if !strings.Contains(output, "classification=shared-risk") {
+		t.Fatalf("GitHub output = %q, want shared-risk classification", output)
+	}
+	if !strings.Contains(output, "full_run_required=true") {
+		t.Fatalf("GitHub output = %q, want full_run_required", output)
+	}
+	if !strings.Contains(output, "full_run_command=make verify") {
+		t.Fatalf("GitHub output = %q, want full run command", output)
+	}
+
+	summaryBytes, err := os.ReadFile(summaryPath)
+	if err != nil {
+		t.Fatalf("read GitHub summary: %v", err)
+	}
+	summary := string(summaryBytes)
+	if !strings.Contains(summary, "- Full required rerun: `make verify`") {
+		t.Fatalf("GitHub summary = %q, want full required rerun guidance", summary)
 	}
 }
 

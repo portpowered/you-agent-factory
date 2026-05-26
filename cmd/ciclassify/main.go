@@ -17,6 +17,7 @@ const (
 	classificationUIOnly      = "ui-only"
 	classificationBackendOnly = "backend-only"
 	classificationSharedRisk  = "shared-risk"
+	fullRunCommand            = "make verify"
 )
 
 var (
@@ -152,7 +153,7 @@ func classifyPaths(paths []string) classificationResult {
 			Classification: classificationSharedRisk,
 			Areas:          []string{"shared-risk"},
 			ChangedPaths:   nil,
-			Reason:         "No changed files were detected, so the workflow falls back to the full shared-risk safety path.",
+			Reason:         "No changed files were detected, so the workflow falls back to the explicit shared-risk full verification path.",
 		}
 	}
 
@@ -179,12 +180,15 @@ func classifyPaths(paths []string) classificationResult {
 		result.Reason = "Only backend-owned files and optional documentation changed, so this pull request stays on the backend-only path."
 	default:
 		result.Classification = classificationSharedRisk
-		result.Reason = "The changed files cross product boundaries or touch shared-risk surfaces, so the workflow keeps the full verification safety path."
+		result.Reason = "The changed files cross product boundaries or touch explicit shared-risk surfaces such as workflows, contracts, generated API boundaries, or root build configuration, so the workflow keeps the full verification safety path."
 	}
 	return result
 }
 
 func classifyPath(path string) string {
+	if isSharedRiskPath(path) {
+		return "shared-risk"
+	}
 	if isDocumentationPath(path) {
 		return "docs"
 	}
@@ -195,6 +199,25 @@ func classifyPath(path string) string {
 		return "backend"
 	}
 	return "shared-risk"
+}
+
+func isSharedRiskPath(path string) bool {
+	if strings.HasPrefix(path, ".github/workflows/") {
+		return true
+	}
+	if strings.HasPrefix(path, "api/") {
+		return true
+	}
+	if strings.HasPrefix(path, "pkg/api/") || strings.HasPrefix(path, "pkg/apisurface/") {
+		return true
+	}
+
+	switch path {
+	case "Makefile", "go.mod", "go.sum":
+		return true
+	default:
+		return false
+	}
 }
 
 func isDocumentationPath(path string) bool {
@@ -354,6 +377,7 @@ func writeGitHubOutput(result classificationResult) error {
 		fmt.Sprintf("backend_only=%t", result.Classification == classificationBackendOnly),
 		fmt.Sprintf("shared_risk=%t", result.Classification == classificationSharedRisk),
 		fmt.Sprintf("full_run_required=%t", result.Classification == classificationSharedRisk),
+		fmt.Sprintf("full_run_command=%s", fullRunCommand),
 		fmt.Sprintf("areas=%s", strings.Join(result.Areas, ",")),
 		fmt.Sprintf("changed_files_count=%d", len(result.ChangedPaths)),
 		fmt.Sprintf("reason=%s", sanitizeGitHubValue(result.Reason)),
@@ -383,6 +407,9 @@ func writeGitHubStepSummary(result classificationResult) error {
 		fmt.Sprintf("- Areas touched: `%s`", strings.Join(result.Areas, ", ")),
 		fmt.Sprintf("- Changed files: `%d`", len(result.ChangedPaths)),
 		fmt.Sprintf("- Reason: %s", result.Reason),
+	}
+	if result.Classification == classificationSharedRisk {
+		lines = append(lines, fmt.Sprintf("- Full required rerun: `%s`", fullRunCommand))
 	}
 	lines = append(lines, "", "### Required lane routing")
 	for _, plan := range lanePlans(result.Classification) {
