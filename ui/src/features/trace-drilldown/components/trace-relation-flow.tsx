@@ -23,6 +23,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import type { DashboardWorkRelation } from "../../../api/dashboard/types";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import {
@@ -255,7 +256,7 @@ function RelationWorkNode({
 
   if (data.selectable && data.workID && data.onSelectWorkID) {
     return (
-      <button
+      <GraphNodeButton
         aria-label={data.label}
         className={cn(
           RELATION_NODE_CLASS,
@@ -264,10 +265,9 @@ function RelationWorkNode({
         )}
         onClick={handleSelectWork}
         title={data.workID}
-        type="button"
       >
         {content}
-      </button>
+      </GraphNodeButton>
     );
   }
 

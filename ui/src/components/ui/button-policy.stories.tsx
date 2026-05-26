@@ -41,17 +41,17 @@ const semanticExceptions = [
   {
     category: "Disclosure triggers",
     guidance:
-      "Keep wrapper ownership where the trigger controls expanded content and needs disclosure-specific semantics.",
+      "Keep wrapper ownership such as DisclosureButton where the trigger controls expanded content and needs disclosure-specific semantics.",
   },
   {
     category: "Selectable rows and cards",
     guidance:
-      "Keep listbox, option, or selection-shell semantics explicit so selection state is not reduced to a generic action button.",
+      "Keep listbox, option, or selection-shell semantics explicit through dedicated owners such as SelectableCardButton so selection state is not reduced to a generic action button.",
   },
   {
     category: "Graph nodes and canvas tools",
     guidance:
-      "Use graph-specific wrappers when the control participates in drag, placement, or canvas navigation semantics.",
+      "Use graph-specific wrappers such as GraphNodeButton when the control participates in drag, placement, or canvas navigation semantics.",
   },
 ];
 
@@ -94,7 +94,9 @@ function ButtonPolicyShowcase() {
             Production UI under <code>ui/src</code> should stay in one of three lanes:
             standard actions use <code>Button</code>, compact dashboard actions use
             <code> DashboardActionButton</code>, and structurally different semantic
-            controls stay behind narrow wrapper-owned exceptions.
+            controls stay behind narrow wrapper-owned exceptions such as
+            <code> DisclosureButton</code>, <code>SelectableCardButton</code>, feature-owned
+            tab shells, or <code>GraphNodeButton</code>.
           </p>
         </div>
       </section>
@@ -257,5 +259,6 @@ export const Default = {
     ).toBeVisible();
     await expect(canvas.getByText("Tabs and segmented controls")).toBeVisible();
     await expect(canvas.getByText("Disclosure triggers")).toBeVisible();
+    await expect(canvas.getByText("GraphNodeButton")).toBeVisible();
   },
 };

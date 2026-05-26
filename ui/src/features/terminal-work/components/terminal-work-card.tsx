@@ -7,17 +7,17 @@ import {
   DETAIL_COPY_CLASS,
 } from "../../../components/dashboard/widget-board";
 import { AgentBentoCard } from "../../../components/ui";
-import { Button } from "../../../components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
-  CollapsibleTrigger,
 } from "../../../components/ui/collapsible";
+import { DisclosureButton } from "../../../components/ui/disclosure-button";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { SelectableCardButton } from "../../../components/ui/selectable-card-button";
 import { cn } from "../../../lib/cn";
 import type { GraphSemanticIconKind } from "../../flowchart/public";
 import { GraphSemanticIcon } from "../../flowchart/public";
@@ -211,23 +211,22 @@ function TerminalWorkRow({
             </div>
             <p className={DASHBOARD_SUPPORTING_TEXT_CLASS}>{itemCountLabel}</p>
           </div>
-          <CollapsibleTrigger asChild>
-            <Button
-              aria-controls={rowId}
-              aria-expanded={expanded}
-              className={TERMINAL_TOGGLE_CLASS}
-              size="sm"
-              tone="secondary"
-            >
-              {toggleLabel}
-            </Button>
-          </CollapsibleTrigger>
+          <DisclosureButton
+            controlsID={rowId}
+            expanded={expanded}
+            className={TERMINAL_TOGGLE_CLASS}
+            onClick={() => onExpandedChange(!expanded)}
+            size="sm"
+            tone="secondary"
+          >
+            {toggleLabel}
+          </DisclosureButton>
         </div>
 
         <CollapsibleContent className={TERMINAL_LIST_CLASS} id={rowId}>
           {items.length > 0 ? (
             items.map((item) => (
-              <Button
+              <SelectableCardButton
                 aria-label={item.label}
                 className={cn(
                   TERMINAL_BUTTON_CLASS,
@@ -240,6 +239,7 @@ function TerminalWorkRow({
                 }
                 key={`${status}-${item.label}`}
                 onClick={() => onSelectItem(item)}
+                selected={selectedLabel === item.label}
                 size="sm"
                 tone="outline"
               >
@@ -252,7 +252,7 @@ function TerminalWorkRow({
                   summary,
                   status,
                 )}
-              </Button>
+              </SelectableCardButton>
             ))
           ) : (
             <p className={DETAIL_COPY_CLASS}>{emptyMessage}</p>
