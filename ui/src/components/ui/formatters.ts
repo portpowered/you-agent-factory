@@ -2,6 +2,12 @@ import type {
   DashboardProviderSession,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
+import {
+  formatDateTime,
+  formatDuration,
+  formatRelativeTime,
+  formatTime,
+} from "../../i18n/formatters";
 
 const LOCAL_JSONL_EXTENSION = ".jsonl";
 const RAW_REJECTED_OUTCOME = "REJECTED";
@@ -23,82 +29,100 @@ export interface WorkstationRunOutcomeContext {
   workstationKind?: string;
 }
 
-const TIME_OF_DAY_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  hour: "numeric",
-  minute: "2-digit",
-});
-const LOCAL_DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
-export function formatDurationMillis(durationMillis: number): string {
-  const safeDurationMillis = Math.max(0, Math.floor(durationMillis));
-
-  if (safeDurationMillis < 1000) {
-    return `${safeDurationMillis}ms`;
-  }
-
-  const durationSeconds = Math.floor(safeDurationMillis / 1000);
-  const hours = Math.floor(durationSeconds / 3600);
-  const minutes = Math.floor((durationSeconds % 3600) / 60);
-  const seconds = durationSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-  return `${seconds}s`;
+export function formatDurationMillis(
+  durationMillis: number,
+  locale?: string | null,
+): string {
+  return formatDuration(durationMillis, locale, {
+    style: "compact",
+  });
 }
 
-export function formatDurationMillisVerbose(durationMillis: number): string {
-  const safeDurationMillis = Math.max(0, Math.floor(durationMillis));
-
-  if (safeDurationMillis < 1000) {
-    return formatDurationUnit(safeDurationMillis, "millisecond");
-  }
-
-  const durationSeconds = Math.floor(safeDurationMillis / 1000);
-  const hours = Math.floor(durationSeconds / 3600);
-  const minutes = Math.floor((durationSeconds % 3600) / 60);
-  const seconds = durationSeconds % 60;
-
-  if (hours > 0) {
-    return [formatDurationUnit(hours, "hour"), formatOptionalDurationUnit(minutes, "minute")]
-      .filter((part): part is string => part !== null)
-      .join(", ");
-  }
-  if (minutes > 0) {
-    return [formatDurationUnit(minutes, "minute"), formatOptionalDurationUnit(seconds, "second")]
-      .filter((part): part is string => part !== null)
-      .join(", ");
-  }
-  return formatDurationUnit(durationSeconds, "second");
+export function formatDurationMillisVerbose(
+  durationMillis: number,
+  locale?: string | null,
+): string {
+  return formatDuration(durationMillis, locale, {
+    style: "verbose",
+  });
 }
 
-export function formatDurationFromISO(startedAt: string, now: number): string {
+export function formatDurationFromISO(
+  startedAt: string,
+  now: number,
+  locale?: string | null,
+  fallback = "Unavailable",
+): string {
   const startedAtMs = Date.parse(startedAt);
   if (Number.isNaN(startedAtMs)) {
-    return "Unavailable";
+    return fallback;
   }
 
-  return formatDurationMillis(now - startedAtMs);
+  return formatDurationMillis(now - startedAtMs, locale);
 }
 
-export function formatTimeOfDay(isoTimestamp: string): string {
-  const timestampMs = Date.parse(isoTimestamp);
+export function formatRelativeTimeFromISO(
+  timestamp: string,
+  now: number,
+  locale?: string | null,
+  fallback = "Unavailable",
+): string {
+  const timestampMs = Date.parse(timestamp);
   if (Number.isNaN(timestampMs)) {
-    return isoTimestamp;
+    return fallback;
   }
 
-  return TIME_OF_DAY_FORMATTER.format(timestampMs).replace(/\s/g, "");
+  const relativeMillis = timestampMs - now;
+  const absoluteMillis = Math.abs(relativeMillis);
+
+  if (absoluteMillis < 60_000) {
+    return formatRelativeTime(
+      Math.round(relativeMillis / 1_000),
+      "second",
+      locale,
+      { fallback },
+    );
+  }
+
+  if (absoluteMillis < 3_600_000) {
+    return formatRelativeTime(
+      Math.round(relativeMillis / 60_000),
+      "minute",
+      locale,
+      { fallback },
+    );
+  }
+
+  if (absoluteMillis < 86_400_000) {
+    return formatRelativeTime(
+      Math.round(relativeMillis / 3_600_000),
+      "hour",
+      locale,
+      { fallback },
+    );
+  }
+
+  return formatRelativeTime(
+    Math.round(relativeMillis / 86_400_000),
+    "day",
+    locale,
+    { fallback },
+  );
+}
+
+export function formatTimeOfDay(
+  isoTimestamp: string,
+  locale?: string | null,
+): string {
+  return formatTime(isoTimestamp, locale, {
+    fallback: isoTimestamp,
+  }).replace(/\s/g, "");
 }
 
 export function formatLocalDateTime(
   timestamp: string | undefined,
   unavailableLabel: string,
+  locale?: string | null,
 ): string {
   const normalizedTimestamp = timestamp?.trim();
   if (!normalizedTimestamp) {
@@ -110,7 +134,9 @@ export function formatLocalDateTime(
     return unavailableLabel;
   }
 
-  return LOCAL_DATE_TIME_FORMATTER.format(timestampMs);
+  return formatDateTime(timestampMs, locale, {
+    fallback: unavailableLabel,
+  });
 }
 
 export function formatWorkItemLabel(workItem: DashboardWorkItemRef): string {
@@ -228,18 +254,6 @@ export function formatList(values: string[] | undefined): string {
 function normalizeNonEmptyText(value: string | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : null;
-}
-
-function formatDurationUnit(value: number, unit: string): string {
-  return `${value} ${unit}${value === 1 ? "" : "s"}`;
-}
-
-function formatOptionalDurationUnit(value: number, unit: string): string | null {
-  if (value === 0) {
-    return null;
-  }
-
-  return formatDurationUnit(value, unit);
 }
 
 function isAllowedSessionLogURL(value: string): boolean {

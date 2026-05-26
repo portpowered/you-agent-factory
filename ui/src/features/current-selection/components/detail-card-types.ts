@@ -219,6 +219,7 @@ export type EditableWorkstationSaveState =
 
 export interface WorkstationActiveWorkListProps {
   executions: DashboardActiveExecution[];
+  locale?: string;
   messages: WorkstationDetailMessages;
   now: number;
   onSelectWorkID?: (workID: string) => void;

@@ -10,6 +10,7 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import {
   formatDurationFromISO,
+  formatRelativeTimeFromISO,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
@@ -84,6 +85,7 @@ export function WorkstationDetailCard({
       />
       <WorkstationActiveWorkList
         executions={activeExecutions}
+        locale={locale}
         messages={messages}
         now={now}
         onSelectWorkID={onSelectWorkID}
@@ -96,6 +98,7 @@ export function WorkstationDetailCard({
       {hasProjectedRequestHistory ? (
         <CollapsibleWorkstationRequests
           key={`workstation-request-history:${selectedNode.node_id}`}
+          locale={locale}
           messages={messages}
           now={now}
           onSelectWorkstationRequest={onSelectWorkstationRequest}
@@ -132,12 +135,14 @@ export function WorkstationDetailCard({
 }
 
 function CollapsibleWorkstationRequests({
+  locale,
   messages,
   now,
   onSelectWorkstationRequest,
   requests,
   resetKey,
 }: {
+  locale?: string;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   now: number;
   onSelectWorkstationRequest?: WorkstationDetailCardProps["onSelectWorkstationRequest"];
@@ -242,11 +247,16 @@ function CollapsibleWorkstationRequests({
                             "m-0 text-af-text-subtle",
                             DASHBOARD_SUPPORTING_TEXT_CLASS,
                           )}
-                        >
-                        {messages.requestStatusStartedAgo(
-                          formatDurationFromISO(request.started_at, now),
-                        )}
-                      </p>
+                    >
+                      {messages.requestStatusStartedAgo(
+                        formatRelativeTimeFromISO(
+                          request.started_at,
+                          now,
+                          locale,
+                          messages.unavailableValue,
+                        ),
+                      )}
+                    </p>
                     ) : null}
                   </div>
                   {onSelectWorkstationRequest ? (
@@ -278,6 +288,7 @@ function CollapsibleWorkstationRequests({
 
 function WorkstationActiveWorkList({
   executions,
+  locale,
   messages,
   now,
   onSelectWorkID,
@@ -344,7 +355,12 @@ function WorkstationActiveWorkList({
                     <div>
                       <dt>{messages.elapsedLabel}</dt>
                       <dd>
-                        {formatDurationFromISO(execution.started_at, now)}
+                        {formatDurationFromISO(
+                          execution.started_at,
+                          now,
+                          locale,
+                          messages.unavailableValue,
+                        )}
                       </dd>
                     </div>
                     <div>

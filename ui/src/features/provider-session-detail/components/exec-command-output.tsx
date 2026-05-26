@@ -3,6 +3,7 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { isAPIRecord } from "../../../api/transport";
+import { formatNumber } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 import { ExpandableCodeBlock } from "./transcript-code-block";
@@ -53,7 +54,7 @@ export function FriendlyExecCommandOutput({
           {friendlyOutput.wallTime ? (
             <SummaryMetric
               label={messages.execCommandWallTimeLabel}
-              value={friendlyOutput.wallTime}
+              value={formatExecCommandWallTime(friendlyOutput.wallTime, locale)}
             />
           ) : null}
           {status ? (
@@ -196,4 +197,34 @@ function summarizeExecCommandText(value: string | null): string | null {
   return firstMeaningfulLine.length > EXEC_COMMAND_SUMMARY_CHAR_LIMIT
     ? `${firstMeaningfulLine.slice(0, EXEC_COMMAND_SUMMARY_CHAR_LIMIT)}…`
     : firstMeaningfulLine;
+}
+
+function formatExecCommandWallTime(
+  value: string,
+  locale?: string,
+): string {
+  const secondsMatch = value.match(
+    /^\s*(?<seconds>\d+(?:\.\d+)?)\s+seconds?\s*$/i,
+  );
+  const secondsText = secondsMatch?.groups?.seconds;
+  if (!secondsText) {
+    return value;
+  }
+
+  const secondsValue = Number(secondsText);
+  if (!Number.isFinite(secondsValue)) {
+    return value;
+  }
+
+  const fractionDigits = secondsText.includes(".")
+    ? secondsText.split(".")[1]?.length ?? 0
+    : 0;
+
+  return formatNumber(secondsValue, locale, {
+    style: "unit",
+    unit: "second",
+    unitDisplay: "long",
+    maximumFractionDigits: fractionDigits,
+    minimumFractionDigits: fractionDigits,
+  });
 }

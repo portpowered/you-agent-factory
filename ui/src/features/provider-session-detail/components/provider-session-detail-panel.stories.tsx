@@ -340,7 +340,7 @@ export const ZhCnLocalizedChrome = {
     ).toBeTruthy();
     expect(canvas.getByText("命令结果")).toBeTruthy();
     expect(canvas.getByText("退出代码")).toBeTruthy();
-    expect(canvas.getByText("0.6289 seconds")).toBeTruthy();
+    expect(canvas.getByText("0.6289秒钟")).toBeTruthy();
     expect(
       canvas.getByText("provider-session parsing verified successfully"),
     ).toBeTruthy();

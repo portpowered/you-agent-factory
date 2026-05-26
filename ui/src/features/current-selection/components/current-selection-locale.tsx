@@ -19,6 +19,7 @@ import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 interface CurrentSelectionLocaleMessages {
   detail: CurrentSelectionDetailMessages;
   dispatchHistory: CurrentSelectionDispatchHistoryMessages;
+  locale?: string | null;
   shell: CurrentSelectionShellMessages;
   workstationDetail: WorkstationDetailMessages;
 }
@@ -40,6 +41,7 @@ export function CurrentSelectionLocaleProvider({
       value={{
         detail: getCurrentSelectionDetailMessages(locale),
         dispatchHistory: getCurrentSelectionDispatchHistoryMessages(locale),
+        locale,
         shell: getCurrentSelectionShellMessages(locale),
         workstationDetail: getWorkstationDetailMessages(locale),
       }}
@@ -75,4 +77,8 @@ export function useCurrentSelectionWorkstationDetailMessages(): WorkstationDetai
     useContext(CurrentSelectionLocaleContext)?.workstationDetail ??
     getWorkstationDetailMessages(undefined)
   );
+}
+
+export function useCurrentSelectionLocale(): string | null | undefined {
+  return useContext(CurrentSelectionLocaleContext)?.locale;
 }
