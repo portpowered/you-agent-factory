@@ -94,6 +94,11 @@ function expectHeadingBeforePosition(firstRect, secondRect, label) {
   }
 }
 
+async function expectSectionHeaderFrame(expectVisible, heading, label) {
+  const headerFrame = heading.locator("xpath=ancestor::div[contains(@class, 'rounded-lg')]").first();
+  await expectVisible(headerFrame, `${label} header frame`);
+}
+
 export async function verifyCurrentSelectionWorkstationDetailOrder({
   expectNoHorizontalOverflow,
   expectVisible,
@@ -129,6 +134,18 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
   await expectVisible(configurationHeading, "Configuration heading");
   await expectVisible(activeWorkHeading, "Active work heading");
   await expectVisible(historyHeading, "History heading");
+  await expectSectionHeaderFrame(
+    expectVisible,
+    summaryHeading,
+    "Workstation summary",
+  );
+  await expectSectionHeaderFrame(
+    expectVisible,
+    configurationHeading,
+    "Configuration",
+  );
+  await expectSectionHeaderFrame(expectVisible, activeWorkHeading, "Active work");
+  await expectSectionHeaderFrame(expectVisible, historyHeading, "History");
   await expectVisible(
     currentSelection.getByText("Input work types"),
     "Workstation summary work-type label",

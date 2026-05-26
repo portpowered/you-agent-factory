@@ -28,6 +28,19 @@ function expectHeadingBefore(first: HTMLElement, second: HTMLElement) {
   ).toBeTruthy();
 }
 
+function expectSectionLabelledByHeading(heading: HTMLElement) {
+  const section = requireValue(
+    heading.closest("section"),
+    `expected ${heading.textContent} section`,
+  );
+  const headingId = heading.getAttribute("id");
+
+  expect(headingId).toBeTruthy();
+  expect(section.getAttribute("aria-labelledby")).toBe(headingId);
+
+  return section;
+}
+
 function expectLocalizedSelectionControlNames() {
   const snapshot = semanticWorkflowDashboardSnapshot;
   const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
@@ -468,6 +481,10 @@ describe("WorkstationDetailCard", () => {
     expectHeadingBefore(summaryHeading, configurationHeading);
     expectHeadingBefore(configurationHeading, activeWorkHeading);
     expectHeadingBefore(activeWorkHeading, runHistoryHeading);
+    expectSectionLabelledByHeading(summaryHeading);
+    expectSectionLabelledByHeading(configurationHeading);
+    expectSectionLabelledByHeading(activeWorkHeading);
+    expectSectionLabelledByHeading(runHistoryHeading);
 
     const activeWorkSection = activeWorkHeading.closest("section");
     const resolvedActiveWorkSection = requireValue(

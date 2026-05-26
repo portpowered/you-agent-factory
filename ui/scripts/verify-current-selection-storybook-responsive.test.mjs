@@ -18,6 +18,9 @@ function createVisibleLocator(label, overrides = {}) {
     isDisabled: vi.fn().mockResolvedValue(false),
     isVisible: vi.fn().mockResolvedValue(true),
     label,
+    locator: vi.fn(function locator() {
+      return this;
+    }),
     waitFor: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -276,6 +279,15 @@ describe("verifyCurrentSelectionWorkstationDetailOrder", () => {
     expect(expectVisible).toHaveBeenCalledWith(
       summaryHeading,
       "Workstation summary heading",
+    );
+    expect(summaryHeading.locator).toHaveBeenCalledWith(
+      "xpath=ancestor::div[contains(@class, 'rounded-lg')]",
+    );
+    expect(configurationHeading.locator).toHaveBeenCalledWith(
+      "xpath=ancestor::div[contains(@class, 'rounded-lg')]",
+    );
+    expect(activeWorkHeading.locator).toHaveBeenCalledWith(
+      "xpath=ancestor::div[contains(@class, 'rounded-lg')]",
     );
     expect(expectVisible).toHaveBeenCalledWith(
       expect.objectContaining({ label: "text:Input work types" }),
