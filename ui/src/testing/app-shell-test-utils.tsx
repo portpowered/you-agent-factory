@@ -24,7 +24,7 @@ import { resetSelectionHistoryStore } from "../features/current-selection/state/
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
-} from "../features/dashboard/state";
+} from "../features/dashboard/state/dashboardStreamStore";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "../features/import/public";

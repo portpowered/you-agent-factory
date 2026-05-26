@@ -9,7 +9,7 @@ export interface DashboardWidgetRemoveButtonProps {
   widgetTitle: string;
 }
 
-export function DashboardWidgetRemoveButton({
+export function  DashboardWidgetRemoveButton({
   locale,
   onClick,
   widgetTitle,
@@ -19,10 +19,9 @@ export function DashboardWidgetRemoveButton({
   return (
     <DashboardActionButton
       aria-label={messages.removeWidgetLabel(widgetTitle)}
-      className="size-8 rounded-md"
       iconOnly
       onClick={onClick}
-      tone="destructive"
+      tone="outline"
     >
       <svg
         aria-hidden="true"

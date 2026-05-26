@@ -87,3 +87,97 @@ export async function verifyCurrentSelectionPromptHint({
     `Current selection prompt hinting at ${viewport.label}`,
   );
 }
+
+function expectHeadingBeforePosition(firstRect, secondRect, label) {
+  if (firstRect.top > secondRect.top) {
+    throw new Error(`${label} rendered out of order.`);
+  }
+}
+
+export async function verifyCurrentSelectionWorkstationDetailOrder({
+  expectNoHorizontalOverflow,
+  expectVisible,
+  page,
+  viewport,
+}) {
+  const currentSelection = page.getByRole("article", {
+    name: "Current selection",
+  });
+  if (!(await currentSelection.isVisible().catch(() => false))) {
+    const selectReviewWorkstationButton = page.getByRole("button", {
+      name: "Select Review workstation",
+    });
+    if ((await selectReviewWorkstationButton.count()) > 0) {
+      await selectReviewWorkstationButton.click();
+    }
+  }
+  await currentSelection.waitFor({ state: "visible" });
+
+  const summaryHeading = currentSelection.getByRole("heading", {
+    name: "Workstation summary",
+  });
+  const configurationHeading = currentSelection.getByRole("heading", {
+    name: "Configuration",
+  });
+  const activeWorkHeading = currentSelection.getByRole("heading", {
+    name: "Active work",
+  });
+  const requestHistoryHeading = currentSelection.getByRole("heading", {
+    name: "Request history",
+  });
+  const runHistoryHeading = currentSelection.getByRole("heading", {
+    name: "Run history",
+  });
+  const historyHeading =
+    (await requestHistoryHeading.count()) > 0
+      ? requestHistoryHeading
+      : runHistoryHeading;
+
+  await expectVisible(summaryHeading, "Workstation summary heading");
+  await expectVisible(configurationHeading, "Configuration heading");
+  await expectVisible(activeWorkHeading, "Active work heading");
+  await expectVisible(historyHeading, "History heading");
+  await expectVisible(
+    currentSelection.getByText("Input work types"),
+    "Workstation summary work-type label",
+  );
+  await expectVisible(
+    currentSelection.getByText("Active runs"),
+    "Workstation summary activity-count label",
+  );
+  await expectVisible(
+    currentSelection.getByRole("button", {
+      name: "Select work item Active Story",
+    }).first(),
+    "Active work selection button",
+  );
+
+  expectHeadingBeforePosition(
+    await summaryHeading.boundingBox(),
+    await configurationHeading.boundingBox(),
+    "Summary heading before configuration heading",
+  );
+  expectHeadingBeforePosition(
+    await configurationHeading.boundingBox(),
+    await activeWorkHeading.boundingBox(),
+    "Configuration heading before active work heading",
+  );
+  expectHeadingBeforePosition(
+    await activeWorkHeading.boundingBox(),
+    await historyHeading.boundingBox(),
+    "Active work heading before history heading",
+  );
+
+  await currentSelection.getByRole("button", { name: "Expand" }).click();
+  await expectVisible(
+    currentSelection.getByRole("button", {
+      name: "Select provider session codex / session_id / sess-rejected-story for dispatch dispatch-review-rejected",
+    }),
+    "History selection button",
+  );
+
+  await expectNoHorizontalOverflow(
+    page,
+    `Current selection workstation detail order at ${viewport.label}`,
+  );
+}

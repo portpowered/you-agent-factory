@@ -1,11 +1,13 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
-
-import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
-import { SelectionDetailLayout } from "./current-selection-detail-layout";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
 } from "../state/selectionHistoryStore";
+import {
+  CurrentSelectionHeaderActionProvider,
+  SelectionDetailLayout,
+} from "./current-selection-detail-layout";
+import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 
 describe("SelectionDetailLayout", () => {
   beforeEach(() => {
@@ -31,16 +33,19 @@ describe("SelectionDetailLayout", () => {
     ).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Undo selection" }).textContent,
-    ).toBe("Undo");
+    ).toBe("");
     expect(
       screen.getByRole("button", { name: "Redo selection" }).textContent,
-    ).toBe("Redo");
+    ).toBe("");
     expect(
       screen.getByRole("button", { name: "Undo selection" }).className,
     ).toContain("rounded-lg");
     expect(
       screen.getByRole("button", { name: "Undo selection" }).className,
-    ).toContain("min-h-10");
+    ).toContain("h-10");
+    expect(
+      screen.getByRole("button", { name: "Undo selection" }).className,
+    ).toContain("w-10");
   });
 
   it("renders localized history control labels and accessible names from the requested locale", () => {
@@ -56,10 +61,10 @@ describe("SelectionDetailLayout", () => {
     expect(screen.getByRole("heading", { name: "当前选择" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "撤销所选内容" }).textContent,
-    ).toBe("撤销");
+    ).toBe("");
     expect(
       screen.getByRole("button", { name: "重做所选内容" }).textContent,
-    ).toBe("重做");
+    ).toBe("");
   });
 
   it("keeps undo and redo history behavior unchanged apart from the localized copy source", () => {
@@ -117,5 +122,37 @@ describe("SelectionDetailLayout", () => {
         .getByRole("button", { name: "重做所选内容" })
         .hasAttribute("disabled"),
     ).toBe(true);
+  });
+
+  it("orders undo, redo, detail actions, then shared header actions", () => {
+    render(
+      <CurrentSelectionHeaderActionProvider
+        headerAction={<button type="button">Remove card</button>}
+      >
+        <SelectionDetailLayout
+          headerAction={<button type="button">Save changes</button>}
+        >
+          <p>Body</p>
+        </SelectionDetailLayout>
+      </CurrentSelectionHeaderActionProvider>,
+    );
+
+    const actionSection = screen
+      .getByRole("button", { name: "Undo selection" })
+      .closest("[data-dashboard-action-row-section='actions']");
+
+    expect(actionSection).toBeTruthy();
+    const buttons = within(actionSection as HTMLElement).getAllByRole("button");
+
+    expect(
+      buttons.map(
+        (button) => button.getAttribute("aria-label") ?? button.textContent,
+      ),
+    ).toEqual([
+      "Undo selection",
+      "Redo selection",
+      "Save changes",
+      "Remove card",
+    ]);
   });
 });

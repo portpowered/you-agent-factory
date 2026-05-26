@@ -1,6 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
 
-import { verifyCurrentSelectionPromptHint } from "./verify-current-selection-storybook-responsive.mjs";
+import {
+  verifyCurrentSelectionPromptHint,
+  verifyCurrentSelectionWorkstationDetailOrder,
+} from "./verify-current-selection-storybook-responsive.mjs";
 
 function createVisibleLocator(label, overrides = {}) {
   return {
@@ -110,5 +113,119 @@ describe("verifyCurrentSelectionPromptHint", () => {
       "text",
       "Save stays disabled until the prompt validates cleanly for this workstation context.",
     ]);
+  });
+});
+
+describe("verifyCurrentSelectionWorkstationDetailOrder", () => {
+  test("verifies the reordered workstation detail sections and request-history access", async () => {
+    const selectReviewWorkstationButton = createVisibleLocator(
+      "Select Review workstation",
+    );
+    selectReviewWorkstationButton.click = vi.fn().mockResolvedValue(undefined);
+    const summaryHeading = createVisibleLocator("Workstation summary", {
+      boundingBox: vi.fn().mockResolvedValue({ top: 10 }),
+    });
+    const configurationHeading = createVisibleLocator("Configuration", {
+      boundingBox: vi.fn().mockResolvedValue({ top: 60 }),
+    });
+    const activeWorkHeading = createVisibleLocator("Active work", {
+      boundingBox: vi.fn().mockResolvedValue({ top: 110 }),
+    });
+    const requestHistoryHeading = createVisibleLocator("Request history", {
+      count: vi.fn().mockResolvedValue(0),
+      boundingBox: vi.fn().mockResolvedValue({ top: 160 }),
+    });
+    const runHistoryHeading = createVisibleLocator("Run history", {
+      boundingBox: vi.fn().mockResolvedValue({ top: 160 }),
+    });
+    const expandButton = createVisibleLocator("Expand button");
+    expandButton.click = vi.fn().mockResolvedValue(undefined);
+    const activeWorkButton = createVisibleLocator("Active Story button");
+    const rejectedStoryButton = createVisibleLocator("Rejected Story button");
+    const currentSelection = {
+      count: vi.fn().mockResolvedValue(1),
+      isVisible: vi.fn().mockResolvedValue(true),
+      getByRole: vi.fn((role, options) => {
+        if (role === "heading" && options?.name === "Workstation summary") {
+          return summaryHeading;
+        }
+        if (role === "heading" && options?.name === "Configuration") {
+          return configurationHeading;
+        }
+        if (role === "heading" && options?.name === "Active work") {
+          return activeWorkHeading;
+        }
+        if (role === "heading" && options?.name === "Request history") {
+          return requestHistoryHeading;
+        }
+        if (role === "heading" && options?.name === "Run history") {
+          return runHistoryHeading;
+        }
+        if (role === "button" && options?.name === "Expand") {
+          return expandButton;
+        }
+        if (
+          role === "button" &&
+          options?.name === "Select work item Active Story"
+        ) {
+          return activeWorkButton;
+        }
+        if (
+          role === "button" &&
+          options?.name ===
+            "Select provider session codex / session_id / sess-rejected-story for dispatch dispatch-review-rejected"
+        ) {
+          return rejectedStoryButton;
+        }
+        return createVisibleLocator(`${role}:${options?.name}`);
+      }),
+      getByText: vi.fn((text) => createVisibleLocator(`text:${text}`)),
+      waitFor: vi.fn().mockResolvedValue(undefined),
+    };
+    const page = {
+      getByRole: vi.fn((role, options) => {
+        if (role === "button" && options?.name === "Select Review workstation") {
+          return selectReviewWorkstationButton;
+        }
+
+        return currentSelection;
+      }),
+    };
+    const expectVisible = vi.fn((_locator) => Promise.resolve());
+    const expectNoHorizontalOverflow = vi.fn().mockResolvedValue(undefined);
+
+    await verifyCurrentSelectionWorkstationDetailOrder({
+      expectNoHorizontalOverflow,
+      expectVisible,
+      page,
+      viewport: { height: 844, label: "mobile", width: 390 },
+    });
+
+    expect(expectVisible).toHaveBeenCalledWith(
+      summaryHeading,
+      "Workstation summary heading",
+    );
+    expect(selectReviewWorkstationButton.click).not.toHaveBeenCalled();
+    expect(expectVisible).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "text:Input work types" }),
+      "Workstation summary work-type label",
+    );
+    expect(expectVisible).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "text:Active runs" }),
+      "Workstation summary activity-count label",
+    );
+    expect(expectVisible).toHaveBeenCalledWith(
+      activeWorkButton,
+      "Active work selection button",
+    );
+    expect(expandButton.click).toHaveBeenCalled();
+    expect(expectVisible).toHaveBeenCalledWith(
+      rejectedStoryButton,
+      "History selection button",
+    );
+    expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
+      page,
+      "Current selection workstation detail order at mobile",
+    );
   });
 });

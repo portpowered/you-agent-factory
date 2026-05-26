@@ -6,6 +6,7 @@ export * from "./chart";
 export * from "./collapsible";
 export * from "./dashboard-action-button";
 export * from "./dashboard-shell";
+export * from "./dashboard-icon-button-shell";
 export * from "./dashboard-status-pill";
 export * from "./dashboard-typography";
 export * from "./data-table";

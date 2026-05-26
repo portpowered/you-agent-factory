@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 
 import {
   Button,
+  DashboardIconButtonShell,
   DashboardWidgetFrame,
   Input,
   Popover,
@@ -73,10 +74,11 @@ export interface SubmitWorkCardProps {
   widgetId?: string;
 }
 
-const FORM_CLASS = "grid h-full min-h-0 gap-4";
+const FORM_CLASS = "grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-4";
+const FORM_FIELDS_CLASS = "grid min-h-0 content-start gap-4 overflow-y-auto pb-2 pr-1";
 const FIELD_GROUP_CLASS = "grid gap-2";
 const FIELD_LABEL_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
-const ACTION_ROW_CLASS = "mt-auto flex items-start gap-3";
+const ACTION_ROW_CLASS = "flex items-start gap-3";
 const HELP_TEXT_CLASS = cn(
   "max-w-xl leading-relaxed text-af-text-muted",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -86,7 +88,7 @@ const VALIDATION_TEXT_CLASS = cn(
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 const ITEM_SHELL_CLASS =
-  "grid gap-3 rounded-lg border border-af-border-subtle bg-af-panel p-3";
+  "grid gap-3 rounded-lg border-af-border border bg-af-panel p-3";
 const STATUS_TONE_CLASS_BY_KIND: Record<SubmitWorkStatus["kind"], string> = {
   error: "text-af-danger-text",
   guidance: "text-af-text-subtle",
@@ -154,85 +156,87 @@ export function SubmitWorkCard({
           onSubmit();
         }}
       >
-        <div className={FIELD_GROUP_CLASS}>
-          <label className={FIELD_LABEL_CLASS} htmlFor={workTypeID}>
-            {messages.workTypeLabel}
-          </label>
-          <Select
-            aria-describedby={
-              validationErrors?.workTypeName ? workTypeErrorID : undefined
-            }
-            aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
-            className={DASHBOARD_BODY_TEXT_CLASS}
-            disabled={controlsDisabled}
-            id={workTypeID}
-            onChange={(event) => onWorkTypeNameChange(event.target.value)}
-            value={draft.workTypeName}
-          >
-            <option value="">{messages.selectWorkTypePlaceholder}</option>
-            {submitWorkTypeNames.map((workTypeName) => (
-              <option key={workTypeName} value={workTypeName}>
-                {workTypeName}
-              </option>
-            ))}
-          </Select>
-          {validationErrors?.workTypeName ? (
-            <p className={VALIDATION_TEXT_CLASS} id={workTypeErrorID}>
-              {validationErrors.workTypeName}
-            </p>
-          ) : null}
-        </div>
-
-        <div className={FIELD_GROUP_CLASS}>
-          <label className={FIELD_LABEL_CLASS} htmlFor={requestNameID}>
-            {messages.requestNameLabel}
-          </label>
-          <Input
-            aria-describedby={
-              validationErrors?.requestName ? requestNameErrorID : undefined
-            }
-            aria-invalid={validationErrors?.requestName ? "true" : undefined}
-            className={DASHBOARD_BODY_TEXT_CLASS}
-            disabled={controlsDisabled}
-            id={requestNameID}
-            onChange={(event) => onRequestNameChange(event.target.value)}
-            placeholder={messages.requestNamePlaceholder}
-            type="text"
-            value={draft.requestName}
-          />
-          {validationErrors?.requestName ? (
-            <p className={VALIDATION_TEXT_CLASS} id={requestNameErrorID}>
-              {validationErrors.requestName}
-            </p>
-          ) : null}
-        </div>
-
-        <div className={FIELD_GROUP_CLASS}>
-          <div className={FIELD_LABEL_CLASS} id={submissionItemsID}>
-            {messages.submissionItemsLabel}
+        <div className={FORM_FIELDS_CLASS}>
+          <div className={FIELD_GROUP_CLASS}>
+            <label className={FIELD_LABEL_CLASS} htmlFor={workTypeID}>
+              {messages.workTypeLabel}
+            </label>
+            <Select
+              aria-describedby={
+                validationErrors?.workTypeName ? workTypeErrorID : undefined
+              }
+              aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
+              className={DASHBOARD_BODY_TEXT_CLASS}
+              disabled={controlsDisabled}
+              id={workTypeID}
+              onChange={(event) => onWorkTypeNameChange(event.target.value)}
+              value={draft.workTypeName}
+            >
+              <option value="">{messages.selectWorkTypePlaceholder}</option>
+              {submitWorkTypeNames.map((workTypeName) => (
+                <option key={workTypeName} value={workTypeName}>
+                  {workTypeName}
+                </option>
+              ))}
+            </Select>
+            {validationErrors?.workTypeName ? (
+              <p className={VALIDATION_TEXT_CLASS} id={workTypeErrorID}>
+                {validationErrors.workTypeName}
+              </p>
+            ) : null}
           </div>
-          <AddSubmissionItemMenu
-            controlsDisabled={controlsDisabled}
-            isOpen={isAddItemMenuOpen}
-            messages={messages}
-            onAddItem={onAddItem}
-            onOpenChange={setIsAddItemMenuOpen}
-          />
-          <SubmissionItemsList
-            controlsDisabled={controlsDisabled}
-            draft={draft}
-            messages={messages}
-            onItemTextChange={onItemTextChange}
-            onRemoveItem={onRemoveItem}
-            onStageFileItems={onStageFileItems}
-            submissionItemsID={submissionItemsID}
-            widgetId={widgetId}
-          />
-          {validationErrors?.submissionItems ? (
-            <p className={VALIDATION_TEXT_CLASS}>
-              {validationErrors.submissionItems}
-            </p>
-          ) : null}
+
+          <div className={FIELD_GROUP_CLASS}>
+            <label className={FIELD_LABEL_CLASS} htmlFor={requestNameID}>
+              {messages.requestNameLabel}
+            </label>
+            <Input
+              aria-describedby={
+                validationErrors?.requestName ? requestNameErrorID : undefined
+              }
+              aria-invalid={validationErrors?.requestName ? "true" : undefined}
+              className={DASHBOARD_BODY_TEXT_CLASS}
+              disabled={controlsDisabled}
+              id={requestNameID}
+              onChange={(event) => onRequestNameChange(event.target.value)}
+              placeholder={messages.requestNamePlaceholder}
+              type="text"
+              value={draft.requestName}
+            />
+            {validationErrors?.requestName ? (
+              <p className={VALIDATION_TEXT_CLASS} id={requestNameErrorID}>
+                {validationErrors.requestName}
+              </p>
+            ) : null}
+          </div>
+
+          <div className={FIELD_GROUP_CLASS}>
+            <div className={FIELD_LABEL_CLASS} id={submissionItemsID}>
+              {messages.submissionItemsLabel}
+            </div>
+            <AddSubmissionItemMenu
+              controlsDisabled={controlsDisabled}
+              isOpen={isAddItemMenuOpen}
+              messages={messages}
+              onAddItem={onAddItem}
+              onOpenChange={setIsAddItemMenuOpen}
+            />
+            <SubmissionItemsList
+              controlsDisabled={controlsDisabled}
+              draft={draft}
+              messages={messages}
+              onItemTextChange={onItemTextChange}
+              onRemoveItem={onRemoveItem}
+              onStageFileItems={onStageFileItems}
+              submissionItemsID={submissionItemsID}
+              widgetId={widgetId}
+            />
+            {validationErrors?.submissionItems ? (
+              <p className={VALIDATION_TEXT_CLASS}>
+                {validationErrors.submissionItems}
+              </p>
+            ) : null}
+          </div>
         </div>
 
         <div className={ACTION_ROW_CLASS}>
@@ -353,7 +357,6 @@ function SubmissionItemsList({
         return (
           <SubmitWorkItemShell
             disabled={controlsDisabled}
-            itemLabel={requestItemLabel}
             itemTypeLabel={typeLabel}
             key={item.id}
             onRemove={() => onRemoveItem(item.id)}
@@ -387,14 +390,12 @@ function SubmissionItemsList({
 function SubmitWorkItemShell({
   children,
   disabled = false,
-  itemLabel,
   itemTypeLabel,
   onRemove,
   removeLabel,
 }: {
   children: ReactNode;
   disabled?: boolean;
-  itemLabel: string;
   itemTypeLabel: string;
   onRemove: () => void;
   removeLabel: string;
@@ -404,11 +405,10 @@ function SubmitWorkItemShell({
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
           <span className={FIELD_LABEL_CLASS}>{itemTypeLabel}</span>
-          <span className={HELP_TEXT_CLASS}>{itemLabel}</span>
         </div>
-        <Button
+        <DashboardIconButtonShell
           aria-label={removeLabel}
-          className="size-8 shrink-0 rounded-md border-af-border px-0 py-0 text-af-text-subtle hover:border-af-danger-border hover:bg-af-danger-surface hover:text-af-danger-text"
+          className="text-af-text-subtle hover:border-af-danger-border hover:bg-af-danger-surface hover:text-af-danger-text"
           disabled={disabled}
           onClick={() => {
             if (disabled) {
@@ -416,9 +416,6 @@ function SubmitWorkItemShell({
             }
             onRemove();
           }}
-          size="icon"
-          tone="ghost"
-          type="button"
         >
           <svg
             aria-hidden="true"
@@ -436,7 +433,7 @@ function SubmitWorkItemShell({
               strokeWidth="1.7"
             />
           </svg>
-        </Button>
+        </DashboardIconButtonShell>
       </div>
       {children}
     </li>
@@ -464,10 +461,8 @@ function TextSubmissionItemEditor({
 
   return (
     <>
-      <label className={FIELD_LABEL_CLASS} htmlFor={requestTextID}>
-        {itemLabel}
-      </label>
       <Textarea
+        aria-label={itemLabel}
         aria-describedby={requestHint ? requestTextHintID : undefined}
         className={DASHBOARD_BODY_TEXT_CLASS}
         disabled={disabled}

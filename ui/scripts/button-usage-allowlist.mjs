@@ -29,12 +29,6 @@ export const approvedButtonUsageAllowlist = [
   {
     rawButtonCount: 1,
     rawButtonReason:
-      "Drag handles are a narrow semantic shell and stay outside the ordinary action-button lane.",
-    relativeFilePath: "src/features/bento/components/agent-bento.tsx",
-  },
-  {
-    rawButtonCount: 1,
-    rawButtonReason:
       "The inline add-widget card is a structural popover trigger shell rather than an ordinary action button.",
     relativeFilePath: "src/features/bento/components/inline-add-widget-card.tsx",
   },

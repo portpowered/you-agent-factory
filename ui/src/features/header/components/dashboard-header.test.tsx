@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
   fireEvent,
@@ -5,7 +6,6 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
@@ -15,17 +15,19 @@ import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamSt
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import { useExportDialogStore } from "../../export/state/exportDialogStore";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
-import { DashboardHeader } from "./dashboard-header";
 import { getHeaderControlsMessages } from "../messages/header-controls";
+import { DashboardHeader } from "./dashboard-header";
 
 vi.mock("./dashboard-session-tabs", () => ({
   DashboardSessionTabs: ({ locale }: { locale: string }) => (
     <div data-testid={`dashboard-session-tabs-${locale}`}>
       <div>Dashboard session tabs {locale}</div>
-      <button aria-label={getHeaderControlsMessages(locale).openSessionButtonLabel} type="button">
+      <button
+        aria-label={getHeaderControlsMessages(locale).openSessionButtonLabel}
+        type="button"
+      >
         +
       </button>
-      <div role="status">{getHeaderControlsMessages(locale).streamStatusConnectingLabel}</div>
     </div>
   ),
 }));
@@ -132,10 +134,7 @@ describe("DashboardHeader", () => {
     const globalActions = screen.getByRole("group", {
       name: headerMessages.globalHeaderActionsLabel,
     });
-    const streamStatus = screen.getByRole("status", {
-      name: headerMessages.streamStatusConnectingLabel,
-    });
-    const actionRow = streamStatus.parentElement?.parentElement;
+    const actionRow = globalActions.parentElement?.parentElement;
     const actionRowSections = toolbar.querySelectorAll(
       "[data-dashboard-action-row-section]",
     );
@@ -156,26 +155,22 @@ describe("DashboardHeader", () => {
       "items-stretch",
     );
     expect(heading.textContent).toContain("U");
-    expect(toolbar.firstElementChild?.firstElementChild?.firstElementChild).toBe(
-      heading,
-    );
+    expect(
+      toolbar.firstElementChild?.firstElementChild?.firstElementChild,
+    ).toBe(heading);
     expect(heading.className).toContain("pb-2");
     expect(heading.firstElementChild?.className).toContain("items-center");
     expect(globalActions.className).toContain("self-end");
     expect(actionRow?.className).toContain("justify-end");
     expect(actionRow?.className).toContain("max-md:w-full");
-    expect(actionRowSections).toHaveLength(2);
+    expect(actionRowSections).toHaveLength(1);
     expect(
       actionRowSections[0]?.getAttribute("data-dashboard-action-row-section"),
-    ).toBe("statuses");
-    expect(
-      actionRowSections[1]?.getAttribute("data-dashboard-action-row-section"),
     ).toBe("actions");
-    expect(actionRowSections[0]?.contains(streamStatus)).toBe(true);
-    expect(actionRowSections[1]?.contains(languageButton)).toBe(true);
-    expect(
-      heading.firstElementChild?.firstElementChild?.className,
-    ).toContain("h-12");
+    expect(actionRowSections[0]?.contains(languageButton)).toBe(true);
+    expect(heading.firstElementChild?.firstElementChild?.className).toContain(
+      "h-12",
+    );
     expect(slider.closest("div")?.parentElement?.className).toContain(
       "rounded-t-2xl",
     );
@@ -195,15 +190,14 @@ describe("DashboardHeader", () => {
     expect(controls[1]).toBe(languageButton);
     expect(controls[2]).toBe(slider);
     expect(controls[3]).toBe(exportButton);
-    expect(streamStatus.textContent).toBe(
-      headerMessages.streamStatusConnectingLabel,
-    );
-    expect(streamStatus.className).toContain("rounded-full");
     expect(globalActions.contains(languageButton)).toBe(true);
     expect(globalActions.contains(openSessionButton)).toBe(false);
     expect(globalActions.contains(exportButton)).toBe(false);
-    expect(actionRowSections[1]?.contains(exportButton)).toBe(false);
-    expect(globalActions.compareDocumentPosition(slider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(actionRowSections[0]?.contains(exportButton)).toBe(false);
+    expect(
+      globalActions.compareDocumentPosition(slider) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");
     expect(languageButton.getAttribute("aria-expanded")).toBe("false");
@@ -264,9 +258,13 @@ describe("DashboardHeader", () => {
         name: headerMessages.languageMenuButtonLabel,
       }).textContent,
     ).toBe("");
-    expect(screen.queryByText(headerMessages.openSessionButtonLabel)).toBeNull();
+    expect(
+      screen.queryByText(headerMessages.openSessionButtonLabel),
+    ).toBeNull();
     expect(screen.queryByText(exportMessages.triggerLabel)).toBeNull();
-    expect(screen.queryByText(headerMessages.languageMenuButtonLabel)).toBeNull();
+    expect(
+      screen.queryByText(headerMessages.languageMenuButtonLabel),
+    ).toBeNull();
     expect(screen.queryByText(headerMessages.sliderLabel)?.className).toContain(
       "sr-only",
     );
@@ -290,9 +288,7 @@ describe("DashboardHeader", () => {
     expect(
       screen.getByRole("region", { name: messages.dashboardSummaryLabel }),
     ).toBeTruthy();
-    expect(
-      screen.getByRole("heading"),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading")).toBeTruthy();
     expect(screen.getByText(messages.sliderLabel).className).toContain(
       "sr-only",
     );
@@ -304,8 +300,8 @@ describe("DashboardHeader", () => {
     ).toBeNull();
     expect(screen.getByText("Dashboard session tabs zh-CN")).toBeTruthy();
     expect(
-      screen.getByRole("status", { name: messages.streamStatusOfflineLabel }),
-    ).toBeTruthy();
+      screen.queryByRole("status", { name: messages.streamStatusOfflineLabel }),
+    ).toBeNull();
   });
 
   it("opens and closes the locale menu through keyboard and dismissal events", async () => {

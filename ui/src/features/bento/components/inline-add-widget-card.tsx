@@ -108,7 +108,7 @@ export function InlineAddWidgetCard({
               </PopoverTrigger>
             </div>
             <div className={INLINE_ADD_WIDGET_DRAG_HANDLE_WRAP_CLASS}>
-              <AgentBentoDragHandle compact title={messages.title} />
+              <AgentBentoDragHandle title={messages.title} />
             </div>
           </div>
         </div>

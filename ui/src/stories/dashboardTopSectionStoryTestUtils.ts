@@ -28,9 +28,6 @@ export async function expectCompactedTopDashboardSection(
   const exportButton = within(toolbar).getByRole("button", {
     name: "Export PNG",
   });
-  const streamStatus = within(toolbar).getByRole("status", {
-    name: /Event stream (connecting|live)/,
-  });
 
   await expect(toolbar).toBeVisible();
   await expect(workTotals).toBeVisible();
@@ -47,7 +44,9 @@ export async function expectCompactedTopDashboardSection(
   ).toBeNull();
   expect(languageButton).toBeVisible();
   expect(exportButton).toBeVisible();
-  expect(streamStatus).toBeVisible();
+  expect(
+    within(toolbar).queryByRole("status", { name: /Event stream/i }),
+  ).toBeNull();
 
   languageButton.focus();
   expect(canvasElement.ownerDocument.activeElement).toBe(languageButton);
