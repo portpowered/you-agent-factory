@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -181,11 +182,32 @@ func TestMockWorkers_ScriptHelper(t *testing.T) {
 	}
 
 	mode := os.Args[len(os.Args)-3]
-	path := os.Args[len(os.Args)-2]
-	content := os.Args[len(os.Args)-1]
-	if mode != "write-file" {
+	if mode == "write-file" {
+		path := os.Args[len(os.Args)-2]
+		content := os.Args[len(os.Args)-1]
+		writeMockWorkerScriptHelperFile(path, content)
 		return
 	}
+	if len(os.Args) < 5 {
+		return
+	}
+	mode = os.Args[len(os.Args)-4]
+	if mode != "sleep-write-file" {
+		return
+	}
+
+	sleepMS, err := strconv.Atoi(os.Args[len(os.Args)-3])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse sleep duration: %v\n", err)
+		os.Exit(2)
+	}
+	path := os.Args[len(os.Args)-2]
+	content := os.Args[len(os.Args)-1]
+	time.Sleep(time.Duration(sleepMS) * time.Millisecond)
+	writeMockWorkerScriptHelperFile(path, content)
+}
+
+func writeMockWorkerScriptHelperFile(path string, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		fmt.Fprintf(os.Stderr, "write side effect: %v\n", err)
 		os.Exit(2)
