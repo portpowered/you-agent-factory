@@ -855,10 +855,10 @@ describe("WorkItemDetailCard summary", () => {
       ).getByText("Parent Story"),
     ).toBeTruthy();
     expect(
-      within(relationshipGraph).getByText("Depends on (ready)"),
+      within(relationshipGraph).getByText("Depends on (Ready)"),
     ).toBeTruthy();
     expect(
-      within(relationshipGraph).getByText("Required by (approved)"),
+      within(relationshipGraph).getByText("Required by (Approved)"),
     ).toBeTruthy();
     expect(
       within(
@@ -913,6 +913,56 @@ describe("WorkItemDetailCard summary", () => {
       ),
     ).toBeTruthy();
     expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
+  });
+
+  it("localizes relationship states and unknown fallbacks in zh-CN", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const localizedTrace = buildSelectedTrace(workItem);
+    localizedTrace.relations = [
+      ...(localizedTrace.relations ?? []),
+      {
+        required_state: "escalated_review",
+        source_work_id: workItem.work_id,
+        target_work_id: "work-related-story",
+        target_work_name: "Related Story",
+        type: "RELATED_TO",
+      },
+    ];
+
+    render(
+      <CurrentSelectionLocaleProvider locale="zh-CN">
+        <WorkItemDetailCard
+          dispatchAttempts={[]}
+          executionDetails={selectWorkItemExecutionDetails({
+            activeExecution: execution,
+            dispatchID,
+            selectedNode,
+            workItem,
+          })}
+          now={DETAIL_CARD_NOW}
+          selectedNode={selectedNode}
+          selectedTrace={localizedTrace}
+          selection={{
+            dispatchId: dispatchID,
+            execution,
+            kind: "work-item",
+            nodeId: selectedNode.node_id,
+            workItem,
+          }}
+          workstationRequests={[]}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const relationshipGraph = screen.getByRole("region", {
+      name: "工作关系",
+    });
+    expect(within(relationshipGraph).getByText("依赖项（就绪）")).toBeTruthy();
+    expect(within(relationshipGraph).getByText("依赖于此（已批准）")).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("related to（未知状态：escalated_review）"),
+    ).toBeTruthy();
   });
 
   it("omits the model row while preserving other execution details for historical selections", () => {
@@ -1095,7 +1145,9 @@ describe("WorkItemDetailCard summary", () => {
 
     expect(onSelectTraceID).toHaveBeenCalledWith("trace-active-story");
   });
+});
 
+describe("WorkItemDetailCard request-detail fallbacks", () => {
   it("keeps markdown-authored inference prompts out of dispatch-level request details before attempts exist", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
@@ -1694,7 +1746,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ).queryByText("No script response yet for this dispatch."),
     ).toBeNull();
     expect(scriptAttempts.getByText("Request attempt 1")).toBeTruthy();
-    expect(scriptAttempts.getByText("PENDING")).toBeTruthy();
+    expect(scriptAttempts.getByText("Pending")).toBeTruthy();
     expect(
       scriptAttempts.getByText(
         "No script response attempt has been recorded yet.",
@@ -1947,7 +1999,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     }
 
     expect(
-      within(dispatchCard).getAllByText("SUCCEEDED").length,
+      within(dispatchCard).getAllByText("Succeeded").length,
     ).toBeGreaterThan(0);
     const scriptAttempts = within(
       expandDispatchSection(dispatchCard, "Script attempts"),
@@ -2023,7 +2075,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     }
 
     expect(
-      within(dispatchCard).getAllByText("TIMED_OUT").length,
+      within(dispatchCard).getAllByText("Timed out").length,
     ).toBeGreaterThan(0);
     const scriptAttempts = within(
       expandDispatchSection(dispatchCard, "Script attempts"),

@@ -28,6 +28,7 @@ import {
 import type { InferenceAttemptCardProps } from "./detail-card-types";
 import {
   useCurrentSelectionDetailMessages,
+  useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionWorkstationDetailMessages,
 } from "./current-selection-locale";
 import {
@@ -92,6 +93,7 @@ function AttemptSummaryHeader({
   timingSummary: string | undefined;
 }) {
   const detailMessages = useCurrentSelectionDetailMessages();
+  const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   return (
     <div className={HISTORY_HEADER_CLASS}>
@@ -101,7 +103,9 @@ function AttemptSummaryHeader({
             {detailMessages.attemptTitle(attempt.attempt)}
           </strong>
           <span className={EXECUTION_PILL_CLASS}>
-            {attempt.outcome ?? detailMessages.pendingOutcome}
+            {attempt.outcome
+              ? enumMessages.localizeOutcome(attempt.outcome)
+              : enumMessages.localizeOutcome("PENDING")}
           </span>
         </div>
         {timingSummary ? (
@@ -201,6 +205,7 @@ function AttemptMetadataDetails({
   attempt: DashboardInferenceAttempt;
 }) {
   const detailMessages = useCurrentSelectionDetailMessages();
+  const enumMessages = useCurrentSelectionOperationalEnumMessages();
   const provider =
     attempt.diagnostics?.provider?.provider ?? attempt.provider_session?.provider;
   const model = attempt.diagnostics?.provider?.model;
@@ -240,7 +245,11 @@ function AttemptMetadataDetails({
       <InferenceAttemptDetail
         code
         label={detailMessages.outcomeLabel}
-        value={attempt.outcome}
+        value={
+          attempt.outcome
+            ? enumMessages.localizeOutcome(attempt.outcome)
+            : undefined
+        }
       />
       <InferenceAttemptDetail
         label={detailMessages.elapsedTimeLabel}

@@ -14,7 +14,10 @@ import {
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import { WORK_SELECTION_BUTTON_CLASS } from "./detail-card-shared";
 import type { WorkItemDetailCardProps } from "./detail-card-types";
-import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
+import {
+  useCurrentSelectionDispatchHistoryMessages,
+  useCurrentSelectionOperationalEnumMessages,
+} from "./current-selection-locale";
 import { SelectedWorkDispatchHistorySection } from "./selected-work-dispatch-history";
 
 export function WorkItemDetailCard({
@@ -34,9 +37,11 @@ export function WorkItemDetailCard({
   widgetId = "current-selection",
 }: WorkItemDetailCardProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
+  const enumMessages = useCurrentSelectionOperationalEnumMessages();
   const workRelationships = buildWorkRelationships(
     selectedTrace,
     selection.workItem.work_id,
+    enumMessages.localizeRelationState,
     messages,
   );
 
@@ -204,11 +209,17 @@ function WorkRelationshipsSection({
 function buildWorkRelationships(
   trace: DashboardTrace | undefined,
   selectedWorkID: string,
+  localizeRelationState: (value: string) => string,
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
 ): RelatedWorkItem[] {
   return (trace?.relations ?? [])
     .flatMap((relation) =>
-      buildRelationshipItems(relation, selectedWorkID, messages),
+      buildRelationshipItems(
+        relation,
+        selectedWorkID,
+        localizeRelationState,
+        messages,
+      ),
     )
     .sort(
       (left, right) =>
@@ -220,6 +231,7 @@ function buildWorkRelationships(
 function buildRelationshipItems(
   relation: DashboardWorkRelation,
   selectedWorkID: string,
+  localizeRelationState: (value: string) => string,
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
 ): RelatedWorkItem[] {
   const items: RelatedWorkItem[] = [];
@@ -229,7 +241,10 @@ function buildRelationshipItems(
     const label = forwardRelationshipLabel(relationType, messages);
     items.push({
       description: relation.required_state
-        ? messages.relationshipStateLabel(label, relation.required_state)
+        ? messages.relationshipStateLabel(
+            label,
+            localizeRelationState(relation.required_state),
+          )
         : label,
       group: forwardRelationshipGroup(relationType),
       key: `${relation.type}:${selectedWorkID}:${relation.target_work_id}:forward`,
@@ -242,7 +257,10 @@ function buildRelationshipItems(
     const label = reverseRelationshipLabel(relationType, messages);
     items.push({
       description: relation.required_state
-        ? messages.relationshipStateLabel(label, relation.required_state)
+        ? messages.relationshipStateLabel(
+            label,
+            localizeRelationState(relation.required_state),
+          )
         : label,
       group: reverseRelationshipGroup(relationType),
       key: `${relation.type}:${relation.source_work_id}:${selectedWorkID}:reverse`,
