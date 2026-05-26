@@ -167,7 +167,7 @@ describe("verifyCurrentSelectionWorkstationDetailOrder", () => {
         if (
           role === "button" &&
           options?.name ===
-            "Select provider session codex / session_id / sess-rejected-story for dispatch dispatch-review-rejected"
+            "Select provider session codex / Session ID / sess-rejected-story for dispatch dispatch-review-rejected"
         ) {
           return rejectedStoryButton;
         }
