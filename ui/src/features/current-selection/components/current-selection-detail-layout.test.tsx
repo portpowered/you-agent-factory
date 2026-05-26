@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+
 import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
@@ -9,7 +10,7 @@ import {
 } from "./current-selection-detail-layout";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 
-describe("SelectionDetailLayout", () => {
+function resetSelectionHistory() {
   beforeEach(() => {
     resetSelectionHistoryStore();
   });
@@ -17,6 +18,10 @@ describe("SelectionDetailLayout", () => {
   afterEach(() => {
     resetSelectionHistoryStore();
   });
+}
+
+describe("SelectionDetailLayout shell copy", () => {
+  resetSelectionHistory();
 
   it("uses the default English shell title when locale is omitted", () => {
     render(
@@ -67,6 +72,10 @@ describe("SelectionDetailLayout", () => {
       screen.getByRole("button", { name: "重做所选内容" }).textContent,
     ).toBe("");
   });
+});
+
+describe("SelectionDetailLayout actions", () => {
+  resetSelectionHistory();
 
   it("keeps undo and redo history behavior unchanged apart from the localized copy source", () => {
     const store = useSelectionHistoryStore.getState();
