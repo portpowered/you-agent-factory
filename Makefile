@@ -47,6 +47,11 @@ endif
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_MIN ?= 80.0
 
+define run_verification_step
+	@printf '%s\n' "==> $(2) [make $(1)]"
+	@$(MAKE) $(1) || { status=$$?; printf '%s\n' "FAIL: $(2) [make $(1)] failed. Rerun with: make $(1)"; exit $$status; }
+endef
+
 .PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-extended verify-build-contracts verify-tests verify test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
@@ -106,9 +111,9 @@ test-functional-long:
 
 verify-fast:
 	@printf '%s\n' "Running fast verification tier: typecheck + short UI/unit suite + short Go suite"
-	$(MAKE) typecheck
-	$(MAKE) ui-test
-	$(MAKE) test
+	$(call run_verification_step,typecheck,dashboard typecheck)
+	$(call run_verification_step,ui-test,short UI/unit suite)
+	$(call run_verification_step,test,short Go suite)
 
 verify-pr:
 	@printf '%s\n' "Running pull-request verification tier: build contracts + required CI-equivalent test lanes"

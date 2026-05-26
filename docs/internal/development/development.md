@@ -79,7 +79,7 @@ Use the same root-level commands locally when reproducing a GitHub Actions failu
 
 Use these canonical verification tiers on the root command surface before reaching for the lower-level lane names:
 
-- `make verify-fast` for the fastest safe author pass: dashboard typecheck, the jsdom-oriented UI unit lane, and the short Go suite.
+- `make verify-fast` for the fastest safe author pass: dashboard typecheck, the jsdom-oriented UI unit lane, and the short Go suite. The tier prints the owned suite label before each step and, on failure, emits the exact `make <target>` rerun command for that step.
 - `make verify-pr` for the pull-request-equivalent local pass: `make verify-build-contracts` plus the required CI test lanes.
 - `make verify-extended` for opt-in deeper coverage after the PR-equivalent pass: `make verify-pr` plus `make long-tests`.
 
