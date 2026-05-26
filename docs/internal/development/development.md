@@ -85,6 +85,25 @@ Use these canonical verification tiers on the root command surface before reachi
 
 The older aggregate names remain available as compatibility aliases while docs, workflows, and active review branches converge on the clearer tiered surface. In particular, `make verify` still works, but it now points contributors at `make verify-pr` as the canonical pull-request rerun command.
 
+Treat the matrix below as the canonical suite-ownership and rerun guide for the tiered test surface:
+
+| Surface | Runs | Intentionally excludes | Failure rerun path |
+| --- | --- | --- | --- |
+| `make verify-fast` | `make typecheck`, `make ui-test`, `make test` | `make test-ui-coverage`, `make ui-integration-test`, `make test-backend-verification`, `make long-tests` | rerun the failing owned step directly: `make typecheck`, `make ui-test`, or `make test` |
+| `make verify-pr` | `make verify-build-contracts` once, then `make verify-tests` once | `make long-tests`, `make test-functional-long`, managed-runtime specialty coverage | rerun `make verify-pr` for the full required envelope, or rerun the failing owned lane called out in output |
+| `make verify-extended` | `make verify-pr`, then `make long-tests` | no extra hidden suites beyond the named long and specialty lanes | rerun `make verify-extended` for the whole opt-in pass, or rerun the failing owned long lane called out in output |
+| `make verify-tests` | `make test-ui-coverage`, `make ui-integration-test`, `make test-backend-verification` | compatibility aliases that would repeat the same confidence outcome | rerun the exact failing required lane printed in output |
+| `make long-tests` | `make long-tests-managed-runtime`, `make long-tests-functional-runtime` | short-path fast and PR-tier suites, unless you intentionally rerun them through `make verify-pr` first | rerun the exact failing specialty lane printed in output |
+
+Compatibility aliases that still remain on the root command surface:
+
+| Compatibility alias | Canonical command to prefer | Why the alias still exists |
+| --- | --- | --- |
+| `make verify` | `make verify-pr` | Keeps existing docs, workflow references, and active review branches working while the canonical PR-tier name rolls out. |
+| `make test-ui-browser-integration` | `make ui-integration-test` | Preserves the older lane-shaped name while the browser-backed dashboard lane keeps the simpler direct test-owner target. |
+| `make test-backend-coverage` | `make test-backend-verification` | Preserves the older backend wording while the merged backend-plus-short-functional lane keeps one canonical rerun path. |
+| `make test-backend-functional` | `make test-backend-verification` | Keeps an older backend-functional mental model callable even though that coverage now lives inside the merged backend verification lane. |
+
 The pull-request workflow restores the supported built-in Go module and build cache through `actions/setup-go` keyed by `go.sum`, and restores Bun's global package cache from `~/.bun/install/cache` keyed by the hosted-runner OS, the pinned `BUN_VERSION`, and `ui/bun.lock`. Keep those invalidation inputs aligned with the real dependency surfaces instead of introducing static cache keys. The workflow intentionally does not cache Playwright browser binaries in the PR lanes because Playwright's CI guidance says restore cost is usually comparable to a fresh download on hosted runners; if that assumption changes, document the measured reason before adding a browser cache layer.
 
 The `UI Browser Integration` lane also intentionally does not reuse a prebuilt `ui/dist` artifact from `verify-build-contracts`. The owned browser harness in `ui/integration/event-stream-replay.integration.test.mjs` rebuilds the dashboard with a lane-scoped `VITE_AGENT_FACTORY_API_ORIGIN` and then starts its own `vite preview` server inside `beforeAll`, so downloading an upstream artifact would add upload/download coupling without removing the lane's own build-and-preview responsibility or making independent retries easier to reason about.

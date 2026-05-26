@@ -145,6 +145,46 @@ func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	}
 }
 
+func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
+		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n",
+		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
+	})
+
+	output, err := runMakefileTarget(repoRoot, makefilePath, "verify")
+	if err != nil {
+		t.Fatalf("run verify wrapper: %v\n%s", err, output)
+	}
+
+	assertOutputOrder(t, output,
+		"make verify is a compatibility alias for the canonical pull-request tier; prefer make verify-pr",
+		"Running pull-request verification tier: build contracts + required CI-equivalent test lanes",
+		"==> build contracts and static verification [make verify-build-contracts]",
+		"stub:verify-build-contracts",
+		"==> required CI-equivalent test lanes [make verify-tests]",
+		"==> UI Coverage lane [make test-ui-coverage]",
+		"stub:test-ui-coverage",
+		"==> UI Browser Integration lane [make ui-integration-test]",
+		"stub:ui-integration-test",
+		"==> Backend Verification lane [make test-backend-verification]",
+		"stub:test-backend-verification",
+	)
+
+	for _, expected := range []string{
+		"stub:verify-build-contracts",
+		"stub:test-ui-coverage",
+		"stub:ui-integration-test",
+		"stub:test-backend-verification",
+	} {
+		if count := strings.Count(output, expected); count != 1 {
+			t.Fatalf("expected %q exactly once through the verify compatibility alias, found %d:\n%s", expected, count, output)
+		}
+	}
+}
+
 func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
