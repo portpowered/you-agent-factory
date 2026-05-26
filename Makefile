@@ -122,8 +122,8 @@ verify-pr:
 
 verify-extended:
 	@printf '%s\n' "Running extended verification tier: required PR verification + opt-in long and specialty suites"
-	$(MAKE) verify-pr
-	$(MAKE) long-tests
+	$(call run_verification_step,verify-pr,pull-request verification tier)
+	$(call run_verification_step,long-tests,opt-in long and specialty suites)
 
 test-ui-coverage:
 	$(MAKE) ui-test-coverage
@@ -143,8 +143,9 @@ test-backend-functional:
 	$(MAKE) test-backend-verification
 
 long-tests:
-	$(MAKE) long-tests-managed-runtime
-	$(MAKE) long-tests-functional-runtime
+	@printf '%s\n' "Running opt-in long and specialty suites: managed runtime coverage + real local inference coverage"
+	$(call run_verification_step,long-tests-managed-runtime,Managed Runtime specialty lane)
+	$(call run_verification_step,long-tests-functional-runtime,Real Local Inference specialty lane)
 
 long-tests-managed-runtime:
 	$(GO) test ./pkg/service -run 'Test(InvokeModelHTTP_UsesManagedLocalModelRuntimePath|InvokeModel_UsesManagedLocalModelRuntimeAndReusesLoadedHandle|LoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath|OmniVoiceLocalRuntime_)' -count=1 -timeout $(GO_TEST_TIMEOUT)

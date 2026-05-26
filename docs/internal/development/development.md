@@ -81,7 +81,7 @@ Use these canonical verification tiers on the root command surface before reachi
 
 - `make verify-fast` for the fastest safe author pass: dashboard typecheck, the jsdom-oriented UI unit lane, and the short Go suite. The tier prints the owned suite label before each step and, on failure, emits the exact `make <target>` rerun command for that step.
 - `make verify-pr` for the pull-request-equivalent local pass: `make verify-build-contracts` plus the required CI test lanes. Like `make verify-fast`, it prints the owned aggregate or lane label before each nested step and reports the exact `make <target>` rerun command when one of those owned steps fails.
-- `make verify-extended` for opt-in deeper coverage after the PR-equivalent pass: `make verify-pr` plus `make long-tests`.
+- `make verify-extended` for opt-in deeper coverage after the PR-equivalent pass: `make verify-pr` plus `make long-tests`. Like the other contributor-facing tiers, it labels the owned step before each nested `make` call and emits the exact rerun target if one of the opt-in long lanes fails.
 
 The older aggregate names remain available as compatibility aliases while docs, workflows, and active review branches converge on the clearer tiered surface. In particular, `make verify` still works, but it now points contributors at `make verify-pr` as the canonical pull-request rerun command.
 
@@ -126,6 +126,15 @@ Use the lane-specific targets below when you need to rerun one required CI lane 
 `make verify-pr` is the canonical full review-ready local pass once dependencies and browser prerequisites are already installed. It does not install packages or browsers itself, so routine verification stays network-free after setup.
 
 `make verify` remains as a compatibility alias for `make verify-pr` while existing references migrate.
+
+Treat the opt-in long and specialty commands as a separate maintainer tier rather than hidden follow-on work inside `make verify-fast` or `make verify-pr`:
+
+- `make verify-extended` is the canonical "everything above plus the deeper safety nets" pass. Use it after `make verify-pr` when a change may have touched managed-local runtime behavior or the real local inference path and you want one aggregate command that still preserves exact rerun hints.
+- `make long-tests-managed-runtime` is the narrow specialty rerun for the package-level managed-runtime lane in `pkg/service`. It protects the subprocess adapter, managed local model loading, and handle-reuse behavior without requiring the full end-to-end API flow.
+- `make long-tests-functional-runtime` is the narrow specialty rerun for the real OMNIVOICE functional lane in `tests/functional/runtime_api`. It protects the end-to-end `POST /models/{model_name}/pull`, direct invocation, and factory `MODEL_INVOKE` path against regressions that only appear with a real local runtime.
+- `make long-tests` is the explicit aggregate over those two opt-in specialty lanes. It prints the owned specialty lane before each nested step and reports the direct `make long-tests-...` rerun command on failure.
+
+Those long and specialty commands are intentionally excluded from `make verify-fast` and `make verify-pr`. Keep them opt-in so routine author and PR-equivalent feedback stays short and deterministic unless a maintainer explicitly asks for the deeper runtime coverage.
 
 When extending the workflow, change the repository-owned command surface before editing GitHub Actions orchestration. Add or adjust the relevant `make test-*` target first, keep the lane name aligned with the owned command, and document any cache, artifact, or deduplication decision here in the same change. Contributors should be able to answer "which lane owns this check?" and "what do I rerun locally?" from this section alone without reverse-engineering `.github/workflows/ci.yml`.
 
