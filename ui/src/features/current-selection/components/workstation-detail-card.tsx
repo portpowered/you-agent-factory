@@ -17,7 +17,6 @@ import {
 import {
   formatDurationMillis,
   formatDurationFromISO,
-  formatRelativeTimeFromISO,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
@@ -91,7 +90,6 @@ export function WorkstationDetailCard({
       />
       <WorkstationActiveWorkList
         executions={activeExecutions}
-        locale={locale}
         messages={messages}
         now={now}
         onSelectWorkID={onSelectWorkID}
@@ -103,7 +101,6 @@ export function WorkstationDetailCard({
       {hasProjectedRequestHistory ? (
         <CollapsibleWorkstationRequests
           key={`workstation-request-history:${selectedNode.node_id}`}
-          locale={locale}
           messages={messages}
           now={now}
           onSelectWorkID={onSelectWorkID}
@@ -143,7 +140,6 @@ export function WorkstationDetailCard({
 }
 
 function CollapsibleWorkstationRequests({
-  locale,
   messages,
   now,
   onSelectWorkID,
@@ -153,7 +149,6 @@ function CollapsibleWorkstationRequests({
   selectedRequest,
   selectedWorkID,
 }: {
-  locale?: string;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   now: number;
   onSelectWorkID?: WorkstationDetailCardProps["onSelectWorkID"];
@@ -409,7 +404,6 @@ function renderWorkstationRequestStatusPill({
 
 function WorkstationActiveWorkList({
   executions,
-  locale,
   messages,
   now,
   onSelectWorkID,
