@@ -221,7 +221,7 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       }),
     );
     const selectSessionButton = within(currentSelection).getByRole("button", {
-      name: "Select provider session codex / session_id / sess_inference_only for dispatch dispatch-review-active",
+      name: "Select provider session codex / Session ID / sess_inference_only for dispatch dispatch-review-active",
     });
 
     expect(selectSessionButton.getAttribute("aria-pressed")).toBe("false");
@@ -231,7 +231,7 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     expect(
       within(currentSelection)
         .getByRole("button", {
-          name: "Select provider session codex / session_id / sess_inference_only for dispatch dispatch-review-active",
+          name: "Select provider session codex / Session ID / sess_inference_only for dispatch dispatch-review-active",
         })
         .getAttribute("aria-pressed"),
     ).toBe("true");
@@ -308,7 +308,7 @@ describe("CurrentSelectionWidget provider-session selection", () => {
 
     await user.click(
       within(currentSelection).getByRole("button", {
-        name: `Select provider session codex / session_id / ${codexSessionID} for dispatch dispatch-review-active`,
+        name: `Select provider session codex / Session ID / ${codexSessionID} for dispatch dispatch-review-active`,
       }),
     );
 
@@ -390,10 +390,10 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       }),
     );
     const firstButton = within(currentSelection).getByRole("button", {
-      name: "Select provider session codex / session_id / sess_inference_first for dispatch dispatch-review-active",
+      name: "Select provider session codex / Session ID / sess_inference_first for dispatch dispatch-review-active",
     });
     const secondButton = within(currentSelection).getByRole("button", {
-      name: "Select provider session codex / session_id / sess_inference_second for dispatch dispatch-review-active",
+      name: "Select provider session codex / Session ID / sess_inference_second for dispatch dispatch-review-active",
     });
 
     await user.click(firstButton);

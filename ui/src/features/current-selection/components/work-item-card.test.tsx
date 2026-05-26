@@ -191,7 +191,7 @@ describe("WorkItemDetailCard provider-session selection", () => {
     expandInferenceAttempt(inferenceAttemptsSection, 1);
     await user.click(
       within(inferenceAttemptsSection).getByRole("button", {
-        name: "Select provider session codex / session_id / sess-current-selection-only for dispatch dispatch-review-active",
+        name: "Select provider session codex / Session ID / sess-current-selection-only for dispatch dispatch-review-active",
       }),
     );
 
@@ -285,7 +285,7 @@ describe("WorkItemDetailCard summary", () => {
     const inferenceAttempts = within(inferenceAttemptsSection);
     expandInferenceAttempt(inferenceAttemptsSection, 1);
     const selectSessionButton = inferenceAttempts.getByRole("button", {
-      name: "Select provider session codex / session_id / sess-ready-request for dispatch dispatch-review-active",
+      name: "Select provider session codex / Session ID / sess-ready-request for dispatch dispatch-review-active",
     });
 
     expect(selectSessionButton.getAttribute("aria-pressed")).toBe("true");
@@ -363,7 +363,7 @@ describe("WorkItemDetailCard summary", () => {
 
     expect(
       inferenceAttempts.queryByRole("button", {
-        name: "Select provider session codex / path / sess-unsupported for dispatch dispatch-review-active",
+        name: "Select provider session codex / Path / sess-unsupported for dispatch dispatch-review-active",
       }),
     ).toBeNull();
     expandInferenceAttempt(inferenceAttemptsSection, 1);
@@ -371,7 +371,7 @@ describe("WorkItemDetailCard summary", () => {
       inferenceAttempts.getByText("Session details unavailable"),
     ).toBeTruthy();
     expect(
-      inferenceAttempts.getByText("codex / path / sess-unsupported"),
+      inferenceAttempts.getByText("codex / Path / sess-unsupported"),
     ).toBeTruthy();
   });
 
@@ -1297,7 +1297,7 @@ describe("WorkItemDetailCard localization", () => {
 
     expect(
       inferenceAttempts.queryByRole("button", {
-        name: `ディスパッチ ${dispatchID} の provider session codex / path / sess-ja-unsupported を選択`,
+        name: `ディスパッチ ${dispatchID} の provider session codex / パス / sess-ja-unsupported を選択`,
       }),
     ).toBeNull();
     expect(
@@ -1555,7 +1555,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(within(secondAttemptCard).getByText("codex")).toBeTruthy();
     expect(
       within(secondAttemptCard).getByText(
-        "codex / session_id / sess-ready-request",
+        "codex / Session ID / sess-ready-request",
       ),
     ).toBeTruthy();
     expect(within(secondAttemptCard).getByText("740ms")).toBeTruthy();
@@ -2174,7 +2174,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeNull();
     expect(
       inferenceAttempts.getByText(
-        `codex / session_id / ${dashboardWorkstationRequestFixtures.rejected.inference_attempts?.[0]?.provider_session?.id}`,
+        `codex / Session ID / ${dashboardWorkstationRequestFixtures.rejected.inference_attempts?.[0]?.provider_session?.id}`,
       ),
     ).toBeTruthy();
     expect(

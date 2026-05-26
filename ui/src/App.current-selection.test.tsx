@@ -603,7 +603,7 @@ describe("App current selection", () => {
     ).toBeNull();
     expect(within(readyRequestBody).getByText("Retry the review with the latest context.")).toBeTruthy();
     expect(within(readyResponseBody).getByText("Ready for the next workstation.")).toBeTruthy();
-    expect(within(readyAttemptDetails).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("codex / Session ID / dispatch-review-ready/session/1")).toBeTruthy();
     expect(within(readyAttemptDetails).getByText("gpt-5.4")).toBeTruthy();
     expect(within(readyAttemptDetails).getByText("C:\\work\\portos")).toBeTruthy();
     expect(within(readyAttemptDetails).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();

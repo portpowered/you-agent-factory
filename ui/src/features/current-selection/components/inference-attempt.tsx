@@ -3,7 +3,6 @@ import type { DashboardInferenceAttempt } from "../../../api/dashboard/types";
 import {
   formatLocalDateTime,
   formatDurationMillis,
-  formatProviderSession,
   getProviderSessionLogTarget,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
@@ -376,6 +375,7 @@ function useAttemptProviderSessionState({
   attempt: DashboardInferenceAttempt;
   selectedProviderSessionKey?: string | null;
 }) {
+  const workstationMessages = useCurrentSelectionWorkstationDetailMessages();
   const providerSessionLogTarget = getProviderSessionLogTarget(
     attempt.provider_session,
     attempt.request_time,
@@ -385,7 +385,10 @@ function useAttemptProviderSessionState({
     provider_session: attempt.provider_session,
   });
   const providerSessionLabel = attempt.provider_session
-    ? formatProviderSession(attempt.provider_session)
+    ? formatLocalizedProviderSessionLabel(
+        attempt.provider_session,
+        workstationMessages,
+      )
     : undefined;
   const providerSessionSelected =
     loadableProviderSession !== null &&
@@ -398,6 +401,41 @@ function useAttemptProviderSessionState({
     providerSessionLogTarget,
     providerSessionSelected,
   };
+}
+
+function formatLocalizedProviderSessionLabel(
+  session: DashboardInferenceAttempt["provider_session"],
+  workstationMessages: ReturnType<typeof useCurrentSelectionWorkstationDetailMessages>,
+): string {
+  if (!session?.id) {
+    return workstationMessages.unavailableValue;
+  }
+
+  const localizedKind = localizeProviderSessionKind(
+    session.kind,
+    workstationMessages,
+  );
+  const parts = [session.provider, localizedKind].filter(
+    (value): value is string => value !== undefined && value !== "",
+  );
+
+  if (parts.length === 0) {
+    return session.id;
+  }
+
+  return `${parts.join(" / ")} / ${session.id}`;
+}
+
+function localizeProviderSessionKind(
+  kind: string | undefined,
+  workstationMessages: ReturnType<typeof useCurrentSelectionWorkstationDetailMessages>,
+): string | undefined {
+  const normalizedKind = kind?.trim();
+  if (!normalizedKind) {
+    return undefined;
+  }
+
+  return workstationMessages.localizeProviderSessionKind(normalizedKind);
 }
 
 function getAttemptTimingSummary(

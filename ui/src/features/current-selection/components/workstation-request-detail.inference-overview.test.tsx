@@ -195,7 +195,7 @@ it("keeps inference-backed request and response detail inside inference attempts
     inferenceAttempts.getByText("Ready for the next workstation."),
   ).toBeTruthy();
   expect(
-    inferenceAttempts.getByText("codex / session_id / sess-ready-request"),
+    inferenceAttempts.getByText("codex / Session ID / sess-ready-request"),
   ).toBeTruthy();
 });
 
@@ -318,5 +318,5 @@ it("renders locale-sensitive inference detail copy while preserving runtime data
   expect(
     screen.getByText("dispatch-review-zh/inference-request/2"),
   ).toBeTruthy();
-  expect(screen.getByText("codex / session_id / sess-zh")).toBeTruthy();
+  expect(screen.getByText("codex / 会话 ID / sess-zh")).toBeTruthy();
 });
