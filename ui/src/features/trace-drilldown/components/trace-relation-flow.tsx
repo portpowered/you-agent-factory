@@ -33,7 +33,7 @@ import {
 
 // tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
-  "h-[60rem] min-h-[40rem] border-transparent bg-af-surface-subtle";
+  "h-[22rem] min-h-[18rem] border-transparent bg-af-surface-subtle";
 const RELATION_NODE_CLASS =
   "flex h-full min-w-0 w-full flex-col gap-2 overflow-hidden rounded-lg border px-3 py-3 text-left text-af-text shadow-af-card transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const RELATION_NODE_ACTIVE_CLASS =

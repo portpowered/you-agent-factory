@@ -69,6 +69,13 @@ describe("SubmitWorkWidget form behavior", () => {
     expect(
       within(card).getByRole("button", { name: "Submit work" }),
     ).toBeTruthy();
+    const submitButton = within(card).getByRole("button", {
+      name: "Submit work",
+    });
+    const form = submitButton.closest("form");
+    expect(form?.className).toContain("gap-3");
+    expect(submitButton.className).toContain("w-full");
+    expect(submitButton.className).toContain("justify-center");
   });
 
   it("enables submission only after a configured work type and non-blank request name are present", () => {

@@ -35,7 +35,7 @@ import {
 } from "./react-flow-current-activity-card-import";
 
 const CURRENT_ACTIVITY_LEGEND_CLASS =
-  "absolute left-7 top-7 z-10 max-md:left-4 max-md:right-4 max-md:top-4";
+  "absolute left-4 right-4 top-4 z-10";
 
 function CurrentActivityEditorToolbar(props: {
   activeTool: "add" | "connect" | "delete" | null;
