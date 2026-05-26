@@ -329,7 +329,14 @@ function RelationshipNodeCard({
       )}
       data-selected-work-relationship-node={isSelected ? "selected" : "related"}
     >
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{heading}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{heading}</span>
+        {isSelected ? (
+          <DashboardStatusPill tone="active">
+            {messages.relationshipCurrentSelectionBadge}
+          </DashboardStatusPill>
+        ) : null}
+      </div>
       {node && onSelectWorkID && !isSelected ? (
         <button
           aria-label={messages.relatedWorkSelectLabel(label)}

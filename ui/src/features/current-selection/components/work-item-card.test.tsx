@@ -1136,6 +1136,10 @@ describe("WorkItemDetailCard relationship graph", () => {
     expect(
       within(selectedRelationshipNode).getByText("Active Story").className,
     ).toContain("text-af-text");
+    expect(
+      within(selectedRelationshipNode).getByText("Current selection"),
+    ).toBeTruthy();
+    expect(selectedRelationshipNode.getAttribute("aria-current")).toBe("true");
     expect(within(selectedRelationshipNode).getByText("in_progress")).toBeTruthy();
     expect(within(selectedRelationshipNode).getByText("story")).toBeTruthy();
     expect(
@@ -1192,6 +1196,122 @@ describe("WorkItemDetailCard relationship graph", () => {
     );
 
     expect(onSelectWorkID).toHaveBeenCalledWith("work-dependency-story");
+  });
+
+  it("re-centers the graph when the current work selection changes", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const onSelectWorkID = vi.fn();
+    const parentWorkItem = {
+      display_name: "Parent Story",
+      state: "done",
+      trace_id: "trace-parent-story",
+      work_id: "work-parent-story",
+      work_type_id: "epic",
+    } satisfies DashboardWorkItemRef;
+
+    const { rerender } = render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectWorkID={onSelectWorkID}
+        selectedNode={selectedNode}
+        relationshipGraph={buildRelationshipGraph(workItem)}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Select related work item Parent Story",
+      }),
+    );
+
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-parent-story");
+
+    rerender(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem: parentWorkItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectWorkID={onSelectWorkID}
+        selectedNode={selectedNode}
+        relationshipGraph={{
+          edges: [
+            {
+              relationship: "CHILD",
+              sourceWorkID: parentWorkItem.work_id,
+              targetWorkID: workItem.work_id,
+            },
+          ],
+          relatedWork: [
+            {
+              label: "Active Story",
+              state: "in_progress",
+              traceID: workItem.trace_id,
+              workID: workItem.work_id,
+              workTypeID: workItem.work_type_id,
+            },
+          ],
+          selectedWork: {
+            label: "Parent Story",
+            state: "done",
+            traceID: parentWorkItem.trace_id,
+            workID: parentWorkItem.work_id,
+            workTypeID: parentWorkItem.work_type_id,
+          },
+          status: "ready",
+        }}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem: parentWorkItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipGraph = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+    const selectedRelationshipNode = within(relationshipGraph)
+      .getByText("Parent Story")
+      .closest('[data-selected-work-relationship-node="selected"]');
+
+    if (!(selectedRelationshipNode instanceof HTMLElement)) {
+      throw new Error("expected recentered selected relationship node");
+    }
+
+    expect(
+      within(selectedRelationshipNode).getByText("Current selection"),
+    ).toBeTruthy();
+    expect(within(selectedRelationshipNode).getByText("done")).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("button", {
+        name: "Select related work item Active Story",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText(parentWorkItem.work_id)).toBeTruthy();
   });
 
   it("renders an explicit empty state when no work relationships are available", () => {

@@ -62,6 +62,7 @@ export interface CurrentSelectionDispatchHistoryMessages {
   responseAttemptFallbackId: string;
   relationshipChildLabel: string;
   relationshipChildLegend: string;
+  relationshipCurrentSelectionBadge: string;
   relationshipDependsOnLabel: string;
   relationshipDependsOnLegend: string;
   relationshipLaneAriaLabel: (label: string) => string;
@@ -182,6 +183,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     requestAttemptFallbackId: "script-request",
     relationshipChildLabel: "Child",
     relationshipChildLegend: "Child work below the current selection",
+    relationshipCurrentSelectionBadge: "Current selection",
     relationshipDependsOnLabel: "Depends on",
     relationshipDependsOnLegend: "Dependencies feeding the current selection",
     relationshipLaneAriaLabel: (label: string) => `${label} relationships`,
@@ -309,6 +311,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     requestAttemptFallbackId: "script-request",
     relationshipChildLabel: "子作業",
     relationshipChildLegend: "現在の選択の下にある子作業",
+    relationshipCurrentSelectionBadge: "現在の選択",
     relationshipDependsOnLabel: "依存先",
     relationshipDependsOnLegend: "現在の選択に流れ込む依存作業",
     relationshipLaneAriaLabel: (label: string) => `${label} の関係`,
@@ -434,6 +437,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     requestAttemptFallbackId: "script-request",
     relationshipChildLabel: "하위 작업",
     relationshipChildLegend: "현재 선택 아래의 하위 작업",
+    relationshipCurrentSelectionBadge: "현재 선택",
     relationshipDependsOnLabel: "의존 대상",
     relationshipDependsOnLegend: "현재 선택으로 들어오는 의존 작업",
     relationshipLaneAriaLabel: (label: string) => `${label} 관계`,
@@ -548,6 +552,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     requestAttemptFallbackId: "script-request",
     relationshipChildLabel: "子工作",
     relationshipChildLegend: "位于当前选中项下方的子工作",
+    relationshipCurrentSelectionBadge: "当前选中项",
     relationshipDependsOnLabel: "依赖项",
     relationshipDependsOnLegend: "流入当前选中项的依赖工作",
     relationshipLaneAriaLabel: (label: string) => `${label}关系`,
