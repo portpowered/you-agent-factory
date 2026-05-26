@@ -58,6 +58,12 @@ const invokeProviderSessionDetail = (
       return [formatter({ turnIndex: 3 } as never)];
     case "turnLabel":
       return [formatter({ index: 3 } as never)];
+    case "localizeSessionKind":
+      return [
+        formatter("session_id" as never),
+        formatter("path" as never),
+        formatter("mystery_kind" as never),
+      ];
     default:
       throw new Error(`Unhandled provider-session formatter ${key}`);
   }

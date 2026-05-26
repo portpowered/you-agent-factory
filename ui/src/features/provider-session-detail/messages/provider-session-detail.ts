@@ -1,5 +1,6 @@
 import {
   type LocalizedMessages,
+  localizeEnumLabel,
   resolveLocalizedMessages,
 } from "../../../i18n";
 import type { ProviderSessionDetailMessages } from "./provider-session-detail-types";
@@ -68,6 +69,16 @@ const providerSessionDetailMessagesByLocale = {
     sessionAnalysisHeading: "Session analysis",
     selectedSessionHeading: "Selected session details",
     sessionIdLabel: "Session ID",
+    localizeSessionKind: (kind: string) =>
+      localizeEnumLabel({
+        category: "kind",
+        labels: {
+          path: "Path",
+          session_id: "Session ID",
+        },
+        locale: "en",
+        value: kind,
+      }),
     sessionLabel: "Provider session",
     sessionStatusLabel: "Status",
     sizeBytesLabel: "File size",
@@ -161,6 +172,16 @@ const providerSessionDetailMessagesByLocale = {
     sessionAnalysisHeading: "セッション分析",
     selectedSessionHeading: "選択中セッションの詳細",
     sessionIdLabel: "セッション ID",
+    localizeSessionKind: (kind: string) =>
+      localizeEnumLabel({
+        category: "kind",
+        labels: {
+          path: "パス",
+          session_id: "セッション ID",
+        },
+        locale: "ja",
+        value: kind,
+      }),
     sessionLabel: "プロバイダー セッション",
     sessionStatusLabel: "状態",
     sizeBytesLabel: "ファイルサイズ",
@@ -220,8 +241,7 @@ const providerSessionDetailMessagesByLocale = {
     expandAction: "펼치기",
     functionCallCountLabel: "함수 호출",
     functionCallsHeading: "함수 호출",
-    functionCallsUnavailable:
-      "함수 또는 도구 호출이 기록되지 않았습니다.",
+    functionCallsUnavailable: "함수 또는 도구 호출이 기록되지 않았습니다.",
     inputLabel: "입력",
     lineLabel: ({ lineNumber }) => `${lineNumber}행`,
     lineCountLabel: "줄 수",
@@ -256,6 +276,16 @@ const providerSessionDetailMessagesByLocale = {
     sessionAnalysisHeading: "세션 분석",
     selectedSessionHeading: "선택한 세션 세부 정보",
     sessionIdLabel: "세션 ID",
+    localizeSessionKind: (kind: string) =>
+      localizeEnumLabel({
+        category: "kind",
+        labels: {
+          path: "경로",
+          session_id: "세션 ID",
+        },
+        locale: "ko",
+        value: kind,
+      }),
     sessionLabel: "공급자 세션",
     sessionStatusLabel: "상태",
     sizeBytesLabel: "파일 크기",
@@ -276,8 +306,7 @@ const providerSessionDetailMessagesByLocale = {
     turnLabel: ({ index }) => `턴 ${index}`,
     unavailableValue: "사용 불가",
     turnsHeading: "실행 턴",
-    turnsUnavailable:
-      "이 세션에서 추론할 수 있는 실행 턴이 없습니다.",
+    turnsUnavailable: "이 세션에서 추론할 수 있는 실행 턴이 없습니다.",
     typeLabel: "유형",
     unknownEventCountLabel: "알 수 없는 이벤트",
     unknownEventOnLineLabel: ({ lineNumber }) =>
@@ -295,7 +324,8 @@ const providerSessionDetailMessagesByLocale = {
     collapseAction: "折叠",
     dispatchLabel: "分派",
     emptyState: "所选会话文件不包含任何 Codex 事件记录。",
-    emptyTranscriptState: "所选会话已成功解析，但不包含可显示为会话记录的条目。",
+    emptyTranscriptState:
+      "所选会话已成功解析，但不包含可显示为会话记录的条目。",
     encryptedReasoningDescription:
       "此步骤确实发生了推理，但明文内容会被有意隐藏，无法直接查看。",
     encryptedReasoningStateLabel: "加密推理",
@@ -347,6 +377,16 @@ const providerSessionDetailMessagesByLocale = {
     sessionAnalysisHeading: "会话分析",
     selectedSessionHeading: "已选会话详情",
     sessionIdLabel: "会话 ID",
+    localizeSessionKind: (kind: string) =>
+      localizeEnumLabel({
+        category: "kind",
+        labels: {
+          path: "路径",
+          session_id: "会话 ID",
+        },
+        locale: "zh-CN",
+        value: kind,
+      }),
     sessionLabel: "提供方会话",
     sessionStatusLabel: "状态",
     sizeBytesLabel: "文件大小",
@@ -370,7 +410,8 @@ const providerSessionDetailMessagesByLocale = {
     turnsUnavailable: "无法从该会话推断出任何执行轮次。",
     typeLabel: "类型",
     unknownEventCountLabel: "未知事件数",
-    unknownEventOnLineLabel: ({ lineNumber }) => `第 ${lineNumber} 行的未知事件`,
+    unknownEventOnLineLabel: ({ lineNumber }) =>
+      `第 ${lineNumber} 行的未知事件`,
     unavailableState: "Provider-session 详情不可用。",
     userMessageLabel: "用户",
     reasoningTranscriptLabel: "推理",
@@ -378,7 +419,10 @@ const providerSessionDetailMessagesByLocale = {
 } satisfies LocalizedMessages<ProviderSessionDetailMessages>;
 
 export function getProviderSessionDetailMessages(locale?: string | null) {
-  return resolveLocalizedMessages(providerSessionDetailMessagesByLocale, locale);
+  return resolveLocalizedMessages(
+    providerSessionDetailMessagesByLocale,
+    locale,
+  );
 }
 
 export { providerSessionDetailMessagesByLocale };

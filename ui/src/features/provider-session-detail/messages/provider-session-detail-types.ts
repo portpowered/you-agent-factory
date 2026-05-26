@@ -53,6 +53,7 @@ export interface ProviderSessionDetailMessages {
   sessionAnalysisHeading: string;
   selectedSessionHeading: string;
   sessionIdLabel: string;
+  localizeSessionKind: (kind: string) => string;
   sessionLabel: string;
   sessionStatusLabel: string;
   sizeBytesLabel: string;
