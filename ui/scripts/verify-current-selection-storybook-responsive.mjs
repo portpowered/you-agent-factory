@@ -169,9 +169,14 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
     "Active work heading before history heading",
   );
 
-  await currentSelection.getByRole("button", { name: "Expand" }).click();
+  const historySection = historyHeading.locator("xpath=ancestor::section[1]");
+  const historyExpandButton = historySection.getByRole("button", {
+    name: "Expand",
+  });
+  await historyExpandButton.focus();
+  await page.keyboard.press("Enter");
   await expectVisible(
-    currentSelection.getByRole("button", {
+    historySection.getByRole("button", {
       name: "Select provider session codex / Session ID / sess-rejected-story for dispatch dispatch-review-rejected",
     }),
     "History selection button",

@@ -307,10 +307,30 @@ describe("verifyCurrentSelectionWorkstationDetailOrder", () => {
     const runHistoryHeading = createVisibleLocator("Run history", {
       boundingBox: vi.fn().mockResolvedValue({ top: 160 }),
     });
+    const runHistorySection = createVisibleLocator("Run history section");
     const expandButton = createVisibleLocator("Expand button");
     expandButton.click = vi.fn().mockResolvedValue(undefined);
     const activeWorkButton = createVisibleLocator("Active Story button");
     const rejectedStoryButton = createVisibleLocator("Rejected Story button");
+    runHistoryHeading.locator = vi.fn((selector) => {
+      if (selector === "xpath=ancestor::section[1]") {
+        return runHistorySection;
+      }
+      return createVisibleLocator(`run-history-heading:${selector}`);
+    });
+    runHistorySection.getByRole = vi.fn((role, options) => {
+      if (role === "button" && options?.name === "Expand") {
+        return expandButton;
+      }
+      if (
+        role === "button" &&
+        options?.name ===
+          "Select provider session codex / Session ID / sess-rejected-story for dispatch dispatch-review-rejected"
+      ) {
+        return rejectedStoryButton;
+      }
+      return createVisibleLocator(`${role}:${options?.name}`);
+    });
     const currentSelection = {
       getByRole: vi.fn((role, options) => {
         if (role === "heading" && options?.name === "Workstation summary") {
@@ -334,16 +354,6 @@ describe("verifyCurrentSelectionWorkstationDetailOrder", () => {
         ) {
           return activeWorkButton;
         }
-        if (role === "button" && options?.name === "Expand") {
-          return expandButton;
-        }
-        if (
-          role === "button" &&
-          options?.name ===
-            "Select provider session codex / Session ID / sess-rejected-story for dispatch dispatch-review-rejected"
-        ) {
-          return rejectedStoryButton;
-        }
         return createVisibleLocator(`${role}:${options?.name}`);
       }),
       getByText: vi.fn((text) => createVisibleLocator(`text:${text}`)),
@@ -351,6 +361,9 @@ describe("verifyCurrentSelectionWorkstationDetailOrder", () => {
     };
     const page = {
       getByRole: vi.fn(() => currentSelection),
+      keyboard: {
+        press: vi.fn().mockResolvedValue(undefined),
+      },
     };
     const expectVisible = vi.fn((_locator) => Promise.resolve());
     const expectNoHorizontalOverflow = vi.fn().mockResolvedValue(undefined);
@@ -378,7 +391,14 @@ describe("verifyCurrentSelectionWorkstationDetailOrder", () => {
       activeWorkButton,
       "Active work selection button",
     );
-    expect(expandButton.click).toHaveBeenCalled();
+    expect(runHistoryHeading.locator).toHaveBeenCalledWith(
+      "xpath=ancestor::section[1]",
+    );
+    expect(runHistorySection.getByRole).toHaveBeenCalledWith("button", {
+      name: "Expand",
+    });
+    expect(expandButton.focus).toHaveBeenCalled();
+    expect(page.keyboard.press).toHaveBeenCalledWith("Enter");
     expect(expectVisible).toHaveBeenCalledWith(
       rejectedStoryButton,
       "History selection button",
