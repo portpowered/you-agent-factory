@@ -473,9 +473,7 @@ describe("App current selection", () => {
       traceFixtures: activeStoryTraceFixtures,
     });
 
-    expect(
-      (await screen.findAllByText("dispatch-review-active")).length,
-    ).toBeGreaterThan(0);
+    await screen.findByRole("button", { name: "Select work item Active Story" });
     fireEvent.click(getActiveStorySelectionButton());
 
     const currentSelection = await screen.findByRole("article", {
@@ -898,7 +896,7 @@ describe("App current selection", () => {
       traceFixtures: activeStoryTraceFixtures,
     });
 
-    await screen.findAllByText("dispatch-review-active");
+    await screen.findByRole("button", { name: "Select work item Active Story" });
 
     const workGraphViewport = screen.getByRole("region", {
       name: "Work graph viewport",
@@ -925,7 +923,7 @@ describe("App current selection", () => {
       traceFixtures: activeStoryTraceFixtures,
     });
 
-    await screen.findAllByText("dispatch-review-active");
+    await screen.findByRole("button", { name: "Select work item Active Story" });
 
     const reviewButton = await screen.findByRole("button", {
       name: "Select Review workstation",
@@ -1054,10 +1052,11 @@ describe("App current selection", () => {
         within(reviewInfo).getByRole("heading", { name: "Active work" }),
       ).toBeTruthy();
       expect(within(reviewInfo).getByText(activeWorkLabel)).toBeTruthy();
-      expect(within(reviewInfo).getByText(activeWorkID)).toBeTruthy();
       expect(
-        within(reviewInfo).getAllByText("dispatch-review-active").length,
-      ).toBeGreaterThan(0);
+        within(reviewInfo).getByRole("button", {
+          name: "Select work item Active Story",
+        }),
+      ).toBeTruthy();
       expect(within(reviewInfo).queryByText("Plan Active")).toBeNull();
     });
 
@@ -1070,10 +1069,11 @@ describe("App current selection", () => {
     });
     await waitFor(() => {
       expect(within(planInfo).getByText("Plan Active")).toBeTruthy();
-      expect(within(planInfo).getByText("work-plan-active")).toBeTruthy();
       expect(
-        within(planInfo).getAllByText("dispatch-plan-active").length,
-      ).toBeGreaterThan(0);
+        within(planInfo).getByRole("button", {
+          name: "Select work item Plan Active",
+        }),
+      ).toBeTruthy();
       expect(within(planInfo).queryByText(activeWorkLabel)).toBeNull();
     });
 
@@ -1380,7 +1380,7 @@ describe("App current selection layout", () => {
       traceFixtures: activeStoryTraceFixtures,
     });
 
-    await screen.findAllByText("dispatch-review-active");
+    await screen.findByRole("button", { name: "Select work item Active Story" });
 
     expect(
       screen.getByRole("region", { name: "Work graph viewport" }),

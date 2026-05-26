@@ -71,10 +71,10 @@ function createRoleLookup({
   globalActions,
   heading,
   languageButton,
+  retiredStreamStatus,
   rootTab,
   sessionTabs,
   slider,
-  retiredStreamStatus,
 }) {
   return vi.fn((role, options) => {
     if (role === "heading") return heading;
@@ -140,10 +140,10 @@ function createPage({
       globalActions,
       heading,
       languageButton,
+      retiredStreamStatus,
       rootTab,
       sessionTabs,
       slider,
-      retiredStreamStatus,
     }),
     getByText: createTextLookup(timelineStatus),
   };

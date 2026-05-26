@@ -6,16 +6,15 @@ import { cn } from "../../../lib/cn";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import {
+  CurrentSelectionSectionHeader,
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   CURRENT_SELECTION_BADGE_CLASS,
   EXECUTION_PILL_CLASS,
-  HISTORY_HEADER_CLASS,
   HISTORY_TOGGLE_CLASS,
   PROVIDER_SESSION_CARD_CLASS,
   PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
@@ -108,25 +107,22 @@ export function CollapsibleProviderSessionAttempts({
 
   return (
     <section aria-labelledby={`${historyID}-heading`} className="mt-4 grid gap-2.5">
-      <div className={HISTORY_HEADER_CLASS}>
-        <div className="grid min-w-0 gap-1">
-          <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={`${historyID}-heading`}>
-            {resolvedTitle}
-          </h4>
-          <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-            {itemCountLabel}
-          </p>
-        </div>
-        <button
-          aria-controls={historyID}
-          aria-expanded={expanded}
-          className={HISTORY_TOGGLE_CLASS}
-          onClick={() => setExpanded((current) => !current)}
-          type="button"
-        >
-          {expanded ? resolvedCollapseActionLabel : resolvedExpandActionLabel}
-        </button>
-      </div>
+      <CurrentSelectionSectionHeader
+        action={
+          <button
+            aria-controls={historyID}
+            aria-expanded={expanded}
+            className={HISTORY_TOGGLE_CLASS}
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
+          >
+            {expanded ? resolvedCollapseActionLabel : resolvedExpandActionLabel}
+          </button>
+        }
+        headingId={`${historyID}-heading`}
+        supportingText={itemCountLabel}
+        title={resolvedTitle}
+      />
       {expanded ? (
         <div id={historyID}>
           <ProviderSessionAttemptList
@@ -167,10 +163,11 @@ export function ProviderSessionAttempts({
   workstationRequestsByDispatchID,
 }: ProviderSessionAttemptsProps) {
   const resolvedTitle = title ?? messages.requestHistoryHeading;
+  const headingId = `${resolvedTitle}-heading`.toLowerCase().replace(/\s+/g, "-");
 
   return (
-    <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{resolvedTitle}</h4>
+    <section aria-labelledby={headingId} className="mt-4 grid gap-2.5 [&_h4]:m-0">
+      <CurrentSelectionSectionHeader headingId={headingId} title={resolvedTitle} />
       <ProviderSessionAttemptList
         attempts={attempts}
         currentDispatchID={currentDispatchID}

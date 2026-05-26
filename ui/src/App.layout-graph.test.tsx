@@ -237,7 +237,7 @@ describe("App graph behavior", () => {
   it("renders distinct graph semantics for topology places, active work, and retry outcomes", async () => {
     renderApp({ snapshot: activeSnapshot });
 
-    expect((await screen.findAllByText("dispatch-review-active")).length).toBeGreaterThan(0);
+    await screen.findByRole("button", { name: "Select work item Active Story" });
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: /Select .* workstation/ })).toHaveLength(5);
     });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   CanonicalFactoryDefinition,
@@ -54,6 +54,7 @@ export function useSaveEditableWorkstationConfiguration({
   const [submittingScopeKey, setSubmittingScopeKey] = useState<string | null>(
     null,
   );
+  const saveInFlightRef = useRef(false);
   const mutation = useSaveCurrentFactory();
 
   useResetExitedSaveScope({
@@ -77,6 +78,12 @@ export function useSaveEditableWorkstationConfiguration({
     editableConfigurationState.pendingFactoryDefinition != null &&
     !mutation.isPending;
 
+  const beginSaveConfirmation = useCallback(() => {
+    setLastSuccessfulScopeKey(null);
+    setLastErroredScope(null);
+    setIsConfirming(true);
+  }, []);
+
   const saveState = useMemo(
     () =>
       resolveEditableWorkstationSaveState({
@@ -98,14 +105,7 @@ export function useSaveEditableWorkstationConfiguration({
   );
 
   return {
-    beginSaveConfirmation: () => {
-      if (!canSave) {
-        return;
-      }
-      setLastSuccessfulScopeKey(null);
-      setLastErroredScope(null);
-      setIsConfirming(true);
-    },
+    beginSaveConfirmation,
     canSave,
     cancelSaveConfirmation: () => {
       if (!mutation.isPending) {
@@ -116,13 +116,15 @@ export function useSaveEditableWorkstationConfiguration({
       if (
         editableConfigurationState?.status !== "ready" ||
         editableConfigurationState.pendingFactoryDefinition == null ||
-        scopeKey == null
+        scopeKey == null ||
+        saveInFlightRef.current
       ) {
         return;
       }
 
       setLastErroredScope(null);
       setLastSuccessfulScopeKey(null);
+      saveInFlightRef.current = true;
       setSubmittingScopeKey(scopeKey);
       const request: EditableWorkstationSaveRequest = {
         baseVersion: editableConfigurationState.baseVersion,
@@ -152,6 +154,8 @@ export function useSaveEditableWorkstationConfiguration({
           scopeKey: request.scopeKey,
         });
         return;
+      } finally {
+        saveInFlightRef.current = false;
       }
     },
     saveState,

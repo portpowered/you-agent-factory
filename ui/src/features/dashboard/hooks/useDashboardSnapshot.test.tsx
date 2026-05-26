@@ -352,6 +352,34 @@ describe("useDashboardSnapshot", () => {
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
   });
 
+  it("surfaces an explicit load error instead of infinite loading when the stream disconnects before the first event", async () => {
+    useFactoryTimelineStore.getState().reset();
+
+    const { result } = renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const stream = replayHarness.getStreams()[0];
+    if (!stream) {
+      throw new Error("expected dashboard stream to be opened");
+    }
+
+    expect(result.current.isInitialLoading).toBe(true);
+    expect(result.current.error).toBeNull();
+
+    act(() => {
+      stream.onerror?.(new Event("error"));
+    });
+
+    await waitFor(() => {
+      expect(result.current.isInitialLoading).toBe(false);
+    });
+    expect(result.current.error?.message).toBe(
+      "Factory event stream disconnected. Showing last event state.",
+    );
+    expect(result.current.snapshot?.tick_count).toBe(0);
+  });
+
   it("pauses the selected session stream without clearing timeline state and resumes on demand", async () => {
     renderHook(() => useDashboardSnapshot(), {
       wrapper: createWrapper(queryClient),

@@ -159,8 +159,9 @@ it("rerenders current-selection request history and request-detail times when th
       name: "Current selection",
     });
     ensureRequestHistoryExpanded(englishSelection);
+    expect(englishSelection.textContent).toContain("Total runtime:");
     expect(englishSelection.textContent).toContain(
-      formatRelativeTimeFromISO("2026-04-08T12:00:01Z", now, "en"),
+      formatDurationMillis(63_000, "en"),
     );
 
     selectReviewRequest(dashboardWorkstationRequestFixtures.ready.dispatch_id);

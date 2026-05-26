@@ -84,7 +84,13 @@ export function EditableWorkstationSaveDialog({
           >
             {messages.editableConfigurationSaveConfirmationCancelAction}
           </Button>
-          <Button onClick={onConfirm} tone="destructive" type="button">
+          <Button
+            aria-busy={saveState.status === "submitting" ? "true" : undefined}
+            disabled={saveState.status === "submitting"}
+            onClick={onConfirm}
+            tone="destructive"
+            type="button"
+          >
             {saveState.status === "submitting"
               ? messages.editableConfigurationSaveBusyAction
               : messages.editableConfigurationSaveConfirmationConfirmAction}

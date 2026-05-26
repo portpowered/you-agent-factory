@@ -61,6 +61,7 @@ export interface WorkstationDetailMessages {
   currentDispatchLabel: string;
   dispatchLabel: string;
   elapsedLabel: string;
+  totalRuntimeLabel: string;
   expandAction: string;
   historyRequestCountLabel: (count: number) => string;
   historyRunCountLabel: (count: number) => string;

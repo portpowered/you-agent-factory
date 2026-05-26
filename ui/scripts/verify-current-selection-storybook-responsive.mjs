@@ -8,15 +8,24 @@ export async function verifyCurrentSelectionPromptHint({
     name: "Current selection",
   });
   await currentSelection.waitFor({ state: "visible" });
+  for (const workstationName of ["Plan", "Implement", "Review"]) {
+    const workstationButton = page.getByRole("button", {
+      name: `Select ${workstationName} workstation`,
+    });
+    await workstationButton.focus();
+    await page.keyboard.press("Enter");
+  }
   const promptField = currentSelection.getByRole("textbox", { name: "Prompt" });
-  const promptEditor = currentSelection
-    .locator(".monaco-editor, [data-monaco-editor='workstation-prompt']")
-    .first();
   const saveButton = currentSelection.getByRole("button", {
     name: "Save changes",
   });
+  const expandEditableConfigurationButton = currentSelection.getByRole("button", {
+    name: "Expand editable configuration",
+  });
+  await expandEditableConfigurationButton.focus();
+  await page.keyboard.press("Enter");
 
-  await expectVisible(promptEditor, "Monaco prompt editor");
+  await expectVisible(promptField, "Prompt field");
   await expectVisible(
     currentSelection.getByText(
       "Autocomplete is ready with 2 variables for 1 authored input.",
@@ -55,8 +64,8 @@ export async function verifyCurrentSelectionPromptHint({
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type("Use {{ (index .Inputs 1).Payload }}.");
   await expectVisible(
-    promptEditor,
-    "Monaco prompt editor after invalid prompt entry",
+    promptField,
+    "Prompt field after invalid prompt entry",
   );
   await expectVisible(
     currentSelection.getByRole("heading", { name: "Prompt diagnostics" }),
@@ -167,9 +176,98 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
     }),
     "History selection button",
   );
-
   await expectNoHorizontalOverflow(
     page,
     `Current selection workstation detail order at ${viewport.label}`,
+  );
+}
+
+export async function verifyCurrentSelectionSaveFlow({
+  expectNoHorizontalOverflow,
+  expectVisible,
+  page,
+  viewport,
+}) {
+  const currentSelection = page.getByRole("article", {
+    name: "Current selection",
+  });
+  await currentSelection.waitFor({ state: "visible" });
+  const promptField = currentSelection.getByRole("textbox", { name: "Prompt" });
+  const workerField = currentSelection.getByRole("combobox", { name: "Worker" });
+  const saveButton = currentSelection.getByRole("button", {
+    name: "Save changes",
+  });
+
+  const expandButton = currentSelection.getByRole("button", {
+    name: "Expand editable configuration",
+  });
+  await expandButton.click();
+  await expectVisible(promptField, "Workstation prompt field");
+  await workerField.selectOption("planner");
+  await promptField.click({ force: true });
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.insertText("Browser verified prompt update.");
+  await waitForEditableConfigurationReadyToSave(currentSelection, saveButton);
+  await saveButton.click();
+
+  const confirmationDialog = page.getByRole("dialog", {
+    name: "Overwrite the running factory definition?",
+  });
+  await expectVisible(
+    confirmationDialog,
+    "Editable workstation save confirmation dialog",
+  );
+  const overwriteButton = confirmationDialog.getByRole("button", {
+    name: "Overwrite factory",
+  });
+  await overwriteButton.click();
+
+  await expectVisible(
+    currentSelection.getByText(
+      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+    ),
+    "Editable workstation save success message",
+  );
+  const overwriteDialogCount = await page
+    .getByRole("dialog", {
+      name: "Overwrite the running factory definition?",
+    })
+    .count();
+  if (overwriteDialogCount > 0) {
+    throw new Error("Save confirmation dialog should close after a successful save.");
+  }
+
+  const saveButtonDisabled = await saveButton.isDisabled();
+  if (!saveButtonDisabled) {
+    throw new Error("Save changes should disable after the saved draft is refreshed.");
+  }
+
+  await expectNoHorizontalOverflow(
+    page,
+    `Current selection save flow at ${viewport.label}`,
+  );
+}
+
+async function waitForEditableConfigurationReadyToSave(
+  currentSelection,
+  saveButton,
+) {
+  const timeoutAt = Date.now() + 30_000;
+  const validationMessage = currentSelection.getByText(
+    "Validating prompt variables for the current draft.",
+  );
+
+  while (Date.now() < timeoutAt) {
+    const saveButtonDisabled = await saveButton.isDisabled();
+    const validatingCount = await validationMessage.count();
+    if (!saveButtonDisabled && validatingCount === 0) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error(
+    "Editable configuration did not finish validation with an enabled save button before timeout.",
   );
 }
