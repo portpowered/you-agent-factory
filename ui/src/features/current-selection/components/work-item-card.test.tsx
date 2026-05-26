@@ -1125,9 +1125,9 @@ describe("WorkItemDetailCard relationship graph", () => {
         "Parent work above the current selection",
       ),
     ).toBeTruthy();
-    const selectedRelationshipNode = within(relationshipGraph)
-      .getByText("Active Story")
-      .closest('[data-selected-work-relationship-node="selected"]');
+    const selectedRelationshipNode = relationshipGraph.querySelector(
+      '[data-selected-work-relationship-node="selected"]',
+    );
 
     if (!(selectedRelationshipNode instanceof HTMLElement)) {
       throw new Error("expected selected relationship node");
@@ -1145,6 +1145,13 @@ describe("WorkItemDetailCard relationship graph", () => {
     expect(
       within(selectedRelationshipNode).getByText("trace-active-story"),
     ).toBeTruthy();
+    const focusedSummary = within(relationshipGraph).getByRole("region", {
+      name: "Focused work summary",
+    });
+
+    expect(within(focusedSummary).getByText("Relationship role")).toBeTruthy();
+    expect(within(focusedSummary).getByText("Current selection")).toBeTruthy();
+    expect(within(focusedSummary).getByText("work-active-story")).toBeTruthy();
     expect(
       within(relationshipGraph).getByRole("region", {
         name: "Parent relationships",
@@ -1196,6 +1203,114 @@ describe("WorkItemDetailCard relationship graph", () => {
     );
 
     expect(onSelectWorkID).toHaveBeenCalledWith("work-dependency-story");
+  });
+
+  it("keeps focused-node trace actions in the graph summary when trace inspection is available", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const onSelectTraceID = vi.fn();
+
+    render(
+      <WorkItemDetailCard
+        activeTraceID="trace-active-story"
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectTraceID={onSelectTraceID}
+        selectedNode={selectedNode}
+        relationshipGraph={buildRelationshipGraph(workItem)}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const focusedSummary = screen.getByRole("region", {
+      name: "Focused work summary",
+    });
+    const traceAction = within(focusedSummary).getByRole("link", {
+      name: "Open trace",
+    });
+
+    expect(within(focusedSummary).getByText("trace-active-story (selected)"))
+      .toBeTruthy();
+    expect(traceAction.getAttribute("href")).toBe("#trace");
+
+    fireEvent.click(traceAction);
+
+    expect(onSelectTraceID).toHaveBeenCalledWith("trace-active-story");
+  });
+
+  it("renders missing focused-node trace metadata explicitly when no trace is available", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectTraceID={vi.fn()}
+        selectedNode={selectedNode}
+        relationshipGraph={{
+          edges: [
+            {
+              relationship: "CHILD",
+              sourceWorkID: workItem.work_id,
+              targetWorkID: "work-child-story",
+            },
+          ],
+          relatedWork: [
+            {
+              label: "Child Story",
+              state: "running",
+              traceID: "trace-child-story",
+              workID: "work-child-story",
+              workTypeID: "task",
+            },
+          ],
+          selectedWork: {
+            label: "Active Story",
+            state: "in_progress",
+            workID: workItem.work_id,
+            workTypeID: workItem.work_type_id,
+          },
+          status: "ready",
+        }}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const focusedSummary = screen.getByRole("region", {
+      name: "Focused work summary",
+    });
+
+    expect(within(focusedSummary).getByText("Unavailable")).toBeTruthy();
+    expect(
+      within(focusedSummary).queryByRole("link", { name: "Open trace" }),
+    ).toBeNull();
   });
 
   it("re-centers the graph when the current work selection changes", () => {
@@ -1294,9 +1409,9 @@ describe("WorkItemDetailCard relationship graph", () => {
     const relationshipGraph = screen.getByRole("region", {
       name: "Work relationships",
     });
-    const selectedRelationshipNode = within(relationshipGraph)
-      .getByText("Parent Story")
-      .closest('[data-selected-work-relationship-node="selected"]');
+    const selectedRelationshipNode = relationshipGraph.querySelector(
+      '[data-selected-work-relationship-node="selected"]',
+    );
 
     if (!(selectedRelationshipNode instanceof HTMLElement)) {
       throw new Error("expected recentered selected relationship node");
@@ -1311,7 +1426,11 @@ describe("WorkItemDetailCard relationship graph", () => {
         name: "Select related work item Active Story",
       }),
     ).toBeTruthy();
-    expect(screen.getByText(parentWorkItem.work_id)).toBeTruthy();
+    expect(
+      within(
+        screen.getByRole("region", { name: "Focused work summary" }),
+      ).getByText(parentWorkItem.work_id),
+    ).toBeTruthy();
   });
 
   it("renders an explicit empty state when no work relationships are available", () => {

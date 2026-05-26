@@ -65,12 +65,15 @@ export interface CurrentSelectionDispatchHistoryMessages {
   relationshipCurrentSelectionBadge: string;
   relationshipDependsOnLabel: string;
   relationshipDependsOnLegend: string;
+  relationshipFocusSummaryHeading: string;
   relationshipLaneAriaLabel: (label: string) => string;
   relationshipLegendHeading: string;
   relationshipMetadataUnavailable: string;
+  relationshipOpenTraceAction: string;
   relationshipParentLabel: string;
   relationshipParentLegend: string;
   relationshipRelatedLabel: string;
+  relationshipRoleLabel: string;
   relationshipRequiredByLabel: string;
   relationshipRequiredByLegend: string;
   relatedWorkSelectLabel: (workItemLabel: string) => string;
@@ -186,12 +189,15 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     relationshipCurrentSelectionBadge: "Current selection",
     relationshipDependsOnLabel: "Depends on",
     relationshipDependsOnLegend: "Dependencies feeding the current selection",
+    relationshipFocusSummaryHeading: "Focused work summary",
     relationshipLaneAriaLabel: (label: string) => `${label} relationships`,
     relationshipLegendHeading: "Relationship key",
     relationshipMetadataUnavailable: "Unavailable",
+    relationshipOpenTraceAction: "Open trace",
     relationshipParentLabel: "Parent",
     relationshipParentLegend: "Parent work above the current selection",
     relationshipRelatedLabel: "Related",
+    relationshipRoleLabel: "Relationship role",
     relationshipRequiredByLabel: "Required by",
     relationshipRequiredByLegend:
       "Dependent work blocked by the current selection",
@@ -314,12 +320,15 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     relationshipCurrentSelectionBadge: "現在の選択",
     relationshipDependsOnLabel: "依存先",
     relationshipDependsOnLegend: "現在の選択に流れ込む依存作業",
+    relationshipFocusSummaryHeading: "フォーカス中の作業概要",
     relationshipLaneAriaLabel: (label: string) => `${label} の関係`,
     relationshipLegendHeading: "関係キー",
     relationshipMetadataUnavailable: "利用不可",
+    relationshipOpenTraceAction: "トレースを開く",
     relationshipParentLabel: "親作業",
     relationshipParentLegend: "現在の選択の上にある親作業",
     relationshipRelatedLabel: "関連",
+    relationshipRoleLabel: "関係の役割",
     relationshipRequiredByLabel: "依存元",
     relationshipRequiredByLegend: "現在の選択に依存する作業",
     relatedWorkSelectLabel: (workItemLabel: string) =>
@@ -440,12 +449,15 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     relationshipCurrentSelectionBadge: "현재 선택",
     relationshipDependsOnLabel: "의존 대상",
     relationshipDependsOnLegend: "현재 선택으로 들어오는 의존 작업",
+    relationshipFocusSummaryHeading: "집중된 작업 요약",
     relationshipLaneAriaLabel: (label: string) => `${label} 관계`,
     relationshipLegendHeading: "관계 범례",
     relationshipMetadataUnavailable: "사용할 수 없음",
+    relationshipOpenTraceAction: "추적 열기",
     relationshipParentLabel: "상위 작업",
     relationshipParentLegend: "현재 선택 위의 상위 작업",
     relationshipRelatedLabel: "관련됨",
+    relationshipRoleLabel: "관계 역할",
     relationshipRequiredByLabel: "의존하는 작업",
     relationshipRequiredByLegend: "현재 선택에 의존하는 작업",
     relatedWorkSelectLabel: (workItemLabel: string) =>
@@ -555,12 +567,15 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     relationshipCurrentSelectionBadge: "当前选中项",
     relationshipDependsOnLabel: "依赖项",
     relationshipDependsOnLegend: "流入当前选中项的依赖工作",
+    relationshipFocusSummaryHeading: "当前焦点工作摘要",
     relationshipLaneAriaLabel: (label: string) => `${label}关系`,
     relationshipLegendHeading: "关系图例",
     relationshipMetadataUnavailable: "不可用",
+    relationshipOpenTraceAction: "打开追踪",
     relationshipParentLabel: "父工作",
     relationshipParentLegend: "位于当前选中项上方的父工作",
     relationshipRelatedLabel: "相关",
+    relationshipRoleLabel: "关系角色",
     relationshipRequiredByLabel: "依赖于此",
     relationshipRequiredByLegend: "依赖当前选中项的工作",
     relatedWorkSelectLabel: (workItemLabel: string) =>

@@ -10,6 +10,7 @@ import type {
   SelectedWorkRelationshipNode,
 } from "../lib/selected-work-relationship-graph";
 import type { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
+import { FocusedRelationshipSummary } from "./work-item-relationship-summary";
 import {
   CURRENT_SELECTION_ALERT_PANEL_CLASS,
   CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
@@ -39,15 +40,21 @@ interface RelationshipGroup {
 }
 
 export function WorkRelationshipsSection({
+  activeTraceID,
   messages,
+  onSelectTraceID,
   onSelectWorkID,
   relationshipGraph,
   selectedWorkLabel,
+  traceTargetId,
 }: {
+  activeTraceID?: string | null;
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
+  onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   relationshipGraph?: SelectedWorkRelationshipGraph;
   selectedWorkLabel: string;
+  traceTargetId: string;
 }) {
   const relationships = buildWorkRelationships(relationshipGraph, messages);
   const relationshipGroups = buildRelationshipGroups(relationships);
@@ -118,6 +125,15 @@ export function WorkRelationshipsSection({
               onSelectWorkID={onSelectWorkID}
             />
           </div>
+          {relationshipGraph?.status === "ready" ? (
+            <FocusedRelationshipSummary
+              activeTraceID={activeTraceID}
+              messages={messages}
+              node={relationshipGraph.selectedWork}
+              onSelectTraceID={onSelectTraceID}
+              traceTargetId={traceTargetId}
+            />
+          ) : null}
           <RelationshipLane
             items={findRelationshipItems(relationshipGroups, "related")}
             label={messages.relationshipRelatedLabel}

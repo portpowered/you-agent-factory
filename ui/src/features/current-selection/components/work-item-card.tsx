@@ -68,7 +68,9 @@ export function WorkItemDetailCard({
         </div>
       </dl>
       <WorkRelationshipsSection
+        activeTraceID={activeTraceID}
         messages={messages}
+        onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}
         relationshipGraph={relationshipGraph}
         selectedWorkLabel={
@@ -77,6 +79,7 @@ export function WorkItemDetailCard({
             ? relationshipGraph.selectedWork.label
             : formatWorkItemLabel(selection.workItem)
         }
+        traceTargetId={traceTargetId}
       />
       <SelectedWorkDispatchHistorySection
         activeTraceID={activeTraceID}
