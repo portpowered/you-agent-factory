@@ -406,7 +406,7 @@ jobs:
         if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         continue-on-error: true
         env:
-          AGENT_FACTORY_BROWSER_ARTIFACT_DIR: .artifacts/ui-browser-integration/browser
+          AGENT_FACTORY_BROWSER_ARTIFACT_DIR: ../.artifacts/ui-browser-integration/browser
         shell: bash
         timeout-minutes: 15
         run: |

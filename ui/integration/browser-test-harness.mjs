@@ -91,7 +91,7 @@ function npmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
-function browserArtifactDirectory() {
+export function browserArtifactDirectory() {
   const configuredPath = process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR?.trim();
   if (!configuredPath) {
     return null;
