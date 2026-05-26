@@ -94,7 +94,11 @@ function indexToPosition(sourceText, index) {
 }
 
 function hasExportModifier(node) {
-  return node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false;
+  return (
+    node.modifiers?.some(
+      (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+    ) ?? false
+  );
 }
 
 function isClassConstantCandidate(statement, declaration) {
@@ -129,7 +133,10 @@ function collectImportedBindings(sourceFile) {
   const importedBindings = new Set();
 
   for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement) || statement.importClause === undefined) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      statement.importClause === undefined
+    ) {
       continue;
     }
 
@@ -173,12 +180,25 @@ function collectTopLevelDeclarations(sourceFile) {
   return declarations;
 }
 
-function isStaticClassExpression(expression, declarations, importedBindings, visitedNames = new Set()) {
+function isStaticClassExpression(
+  expression,
+  declarations,
+  importedBindings,
+  visitedNames = new Set(),
+) {
   if (ts.isParenthesizedExpression(expression)) {
-    return isStaticClassExpression(expression.expression, declarations, importedBindings, visitedNames);
+    return isStaticClassExpression(
+      expression.expression,
+      declarations,
+      importedBindings,
+      visitedNames,
+    );
   }
 
-  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+  if (
+    ts.isStringLiteral(expression) ||
+    ts.isNoSubstitutionTemplateLiteral(expression)
+  ) {
     return true;
   }
 
@@ -207,12 +227,20 @@ function isStaticClassExpression(expression, declarations, importedBindings, vis
     return isStatic;
   }
 
-  if (!ts.isCallExpression(expression) || getIdentifierText(expression.expression) !== "cn") {
+  if (
+    !ts.isCallExpression(expression) ||
+    getIdentifierText(expression.expression) !== "cn"
+  ) {
     return false;
   }
 
   return expression.arguments.every((argument) =>
-    isStaticClassExpression(argument, declarations, importedBindings, visitedNames),
+    isStaticClassExpression(
+      argument,
+      declarations,
+      importedBindings,
+      visitedNames,
+    ),
   );
 }
 
@@ -250,7 +278,11 @@ function collectReferences(sourceFile, constantName, declarationName, checker) {
   return references;
 }
 
-function findInlineComponentClassViolations(filePath, relativeFilePath, sourceText) {
+function findInlineComponentClassViolations(
+  filePath,
+  _relativeFilePath,
+  sourceText,
+) {
   const program = ts.createProgram([filePath], {
     allowJs: false,
     jsx: ts.JsxEmit.Preserve,
@@ -280,7 +312,13 @@ function findInlineComponentClassViolations(filePath, relativeFilePath, sourceTe
         continue;
       }
 
-      if (!isStaticClassExpression(declaration.initializer, declarations, importedBindings)) {
+      if (
+        !isStaticClassExpression(
+          declaration.initializer,
+          declarations,
+          importedBindings,
+        )
+      ) {
         continue;
       }
 
@@ -291,13 +329,19 @@ function findInlineComponentClassViolations(filePath, relativeFilePath, sourceTe
         declaration.name,
         checker,
       );
-      if (references.length !== 1 || !isDirectClassNameReference(references[0])) {
+      if (
+        references.length !== 1 ||
+        !isDirectClassNameReference(references[0])
+      ) {
         continue;
       }
 
       violations.push({
         constantName,
-        position: indexToPosition(sourceText, declaration.name.getStart(sourceFile)),
+        position: indexToPosition(
+          sourceText,
+          declaration.name.getStart(sourceFile),
+        ),
       });
     }
   }
@@ -324,7 +368,10 @@ export async function scanInlineComponentClassUsage(
       relativeFilePath,
       sourceText,
     )) {
-      const allowlistKey = createAllowlistKey(relativeFilePath, violation.constantName);
+      const allowlistKey = createAllowlistKey(
+        relativeFilePath,
+        violation.constantName,
+      );
       if (allowlistedKeys.has(allowlistKey)) {
         observedAllowlistedKeys.add(allowlistKey);
         continue;
@@ -365,12 +412,20 @@ function formatStaleAllowlistEntry(entry) {
 }
 
 async function main() {
-  const report = await scanInlineComponentClassUsage(sourceDir, getConfiguredAllowlist());
-  if (report.violations.length === 0 && report.staleAllowlistEntries.length === 0) {
+  const report = await scanInlineComponentClassUsage(
+    sourceDir,
+    getConfiguredAllowlist(),
+  );
+  if (
+    report.violations.length === 0 &&
+    report.staleAllowlistEntries.length === 0
+  ) {
     return;
   }
 
-  const violationReport = report.violations.map((violation) => formatViolation(violation)).join("\n\n");
+  const violationReport = report.violations
+    .map((violation) => formatViolation(violation))
+    .join("\n\n");
   const staleAllowlistReport = report.staleAllowlistEntries
     .map((entry) => formatStaleAllowlistEntry(entry))
     .join("\n\n");
@@ -379,8 +434,12 @@ async function main() {
     [
       "Inline component class usage guard failed.",
       "Unexported static class constants that are referenced exactly once as a direct JSX className should be inlined for local readability.",
-      violationReport.length > 0 ? ["Violations:", violationReport].join("\n\n") : "",
-      staleAllowlistReport.length > 0 ? ["Stale allowlist entries:", staleAllowlistReport].join("\n\n") : "",
+      violationReport.length > 0
+        ? ["Violations:", violationReport].join("\n\n")
+        : "",
+      staleAllowlistReport.length > 0
+        ? ["Stale allowlist entries:", staleAllowlistReport].join("\n\n")
+        : "",
     ]
       .filter(Boolean)
       .join("\n\n"),
