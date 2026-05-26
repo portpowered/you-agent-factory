@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -137,6 +139,54 @@ func TestPullModel_ResolveModelCacheUsesPersistedMetadataOffline(t *testing.T) {
 	}
 }
 
+func TestPullModel_RetriesManifestLookupAfterDNSError(t *testing.T) {
+	baseBytes := []byte("base-gguf")
+	tokenizerBytes := []byte("tokenizer-gguf")
+	baseSHA := sha256HexString(baseBytes)
+	tokenizerSHA := sha256HexString(tokenizerBytes)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/models/Serveurperso/OmniVoice-GGUF":
+			_, _ = io.WriteString(w, fmt.Sprintf(`{"sha":"rev-test","siblings":[{"rfilename":"omnivoice-base-Q4_K_M.gguf","size":%d,"lfs":{"oid":"%s","size":%d}},{"rfilename":"omnivoice-tokenizer-Q4_K_M.gguf","size":%d,"lfs":{"oid":"%s","size":%d}}]}`, len(baseBytes), baseSHA, len(baseBytes), len(tokenizerBytes), tokenizerSHA, len(tokenizerBytes)))
+		case "/Serveurperso/OmniVoice-GGUF/resolve/rev-test/omnivoice-base-Q4_K_M.gguf":
+			_, _ = w.Write(baseBytes)
+		case "/Serveurperso/OmniVoice-GGUF/resolve/rev-test/omnivoice-tokenizer-Q4_K_M.gguf":
+			_, _ = w.Write(tokenizerBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	puller := newHuggingFaceModelAssetPuller(t.TempDir())
+	puller.baseURL = server.URL
+	puller.apiBaseURL = server.URL + "/api"
+	puller.client = &http.Client{
+		Transport: &manifestRetryRoundTripper{
+			base: server.Client().Transport,
+		},
+	}
+
+	runtimeCfg := mustLoadedFactoryConfigForModelCatalogTest(t, &interfaces.FactoryConfig{
+		Resources: []interfaces.ResourceConfig{{
+			Name:       "omnivoice-cache",
+			Type:       interfaces.ResourceTypeModel,
+			Capacity:   1,
+			Model:      "OMNIVOICE_Q4_K_M",
+			Backend:    "LLAMACPP",
+			LoadPolicy: "ON_DEMAND",
+		}},
+	})
+
+	result, err := puller.PullModel(context.Background(), runtimeCfg, "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("PullModel with manifest retry: %v", err)
+	}
+	if result.Revision != "rev-test" || len(result.DownloadedFiles) != 2 {
+		t.Fatalf("result = %#v, want rev-test with both managed files", result)
+	}
+}
+
 func TestPullModel_ReturnsUnsupportedWhenRuntimeHasNoMatchingModelResource(t *testing.T) {
 	puller := newHuggingFaceModelAssetPuller(t.TempDir())
 	runtimeCfg := mustLoadedFactoryConfigForModelCatalogTest(t, &interfaces.FactoryConfig{})
@@ -210,4 +260,23 @@ func TestInvokeModel_ReturnsModelNotAvailableWhenManagedCacheIsMissing(t *testin
 func sha256HexString(input []byte) string {
 	sum := sha256.Sum256(input)
 	return hex.EncodeToString(sum[:])
+}
+
+type manifestRetryRoundTripper struct {
+	base http.RoundTripper
+	mu   sync.Mutex
+	hit  bool
+}
+
+func (rt *manifestRetryRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	rt.mu.Lock()
+	shouldFail := !rt.hit && req != nil && req.URL != nil && req.URL.Path == "/api/models/Serveurperso/OmniVoice-GGUF"
+	if shouldFail {
+		rt.hit = true
+	}
+	rt.mu.Unlock()
+	if shouldFail {
+		return nil, &net.DNSError{Err: "lookup huggingface.co: no such host", Name: "huggingface.co", IsNotFound: true}
+	}
+	return rt.base.RoundTrip(req)
 }
