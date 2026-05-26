@@ -3,16 +3,15 @@ import { type ReactNode, useId, useState } from "react";
 import { Select } from "../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { formatList } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
 import {
+  CurrentSelectionSectionHeader,
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
-  HISTORY_HEADER_CLASS,
   HISTORY_TOGGLE_CLASS,
   WORKSTATION_SUMMARY_ITEM_CLASS,
 } from "./detail-card-shared";
@@ -50,27 +49,26 @@ export function EditableConfigurationSection({
       aria-labelledby={headingId}
       className="mt-4 grid gap-2.5 [&_h4]:m-0"
     >
-      <div className={HISTORY_HEADER_CLASS}>
-        <div className="min-w-0">
-          <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
-            {messages.editableConfigurationHeading}
-          </h4>
-        </div>
-        <button
-          aria-label={
-            expanded
-              ? messages.editableConfigurationCollapseActionLabel
-              : messages.editableConfigurationExpandActionLabel
-          }
-          aria-controls={contentId}
-          aria-expanded={expanded}
-          className={HISTORY_TOGGLE_CLASS}
-          onClick={() => setExpanded((current) => !current)}
-          type="button"
-        >
-          {expanded ? messages.collapseAction : messages.expandAction}
-        </button>
-      </div>
+      <CurrentSelectionSectionHeader
+        action={
+          <button
+            aria-label={
+              expanded
+                ? messages.editableConfigurationCollapseActionLabel
+                : messages.editableConfigurationExpandActionLabel
+            }
+            aria-controls={contentId}
+            aria-expanded={expanded}
+            className={HISTORY_TOGGLE_CLASS}
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
+          >
+            {expanded ? messages.collapseAction : messages.expandAction}
+          </button>
+        }
+        headingId={headingId}
+        title={messages.editableConfigurationHeading}
+      />
       {expanded ? (
         <div className="grid gap-2.5" id={contentId}>
           {state?.status === "loading" ? (
@@ -355,11 +353,14 @@ export function WorkstationSummary({
   messages,
   selectedNode,
 }: WorkstationSummaryProps) {
+  const sectionId = `workstation-summary-${selectedNode.node_id}`;
+
   return (
-    <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.summaryHeading}
-      </h4>
+    <section aria-labelledby={sectionId} className="mt-4 grid gap-2.5 [&_h4]:m-0">
+      <CurrentSelectionSectionHeader
+        headingId={sectionId}
+        title={messages.summaryHeading}
+      />
       <ul className="m-0 grid list-none gap-2 p-0 [grid-template-columns:repeat(auto-fit,minmax(8.75rem,1fr))]">
         <WorkstationSummaryItem
           label={messages.workerTypeLabel}

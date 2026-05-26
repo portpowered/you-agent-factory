@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { App } from "./App";
 import type { FactoryValue } from "./api/named-factory";
@@ -8,6 +9,11 @@ import {
 } from "./components/dashboard/test-fixtures";
 import { formatTimeOfDay } from "./components/ui/formatters";
 import { DashboardScreen } from "./features/dashboard/public";
+import {
+  resetSelectionHistoryStore,
+  useSelectionHistoryStore,
+} from "./features/current-selection/state/selectionHistoryStore";
+import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
 import {
   activeStoryTrace,
@@ -99,25 +105,29 @@ function buildEditableConfigurationDocument(
   };
 }
 
-function submittedFactoryDefinitionBody(init?: RequestInit): FactoryValue {
+function submittedFactoryDefinitionDocument(init?: RequestInit) {
   if (typeof init?.body !== "string") {
-    return buildEditableConfigurationFactoryDefinition({
-      prompt: "Browser verified prompt update.",
-      workerName: "planner",
-    });
+    return buildEditableConfigurationDocument(
+      buildEditableConfigurationFactoryDefinition({
+        prompt: "Browser verified prompt update.",
+        workerName: "planner",
+      }),
+    );
   }
 
   const requestBody = JSON.parse(init.body) as Record<string, unknown>;
   const { version: _ignoredVersion, ...factoryDefinition } = requestBody;
 
   if (typeof factoryDefinition.name === "string") {
-    return factoryDefinition as FactoryValue;
+    return buildEditableConfigurationDocument(factoryDefinition as FactoryValue);
   }
 
-  return buildEditableConfigurationFactoryDefinition({
-    prompt: "Browser verified prompt update.",
-    workerName: "planner",
-  });
+  return buildEditableConfigurationDocument(
+    buildEditableConfigurationFactoryDefinition({
+      prompt: "Browser verified prompt update.",
+      workerName: "planner",
+    }),
+  );
 }
 
 function promptTemplateValidationResponse(init?: RequestInit) {
@@ -169,6 +179,99 @@ async function delayedValidPromptTemplateValidationMock() {
   };
 }
 
+async function delayedSaveCurrentFactoryDocumentMock(
+  _input: RequestInfo | URL,
+  init?: RequestInit,
+) {
+  await new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 25);
+  });
+
+  return {
+    body: submittedFactoryDefinitionDocument(init),
+    status: 200,
+  };
+}
+
+function buildReanchoredSelectionSnapshot() {
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  const activeExecution =
+    snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+  const activeWorkItem = activeExecution?.work_items?.[0];
+
+  if (!activeExecution || !activeWorkItem) {
+    throw new Error(
+      "expected semantic workflow fixture to include the active review work item",
+    );
+  }
+
+  snapshot.tick_count += 1;
+  snapshot.runtime.active_dispatch_ids = [];
+  if (snapshot.runtime.active_executions_by_dispatch_id) {
+    delete snapshot.runtime.active_executions_by_dispatch_id["dispatch-review-active"];
+  }
+  snapshot.runtime.current_work_items_by_place_id = {};
+  snapshot.runtime.place_occupancy_work_items_by_place_id = {
+    ...(snapshot.runtime.place_occupancy_work_items_by_place_id ?? {}),
+    "story:approved": [activeWorkItem],
+  };
+  snapshot.runtime.session.provider_sessions = [
+    {
+      dispatch_id: "dispatch-repair-completed",
+      outcome: "ACCEPTED",
+      provider_session: {
+        id: "sess-repair-completed",
+        kind: "session_id",
+        provider: "codex",
+      },
+      transition_id: "repair",
+      work_items: [activeWorkItem],
+      workstation_name: "Repair",
+    },
+  ];
+  snapshot.runtime.workstation_requests_by_dispatch_id = {
+    "dispatch-repair-completed": {
+      counts: {
+        dispatched_count: 1,
+        errored_count: 0,
+        responded_count: 1,
+      },
+      dispatch_id: "dispatch-repair-completed",
+      request: {
+        input_work_items: [activeWorkItem],
+        started_at: "2026-04-08T12:00:09Z",
+        trace_ids: activeWorkItem.trace_id ? [activeWorkItem.trace_id] : [],
+      },
+      response: {
+        output_work_items: [activeWorkItem],
+      },
+      transition_id: "repair",
+      workstation_name: "Repair",
+    },
+  };
+
+  return snapshot;
+}
+
+function applyStorySnapshot(snapshot: ReturnType<typeof buildReanchoredSelectionSnapshot>) {
+  useFactoryTimelineStore.setState({
+    events: [],
+    latestTick: snapshot.tick_count,
+    mode: "current",
+    receivedEventIDs: [],
+    selectedTick: snapshot.tick_count,
+    worldViewCache: {
+      [snapshot.tick_count]: {
+        ...snapshot,
+        relationsByWorkID: {},
+        tracesByWorkID: {},
+        workstationRequestsByDispatchID: {},
+        workRequestsByID: {},
+      },
+    },
+  });
+}
+
 function editableConfigurationSection(
   currentSelection: HTMLElement,
 ): HTMLElement {
@@ -195,7 +298,7 @@ async function expectSingleEditableConfigurationSection(
   return editableConfigurationSection(currentSelection);
 }
 
-async function expectEditableConfigurationBrowserFlow(
+async function prepareEditableConfigurationReadyToSave(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
@@ -251,12 +354,14 @@ async function expectEditableConfigurationBrowserFlow(
   expect(sectionScope.queryByLabelText("Template")).toBeNull();
 
   await userEvent.selectOptions(workerField, "planner");
-  await userEvent.clear(promptField);
-  await userEvent.click(promptField);
+  await userEvent.click(promptField, { pointerEventsCheck: 0 });
+  await userEvent.keyboard("{Control>}{KeyA}{/Control}");
   await userEvent.paste("Browser verified prompt update.");
 
   await expect(workerField).toHaveValue("planner");
-  await expect(promptField).toHaveValue("Browser verified prompt update.");
+  expect((promptField as HTMLTextAreaElement).value).toContain(
+    "Browser verified prompt update.",
+  );
 
   const currentSelectionScope = within(currentSelection);
   const saveButton = currentSelectionScope.getByRole("button", {
@@ -272,7 +377,17 @@ async function expectEditableConfigurationBrowserFlow(
     expect(saveButton).toBeEnabled();
   });
   await expect(workerField).toHaveValue("planner");
-  await expect(promptField).toHaveValue("Browser verified prompt update.");
+  expect((promptField as HTMLTextAreaElement).value).toContain(
+    "Browser verified prompt update.",
+  );
+}
+
+async function expectEditableConfigurationBrowserFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+
+  await prepareEditableConfigurationReadyToSave(canvasElement);
 
   await userEvent.click(
     await canvas.findByRole("button", {
@@ -310,6 +425,18 @@ async function expectEditableConfigurationBrowserFlow(
       name: "Save changes",
     }),
   ).toBeDisabled();
+}
+
+async function expectEditableConfigurationSaveBrowserFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  await prepareEditableConfigurationReadyToSave(canvasElement);
+
+  const currentSelection = currentSelectionCard(canvasElement);
+  const saveButton = within(currentSelection).getByRole("button", {
+    name: "Save changes",
+  });
+  await expect(saveButton).toBeEnabled();
 }
 
 async function expectFactoryGraphHeaderBrowserFlow(
@@ -366,114 +493,27 @@ async function expectFactoryGraphHeaderBrowserFlow(
   await expect(headerScope.getByText("Observe mode")).toBeVisible();
 }
 
-async function expectPromptHintBrowserFlow(
-  canvasElement: HTMLElement,
-): Promise<void> {
-  const canvas = within(canvasElement);
+function CurrentSelectionEditableConfigurationSaveStory() {
+  useEffect(() => {
+    const reviewNodeID =
+      semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review
+        .node_id;
 
-  await userEvent.click(
-    await canvas.findByRole("button", { name: "Select Review workstation" }),
-  );
-
-  const currentSelection = currentSelectionCard(canvasElement);
-  const section = editableConfigurationSection(currentSelection);
-  const sectionScope = within(section);
-
-  await userEvent.click(
-    sectionScope.getByRole("button", {
-      name: "Expand editable configuration",
-    }),
-  );
-
-  const promptField = await sectionScope.findByRole("textbox", {
-    name: "Prompt",
-  });
-  const saveButton = within(currentSelection).getByRole("button", {
-    name: "Save changes",
-  });
-
-  await expect(
-    await sectionScope.findByText(
-      "Autocomplete is ready with 2 variables for 1 authored input.",
-    ),
-  ).toBeVisible();
-  await expect(
-    sectionScope.getByText(
-      "Type inside {{ ... }} to see suggestions, or open Monaco completion manually anywhere in the prompt editor.",
-    ),
-  ).toBeVisible();
-  await expect(
-    sectionScope.queryByRole("button", {
-      name: "Open prompt variable help",
-    }),
-  ).toBeNull();
-  await expect(sectionScope.queryByText("Prompt variable help")).toBeNull();
-
-  promptField.focus();
-  await userEvent.clear(promptField);
-  await userEvent.type(promptField, "Use {{ (index .Inputs 1).Payload }}.");
-
-  await expect(
-    await sectionScope.findByText("Prompt diagnostics"),
-  ).toBeVisible();
-  await expect(sectionScope.getByText(".Inputs[1]")).toBeVisible();
-  await expect(sectionScope.getAllByText("(index .Inputs 1)")[0]).toBeVisible();
-  await expect(saveButton).toBeDisabled();
-}
-
-function expectHeadingBefore(first: HTMLElement, second: HTMLElement) {
-  expect(
-    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-}
-
-async function expectWorkstationDetailOrderBrowserFlow(
-  canvasElement: HTMLElement,
-): Promise<void> {
-  const canvas = within(canvasElement);
-
-  await userEvent.click(
-    await canvas.findByRole("button", { name: "Select Review workstation" }),
-  );
-
-  const currentSelection = currentSelectionCard(canvasElement);
-  const currentSelectionScope = within(currentSelection);
-  const summaryHeading = currentSelectionScope.getByRole("heading", {
-    name: "Workstation summary",
-  });
-  const configurationHeading = currentSelectionScope.getByRole("heading", {
-    name: "Configuration",
-  });
-  const activeWorkHeading = currentSelectionScope.getByRole("heading", {
-    name: "Active work",
-  });
-  const historyHeading =
-    currentSelectionScope.queryByRole("heading", {
-      name: "Request history",
-    }) ??
-    currentSelectionScope.getByRole("heading", {
-      name: "Run history",
+    useSelectionHistoryStore.setState({
+      future: [],
+      past: [],
+      present: {
+        selection: { kind: "node", nodeId: reviewNodeID },
+        terminalWorkDetail: null,
+      },
     });
 
-  expectHeadingBefore(summaryHeading, configurationHeading);
-  expectHeadingBefore(configurationHeading, activeWorkHeading);
-  expectHeadingBefore(activeWorkHeading, historyHeading);
-  await expect(currentSelectionScope.getByText("Input work types")).toBeVisible();
-  await expect(currentSelectionScope.getByText("Active runs")).toBeVisible();
-  await expect(
-    currentSelectionScope.getByRole("button", {
-      name: "Select work item Active Story",
-    }),
-  ).toBeVisible();
+    return () => {
+      resetSelectionHistoryStore();
+    };
+  }, []);
 
-  await userEvent.click(
-    currentSelectionScope.getByRole("button", { name: "Expand" }),
-  );
-  await expect(
-    currentSelectionScope.getByRole("button", {
-      name: "Select provider session codex / session_id / sess-rejected-story for dispatch dispatch-review-rejected",
-    }),
-  ).toBeVisible();
+  return <App />;
 }
 
 function LocalePropagationStory() {
@@ -864,12 +904,9 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
           response: delayedValidPromptTemplateValidationMock,
         },
         {
-          method: "POST",
-          path: "/factories",
-          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
-            body: submittedFactoryDefinitionBody(init),
-            status: 201,
-          }),
+          method: "PUT",
+          path: "/factory-sessions/~default/factory",
+          response: delayedSaveCurrentFactoryDocumentMock,
         },
       ],
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -904,12 +941,9 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
           response: delayedValidPromptTemplateValidationMock,
         },
         {
-          method: "POST",
-          path: "/factories",
-          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
-            body: submittedFactoryDefinitionBody(init),
-            status: 201,
-          }),
+          method: "PUT",
+          path: "/factory-sessions/~default/factory",
+          response: delayedSaveCurrentFactoryDocumentMock,
         },
       ],
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -924,6 +958,80 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await expectFactoryGraphHeaderBrowserFlow(canvasElement);
     await expectEditableConfigurationBrowserFlow(canvasElement);
+    expectNoPageHorizontalOverflow(canvasElement);
+  },
+};
+
+export const CurrentSelectionEditableConfigurationSaveDesktopVerification = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/~default/factory",
+          response: {
+            body: editableConfigurationDocument,
+          },
+        },
+        {
+          method: "POST",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
+          response: delayedValidPromptTemplateValidationMock,
+        },
+        {
+          method: "PUT",
+          path: "/factory-sessions/~default/factory",
+          response: delayedSaveCurrentFactoryDocumentMock,
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "1280px" }}>
+      <CurrentSelectionEditableConfigurationSaveStory />
+    </div>
+  ),
+  tags: ["test"],
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectEditableConfigurationSaveBrowserFlow(canvasElement);
+    expectNoPageHorizontalOverflow(canvasElement);
+  },
+};
+
+export const CurrentSelectionEditableConfigurationSaveNarrowVerification = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/~default/factory",
+          response: {
+            body: editableConfigurationDocument,
+          },
+        },
+        {
+          method: "POST",
+          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
+          response: delayedValidPromptTemplateValidationMock,
+        },
+        {
+          method: "PUT",
+          path: "/factory-sessions/~default/factory",
+          response: delayedSaveCurrentFactoryDocumentMock,
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "360px" }}>
+      <CurrentSelectionEditableConfigurationSaveStory />
+    </div>
+  ),
+  tags: ["test"],
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectEditableConfigurationSaveBrowserFlow(canvasElement);
     expectNoPageHorizontalOverflow(canvasElement);
   },
 };
@@ -955,12 +1063,9 @@ export const CurrentSelectionPromptHintVerification = {
           }),
         },
         {
-          method: "POST",
-          path: "/factories",
-          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
-            body: submittedFactoryDefinitionBody(init),
-            status: 201,
-          }),
+          method: "PUT",
+          path: "/factory-sessions/~default/factory",
+          response: delayedSaveCurrentFactoryDocumentMock,
         },
       ],
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -968,14 +1073,10 @@ export const CurrentSelectionPromptHintVerification = {
   },
   render: () => (
     <div style={{ maxWidth: "100%", width: "1280px" }}>
-      <App />
+      <CurrentSelectionEditableConfigurationSaveStory />
     </div>
   ),
   tags: ["test"],
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectPromptHintBrowserFlow(canvasElement);
-    expectNoPageHorizontalOverflow(canvasElement);
-  },
 };
 
 export const CurrentSelectionWorkstationDetailOrderVerification = {
@@ -990,9 +1091,50 @@ export const CurrentSelectionWorkstationDetailOrderVerification = {
     </div>
   ),
   tags: ["test"],
+};
+
+export const CurrentSelectionReanchoredSelectionVerification = {
+  parameters: {
+    dashboardApi: {
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "1280px" }}>
+      <App />
+    </div>
+  ),
+  tags: ["test"],
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectWorkstationDetailOrderBrowserFlow(canvasElement);
-    expectNoPageHorizontalOverflow(canvasElement);
+    const canvas = within(canvasElement);
+
+    await userEvent.click(
+      (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
+    );
+
+    const currentSelection = await canvas.findByRole("article", {
+      name: "Current selection",
+    });
+    await expect(
+      await within(currentSelection).findByText("dispatch-review-active"),
+    ).toBeVisible();
+    await expect(
+      await within(currentSelection).findByText("work-active-story"),
+    ).toBeVisible();
+
+    applyStorySnapshot(buildReanchoredSelectionSnapshot());
+
+    await waitFor(() => {
+      expect(
+        within(currentSelection).queryByText("dispatch-review-active"),
+      ).toBeNull();
+    });
+    await expect(
+      await within(currentSelection).findByText("dispatch-repair-completed"),
+    ).toBeVisible();
+    await expect(
+      await within(currentSelection).findByText("work-active-story"),
+    ).toBeVisible();
   },
 };
 

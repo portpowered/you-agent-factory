@@ -312,17 +312,26 @@ export function useDashboardSnapshot({
     eventCount,
   });
 
+  const hasNoStreamedSnapshot = selectedTick === 0 && eventCount === 0;
   const isInitialLoading =
-    selectedSessionID != null && selectedTick === 0 && eventCount === 0;
+    selectedSessionID != null &&
+    hasNoStreamedSnapshot &&
+    streamState.status !== "offline";
+  const error =
+    selectedSessionID != null &&
+    hasNoStreamedSnapshot &&
+    streamState.status === "offline"
+      ? new Error(streamState.message)
+      : null;
 
   return useMemo(
     () => ({
       snapshot,
       streamState,
       isInitialLoading,
-      error: null as Error | null,
+      error,
     }),
-    [snapshot, streamState, isInitialLoading],
+    [error, snapshot, streamState, isInitialLoading],
   );
 }
 

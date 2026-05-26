@@ -90,6 +90,34 @@ export const REQUEST_HISTORY_TEXT_CLASS = cn(
   DASHBOARD_BODY_CODE_CLASS,
 );
 
+export function CurrentSelectionSectionHeader({
+  action,
+  headingId,
+  supportingText,
+  title,
+}: {
+  action?: ReactNode;
+  headingId: string;
+  supportingText?: ReactNode;
+  title: string;
+}) {
+  return (
+    <div className={HISTORY_HEADER_CLASS}>
+      <div className="grid min-w-0 gap-1">
+        <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
+          {title}
+        </h4>
+        {supportingText ? (
+          <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+            {supportingText}
+          </p>
+        ) : null}
+      </div>
+      {action}
+    </div>
+  );
+}
+
 interface RequestAuthoredHeadingBlock {
   level: 1 | 2 | 3 | 4 | 5 | 6;
   text: string;

@@ -280,6 +280,9 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   const languageButton = page.getByRole("button", {
     name: "Change language",
   });
+  const sessionStreamToggle = page.getByRole("button", {
+    name: /(Pause|Resume) .* updates/,
+  });
   const exportButton = page.getByRole("button", { name: "Export PNG" });
   const globalActions = page.getByRole("group", {
     name: "Dashboard actions",
@@ -292,6 +295,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectVisible(slider, "Timeline slider");
   await expectVisible(timelineStatus, "Timeline status");
   await expectVisible(languageButton, "Language menu button");
+  await expectVisible(sessionStreamToggle, "Dashboard session stream toggle");
   await expectVisible(exportButton, "Export PNG button");
   await expectVisible(globalActions, "Global header actions");
 
@@ -400,8 +404,8 @@ export async function runResponsiveStorybookChecks(
   browser,
   { checks = storyChecks, viewports = viewportChecks } = {},
 ) {
-  for (const viewport of viewports) {
-    for (const storyCheck of checks) {
+  for (const storyCheck of checks) {
+    for (const viewport of storyCheck.viewports ?? viewports) {
       await verifyStory(browser, storyCheck, viewport);
     }
   }
