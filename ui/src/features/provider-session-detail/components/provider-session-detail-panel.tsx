@@ -612,17 +612,21 @@ function TimestampMetricValue({
   unavailableLabel: string;
 }) {
   const messages = getProviderSessionDetailMessages(locale);
+  const normalizedTimestamp = normalizeValidTimestamp(timestamp);
 
   if (!timestamp) {
     return unavailableLabel;
   }
 
-  const formattedTimestamp = formatDateTime(timestamp, locale, {
-  });
+  if (!normalizedTimestamp) {
+    return messages.unavailableValue;
+  }
+
+  const formattedTimestamp = formatDateTime(normalizedTimestamp, locale, { fallback: messages.unavailableValue });
 
   return (
     <span className="grid gap-1">
-      <span title={timestamp}>{formattedTimestamp}</span>
+      <span title={normalizedTimestamp}>{formattedTimestamp}</span>
       <details className="grid gap-1">
         <summary
           className={cn(
@@ -638,9 +642,14 @@ function TimestampMetricValue({
             DASHBOARD_BODY_CODE_CLASS,
           )}
         >
-          {timestamp}
+          {normalizedTimestamp}
         </code>
       </details>
     </span>
   );
+}
+
+function normalizeValidTimestamp(timestamp?: string | null): string | null {
+  const normalizedTimestamp = timestamp?.trim();
+  return !normalizedTimestamp || Number.isNaN(Date.parse(normalizedTimestamp)) ? null : normalizedTimestamp;
 }
