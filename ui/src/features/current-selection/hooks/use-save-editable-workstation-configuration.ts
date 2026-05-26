@@ -11,7 +11,7 @@ import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationSaveState,
 } from "../components/detail-card-types";
-import { getWorkstationDetailMessages } from "../messages";
+import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 interface UseSaveEditableWorkstationConfigurationOptions {
   editableConfigurationState?: EditableWorkstationConfigurationState;

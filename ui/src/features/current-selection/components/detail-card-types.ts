@@ -23,7 +23,7 @@ import type {
   EditableWorkstationBehavior,
   EditableWorkstationValues,
 } from "../../current-factory-definition/public";
-import type { WorkstationDetailMessages } from "../messages";
+import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
 import type { RunnerID } from "../editing/runner-metadata";

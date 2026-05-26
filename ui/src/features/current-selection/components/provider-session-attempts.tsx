@@ -34,7 +34,7 @@ import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
 } from "../../provider-session-detail/lib/provider-session-ref";
-import { getWorkstationDetailMessages } from "../messages";
+import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = getWorkstationDetailMessages(undefined);
 
