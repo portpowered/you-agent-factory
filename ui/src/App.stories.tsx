@@ -427,6 +427,18 @@ async function expectEditableConfigurationBrowserFlow(
   ).toBeDisabled();
 }
 
+async function expectEditableConfigurationSaveBrowserFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  await prepareEditableConfigurationReadyToSave(canvasElement);
+
+  const currentSelection = currentSelectionCard(canvasElement);
+  const saveButton = within(currentSelection).getByRole("button", {
+    name: "Save changes",
+  });
+  await expect(saveButton).toBeEnabled();
+}
+
 async function expectFactoryGraphHeaderBrowserFlow(
   canvasElement: HTMLElement,
 ): Promise<void> {
@@ -981,6 +993,10 @@ export const CurrentSelectionEditableConfigurationSaveDesktopVerification = {
     </div>
   ),
   tags: ["test"],
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectEditableConfigurationSaveBrowserFlow(canvasElement);
+    expectNoPageHorizontalOverflow(canvasElement);
+  },
 };
 
 export const CurrentSelectionEditableConfigurationSaveNarrowVerification = {
@@ -1014,6 +1030,10 @@ export const CurrentSelectionEditableConfigurationSaveNarrowVerification = {
     </div>
   ),
   tags: ["test"],
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectEditableConfigurationSaveBrowserFlow(canvasElement);
+    expectNoPageHorizontalOverflow(canvasElement);
+  },
 };
 
 export const CurrentSelectionPromptHintVerification = {
@@ -1053,7 +1073,7 @@ export const CurrentSelectionPromptHintVerification = {
   },
   render: () => (
     <div style={{ maxWidth: "100%", width: "1280px" }}>
-      <App />
+      <CurrentSelectionEditableConfigurationSaveStory />
     </div>
   ),
   tags: ["test"],

@@ -14,6 +14,9 @@ function createVisibleLocator(label, overrides = {}) {
     first: vi.fn(function first() {
       return this;
     }),
+    last: vi.fn(function last() {
+      return this;
+    }),
     focus: vi.fn().mockResolvedValue(undefined),
     isDisabled: vi.fn().mockResolvedValue(false),
     isVisible: vi.fn().mockResolvedValue(true),
@@ -31,6 +34,8 @@ function createSaveFlowHarness() {
   expandButton.click = vi.fn().mockResolvedValue(undefined);
   const promptField = createVisibleLocator("Prompt textbox");
   promptField.click = vi.fn().mockResolvedValue(undefined);
+  const workerField = createVisibleLocator("Worker combobox");
+  workerField.selectOption = vi.fn().mockResolvedValue(undefined);
   const saveButton = createVisibleLocator("Save changes button", {
     isDisabled: vi
       .fn()
@@ -59,6 +64,9 @@ function createSaveFlowHarness() {
       if (role === "textbox" && options?.name === "Prompt") {
         return promptField;
       }
+      if (role === "combobox" && options?.name === "Worker") {
+        return workerField;
+      }
       if (role === "button" && options?.name === "Save changes") {
         return saveButton;
       }
@@ -70,6 +78,11 @@ function createSaveFlowHarness() {
         "Running factory saved. The editable workstation values were refreshed to the saved definition."
       ) {
         return successMessage;
+      }
+      if (text === "Validating prompt variables for the current draft.") {
+        return createVisibleLocator("Prompt validation status", {
+          count: vi.fn().mockResolvedValue(0),
+        });
       }
       return createVisibleLocator(`text:${text}`);
     }),
@@ -93,6 +106,8 @@ function createSaveFlowHarness() {
       return createVisibleLocator(`${role}:${options?.name}`);
     }),
     keyboard: {
+      insertText: vi.fn().mockResolvedValue(undefined),
+      press: vi.fn().mockResolvedValue(undefined),
       type: vi.fn().mockResolvedValue(undefined),
     },
   };
@@ -105,12 +120,19 @@ function createSaveFlowHarness() {
     promptField,
     saveButton,
     successMessage,
+    workerField,
   };
 }
 
 describe("verifyCurrentSelectionPromptHint", () => {
-  test("verifies Monaco inline prompt guidance instead of the removed help disclosure", async () => {
+  test("expands editable configuration before verifying Monaco inline guidance", async () => {
     const calls = [];
+    const reviewWorkstationButton = createVisibleLocator("Select Review workstation");
+    reviewWorkstationButton.click = vi.fn().mockResolvedValue(undefined);
+    const expandEditableConfigurationButton = createVisibleLocator(
+      "Expand editable configuration",
+    );
+    expandEditableConfigurationButton.click = vi.fn().mockResolvedValue(undefined);
     const removedHelpButton = createVisibleLocator("removed help button", {
       count: vi.fn().mockResolvedValue(0),
     });
@@ -121,7 +143,9 @@ describe("verifyCurrentSelectionPromptHint", () => {
       count: vi.fn().mockResolvedValue(0),
     });
     const promptEditor = createVisibleLocator("Monaco prompt editor");
-    const promptField = createVisibleLocator("Prompt textbox");
+    const promptField = createVisibleLocator("Prompt textbox", {
+      count: vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(0),
+    });
     promptField.click = vi.fn().mockResolvedValue(undefined);
     const saveButton = createVisibleLocator("Save changes button", {
       isDisabled: vi.fn().mockResolvedValue(true),
@@ -131,6 +155,12 @@ describe("verifyCurrentSelectionPromptHint", () => {
         calls.push(["role", role, options]);
         if (role === "textbox" && options?.name === "Prompt") {
           return promptField;
+        }
+        if (
+          role === "button" &&
+          options?.name === "Expand editable configuration"
+        ) {
+          return expandEditableConfigurationButton;
         }
         if (role === "button" && options?.name === "Save changes") {
           return saveButton;
@@ -160,7 +190,15 @@ describe("verifyCurrentSelectionPromptHint", () => {
       evaluate: vi
         .fn()
         .mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
-      getByRole: vi.fn(() => currentSelection),
+      getByRole: vi.fn((role, options) => {
+        if (role === "article" && options?.name === "Current selection") {
+          return currentSelection;
+        }
+        if (role === "button" && options?.name === "Select Review workstation") {
+          return reviewWorkstationButton;
+        }
+        return createVisibleLocator(`${role}:${options?.name}`);
+      }),
       keyboard: {
         press: vi.fn().mockResolvedValue(undefined),
         type: vi.fn().mockResolvedValue(undefined),
@@ -182,6 +220,8 @@ describe("verifyCurrentSelectionPromptHint", () => {
     expect(removedHelpButton.count).toHaveBeenCalled();
     expect(removedHelpPanel.count).toHaveBeenCalled();
     expect(legacySquiggleOverlay.count).toHaveBeenCalled();
+    expect(reviewWorkstationButton.click).not.toHaveBeenCalled();
+    expect(expandEditableConfigurationButton.click).toHaveBeenCalled();
     expect(promptField.click).toHaveBeenCalledWith({ force: true });
     expect(page.keyboard.press).toHaveBeenCalledWith("ControlOrMeta+A");
     expect(page.keyboard.type).toHaveBeenCalledWith(
@@ -221,10 +261,7 @@ describe("verifyCurrentSelectionWorkstationDetailOrder", () => {
     const runHistoryHeading = createVisibleLocator("Run history", {
       boundingBox: vi.fn().mockResolvedValue({ top: 160 }),
     });
-    const expandButton = createVisibleLocator("Expand button");
-    expandButton.click = vi.fn().mockResolvedValue(undefined);
     const activeWorkButton = createVisibleLocator("Active Story button");
-    const rejectedStoryButton = createVisibleLocator("Rejected Story button");
     const currentSelection = {
       getByRole: vi.fn((role, options) => {
         if (role === "heading" && options?.name === "Workstation summary") {
@@ -242,21 +279,11 @@ describe("verifyCurrentSelectionWorkstationDetailOrder", () => {
         if (role === "heading" && options?.name === "Run history") {
           return runHistoryHeading;
         }
-        if (role === "button" && options?.name === "Expand") {
-          return expandButton;
-        }
         if (
           role === "button" &&
           options?.name === "Select work item Active Story"
         ) {
           return activeWorkButton;
-        }
-        if (
-          role === "button" &&
-          options?.name ===
-            "Select provider session codex / session_id / sess-rejected-story for dispatch dispatch-review-rejected"
-        ) {
-          return rejectedStoryButton;
         }
         return createVisibleLocator(`${role}:${options?.name}`);
       }),
@@ -301,11 +328,6 @@ describe("verifyCurrentSelectionWorkstationDetailOrder", () => {
       activeWorkButton,
       "Active work selection button",
     );
-    expect(expandButton.click).toHaveBeenCalled();
-    expect(expectVisible).toHaveBeenCalledWith(
-      rejectedStoryButton,
-      "History selection button",
-    );
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
       "Current selection workstation detail order at mobile",
@@ -323,6 +345,7 @@ describe("verifyCurrentSelectionSaveFlow", () => {
       promptField,
       saveButton,
       successMessage,
+      workerField,
     } = createSaveFlowHarness();
     const expectVisible = vi.fn((_locator) => Promise.resolve());
     const expectNoHorizontalOverflow = vi.fn().mockResolvedValue(undefined);
@@ -335,9 +358,11 @@ describe("verifyCurrentSelectionSaveFlow", () => {
     });
 
     expect(expandButton.click).toHaveBeenCalled();
+    expect(workerField.selectOption).toHaveBeenCalledWith("planner");
     expect(promptField.click).toHaveBeenCalledWith({ force: true });
-    expect(page.keyboard.type).toHaveBeenCalledWith(
-      " Browser verified prompt update.",
+    expect(page.keyboard.press).toHaveBeenCalledWith("ControlOrMeta+A");
+    expect(page.keyboard.insertText).toHaveBeenCalledWith(
+      "Browser verified prompt update.",
     );
     expect(saveButton.click).toHaveBeenCalled();
     expect(overwriteButton.click).toHaveBeenCalled();

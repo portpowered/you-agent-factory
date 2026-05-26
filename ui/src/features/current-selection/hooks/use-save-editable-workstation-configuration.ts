@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   CanonicalFactoryDefinition,
@@ -78,6 +78,12 @@ export function useSaveEditableWorkstationConfiguration({
     editableConfigurationState.pendingFactoryDefinition != null &&
     !mutation.isPending;
 
+  const beginSaveConfirmation = useCallback(() => {
+    setLastSuccessfulScopeKey(null);
+    setLastErroredScope(null);
+    setIsConfirming(true);
+  }, []);
+
   const saveState = useMemo(
     () =>
       resolveEditableWorkstationSaveState({
@@ -99,14 +105,7 @@ export function useSaveEditableWorkstationConfiguration({
   );
 
   return {
-    beginSaveConfirmation: () => {
-      if (!canSave) {
-        return;
-      }
-      setLastSuccessfulScopeKey(null);
-      setLastErroredScope(null);
-      setIsConfirming(true);
-    },
+    beginSaveConfirmation,
     canSave,
     cancelSaveConfirmation: () => {
       if (!mutation.isPending) {

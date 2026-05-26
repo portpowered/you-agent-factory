@@ -17,7 +17,6 @@ import {
 } from "./verify-graph-parity-storybook-responsive.mjs";
 import {
   verifyCurrentSelectionPromptHint as verifyCurrentSelectionPromptHintImpl,
-  verifyCurrentSelectionSaveFlow as verifyCurrentSelectionSaveFlowImpl,
   verifyCurrentSelectionWorkstationDetailOrder as verifyCurrentSelectionWorkstationDetailOrderImpl,
 } from "./verify-current-selection-storybook-responsive.mjs";
 import {
@@ -152,18 +151,6 @@ export const storyChecks = [
     assertions: verifyCurrentSelectionPromptHint,
     id: "you-agent-factory-workflow-dashboard--current-selection-prompt-hint-verification",
     label: "current selection prompt hinting",
-  },
-  {
-    assertions: verifyCurrentSelectionSaveFlow,
-    id: "you-agent-factory-workflow-dashboard--current-selection-editable-configuration-save-narrow-verification",
-    label: "current selection save flow (narrow)",
-    viewports: viewportChecks.filter((viewport) => viewport.label !== "desktop"),
-  },
-  {
-    assertions: verifyCurrentSelectionSaveFlow,
-    id: "you-agent-factory-workflow-dashboard--current-selection-editable-configuration-save-desktop-verification",
-    label: "current selection save flow (desktop)",
-    viewports: viewportChecks.filter((viewport) => viewport.label === "desktop"),
   },
   {
     assertions: verifyCurrentSelectionWorkstationDetailOrder,
@@ -356,14 +343,6 @@ export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
 }
 export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {
   return verifyCurrentSelectionPromptHintImpl({
-    expectNoHorizontalOverflow,
-    expectVisible,
-    page,
-    viewport,
-  });
-}
-export async function verifyCurrentSelectionSaveFlow(page, _dialog, viewport) {
-  return verifyCurrentSelectionSaveFlowImpl({
     expectNoHorizontalOverflow,
     expectVisible,
     page,

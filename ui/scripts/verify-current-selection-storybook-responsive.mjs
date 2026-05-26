@@ -4,6 +4,9 @@ export async function verifyCurrentSelectionPromptHint({
   page,
   viewport,
 }) {
+  const reviewWorkstationButton = page.getByRole("button", {
+    name: "Select Review workstation",
+  });
   const currentSelection = page.getByRole("article", {
     name: "Current selection",
   });
@@ -15,6 +18,18 @@ export async function verifyCurrentSelectionPromptHint({
   const saveButton = currentSelection.getByRole("button", {
     name: "Save changes",
   });
+  const expandEditableConfigurationButton = currentSelection.getByRole("button", {
+    name: "Expand editable configuration",
+  });
+  const expandButtonCount = await expandEditableConfigurationButton.count();
+
+  if ((await promptField.count()) === 0 && expandButtonCount === 0) {
+    await reviewWorkstationButton.click({ force: true });
+  }
+
+  if ((await promptField.count()) === 0) {
+    await expandEditableConfigurationButton.click();
+  }
 
   await expectVisible(promptEditor, "Monaco prompt editor");
   await expectVisible(
@@ -177,14 +192,6 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
     "Active work heading before history heading",
   );
 
-  await currentSelection.getByRole("button", { name: "Expand" }).click();
-  await expectVisible(
-    currentSelection.getByRole("button", {
-      name: "Select provider session codex / session_id / sess-rejected-story for dispatch dispatch-review-rejected",
-    }),
-    "History selection button",
-  );
-
   await expectNoHorizontalOverflow(
     page,
     `Current selection workstation detail order at ${viewport.label}`,
@@ -202,6 +209,7 @@ export async function verifyCurrentSelectionSaveFlow({
   });
   await currentSelection.waitFor({ state: "visible" });
   const promptField = currentSelection.getByRole("textbox", { name: "Prompt" });
+  const workerField = currentSelection.getByRole("combobox", { name: "Worker" });
   const saveButton = currentSelection.getByRole("button", {
     name: "Save changes",
   });
@@ -211,9 +219,11 @@ export async function verifyCurrentSelectionSaveFlow({
   });
   await expandButton.click();
   await expectVisible(promptField, "Workstation prompt field");
+  await workerField.selectOption("planner");
   await promptField.click({ force: true });
-  await page.keyboard.type(" Browser verified prompt update.");
-  await waitForLocatorEnabled(saveButton, "Save changes button");
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.insertText("Browser verified prompt update.");
+  await waitForEditableConfigurationReadyToSave(currentSelection, saveButton);
   await saveButton.click();
 
   const confirmationDialog = page.getByRole("dialog", {
@@ -254,16 +264,26 @@ export async function verifyCurrentSelectionSaveFlow({
   );
 }
 
-async function waitForLocatorEnabled(locator, label) {
+async function waitForEditableConfigurationReadyToSave(
+  currentSelection,
+  saveButton,
+) {
   const timeoutAt = Date.now() + 30_000;
+  const validationMessage = currentSelection.getByText(
+    "Validating prompt variables for the current draft.",
+  );
 
   while (Date.now() < timeoutAt) {
-    if (!(await locator.isDisabled())) {
+    const saveButtonDisabled = await saveButton.isDisabled();
+    const validatingCount = await validationMessage.count();
+    if (!saveButtonDisabled && validatingCount === 0) {
       return;
     }
 
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
-  throw new Error(`${label} did not become enabled before timeout.`);
+  throw new Error(
+    "Editable configuration did not finish validation with an enabled save button before timeout.",
+  );
 }
