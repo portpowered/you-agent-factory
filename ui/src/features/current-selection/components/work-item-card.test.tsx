@@ -1,12 +1,13 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { formatLocalDateTime } from "../../../components/ui/formatters";
-import type {
-  DashboardTrace,
-  DashboardWorkItemRef,
-} from "../../../api/dashboard/types";
+import type { DashboardWorkItemRef } from "../../../api/dashboard/types";
 import { dashboardWorkstationRequestFixtures } from "../../../components/dashboard/fixtures";
+import { formatLocalDateTime } from "../../../components/ui/formatters";
+import { providerSessionSelectionKey } from "../../provider-session-detail/lib/provider-session-ref";
+import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
+import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
+import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import {
   DETAIL_CARD_NOW,
@@ -14,9 +15,6 @@ import {
   inferenceAttempt,
   workstationRequest,
 } from "./detail-card-test-helpers";
-import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
-import { selectWorkItemExecutionDetails } from "../state/executionDetails";
-import { providerSessionSelectionKey } from "../../provider-session-detail/lib/provider-session-ref";
 import { WorkItemDetailCard } from "./work-item-card";
 
 function getDetailRow(container: HTMLElement, label: string): HTMLElement {
@@ -87,41 +85,48 @@ function expandAttemptBody(
   return within(attemptCard).getByRole("region", { name: bodyLabel });
 }
 
-function buildSelectedTrace(workItem: DashboardWorkItemRef): DashboardTrace {
+function buildRelationshipGraph(
+  workItem: DashboardWorkItemRef,
+): SelectedWorkRelationshipGraph {
   return {
-    dispatches: [],
-    relations: [
+    edges: [
       {
-        source_work_id: "work-parent-story",
-        source_work_name: "Parent Story",
-        target_work_id: workItem.work_id,
-        type: "PARENT",
+        relationship: "PARENT",
+        sourceWorkID: workItem.work_id,
+        targetWorkID: "work-parent-story",
       },
       {
-        required_state: "ready",
-        source_work_id: workItem.work_id,
-        target_work_id: "work-dependency-story",
-        target_work_name: "Dependency Story",
-        type: "DEPENDS_ON",
+        relationship: "DEPENDS_ON",
+        requiredState: "ready",
+        sourceWorkID: workItem.work_id,
+        targetWorkID: "work-dependency-story",
       },
       {
-        required_state: "approved",
-        source_work_id: "work-blocked-story",
-        source_work_name: "Blocked Story",
-        target_work_id: workItem.work_id,
-        type: "DEPENDS_ON",
+        relationship: "REQUIRED_BY",
+        requiredState: "approved",
+        sourceWorkID: workItem.work_id,
+        targetWorkID: "work-blocked-story",
       },
       {
-        source_work_id: workItem.work_id,
-        target_work_id: "work-child-story",
-        target_work_name: "Child Story",
-        type: "PARENT",
+        relationship: "CHILD",
+        sourceWorkID: workItem.work_id,
+        targetWorkID: "work-child-story",
       },
     ],
-    trace_id: workItem.trace_id ?? "trace-active-story",
-    transition_ids: [],
-    work_ids: [workItem.work_id],
-    workstation_sequence: [],
+    relatedWork: [
+      { label: "Blocked Story", workID: "work-blocked-story" },
+      { label: "Child Story", workID: "work-child-story" },
+      { label: "Dependency Story", workID: "work-dependency-story" },
+      { label: "Parent Story", workID: "work-parent-story" },
+    ],
+    selectedWork: {
+      label: "Active Story",
+      state: workItem.state,
+      traceID: workItem.trace_id,
+      workID: workItem.work_id,
+      workTypeID: workItem.work_type_id,
+    },
+    status: "ready",
   };
 }
 
@@ -807,7 +812,7 @@ describe("WorkItemDetailCard summary", () => {
         now={DETAIL_CARD_NOW}
         onSelectWorkID={onSelectWorkID}
         selectedNode={selectedNode}
-        selectedTrace={buildSelectedTrace(workItem)}
+        relationshipGraph={buildRelationshipGraph(workItem)}
         selection={{
           dispatchId: dispatchID,
           execution,
@@ -1355,7 +1360,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(activeToggle.getAttribute("aria-expanded")).toBe("true");
     expect(historicalToggle.getAttribute("aria-expanded")).toBe("false");
     const expandedActiveAttempt = expandInferenceAttempt(activeSection, 1);
-    const activeRequestBody = expandAttemptBody(expandedActiveAttempt, "Request body");
+    const activeRequestBody = expandAttemptBody(
+      expandedActiveAttempt,
+      "Request body",
+    );
     expect(
       within(activeRequestBody).getByText("Active attempt prompt."),
     ).toBeTruthy();
@@ -1492,10 +1500,22 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(attemptCards).toHaveLength(2);
     expect(within(attemptCards[0]).getByText("Attempt 1")).toBeTruthy();
     expect(within(attemptCards[1]).getByText("Attempt 2")).toBeTruthy();
-    const firstAttemptCard = expandInferenceAttempt(inferenceAttemptsSection, 1);
-    const secondAttemptCard = expandInferenceAttempt(inferenceAttemptsSection, 2);
-    const secondRequestBody = expandAttemptBody(secondAttemptCard, "Request body");
-    const secondResponseBody = expandAttemptBody(secondAttemptCard, "Response body");
+    const firstAttemptCard = expandInferenceAttempt(
+      inferenceAttemptsSection,
+      1,
+    );
+    const secondAttemptCard = expandInferenceAttempt(
+      inferenceAttemptsSection,
+      2,
+    );
+    const secondRequestBody = expandAttemptBody(
+      secondAttemptCard,
+      "Request body",
+    );
+    const secondResponseBody = expandAttemptBody(
+      secondAttemptCard,
+      "Response body",
+    );
     expect(
       within(firstAttemptCard).getByText(`${dispatchID}/inference-request/1`),
     ).toBeTruthy();

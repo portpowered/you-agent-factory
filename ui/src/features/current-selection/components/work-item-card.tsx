@@ -1,20 +1,21 @@
-import type {
-  DashboardTrace,
-  DashboardWorkRelation,
-} from "../../../api/dashboard/types";
+import { WIDGET_SUBTITLE_CLASS } from "../../../components/dashboard/widget-board";
 import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { WIDGET_SUBTITLE_CLASS } from "../../../components/dashboard/widget-board";
 import {
   formatList,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
+import type {
+  SelectedWorkRelationshipEdge,
+  SelectedWorkRelationshipGraph,
+  SelectedWorkRelationshipNode,
+} from "../lib/selected-work-relationship-graph";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
+import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
 import { WORK_SELECTION_BUTTON_CLASS } from "./detail-card-shared";
 import type { WorkItemDetailCardProps } from "./detail-card-types";
-import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
 import { SelectedWorkDispatchHistorySection } from "./selected-work-dispatch-history";
 
 export function WorkItemDetailCard({
@@ -25,20 +26,15 @@ export function WorkItemDetailCard({
   onSelectProviderSession,
   onSelectTraceID,
   onSelectWorkID,
+  relationshipGraph,
   selectedNode,
   selectedProviderSessionKey,
   selection,
-  selectedTrace,
   workstationRequests,
   traceTargetId = "trace",
   widgetId = "current-selection",
 }: WorkItemDetailCardProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
-  const workRelationships = buildWorkRelationships(
-    selectedTrace,
-    selection.workItem.work_id,
-    messages,
-  );
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
@@ -83,8 +79,13 @@ export function WorkItemDetailCard({
       <WorkRelationshipsSection
         messages={messages}
         onSelectWorkID={onSelectWorkID}
-        relationships={workRelationships}
-        selectedWorkLabel={formatWorkItemLabel(selection.workItem)}
+        relationshipGraph={relationshipGraph}
+        selectedWorkLabel={
+          relationshipGraph?.status !== "loading" &&
+          relationshipGraph?.selectedWork.label
+            ? relationshipGraph.selectedWork.label
+            : formatWorkItemLabel(selection.workItem)
+        }
       />
       <SelectedWorkDispatchHistorySection
         activeTraceID={activeTraceID}
@@ -127,14 +128,15 @@ interface RelationshipGroup {
 function WorkRelationshipsSection({
   messages,
   onSelectWorkID,
-  relationships,
+  relationshipGraph,
   selectedWorkLabel,
 }: {
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
   onSelectWorkID?: (workID: string) => void;
-  relationships: RelatedWorkItem[];
+  relationshipGraph?: SelectedWorkRelationshipGraph;
   selectedWorkLabel: string;
 }) {
+  const relationships = buildWorkRelationships(relationshipGraph, messages);
   const relationshipGroups = buildRelationshipGroups(relationships);
 
   return (
@@ -166,9 +168,7 @@ function WorkRelationshipsSection({
               <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
                 {messages.selectedWorkHeading}
               </span>
-              <code className="text-sm text-af-text">
-                {selectedWorkLabel}
-              </code>
+              <code className="text-sm text-af-text">{selectedWorkLabel}</code>
             </div>
             <RelationshipLane
               className="md:col-start-3 md:row-start-2"
@@ -202,13 +202,20 @@ function WorkRelationshipsSection({
 }
 
 function buildWorkRelationships(
-  trace: DashboardTrace | undefined,
-  selectedWorkID: string,
+  relationshipGraph: SelectedWorkRelationshipGraph | undefined,
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
 ): RelatedWorkItem[] {
-  return (trace?.relations ?? [])
-    .flatMap((relation) =>
-      buildRelationshipItems(relation, selectedWorkID, messages),
+  if (!relationshipGraph || relationshipGraph.status !== "ready") {
+    return [];
+  }
+
+  const nodesByID = new Map<string, SelectedWorkRelationshipNode>(
+    relationshipGraph.relatedWork.map((node) => [node.workID, node]),
+  );
+
+  return relationshipGraph.edges
+    .flatMap((edge) =>
+      buildRelationshipItems(edge, nodesByID.get(edge.targetWorkID), messages),
     )
     .sort(
       (left, right) =>
@@ -218,66 +225,44 @@ function buildWorkRelationships(
 }
 
 function buildRelationshipItems(
-  relation: DashboardWorkRelation,
-  selectedWorkID: string,
+  edge: SelectedWorkRelationshipEdge,
+  relatedNode: SelectedWorkRelationshipNode | undefined,
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
 ): RelatedWorkItem[] {
-  const items: RelatedWorkItem[] = [];
-  const relationType = relation.type.trim().toUpperCase();
-
-  if (relation.source_work_id === selectedWorkID && relation.target_work_id) {
-    const label = forwardRelationshipLabel(relationType, messages);
-    items.push({
-      description: relation.required_state
-        ? messages.relationshipStateLabel(label, relation.required_state)
-        : label,
-      group: forwardRelationshipGroup(relationType),
-      key: `${relation.type}:${selectedWorkID}:${relation.target_work_id}:forward`,
-      workID: relation.target_work_id,
-      workLabel: relation.target_work_name || relation.target_work_id,
-    });
+  if (!relatedNode) {
+    return [];
   }
 
-  if (relation.target_work_id === selectedWorkID && relation.source_work_id) {
-    const label = reverseRelationshipLabel(relationType, messages);
-    items.push({
-      description: relation.required_state
-        ? messages.relationshipStateLabel(label, relation.required_state)
+  const label = relationshipLabel(edge.relationship, messages);
+  return [
+    {
+      description: edge.requiredState
+        ? messages.relationshipStateLabel(label, edge.requiredState)
         : label,
-      group: reverseRelationshipGroup(relationType),
-      key: `${relation.type}:${relation.source_work_id}:${selectedWorkID}:reverse`,
-      workID: relation.source_work_id,
-      workLabel: relation.source_work_name || relation.source_work_id,
-    });
-  }
-
-  return items;
+      group: relationshipGroup(edge.relationship),
+      key: `${edge.relationship}:${edge.sourceWorkID}:${edge.targetWorkID}:${edge.requiredState ?? ""}`,
+      workID: relatedNode.workID,
+      workLabel: relatedNode.label,
+    },
+  ];
 }
 
-function forwardRelationshipLabel(
-  relationType: string,
+function relationshipLabel(
+  relationship: SelectedWorkRelationshipEdge["relationship"],
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
 ): string {
-  if (relationType.includes("PARENT")) {
-    return messages.relationshipChildLabel;
+  switch (relationship) {
+    case "PARENT":
+      return messages.relationshipParentLabel;
+    case "CHILD":
+      return messages.relationshipChildLabel;
+    case "DEPENDS_ON":
+      return messages.relationshipDependsOnLabel;
+    case "REQUIRED_BY":
+      return messages.relationshipRequiredByLabel;
+    default:
+      return messages.relationshipRelatedLabel;
   }
-  if (relationType.includes("DEPENDS")) {
-    return messages.relationshipDependsOnLabel;
-  }
-  return relationType.toLowerCase().replace(/_/g, " ");
-}
-
-function reverseRelationshipLabel(
-  relationType: string,
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
-): string {
-  if (relationType.includes("PARENT")) {
-    return messages.relationshipParentLabel;
-  }
-  if (relationType.includes("DEPENDS")) {
-    return messages.relationshipRequiredByLabel;
-  }
-  return relationType.toLowerCase().replace(/_/g, " ");
 }
 
 function RelationshipLane({
@@ -314,7 +299,9 @@ function RelationshipLane({
             </span>
             {onSelectWorkID ? (
               <button
-                aria-label={messages.relatedWorkSelectLabel(relationship.workLabel)}
+                aria-label={messages.relatedWorkSelectLabel(
+                  relationship.workLabel,
+                )}
                 className={WORK_SELECTION_BUTTON_CLASS}
                 onClick={() => onSelectWorkID(relationship.workID)}
                 type="button"
@@ -364,24 +351,21 @@ function findRelationshipItems(
   return groups.find((group) => group.key === key)?.items ?? [];
 }
 
-function forwardRelationshipGroup(relationType: string): RelationshipGroupKey {
-  if (relationType.includes("PARENT")) {
-    return "child";
+function relationshipGroup(
+  relationship: SelectedWorkRelationshipEdge["relationship"],
+): RelationshipGroupKey {
+  switch (relationship) {
+    case "PARENT":
+      return "parent";
+    case "CHILD":
+      return "child";
+    case "DEPENDS_ON":
+      return "depends-on";
+    case "REQUIRED_BY":
+      return "required-by";
+    default:
+      return "related";
   }
-  if (relationType.includes("DEPENDS")) {
-    return "depends-on";
-  }
-  return "related";
-}
-
-function reverseRelationshipGroup(relationType: string): RelationshipGroupKey {
-  if (relationType.includes("PARENT")) {
-    return "parent";
-  }
-  if (relationType.includes("DEPENDS")) {
-    return "required-by";
-  }
-  return "related";
 }
 
 const relationshipGroupOrder: RelationshipGroupKey[] = [

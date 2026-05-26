@@ -4,6 +4,13 @@ import type {
   DashboardFailedWorkDetail,
   DashboardTrace,
 } from "../../../api/dashboard/types";
+import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
+import { useEditableWorkstationConfigurationState } from "../hooks/use-editable-workstation-configuration-state";
+import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
+import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
+import { useSelectedProviderSessionState } from "../hooks/useSelectedProviderSessionState";
+import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
+import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
@@ -11,18 +18,12 @@ import {
   WorkstationDetailCard,
   WorkstationRequestDetailCard,
 } from "./current-selection-cards";
+import { CurrentSelectionHeaderActionProvider } from "./current-selection-detail-layout";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
-import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
-import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
-import { useEditableWorkstationConfigurationState } from "../hooks/use-editable-workstation-configuration-state";
-import { useSaveEditableWorkstationConfiguration } from "../hooks/use-save-editable-workstation-configuration";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useSelectedProviderSessionState } from "../hooks/useSelectedProviderSessionState";
 import {
   EditableWorkstationSaveDialog,
   EditableWorkstationSaveHeaderAction,
 } from "./workstation-save-controls";
-import { CurrentSelectionHeaderActionProvider } from "./current-selection-detail-layout";
 
 export interface CurrentSelectionWidgetProps {
   activeTraceID?: string | null;
@@ -35,6 +36,7 @@ export interface CurrentSelectionWidgetProps {
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   selectedTrace?: DashboardTrace;
   selectedProviderSessionKey?: string | null;
+  selectedWorkRelationshipGraph?: SelectedWorkRelationshipGraph;
   selectedWorkExecutionDetails: SelectedWorkItemExecutionDetails | null;
   widgetId?: string;
 }
@@ -51,6 +53,7 @@ function renderCurrentSelectionDetailCard({
   saveState,
   selectedProviderSessionKey,
   selectedTrace,
+  selectedWorkRelationshipGraph,
   selectedWorkExecutionDetails,
   setSelectedProviderSession,
   widgetId,
@@ -70,6 +73,7 @@ function renderCurrentSelectionDetailCard({
   >["saveState"];
   selectedProviderSessionKey: string | null;
   selectedTrace?: DashboardTrace;
+  selectedWorkRelationshipGraph?: SelectedWorkRelationshipGraph;
   selectedWorkExecutionDetails: SelectedWorkItemExecutionDetails | null;
   setSelectedProviderSession: (session: LoadableProviderSessionRef) => void;
   widgetId: string;
@@ -103,6 +107,7 @@ function renderCurrentSelectionDetailCard({
         onSelectProviderSession={setSelectedProviderSession}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={selectWorkByID}
+        relationshipGraph={selectedWorkRelationshipGraph}
         selectedNode={selectedNode}
         selectedProviderSessionKey={selectedProviderSessionKey}
         selectedTrace={selectedTrace}
@@ -178,6 +183,7 @@ export function CurrentSelectionWidget({
   onSelectProviderSession,
   selectedTrace,
   selectedProviderSessionKey: controlledSelectedProviderSessionKey,
+  selectedWorkRelationshipGraph,
   selectedWorkExecutionDetails,
   widgetId = "current-selection",
 }: CurrentSelectionWidgetProps) {
@@ -210,7 +216,8 @@ export function CurrentSelectionWidget({
     selection,
   });
   const selectedProviderSessionKey =
-    controlledSelectedProviderSessionKey ?? providerSessionState.selectedProviderSessionKey;
+    controlledSelectedProviderSessionKey ??
+    providerSessionState.selectedProviderSessionKey;
   const handleSelectProviderSession =
     onSelectProviderSession ?? providerSessionState.setSelectedProviderSession;
   const workstationHeaderAction = (
@@ -233,6 +240,7 @@ export function CurrentSelectionWidget({
     saveState: workstationSave.saveState,
     selectedProviderSessionKey,
     selectedTrace,
+    selectedWorkRelationshipGraph,
     selectedWorkExecutionDetails,
     setSelectedProviderSession: handleSelectProviderSession,
     widgetId,
