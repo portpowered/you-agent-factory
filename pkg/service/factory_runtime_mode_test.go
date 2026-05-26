@@ -199,6 +199,7 @@ func TestFactoryService_ServiceModeAPISurfaceStartsBeforeStartupWorkFileSubmissi
 	}
 
 	observedCh := make(chan starterObservation, 1)
+	apiReady := make(chan struct{})
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               dir,
 		RuntimeMode:       interfaces.RuntimeModeService,
@@ -206,6 +207,7 @@ func TestFactoryService_ServiceModeAPISurfaceStartsBeforeStartupWorkFileSubmissi
 		WorkFile:          workFile,
 		Port:              1,
 		Logger:            zap.NewNop(),
+		APIServerReady:    apiReady,
 		APIServerStarter: func(ctx context.Context, runtime apisurface.APISurface, _ int, _ *zap.Logger) error {
 			snapshot, err := runtime.GetEngineStateSnapshot(ctx)
 			if err != nil {
@@ -213,6 +215,7 @@ func TestFactoryService_ServiceModeAPISurfaceStartsBeforeStartupWorkFileSubmissi
 			} else {
 				observedCh <- starterObservation{snapshot: snapshot}
 			}
+			close(apiReady)
 			<-ctx.Done()
 			return nil
 		},
