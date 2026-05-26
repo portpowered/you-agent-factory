@@ -15,6 +15,10 @@ import type {
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
 import { WORK_SELECTION_BUTTON_CLASS } from "./detail-card-shared";
+import {
+  CURRENT_SELECTION_ALERT_PANEL_CLASS,
+  CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
+} from "./detail-card-shared";
 import type { WorkItemDetailCardProps } from "./detail-card-types";
 import { SelectedWorkDispatchHistorySection } from "./selected-work-dispatch-history";
 
@@ -138,6 +142,7 @@ function WorkRelationshipsSection({
 }) {
   const relationships = buildWorkRelationships(relationshipGraph, messages);
   const relationshipGroups = buildRelationshipGroups(relationships);
+  const graphStatus = relationshipGraph?.status ?? "loading";
 
   return (
     <section
@@ -147,7 +152,18 @@ function WorkRelationshipsSection({
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
         {messages.workRelationshipsHeading}
       </h4>
-      {relationships.length > 0 ? (
+      {graphStatus === "loading" ? (
+        <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS} role="status">
+          {messages.workRelationshipsLoading}
+        </p>
+      ) : relationshipGraph?.status === "error" ? (
+        <div className={CURRENT_SELECTION_ALERT_PANEL_CLASS} role="alert">
+          <p className="m-0">{messages.workRelationshipsError}</p>
+          <p className="m-0 text-sm text-af-danger">
+            {relationshipGraph.message}
+          </p>
+        </div>
+      ) : relationships.length > 0 ? (
         <div className="grid gap-3 rounded-xl border border-af-border bg-af-surface-subtle p-3">
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(14rem,16rem)_minmax(0,1fr)] md:grid-rows-[auto_auto_auto] md:items-start">
             <RelationshipLane
@@ -193,7 +209,7 @@ function WorkRelationshipsSection({
           />
         </div>
       ) : (
-        <p className="m-0 text-sm text-af-text-subtle">
+        <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
           {messages.workRelationshipsEmpty}
         </p>
       )}

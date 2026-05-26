@@ -71,6 +71,7 @@ export function buildSelectedWorkRelationshipGraph({
   if (!relationsByWorkID) {
     return {
       message:
+        // hardcoded-ui-copy-exception: non-product-diagnostic
         "Work relationship data is unavailable for the selected timeline snapshot.",
       selectedWork,
       status: "error",
@@ -195,8 +196,10 @@ function outboundRelationshipRole(
   switch (relationType.trim().toUpperCase()) {
     case "PARENT":
     case "PARENT_CHILD":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "PARENT";
     case "DEPENDS_ON":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "DEPENDS_ON";
     default:
       return null;
@@ -209,8 +212,10 @@ function inboundRelationshipRole(
   switch (relationType.trim().toUpperCase()) {
     case "PARENT":
     case "PARENT_CHILD":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "CHILD";
     case "DEPENDS_ON":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "REQUIRED_BY";
     default:
       return null;

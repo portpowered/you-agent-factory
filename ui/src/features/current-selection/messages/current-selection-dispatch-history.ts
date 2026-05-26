@@ -94,8 +94,10 @@ export interface CurrentSelectionDispatchHistoryMessages {
   workIdLabel: string;
   workTypeLabel: string;
   selectedWorkHeading: string;
+  workRelationshipsError: string;
   workRelationshipsEmpty: string;
   workRelationshipsHeading: string;
+  workRelationshipsLoading: string;
   workstationDispatchesLabel: string;
   workstationLabel: string;
   workstationUnavailableValue: string;
@@ -216,9 +218,13 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workIdLabel: "Work ID",
     workTypeLabel: "Work type",
     selectedWorkHeading: "Selected work",
+    workRelationshipsError:
+      "Work relationships could not be loaded for this work item.",
     workRelationshipsEmpty:
       "No parent, child, or dependency relationships are available for this work item.",
     workRelationshipsHeading: "Work relationships",
+    workRelationshipsLoading:
+      "Work relationships are still loading for this work item.",
     workstationDispatchesLabel: "Workstation dispatches",
     workstationLabel: "Workstation",
     workstationUnavailableValue: "Unavailable",
@@ -332,9 +338,13 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workIdLabel: "作業 ID",
     workTypeLabel: "作業タイプ",
     selectedWorkHeading: "選択中の作業",
+    workRelationshipsError:
+      "この作業項目の作業関係を読み込めませんでした。",
     workRelationshipsEmpty:
       "この作業項目では親子関係や依存関係を利用できません。",
     workRelationshipsHeading: "作業の関係",
+    workRelationshipsLoading:
+      "この作業項目の作業関係を読み込み中です。",
     workstationDispatchesLabel: "ワークステーションのディスパッチ",
     workstationLabel: "ワークステーション",
     workstationUnavailableValue: "利用不可",
@@ -447,9 +457,13 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workIdLabel: "작업 ID",
     workTypeLabel: "작업 유형",
     selectedWorkHeading: "선택한 작업",
+    workRelationshipsError:
+      "이 작업 항목의 작업 관계를 불러오지 못했습니다.",
     workRelationshipsEmpty:
       "이 작업 항목에는 상하위 또는 의존 관계가 없습니다.",
     workRelationshipsHeading: "작업 관계",
+    workRelationshipsLoading:
+      "이 작업 항목의 작업 관계를 불러오는 중입니다.",
     workstationDispatchesLabel: "워크스테이션 디스패치",
     workstationLabel: "워크스테이션",
     workstationUnavailableValue: "사용할 수 없음",
@@ -550,8 +564,10 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workIdLabel: "工作 ID",
     workTypeLabel: "工作类型",
     selectedWorkHeading: "已选工作",
+    workRelationshipsError: "无法加载此工作项的工作关系。",
     workRelationshipsEmpty: "这个工作项暂时没有可用的父子或依赖关系。",
     workRelationshipsHeading: "工作关系",
+    workRelationshipsLoading: "正在加载此工作项的工作关系。",
     workstationDispatchesLabel: "工作站分派",
     workstationLabel: "工作站",
     workstationUnavailableValue: "不可用",

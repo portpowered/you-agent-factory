@@ -795,131 +795,6 @@ describe("WorkItemDetailCard summary", () => {
     ).toBeTruthy();
   });
 
-  it("renders work relationships as a graph-shaped surface and keeps related work selectable", () => {
-    const { dispatchID, execution, selectedNode, workItem } =
-      getSelectedWorkItemFixture();
-    const onSelectWorkID = vi.fn();
-
-    render(
-      <WorkItemDetailCard
-        dispatchAttempts={[]}
-        executionDetails={selectWorkItemExecutionDetails({
-          activeExecution: execution,
-          dispatchID,
-          selectedNode,
-          workItem,
-        })}
-        now={DETAIL_CARD_NOW}
-        onSelectWorkID={onSelectWorkID}
-        selectedNode={selectedNode}
-        relationshipGraph={buildRelationshipGraph(workItem)}
-        selection={{
-          dispatchId: dispatchID,
-          execution,
-          kind: "work-item",
-          nodeId: selectedNode.node_id,
-          workItem,
-        }}
-        workstationRequests={[]}
-      />,
-    );
-
-    const relationshipGraph = screen.getByRole("region", {
-      name: "Work relationships",
-    });
-
-    expect(within(relationshipGraph).getByText("Selected work")).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByText("Active Story").className,
-    ).toContain("text-af-text");
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Parent relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Depends on relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Required by relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Child relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(
-        within(relationshipGraph).getByRole("region", {
-          name: "Parent relationships",
-        }),
-      ).getByText("Parent Story"),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByText("Depends on (ready)"),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByText("Required by (approved)"),
-    ).toBeTruthy();
-    expect(
-      within(
-        within(relationshipGraph).getByRole("region", {
-          name: "Child relationships",
-        }),
-      ).getByText("Child Story"),
-    ).toBeTruthy();
-
-    fireEvent.click(
-      within(relationshipGraph).getByRole("button", {
-        name: "Select related work item Dependency Story",
-      }),
-    );
-
-    expect(onSelectWorkID).toHaveBeenCalledWith("work-dependency-story");
-  });
-
-  it("renders an explicit empty state when no work relationships are available", () => {
-    const { dispatchID, execution, selectedNode, workItem } =
-      getSelectedWorkItemFixture();
-
-    render(
-      <WorkItemDetailCard
-        dispatchAttempts={[]}
-        executionDetails={selectWorkItemExecutionDetails({
-          activeExecution: execution,
-          dispatchID,
-          selectedNode,
-          workItem,
-        })}
-        now={DETAIL_CARD_NOW}
-        selectedNode={selectedNode}
-        selection={{
-          dispatchId: dispatchID,
-          execution,
-          kind: "work-item",
-          nodeId: selectedNode.node_id,
-          workItem,
-        }}
-        workstationRequests={[]}
-      />,
-    );
-
-    const relationshipSection = screen.getByRole("region", {
-      name: "Work relationships",
-    });
-
-    expect(
-      within(relationshipSection).getByText(
-        "No parent, child, or dependency relationships are available for this work item.",
-      ),
-    ).toBeTruthy();
-    expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
-  });
-
   it("omits the model row while preserving other execution details for historical selections", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
@@ -1178,6 +1053,231 @@ describe("WorkItemDetailCard summary", () => {
       requestDetails.queryByText("bun test", { selector: "code" }),
     ).toBeNull();
     expect(within(dispatchCard).queryByText("## Review checklist")).toBeNull();
+  });
+});
+
+describe("WorkItemDetailCard relationship graph", () => {
+  it("renders work relationships as a graph-shaped surface and keeps related work selectable", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const onSelectWorkID = vi.fn();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectWorkID={onSelectWorkID}
+        selectedNode={selectedNode}
+        relationshipGraph={buildRelationshipGraph(workItem)}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipGraph = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+
+    expect(within(relationshipGraph).getByText("Selected work")).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("Active Story").className,
+    ).toContain("text-af-text");
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Parent relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Depends on relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Required by relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Child relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(relationshipGraph).getByRole("region", {
+          name: "Parent relationships",
+        }),
+      ).getByText("Parent Story"),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("Depends on (ready)"),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("Required by (approved)"),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(relationshipGraph).getByRole("region", {
+          name: "Child relationships",
+        }),
+      ).getByText("Child Story"),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(relationshipGraph).getByRole("button", {
+        name: "Select related work item Dependency Story",
+      }),
+    );
+
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-dependency-story");
+  });
+
+  it("renders an explicit empty state when no work relationships are available", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        relationshipGraph={{
+          edges: [],
+          relatedWork: [],
+          selectedWork: {
+            label: "Active Story",
+            workID: workItem.work_id,
+          },
+          status: "empty",
+        }}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipSection = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+
+    expect(
+      within(relationshipSection).getByText(
+        "No parent, child, or dependency relationships are available for this work item.",
+      ),
+    ).toBeTruthy();
+    expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
+  });
+
+  it("renders an explicit loading state while work relationships are still loading", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        relationshipGraph={{ status: "loading" }}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipSection = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+    const status = within(relationshipSection).getByRole("status");
+
+    expect(status.textContent).toContain(
+      "Work relationships are still loading for this work item.",
+    );
+    expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
+  });
+
+  it("renders an explicit error state when work relationships fail to load", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        relationshipGraph={{
+          message:
+            "Work relationship data is unavailable for the selected timeline snapshot.",
+          selectedWork: {
+            label: "Active Story",
+            state: "in_progress",
+            traceID: "trace-active-story",
+            workID: "work-active-story",
+            workTypeID: "story",
+          },
+          status: "error",
+        }}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipSection = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+    const alert = within(relationshipSection).getByRole("alert");
+
+    expect(alert.textContent).toContain(
+      "Work relationships could not be loaded for this work item.",
+    );
+    expect(within(relationshipSection).getByText(/selected timeline snapshot/i))
+      .toBeTruthy();
+    expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
   });
 });
 
