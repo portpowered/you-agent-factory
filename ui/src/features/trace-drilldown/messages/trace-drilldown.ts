@@ -1,5 +1,6 @@
 import {
   type LocalizedMessageCatalog,
+  localizeEnumLabel,
   resolveLocalizedMessages,
 } from "../../../i18n";
 
@@ -29,6 +30,14 @@ export interface TraceDrilldownMessages {
   noTraceHistoryMessage: string;
   noTraceHistoryTitle: string;
   unknownRelationSource: string;
+  localizeRelationState: (value: string) => string;
+  localizeRelationType: (value: string) => string;
+  relationEdgeLabel: (params: {
+    relationState?: string;
+    relationType: string;
+    sourceLabel: string;
+    targetLabel: string;
+  }) => string;
   requestIdsLabel: string;
   tableCaption: string;
   title: string;
@@ -73,6 +82,80 @@ const traceDrilldownMessagesByLocale = {
       "No retained dispatch history is currently available for this work item.",
     noTraceHistoryTitle: "Trace history unavailable",
     unknownRelationSource: "Unknown source",
+    localizeRelationState: (value: string) =>
+      localizeEnumLabel({
+        category: "status",
+        labels: {
+          ACCEPTED: "Accepted",
+          APPROVED: "Approved",
+          COMPLETED: "Completed",
+          DONE: "Done",
+          FAILED: "Failed",
+          READY: "Ready",
+          REJECTED: "Rejected",
+        },
+        locale: "en",
+        value,
+      }),
+    localizeRelationType: (value: string) =>
+      localizeEnumLabel({
+        category: "relation",
+        labels: {
+          DEPENDS_ON: "Depends on",
+          PARENT_CHILD: "Parent-child",
+          RELATED_TO: "Related to",
+          RETRY: "Retry",
+          SPAWNED_BY: "Spawned by",
+        },
+        locale: "en",
+        value,
+      }),
+    relationEdgeLabel: ({
+      relationState,
+      relationType,
+      sourceLabel,
+      targetLabel,
+    }) =>
+      relationState
+        ? `${localizeEnumLabel({
+            category: "relation",
+            labels: {
+              DEPENDS_ON: "Depends on",
+              PARENT_CHILD: "Parent-child",
+              RELATED_TO: "Related to",
+              RETRY: "Retry",
+              SPAWNED_BY: "Spawned by",
+            },
+            locale: "en",
+            value: relationType,
+          })} relation from ${sourceLabel} to ${targetLabel}, requiring ${localizeEnumLabel(
+            {
+              category: "status",
+              labels: {
+                ACCEPTED: "Accepted",
+                APPROVED: "Approved",
+                COMPLETED: "Completed",
+                DONE: "Done",
+                FAILED: "Failed",
+                READY: "Ready",
+                REJECTED: "Rejected",
+              },
+              locale: "en",
+              value: relationState,
+            },
+          )}`
+        : `${localizeEnumLabel({
+            category: "relation",
+            labels: {
+              DEPENDS_ON: "Depends on",
+              PARENT_CHILD: "Parent-child",
+              RELATED_TO: "Related to",
+              RETRY: "Retry",
+              SPAWNED_BY: "Spawned by",
+            },
+            locale: "en",
+            value: relationType,
+          })} relation from ${sourceLabel} to ${targetLabel}`,
     requestIdsLabel: "Request IDs",
     tableCaption: "Trace dispatch grid",
     title: "Trace drill-down",
@@ -112,6 +195,80 @@ const traceDrilldownMessagesByLocale = {
     noTraceHistoryMessage: "当前这个工作项暂时没有可保留的分派历史。",
     noTraceHistoryTitle: "追踪历史不可用",
     unknownRelationSource: "未知来源",
+    localizeRelationState: (value: string) =>
+      localizeEnumLabel({
+        category: "status",
+        labels: {
+          ACCEPTED: "已接受",
+          APPROVED: "已批准",
+          COMPLETED: "已完成",
+          DONE: "已完成",
+          FAILED: "失败",
+          READY: "就绪",
+          REJECTED: "已拒绝",
+        },
+        locale: "zh-CN",
+        value,
+      }),
+    localizeRelationType: (value: string) =>
+      localizeEnumLabel({
+        category: "relation",
+        labels: {
+          DEPENDS_ON: "依赖项",
+          PARENT_CHILD: "父子",
+          RELATED_TO: "相关",
+          RETRY: "重试",
+          SPAWNED_BY: "派生自",
+        },
+        locale: "zh-CN",
+        value,
+      }),
+    relationEdgeLabel: ({
+      relationState,
+      relationType,
+      sourceLabel,
+      targetLabel,
+    }) =>
+      relationState
+        ? `${localizeEnumLabel({
+            category: "relation",
+            labels: {
+              DEPENDS_ON: "依赖项",
+              PARENT_CHILD: "父子",
+              RELATED_TO: "相关",
+              RETRY: "重试",
+              SPAWNED_BY: "派生自",
+            },
+            locale: "zh-CN",
+            value: relationType,
+          })}关系：从 ${sourceLabel} 到 ${targetLabel}，要求 ${localizeEnumLabel(
+            {
+              category: "status",
+              labels: {
+                ACCEPTED: "已接受",
+                APPROVED: "已批准",
+                COMPLETED: "已完成",
+                DONE: "已完成",
+                FAILED: "失败",
+                READY: "就绪",
+                REJECTED: "已拒绝",
+              },
+              locale: "zh-CN",
+              value: relationState,
+            },
+          )}`
+        : `${localizeEnumLabel({
+            category: "relation",
+            labels: {
+              DEPENDS_ON: "依赖项",
+              PARENT_CHILD: "父子",
+              RELATED_TO: "相关",
+              RETRY: "重试",
+              SPAWNED_BY: "派生自",
+            },
+            locale: "zh-CN",
+            value: relationType,
+          })}关系：从 ${sourceLabel} 到 ${targetLabel}`,
     requestIdsLabel: "请求 ID",
     tableCaption: "追踪分派表",
     title: "追踪下钻",

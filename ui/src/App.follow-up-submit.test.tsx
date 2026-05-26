@@ -302,7 +302,7 @@ describe("App follow-up workstation and live totals flows", () => {
     expect(within(workstationInfo).getByText("Active Story")).toBeTruthy();
     expect(
       within(workstationInfo).queryByText(
-        /codex \/ session_id \/ sess-active-story/,
+        /codex \/ Session ID \/ sess-active-story/,
       ),
     ).toBeNull();
 
@@ -316,7 +316,7 @@ describe("App follow-up workstation and live totals flows", () => {
       ).toBeGreaterThan(0);
       expect(
         within(workstationInfo).getByText(
-          /codex \/ session_id \/ sess-active-story/,
+          /codex \/ Session ID \/ sess-active-story/,
         ),
       ).toBeTruthy();
       expect(within(workstationInfo).getByText("Repeated work")).toBeTruthy();

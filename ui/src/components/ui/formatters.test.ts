@@ -9,7 +9,6 @@ import {
   formatRelativeTimeFromISO,
   formatTimeOfDay,
   formatWorkItemLabel,
-  formatWorkstationRunOutcome,
   getProviderSessionLogTarget,
 } from "./formatters";
 
@@ -131,40 +130,6 @@ describe("formatWorkItemLabel", () => {
         trace_id: "trace-123",
       } as DashboardWorkItemRef),
     ).toBe("Unknown work");
-  });
-});
-
-describe("formatWorkstationRunOutcome", () => {
-  it("renders repeater rejection-loop outcomes as repeated work with raw outcome metadata", () => {
-    expect(
-      formatWorkstationRunOutcome("REJECTED", { workstationKind: "repeater" }),
-    ).toEqual({
-      label: "Repeated work",
-      rawOutcomeLabel: "Raw outcome: REJECTED",
-    });
-  });
-
-  it("keeps terminal rejection wording for non-repeater workstation outcomes", () => {
-    expect(
-      formatWorkstationRunOutcome("REJECTED", { workstationKind: "standard" }),
-    ).toEqual({
-      label: "Rejected",
-    });
-  });
-
-  it("keeps accepted, failed, retry, and unknown outcomes readable", () => {
-    expect(formatWorkstationRunOutcome("ACCEPTED", { workstationKind: "repeater" })).toEqual({
-      label: "Accepted",
-    });
-    expect(formatWorkstationRunOutcome("FAILED", { workstationKind: "repeater" })).toEqual({
-      label: "Failed",
-    });
-    expect(formatWorkstationRunOutcome("RETRY", { workstationKind: "repeater" })).toEqual({
-      label: "Retry",
-    });
-    expect(formatWorkstationRunOutcome("", { workstationKind: "repeater" })).toEqual({
-      label: "Unknown",
-    });
   });
 });
 

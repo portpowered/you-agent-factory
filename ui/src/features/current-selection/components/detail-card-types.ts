@@ -224,12 +224,11 @@ export type EditableWorkstationSaveState =
 
 export interface WorkstationActiveWorkListProps {
   executions: DashboardActiveExecution[];
-  locale?: string;
   messages: WorkstationDetailMessages;
   now: number;
   onSelectWorkID?: (workID: string) => void;
   onSelectWorkstationRequest?: (request: DashboardWorkstationRequest) => void;
-  selectedNode: DashboardWorkstationNode;
+  selectedNodeID: string;
   selectedRequest?: DashboardWorkstationRequest | null;
   selectedWorkID?: string | null;
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
@@ -262,6 +261,7 @@ export interface ProviderSessionAttemptsProps {
     | "currentDispatchLabel"
     | "expandAction"
     | "historyRunCountLabel"
+    | "localizeProviderSessionKind"
     | "openNamedWorkItemAction"
     | "openRequestDetailsAction"
     | "providerSessionLogAction"
@@ -278,6 +278,7 @@ export interface ProviderSessionAttemptsProps {
     | "workDetailsUnavailable"
     | "workSelectedAction"
     | "runHistoryHeading"
+    | "unavailableValue"
   >;
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectWorkID?: (workID: string) => void;

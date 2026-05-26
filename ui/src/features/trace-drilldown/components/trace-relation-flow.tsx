@@ -2,18 +2,17 @@ import "@xyflow/react/dist/style.css";
 
 import {
   applyNodeChanges,
+  type Edge,
   Handle,
   MarkerType,
-  Position,
-  ReactFlow,
-  type Edge,
   type Node,
   type NodeChange,
   type NodeProps,
+  Position,
+  ReactFlow,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
-import { cn } from "../../../lib/cn";
+import type { DashboardWorkRelation } from "../../../api/dashboard/types";
 import {
   DashboardGraphBackground,
   DashboardGraphControls,
@@ -24,13 +23,13 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { GraphNodeButton } from "../../../components/ui/graph-node-button";
-import type { DashboardWorkRelation } from "../../../api/dashboard/types";
-import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
+import { cn } from "../../../lib/cn";
 import {
   getCachedTraceGraphLayout,
   layoutTraceGraphWithElk,
   traceGraphLayoutKey,
 } from "../lib/trace-elk-layout";
+import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
 // tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
@@ -48,9 +47,12 @@ const RELATION_STATE_BADGE_SUCCESS_CLASS =
 const RELATION_STATE_BADGE_WARNING_CLASS =
   "border-af-warning-border bg-af-warning-surface text-af-warning-text";
 const RELATION_NODE_TONE_DEFAULT_CLASS = "border-af-border bg-af-surface";
-const RELATION_NODE_TONE_DANGER_CLASS = "border-af-danger-border bg-af-danger-surface";
-const RELATION_NODE_TONE_SUCCESS_CLASS = "border-af-success-border bg-af-success-surface";
-const RELATION_NODE_TONE_WARNING_CLASS = "border-af-warning-border bg-af-warning-surface";
+const RELATION_NODE_TONE_DANGER_CLASS =
+  "border-af-danger-border bg-af-danger-surface";
+const RELATION_NODE_TONE_SUCCESS_CLASS =
+  "border-af-success-border bg-af-success-surface";
+const RELATION_NODE_TONE_WARNING_CLASS =
+  "border-af-warning-border bg-af-warning-surface";
 const RELATION_NODE_WIDTH = 220;
 const RELATION_NODE_HEIGHT = 112;
 const GRAPH_FIT_VIEW_OPTIONS = { maxZoom: 1.5, padding: 0.08 } as const;
@@ -89,11 +91,16 @@ export function TraceRelationFlow({
   );
   const graphDimensions = useMemo(
     () =>
-      new Map(graph.nodes.map((node) => [node.id, {
-        height: RELATION_NODE_HEIGHT,
-        id: node.id,
-        width: RELATION_NODE_WIDTH,
-      }])),
+      new Map(
+        graph.nodes.map((node) => [
+          node.id,
+          {
+            height: RELATION_NODE_HEIGHT,
+            id: node.id,
+            width: RELATION_NODE_WIDTH,
+          },
+        ]),
+      ),
     [graph.nodes],
   );
   const layoutKey = useMemo(
@@ -105,7 +112,9 @@ export function TraceRelationFlow({
   );
 
   useEffect(() => {
-    setLayoutedNodes(getCachedTraceGraphLayout(layoutKey, graph.nodes) ?? graph.nodes);
+    setLayoutedNodes(
+      getCachedTraceGraphLayout(layoutKey, graph.nodes) ?? graph.nodes,
+    );
   }, [graph.nodes, layoutKey]);
 
   useEffect(() => {
@@ -156,9 +165,12 @@ export function TraceRelationFlow({
     });
   }, [baseNodes]);
 
-  const handleNodesChange = useCallback((changes: NodeChange<RelationFlowNode>[]) => {
-    setNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
-  }, []);
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<RelationFlowNode>[]) => {
+      setNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
+    },
+    [],
+  );
 
   if (relations.length === 0) {
     return <span>{messages.noBatchRelations}</span>;
@@ -197,9 +209,7 @@ export function TraceRelationFlow({
   );
 }
 
-function RelationWorkNode({
-  data,
-}: NodeProps<RelationFlowNode>) {
+function RelationWorkNode({ data }: NodeProps<RelationFlowNode>) {
   const messages = getTraceDrilldownMessages(data.locale);
   const handleSelectWork = () => {
     if (data.workID && data.onSelectWorkID) {
@@ -230,7 +240,7 @@ function RelationWorkNode({
             )}
             key={relationType}
           >
-            {formatRelationBadgeLabel(relationType)}
+            {messages.localizeRelationType(relationType)}
           </span>
         ))}
         {data.relationStates.slice(0, 1).map((relationState) => (
@@ -242,12 +252,15 @@ function RelationWorkNode({
             )}
             key={relationState}
           >
-            {relationState}
+            {messages.localizeRelationState(relationState)}
           </span>
         ))}
       </div>
       <strong
-        className={cn("text-sm text-af-text [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn(
+          "text-sm text-af-text [overflow-wrap:anywhere]",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
       >
         {data.label}
       </strong>
@@ -340,7 +353,12 @@ function buildRelationGraph(
     }
 
     edgeRecords.push({
-      ariaLabel: relationEdgeLabel(source.label, target.label, relation),
+      ariaLabel: relationEdgeLabel(
+        source.label,
+        target.label,
+        relation,
+        locale,
+      ),
       id: relationEdgeID(relation, index),
       markerEnd: {
         color: relationEdgeStroke(relation),
@@ -398,7 +416,10 @@ function relationEndpoint(
   };
 }
 
-function relationEdgeID(relation: DashboardWorkRelation, index: number): string {
+function relationEdgeID(
+  relation: DashboardWorkRelation,
+  index: number,
+): string {
   return [
     relation.type,
     relation.source_work_id ?? `source-${index}`,
@@ -406,10 +427,6 @@ function relationEdgeID(relation: DashboardWorkRelation, index: number): string 
     relation.required_state ?? "",
     relation.request_id ?? "",
   ].join("|");
-}
-
-function formatRelationBadgeLabel(relationType: string): string {
-  return relationType.replaceAll("_", " ");
 }
 
 function relationStateToneClassName(relationState: string): string {
@@ -482,13 +499,12 @@ function relationEdgeLabel(
   sourceLabel: string,
   targetLabel: string,
   relation: DashboardWorkRelation,
+  locale?: string,
 ): string {
-  const fragments = [
-    `${formatRelationBadgeLabel(relation.type)} relation from ${sourceLabel} to ${targetLabel}`,
-  ];
-  if (relation.required_state) {
-    fragments.push(`requiring ${relation.required_state}`);
-  }
-
-  return fragments.join(", ");
+  return getTraceDrilldownMessages(locale).relationEdgeLabel({
+    relationState: relation.required_state,
+    relationType: relation.type,
+    sourceLabel,
+    targetLabel,
+  });
 }

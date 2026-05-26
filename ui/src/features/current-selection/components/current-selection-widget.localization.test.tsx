@@ -117,7 +117,7 @@ function buildSelectedWorkItemFixture() {
   };
 }
 
-describe("CurrentSelectionWidget localization", () => {
+function setupCurrentSelectionLocalizationTest() {
   beforeEach(() => {
     resetSelectionHistoryStore();
     vi.stubGlobal("fetch", vi.fn());
@@ -150,6 +150,10 @@ describe("CurrentSelectionWidget localization", () => {
     resetSelectionHistoryStore();
     vi.unstubAllGlobals();
   });
+}
+
+describe("CurrentSelectionWidget localization", () => {
+  setupCurrentSelectionLocalizationTest();
 
   it("switches shell, dispatch, and provider-session copy to zh-CN while preserving data values", async () => {
     const user = userEvent.setup();
@@ -196,7 +200,7 @@ describe("CurrentSelectionWidget localization", () => {
 
     await user.click(
       within(englishSelection).getByRole("button", {
-        name: "Select provider session codex / session_id / sess-active-story for dispatch dispatch-review-active",
+        name: "Select provider session codex / Session ID / sess-active-story for dispatch dispatch-review-active",
       }),
     );
     expect(
@@ -223,7 +227,7 @@ describe("CurrentSelectionWidget localization", () => {
     expect(within(localizedSelection).getByText("当前分派")).toBeTruthy();
     expect(
       within(localizedSelection).getByRole("button", {
-        name: "选择调度 dispatch-review-active 的 provider session codex / session_id / sess-active-story",
+        name: "选择调度 dispatch-review-active 的 provider session codex / 会话 ID / sess-active-story",
       }),
     ).toBeTruthy();
     expect(
@@ -239,5 +243,84 @@ describe("CurrentSelectionWidget localization", () => {
       within(localizedSelection).getAllByText(/sess-active-story/).length,
     ).toBeGreaterThan(0);
     expect(within(localizedSelection).getByText("Active Story")).toBeTruthy();
+  });
+});
+
+describe("CurrentSelectionWidget workstation localization", () => {
+  setupCurrentSelectionLocalizationTest();
+
+  it("switches workstation kind labels to zh-CN without changing canonical values", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = {
+      ...snapshot.topology.workstation_nodes_by_id.review,
+      workstation_kind: "standard",
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+      data: {
+        name: "Current Factory",
+        version: {
+          logical: 7,
+          physical: "2026-05-23T15:52:00Z",
+        },
+        workers: [
+          { model: "gpt-5.5", name: "reviewer", type: "MODEL_WORKER" },
+          { model: "gpt-5.6", name: "planner", type: "MODEL_WORKER" },
+        ],
+        workstations: [
+          {
+            behavior: "STANDARD",
+            body: "Review the latest story changes before approval.",
+            id: "review",
+            inputs: [{ state: "queued", workType: "story" }],
+            name: "Review",
+            outputs: [{ state: "approved", workType: "story" }],
+            promptFile: "prompts/review.md",
+            worker: "reviewer",
+          },
+        ],
+        workTypes: [],
+      },
+      isPending: false,
+      status: "success",
+    } as never);
+
+    const currentSelection = buildCurrentSelection({
+      selectedNode,
+      selection: { kind: "node", nodeId: selectedNode.node_id },
+    });
+
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <CurrentSelectionWidget
+          currentSelection={currentSelection}
+          locale="en"
+          now={DETAIL_CARD_NOW}
+          selectedWorkExecutionDetails={null}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole("heading", { name: "Workstation summary" })).toBeTruthy();
+    expect(screen.getByText("Standard")).toBeTruthy();
+    expect(screen.getByText("reviewer")).toBeTruthy();
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <CurrentSelectionWidget
+          currentSelection={currentSelection}
+          locale="zh-CN"
+          now={DETAIL_CARD_NOW}
+          selectedWorkExecutionDetails={null}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole("heading", { name: "工作站摘要" })).toBeTruthy();
+    expect(screen.getByText("标准")).toBeTruthy();
+    expect(screen.getByText("reviewer")).toBeTruthy();
   });
 });

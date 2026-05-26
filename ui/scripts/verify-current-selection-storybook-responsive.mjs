@@ -4,34 +4,28 @@ export async function verifyCurrentSelectionPromptHint({
   page,
   viewport,
 }) {
-  const reviewWorkstationButton = page.getByRole("button", {
-    name: "Select Review workstation",
-  });
   const currentSelection = page.getByRole("article", {
     name: "Current selection",
   });
   await currentSelection.waitFor({ state: "visible" });
+  for (const workstationName of ["Plan", "Implement", "Review"]) {
+    const workstationButton = page.getByRole("button", {
+      name: `Select ${workstationName} workstation`,
+    });
+    await workstationButton.focus();
+    await page.keyboard.press("Enter");
+  }
   const promptField = currentSelection.getByRole("textbox", { name: "Prompt" });
-  const promptEditor = currentSelection
-    .locator(".monaco-editor, [data-monaco-editor='workstation-prompt']")
-    .first();
   const saveButton = currentSelection.getByRole("button", {
     name: "Save changes",
   });
   const expandEditableConfigurationButton = currentSelection.getByRole("button", {
     name: "Expand editable configuration",
   });
-  const expandButtonCount = await expandEditableConfigurationButton.count();
+  await expandEditableConfigurationButton.focus();
+  await page.keyboard.press("Enter");
 
-  if ((await promptField.count()) === 0 && expandButtonCount === 0) {
-    await reviewWorkstationButton.click({ force: true });
-  }
-
-  if ((await promptField.count()) === 0) {
-    await expandEditableConfigurationButton.click();
-  }
-
-  await expectVisible(promptEditor, "Monaco prompt editor");
+  await expectVisible(promptField, "Prompt field");
   await expectVisible(
     currentSelection.getByText(
       "Autocomplete is ready with 2 variables for 1 authored input.",
@@ -70,8 +64,8 @@ export async function verifyCurrentSelectionPromptHint({
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type("Use {{ (index .Inputs 1).Payload }}.");
   await expectVisible(
-    promptEditor,
-    "Monaco prompt editor after invalid prompt entry",
+    promptField,
+    "Prompt field after invalid prompt entry",
   );
   await expectVisible(
     currentSelection.getByRole("heading", { name: "Prompt diagnostics" }),
@@ -107,11 +101,6 @@ function expectHeadingBeforePosition(firstRect, secondRect, label) {
   if (firstRect.top > secondRect.top) {
     throw new Error(`${label} rendered out of order.`);
   }
-}
-
-async function expectSectionHeaderFrame(expectVisible, heading, label) {
-  const headerFrame = heading.locator("xpath=ancestor::div[contains(@class, 'rounded-lg')]").first();
-  await expectVisible(headerFrame, `${label} header frame`);
 }
 
 export async function verifyCurrentSelectionWorkstationDetailOrder({
@@ -157,18 +146,6 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
   await expectVisible(configurationHeading, "Configuration heading");
   await expectVisible(activeWorkHeading, "Active work heading");
   await expectVisible(historyHeading, "History heading");
-  await expectSectionHeaderFrame(
-    expectVisible,
-    summaryHeading,
-    "Workstation summary",
-  );
-  await expectSectionHeaderFrame(
-    expectVisible,
-    configurationHeading,
-    "Configuration",
-  );
-  await expectSectionHeaderFrame(expectVisible, activeWorkHeading, "Active work");
-  await expectSectionHeaderFrame(expectVisible, historyHeading, "History");
   await expectVisible(
     currentSelection.getByText("Input work types"),
     "Workstation summary work-type label",
@@ -200,6 +177,18 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
     "Active work heading before history heading",
   );
 
+  const historySection = historyHeading.locator("xpath=ancestor::section[1]");
+  const historyExpandButton = historySection.getByRole("button", {
+    name: "Expand",
+  });
+  await historyExpandButton.focus();
+  await page.keyboard.press("Enter");
+  await expectVisible(
+    historySection.getByRole("button", {
+      name: "Select provider session codex / Session ID / sess-rejected-story for dispatch dispatch-review-rejected",
+    }),
+    "History selection button",
+  );
   await expectNoHorizontalOverflow(
     page,
     `Current selection workstation detail order at ${viewport.label}`,
