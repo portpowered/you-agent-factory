@@ -71,14 +71,14 @@ describe("import/export responsive schedule", () => {
 
     expect(visitedViewports).toEqual([
       { height: 111, width: 222 },
-      { height: 111, width: 222 },
       { height: 333, width: 444 },
+      { height: 111, width: 222 },
       { height: 333, width: 444 },
     ]);
     expect(visitedUrls).toEqual([
       "http://127.0.0.1:6008/iframe.html?id=story-one&viewMode=story",
-      "http://127.0.0.1:6008/iframe.html?id=story-two&viewMode=story",
       "http://127.0.0.1:6008/iframe.html?id=story-one&viewMode=story",
+      "http://127.0.0.1:6008/iframe.html?id=story-two&viewMode=story",
       "http://127.0.0.1:6008/iframe.html?id=story-two&viewMode=story",
     ]);
     expect(checks[0].assertions).toHaveBeenCalledTimes(2);
