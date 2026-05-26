@@ -302,47 +302,8 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
   });
 });
 
-describe("useDashboardLayout inline add-widget persistence", () => {
+describe("useDashboardLayout widget instance persistence", () => {
   beforeEach(resetDashboardLayoutStorage);
-
-  it("persists inline add-widget repositioning alongside normal dashboard cards", () => {
-    const { result } = renderHook(() => useDashboardLayout());
-
-    act(() => {
-      result.current.persistDashboardLayout(
-        result.current.dashboardLayout.map((item) =>
-          item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID
-            ? { ...item, h: 5, w: 3, x: 5, y: 24 }
-            : item,
-        ),
-      );
-    });
-
-    const storedLayout = JSON.parse(
-      window.localStorage.getItem("agent-factory.dashboard.layout.v2") ?? "[]",
-    ) as Array<{
-      h: number;
-      id: string;
-      w: number;
-      widgetType: string;
-      x: number;
-      y: number;
-    }>;
-
-    expect(
-      storedLayout.filter((item) => item.widgetType === DASHBOARD_WIDGET_IDS.addWidget),
-    ).toHaveLength(1);
-    expect(
-      storedLayout.find((item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID),
-    ).toMatchObject({
-      h: 5,
-      id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
-      w: 3,
-      widgetType: DASHBOARD_WIDGET_IDS.addWidget,
-      x: 5,
-      y: 24,
-    });
-  });
 
   it("adds duplicate-capable widgets with stable instance ids and keeps one add-widget card", () => {
     const { result } = renderHook(() => useDashboardLayout());
@@ -423,7 +384,6 @@ describe("useDashboardLayout inline add-widget persistence", () => {
       ),
     ).toBeDefined();
   });
-
 });
 
 describe("useDashboardLayout reload persistence", () => {

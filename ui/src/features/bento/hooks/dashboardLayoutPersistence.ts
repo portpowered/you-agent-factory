@@ -168,17 +168,14 @@ function migrateDashboardLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayou
   const normalizedLayout = layout
     .map((item) => normalizeDashboardLayoutItem(item))
     .filter((item): item is AgentBentoLayoutItem => item !== null);
-  const migratedLayout = migrateProviderSessionLayout(
-    migrateDashboardCompactionLayout(
-      migrateTraceLayout(migrateWorkOutcomeLayout(normalizedLayout)),
+  const migratedLayout = normalizeInlineAddWidgetLayout(
+    migrateProviderSessionLayout(
+      migrateDashboardCompactionLayout(
+        migrateTraceLayout(migrateWorkOutcomeLayout(normalizedLayout)),
+      ),
     ),
   );
-
-  if (migratedLayout.some((item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID)) {
-    return migratedLayout;
-  }
-
-  return [...migratedLayout, getDefaultInlineAddWidgetLayout()];
+  return migratedLayout;
 }
 
 function migrateDashboardCompactionLayout(
@@ -279,6 +276,35 @@ function migrateTraceLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutIte
 
     return item;
   });
+}
+
+function normalizeInlineAddWidgetLayout(
+  layout: AgentBentoLayoutItem[],
+): AgentBentoLayoutItem[] {
+  const inlineAddWidgetItems = layout.filter(
+    (item) => item.widgetType === DASHBOARD_WIDGET_IDS.addWidget,
+  );
+
+  if (inlineAddWidgetItems.length === 0) {
+    return [...layout, getDefaultInlineAddWidgetLayout()];
+  }
+
+  const orderedInlineAddWidgetItems = [...inlineAddWidgetItems].reverse();
+  const canonicalInlineAddWidget =
+    orderedInlineAddWidgetItems.find(
+      (item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+    ) ?? orderedInlineAddWidgetItems[0];
+  const normalizedInlineAddWidget: AgentBentoLayoutItem = {
+    ...canonicalInlineAddWidget,
+    hidden: undefined,
+    id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+    widgetType: DASHBOARD_WIDGET_IDS.addWidget,
+  };
+
+  return [
+    ...layout.filter((item) => item.widgetType !== DASHBOARD_WIDGET_IDS.addWidget),
+    normalizedInlineAddWidget,
+  ];
 }
 
 function migrateWorkOutcomeLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {
