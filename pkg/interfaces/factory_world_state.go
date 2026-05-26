@@ -1,12 +1,17 @@
 package interfaces
 
-import "time"
+import (
+	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+)
 
 // FactoryWorldState is the dashboard-agnostic reconstruction of factory state
 // from canonical factory events up to one selected engine tick.
 type FactoryWorldState struct {
 	Tick                          int                                                `json:"tick"`
 	EventTime                     time.Time                                          `json:"event_time,omitempty"`
+	Factory                       *factoryapi.Factory                                `json:"factory,omitempty"`
 	Topology                      InitialStructurePayload                            `json:"topology"`
 	PayloadLineage                WorkPayloadLineageProjection                       `json:"payload_lineage,omitempty"`
 	WorkRequestsByID              map[string]WorkRequestPayload                      `json:"work_requests_by_id,omitempty"`

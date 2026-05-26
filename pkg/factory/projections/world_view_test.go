@@ -67,6 +67,94 @@ func TestBuildFactoryWorldView_ProjectsFromReconstructedWorldState(t *testing.T)
 	}
 }
 
+func TestBuildFactoryWorldView_ExposesCanonicalFactoryGraphFromStructureEvents(t *testing.T) {
+	t0 := time.Date(2026, 5, 27, 1, 0, 0, 0, time.UTC)
+	workerType := factoryapi.WorkerTypeModelWorker
+	workerProvider := factoryapi.WorkerModelProviderCodex
+	workstationKind := factoryapi.WorkstationKindStandard
+	maxRetries := 3
+	promptBody := "Review the work and either continue, reject, or fail it."
+	payload := factoryapi.InitialStructureRequestEventPayload{
+		Factory: factoryapi.Factory{
+			Name:      "graph-source",
+			Resources: &[]factoryapi.Resource{{Name: "agent-slot", Capacity: 2}},
+			Workers: &[]factoryapi.Worker{{
+				Name:          "reviewer",
+				Type:          &workerType,
+				ModelProvider: &workerProvider,
+				Model:         stringPtrForProjectionTest("gpt-5.4"),
+				Resources:     &[]factoryapi.ResourceRequirement{{Name: "agent-slot", Capacity: 1}},
+			}},
+			WorkTypes: &[]factoryapi.WorkType{{
+				Name: "story",
+				States: []factoryapi.WorkState{
+					{Name: "new", Type: factoryapi.WorkStateTypeINITIAL},
+					{Name: "review", Type: factoryapi.WorkStateTypePROCESSING},
+					{Name: "continue", Type: factoryapi.WorkStateTypePROCESSING},
+					{Name: "rejected", Type: factoryapi.WorkStateTypePROCESSING},
+					{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+					{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
+				},
+			}},
+			Workstations: &[]factoryapi.Workstation{{
+				Id:         stringPtrForProjectionTest("review"),
+				Name:       "Review",
+				Worker:     "reviewer",
+				Behavior:   &workstationKind,
+				Body:       &promptBody,
+				Inputs:     []factoryapi.WorkstationIO{{WorkType: "story", State: "new"}},
+				Outputs:    &[]factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
+				OnContinue: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "continue"}},
+				OnRejection: &[]factoryapi.WorkstationIO{{
+					WorkType: "story",
+					State:    "rejected",
+				}},
+				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "failed"}},
+				Resources: &[]factoryapi.ResourceRequirement{{Name: "agent-slot", Capacity: 1}},
+				Limits:    &factoryapi.WorkstationLimits{MaxRetries: &maxRetries},
+			}},
+		},
+	}
+	events := []factoryapi.FactoryEvent{
+		generatedProjectionEvent(factoryapi.FactoryEventTypeInitialStructureRequest, "initial-canonical-factory", 0, t0, factoryapi.FactoryEventContext{}, payload),
+	}
+	worldState, err := ReconstructFactoryWorldState(events, 0)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	view := BuildFactoryWorldView(worldState)
+
+	if worldState.Factory == nil {
+		t.Fatal("world state factory = nil, want canonical factory graph")
+	}
+	if view.Factory == nil {
+		t.Fatal("world view factory = nil, want canonical factory graph")
+	}
+	if !reflect.DeepEqual(*worldState.Factory, payload.Factory) {
+		t.Fatalf("world state factory = %#v, want canonical payload", *worldState.Factory)
+	}
+	if !reflect.DeepEqual(*view.Factory, payload.Factory) {
+		t.Fatalf("world view factory = %#v, want canonical payload", *view.Factory)
+	}
+
+	workstation := (*view.Factory.Workstations)[0]
+	if len(*workstation.OnContinue) != 1 || (*workstation.OnContinue)[0].State != "continue" {
+		t.Fatalf("onContinue = %#v, want continue route", workstation.OnContinue)
+	}
+	if len(*workstation.OnRejection) != 1 || (*workstation.OnRejection)[0].State != "rejected" {
+		t.Fatalf("onRejection = %#v, want rejected route", workstation.OnRejection)
+	}
+	if len(*workstation.OnFailure) != 1 || (*workstation.OnFailure)[0].State != "failed" {
+		t.Fatalf("onFailure = %#v, want failed route", workstation.OnFailure)
+	}
+	if workstation.Body == nil || *workstation.Body != promptBody {
+		t.Fatalf("body = %#v, want prompt body preserved", workstation.Body)
+	}
+	if workstation.Limits == nil || workstation.Limits.MaxRetries == nil || *workstation.Limits.MaxRetries != maxRetries {
+		t.Fatalf("limits = %#v, want max retries preserved", workstation.Limits)
+	}
+}
+
 func TestBuildFactoryWorldViewWithActiveThrottlePauses_ProjectsRuntimePauseMetadata(t *testing.T) {
 	view := BuildFactoryWorldViewWithActiveThrottlePauses(
 		interfaces.FactoryWorldState{

@@ -1,6 +1,7 @@
 package projections
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -124,6 +125,9 @@ func (r *factoryWorldReducer) applyStructureEvent(event factoryapi.FactoryEvent)
 			return err
 		}
 		if !r.hasTopology() {
+			if err := r.applyCanonicalFactory(payload.Factory); err != nil {
+				return err
+			}
 			r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload{
 				Factory: payload.Factory,
 			}))
@@ -133,10 +137,16 @@ func (r *factoryWorldReducer) applyStructureEvent(event factoryapi.FactoryEvent)
 		if err != nil {
 			return err
 		}
+		if err := r.applyCanonicalFactory(payload.Factory); err != nil {
+			return err
+		}
 		r.applyInitialStructure(initialStructureFromGenerated(payload))
 	case factoryapi.FactoryEventTypeFactoryChange:
 		payload, err := event.Payload.AsFactoryChangeEventPayload()
 		if err != nil {
+			return err
+		}
+		if err := r.applyCanonicalFactory(payload.Factory); err != nil {
 			return err
 		}
 		r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload(payload)))
@@ -240,6 +250,27 @@ func (r *factoryWorldReducer) applyInitialStructure(payload interfaces.InitialSt
 	for _, resource := range payload.Resources {
 		r.seedResourceTokens(resource)
 	}
+}
+
+func (r *factoryWorldReducer) applyCanonicalFactory(factory factoryapi.Factory) error {
+	clone, err := cloneGeneratedFactory(factory)
+	if err != nil {
+		return err
+	}
+	r.stateValue.Factory = &clone
+	return nil
+}
+
+func cloneGeneratedFactory(factory factoryapi.Factory) (factoryapi.Factory, error) {
+	encoded, err := json.Marshal(factory)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("clone canonical factory graph: %w", err)
+	}
+	var clone factoryapi.Factory
+	if err := json.Unmarshal(encoded, &clone); err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("clone canonical factory graph: %w", err)
+	}
+	return clone, nil
 }
 
 func (r *factoryWorldReducer) applyWorkRequest(context factoryapi.FactoryEventContext, payload factoryapi.WorkRequestEventPayload) {

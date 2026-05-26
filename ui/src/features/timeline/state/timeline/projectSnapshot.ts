@@ -4,9 +4,9 @@ import {
   cloneWorkRequestsByID,
   cloneWorkstationDispatchRequestsByID,
 } from "./cloneTimelineSnapshot";
-import { projectWorkstationDispatchRequestsByID } from "./projectWorkstationRequests";
 import { projectRuntime } from "./projectRuntime";
 import { projectTopology } from "./projectTopology";
+import { projectWorkstationDispatchRequestsByID } from "./projectWorkstationRequests";
 import { isSystemTimeWorkType } from "./systemTime";
 import type { ReplayWorldState, WorldState } from "./types";
 
@@ -38,6 +38,7 @@ export function projectSnapshot(state: ReplayWorldState): WorldState {
 
   return {
     factory_state: state.factory_state,
+    factory: state.factory ? structuredClone(state.factory) : undefined,
     runtime,
     tick_count: state.tick_count,
     topology: projectTopology(state.topology),
@@ -49,7 +50,8 @@ export function projectSnapshot(state: ReplayWorldState): WorldState {
         activeDispatches: state.activeDispatches,
         completedDispatches: state.completedDispatches,
         inferenceAttemptsByDispatchID: state.inferenceAttemptsByDispatchID,
-        runtimeRequestsByDispatchID: runtime.workstation_requests_by_dispatch_id ?? {},
+        runtimeRequestsByDispatchID:
+          runtime.workstation_requests_by_dispatch_id ?? {},
         scriptRequestsByDispatchID: state.scriptRequestsByDispatchID,
         scriptResponsesByDispatchID: state.scriptResponsesByDispatchID,
         workRequestsByID: publicWorkRequestsByID,
@@ -58,5 +60,3 @@ export function projectSnapshot(state: ReplayWorldState): WorldState {
     workRequestsByID: publicWorkRequestsByID,
   };
 }
-
-
