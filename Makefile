@@ -117,8 +117,8 @@ verify-fast:
 
 verify-pr:
 	@printf '%s\n' "Running pull-request verification tier: build contracts + required CI-equivalent test lanes"
-	$(MAKE) verify-build-contracts
-	$(MAKE) verify-tests
+	$(call run_verification_step,verify-build-contracts,build contracts and static verification)
+	$(call run_verification_step,verify-tests,required CI-equivalent test lanes)
 
 verify-extended:
 	@printf '%s\n' "Running extended verification tier: required PR verification + opt-in long and specialty suites"
@@ -198,9 +198,10 @@ verify-build-contracts:
 	$(MAKE) api-smoke
 
 verify-tests:
-	$(MAKE) test-ui-coverage
-	$(MAKE) ui-integration-test
-	$(MAKE) test-backend-verification
+	@printf '%s\n' "Running required CI-equivalent test lanes: UI coverage + browser integration + backend verification"
+	$(call run_verification_step,test-ui-coverage,UI Coverage lane)
+	$(call run_verification_step,ui-integration-test,UI Browser Integration lane)
+	$(call run_verification_step,test-backend-verification,Backend Verification lane)
 
 verify:
 	@printf '%s\n' "make verify is a compatibility alias for the canonical pull-request tier; prefer make verify-pr"

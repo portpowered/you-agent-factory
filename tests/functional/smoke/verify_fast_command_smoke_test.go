@@ -71,6 +71,80 @@ func TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand(t *testi
 	}
 }
 
+func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
+		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n",
+		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"verify":                    "@printf '%s\\n' 'unexpected:verify'\n\t@exit 99\n",
+		"test-backend-functional":   "@printf '%s\\n' 'unexpected:test-backend-functional'\n\t@exit 99\n",
+		"ui-test":                   "@printf '%s\\n' 'unexpected:ui-test'\n\t@exit 99\n",
+	})
+
+	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr")
+	if err != nil {
+		t.Fatalf("run verify-pr wrapper: %v\n%s", err, output)
+	}
+
+	assertOutputOrder(t, output,
+		"Running pull-request verification tier: build contracts + required CI-equivalent test lanes",
+		"==> build contracts and static verification [make verify-build-contracts]",
+		"stub:verify-build-contracts",
+		"==> required CI-equivalent test lanes [make verify-tests]",
+		"Running required CI-equivalent test lanes: UI coverage + browser integration + backend verification",
+		"==> UI Coverage lane [make test-ui-coverage]",
+		"stub:test-ui-coverage",
+		"==> UI Browser Integration lane [make ui-integration-test]",
+		"stub:ui-integration-test",
+		"==> Backend Verification lane [make test-backend-verification]",
+		"stub:test-backend-verification",
+	)
+
+	for _, expected := range []string{
+		"stub:verify-build-contracts",
+		"stub:test-ui-coverage",
+		"stub:ui-integration-test",
+		"stub:test-backend-verification",
+	} {
+		if count := strings.Count(output, expected); count != 1 {
+			t.Fatalf("expected %q exactly once, found %d:\n%s", expected, count, output)
+		}
+	}
+
+	for _, unwanted := range []string{
+		"unexpected:verify",
+		"unexpected:test-backend-functional",
+		"unexpected:ui-test",
+	} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("verify-pr unexpectedly ran %q:\n%s", unwanted, output)
+		}
+	}
+}
+
+func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
+		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n\t@exit 23\n",
+		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
+	})
+
+	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr")
+	if err == nil {
+		t.Fatalf("verify-pr unexpectedly succeeded:\n%s", output)
+	}
+	if !strings.Contains(output, "FAIL: UI Browser Integration lane [make ui-integration-test] failed. Rerun with: make ui-integration-test") {
+		t.Fatalf("verify-pr failure output missing exact lane rerun hint:\n%s", output)
+	}
+	if strings.Contains(output, "stub:test-backend-verification") {
+		t.Fatalf("verify-pr continued after the failing required lane:\n%s", output)
+	}
+}
+
 func writeVerifyFastWrapperMakefile(t *testing.T, repoRoot string, overrides map[string]string) string {
 	t.Helper()
 

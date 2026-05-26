@@ -80,7 +80,7 @@ Use the same root-level commands locally when reproducing a GitHub Actions failu
 Use these canonical verification tiers on the root command surface before reaching for the lower-level lane names:
 
 - `make verify-fast` for the fastest safe author pass: dashboard typecheck, the jsdom-oriented UI unit lane, and the short Go suite. The tier prints the owned suite label before each step and, on failure, emits the exact `make <target>` rerun command for that step.
-- `make verify-pr` for the pull-request-equivalent local pass: `make verify-build-contracts` plus the required CI test lanes.
+- `make verify-pr` for the pull-request-equivalent local pass: `make verify-build-contracts` plus the required CI test lanes. Like `make verify-fast`, it prints the owned aggregate or lane label before each nested step and reports the exact `make <target>` rerun command when one of those owned steps fails.
 - `make verify-extended` for opt-in deeper coverage after the PR-equivalent pass: `make verify-pr` plus `make long-tests`.
 
 The older aggregate names remain available as compatibility aliases while docs, workflows, and active review branches converge on the clearer tiered surface. In particular, `make verify` still works, but it now points contributors at `make verify-pr` as the canonical pull-request rerun command.
@@ -103,7 +103,7 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make verify-build-contracts` is the repository-owned build-contract lane used by CI after dependency setup. It runs `make typecheck`, `make ui-build`, `make build`, `make lint`, and `make api-smoke` in the same order the `verify-build-contracts` GitHub Actions job enforces.
 
-`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make ui-integration-test`, and `make test-backend-verification`. The GitHub Actions workflow fans those commands out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Verification` jobs so required failures point at one lane instead of a mixed `make ui-test` rerun.
+`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make ui-integration-test`, and `make test-backend-verification`, prints the owned lane label before each one, and emits the exact lane rerun command if one fails. The GitHub Actions workflow fans those commands out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Verification` jobs so required failures point at one lane instead of a mixed `make ui-test` rerun.
 
 Treat those lanes as the stable contributor mental model:
 
