@@ -647,6 +647,11 @@ describe("ProviderSessionDetailPanel", () => {
     });
 
     expect(
+      screen.getByText(
+        "Times on this card are shown in your local timezone. Expand Raw ISO timestamp when you need the machine value.",
+      ),
+    ).toBeTruthy();
+    expect(
       screen
         .getAllByTitle("2026-05-18T14:10:01Z")
         .some(
@@ -669,6 +674,11 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "会话记录" })).toBeTruthy();
     });
 
+    expect(
+      screen.getByText(
+        "此卡片中的时间会按你的本地时区显示。需要机器时间值时，请展开原始 ISO 时间戳。",
+      ),
+    ).toBeTruthy();
     expect(
       screen
         .getAllByTitle("2026-05-18T14:10:01Z")

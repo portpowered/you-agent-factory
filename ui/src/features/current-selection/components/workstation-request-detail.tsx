@@ -1,4 +1,5 @@
 import { formatDurationMillis } from "../../../components/ui/formatters";
+import { LocalizedTimezoneNote } from "../../../components/ui/localized-timezone-note";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -97,6 +98,9 @@ function WorkstationRequestSummary({
   return (
     <>
       <p className={WIDGET_SUBTITLE_CLASS}>{view.requestTitle}</p>
+      <LocalizedTimezoneNote>
+        {messages.localizedTimezoneContext}
+      </LocalizedTimezoneNote>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <div>
           <dt>{messages.dispatchIdLabel}</dt>

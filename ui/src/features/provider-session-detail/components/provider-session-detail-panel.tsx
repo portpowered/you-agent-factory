@@ -6,6 +6,7 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { LocalizedTimezoneNote } from "../../../components/ui/localized-timezone-note";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import { formatDateTime } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
@@ -77,6 +78,9 @@ function LoadedProviderSessionDetailPanel({
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
           {messages.selectedSessionHeading}
         </h4>
+        <LocalizedTimezoneNote>
+          {messages.localizedTimezoneContext}
+        </LocalizedTimezoneNote>
         <div className="grid gap-3 md:grid-cols-2">
           <DetailMetric label={messages.sessionLabel} value={sessionLabel} code />
           <DetailMetric

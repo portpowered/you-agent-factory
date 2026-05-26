@@ -33,6 +33,9 @@ it("rerenders request and response timestamps for the active locale", () => {
   const inferenceAttempts = within(
     screen.getByRole("region", { name: "Inference attempts" }),
   );
+  expect(
+    screen.getByText("Times on this card are shown in your local timezone."),
+  ).toBeTruthy();
   const expectedEnglishRequestTime = formatLocalDateTime(
     requestTime,
     "Unavailable",
@@ -71,6 +74,7 @@ it("rerenders request and response timestamps for the active locale", () => {
   const localizedInferenceAttempts = within(
     screen.getByRole("region", { name: "推理尝试" }),
   );
+  expect(screen.getByText("此卡片中的时间会按你的本地时区显示。")).toBeTruthy();
   const expectedChineseRequestTime = formatLocalDateTime(
     requestTime,
     "不可用",
