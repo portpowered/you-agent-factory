@@ -327,6 +327,65 @@ func TestFactoryService_ServiceModeStartupWorkReadabilityFailsWhenAPIServerStart
 	}
 }
 
+func TestFactoryService_ServiceModeStartupWorkSkipsAPIReadinessWaitWhenPortDisabled(t *testing.T) {
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	workFile := filepath.Join(dir, "startup-work.json")
+	if err := os.WriteFile(workFile, []byte(`{
+  "requestId": "request-service-port-disabled",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "startup-item",
+      "workId": "work-service-port-disabled",
+      "workTypeName": "task",
+      "traceId": "trace-service-port-disabled",
+      "payload": {"title": "startup work"}
+    }
+  ]
+}`), 0o644); err != nil {
+		t.Fatalf("write work file: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		WorkFile:          workFile,
+		Logger:            zap.NewNop(),
+		Port:              0,
+		APIServerReady:    make(chan struct{}),
+		APIServerStarter: func(context.Context, apisurface.APISurface, int, *zap.Logger) error {
+			return errors.New("API server should not start when port is disabled")
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForTokenInPlaceByWorkID(t, svc, "task:complete", "work-service-port-disabled", time.Second)
+	cancel()
+	select {
+	case runErr := <-runErrCh:
+		if runErr != nil {
+			t.Fatalf("Run after cancellation: %v", runErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service-mode run with disabled API port to stop")
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this runtime observability test keeps snapshot and event-stream assertions together in one service flow.
 func TestFactoryService_RunPreservesSnapshotAndFactoryEventObservability(t *testing.T) {
 	dir := t.TempDir()

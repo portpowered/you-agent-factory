@@ -8,7 +8,7 @@ import (
 )
 
 func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.Context, serviceMode bool) error {
-	if !serviceMode || fs.cfg.WorkFile == "" || fs.cfg.APIServerReady == nil {
+	if !serviceMode || fs.cfg.WorkFile == "" || fs.cfg.APIServerReady == nil || fs.cfg.Port <= 0 || fs.cfg.APIServerStarter == nil {
 		return nil
 	}
 	apiServerExit := fs.apiServerExit
