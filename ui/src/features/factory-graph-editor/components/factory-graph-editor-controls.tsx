@@ -301,6 +301,7 @@ function FactoryGraphEditorAddMenu({
         align="start"
         aria-label={messages.toolbarVisibilityMenuAriaLabel}
         className="grid gap-2"
+        side="top"
       >
         <div className="grid gap-1">
           <p className="m-0 text-sm font-semibold text-af-text">
