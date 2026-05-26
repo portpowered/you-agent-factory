@@ -124,99 +124,131 @@ function createSaveFlowHarness() {
   };
 }
 
+function createPromptHintFixture() {
+  const calls = [];
+  const planWorkstationButton = createVisibleLocator("Select Plan workstation");
+  planWorkstationButton.click = vi.fn().mockResolvedValue(undefined);
+  const implementWorkstationButton = createVisibleLocator(
+    "Select Implement workstation",
+  );
+  implementWorkstationButton.click = vi.fn().mockResolvedValue(undefined);
+  const reviewWorkstationButton = createVisibleLocator("Select Review workstation");
+  reviewWorkstationButton.click = vi.fn().mockResolvedValue(undefined);
+  const expandEditableConfigurationButton = createVisibleLocator(
+    "Expand editable configuration",
+  );
+  const removedHelpButton = createVisibleLocator("removed help button", {
+    count: vi.fn().mockResolvedValue(0),
+  });
+  const removedHelpPanel = createVisibleLocator("removed help panel", {
+    count: vi.fn().mockResolvedValue(0),
+  });
+  const legacySquiggleOverlay = createVisibleLocator("legacy mark", {
+    count: vi.fn().mockResolvedValue(0),
+  });
+  const promptField = createVisibleLocator("Prompt textbox");
+  promptField.click = vi.fn().mockResolvedValue(undefined);
+  const saveButton = createVisibleLocator("Save changes button", {
+    isDisabled: vi.fn().mockResolvedValue(true),
+  });
+  const currentSelection = {
+    getByRole: vi.fn((role, options) => {
+      calls.push(["role", role, options]);
+      if (role === "textbox" && options?.name === "Prompt") {
+        return promptField;
+      }
+      if (
+        role === "button" &&
+        options?.name === "Expand editable configuration"
+      ) {
+        return expandEditableConfigurationButton;
+      }
+      if (role === "button" && options?.name === "Save changes") {
+        return saveButton;
+      }
+      if (role === "button" && String(options?.name).includes("prompt variable help")) {
+        return removedHelpButton;
+      }
+      return createVisibleLocator(`${role}:${options?.name}`);
+    }),
+    getByText: vi.fn((text) => {
+      calls.push(["text", text]);
+      if (text === "Available variables") {
+        return removedHelpPanel;
+      }
+      return createVisibleLocator(`text:${text}`);
+    }),
+    locator: vi.fn((selector) => {
+      calls.push(["locator", selector]);
+      if (selector === "mark") {
+        return legacySquiggleOverlay;
+      }
+      return createVisibleLocator(`locator:${selector}`);
+    }),
+    waitFor: vi.fn().mockResolvedValue(undefined),
+  };
+  const page = {
+    evaluate: vi.fn().mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
+    getByRole: vi.fn((role, options) => {
+      if (role === "article" && options?.name === "Current selection") {
+        return currentSelection;
+      }
+      if (role === "button" && options?.name === "Select Plan workstation") {
+        return planWorkstationButton;
+      }
+      if (
+        role === "button" &&
+        options?.name === "Select Implement workstation"
+      ) {
+        return implementWorkstationButton;
+      }
+      if (role === "button" && options?.name === "Select Review workstation") {
+        return reviewWorkstationButton;
+      }
+      return createVisibleLocator(`${role}:${options?.name}`);
+    }),
+    keyboard: {
+      press: vi.fn().mockResolvedValue(undefined),
+      type: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+
+  return {
+    calls,
+    currentSelection,
+    expectNoHorizontalOverflow: vi.fn().mockResolvedValue(undefined),
+    expectVisible: vi.fn((_locator) => Promise.resolve()),
+    expandEditableConfigurationButton,
+    implementWorkstationButton,
+    legacySquiggleOverlay,
+    page,
+    planWorkstationButton,
+    promptField,
+    removedHelpButton,
+    removedHelpPanel,
+    reviewWorkstationButton,
+    saveButton,
+  };
+}
+
 describe("verifyCurrentSelectionPromptHint", () => {
   test("expands editable configuration before verifying Monaco inline guidance", async () => {
-    const calls = [];
-    const planWorkstationButton = createVisibleLocator("Select Plan workstation");
-    planWorkstationButton.click = vi.fn().mockResolvedValue(undefined);
-    const implementWorkstationButton = createVisibleLocator(
-      "Select Implement workstation",
-    );
-    implementWorkstationButton.click = vi.fn().mockResolvedValue(undefined);
-    const reviewWorkstationButton = createVisibleLocator("Select Review workstation");
-    reviewWorkstationButton.click = vi.fn().mockResolvedValue(undefined);
-    const expandEditableConfigurationButton = createVisibleLocator(
-      "Expand editable configuration",
-    );
-    const removedHelpButton = createVisibleLocator("removed help button", {
-      count: vi.fn().mockResolvedValue(0),
-    });
-    const removedHelpPanel = createVisibleLocator("removed help panel", {
-      count: vi.fn().mockResolvedValue(0),
-    });
-    const legacySquiggleOverlay = createVisibleLocator("legacy mark", {
-      count: vi.fn().mockResolvedValue(0),
-    });
-    const promptField = createVisibleLocator("Prompt textbox");
-    promptField.click = vi.fn().mockResolvedValue(undefined);
-    const saveButton = createVisibleLocator("Save changes button", {
-      isDisabled: vi.fn().mockResolvedValue(true),
-    });
-    const currentSelection = {
-      getByRole: vi.fn((role, options) => {
-        calls.push(["role", role, options]);
-        if (role === "textbox" && options?.name === "Prompt") {
-          return promptField;
-        }
-        if (
-          role === "button" &&
-          options?.name === "Expand editable configuration"
-        ) {
-          return expandEditableConfigurationButton;
-        }
-        if (role === "button" && options?.name === "Save changes") {
-          return saveButton;
-        }
-        if (role === "button" && String(options?.name).includes("prompt variable help")) {
-          return removedHelpButton;
-        }
-        return createVisibleLocator(`${role}:${options?.name}`);
-      }),
-      getByText: vi.fn((text) => {
-        calls.push(["text", text]);
-        if (text === "Available variables") {
-          return removedHelpPanel;
-        }
-        return createVisibleLocator(`text:${text}`);
-      }),
-      locator: vi.fn((selector) => {
-        calls.push(["locator", selector]);
-        if (selector === "mark") {
-          return legacySquiggleOverlay;
-        }
-        return createVisibleLocator(`locator:${selector}`);
-      }),
-      waitFor: vi.fn().mockResolvedValue(undefined),
-    };
-    const page = {
-      evaluate: vi
-        .fn()
-        .mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
-      getByRole: vi.fn((role, options) => {
-        if (role === "article" && options?.name === "Current selection") {
-          return currentSelection;
-        }
-        if (role === "button" && options?.name === "Select Plan workstation") {
-          return planWorkstationButton;
-        }
-        if (
-          role === "button" &&
-          options?.name === "Select Implement workstation"
-        ) {
-          return implementWorkstationButton;
-        }
-        if (role === "button" && options?.name === "Select Review workstation") {
-          return reviewWorkstationButton;
-        }
-        return createVisibleLocator(`${role}:${options?.name}`);
-      }),
-      keyboard: {
-        press: vi.fn().mockResolvedValue(undefined),
-        type: vi.fn().mockResolvedValue(undefined),
-      },
-    };
-    const expectVisible = vi.fn((_locator) => Promise.resolve());
-    const expectNoHorizontalOverflow = vi.fn().mockResolvedValue(undefined);
+    const {
+      calls,
+      currentSelection,
+      expectNoHorizontalOverflow,
+      expectVisible,
+      expandEditableConfigurationButton,
+      implementWorkstationButton,
+      legacySquiggleOverlay,
+      page,
+      planWorkstationButton,
+      promptField,
+      removedHelpButton,
+      removedHelpPanel,
+      reviewWorkstationButton,
+      saveButton,
+    } = createPromptHintFixture();
 
     await verifyCurrentSelectionPromptHint({
       expectNoHorizontalOverflow,

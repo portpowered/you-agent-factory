@@ -4,10 +4,7 @@ import {
   WIDGET_SUBTITLE_CLASS,
 } from "../../../components/dashboard/widget-board";
 import type { DashboardWorkstationRequest } from "../../../api/dashboard/types";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
+import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import {
   DashboardStatusPill,
   DashboardActionButton,
@@ -16,7 +13,6 @@ import {
 import {
   formatDurationMillis,
   formatDurationFromISO,
-  formatRelativeTimeFromISO,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
@@ -90,11 +86,11 @@ export function WorkstationDetailCard({
       />
       <WorkstationActiveWorkList
         executions={activeExecutions}
-        locale={locale}
         messages={messages}
         now={now}
         onSelectWorkID={onSelectWorkID}
         onSelectWorkstationRequest={onSelectWorkstationRequest}
+        resetKey={selectedNode.node_id}
         selectedRequest={selectedRequest}
         selectedWorkID={selectedWorkID}
         workstationRequestsByDispatchID={workstationRequestsByDispatchID}
@@ -102,7 +98,6 @@ export function WorkstationDetailCard({
       {hasProjectedRequestHistory ? (
         <CollapsibleWorkstationRequests
           key={`workstation-request-history:${selectedNode.node_id}`}
-          locale={locale}
           messages={messages}
           now={now}
           onSelectWorkID={onSelectWorkID}
@@ -142,7 +137,6 @@ export function WorkstationDetailCard({
 }
 
 function CollapsibleWorkstationRequests({
-  locale,
   messages,
   now,
   onSelectWorkID,
@@ -152,7 +146,6 @@ function CollapsibleWorkstationRequests({
   selectedRequest,
   selectedWorkID,
 }: {
-  locale?: string;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   now: number;
   onSelectWorkID?: WorkstationDetailCardProps["onSelectWorkID"];
@@ -397,16 +390,16 @@ function renderWorkstationRequestStatusPill({
 
 function WorkstationActiveWorkList({
   executions,
-  locale,
   messages,
   now,
   onSelectWorkID,
   onSelectWorkstationRequest,
+  resetKey,
   selectedRequest,
   selectedWorkID,
   workstationRequestsByDispatchID,
 }: WorkstationActiveWorkListProps) {
-  const sectionId = `active-work-${selectedNode.node_id}`;
+  const sectionId = `active-work-${resetKey}`;
 
   return (
     <section aria-labelledby={sectionId} className="mt-4 grid gap-2.5 [&_h4]:m-0">
