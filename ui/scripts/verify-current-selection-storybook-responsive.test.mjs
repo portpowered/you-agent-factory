@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import {
   verifyCurrentSelectionPromptHint,
+  verifyCurrentSelectionSaveFlow,
   verifyCurrentSelectionWorkstationDetailOrder,
 } from "./verify-current-selection-storybook-responsive.mjs";
 
@@ -19,6 +20,88 @@ function createVisibleLocator(label, overrides = {}) {
     label,
     waitFor: vi.fn().mockResolvedValue(undefined),
     ...overrides,
+  };
+}
+
+function createSaveFlowHarness() {
+  const expandButton = createVisibleLocator("Expand editable configuration");
+  expandButton.click = vi.fn().mockResolvedValue(undefined);
+  const promptField = createVisibleLocator("Prompt textbox");
+  promptField.click = vi.fn().mockResolvedValue(undefined);
+  const saveButton = createVisibleLocator("Save changes button", {
+    isDisabled: vi
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true),
+  });
+  saveButton.click = vi.fn().mockResolvedValue(undefined);
+  const successMessage = createVisibleLocator("Save success message");
+  const confirmationDialog = createVisibleLocator("Confirmation dialog", {
+    count: vi.fn().mockResolvedValue(0),
+  });
+  const overwriteButton = createVisibleLocator("Overwrite factory button");
+  overwriteButton.click = vi.fn().mockResolvedValue(undefined);
+  confirmationDialog.getByRole = vi.fn((role, options) => {
+    if (role === "button" && options?.name === "Overwrite factory") {
+      return overwriteButton;
+    }
+    return createVisibleLocator(`${role}:${options?.name}`);
+  });
+  const currentSelection = {
+    getByRole: vi.fn((role, options) => {
+      if (role === "button" && options?.name === "Expand editable configuration") {
+        return expandButton;
+      }
+      if (role === "textbox" && options?.name === "Prompt") {
+        return promptField;
+      }
+      if (role === "button" && options?.name === "Save changes") {
+        return saveButton;
+      }
+      return createVisibleLocator(`${role}:${options?.name}`);
+    }),
+    getByText: vi.fn((text) => {
+      if (
+        text ===
+        "Running factory saved. The editable workstation values were refreshed to the saved definition."
+      ) {
+        return successMessage;
+      }
+      return createVisibleLocator(`text:${text}`);
+    }),
+    isVisible: vi.fn().mockResolvedValue(true),
+    waitFor: vi.fn().mockResolvedValue(undefined),
+  };
+  const page = {
+    evaluate: vi
+      .fn()
+      .mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
+    getByRole: vi.fn((role, options) => {
+      if (role === "article" && options?.name === "Current selection") {
+        return currentSelection;
+      }
+      if (
+        role === "dialog" &&
+        options?.name === "Overwrite the running factory definition?"
+      ) {
+        return confirmationDialog;
+      }
+      return createVisibleLocator(`${role}:${options?.name}`);
+    }),
+    keyboard: {
+      type: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+
+  return {
+    confirmationDialog,
+    expandButton,
+    overwriteButton,
+    page,
+    promptField,
+    saveButton,
+    successMessage,
   };
 }
 
@@ -214,6 +297,47 @@ describe("verifyCurrentSelectionWorkstationDetailOrder", () => {
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
       "Current selection workstation detail order at mobile",
+    );
+  });
+});
+
+describe("verifyCurrentSelectionSaveFlow", () => {
+  test("verifies the save confirmation, pending state, and refreshed success state", async () => {
+    const {
+      confirmationDialog,
+      expandButton,
+      overwriteButton,
+      page,
+      promptField,
+      saveButton,
+      successMessage,
+    } = createSaveFlowHarness();
+    const expectVisible = vi.fn((_locator) => Promise.resolve());
+    const expectNoHorizontalOverflow = vi.fn().mockResolvedValue(undefined);
+
+    await verifyCurrentSelectionSaveFlow({
+      expectNoHorizontalOverflow,
+      expectVisible,
+      page,
+      viewport: { height: 844, label: "mobile", width: 390 },
+    });
+
+    expect(expandButton.click).toHaveBeenCalled();
+    expect(promptField.click).toHaveBeenCalledWith({ force: true });
+    expect(page.keyboard.type).toHaveBeenCalledWith(
+      " Browser verified prompt update.",
+    );
+    expect(saveButton.click).toHaveBeenCalled();
+    expect(overwriteButton.click).toHaveBeenCalled();
+    expect(expectVisible).toHaveBeenCalledWith(
+      successMessage,
+      "Editable workstation save success message",
+    );
+    expect(confirmationDialog.count).toHaveBeenCalled();
+    expect(saveButton.isDisabled).toHaveBeenCalled();
+    expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
+      page,
+      "Current selection save flow at mobile",
     );
   });
 });

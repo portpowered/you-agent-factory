@@ -17,6 +17,7 @@ import {
 } from "./verify-graph-parity-storybook-responsive.mjs";
 import {
   verifyCurrentSelectionPromptHint as verifyCurrentSelectionPromptHintImpl,
+  verifyCurrentSelectionSaveFlow as verifyCurrentSelectionSaveFlowImpl,
   verifyCurrentSelectionWorkstationDetailOrder as verifyCurrentSelectionWorkstationDetailOrderImpl,
 } from "./verify-current-selection-storybook-responsive.mjs";
 import {
@@ -153,6 +154,18 @@ export const storyChecks = [
     label: "current selection prompt hinting",
   },
   {
+    assertions: verifyCurrentSelectionSaveFlow,
+    id: "you-agent-factory-workflow-dashboard--current-selection-editable-configuration-save-narrow-verification",
+    label: "current selection save flow (narrow)",
+    viewports: viewportChecks.filter((viewport) => viewport.label !== "desktop"),
+  },
+  {
+    assertions: verifyCurrentSelectionSaveFlow,
+    id: "you-agent-factory-workflow-dashboard--current-selection-editable-configuration-save-desktop-verification",
+    label: "current selection save flow (desktop)",
+    viewports: viewportChecks.filter((viewport) => viewport.label === "desktop"),
+  },
+  {
     assertions: verifyCurrentSelectionWorkstationDetailOrder,
     id: "you-agent-factory-workflow-dashboard--current-selection-workstation-detail-order-verification",
     label: "current selection workstation detail order",
@@ -280,6 +293,9 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   const languageButton = page.getByRole("button", {
     name: "Change language",
   });
+  const sessionStreamToggle = page.getByRole("button", {
+    name: /(Pause|Resume) .* updates/,
+  });
   const exportButton = page.getByRole("button", { name: "Export PNG" });
   const globalActions = page.getByRole("group", {
     name: "Dashboard actions",
@@ -292,6 +308,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectVisible(slider, "Timeline slider");
   await expectVisible(timelineStatus, "Timeline status");
   await expectVisible(languageButton, "Language menu button");
+  await expectVisible(sessionStreamToggle, "Dashboard session stream toggle");
   await expectVisible(exportButton, "Export PNG button");
   await expectVisible(globalActions, "Global header actions");
 
@@ -339,6 +356,14 @@ export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
 }
 export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {
   return verifyCurrentSelectionPromptHintImpl({
+    expectNoHorizontalOverflow,
+    expectVisible,
+    page,
+    viewport,
+  });
+}
+export async function verifyCurrentSelectionSaveFlow(page, _dialog, viewport) {
+  return verifyCurrentSelectionSaveFlowImpl({
     expectNoHorizontalOverflow,
     expectVisible,
     page,
@@ -400,8 +425,8 @@ export async function runResponsiveStorybookChecks(
   browser,
   { checks = storyChecks, viewports = viewportChecks } = {},
 ) {
-  for (const viewport of viewports) {
-    for (const storyCheck of checks) {
+  for (const storyCheck of checks) {
+    for (const viewport of storyCheck.viewports ?? viewports) {
       await verifyStory(browser, storyCheck, viewport);
     }
   }

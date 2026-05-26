@@ -173,3 +173,80 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
     `Current selection workstation detail order at ${viewport.label}`,
   );
 }
+
+export async function verifyCurrentSelectionSaveFlow({
+  expectNoHorizontalOverflow,
+  expectVisible,
+  page,
+  viewport,
+}) {
+  const currentSelection = page.getByRole("article", {
+    name: "Current selection",
+  });
+  await currentSelection.waitFor({ state: "visible" });
+  const promptField = currentSelection.getByRole("textbox", { name: "Prompt" });
+  const saveButton = currentSelection.getByRole("button", {
+    name: "Save changes",
+  });
+
+  const expandButton = currentSelection.getByRole("button", {
+    name: "Expand editable configuration",
+  });
+  await expandButton.click();
+  await expectVisible(promptField, "Workstation prompt field");
+  await promptField.click({ force: true });
+  await page.keyboard.type(" Browser verified prompt update.");
+  await waitForLocatorEnabled(saveButton, "Save changes button");
+  await saveButton.click();
+
+  const confirmationDialog = page.getByRole("dialog", {
+    name: "Overwrite the running factory definition?",
+  });
+  await expectVisible(
+    confirmationDialog,
+    "Editable workstation save confirmation dialog",
+  );
+  const overwriteButton = confirmationDialog.getByRole("button", {
+    name: "Overwrite factory",
+  });
+  await overwriteButton.click();
+
+  await expectVisible(
+    currentSelection.getByText(
+      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+    ),
+    "Editable workstation save success message",
+  );
+  const overwriteDialogCount = await page
+    .getByRole("dialog", {
+      name: "Overwrite the running factory definition?",
+    })
+    .count();
+  if (overwriteDialogCount > 0) {
+    throw new Error("Save confirmation dialog should close after a successful save.");
+  }
+
+  const saveButtonDisabled = await saveButton.isDisabled();
+  if (!saveButtonDisabled) {
+    throw new Error("Save changes should disable after the saved draft is refreshed.");
+  }
+
+  await expectNoHorizontalOverflow(
+    page,
+    `Current selection save flow at ${viewport.label}`,
+  );
+}
+
+async function waitForLocatorEnabled(locator, label) {
+  const timeoutAt = Date.now() + 30_000;
+
+  while (Date.now() < timeoutAt) {
+    if (!(await locator.isDisabled())) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error(`${label} did not become enabled before timeout.`);
+}
