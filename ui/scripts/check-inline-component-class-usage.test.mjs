@@ -87,6 +87,38 @@ test("scanInlineComponentClassUsage preserves exported tokens, merge helpers, an
   }
 });
 
+test("scanInlineComponentClassUsage still flags a top-level class constant when a nested scope shadows the same identifier", async () => {
+  const { srcDir, tempRoot } = await createSourceTree({
+    "features/example/panel.tsx": `
+      const PANEL_CLASS = "rounded-lg border border-af-border";
+
+      export function Panel() {
+        return <section className={PANEL_CLASS}>Body</section>;
+      }
+
+      function helper(PANEL_CLASS: string) {
+        return PANEL_CLASS;
+      }
+
+      void helper;
+    `,
+  });
+
+  try {
+    await expect(scanInlineComponentClassUsage(srcDir, [])).resolves.toEqual({
+      staleAllowlistEntries: [],
+      violations: [
+        expect.objectContaining({
+          constantName: "PANEL_CLASS",
+          relativeFilePath: "src/features/example/panel.tsx",
+        }),
+      ],
+    });
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
 test("scanInlineComponentClassUsage supports a narrow explicit allowlist and reports stale entries", async () => {
   const { srcDir, tempRoot } = await createSourceTree({
     "features/example/panel.tsx": `

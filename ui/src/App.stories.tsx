@@ -570,6 +570,9 @@ export const SemanticGraphComposition = {
     expect(
       within(graphCard).queryByRole("heading", { name: "Current activity" }),
     ).toBeNull();
+    await userEvent.click(
+      (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
+    );
     expect(
       (await canvas.findAllByText("dispatch-review-active")).length,
     ).toBeGreaterThan(0);

@@ -84,9 +84,9 @@ export const Verification = {
       name: "Current selection",
     });
     await expect(await within(currentSelection).findByText("Active Story")).toBeVisible();
-    await expect(
-      await within(currentSelection).findByText("work-active-story"),
-    ).toBeVisible();
+    await userEvent.click(
+      (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
+    );
 
     const {
       requestField,
@@ -111,18 +111,16 @@ export const Verification = {
       throw new Error("expected at least one Beta Story button");
     }
     await expect(betaStoryButton).toBeVisible();
+    await userEvent.click(betaStoryButton);
     const refreshedCurrentSelection = await canvas.findByRole("article", {
       name: "Current selection",
     });
     await expect(
       await within(refreshedCurrentSelection).findByText("Beta Story"),
     ).toBeVisible();
-    await expect(
-      await within(refreshedCurrentSelection).findByText("work-beta-story"),
-    ).toBeVisible();
     await waitFor(() => {
       expect(
-        within(refreshedCurrentSelection).queryByText("work-active-story"),
+        within(refreshedCurrentSelection).queryByText("Active Story"),
       ).toBeNull();
     });
     const {

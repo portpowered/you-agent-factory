@@ -225,11 +225,21 @@ function isDirectClassNameReference(identifier) {
   );
 }
 
-function collectReferences(sourceFile, constantName, declarationName) {
+function collectReferences(sourceFile, constantName, declarationName, checker) {
   const references = [];
+  const declarationSymbol = checker.getSymbolAtLocation(declarationName);
+
+  if (!declarationSymbol) {
+    return references;
+  }
 
   const visit = (node) => {
-    if (ts.isIdentifier(node) && node.text === constantName && node !== declarationName) {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === constantName &&
+      node !== declarationName &&
+      checker.getSymbolAtLocation(node) === declarationSymbol
+    ) {
       references.push(node);
     }
 
@@ -240,14 +250,22 @@ function collectReferences(sourceFile, constantName, declarationName) {
   return references;
 }
 
-function findInlineComponentClassViolations(relativeFilePath, sourceText) {
-  const sourceFile = ts.createSourceFile(
-    relativeFilePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TSX,
-  );
+function findInlineComponentClassViolations(filePath, relativeFilePath, sourceText) {
+  const program = ts.createProgram([filePath], {
+    allowJs: false,
+    jsx: ts.JsxEmit.Preserve,
+    module: ts.ModuleKind.ESNext,
+    noEmit: true,
+    skipLibCheck: true,
+    target: ts.ScriptTarget.Latest,
+  });
+  const sourceFile = program.getSourceFile(filePath);
+
+  if (!sourceFile) {
+    return [];
+  }
+
+  const checker = program.getTypeChecker();
   const declarations = collectTopLevelDeclarations(sourceFile);
   const importedBindings = collectImportedBindings(sourceFile);
   const violations = [];
@@ -267,7 +285,12 @@ function findInlineComponentClassViolations(relativeFilePath, sourceText) {
       }
 
       const constantName = declaration.name.text;
-      const references = collectReferences(sourceFile, constantName, declaration.name);
+      const references = collectReferences(
+        sourceFile,
+        constantName,
+        declaration.name,
+        checker,
+      );
       if (references.length !== 1 || !isDirectClassNameReference(references[0])) {
         continue;
       }
@@ -296,7 +319,11 @@ export async function scanInlineComponentClassUsage(
     const relativeFilePath = toUiRelativePath(sourceFile, rootUiDirectory);
     const sourceText = await readFile(sourceFile, "utf8");
 
-    for (const violation of findInlineComponentClassViolations(relativeFilePath, sourceText)) {
+    for (const violation of findInlineComponentClassViolations(
+      sourceFile,
+      relativeFilePath,
+      sourceText,
+    )) {
       const allowlistKey = createAllowlistKey(relativeFilePath, violation.constantName);
       if (allowlistedKeys.has(allowlistKey)) {
         observedAllowlistedKeys.add(allowlistKey);
