@@ -7,9 +7,8 @@ src/components/ui/dialog.tsx|29|16|string-literal|Close dialog
 src/components/ui/formatters.ts|169|12|string-literal|Unknown
 src/components/ui/formatters.ts|192|14|string-literal|Repeated work
 src/components/ui/formatters.ts|193|24|string-literal|Raw outcome:
-src/components/ui/formatters.ts|204|12|string-literal|Unavailable
-src/components/ui/formatters.ts|249|12|string-literal|None
-src/components/ui/formatters.ts|293|10|string-literal|~/.codex/sessions/ / / /rollout- .jsonl
+src/components/ui/formatters.ts|235|12|string-literal|None
+src/components/ui/formatters.ts|279|10|string-literal|~/.codex/sessions/ / / /rollout- .jsonl
 src/components/ui/ui-foundation-showcase.tsx|47|65|string-literal|Completed
 src/components/ui/ui-foundation-showcase.tsx|48|59|string-literal|Failed
 src/components/ui/ui-foundation-showcase.tsx|79|72|jsx-text|Shared UI primitives

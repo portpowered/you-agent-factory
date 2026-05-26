@@ -199,20 +199,6 @@ export function formatWorkstationRunOutcome(
   };
 }
 
-export function formatProviderSession(session: DashboardProviderSession | undefined): string {
-  if (!session?.id) {
-    return "Unavailable";
-  }
-
-  const parts = [session.provider, session.kind].filter(
-    (value): value is string => value !== undefined && value !== "",
-  );
-  if (parts.length === 0) {
-    return session.id;
-  }
-  return `${parts.join(" / ")} / ${session.id}`;
-}
-
 export function getProviderSessionLogTarget(
   session: DashboardProviderSession | undefined,
   startedAt?: string,
