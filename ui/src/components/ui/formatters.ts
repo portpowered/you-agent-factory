@@ -2,6 +2,11 @@ import type {
   DashboardProviderSession,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
+import {
+  formatDateTime,
+  formatDuration,
+  formatTime,
+} from "../../i18n/formatters";
 
 const LOCAL_JSONL_EXTENSION = ".jsonl";
 const RAW_REJECTED_OUTCOME = "REJECTED";
@@ -23,59 +28,16 @@ export interface WorkstationRunOutcomeContext {
   workstationKind?: string;
 }
 
-const TIME_OF_DAY_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  hour: "numeric",
-  minute: "2-digit",
-});
-const LOCAL_DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
 export function formatDurationMillis(durationMillis: number): string {
-  const safeDurationMillis = Math.max(0, Math.floor(durationMillis));
-
-  if (safeDurationMillis < 1000) {
-    return `${safeDurationMillis}ms`;
-  }
-
-  const durationSeconds = Math.floor(safeDurationMillis / 1000);
-  const hours = Math.floor(durationSeconds / 3600);
-  const minutes = Math.floor((durationSeconds % 3600) / 60);
-  const seconds = durationSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-  return `${seconds}s`;
+  return formatDuration(durationMillis, "en", {
+    style: "compact",
+  });
 }
 
 export function formatDurationMillisVerbose(durationMillis: number): string {
-  const safeDurationMillis = Math.max(0, Math.floor(durationMillis));
-
-  if (safeDurationMillis < 1000) {
-    return formatDurationUnit(safeDurationMillis, "millisecond");
-  }
-
-  const durationSeconds = Math.floor(safeDurationMillis / 1000);
-  const hours = Math.floor(durationSeconds / 3600);
-  const minutes = Math.floor((durationSeconds % 3600) / 60);
-  const seconds = durationSeconds % 60;
-
-  if (hours > 0) {
-    return [formatDurationUnit(hours, "hour"), formatOptionalDurationUnit(minutes, "minute")]
-      .filter((part): part is string => part !== null)
-      .join(", ");
-  }
-  if (minutes > 0) {
-    return [formatDurationUnit(minutes, "minute"), formatOptionalDurationUnit(seconds, "second")]
-      .filter((part): part is string => part !== null)
-      .join(", ");
-  }
-  return formatDurationUnit(durationSeconds, "second");
+  return formatDuration(durationMillis, "en", {
+    style: "verbose",
+  });
 }
 
 export function formatDurationFromISO(startedAt: string, now: number): string {
@@ -88,12 +50,9 @@ export function formatDurationFromISO(startedAt: string, now: number): string {
 }
 
 export function formatTimeOfDay(isoTimestamp: string): string {
-  const timestampMs = Date.parse(isoTimestamp);
-  if (Number.isNaN(timestampMs)) {
-    return isoTimestamp;
-  }
-
-  return TIME_OF_DAY_FORMATTER.format(timestampMs).replace(/\s/g, "");
+  return formatTime(isoTimestamp, "en", {
+    fallback: isoTimestamp,
+  }).replace(/\s/g, "");
 }
 
 export function formatLocalDateTime(
@@ -110,7 +69,9 @@ export function formatLocalDateTime(
     return unavailableLabel;
   }
 
-  return LOCAL_DATE_TIME_FORMATTER.format(timestampMs);
+  return formatDateTime(timestampMs, "en", {
+    fallback: unavailableLabel,
+  });
 }
 
 export function formatWorkItemLabel(workItem: DashboardWorkItemRef): string {
@@ -228,18 +189,6 @@ export function formatList(values: string[] | undefined): string {
 function normalizeNonEmptyText(value: string | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : null;
-}
-
-function formatDurationUnit(value: number, unit: string): string {
-  return `${value} ${unit}${value === 1 ? "" : "s"}`;
-}
-
-function formatOptionalDurationUnit(value: number, unit: string): string | null {
-  if (value === 0) {
-    return null;
-  }
-
-  return formatDurationUnit(value, unit);
 }
 
 function isAllowedSessionLogURL(value: string): boolean {

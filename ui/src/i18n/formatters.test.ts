@@ -4,6 +4,7 @@ import {
   formatCount,
   formatDate,
   formatDateTime,
+  formatDuration,
   formatList,
   formatNumber,
   formatPercent,
@@ -13,7 +14,7 @@ import {
 
 const fixedTimestamp = Date.UTC(2026, 4, 18, 9, 30);
 
-describe("shared locale formatters", () => {
+describe("shared locale date and time formatters", () => {
   it("formats dates and times with the requested locale", () => {
     expect(
       formatDate(fixedTimestamp, "en", {
@@ -38,6 +39,11 @@ describe("shared locale formatters", () => {
         timeZone: "UTC",
       }),
     ).toBe("May 18, 2026, 9:30 AM");
+    expect(
+      formatDateTime(fixedTimestamp, "zh-CN", {
+        timeZone: "UTC",
+      }),
+    ).toBe("2026年5月18日 09:30");
   });
 
   it("formats numbers, percentages, and lists with Intl APIs", () => {
@@ -56,7 +62,10 @@ describe("shared locale formatters", () => {
     );
   });
 
-  it("formats count-sensitive labels and relative values", () => {
+});
+
+describe("shared locale duration and relative-time formatters", () => {
+  it("formats count-sensitive labels, durations, and relative values", () => {
     expect(
       formatCount(
         1,
@@ -86,10 +95,68 @@ describe("shared locale formatters", () => {
         "zh-CN",
       ),
     ).toBe("2 个任务");
+    expect(formatDuration(192_000, "en")).toBe("3m 12s");
+    expect(formatDuration(192_000, "zh-CN")).toBe("3分 12秒");
+    expect(
+      formatDuration(7_440_000, "en", {
+        style: "verbose",
+      }),
+    ).toBe("2 hours, 4 minutes");
+    expect(
+      formatDuration(7_440_000, "zh-CN", {
+        style: "verbose",
+      }),
+    ).toBe("2小时4分钟");
     expect(formatRelativeTime(-1, "day", "en")).toBe("yesterday");
     expect(formatRelativeTime(-1, "day", "zh-CN")).toBe("昨天");
   });
 
+  it("returns explicit fallback copy for invalid timestamp and relative-time input", () => {
+    expect(
+      formatDateTime("not-a-date", "en", {
+        fallback: "Unavailable",
+      }),
+    ).toBe("Unavailable");
+    expect(
+      formatTime(undefined, "zh-CN", {
+        fallback: "不可用",
+      }),
+    ).toBe("不可用");
+    expect(
+      formatDuration(undefined, "en", {
+        fallback: "Unavailable",
+      }),
+    ).toBe("Unavailable");
+    expect(
+      formatRelativeTime(Number.NaN, "minute", "zh-CN", {
+        fallback: "不可用",
+      }),
+    ).toBe("不可用");
+  });
+
+  it("keeps explicit timezone overrides available for time-only and date-time rendering", () => {
+    expect(
+      formatTime(fixedTimestamp, "en", {
+        hour12: false,
+        timeZone: "UTC",
+      }),
+    ).toBe("09:30");
+    expect(
+      formatTime(fixedTimestamp, "en", {
+        hour12: false,
+        timeZone: "America/New_York",
+      }),
+    ).toBe("05:30");
+    expect(
+      formatDateTime(fixedTimestamp, "en", {
+        timeZone: "America/New_York",
+      }),
+    ).toBe("May 18, 2026, 5:30 AM");
+  });
+
+});
+
+describe("shared locale fallback behavior", () => {
   it("falls back to English for unsupported locale inputs", () => {
     expect(
       formatDate(fixedTimestamp, "fr", {
