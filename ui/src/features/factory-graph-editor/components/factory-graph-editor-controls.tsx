@@ -300,6 +300,7 @@ function FactoryGraphEditorAddMenu({
       <PopoverContent
         align="start"
         aria-label={messages.toolbarVisibilityMenuAriaLabel}
+        avoidCollisions={false}
         className="grid gap-2"
         side="top"
       >

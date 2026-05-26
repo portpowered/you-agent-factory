@@ -64,6 +64,7 @@ describe("factory graph editor toolbar controls", () => {
 
     const menu = await screen.findByLabelText("Add graph entity menu");
     expect(menu).toBeTruthy();
+    expect(menu.getAttribute("data-side")).toBe("top");
     expect(addMenuButton.getAttribute("aria-expanded")).toBe("true");
     expect(
       within(menu).getByRole("button", { name: "Workstation" }),
