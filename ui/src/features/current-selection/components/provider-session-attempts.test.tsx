@@ -7,6 +7,7 @@ import {
   providerSessionSelectionKey,
 } from "../../provider-session-detail/lib/provider-session-ref";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 
 describe("ProviderSessionAttempts", () => {
   it("uses the default workstation-detail helper messages when no localized messages are provided", async () => {
@@ -166,39 +167,42 @@ describe("ProviderSessionAttempts", () => {
     const localizedMessages = getWorkstationDetailMessages("zh-CN");
 
     render(
-      <ProviderSessionAttempts
-        attempts={[
-          {
-            dispatch_id: "dispatch-review-active",
-            outcome: "ACCEPTED",
-            provider_session: {
-              id: "sess_active",
-              kind: "session_id",
-              provider: "codex",
-            },
-            transition_id: "transition-review",
-            workstation_name: "Review",
-            work_items: [
-              {
-                display_name: "Active Story",
-                trace_id: "trace-active-story",
-                work_id: "work-active-story",
-                work_type_id: "story",
+      <CurrentSelectionLocaleProvider locale="zh-CN">
+        <ProviderSessionAttempts
+          attempts={[
+            {
+              dispatch_id: "dispatch-review-active",
+              outcome: "ACCEPTED",
+              provider_session: {
+                id: "sess_active",
+                kind: "session_id",
+                provider: "codex",
               },
-            ],
-          },
-        ]}
-        currentDispatchID="dispatch-review-active"
-        emptyMessage="这个工作站暂时还没有记录任何运行。"
-        messages={localizedMessages}
-        onSelectProviderSession={vi.fn()}
-        renderHeading={(attempt) => attempt.dispatch_id}
-        selectedProviderSessionKey={null}
-        workstationKind="standard"
-      />,
+              transition_id: "transition-review",
+              workstation_name: "Review",
+              work_items: [
+                {
+                  display_name: "Active Story",
+                  trace_id: "trace-active-story",
+                  work_id: "work-active-story",
+                  work_type_id: "story",
+                },
+              ],
+            },
+          ]}
+          currentDispatchID="dispatch-review-active"
+          emptyMessage="这个工作站暂时还没有记录任何运行。"
+          messages={localizedMessages}
+          onSelectProviderSession={vi.fn()}
+          renderHeading={(attempt) => attempt.dispatch_id}
+          selectedProviderSessionKey={null}
+          workstationKind="standard"
+        />
+      </CurrentSelectionLocaleProvider>,
     );
 
     expect(screen.getByText("当前分派")).toBeTruthy();
+    expect(screen.getByText("已接受")).toBeTruthy();
     expect(
       screen.getByRole("button", {
         name: "选择调度 dispatch-review-active 的 provider session codex / 会话 ID / sess_active",

@@ -10,23 +10,12 @@ import {
 } from "../../i18n/formatters";
 
 const LOCAL_JSONL_EXTENSION = ".jsonl";
-const RAW_REJECTED_OUTCOME = "REJECTED";
-const REPEATER_WORKSTATION_KIND = "repeater";
 const SESSION_LOG_HREF_PROTOCOLS = new Set(["file:", "http:", "https:"]);
 const UNKNOWN_WORK_LABEL = "Unknown work";
 
 export interface ProviderSessionLogTarget {
   display: string;
   href: string;
-}
-
-export interface WorkstationRunOutcomeDisplay {
-  label: string;
-  rawOutcomeLabel?: string;
-}
-
-export interface WorkstationRunOutcomeContext {
-  workstationKind?: string;
 }
 
 export function formatDurationMillis(
@@ -174,29 +163,6 @@ export function formatTraceOutcome(outcome: string): string {
     .split("_")
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
-}
-
-export function formatWorkstationRunOutcome(
-  outcome: string,
-  context: WorkstationRunOutcomeContext,
-): WorkstationRunOutcomeDisplay {
-  const trimmedOutcome = outcome.trim();
-  const rawOutcome = trimmedOutcome.length > 0 ? trimmedOutcome : undefined;
-  const workstationKind = context.workstationKind?.trim().toLowerCase();
-
-  if (
-    rawOutcome?.toUpperCase() === RAW_REJECTED_OUTCOME &&
-    workstationKind === REPEATER_WORKSTATION_KIND
-  ) {
-    return {
-      label: "Repeated work",
-      rawOutcomeLabel: `Raw outcome: ${rawOutcome}`,
-    };
-  }
-
-  return {
-    label: formatTraceOutcome(rawOutcome ?? ""),
-  };
 }
 
 export function getProviderSessionLogTarget(

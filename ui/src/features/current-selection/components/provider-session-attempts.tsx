@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DashboardProviderSession } from "../../../api/dashboard/types";
 
-import {
-  formatWorkstationRunOutcome,
-  getProviderSessionLogTarget,
-} from "../../../components/ui/formatters";
+import { getProviderSessionLogTarget } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
 import {
   DASHBOARD_BODY_CODE_CLASS,
@@ -36,6 +33,7 @@ import {
 } from "../../provider-session-detail/lib/provider-session-ref";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import { useCurrentSelectionOperationalEnumMessages } from "./current-selection-locale";
 
 const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = getWorkstationDetailMessages(undefined);
 
@@ -207,6 +205,8 @@ function ProviderSessionAttemptList({
   workstationKind,
   workstationRequestsByDispatchID,
 }: ProviderSessionAttemptsProps) {
+  const enumMessages = useCurrentSelectionOperationalEnumMessages();
+
   if (attempts.length === 0) {
     return <p className={DETAIL_COPY_CLASS}>{emptyMessage}</p>;
   }
@@ -214,7 +214,10 @@ function ProviderSessionAttemptList({
   return (
     <div className="grid gap-3">
       {attempts.map((attempt) => {
-        const outcome = formatWorkstationRunOutcome(attempt.outcome, { workstationKind });
+        const outcome = enumMessages.localizeWorkstationRunOutcome(
+          attempt.outcome,
+          workstationKind,
+        );
         const isCurrentDispatch = currentDispatchID === attempt.dispatch_id;
         const loadableProviderSession = getLoadableProviderSessionRef(attempt);
         const providerSessionLabel = formatLocalizedProviderSessionLabel(
