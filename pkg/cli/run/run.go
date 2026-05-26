@@ -347,6 +347,10 @@ func buildRunServiceConfig(
 	dashboardReady chan struct{},
 	dashboardReadyOnce *sync.Once,
 ) *service.FactoryServiceConfig {
+	var apiServerReady chan struct{}
+	if cfg.Port > 0 {
+		apiServerReady = dashboardReady
+	}
 	svcCfg := &service.FactoryServiceConfig{
 		Dir:               cfg.Dir,
 		RunnerID:          cfg.RunnerID,
@@ -363,6 +367,7 @@ func buildRunServiceConfig(
 		WorkflowID:        cfg.Workflow,
 		MockWorkersConfig: mockWorkersConfig,
 		APIServerStarter:  runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
+		APIServerReady:    apiServerReady,
 	}
 	if !cfg.SuppressDashboardRendering {
 		svcCfg.SimpleDashboardRenderer = renderSimpleDashboard

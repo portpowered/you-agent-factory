@@ -19,6 +19,10 @@ env:
   # Keep CI on an explicit Node LTS major so setup-node does not need to resolve
   # the floating lts/* alias through the GitHub-hosted manifest API.
   NODE_VERSION: 22
+  # Keep this aligned with go.mod's toolchain directive. Using only the lower
+  # go directive can make setup-go download the newer toolchain into GOMODCACHE
+  # before cache restore, which causes cache extraction collisions on CI.
+  GO_VERSION: 1.24.2
 
 jobs:
   typecheck:
@@ -34,7 +38,7 @@ jobs:
       - name: Set up Go from go.mod
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
           cache: true
           cache-dependency-path: go.sum
 
@@ -71,7 +75,7 @@ jobs:
       - name: Set up Go from go.mod
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
           cache: true
           cache-dependency-path: go.sum
 
@@ -144,7 +148,7 @@ jobs:
       - name: Set up Go from go.mod
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
           cache: true
           cache-dependency-path: go.sum
 
@@ -188,7 +192,7 @@ jobs:
       - name: Set up Go from go.mod
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
           cache: true
           cache-dependency-path: go.sum
 
@@ -243,7 +247,7 @@ jobs:
       - name: Set up Go from go.mod
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
           cache: true
           cache-dependency-path: go.sum
 

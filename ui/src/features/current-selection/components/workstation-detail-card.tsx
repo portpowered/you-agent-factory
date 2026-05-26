@@ -93,7 +93,7 @@ export function WorkstationDetailCard({
         now={now}
         onSelectWorkID={onSelectWorkID}
         onSelectWorkstationRequest={onSelectWorkstationRequest}
-        selectedNode={selectedNode}
+        selectedNodeID={selectedNode.node_id}
         selectedRequest={selectedRequest}
         selectedWorkID={selectedWorkID}
         workstationRequestsByDispatchID={workstationRequestsByDispatchID}
@@ -397,12 +397,12 @@ function WorkstationActiveWorkList({
   now,
   onSelectWorkID,
   onSelectWorkstationRequest,
-  selectedNode,
+  selectedNodeID,
   selectedRequest,
   selectedWorkID,
   workstationRequestsByDispatchID,
 }: WorkstationActiveWorkListProps) {
-  const sectionId = `active-work-${selectedNode.node_id}`;
+  const sectionId = `active-work-${selectedNodeID}`;
 
   return (
     <section aria-labelledby={sectionId} className="mt-4 grid gap-2.5 [&_h4]:m-0">
