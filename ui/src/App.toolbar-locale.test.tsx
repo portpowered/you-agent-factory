@@ -1,8 +1,15 @@
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DASHBOARD_PAGE_HEADING_CLASS } from "./components/ui/dashboard-typography";
 import { useDashboardStreamStore } from "./features/dashboard/state";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
+import { currentNamedFactoryExportResponse } from "./testing/app-shell-export-test-utils";
 import {
   createFactoryImportValue,
   createFileDropTransfer,
@@ -11,7 +18,6 @@ import {
   renderApp,
   terminalSnapshot,
 } from "./testing/app-shell-test-utils";
-import { currentNamedFactoryExportResponse } from "./testing/app-shell-export-test-utils";
 
 describe("App shell locale and toolbar flows", () => {
   registerAppDashboardTestLifecycle();
@@ -158,16 +164,16 @@ describe("App shell locale and toolbar flows", () => {
 
     const heading = await screen.findByRole("heading", { name: "U" });
     const toolbar = screen.getByRole("region", { name: "dashboard summary" });
-    const streamStatus = screen.getByRole("status", {
-      name: "Event stream connecting",
-    });
     const exportButton = screen.getByRole("button", { name: "Export PNG" });
 
     expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
-    expect(streamStatus.className).toContain("rounded-full");
-    expect(streamStatus.className).toContain("border");
+    expect(
+      within(toolbar).queryByRole("status", { name: /Event stream/i }),
+    ).toBeNull();
     expect(within(toolbar).queryByText("Factory state")).toBeNull();
-    expect(within(toolbar).queryByText(terminalSnapshot.factory_state)).toBeNull();
+    expect(
+      within(toolbar).queryByText(terminalSnapshot.factory_state),
+    ).toBeNull();
     expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
     expect(within(toolbar).queryByText("Export PNG")).toBeNull();
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
@@ -181,10 +187,8 @@ describe("App shell locale and toolbar flows", () => {
     });
 
     expect(
-      within(toolbar).getByRole("status", {
-        name: "Event stream connecting",
-      }),
-    ).toBeTruthy();
+      within(toolbar).queryByRole("status", { name: /Event stream/i }),
+    ).toBeNull();
     expect(within(toolbar).queryByText("Factory state")).toBeNull();
     expect(within(toolbar).queryByText("Stream")).toBeNull();
     expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
@@ -201,10 +205,8 @@ describe("App shell locale and toolbar flows", () => {
 
     await waitFor(() => {
       expect(
-        within(toolbar).getByRole("status", {
-          name: "Event stream live",
-        }),
-      ).toBeTruthy();
+        within(toolbar).queryByRole("status", { name: /Event stream/i }),
+      ).toBeNull();
     });
     expect(
       within(toolbar).queryByText("Factory event stream connected."),
@@ -222,10 +224,8 @@ describe("App shell locale and toolbar flows", () => {
 
     await waitFor(() => {
       expect(
-        within(toolbar).getByRole("status", {
-          name: "Event stream offline",
-        }),
-      ).toBeTruthy();
+        within(toolbar).queryByRole("status", { name: /Event stream/i }),
+      ).toBeNull();
     });
     expect(
       within(toolbar).queryByText(

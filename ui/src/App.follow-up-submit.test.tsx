@@ -391,10 +391,8 @@ describe("App follow-up workstation and live totals flows", () => {
             .closest("article") as HTMLElement,
         ).getByText("1"),
       ).toBeTruthy();
-      expect(
-        screen.getByRole("status", { name: "Event stream live" }),
-      ).toBeTruthy();
     });
+    expect(screen.queryByRole("status", { name: /Event stream/i })).toBeNull();
   });
 });
 

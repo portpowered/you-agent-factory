@@ -2,8 +2,8 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 import { App } from "./App";
 import type { FactoryValue } from "./api/named-factory";
 import {
-  singleNodeDashboardSnapshot,
   semanticWorkflowDashboardSnapshot,
+  singleNodeDashboardSnapshot,
   twentyNodeDashboardSnapshot,
 } from "./components/dashboard/test-fixtures";
 import { formatTimeOfDay } from "./components/ui/formatters";
@@ -13,10 +13,10 @@ import {
   activeStoryTrace,
   buttonVisibleStyle,
   currentSelectionCard,
-  expectWorkOutcomeSeries,
   expectCurrentSelectionCardID,
   expectGraphWorkstation,
   expectNoPageHorizontalOverflow,
+  expectWorkOutcomeSeries,
   fillSubmitWorkCard,
   historicalWorkOutcomeSnapshot,
   liveWorkOutcomeSnapshot,
@@ -555,7 +555,9 @@ export const SemanticGraphComposition = {
       name: "Failed Story",
     });
     await expect(failedStoryButton).toBeVisible();
-    await expect(within(failedStoryButton).getByText("Failed at Repair")).toBeVisible();
+    await expect(
+      within(failedStoryButton).getByText("Failed at Repair"),
+    ).toBeVisible();
     expect(within(failedStoryButton).queryByText(/session_id/i)).toBeNull();
     expect(within(failedStoryButton).queryByText(/codex/i)).toBeNull();
   },
@@ -745,10 +747,10 @@ export const DashboardImprovementsSmoke = {
     );
     const currentSelection = within(currentSelectionCard(canvasElement));
     const summaryDetails = currentSelection.getByText("Count").closest("dl");
+    await expect(currentSelection.getByText("Current work")).toBeVisible();
     await expect(
-      currentSelection.getByText("Current work"),
+      currentSelection.getByText("story: implemented"),
     ).toBeVisible();
-    await expect(currentSelection.getByText("story: implemented")).toBeVisible();
     await expect(currentSelection.getByText("Active Story")).toBeVisible();
     await expect(
       currentSelection.getByText(
@@ -756,9 +758,15 @@ export const DashboardImprovementsSmoke = {
       ),
     ).toBeVisible();
     expect(summaryDetails).not.toBeNull();
-    expect(within(summaryDetails ?? canvasElement).queryByText("Work type")).toBeNull();
-    expect(within(summaryDetails ?? canvasElement).queryByText("State")).toBeNull();
-    expect(within(summaryDetails ?? canvasElement).queryByText("State node ID")).toBeNull();
+    expect(
+      within(summaryDetails ?? canvasElement).queryByText("Work type"),
+    ).toBeNull();
+    expect(
+      within(summaryDetails ?? canvasElement).queryByText("State"),
+    ).toBeNull();
+    expect(
+      within(summaryDetails ?? canvasElement).queryByText("State node ID"),
+    ).toBeNull();
     expect(currentSelection.queryByText("trace-active-story")).toBeNull();
     const traceDrilldownCard = await canvas.findByRole("article", {
       name: "Trace drill-down",
@@ -1143,10 +1151,8 @@ export const HeaderLocalizationVerification = {
     ).toBeVisible();
     await expect(await canvas.findByText("5/5")).toBeVisible();
     await expect(
-      within(localizedToolbar).getByRole("status", {
-        name: /事件流(正在连接|在线)/,
-      }),
-    ).toBeVisible();
+      within(localizedToolbar).queryByRole("status", { name: /事件流/ }),
+    ).toBeNull();
     await expect(
       within(localizedToolbar).queryByRole("button", { name: "返回当前刻度" }),
     ).toBeNull();
@@ -1157,9 +1163,12 @@ export const HeaderLocalizationVerification = {
     await userEvent.click(
       within(localizedToolbar).getByRole("button", { name: "导出 PNG" }),
     );
-    const dialog = await within(canvasElement.ownerDocument.body).findByRole("dialog", {
-      name: "导出工厂",
-    });
+    const dialog = await within(canvasElement.ownerDocument.body).findByRole(
+      "dialog",
+      {
+        name: "导出工厂",
+      },
+    );
     await expect(
       within(dialog).getByRole("button", { name: "取消" }),
     ).toBeVisible();
@@ -1167,9 +1176,12 @@ export const HeaderLocalizationVerification = {
       within(dialog).getByRole("button", { name: "导出 PNG" }),
     ).toBeVisible();
     await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
-    const localizedLanguageButton = within(localizedToolbar).getByRole("button", {
-      name: "切换语言",
-    });
+    const localizedLanguageButton = within(localizedToolbar).getByRole(
+      "button",
+      {
+        name: "切换语言",
+      },
+    );
     localizedLanguageButton.focus();
     await expect(localizedLanguageButton).toHaveFocus();
     await userEvent.click(localizedLanguageButton);
@@ -1178,7 +1190,9 @@ export const HeaderLocalizationVerification = {
         name: "English",
       }),
     );
-    const restoredToolbar = await canvas.findByRole("region", { name: "dashboard summary" });
+    const restoredToolbar = await canvas.findByRole("region", {
+      name: "dashboard summary",
+    });
     await expect(
       within(restoredToolbar).getByRole("button", { name: "Change language" }),
     ).toBeVisible();
@@ -1192,7 +1206,10 @@ export const LocalePropagationVerification = {
   tags: ["test"],
   parameters: {
     dashboardApi: {
-      timelineSnapshots: [historicalWorkOutcomeSnapshot, liveWorkOutcomeSnapshot],
+      timelineSnapshots: [
+        historicalWorkOutcomeSnapshot,
+        liveWorkOutcomeSnapshot,
+      ],
     },
   },
   render: () => <LocalePropagationStory />,

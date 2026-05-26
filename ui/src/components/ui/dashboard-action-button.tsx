@@ -2,11 +2,11 @@ import { forwardRef, type ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
 import { Button, type ButtonProps } from "./button";
+import { DashboardIconButtonShell } from "./dashboard-icon-button-shell";
 
 const DASHBOARD_ACTION_BUTTON_BASE_CLASS =
   "relative shrink-0 rounded-lg border text-sm font-semibold";
 const DASHBOARD_ACTION_BUTTON_SIZE_CLASS = {
-  icon: "h-10 w-10 px-0 py-0",
   text: "min-h-10 px-3.5 py-2",
 };
 const DASHBOARD_ACTION_BUTTON_CONTENT_CLASS =
@@ -38,22 +38,8 @@ export const DashboardActionButton = forwardRef<
   },
   ref,
 ) {
-  return (
-    <Button
-      aria-busy={executing || undefined}
-      className={cn(
-        DASHBOARD_ACTION_BUTTON_BASE_CLASS,
-        iconOnly
-          ? DASHBOARD_ACTION_BUTTON_SIZE_CLASS.icon
-          : DASHBOARD_ACTION_BUTTON_SIZE_CLASS.text,
-        className,
-      )}
-      disabled={disabled || executing}
-      ref={ref}
-      size={iconOnly ? "icon" : "sm"}
-      tone={tone}
-      {...props}
-    >
+  const content = (
+    <>
       <span
         className={cn(
           DASHBOARD_ACTION_BUTTON_CONTENT_CLASS,
@@ -70,6 +56,39 @@ export const DashboardActionButton = forwardRef<
           <DashboardActionButtonSpinner />
         </span>
       ) : null}
+    </>
+  );
+
+  if (iconOnly) {
+    return (
+      <DashboardIconButtonShell
+        aria-busy={executing || undefined}
+        className={cn(DASHBOARD_ACTION_BUTTON_BASE_CLASS, className)}
+        disabled={disabled || executing}
+        ref={ref}
+        tone={tone}
+        {...props}
+      >
+        {content}
+      </DashboardIconButtonShell>
+    );
+  }
+
+  return (
+    <Button
+      aria-busy={executing || undefined}
+      className={cn(
+        DASHBOARD_ACTION_BUTTON_BASE_CLASS,
+        DASHBOARD_ACTION_BUTTON_SIZE_CLASS.text,
+        className,
+      )}
+      disabled={disabled || executing}
+      ref={ref}
+      size="sm"
+      tone={tone}
+      {...props}
+    >
+      {content}
     </Button>
   );
 });

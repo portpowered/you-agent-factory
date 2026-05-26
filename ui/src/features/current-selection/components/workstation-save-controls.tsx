@@ -1,11 +1,11 @@
 import { DashboardMutationDialog } from "../../../components/dashboard";
-import { Button } from "../../../components/ui";
+import { Button, DashboardActionButton } from "../../../components/ui";
+import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
+import { getWorkstationDetailMessages } from "../messages";
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
 } from "./detail-card-types";
-import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
-import { getWorkstationDetailMessages } from "../messages";
 
 export function EditableWorkstationSaveHeaderAction({
   canSave,
@@ -21,20 +21,24 @@ export function EditableWorkstationSaveHeaderAction({
   const messages = getWorkstationDetailMessages(locale);
 
   return (
-    <Button
+    <DashboardActionButton
+      aria-label={
+        saveState.status === "submitting"
+          ? messages.editableConfigurationSaveBusyAction
+          : messages.editableConfigurationSaveAction
+      }
       aria-expanded={
         saveState.status === "confirming" || saveState.status === "submitting"
       }
       aria-haspopup="dialog"
       disabled={!canSave}
+      executing={saveState.status === "submitting"}
+      iconOnly
       onClick={onClick}
-      size="sm"
       type="button"
     >
-      {saveState.status === "submitting"
-        ? messages.editableConfigurationSaveBusyAction
-        : messages.editableConfigurationSaveAction}
-    </Button>
+      <SaveIcon />
+    </DashboardActionButton>
   );
 }
 
@@ -90,5 +94,30 @@ export function EditableWorkstationSaveDialog({
     >
       <div />
     </DashboardMutationDialog>
+  );
+}
+
+function SaveIcon() {
+  return (
+    <svg aria-hidden="true" className="size-4" fill="none" viewBox="0 0 16 16">
+      <path
+        d="M3 2.75h8.5L13.25 4.5v8.75H3z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M5 2.75v3h5v-3"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M5.25 13.25v-4h5.5v4"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+    </svg>
   );
 }

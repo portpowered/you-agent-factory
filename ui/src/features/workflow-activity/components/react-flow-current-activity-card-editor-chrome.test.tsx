@@ -25,7 +25,9 @@ describe("CurrentActivityGraphHeaderActions", () => {
     expect(sections[1]?.getAttribute("data-dashboard-action-row-section")).toBe(
       "actions",
     );
-    expect(within(sections[0] as HTMLElement).getByText("Observe mode")).toBeTruthy();
+    expect(
+      within(sections[0] as HTMLElement).getByText("Observe mode"),
+    ).toBeTruthy();
     expect(
       within(sections[1] as HTMLElement).getByRole("button", {
         name: "Enter factory graph editor",
@@ -57,5 +59,29 @@ describe("CurrentActivityGraphHeaderActions", () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText("Unsaved graph changes")).toBeTruthy();
+  });
+
+  it("keeps custom header actions in the actions section after the mode toggle", () => {
+    const { container } = render(
+      <CurrentActivityGraphHeaderActions
+        editorMode={false}
+        hasChanges={false}
+        headerActions={<button type="button">Remove card</button>}
+        isDefinitionLoading={false}
+        onToggle={() => {}}
+      />,
+    );
+
+    const sections = container.querySelectorAll(
+      "[data-dashboard-action-row-section]",
+    );
+    const actionsSection = sections[1] as HTMLElement;
+    const actionButtons = within(actionsSection).getAllByRole("button");
+
+    expect(actionButtons).toHaveLength(2);
+    expect(actionButtons[0]?.getAttribute("aria-label")).toBe(
+      "Enter factory graph editor",
+    );
+    expect(actionButtons[1]?.textContent).toBe("Remove card");
   });
 });
