@@ -101,6 +101,30 @@ describe("InlineAddWidgetCard", () => {
     );
 
     expect(onSelectWidget).toHaveBeenCalledWith("work-graph");
+    expect(
+      screen.queryByRole("dialog", { name: "Add dashboard widget" }),
+    ).toBeNull();
+    expect(getCardActionButton().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("reopens the same picker surface after completing a selection", () => {
+    renderControlledCard();
+
+    fireEvent.click(getCardActionButton());
+    fireEvent.click(
+      screen.getByRole("button", { name: "Browse widgets: Workflow activity" }),
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: "Add dashboard widget" }),
+    ).toBeNull();
+
+    fireEvent.click(getCardActionButton());
+
+    expect(
+      screen.getByRole("dialog", { name: "Add dashboard widget" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Workflow activity")).toBeTruthy();
   });
 
   it("shows an explicit unavailable state and disables opening the picker", () => {

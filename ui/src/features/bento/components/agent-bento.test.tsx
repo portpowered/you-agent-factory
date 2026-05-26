@@ -365,7 +365,7 @@ describe("AgentBentoLayout", () => {
     ).toHaveLength(1);
     expect(
       within(addWidgetItem).getByText(
-        "Browse available dashboard widgets without leaving this grid.",
+        "No additional widgets are available from this layout.",
       ),
     ).toBeTruthy();
   });

@@ -77,6 +77,7 @@ export function InlineAddWidgetCard({
   const actionLabel = hasEnabledWidgets
     ? messages.actionLabel
     : messages.actionUnavailableLabel;
+  const showPicker = pickerOpen && hasEnabledWidgets;
 
   return (
     <Popover onOpenChange={onPickerOpenChange} open={pickerOpen}>
@@ -137,7 +138,7 @@ export function InlineAddWidgetCard({
           </div>
         </div>
       </DashboardPanelShell>
-      {pickerOpen ? (
+      {showPicker ? (
         <InlineWidgetPicker
           availability={pickerAvailability}
           locale={locale}
@@ -145,6 +146,7 @@ export function InlineAddWidgetCard({
             onPickerOpenChange?.(false);
           }}
           onSelectWidget={(widgetType) => {
+            onPickerOpenChange?.(false);
             onSelectWidget?.(widgetType);
           }}
         />
