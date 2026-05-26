@@ -163,7 +163,7 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
   await currentSelection.getByRole("button", { name: "Expand" }).click();
   await expectVisible(
     currentSelection.getByRole("button", {
-      name: "Select provider session codex / session_id / sess-rejected-story for dispatch dispatch-review-rejected",
+      name: "Select provider session codex / Session ID / sess-rejected-story for dispatch dispatch-review-rejected",
     }),
     "History selection button",
   );
