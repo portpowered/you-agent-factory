@@ -3,6 +3,7 @@ import { resolveSupportedLocale } from "./locales";
 type DateInput = Date | number | string;
 type DateLikeInput = DateInput | null | undefined;
 type RelativeTimeValue = number | null | undefined;
+type DurationUnit = "hour" | "minute" | "second" | "millisecond";
 
 type DateTimeFormatterOptions = Intl.DateTimeFormatOptions & {
   fallback?: string;
@@ -196,6 +197,78 @@ interface DurationUnits {
   hours?: number;
 }
 
+const COMPACT_DURATION_LABELS: Record<
+  string,
+  Record<DurationUnit, string>
+> = {
+  en: {
+    hour: "h",
+    minute: "m",
+    second: "s",
+    millisecond: "ms",
+  },
+  "zh-CN": {
+    hour: "小时",
+    minute: "分",
+    second: "秒",
+    millisecond: "毫秒",
+  },
+  ja: {
+    hour: "時間",
+    minute: "分",
+    second: "秒",
+    millisecond: "ミリ秒",
+  },
+  ko: {
+    hour: "시간",
+    minute: "분",
+    second: "초",
+    millisecond: "밀리초",
+  },
+};
+
+const VERBOSE_DURATION_LABELS: Record<
+  string,
+  Record<DurationUnit, string | CountLabels>
+> = {
+  en: {
+    hour: {
+      one: "hour",
+      other: "hours",
+    },
+    minute: {
+      one: "minute",
+      other: "minutes",
+    },
+    second: {
+      one: "second",
+      other: "seconds",
+    },
+    millisecond: {
+      one: "millisecond",
+      other: "milliseconds",
+    },
+  },
+  "zh-CN": {
+    hour: "小时",
+    minute: "分钟",
+    second: "秒",
+    millisecond: "毫秒",
+  },
+  ja: {
+    hour: "時間",
+    minute: "分",
+    second: "秒",
+    millisecond: "ミリ秒",
+  },
+  ko: {
+    hour: "시간",
+    minute: "분",
+    second: "초",
+    millisecond: "밀리초",
+  },
+};
+
 function toDurationUnits(durationMillis: number): DurationUnits {
   if (durationMillis < 1000) {
     return { milliseconds: durationMillis };
@@ -234,18 +307,13 @@ function formatCompactDurationParts(
     .join(" ");
 }
 
-function formatVerboseDurationParts(
-  units: DurationUnits,
-  locale: string,
-): string {
+function formatVerboseDurationParts(units: DurationUnits, locale: string): string {
   return getDurationParts(units, {
     omitZeroValues: true,
   })
     .map(({ unit, value }) => formatVerboseDurationPart(value, unit, locale))
     .join(locale === "zh-CN" ? "" : ", ");
 }
-
-type DurationUnit = "hour" | "minute" | "second" | "millisecond";
 
 function getDurationParts(
   units: DurationUnits,
@@ -291,40 +359,22 @@ function formatVerboseDurationPart(
   unit: DurationUnit,
   locale: string,
 ): string {
-  if (locale === "zh-CN") {
+  if (shouldOmitDurationUnitSpacing(locale)) {
     return `${formatNumber(value, locale)}${getVerboseDurationLabel(unit, locale, value)}`;
   }
 
   return `${formatNumber(value, locale)} ${getVerboseDurationLabel(unit, locale, value)}`;
 }
 
+function shouldOmitDurationUnitSpacing(locale: string): boolean {
+  return locale === "zh-CN" || locale === "ko";
+}
+
 function getCompactDurationLabel(
   unit: DurationUnit,
   locale: string,
 ): string {
-  if (locale === "zh-CN") {
-    switch (unit) {
-      case "hour":
-        return "小时";
-      case "minute":
-        return "分";
-      case "second":
-        return "秒";
-      case "millisecond":
-        return "毫秒";
-    }
-  }
-
-  switch (unit) {
-    case "hour":
-      return "h";
-    case "minute":
-      return "m";
-    case "second":
-      return "s";
-    case "millisecond":
-      return "ms";
-  }
+  return COMPACT_DURATION_LABELS[locale]?.[unit] ?? COMPACT_DURATION_LABELS.en[unit];
 }
 
 function getVerboseDurationLabel(
@@ -332,22 +382,12 @@ function getVerboseDurationLabel(
   locale: string,
   value: number,
 ): string {
-  if (locale === "zh-CN") {
-    switch (unit) {
-      case "hour":
-        return "小时";
-      case "minute":
-        return "分钟";
-      case "second":
-        return "秒";
-      case "millisecond":
-        return "毫秒";
-    }
+  const labels = VERBOSE_DURATION_LABELS[locale]?.[unit] ?? VERBOSE_DURATION_LABELS.en[unit];
+  if (typeof labels === "string") {
+    return labels;
   }
 
-  if (value === 1) {
-    return unit;
-  }
+  const pluralCategory = new Intl.PluralRules(locale).select(value);
 
-  return `${unit}s`;
+  return labels[pluralCategory] ?? labels.other;
 }

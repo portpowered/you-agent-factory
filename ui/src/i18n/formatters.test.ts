@@ -97,6 +97,8 @@ describe("shared locale duration and relative-time formatters", () => {
     ).toBe("2 个任务");
     expect(formatDuration(192_000, "en")).toBe("3m 12s");
     expect(formatDuration(192_000, "zh-CN")).toBe("3分 12秒");
+    expect(formatDuration(192_000, "ja")).toBe("3分 12秒");
+    expect(formatDuration(192_000, "ko")).toBe("3분 12초");
     expect(
       formatDuration(7_440_000, "en", {
         style: "verbose",
@@ -107,6 +109,16 @@ describe("shared locale duration and relative-time formatters", () => {
         style: "verbose",
       }),
     ).toBe("2小时4分钟");
+    expect(
+      formatDuration(7_440_000, "ja", {
+        style: "verbose",
+      }),
+    ).toBe("2 時間, 4 分");
+    expect(
+      formatDuration(7_440_000, "ko", {
+        style: "verbose",
+      }),
+    ).toBe("2시간, 4분");
     expect(formatRelativeTime(-1, "day", "en")).toBe("yesterday");
     expect(formatRelativeTime(-1, "day", "zh-CN")).toBe("昨天");
   });
