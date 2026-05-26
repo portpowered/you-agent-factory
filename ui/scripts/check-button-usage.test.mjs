@@ -37,7 +37,8 @@ test("scanButtonUsage allows approved primitive owners and narrow semantic excep
     `,
     "features/selection/components/detail.tsx": `
       export function Detail() {
-        return <button type="button">Toggle details</button>;
+        const expanded = false;
+        return <button aria-expanded={expanded} type="button">Toggle details</button>;
       }
     `,
   });
@@ -51,7 +52,7 @@ test("scanButtonUsage allows approved primitive owners and narrow semantic excep
           relativeFilePath: "src/components/ui/button.tsx",
         },
         {
-          rawButtonCount: 1,
+          rawButtonFingerprints: ['aria-expanded={expanded}'],
           rawButtonReason: "semantic disclosure shell",
           relativeFilePath: "src/features/selection/components/detail.tsx",
         },
@@ -94,11 +95,11 @@ test("scanButtonUsage rejects unallowlisted raw buttons and direct buttonVariant
   }
 });
 
-test("scanButtonUsage reports stale allowlist counts after approved exceptions shrink", async () => {
+test("scanButtonUsage rejects raw-button drift in an allowlisted file when the count still matches", async () => {
   const { srcDir, tempRoot } = await createSourceTree({
     "features/selection/components/detail.tsx": `
       export function Detail() {
-        return <button type="button">Toggle details</button>;
+        return <button type="button">Save changes</button>;
       }
     `,
   });
@@ -107,7 +108,7 @@ test("scanButtonUsage reports stale allowlist counts after approved exceptions s
     await expect(
       scanButtonUsage(srcDir, [
         {
-          rawButtonCount: 2,
+          rawButtonFingerprints: ['aria-expanded={expanded}'],
           rawButtonReason: "semantic disclosure shell",
           relativeFilePath: "src/features/selection/components/detail.tsx",
         },
@@ -115,10 +116,16 @@ test("scanButtonUsage reports stale allowlist counts after approved exceptions s
     ).resolves.toEqual({
       staleAllowlistEntries: [
         expect.objectContaining({
+          reason: expect.stringContaining("Allowlisted raw <button> fingerprints are stale"),
           relativeFilePath: "src/features/selection/components/detail.tsx",
         }),
       ],
-      violations: [],
+      violations: [
+        expect.objectContaining({
+          kind: "raw-button",
+          relativeFilePath: "src/features/selection/components/detail.tsx",
+        }),
+      ],
     });
   } finally {
     await rm(tempRoot, { force: true, recursive: true });

@@ -92,6 +92,10 @@ function indexToPosition(sourceFile, start) {
   return { column: character + 1, line: line + 1 };
 }
 
+function normalizeWhitespace(value) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function collectButtonUsage(sourceText, filePath) {
   const sourceFile = ts.createSourceFile(
     filePath,
@@ -109,7 +113,12 @@ function collectButtonUsage(sourceText, filePath) {
       ts.isIdentifier(node.tagName) &&
       node.tagName.text === "button"
     ) {
-      rawButtons.push(indexToPosition(sourceFile, node.getStart(sourceFile)));
+      rawButtons.push({
+        openingElementText: normalizeWhitespace(
+          sourceText.slice(node.getStart(sourceFile), node.getEnd()),
+        ),
+        position: indexToPosition(sourceFile, node.getStart(sourceFile)),
+      });
     }
 
     if (
@@ -136,11 +145,44 @@ function buildAllowlistMap(allowlist = approvedButtonUsageAllowlist) {
 }
 
 function formatPositions(positions) {
-  return positions.map((position) => `${position.line}:${position.column}`).join(", ");
+  return positions
+    .map((position) => {
+      const resolvedPosition = "position" in position ? position.position : position;
+      return `${resolvedPosition.line}:${resolvedPosition.column}`;
+    })
+    .join(", ");
+}
+
+function getAllowedRawButtonCount(allowlistEntry) {
+  return allowlistEntry?.rawButtonFingerprints?.length ?? allowlistEntry?.rawButtonCount ?? 0;
+}
+
+function matchApprovedRawButtons(rawButtons, rawButtonFingerprints = []) {
+  const remainingButtons = [...rawButtons];
+  const missingFingerprints = [];
+
+  for (const fingerprint of rawButtonFingerprints.map(normalizeWhitespace)) {
+    const matchingIndex = remainingButtons.findIndex((rawButton) =>
+      rawButton.openingElementText.includes(fingerprint),
+    );
+
+    if (matchingIndex === -1) {
+      missingFingerprints.push(fingerprint);
+      continue;
+    }
+
+    remainingButtons.splice(matchingIndex, 1);
+  }
+
+  return {
+    missingFingerprints,
+    unexpectedRawButtons: remainingButtons,
+  };
 }
 
 function getUsageViolation({
   actualCount,
+  details,
   filePath,
   kind,
   positions,
@@ -150,6 +192,7 @@ function getUsageViolation({
 }) {
   return {
     actualCount,
+    details,
     filePath,
     kind,
     positions,
@@ -166,7 +209,6 @@ export async function scanButtonUsage(
   const sourceFiles = await collectSourceFiles(rootDirectory);
   const rootUiDirectory = path.dirname(rootDirectory);
   const allowlistMap = buildAllowlistMap(allowlist);
-  const observedAllowlistEntries = new Set();
   const staleAllowlistEntries = [];
   const violations = [];
 
@@ -175,22 +217,35 @@ export async function scanButtonUsage(
     const usage = collectButtonUsage(sourceText, sourceFile);
     const relativeFilePath = toUiRelativePath(sourceFile, rootUiDirectory);
     const allowlistEntry = allowlistMap.get(relativeFilePath);
-
-    if (
-      allowlistEntry &&
-      (usage.rawButtons.length > 0 || usage.buttonVariantsCalls.length > 0)
-    ) {
-      observedAllowlistEntries.add(relativeFilePath);
-    }
-
-    const allowedRawButtonCount = allowlistEntry?.rawButtonCount ?? 0;
-    if (usage.rawButtons.length > allowedRawButtonCount) {
+    const rawButtonFingerprintMatch = allowlistEntry?.rawButtonFingerprints
+      ? matchApprovedRawButtons(
+          usage.rawButtons,
+          allowlistEntry.rawButtonFingerprints,
+        )
+      : null;
+    const allowedRawButtonCount = getAllowedRawButtonCount(allowlistEntry);
+    const hasUnexpectedRawButtons =
+      rawButtonFingerprintMatch !== null &&
+      (rawButtonFingerprintMatch.unexpectedRawButtons.length > 0 ||
+        rawButtonFingerprintMatch.missingFingerprints.length > 0);
+    if (usage.rawButtons.length > allowedRawButtonCount || hasUnexpectedRawButtons) {
       violations.push(
         getUsageViolation({
           actualCount: usage.rawButtons.length,
+          details:
+            rawButtonFingerprintMatch?.missingFingerprints.length
+              ? `missing approved raw-button fingerprints: ${rawButtonFingerprintMatch.missingFingerprints.join(" | ")}`
+              : rawButtonFingerprintMatch?.unexpectedRawButtons.length
+                ? `unexpected raw-button openings: ${rawButtonFingerprintMatch.unexpectedRawButtons
+                    .map((rawButton) => rawButton.openingElementText)
+                    .join(" | ")}`
+                : undefined,
           filePath: sourceFile,
           kind: "raw-button",
-          positions: usage.rawButtons,
+          positions:
+            rawButtonFingerprintMatch?.unexpectedRawButtons.length
+              ? rawButtonFingerprintMatch.unexpectedRawButtons
+              : usage.rawButtons,
           reason:
             allowlistEntry?.rawButtonReason ??
             "Ordinary production actions must use Button, compact dashboard actions must use DashboardActionButton, and semantic-button exceptions must move behind a dedicated wrapper or an allowlisted narrow exception path.",
@@ -237,7 +292,19 @@ export async function scanButtonUsage(
     }
 
     const usage = collectButtonUsage(sourceText, sourceFilePath);
-    if (
+    if (entry.rawButtonFingerprints) {
+      const rawButtonFingerprintMatch = matchApprovedRawButtons(
+        usage.rawButtons,
+        entry.rawButtonFingerprints,
+      );
+
+      if (rawButtonFingerprintMatch.missingFingerprints.length > 0) {
+        staleAllowlistEntries.push({
+          reason: `Allowlisted raw <button> fingerprints are stale. Missing ${rawButtonFingerprintMatch.missingFingerprints.join(" | ")}.`,
+          relativeFilePath: entry.relativeFilePath,
+        });
+      }
+    } else if (
       entry.rawButtonCount !== undefined &&
       usage.rawButtons.length < entry.rawButtonCount
     ) {
@@ -270,6 +337,7 @@ function formatViolation(rootDirectory, violation) {
     `  kind: ${violation.kind}`,
     `  observed count: ${violation.actualCount}`,
     `  allowed path: ${violation.reason}`,
+    violation.details ? `  details: ${violation.details}` : "",
     `  fix: ${violation.recommendedFix}`,
   ].join("\n");
 }

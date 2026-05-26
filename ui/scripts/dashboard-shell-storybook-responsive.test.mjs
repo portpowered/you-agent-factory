@@ -72,7 +72,7 @@ describe("verifyDashboardShellConsolidation", () => {
     const currentButton = { isVisible: vi.fn().mockResolvedValue(false) };
     const timelineSlider = { isVisible: vi.fn().mockResolvedValue(true) };
     const timelineStatus = { isVisible: vi.fn().mockResolvedValue(true) };
-    const streamStatus = { isVisible: vi.fn().mockResolvedValue(true) };
+    const streamStatus = { isVisible: vi.fn().mockResolvedValue(false) };
     const moveButton = { isVisible: vi.fn().mockResolvedValue(true) };
     const workTotalsCard = {
       evaluate: vi.fn().mockResolvedValue({ ...shellStyle }),
@@ -141,6 +141,9 @@ describe("verifyDashboardShellConsolidation", () => {
     });
     expect(toolbar.getByRole).toHaveBeenCalledWith("slider", {
       name: "Timeline tick",
+    });
+    expect(toolbar.getByRole).toHaveBeenCalledWith("status", {
+      name: /Event stream/i,
     });
   });
 });

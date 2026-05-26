@@ -9,7 +9,7 @@ export const approvedButtonUsageAllowlist = [
     buttonVariantsCount: 2,
     buttonVariantsReason:
       "Shared dialog owner may compose buttonVariants for its structural close and action controls.",
-    rawButtonCount: 1,
+    rawButtonFingerprints: ['aria-label={closeLabel}'],
     rawButtonReason:
       "Shared dialog owner keeps one raw semantic close trigger around the action rows.",
     relativeFilePath: "src/components/ui/dialog.tsx",
@@ -21,106 +21,134 @@ export const approvedButtonUsageAllowlist = [
     relativeFilePath: "src/components/ui/calendar.tsx",
   },
   {
-    rawButtonCount: 1,
+    rawButtonFingerprints: [
+      "className={cn(GRAPH_NODE_BUTTON_BASE_CLASS, className)}",
+    ],
     rawButtonReason:
       "Graph nodes stay behind the dedicated GraphNodeButton semantic wrapper owner.",
     relativeFilePath: "src/components/ui/graph-node-button.tsx",
   },
   {
-    rawButtonCount: 1,
+    rawButtonFingerprints: ['aria-expanded={pickerOpen}'],
     rawButtonReason:
       "The inline add-widget card is a structural popover trigger shell rather than an ordinary action button.",
     relativeFilePath: "src/features/bento/components/inline-add-widget-card.tsx",
   },
   {
-    rawButtonCount: 1,
+    rawButtonFingerprints: [
+      "className={PICKER_ITEM_BUTTON_CLASS}",
+    ],
     rawButtonReason:
       "Inline widget picker options are selectable option rows inside a popover rather than ordinary action buttons.",
     relativeFilePath: "src/features/bento/components/inline-widget-picker.tsx",
   },
   {
-    rawButtonCount: 3,
+    rawButtonFingerprints: [
+      'aria-haspopup="dialog"',
+      'aria-controls={controlsID}',
+      'aria-label={sessionCloseLabel(session, messages)}',
+    ],
     rawButtonReason:
       "Session tabs keep dedicated tab and tab-close button semantics instead of collapsing into the ordinary Button lane.",
     relativeFilePath: "src/features/header/components/dashboard-session-tabs.tsx",
   },
   {
-    rawButtonCount: 1,
+    rawButtonFingerprints: ['SESSION_TARGET_BUTTON_CLASS'],
     rawButtonReason:
       "The open-session dialog trigger is a dedicated tab-strip affordance rather than an ordinary action button.",
     relativeFilePath: "src/features/header/components/dashboard-session-tabs-open-dialog.tsx",
   },
   {
-    rawButtonCount: 3,
+    rawButtonFingerprints: [
+      'aria-controls={panelId} aria-expanded={expanded}',
+      'className={HISTORY_TOGGLE_CLASS} onClick={() => setExpanded((current) => !current)}',
+      'aria-label={workstationMessages.selectProviderSessionLabel(',
+    ],
     rawButtonReason:
       "Inference attempt controls are disclosure toggles and provider-session selection shells inside the current-selection detail surface.",
     relativeFilePath: "src/features/current-selection/components/inference-attempt.tsx",
   },
   {
-    rawButtonCount: 4,
+    rawButtonFingerprints: [
+      'aria-controls={historyID} aria-expanded={expanded}',
+      'aria-label={messages.selectProviderSessionLabel(',
+      'aria-label={messages.selectWorkItemLabel(',
+      'aria-label={messages.selectWorkstationRequestLabel(',
+    ],
     rawButtonReason:
       "Provider-session attempt rows use disclosure and selection semantics rather than ordinary action-button styling.",
     relativeFilePath: "src/features/current-selection/components/provider-session-attempts.tsx",
   },
   {
-    rawButtonCount: 1,
+    rawButtonFingerprints: ['aria-controls={panelId} aria-expanded={expanded}'],
     rawButtonReason:
       "Selected-work dispatch attempt sections are disclosure shells and stay outside the ordinary action-button lane.",
     relativeFilePath: "src/features/current-selection/components/selected-work-dispatch-attempt-sections.tsx",
   },
   {
-    rawButtonCount: 1,
+    rawButtonFingerprints: ['aria-label={selectWorkItemAccessibleLabel('],
     rawButtonReason:
       "Shared selected-work dispatch controls use work-selection chip semantics rather than ordinary actions.",
     relativeFilePath:
       "src/features/current-selection/components/selected-work-dispatch-history-card-shared.tsx",
   },
   {
-    rawButtonCount: 1,
+    rawButtonFingerprints: ['aria-label={messages.selectWorkItemLabel(workLabel)}'],
     rawButtonReason:
       "State-node work rows are selection shells that need full-row button semantics.",
     relativeFilePath: "src/features/current-selection/components/state-node-detail.tsx",
   },
   {
-    rawButtonCount: 1,
+    rawButtonFingerprints: ['aria-label={messages.relatedWorkSelectLabel(relationship.workLabel)}'],
     rawButtonReason:
       "Work-item detail action chips select related work items rather than performing ordinary button-lane actions.",
     relativeFilePath: "src/features/current-selection/components/work-item-card.tsx",
   },
   {
-    rawButtonCount: 1,
+    rawButtonFingerprints: ['aria-label={resolvedMessages.selectWorkItemLabel(workLabel)}'],
     rawButtonReason:
       "Consumed-work payload rows use work-selection chip semantics rather than ordinary action buttons.",
     relativeFilePath: "src/features/current-selection/components/work-item-payload-details.tsx",
   },
   {
-    rawButtonCount: 4,
+    rawButtonFingerprints: [
+      'aria-controls={historyID} aria-expanded={expanded}',
+      'aria-label={messages.selectRequestLabel(',
+      'aria-label={messages.selectWorkItemLabel(workLabel)}',
+      'aria-label={messages.selectWorkstationRequestLabel(',
+    ],
     rawButtonReason:
       "Workstation detail controls are disclosure and selection shells inside the current-selection detail surface.",
     relativeFilePath: "src/features/current-selection/components/workstation-detail-card.tsx",
   },
   {
-    rawButtonCount: 1,
+    rawButtonFingerprints: ['messages.editableConfigurationCollapseActionLabel'],
     rawButtonReason:
       "Editable workstation configuration uses a disclosure toggle for an expandable semantic section.",
     relativeFilePath:
       "src/features/current-selection/components/workstation-editable-configuration-section.tsx",
   },
   {
-    rawButtonCount: 1,
+    rawButtonFingerprints: ['aria-controls={panelID} aria-expanded={expanded}'],
     rawButtonReason:
       "Transcript code blocks use a disclosure toggle for expandable inline code content.",
     relativeFilePath:
       "src/features/provider-session-detail/components/transcript-code-block.tsx",
   },
   {
-    rawButtonCount: 2,
+    rawButtonFingerprints: [
+      'className="pointer-events-auto absolute inset-0"',
+      'className={DIALOG_CLOSE_BUTTON_CLASS}',
+    ],
     rawButtonReason:
       "The workflow mutation dialog keeps structural overlay-dismiss and close-icon button semantics in its shared shell.",
     relativeFilePath: "src/features/workflow-activity/components/mutation-dialog.tsx",
   },
   {
-    rawButtonCount: 2,
+    rawButtonFingerprints: [
+      'aria-expanded="true"',
+      'aria-expanded="false"',
+    ],
     rawButtonReason:
       "The dashboard flow-axis legend uses narrow disclosure-toggle semantics for its collapsible chrome.",
     relativeFilePath:
