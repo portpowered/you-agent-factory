@@ -54,6 +54,7 @@ export function useSaveEditableWorkstationConfiguration({
   const [submittingScopeKey, setSubmittingScopeKey] = useState<string | null>(
     null,
   );
+  const saveInFlightRef = useRef(false);
   const mutation = useSaveCurrentFactory();
 
   useResetExitedSaveScope({
@@ -116,13 +117,15 @@ export function useSaveEditableWorkstationConfiguration({
       if (
         editableConfigurationState?.status !== "ready" ||
         editableConfigurationState.pendingFactoryDefinition == null ||
-        scopeKey == null
+        scopeKey == null ||
+        saveInFlightRef.current
       ) {
         return;
       }
 
       setLastErroredScope(null);
       setLastSuccessfulScopeKey(null);
+      saveInFlightRef.current = true;
       setSubmittingScopeKey(scopeKey);
       const request: EditableWorkstationSaveRequest = {
         baseVersion: editableConfigurationState.baseVersion,
@@ -152,6 +155,8 @@ export function useSaveEditableWorkstationConfiguration({
           scopeKey: request.scopeKey,
         });
         return;
+      } finally {
+        saveInFlightRef.current = false;
       }
     },
     saveState,

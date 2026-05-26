@@ -7,6 +7,7 @@ import { useDashboardSessionStore } from "../../dashboard/state/dashboardSession
 import type { EditableWorkstationConfigurationState } from "../components/detail-card-types";
 import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: focused save-hook regressions share one mocked mutation seam to keep re-entrant action behavior readable.
 describe("useSaveEditableWorkstationConfiguration", () => {
   beforeEach(() => {
     useDashboardSessionStore.setState({ selectedSessionID: "~default" });
@@ -139,6 +140,56 @@ describe("useSaveEditableWorkstationConfiguration", () => {
     });
     expect(markChangesSaved).toHaveBeenCalledTimes(1);
   });
+
+  it("ignores repeated save confirmations while the current save is still in flight", async () => {
+    const deferredSave = createDeferredPromise<unknown>();
+    const mutateAsync = vi.fn().mockReturnValue(deferredSave.promise);
+    vi.spyOn(currentFactoryFeature, "useSaveCurrentFactory").mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState(),
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    act(() => {
+      result.current.beginSaveConfirmation();
+    });
+
+    let firstSave: Promise<void> | undefined;
+    await act(async () => {
+      firstSave = result.current.confirmSave();
+      await Promise.resolve();
+      await result.current.confirmSave();
+    });
+
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(result.current.saveState).toEqual({ status: "submitting" });
+
+    deferredSave.resolve({
+      name: "Current Factory",
+      version: {
+        logical: 7,
+        physical: "2026-05-23T15:52:00Z",
+      },
+      workers: [],
+      workstations: [],
+    });
+
+    await act(async () => {
+      await firstSave;
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).not.toEqual({ status: "submitting" });
+    });
+  });
 });
 
 function createQueryClientWrapper() {
@@ -221,4 +272,15 @@ function buildReadyEditableConfigurationState(overrides?: {
       status: "ready",
     },
   };
+}
+
+function createDeferredPromise<T>() {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    reject = innerReject;
+    resolve = innerResolve;
+  });
+
+  return { promise, reject, resolve };
 }
