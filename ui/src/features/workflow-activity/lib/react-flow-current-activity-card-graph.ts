@@ -66,10 +66,12 @@ function activeTokenLabel(
 }
 
 function workstationGraphNodeId(nodeId: string): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `workstation:${nodeId}`;
 }
 
 function placeGraphNodeId(placeId: string): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `place:${placeId}`;
 }
 

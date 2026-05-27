@@ -23,6 +23,7 @@ const BADGE_TONE_CLASS_NAME: Record<ActivityGraphNodeBadgeTone, string> = {
 
 const BADGE_WEIGHT_CLASS_NAME: Record<ActivityGraphNodeBadgeWeight, string> = {
   body: "font-mono text-[0.68rem]",
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   label: "text-[0.65rem] font-semibold uppercase tracking-[0.08em]",
 };
 

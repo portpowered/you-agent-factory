@@ -146,6 +146,7 @@ function normalizeSubmitWorkErrorCode(
     case "INTERNAL_ERROR":
       return code;
     default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INTERNAL_ERROR";
   }
 }

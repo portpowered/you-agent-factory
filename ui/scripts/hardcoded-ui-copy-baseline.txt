@@ -1,23 +1,2 @@
 # Baseline for the hardcoded UI copy check.
 # Entries are path|line|column|kind|text.
-src/api/provider-session-details/api.ts|155|14|string-literal|INTERNAL_ERROR
-src/api/work/api.ts|149|14|string-literal|INTERNAL_ERROR
-src/features/current-selection/state/selectionHistoryStore.ts|36|14|string-literal|node:
-src/features/current-selection/state/selectionHistoryStore.ts|38|14|string-literal|state:
-src/features/current-selection/state/selectionHistoryStore.ts|40|14|string-literal|work: : :
-src/features/current-selection/state/selectionHistoryStore.ts|42|14|string-literal|request: :
-src/features/factory-graph-editor/lib/factory-graph-draft-types.ts|243|14|string-literal|resource:
-src/features/factory-graph-editor/lib/factory-graph-draft-types.ts|245|14|string-literal|worker:
-src/features/factory-graph-editor/lib/factory-graph-draft-types.ts|247|14|string-literal|work-state: :
-src/features/factory-graph-editor/lib/factory-graph-draft-types.ts|249|14|string-literal|work-type:
-src/features/factory-graph-editor/lib/factory-graph-draft-types.ts|251|14|string-literal|workstation:
-src/features/flowchart/components/current-activity-node-chrome.tsx|26|10|string-literal|text-[0.65rem] font-semibold uppercase tracking-[0.08em]
-src/features/flowchart/lib/layout.ts|100|10|string-literal|workstation:
-src/features/flowchart/lib/layout.ts|104|10|string-literal|place:
-src/features/timeline/state/timeline/replayGraphState.ts|220|10|string-literal|:resource:
-src/features/workflow-activity/components/mutation-dialog.tsx|75|22|string-literal|fixed inset-0 px-5 py-6
-src/features/workflow-activity/lib/react-flow-current-activity-card-draft-edges.ts|12|12|string-literal|workstation:
-src/features/workflow-activity/lib/react-flow-current-activity-card-draft-edges.ts|16|12|string-literal|place:
-src/features/workflow-activity/lib/react-flow-current-activity-card-draft-edges.ts|19|10|string-literal|place: :
-src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|69|10|string-literal|workstation:
-src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|73|10|string-literal|place:

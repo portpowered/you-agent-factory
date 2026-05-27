@@ -262,10 +262,11 @@ async function scanSourceRootForHardcodedCopy(
   sourceRoot: string,
 ): Promise<HardcodedCopyFinding[]> {
   const sourceFiles = await collectSourceFiles(sourceRoot);
+  const sourceBaseDir = path.dirname(sourceRoot);
   const findings = await Promise.all(
     sourceFiles.map(async (absolutePath) => {
       const relativePath = path
-        .relative(UI_DIR, absolutePath)
+        .relative(sourceBaseDir, absolutePath)
         .replaceAll(path.sep, "/");
       const sourceText = await readFile(absolutePath, "utf8");
       return scanSourceTextForHardcodedCopy(relativePath, sourceText);

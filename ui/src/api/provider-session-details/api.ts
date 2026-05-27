@@ -152,6 +152,7 @@ function normalizeProviderSessionDetailsAPIErrorCode(
     case "NOT_FOUND":
       return code;
     default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "INTERNAL_ERROR";
   }
 }
