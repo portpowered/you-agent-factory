@@ -164,7 +164,7 @@ describe("registerWorkstationPromptMonaco", () => {
     ).toEqual([
       expect.objectContaining({
         insertText: "me",
-        label: "me",
+        label: "Name",
       }),
     ]);
   });
@@ -642,7 +642,7 @@ describe("registerWorkstationPromptMonaco", () => {
       suggestions: [
         expect.objectContaining({
           insertText: "me",
-          label: "me",
+          label: "Name",
           range: {
             endColumn: namePrompt.length + 1,
             endLineNumber: 1,

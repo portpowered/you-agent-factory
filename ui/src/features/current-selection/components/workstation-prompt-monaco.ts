@@ -235,7 +235,11 @@ function toContextualTemplateSuggestion(
       filterText: fullTemplateExpression,
       insertMode: "insertAtCursor" as const,
       insertText: relativeInsertText,
-      label: relativeInsertText.length > 0 ? relativeInsertText : path,
+      label: resolveContextualCompletionLabel(
+        normalizedCurrentExpression,
+        relativeInsertText,
+        path,
+      ),
     };
   }
 
@@ -255,6 +259,20 @@ function toContextualTemplateSuggestion(
   }
 
   return null;
+}
+
+function resolveContextualCompletionLabel(
+  currentExpression: string,
+  relativeInsertText: string,
+  path: string,
+) {
+  if (relativeInsertText.length === 0) {
+    return path;
+  }
+
+  const currentWordMatch = currentExpression.match(/([A-Za-z_]\w*)$/);
+
+  return `${currentWordMatch?.[1] ?? ""}${relativeInsertText}`;
 }
 
 function hasTemplateExpressionPrefix(currentTemplateExpression?: string) {
