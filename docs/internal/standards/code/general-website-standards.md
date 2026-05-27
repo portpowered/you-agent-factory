@@ -91,8 +91,7 @@ All UI **MUST** be composed from reusable components with explicit contracts.
 Rules:
 
 - Components **MUST** have clear, typed props and a single understandable responsibility.
-- Repeated UI patterns **MUST** be extracted once they are used in more than one place or are likely to drift.
-- Large components **SHOULD** be split when they mix layout, data access, formatting, and interaction logic in one file.
+- Compound UI **SHOULD** be decomposed into focused child components with explicit props when a parent combines multiple independently understandable controls, regions, or interaction responsibilities. Keep orchestration, state ownership, and data preparation in the parent component or hook, and let child components render one clear piece of UI. Prefer shared chrome and layout primitives for repeated structural patterns, and keep utility surfaces terse: expose the core control, primary action, and necessary state without redundant explanatory copy.
 - Feature components **SHOULD** receive prepared data from hooks or view-model helpers rather than performing dense transformation logic inline.
 - Interactive components **MUST** expose disabled, loading, and error-friendly behavior where applicable.
 
