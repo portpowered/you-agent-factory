@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -507,3 +508,25 @@ func (configRuntimeFixture) FactoryDir() string     { return "" }
 func (configRuntimeFixture) RuntimeBaseDir() string { return "" }
 
 var _ interfaces.RuntimeConfigLookup = configRuntimeFixture{}
+
+func parseRuntimeLogRecords(t *testing.T, data string) []map[string]any {
+	t.Helper()
+	var records []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(data), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
+		}
+		records = append(records, record)
+	}
+	return records
+}
+
+type recordingDiagnosticsCommandRunner struct{}
+
+func (recordingDiagnosticsCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{Stdout: []byte("script done\n"), Stderr: []byte("script details\n")}, nil
+}

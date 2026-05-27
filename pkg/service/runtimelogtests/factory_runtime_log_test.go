@@ -1,4 +1,4 @@
-package service
+package runtimelogtests
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -32,7 +33,7 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 	t.Setenv("USERPROFILE", homeDir)
 	logDir := filepath.Join(homeDir, ".you-agent-factory", "logs")
 	runtimeInstanceID := "runtime-log-test"
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:               dir,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
@@ -45,7 +46,7 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
+		t.Fatalf("service.BuildFactoryService: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -134,7 +135,7 @@ func TestFactoryService_RunWritesCorrelationFieldsToRuntimeLog(t *testing.T) {
 
 	runtimeInstanceID := "runtime-log-context-test"
 	logDir := t.TempDir()
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:               dir,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
@@ -143,7 +144,7 @@ func TestFactoryService_RunWritesCorrelationFieldsToRuntimeLog(t *testing.T) {
 		WorkFile:          workFile,
 	})
 	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
+		t.Fatalf("service.BuildFactoryService: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -465,7 +466,7 @@ func runRuntimeLogAndReplayFixture(t *testing.T, opts runtimeLogFixtureOptions) 
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:                   dir,
 		Logger:                logger,
 		Verbose:               opts.verbose,
@@ -476,7 +477,7 @@ func runRuntimeLogAndReplayFixture(t *testing.T, opts runtimeLogFixtureOptions) 
 		CommandRunnerOverride: opts.commandRunnerOverride,
 	})
 	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
+		t.Fatalf("service.BuildFactoryService: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
