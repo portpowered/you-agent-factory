@@ -1,0 +1,23 @@
+{
+  "requestId": "docs-example-story-001",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "docs-example-story-001",
+      "workTypeName": "story",
+      "state": "init",
+      "payload": {
+        "title": "Add deterministic replay notes",
+        "summary": "Update the customer guide with a short mock-worker and replay workflow.",
+        "acceptanceCriteria": [
+          "The mock-worker run completes without live provider calls.",
+          "The replay artifact path is documented after shutdown."
+        ]
+      },
+      "tags": {
+        "branch": "ralph/docs-example-story-001",
+        "worktree": ".worktrees/ralph/docs-example-story-001/docs-example-story-001"
+      }
+    }
+  ]
+}

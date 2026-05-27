@@ -309,11 +309,20 @@ Create a startup or watched-file request:
 Run it at startup:
 
 ```bash
-you run --dir ./factory --with-mock-workers --work ./fixtures/story-001.json
+you run --dir ./factory --with-mock-workers --work ./docs/examples/startup-work.json
 ```
 
 Or drop the file under `factory/inputs/story/default/` while the factory is
 already running.
+
+The reusable startup work file
+[`docs/examples/startup-work.json`](../examples/startup-work.json) uses the
+same `FACTORY_REQUEST_BATCH` request shape with one `story` work item in the
+`init` state and a concrete payload. The companion
+[`docs/examples/README.md`](../examples/README.md) shows how to combine that
+startup work, the mock-worker config, and replay commands with the checked-in
+[`examples/write-code-review`](../../examples/write-code-review/factory.json)
+factory.
 
 ## Author A Model-Operation TTS Factory
 
