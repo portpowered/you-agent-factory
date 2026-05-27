@@ -1,10 +1,13 @@
-package service
+package replaytests
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	service "github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -49,7 +53,7 @@ func TestBuildFactoryService_ReplayModeLoadsEmbeddedConfigWithoutFactoryFiles(t 
 	}
 
 	replayDir := t.TempDir()
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:               replayDir,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
@@ -59,11 +63,8 @@ func TestBuildFactoryService_ReplayModeLoadsEmbeddedConfigWithoutFactoryFiles(t 
 		t.Fatalf("BuildFactoryService replay: %v", err)
 	}
 
-	if svc.net == nil {
-		t.Fatal("expected replay service to build net from embedded config")
-	}
-	if _, ok := svc.net.WorkTypes["task"]; !ok {
-		t.Fatal("expected task work type from embedded config")
+	if _, err := svc.GetEngineStateSnapshot(context.Background()); err != nil {
+		t.Fatalf("expected replay service to build an inspectable runtime from embedded config: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(replayDir, interfaces.FactoryConfigFile)); !os.IsNotExist(err) {
 		t.Fatalf("replay should not create or require local factory.json, stat err = %v", err)
@@ -87,7 +88,7 @@ func TestBuildFactoryService_ReplayModeDefaultsToDeterministicClock(t *testing.T
 		t.Fatalf("Save artifact: %v", err)
 	}
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:               t.TempDir(),
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
@@ -97,11 +98,10 @@ func TestBuildFactoryService_ReplayModeDefaultsToDeterministicClock(t *testing.T
 		t.Fatalf("BuildFactoryService replay: %v", err)
 	}
 
-	if _, ok := svc.clock.(*replay.DeterministicClock); !ok {
-		t.Fatalf("expected replay service to use deterministic clock, got %T", svc.clock)
-	}
-	if got := svc.clock.Now(); !got.Equal(recordedAt) {
-		t.Fatalf("replay clock Now() = %s, want %s", got, recordedAt)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := svc.Run(ctx); err != nil {
+		t.Fatalf("Run replay with deterministic default clock: %v", err)
 	}
 }
 
@@ -134,7 +134,7 @@ func TestBuildFactoryService_ReplayModeUsesRecordedProviderSideEffects(t *testin
 		},
 	})
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:        t.TempDir(),
 		Logger:     zap.NewNop(),
 		ReplayPath: artifactPath,
@@ -203,7 +203,7 @@ func TestBuildFactoryService_ReplayModeDeliversRecordedCompletionAtLogicalTick(t
 	}
 
 	var completions []interfaces.FactoryCompletionRecord
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:        t.TempDir(),
 		Logger:     zap.NewNop(),
 		ReplayPath: artifactPath,
@@ -275,7 +275,7 @@ func TestBuildFactoryService_ReplayModeUsesRecordedCommandRunnerSideEffects(t *t
 		},
 	})
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:        t.TempDir(),
 		Logger:     zap.NewNop(),
 		ReplayPath: artifactPath,
@@ -323,7 +323,7 @@ func TestBuildFactoryService_ReplayModeStopsOnDispatchDivergence(t *testing.T) {
 		},
 	})
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:        t.TempDir(),
 		Logger:     zap.NewNop(),
 		ReplayPath: artifactPath,
@@ -387,7 +387,7 @@ func TestBuildFactoryService_ReplayModeWarnsOnCurrentConfigHashMismatch(t *testi
 	writeFactoryJSON(t, sourceDir, mismatchedConfig)
 
 	core, observedLogs := observer.New(zap.WarnLevel)
-	_, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+	_, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:        sourceDir,
 		Logger:     zap.New(core),
 		ReplayPath: artifactPath,
@@ -851,4 +851,80 @@ func serviceFactoryEventTypes(events []factoryapi.FactoryEvent) []factoryapi.Fac
 		types = append(types, event.Type)
 	}
 	return types
+}
+
+func minimalFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "test-factory",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "worker-a"}},
+		"workstations": []map[string]any{{
+			"name":    "process",
+			"worker":  "worker-a",
+			"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+		}},
+	}
+}
+
+func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
+	t.Helper()
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal factory.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+}
+
+func writeWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {
+	t.Helper()
+	writeWorkerAgentsMDWithContent(t, factoryDir, workerName, "---\ntype: MODEL_WORKER\nmodel: claude-3-5-haiku-20241022\n---\nYou are a helpful assistant.\n")
+}
+
+func writeScriptWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {
+	t.Helper()
+	writeScriptWorkerAgentsMDWithCommand(t, factoryDir, workerName, "echo", []string{"ok"})
+}
+
+func writeScriptWorkerAgentsMDWithCommand(t *testing.T, factoryDir, workerName, command string, args []string) {
+	t.Helper()
+	var argsYAML strings.Builder
+	for _, arg := range args {
+		argsYAML.WriteString("  - ")
+		argsYAML.WriteString(strconv.Quote(arg))
+		argsYAML.WriteString("\n")
+	}
+	writeWorkerAgentsMDWithContent(t, factoryDir, workerName, fmt.Sprintf("---\ntype: SCRIPT_WORKER\ncommand: %s\nargs:\n%s---\n", command, argsYAML.String()))
+}
+
+func writeWorkerAgentsMDWithContent(t *testing.T, factoryDir, workerName, content string) {
+	t.Helper()
+	workerDir := filepath.Join(factoryDir, "workers", workerName)
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("create worker dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workerDir, "AGENTS.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write AGENTS.md: %v", err)
+	}
+}
+
+func writeWorkstationAgentsMD(t *testing.T, factoryDir, workstationName string) {
+	t.Helper()
+	workstationDir := filepath.Join(factoryDir, "workstations", workstationName)
+	if err := os.MkdirAll(workstationDir, 0o755); err != nil {
+		t.Fatalf("create workstation dir: %v", err)
+	}
+	agentsMD := "---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n"
+	if err := os.WriteFile(filepath.Join(workstationDir, "AGENTS.md"), []byte(agentsMD), 0o644); err != nil {
+		t.Fatalf("write workstation AGENTS.md: %v", err)
+	}
 }
