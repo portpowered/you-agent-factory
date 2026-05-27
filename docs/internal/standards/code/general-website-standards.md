@@ -122,6 +122,7 @@ Rules:
 - Ordinary layout spacing **MUST** use the approved Tailwind spacing scale instead of arbitrary bracket values when styling padding, margin, gap, inset, width or height spacing, border radius, scroll margin or padding, and layout rhythm.
 - Responsive layout changes **MUST** use the approved breakpoint variants instead of custom bracket variants for ordinary mobile, tablet, and desktop behavior.
 - Shared typography, card, button, field, and panel patterns **SHOULD** be centralized and reused.
+- Component-local class name constants such as `CARD_CLASS`, `HEADER_CLASS`, or `ACTION_CLASS` are an anti-pattern when they are only used to keep JSX shorter. Put Tailwind classes directly on the element, using inline `cn(...)` calls when conditional classes or shared typography tokens are needed. Extract a style helper only when it represents a reused variant, shared primitive, or non-trivial state mapping.
 - Visual language **MUST** remain consistent across screens in the same product area.
 - Any lint or static check that enforces token usage **MUST** pass before merge.
 
@@ -164,7 +165,7 @@ Rules:
 - Every interactive control **MUST** be keyboard reachable and operable.
 - Focus indicators **MUST** remain visible and meet contrast expectations.
 - Forms **MUST** provide labels, error messaging, and programmatic relationships between controls and validation text.
-- Icons **MUST** have accessible names when they convey meaning.
+- Icons **MUST** use `lucide-react` when a suitable Lucide icon exists, instead of handwritten inline SVGs or feature-local icon components. Icons **MUST** have accessible names when they convey meaning; decorative icons **MUST** be hidden from assistive technology and paired with text or an accessible label on the owning control.
 - Color **MUST NOT** be the only means of communicating state.
 - Heading order and landmark usage **SHOULD** preserve a sensible document outline.
 - Tables, dialogs, menus, disclosure widgets, and drag interactions **MUST** follow their expected accessibility patterns.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
@@ -76,7 +76,6 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     removeDashboardWidget,
   } = useDashboardLayout();
   const now = useDashboardNow();
-  const [isInlineWidgetPickerOpen, setInlineWidgetPickerOpen] = useState(false);
   const {
     incrementRefreshToken,
     resetSelectedTraceID,
@@ -139,17 +138,14 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     currentSelection,
     dashboardLayout,
     importController,
-    isInlineWidgetPickerOpen,
     locale: resolvedLocale,
     now,
-    onInlineWidgetPickerOpenChange: setInlineWidgetPickerOpen,
     onRemoveDashboardWidget: removeDashboardWidget,
     providerSessionState,
     selectedTrace,
     selectedTraceID,
     selectedWorkExecutionDetails,
     selectedWorkRelationshipGraph,
-    setInlineWidgetPickerOpen,
     setSelectedTraceID,
     snapshot,
     traceGridState,
@@ -188,17 +184,14 @@ function buildDashboardCardLayouts({
   currentSelection,
   dashboardLayout,
   importController,
-  isInlineWidgetPickerOpen,
   locale,
   now,
-  onInlineWidgetPickerOpenChange,
   onRemoveDashboardWidget,
   providerSessionState,
   selectedTrace,
   selectedTraceID,
   selectedWorkExecutionDetails,
   selectedWorkRelationshipGraph,
-  setInlineWidgetPickerOpen,
   setSelectedTraceID,
   snapshot,
   traceGridState,
@@ -207,20 +200,16 @@ function buildDashboardCardLayouts({
   addDashboardWidget: ReturnType<
     typeof useDashboardLayout
   >["addDashboardWidget"];
-  setInlineWidgetPickerOpen: (open: boolean) => void;
 }) {
   return buildDashboardCards({
     currentSelection,
     dashboardLayout,
     importController,
-    isInlineWidgetPickerOpen,
     locale,
     now,
-    onInlineWidgetPickerOpenChange,
     onRemoveDashboardWidget,
     onSelectInlineWidget: (widgetType) => {
       addDashboardWidget(widgetType);
-      setInlineWidgetPickerOpen(false);
     },
     providerSessionState,
     selectedTrace,
