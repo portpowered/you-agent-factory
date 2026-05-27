@@ -1,4 +1,4 @@
-package api
+package apiboundary_test
 
 import (
 	"reflect"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/api"
 	"github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
@@ -28,7 +29,7 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 	worldView := projections.BuildFactoryWorldView(worldState)
 	assertSelectedTickWorldView(t, worldView)
 
-	requestSlice := BuildFactoryWorldWorkstationRequestProjectionSlice(worldState)
+	requestSlice := api.BuildFactoryWorldWorkstationRequestProjectionSlice(worldState)
 	assertSelectedTickWorkstationRequests(t, requestSlice)
 
 	output := dashboard.FormatSimpleDashboardWithRenderData(

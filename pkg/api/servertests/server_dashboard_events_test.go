@@ -1,4 +1,4 @@
-package api
+package apiserver_test
 
 import (
 	"bufio"
@@ -7,18 +7,100 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	api "github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
 )
 
+func newAPITestServer(f *testutil.MockFactory) *api.Server {
+	logger, _ := zap.NewDevelopment()
+	return api.NewServer(f, 8080, logger)
+}
+
+func readAPISSEFactoryEvent(t *testing.T, reader *bufio.Reader) factoryapi.FactoryEvent {
+	t.Helper()
+
+	var dataLine string
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read SSE line: %v", err)
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			break
+		}
+		if strings.HasPrefix(line, "event:") {
+			t.Fatalf("factory event stream should use default SSE message event, got line %q", line)
+		}
+		if strings.HasPrefix(line, "data: ") {
+			dataLine = strings.TrimPrefix(line, "data: ")
+		}
+	}
+	if dataLine == "" {
+		t.Fatal("expected SSE data payload")
+	}
+
+	var event factoryapi.FactoryEvent
+	if err := json.Unmarshal([]byte(dataLine), &event); err != nil {
+		t.Fatalf("decode SSE factory event: %v", err)
+	}
+	return event
+}
+
+func embeddedAPIDashboardAssetPath(t *testing.T, html string) string {
+	t.Helper()
+
+	pattern := regexp.MustCompile(`(?:src|href)="(/dashboard/ui/assets/[^"]+)"`)
+	matches := pattern.FindStringSubmatch(html)
+	if len(matches) != 2 {
+		t.Fatalf("expected embedded dashboard asset path in html: %s", html)
+	}
+	return matches[1]
+}
+
+func testAPIFactoryEvent(t *testing.T, eventType factoryapi.FactoryEventType, id string, context factoryapi.FactoryEventContext, payload any) factoryapi.FactoryEvent {
+	t.Helper()
+
+	var eventPayload factoryapi.FactoryEvent_Payload
+	var err error
+	switch typed := payload.(type) {
+	case factoryapi.RunRequestEventPayload:
+		err = eventPayload.FromRunRequestEventPayload(typed)
+	case factoryapi.InitialStructureRequestEventPayload:
+		err = eventPayload.FromInitialStructureRequestEventPayload(typed)
+	case factoryapi.WorkRequestEventPayload:
+		err = eventPayload.FromWorkRequestEventPayload(typed)
+	case factoryapi.DispatchRequestEventPayload:
+		err = eventPayload.FromDispatchRequestEventPayload(typed)
+	default:
+		t.Fatalf("unsupported test factory event payload %T", payload)
+	}
+	if err != nil {
+		t.Fatalf("encode test factory event payload: %v", err)
+	}
+	return factoryapi.FactoryEvent{
+		SchemaVersion: factoryapi.AgentFactoryEventV1,
+		Type:          eventType,
+		Id:            id,
+		Context:       context,
+		Payload:       eventPayload,
+	}
+}
+
+func stringPointerForAPIServerTest(value string) *string {
+	return &value
+}
+
 func TestDeprecatedFactoryApiRoutesAreNotRegistered(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(&testutil.MockFactory{})
 	for _, path := range []string{"/dashboard", "/dashboard/stream", "/state", "/traces/trace-id", "/work/token-1/trace", "/workflows", "/workflows/wf-1"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
@@ -30,7 +112,7 @@ func TestDeprecatedFactoryApiRoutesAreNotRegistered(t *testing.T) {
 }
 
 func TestGetDashboardUI_ReturnsEmbeddedShell(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(&testutil.MockFactory{})
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/ui", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -50,12 +132,12 @@ func TestGetDashboardUI_ReturnsEmbeddedShell(t *testing.T) {
 }
 
 func TestGetDashboardUI_ServesEmbeddedAsset(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(&testutil.MockFactory{})
 	shellReq := httptest.NewRequest(http.MethodGet, "/dashboard/ui", nil)
 	shellRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(shellRec, shellReq)
 
-	assetReq := httptest.NewRequest(http.MethodGet, embeddedDashboardAssetPath(t, shellRec.Body.String()), nil)
+	assetReq := httptest.NewRequest(http.MethodGet, embeddedAPIDashboardAssetPath(t, shellRec.Body.String()), nil)
 	assetRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(assetRec, assetReq)
 	if assetRec.Code != http.StatusOK || assetRec.Body.Len() == 0 {
@@ -64,7 +146,7 @@ func TestGetDashboardUI_ServesEmbeddedAsset(t *testing.T) {
 }
 
 func TestGetDashboardUI_FallbacksToIndexForClientRoutes(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(&testutil.MockFactory{})
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/ui/workstations/live", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -80,7 +162,7 @@ func TestGetEvents_ReplaysHistoryThenStreamsLiveEventsInOrder(t *testing.T) {
 	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: historical, Events: liveEvents}}
 
 	logger, _ := zap.NewDevelopment()
-	server := httptest.NewServer(NewServer(mf, 8080, logger).Handler())
+	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
 	defer server.Close()
 
 	reader, closeStream := openEventStreamReader(t, server.URL)
@@ -96,9 +178,9 @@ func testHistoricalFactoryEvents(t *testing.T, eventTime time.Time) []factoryapi
 		WorkTypes: &[]factoryapi.WorkType{{Name: "task", States: []factoryapi.WorkState{{Name: "init", Type: factoryapi.WorkStateTypeINITIAL}, {Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL}}}},
 	}
 	return []factoryapi.FactoryEvent{
-		testFactoryEvent(t, factoryapi.FactoryEventTypeRunRequest, "factory-event/run-started", factoryapi.FactoryEventContext{Tick: 0, EventTime: eventTime}, factoryapi.RunRequestEventPayload{RecordedAt: eventTime, Factory: runStartedFactory}),
-		testFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory-event/initial-structure/0", factoryapi.FactoryEventContext{Tick: 0, EventTime: eventTime}, factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{Name: "factory"}}),
-		testFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "factory-event/work-request/request-1", factoryapi.FactoryEventContext{Tick: 1, EventTime: time.Date(2026, 4, 8, 12, 0, 1, 0, time.UTC), RequestId: stringPointerForAPITest("request-1")}, factoryapi.WorkRequestEventPayload{Type: factoryapi.WorkRequestTypeFactoryRequestBatch}),
+		testAPIFactoryEvent(t, factoryapi.FactoryEventTypeRunRequest, "factory-event/run-started", factoryapi.FactoryEventContext{Tick: 0, EventTime: eventTime}, factoryapi.RunRequestEventPayload{RecordedAt: eventTime, Factory: runStartedFactory}),
+		testAPIFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory-event/initial-structure/0", factoryapi.FactoryEventContext{Tick: 0, EventTime: eventTime}, factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{Name: "factory"}}),
+		testAPIFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "factory-event/work-request/request-1", factoryapi.FactoryEventContext{Tick: 1, EventTime: time.Date(2026, 4, 8, 12, 0, 1, 0, time.UTC), RequestId: stringPointerForAPIServerTest("request-1")}, factoryapi.WorkRequestEventPayload{Type: factoryapi.WorkRequestTypeFactoryRequestBatch}),
 	}
 }
 
@@ -131,9 +213,9 @@ func openEventStreamReader(t *testing.T, serverURL string) (*bufio.Reader, func(
 func assertHistoricalEventsReplay(t *testing.T, reader *bufio.Reader, historical []factoryapi.FactoryEvent) {
 	t.Helper()
 
-	first := readSSEFactoryEvent(t, reader)
-	second := readSSEFactoryEvent(t, reader)
-	third := readSSEFactoryEvent(t, reader)
+	first := readAPISSEFactoryEvent(t, reader)
+	second := readAPISSEFactoryEvent(t, reader)
+	third := readAPISSEFactoryEvent(t, reader)
 	if first.Id != historical[0].Id || second.Id != historical[1].Id || third.Id != historical[2].Id {
 		t.Fatalf("historical event order = [%s %s %s], want [%s %s %s]", first.Id, second.Id, third.Id, historical[0].Id, historical[1].Id, historical[2].Id)
 	}
@@ -156,14 +238,14 @@ func assertHistoricalEventsReplay(t *testing.T, reader *bufio.Reader, historical
 func assertLiveEventReplay(t *testing.T, reader *bufio.Reader, liveEvents chan factoryapi.FactoryEvent, eventTime time.Time) {
 	t.Helper()
 
-	live := testFactoryEvent(t, factoryapi.FactoryEventTypeDispatchRequest, "factory-event/dispatch-created/dispatch-1", factoryapi.FactoryEventContext{
+	live := testAPIFactoryEvent(t, factoryapi.FactoryEventTypeDispatchRequest, "factory-event/dispatch-created/dispatch-1", factoryapi.FactoryEventContext{
 		Tick:       2,
 		EventTime:  time.Date(2026, 4, 8, 12, 0, 2, 0, time.UTC),
-		DispatchId: stringPointerForAPITest("dispatch-1"),
+		DispatchId: stringPointerForAPIServerTest("dispatch-1"),
 	}, factoryapi.DispatchRequestEventPayload{TransitionId: "review", Inputs: []factoryapi.DispatchConsumedWorkRef{}})
 	liveEvents <- live
 
-	fourth := readSSEFactoryEvent(t, reader)
+	fourth := readAPISSEFactoryEvent(t, reader)
 	if fourth.Id != live.Id || fourth.Type != factoryapi.FactoryEventTypeDispatchRequest || fourth.Context.Tick != 2 {
 		t.Fatalf("live event = %#v, want request event at tick 2", fourth)
 	}
@@ -174,14 +256,14 @@ func TestGetEvents_ClientDisconnectCancelsSubscription(t *testing.T) {
 	mf := &testutil.MockFactory{
 		FactoryEventStream: &interfaces.FactoryEventStream{
 			History: []factoryapi.FactoryEvent{
-				testFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory-event/initial-structure/0", factoryapi.FactoryEventContext{Tick: 0, EventTime: time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)}, factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{Name: "factory"}}),
+				testAPIFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory-event/initial-structure/0", factoryapi.FactoryEventContext{Tick: 0, EventTime: time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)}, factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{Name: "factory"}}),
 			},
 			Events: liveEvents,
 		},
 	}
 
 	logger, _ := zap.NewDevelopment()
-	server := httptest.NewServer(NewServer(mf, 8080, logger).Handler())
+	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
 	defer server.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -194,7 +276,7 @@ func TestGetEvents_ClientDisconnectCancelsSubscription(t *testing.T) {
 		t.Fatalf("stream request: %v", err)
 	}
 
-	_ = readSSEFactoryEvent(t, bufio.NewReader(resp.Body))
+	_ = readAPISSEFactoryEvent(t, bufio.NewReader(resp.Body))
 	cancel()
 	_ = resp.Body.Close()
 
@@ -210,7 +292,7 @@ func TestGetEvents_ClientDisconnectCancelsSubscription(t *testing.T) {
 }
 
 func TestDashboardSnapshotRoutes_RemovedFromRouter(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(&testutil.MockFactory{})
 	for _, path := range []string{"/dashboard", "/dashboard/stream"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()

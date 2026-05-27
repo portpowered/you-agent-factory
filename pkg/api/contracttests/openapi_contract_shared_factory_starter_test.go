@@ -1,4 +1,4 @@
-package api
+package apicontract_test
 
 import (
 	"os"
@@ -13,7 +13,7 @@ func TestOpenAPIContract_DocumentsSharedFactoryStarterWorkCopySemantics(t *testi
 	bundledFileSchema := requireOpenAPI3ComponentSchema(t, doc, "BundledFile")
 	bundledFileTypeSchema := assertOpenAPI3PropertyDescription(t, bundledFileSchema, "BundledFile", "type")
 
-	data, err := os.ReadFile("../../api/openapi.yaml")
+	data, err := os.ReadFile("../../../api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("read openapi contract: %v", err)
 	}

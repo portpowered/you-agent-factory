@@ -1,4 +1,4 @@
-package api
+package apicontract_test
 
 import (
 	"context"
@@ -120,7 +120,7 @@ const openAPISchemaRefPrefix = "#/components/schemas/"
 func loadBundledOpenAPIDocument(t *testing.T) map[string]any {
 	t.Helper()
 
-	data, err := os.ReadFile("../../api/openapi.yaml")
+	data, err := os.ReadFile("../../../api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("read openapi contract: %v", err)
 	}
@@ -150,7 +150,7 @@ func loadValidatedOpenAPIContract(t *testing.T) *openapi3.T {
 	t.Helper()
 
 	loader := openapi3.NewLoader()
-	doc, err := loader.LoadFromFile("../../api/openapi.yaml")
+	doc, err := loader.LoadFromFile("../../../api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("load openapi contract: %v", err)
 	}
@@ -935,7 +935,7 @@ func assertJSONKeysPresent(t *testing.T, object map[string]any, name string, key
 
 func loadCanonicalFactoryEventVocabularyFixture(t *testing.T) []map[string]any {
 	t.Helper()
-	fixtureBytes, err := os.ReadFile("testdata/canonical-event-vocabulary-stream.json")
+	fixtureBytes, err := os.ReadFile("../testdata/canonical-event-vocabulary-stream.json")
 	if err != nil {
 		t.Fatalf("read canonical event vocabulary fixture: %v", err)
 	}

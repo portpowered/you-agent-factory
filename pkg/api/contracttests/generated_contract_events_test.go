@@ -1,4 +1,4 @@
-package api_test
+package apicontract_test
 
 import (
 	"encoding/json"
@@ -30,7 +30,7 @@ func TestGeneratedFactoryEventContractsCompile(t *testing.T) {
 }
 
 func TestGeneratedFactoryEventContractsRoundTripCanonicalFixture(t *testing.T) {
-	data, err := os.ReadFile(filepath.FromSlash("testdata/canonical-event-vocabulary-stream.json"))
+	data, err := os.ReadFile(filepath.FromSlash("../testdata/canonical-event-vocabulary-stream.json"))
 	if err != nil {
 		t.Fatalf("read canonical event fixture: %v", err)
 	}
@@ -56,9 +56,9 @@ func TestGeneratedFactoryEventContractsRoundTripCanonicalFixture(t *testing.T) {
 
 func TestGeneratedArtifactsAndCanonicalFixturesOmitRetiredEventNames(t *testing.T) {
 	paths := []string{
-		filepath.FromSlash("generated/server.gen.go"),
-		filepath.FromSlash("testdata/canonical-event-vocabulary-stream.json"),
-		filepath.FromSlash("../replay/testdata/inference-events.replay.json"),
+		filepath.FromSlash("../generated/server.gen.go"),
+		filepath.FromSlash("../testdata/canonical-event-vocabulary-stream.json"),
+		filepath.FromSlash("../../replay/testdata/inference-events.replay.json"),
 	}
 
 	for _, path := range paths {

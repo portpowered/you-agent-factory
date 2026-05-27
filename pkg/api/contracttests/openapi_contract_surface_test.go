@@ -1,4 +1,4 @@
-package api
+package apicontract_test
 
 import (
 	"context"
@@ -47,7 +47,7 @@ func TestOpenAPIContract_DefaultLocalServerURL(t *testing.T) {
 
 func TestOpenAPIContract_FactorySchemaGraphIncludesCustomerFacingDescriptions(t *testing.T) {
 	loader := openapi3.NewLoader()
-	doc, err := loader.LoadFromFile("../../api/openapi.yaml")
+	doc, err := loader.LoadFromFile("../../../api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("load openapi contract: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 	}
 
 	requiredOperations := map[string][]string{
-		"/factory-sessions/{session_id}/work":                        {"get", "post"},
+		"/factory-sessions/{session_id}/work":                       {"get", "post"},
 		"/factory-sessions/{session_id}/work/staged-files":          {"post"},
 		"/factory-sessions/{session_id}/work-requests/{request_id}": {"put"},
 		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
@@ -243,18 +243,18 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 func assertPublishedOperations(t *testing.T, paths map[string]any) {
 	t.Helper()
 	requiredOperations := map[string][]string{
-		"/work":                                 {"get", "post"},
-		"/work/staged-files":                    {"post"},
-		"/work-requests/{request_id}":           {"put"},
-		"/work/{id}":                            {"get"},
-		"/events":                               {"get"},
-		"/status":                               {"get"},
-		"/models":                               {"get"},
-		"/models/{model_name}":                  {"get"},
-		"/models/{model_name}/invocations":      {"post"},
-		"/models/{model_name}/pull":             {"post"},
-		"/provider-sessions/detail":             {"get"},
-		"/factories":                            {"post"},
+		"/work":                                  {"get", "post"},
+		"/work/staged-files":                     {"post"},
+		"/work-requests/{request_id}":            {"put"},
+		"/work/{id}":                             {"get"},
+		"/events":                                {"get"},
+		"/status":                                {"get"},
+		"/models":                                {"get"},
+		"/models/{model_name}":                   {"get"},
+		"/models/{model_name}/invocations":       {"post"},
+		"/models/{model_name}/pull":              {"post"},
+		"/provider-sessions/detail":              {"get"},
+		"/factories":                             {"post"},
 		"/factory-sessions/{session_id}/factory": {"get", "put"},
 	}
 	for path, methods := range requiredOperations {

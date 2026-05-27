@@ -1,4 +1,4 @@
-package api
+package apicontract_test
 
 import (
 	"context"
@@ -253,7 +253,7 @@ func loadOpenAPI3DocumentForSmoke(t *testing.T) *openapi3.T {
 	t.Helper()
 
 	loader := openapi3.NewLoader()
-	doc, err := loader.LoadFromFile("../../api/openapi.yaml")
+	doc, err := loader.LoadFromFile("../../../api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("load openapi contract: %v", err)
 	}
@@ -266,7 +266,7 @@ func loadOpenAPI3DocumentForSmoke(t *testing.T) *openapi3.T {
 func factoryConfigSmokeFixtureDir(t *testing.T, name string) string {
 	t.Helper()
 
-	return filepath.Clean(filepath.Join("..", "..", "tests", "functional_test", "testdata", name))
+	return filepath.Clean(filepath.Join("..", "..", "..", "tests", "functional_test", "testdata", name))
 }
 
 func writeFactoryConfigSmokeDir(t *testing.T, content string) string {
@@ -573,7 +573,7 @@ func assertFactoryConfigSmokeDescriptions(t *testing.T, factory *openapi3.Schema
 func assertFactoryConfigSmokeEnumRefs(t *testing.T) {
 	t.Helper()
 
-	data, err := os.ReadFile("../../api/openapi.yaml")
+	data, err := os.ReadFile("../../../api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("read openapi contract: %v", err)
 	}

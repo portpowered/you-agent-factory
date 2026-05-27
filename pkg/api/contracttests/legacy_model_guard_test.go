@@ -1,4 +1,4 @@
-package api
+package apicontract_test
 
 import (
 	"go/ast"
@@ -13,7 +13,7 @@ import (
 )
 
 func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
-	moduleRoot := filepath.Clean(filepath.Join("..", ".."))
+	moduleRoot := filepath.Clean(filepath.Join("..", "..", ".."))
 	generatedImportPaths := map[string]struct{}{
 		"github.com/portpowered/infinite-you/pkg/api/generated": {},
 		"pkg/api/generated": {},

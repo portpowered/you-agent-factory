@@ -1,4 +1,4 @@
-package api
+package apicontract_test
 
 import (
 	"encoding/json"
@@ -311,7 +311,7 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 
 func loadAuthoredOpenAPIDoc(t *testing.T) map[string]any {
 	t.Helper()
-	data, err := os.ReadFile("../../api/openapi-main.yaml")
+	data, err := os.ReadFile("../../../api/openapi-main.yaml")
 	if err != nil {
 		t.Fatalf("read authored openapi contract: %v", err)
 	}

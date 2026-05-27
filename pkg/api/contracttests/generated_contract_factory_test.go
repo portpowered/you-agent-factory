@@ -1,4 +1,4 @@
-package api_test
+package apicontract_test
 
 import (
 	"encoding/json"

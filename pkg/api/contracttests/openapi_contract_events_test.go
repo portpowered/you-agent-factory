@@ -1,4 +1,4 @@
-package api
+package apicontract_test
 
 import (
 	"os"
@@ -39,7 +39,7 @@ func TestOpenAPIContract_CanonicalFactoryEventVocabularyFixtureValidatesAndRetir
 }
 
 func TestOpenAPIContract_GeneratedModelsOmitLegacyConfig(t *testing.T) {
-	data, err := os.ReadFile("generated/server.gen.go")
+	data, err := os.ReadFile("../generated/server.gen.go")
 	if err != nil {
 		t.Fatalf("read generated server models: %v", err)
 	}

@@ -1,4 +1,4 @@
-package api
+package apicontract_test
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 )
 
 func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *testing.T) {
-	data, err := os.ReadFile("../../api/openapi.yaml")
+	data, err := os.ReadFile("../../../api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("read openapi contract: %v", err)
 	}
