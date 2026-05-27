@@ -7,7 +7,7 @@ import { workstationDetailMessagesByLocale } from "../features/current-selection
 import { exportDialogMessagesByLocale } from "../features/export/messages/export-dialog";
 import { headerControlsMessagesByLocale } from "../features/header/messages/header-controls";
 import { importPreviewDialogMessagesByLocale } from "../features/import/messages/import-preview-dialog";
-import { terminalWorkMessagesByLocale } from "../features/terminal-work/messages";
+import { terminalWorkMessagesByLocale } from "../features/terminal-work/messages/terminal-work";
 import { dashboardFlowAxisLegendMessagesByLocale } from "../features/workflow-activity/messages/dashboard-flow-axis-legend";
 import { workflowActivityGraphImportMessagesByLocale } from "../features/workflow-activity/messages/graph-import";
 import {

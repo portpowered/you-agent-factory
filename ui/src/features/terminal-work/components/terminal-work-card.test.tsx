@@ -5,7 +5,7 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { getTerminalWorkMessages } from "../messages";
+import { getTerminalWorkMessages } from "../messages/terminal-work";
 import { CompletedFailedWorkstationCard } from "./terminal-work-card";
 
 const failedAttempt: DashboardProviderSessionAttempt = {

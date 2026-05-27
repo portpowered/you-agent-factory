@@ -8,7 +8,7 @@ import {
   scriptDashboardIntegrationFixtureIDs,
   scriptDashboardIntegrationTimelineEvents,
 } from "./components/dashboard/fixtures";
-import { useFactoryTimelineStore } from "./features/timeline/state";
+import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import {
   registerAppDashboardTestLifecycle,
   renderApp,

@@ -21,7 +21,7 @@ import { SelectableCardButton } from "../../../components/ui/selectable-card-but
 import { cn } from "../../../lib/cn";
 import type { GraphSemanticIconKind } from "../../flowchart/public";
 import { GraphSemanticIcon } from "../../flowchart/public";
-import { getTerminalWorkMessages } from "../messages";
+import { getTerminalWorkMessages } from "../messages/terminal-work";
 import type { TerminalWorkItem, TerminalWorkStatus } from "../lib/types";
 export type { TerminalWorkItem, TerminalWorkStatus } from "../lib/types";
 

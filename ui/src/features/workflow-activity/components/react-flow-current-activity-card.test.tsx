@@ -50,10 +50,8 @@ import {
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../../flowchart/public";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
-import type {
-  FactoryPngImportValue,
-  ReadFactoryImportFile,
-} from "../../import/public";
+import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
+import type { ReadFactoryImportFile } from "../../import/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { buildVisibleGraphEdges } from "../lib/react-flow-current-activity-card-graph";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
