@@ -28,8 +28,10 @@ import {
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "../features/import/public";
-import type { WorldState } from "../features/timeline/state";
-import { useFactoryTimelineStore } from "../features/timeline/state";
+import {
+  type WorldState,
+  useFactoryTimelineStore,
+} from "../features/timeline/state/factoryTimelineStore";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
 
 vi.mock("../features/flowchart/lib/layout", async () => {

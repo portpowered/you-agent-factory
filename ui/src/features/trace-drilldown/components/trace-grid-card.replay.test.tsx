@@ -61,7 +61,7 @@ vi.mock("@xyflow/react", async () => ({
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { parseReplayFixtureEvents } from "../../../testing/replay-fixtures";
-import { buildFactoryTimelineSnapshot } from "../../timeline/state";
+import { buildFactoryTimelineSnapshot } from "../../timeline/state/factoryTimelineStore";
 import { TraceGridBentoCard } from "./trace-grid-card";
 
 const TRACE_WORKSTATION_PATH_REGRESSION_TRACE_ID =

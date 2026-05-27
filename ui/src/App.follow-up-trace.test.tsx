@@ -15,7 +15,7 @@ import {
   fanInResultWorkID,
   renderTraceDrilldownHarness,
 } from "./testing/app-shell-trace-follow-up-test-utils";
-import { useFactoryTimelineStore } from "./features/timeline/state";
+import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 
 const traceSnapshot: DashboardTrace = {
   trace_id: "trace-active-story",
