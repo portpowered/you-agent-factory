@@ -9,7 +9,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { LocalizedTimezoneNote } from "../../../components/ui/localized-timezone-note";
-import { formatDateTime } from "../../../i18n/formatters";
+import { getLocalDateTimeDisplay } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
 import { PROVIDER_SESSION_CARD_CLASS } from "../../current-selection/components/detail-card-shared";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
@@ -78,7 +78,10 @@ function LoadedProviderSessionDetailPanel({
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
           {messages.selectedSessionHeading}
         </h4>
-        <LocalizedTimezoneNote>
+        <LocalizedTimezoneNote
+          locale={locale}
+          timezoneLabel={messages.localizedTimezoneLabel}
+        >
           {messages.localizedTimezoneContext}
         </LocalizedTimezoneNote>
         <div className="grid gap-3">
@@ -542,23 +545,19 @@ function TimestampMetricValue({
   unavailableLabel: string;
 }) {
   const messages = getProviderSessionDetailMessages(locale);
-  const normalizedTimestamp = normalizeValidTimestamp(timestamp);
+  const timestampDisplay = getLocalDateTimeDisplay(
+    timestamp,
+    unavailableLabel,
+    locale,
+  );
 
-  if (!timestamp) {
-    return unavailableLabel;
+  if (!timestampDisplay.rawTimestamp) {
+    return timestampDisplay.label;
   }
-
-  if (!normalizedTimestamp) {
-    return messages.unavailableValue;
-  }
-
-  const formattedTimestamp = formatDateTime(normalizedTimestamp, locale, {
-    fallback: messages.unavailableValue,
-  });
 
   return (
     <span className="grid gap-1">
-      <span title={normalizedTimestamp}>{formattedTimestamp}</span>
+      <span title={timestampDisplay.rawTimestamp}>{timestampDisplay.label}</span>
       <details className="grid gap-1">
         <summary
           className={cn(
@@ -574,16 +573,9 @@ function TimestampMetricValue({
             DASHBOARD_BODY_CODE_CLASS,
           )}
         >
-          {normalizedTimestamp}
+          {timestampDisplay.rawTimestamp}
         </code>
       </details>
     </span>
   );
-}
-
-function normalizeValidTimestamp(timestamp?: string | null): string | null {
-  const normalizedTimestamp = timestamp?.trim();
-  return !normalizedTimestamp || Number.isNaN(Date.parse(normalizedTimestamp))
-    ? null
-    : normalizedTimestamp;
 }

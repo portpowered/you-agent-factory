@@ -51,6 +51,7 @@ const providerSessionDetailMessagesByLocale = {
     providerLabel: "Provider",
     localizedTimezoneContext:
       "Times on this card are shown in your local timezone. Expand Raw ISO timestamp when you need the machine value.",
+    localizedTimezoneLabel: "Timezone",
     rawTimestampDetailsLabel: "Raw ISO timestamp",
     noTimestamp: "No timestamp",
     orderLabel: ({ order, turnIndex }) =>
@@ -156,6 +157,7 @@ const providerSessionDetailMessagesByLocale = {
     providerLabel: "プロバイダー",
     localizedTimezoneContext:
       "このカードの時刻は、あなたのローカルタイムゾーンで表示されます。機械の値が必要な場合は ISO タイムスタンプを展開してください。",
+    localizedTimezoneLabel: "タイムゾーン",
     rawTimestampDetailsLabel: "ISO タイムスタンプ",
     noTimestamp: "タイムスタンプなし",
     orderLabel: ({ order, turnIndex }) =>
@@ -262,6 +264,7 @@ const providerSessionDetailMessagesByLocale = {
     providerLabel: "공급자",
     localizedTimezoneContext:
       "이 카드의 시간은 사용자의 로컬 시간대로 표시됩니다. 기계 값을 확인해야 하면 원시 ISO 타임스탬프를 펼치세요.",
+    localizedTimezoneLabel: "시간대",
     rawTimestampDetailsLabel: "원시 ISO 타임스탬프",
     noTimestamp: "타임스탬프 없음",
     orderLabel: ({ order, turnIndex }) =>
@@ -365,6 +368,7 @@ const providerSessionDetailMessagesByLocale = {
     providerLabel: "提供方",
     localizedTimezoneContext:
       "此卡片中的时间会按你的本地时区显示。需要机器时间值时，请展开原始 ISO 时间戳。",
+    localizedTimezoneLabel: "时区",
     rawTimestampDetailsLabel: "原始 ISO 时间戳",
     noTimestamp: "无时间戳",
     orderLabel: ({ order, turnIndex }) =>

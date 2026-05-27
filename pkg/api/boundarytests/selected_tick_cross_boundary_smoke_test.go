@@ -32,6 +32,7 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 	requestSlice := api.BuildFactoryWorldWorkstationRequestProjectionSlice(worldState)
 	assertSelectedTickWorkstationRequests(t, requestSlice)
 
+	now := t0.Add(12 * time.Second)
 	output := dashboard.FormatSimpleDashboardWithRenderData(
 		interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 			FactoryState:  "RUNNING",
@@ -40,8 +41,9 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 			Uptime:        11 * time.Second,
 		},
 		dashboardrender.SimpleDashboardRenderDataFromWorldState(worldState),
-		t0.Add(12*time.Second),
+		now,
 	)
+	assertSelectedTickTimeCorrelation(t, requestSlice, output, t0)
 	for _, want := range []string{
 		"Active Workstations (1)",
 		"Pending Runtime Story",
@@ -136,6 +138,50 @@ func assertSelectedTickWorkstationRequests(
 	}
 	if failed.Response == nil || failed.Response.FailureReason == nil || *failed.Response.FailureReason != "provider_rate_limit" {
 		t.Fatalf("failed response = %#v, want provider_rate_limit", failed.Response)
+	}
+}
+
+func assertSelectedTickTimeCorrelation(
+	t *testing.T,
+	slice generated.FactoryWorldWorkstationRequestProjectionSlice,
+	dashboardOutput string,
+	t0 time.Time,
+) {
+	t.Helper()
+
+	requests := *slice.WorkstationRequestsByDispatchId
+	completed := requests["dispatch-runtime-completed"]
+	if completed.Request.StartedAt == nil {
+		t.Fatal("completed request startedAt = nil, want API timestamp")
+	}
+	assertTimeEqual(t, "completed request startedAt", *completed.Request.StartedAt, t0.Add(5*time.Second))
+	if completed.Response == nil {
+		t.Fatal("completed response = nil, want API response")
+	}
+	if completed.Response.EndTime == nil {
+		t.Fatal("completed response endTime = nil, want API timestamp")
+	}
+	assertTimeEqual(t, "completed response endTime", *completed.Response.EndTime, t0.Add(8*time.Second))
+	if completed.Response.DurationMillis == nil || *completed.Response.DurationMillis != 875 {
+		t.Fatalf("completed response durationMillis = %v, want 875", completed.Response.DurationMillis)
+	}
+
+	for _, want := range []string{
+		"2026-04-22 12:00:05 UTC",
+		"2026-04-22 12:00:08 UTC",
+		"875ms",
+	} {
+		if !strings.Contains(dashboardOutput, want) {
+			t.Fatalf("dashboard output missing correlated time value %q:\n%s", want, dashboardOutput)
+		}
+	}
+}
+
+func assertTimeEqual(t *testing.T, label string, got, want time.Time) {
+	t.Helper()
+
+	if !got.Equal(want) {
+		t.Fatalf("%s = %s, want %s", label, got.Format(time.RFC3339Nano), want.Format(time.RFC3339Nano))
 	}
 }
 

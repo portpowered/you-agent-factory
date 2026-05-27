@@ -352,6 +352,26 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	}
 }
 
+func TestFactoryEventHistory_RecordWorkstationRequest_NormalizesEventTimeToUTC(t *testing.T) {
+	localZone := time.FixedZone("Factory/Local", 7*60*60)
+	eventTime := time.Date(2026, 4, 22, 23, 30, 0, 0, localZone)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	history.RecordWorkstationRequest(4, interfaces.FactoryDispatchRecord{
+		DispatchID: "dispatch-utc",
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID:   "dispatch-utc",
+			TransitionID: "build",
+		},
+	}, eventTime)
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	assertEventTimeUTCJSON(t, events[0], "2026-04-22T16:30:00Z")
+}
+
 func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailureDetails(t *testing.T) {
 	eventTime := time.Date(2026, 4, 17, 9, 30, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
@@ -417,6 +437,38 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 	assertJSONField(t, providerFailure, "type", "throttled")
 }
 
+func TestFactoryEventHistory_RecordWorkstationResponse_UsesUTCFallbackAndDurationMillisForMissingEndTime(t *testing.T) {
+	localZone := time.FixedZone("Factory/Local", -5*60*60)
+	fallbackTime := time.Date(2026, 4, 17, 9, 30, 0, 0, localZone)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return fallbackTime })
+	result := interfaces.WorkResult{
+		DispatchID:   "dispatch-fallback",
+		TransitionID: "build",
+		Outcome:      interfaces.OutcomeAccepted,
+	}
+	completed := interfaces.CompletedDispatch{
+		DispatchID:   result.DispatchID,
+		TransitionID: result.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+		Duration:     1500 * time.Millisecond,
+	}
+
+	history.RecordWorkstationResponse(9, result, completed)
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	assertEventTimeUTCJSON(t, events[0], "2026-04-17T14:30:00Z")
+	payload, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch completed payload: %v", err)
+	}
+	if payload.DurationMillis == nil || *payload.DurationMillis != 1500 {
+		t.Fatalf("durationMillis = %#v, want 1500", payload.DurationMillis)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode4294967295UsesRetryableProviderFailureMetadata(t *testing.T) {
 	eventTime := time.Date(2026, 4, 21, 1, 15, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
@@ -479,6 +531,20 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OmitsRetiredProviderAttem
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
 	assertThinDispatchResponseSerializedEvent(t, events[0])
+}
+
+func assertEventTimeUTCJSON(t *testing.T, event factoryapi.FactoryEvent, want string) {
+	t.Helper()
+	if event.Context.EventTime.Location() != time.UTC {
+		t.Fatalf("event time location = %v, want UTC", event.Context.EventTime.Location())
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal event: %v", err)
+	}
+	if !strings.Contains(string(data), `"eventTime":"`+want+`"`) {
+		t.Fatalf("event JSON = %s, want eventTime %q", data, want)
+	}
 }
 
 func safeDiagnosticsWorkResult() interfaces.WorkResult {

@@ -778,12 +778,12 @@ func tokenViewSlicePtr(values []factoryapi.FactoryWorldTokenView) *[]factoryapi.
 	return &values
 }
 
-func timePtr(value time.Time) *string {
+func timePtr(value time.Time) *time.Time {
 	if value.IsZero() {
 		return nil
 	}
-	formatted := value.UTC().Format(time.RFC3339Nano)
-	return &formatted
+	utc := value.UTC()
+	return &utc
 }
 
 func int64Ptr(value int64) *int64 {

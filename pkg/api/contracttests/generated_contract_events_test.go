@@ -54,6 +54,28 @@ func TestGeneratedFactoryEventContractsRoundTripCanonicalFixture(t *testing.T) {
 	}
 }
 
+func TestCanonicalFactoryEventFixtureUsesMachineTimeContract(t *testing.T) {
+	data, err := os.ReadFile(filepath.FromSlash("../testdata/canonical-event-vocabulary-stream.json"))
+	if err != nil {
+		t.Fatalf("read canonical event fixture: %v", err)
+	}
+
+	var events []map[string]any
+	decodeRoundTripJSON(t, data, &events, "canonical event fixture")
+	for i, event := range events {
+		context, ok := event["context"].(map[string]any)
+		if !ok {
+			t.Fatalf("event[%d].context = %#v, want object", i, event["context"])
+		}
+		eventTime, ok := context["eventTime"].(string)
+		if !ok || eventTime == "" {
+			t.Fatalf("event[%d].context.eventTime = %#v, want non-empty string", i, context["eventTime"])
+		}
+		assertRFC3339TimestampWithTimezone(t, "context.eventTime", eventTime)
+		assertMachineTimePayloadValues(t, event["payload"], "event.payload")
+	}
+}
+
 func TestGeneratedArtifactsAndCanonicalFixturesOmitRetiredEventNames(t *testing.T) {
 	paths := []string{
 		filepath.FromSlash("../generated/server.gen.go"),
@@ -658,6 +680,46 @@ func decodeFactoryEventJSON(t *testing.T, input string) factoryapi.FactoryEvent 
 	var event factoryapi.FactoryEvent
 	decodeRoundTripJSON(t, []byte(input), &event, "generated FactoryEvent")
 	return event
+}
+
+func assertRFC3339TimestampWithTimezone(t *testing.T, field string, value string) {
+	t.Helper()
+	if strings.HasPrefix(value, "0001-01-01") {
+		t.Fatalf("%s = %q, want omitted optional time instead of Go zero-time string", field, value)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, value); err != nil {
+		t.Fatalf("%s = %q, want RFC3339/RFC3339Nano timestamp: %v", field, value, err)
+	}
+	if !strings.HasSuffix(value, "Z") && !strings.Contains(value[10:], "+") && !strings.Contains(value[10:], "-") {
+		t.Fatalf("%s = %q, want explicit timezone offset", field, value)
+	}
+}
+
+func assertMachineTimePayloadValues(t *testing.T, value any, path string) {
+	t.Helper()
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			childPath := path + "." + key
+			switch key {
+			case "durationNanos":
+				t.Fatalf("%s must not be used; public elapsed durations use durationMillis", childPath)
+			case "durationMillis":
+				if _, ok := child.(float64); !ok {
+					t.Fatalf("%s = %#v, want JSON number", childPath, child)
+				}
+			case "recordedAt", "finishedAt", "startedAt", "eventTime":
+				if text, ok := child.(string); ok {
+					assertRFC3339TimestampWithTimezone(t, childPath, text)
+				}
+			}
+			assertMachineTimePayloadValues(t, child, childPath)
+		}
+	case []any:
+		for _, child := range typed {
+			assertMachineTimePayloadValues(t, child, path+"[]")
+		}
+	}
 }
 
 func assertEventPayloadJSONOmitsKeys(t *testing.T, event factoryapi.FactoryEvent, keys ...string) {

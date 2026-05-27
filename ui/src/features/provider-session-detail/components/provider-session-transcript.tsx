@@ -4,7 +4,7 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { formatDateTime } from "../../../i18n/formatters";
+import { getLocalDateTimeDisplay } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
 import {
   AuthoredBodyText,
@@ -160,38 +160,9 @@ function getTranscriptTimestampState(
   locale?: string,
 ) {
   const messages = getProviderSessionDetailMessages(locale);
-  const normalizedTimestamp = normalizeValidTimestamp(timestamp);
-  if (!timestamp?.trim()) {
-    return {
-      label: messages.noTimestamp,
-      rawTimestamp: null,
-    };
-  }
-
-  if (!normalizedTimestamp) {
-    return {
-      label: messages.unavailableValue,
-      rawTimestamp: null,
-    };
-  }
-
-  return {
-    label: formatDateTime(normalizedTimestamp, locale, {
-      fallback: messages.unavailableValue,
-    }),
-    rawTimestamp: normalizedTimestamp,
-  };
-}
-
-function normalizeValidTimestamp(timestamp: string | undefined): string | null {
-  const normalizedTimestamp = timestamp?.trim();
-  if (!normalizedTimestamp) {
-    return null;
-  }
-
-  return Number.isNaN(Date.parse(normalizedTimestamp))
-    ? null
-    : normalizedTimestamp;
+  return getLocalDateTimeDisplay(timestamp, messages.unavailableValue, locale, {
+    missingLabel: messages.noTimestamp,
+  });
 }
 
 function TranscriptEntryBody({

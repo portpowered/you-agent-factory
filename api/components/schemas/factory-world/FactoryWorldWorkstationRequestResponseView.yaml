@@ -17,6 +17,7 @@ properties:
     $ref: './FactoryWorldScriptResponseView.yaml'
   endTime:
     type: string
+    format: date-time
   durationMillis:
     type: integer
     format: int64

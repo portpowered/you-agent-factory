@@ -35,7 +35,8 @@ func buildTestTopology() *state.Net {
 }
 
 func TestFormatSimpleDashboardWithRenderData_RendersSessionMetricsAndActiveRows(t *testing.T) {
-	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
+	localOffset := time.FixedZone("UTC+07", 7*60*60)
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, localOffset)
 	topology := buildTestTopology()
 
 	output := FormatSimpleDashboardWithRenderData(
@@ -48,7 +49,7 @@ func TestFormatSimpleDashboardWithRenderData_RendersSessionMetricsAndActiveRows(
 		"Active Workstations (1)",
 		"story",
 		"review-station",
-		"11:59:15",
+		"2026-04-03 04:59:15 UTC",
 		"45s",
 		"dashboard cleanup",
 		"Queue Counts",
@@ -197,6 +198,55 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 	}
 	if strings.Contains(output, interfaces.SystemTimeExpiryTransitionID) {
 		t.Fatalf("output should not expose raw system-time transition id:\n%s", output)
+	}
+}
+
+func TestFormatSimpleDashboardWithRenderData_RendersUnavailableTimes(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+
+	output := FormatSimpleDashboardWithRenderData(
+		interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			Marking:       petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			FactoryState:  "RUNNING",
+			RuntimeStatus: interfaces.RuntimeStatusActive,
+			Topology:      buildTestTopology(),
+		},
+		dashboardrender.SimpleDashboardRenderData{
+			InFlightDispatchCount: 1,
+			ActiveExecutionsByDispatchID: map[string]dashboardrender.SimpleDashboardActiveExecution{
+				"dispatch-active": {
+					DispatchID:      "dispatch-active",
+					TransitionID:    "review",
+					WorkstationName: "Reviewer",
+					WorkTypeIDs:     []string{"story"},
+					WorkItems:       []interfaces.FactoryWorldWorkItemRef{{WorkID: "work-active", WorkTypeID: "story", DisplayName: "Active story"}},
+				},
+			},
+			Session: dashboardrender.SimpleDashboardSessionData{
+				HasData:         true,
+				DispatchedCount: 1,
+				CompletedCount:  1,
+				DispatchHistory: []interfaces.FactoryWorldDispatchCompletion{{
+					DispatchID:      "dispatch-complete",
+					TransitionID:    "write",
+					Workstation:     interfaces.FactoryWorkstationRef{Name: "Writer"},
+					OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Complete story"}},
+					Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+				}},
+			},
+		},
+		now,
+	)
+
+	for _, want := range []string{
+		"Active story",
+		"Complete story",
+		"n/a",
+		"0s",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
 	}
 }
 
@@ -559,10 +609,17 @@ func TestFormatDurationShort(t *testing.T) {
 }
 
 func TestFormatDashboardTime(t *testing.T) {
-	value := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
+	value := time.Date(2026, 4, 3, 19, 0, 0, 0, time.FixedZone("UTC+07", 7*60*60))
 	got := formatDashboardTime(value)
-	if got != "12:00:00" {
-		t.Fatalf("formatDashboardTime() = %q, want %q", got, "12:00:00")
+	if got != "2026-04-03 12:00:00 UTC" {
+		t.Fatalf("formatDashboardTime() = %q, want %q", got, "2026-04-03 12:00:00 UTC")
+	}
+}
+
+func TestFormatDashboardElapsedMissingStart(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	if got := formatDashboardElapsed(time.Time{}, now); got != "n/a" {
+		t.Fatalf("formatDashboardElapsed(zero, now) = %q, want n/a", got)
 	}
 }
 

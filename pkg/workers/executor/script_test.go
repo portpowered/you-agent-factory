@@ -333,9 +333,10 @@ func TestScriptExecutor_SharedCommandRunnerReceivesResolvedDispatchRequest(t *te
 }
 
 func TestScriptExecutor_EmitsScriptRequestEventBeforeCommandRunner(t *testing.T) {
+	localZone := time.FixedZone("Script/Local", -4*60*60)
 	order := make([]string, 0, 3)
 	recorded := make([]factoryapi.FactoryEvent, 0, 2)
-	result := executeRecordedScript(t, newRecordedScriptExecutor(
+	executor := newRecordedScriptExecutor(
 		commandRunnerFunc(func(_ context.Context, req CommandRequest) (CommandResult, error) {
 			order = append(order, "run")
 			if strings.Join(req.Args, " ") != "--work work-script --priority high" {
@@ -347,7 +348,17 @@ func TestScriptExecutor_EmitsScriptRequestEventBeforeCommandRunner(t *testing.T)
 			order = append(order, "record")
 			recorded = append(recorded, event)
 		},
-	))
+	)
+	eventTimes := []time.Time{
+		time.Date(2026, 4, 19, 8, 0, 0, 0, localZone),
+		time.Date(2026, 4, 19, 8, 0, 1, 250*int(time.Millisecond), localZone),
+	}
+	WithScriptClock(func() time.Time {
+		value := eventTimes[0]
+		eventTimes = eventTimes[1:]
+		return value
+	})(executor)
+	result := executeRecordedScript(t, executor)
 	if result.Outcome != interfaces.OutcomeAccepted {
 		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
 	}
@@ -360,6 +371,9 @@ func TestScriptExecutor_EmitsScriptRequestEventBeforeCommandRunner(t *testing.T)
 	assertScriptRequestEvent(t, recorded[0])
 	if recorded[1].Type != factoryapi.FactoryEventTypeScriptResponse {
 		t.Fatalf("second event type = %s, want %s", recorded[1].Type, factoryapi.FactoryEventTypeScriptResponse)
+	}
+	if got := recorded[0].Context.EventTime.Format(time.RFC3339); got != "2026-04-19T12:00:00Z" {
+		t.Fatalf("request eventTime = %q, want UTC timestamp", got)
 	}
 }
 

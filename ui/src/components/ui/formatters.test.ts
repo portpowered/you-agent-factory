@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { DashboardWorkItemRef } from "../../api/dashboard/types";
 import {
   formatDurationFromISO,
+  formatLocalTimezoneContext,
+  getLocalDateTimeDisplay,
   formatLocalDateTime,
   formatDurationMillis,
   formatDurationMillisVerbose,
@@ -24,6 +26,10 @@ describe("formatDurationMillis", () => {
 
   it("clamps negative durations to zero milliseconds", () => {
     expect(formatDurationMillis(-100)).toBe("0ms");
+  });
+
+  it("does not leak invalid numeric duration values into display labels", () => {
+    expect(formatDurationMillis(Number.NaN)).toBe("");
   });
 });
 
@@ -139,6 +145,43 @@ describe("formatLocalDateTime", () => {
     );
     expect(formatLocalDateTime(undefined, "Unavailable")).toBe("Unavailable");
     expect(formatLocalDateTime("   ", "Unavailable")).toBe("Unavailable");
+  });
+});
+
+describe("getLocalDateTimeDisplay", () => {
+  it("returns a shared display label and raw timestamp for valid local date-times", () => {
+    expect(
+      getLocalDateTimeDisplay(" 2026-04-10T18:16:00.000Z ", "Unavailable"),
+    ).toEqual({
+      label: formatLocalDateTime(
+        "2026-04-10T18:16:00.000Z",
+        "Unavailable",
+      ),
+      rawTimestamp: "2026-04-10T18:16:00.000Z",
+    });
+  });
+
+  it("uses explicit missing and invalid timestamp fallbacks without exposing raw invalid values", () => {
+    expect(
+      getLocalDateTimeDisplay(undefined, "Unavailable", "en", {
+        missingLabel: "No timestamp",
+      }),
+    ).toEqual({
+      label: "No timestamp",
+      rawTimestamp: null,
+    });
+    expect(getLocalDateTimeDisplay("not-a-date", "Unavailable")).toEqual({
+      label: "Unavailable",
+      rawTimestamp: null,
+    });
+  });
+});
+
+describe("formatLocalTimezoneContext", () => {
+  it("exposes the resolved local timezone as concise context", () => {
+    expect(formatLocalTimezoneContext("Timezone")).toBe(
+      `Timezone: ${new Intl.DateTimeFormat().resolvedOptions().timeZone}`,
+    );
   });
 });
 

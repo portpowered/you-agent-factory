@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,6 +75,29 @@ func TestRecordingProvider_Infer_SuccessEmitsRequestAndResponseEventsInOrder(t *
 	}
 	assertInferenceEventContext(t, events.items[0].Context)
 	assertInferenceEventContext(t, events.items[1].Context)
+}
+
+func TestRecordingProvider_Infer_NormalizesEventTimesToUTC(t *testing.T) {
+	localZone := time.FixedZone("Provider/Local", 3*60*60)
+	events := &recordingEvents{}
+	provider := NewRecordingProvider(
+		&recordingProviderFake{responses: []interfaces.InferenceResponse{{Content: "provider response"}}},
+		events.record,
+		WithRecordingProviderClock(sequenceClock(
+			time.Date(2026, 4, 18, 15, 0, 0, 0, localZone),
+			25*time.Millisecond,
+		)),
+	)
+
+	_, err := provider.Infer(context.Background(), recordingProviderDispatch())
+	if err != nil {
+		t.Fatalf("Infer returned error: %v", err)
+	}
+	if len(events.items) != 2 {
+		t.Fatalf("recorded events = %d, want 2", len(events.items))
+	}
+	assertProviderEventTimeJSON(t, events.items[0], "2026-04-18T12:00:00Z")
+	assertProviderEventTimeJSON(t, events.items[1], "2026-04-18T12:00:00.025Z")
 }
 
 func TestRecordingProvider_Infer_FailureEmitsFailedResponseWithProviderDetails(t *testing.T) {
@@ -537,6 +562,20 @@ func assertInferenceEventContext(t *testing.T, context factoryapi.FactoryEventCo
 	}
 	if context.WorkIds == nil || len(*context.WorkIds) != 2 || (*context.WorkIds)[0] != "work-1" || (*context.WorkIds)[1] != "work-2" {
 		t.Fatalf("context workIds = %#v, want work-1/work-2", context.WorkIds)
+	}
+}
+
+func assertProviderEventTimeJSON(t *testing.T, event factoryapi.FactoryEvent, want string) {
+	t.Helper()
+	if event.Context.EventTime.Location() != time.UTC {
+		t.Fatalf("event time location = %v, want UTC", event.Context.EventTime.Location())
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal event: %v", err)
+	}
+	if !strings.Contains(string(data), `"eventTime":"`+want+`"`) {
+		t.Fatalf("event JSON = %s, want eventTime %q", data, want)
 	}
 }
 

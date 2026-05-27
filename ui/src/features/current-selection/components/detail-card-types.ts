@@ -100,6 +100,7 @@ export interface InferenceAttemptCardProps {
 export interface InferenceAttemptDetailProps {
   code?: boolean;
   label: string;
+  rawValue?: string;
   value?: number | string;
 }
 

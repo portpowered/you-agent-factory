@@ -2309,6 +2309,7 @@ components:
           $ref: '#/components/schemas/FactoryWorldSelectedRunnerView'
         startedAt:
           type: string
+          format: date-time
         inputWorkItems:
           type: array
           items:
@@ -2353,6 +2354,7 @@ components:
           $ref: '#/components/schemas/FactoryWorldScriptResponseView'
         endTime:
           type: string
+          format: date-time
         durationMillis:
           type: integer
           format: int64
@@ -3137,9 +3139,10 @@ components:
       type: object
       additionalProperties: false
       properties:
-        durationNanos:
+        durationMillis:
           type: integer
           format: int64
+          minimum: 0
         cost:
           type: number
           format: double

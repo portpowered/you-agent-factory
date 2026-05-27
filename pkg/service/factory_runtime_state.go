@@ -253,7 +253,7 @@ func modelResponseEvent(
 func modelEventContext(request interfaces.RunnerExecutionRequest, eventTime time.Time) factoryapi.FactoryEventContext {
 	return factoryapi.FactoryEventContext{
 		Tick:       workersExecutionTick(request.Dispatch.Execution),
-		EventTime:  eventTime,
+		EventTime:  interfaces.CanonicalEventTime(eventTime),
 		DispatchId: modelEventStringPtr(request.Dispatch.DispatchID),
 		RequestId:  modelEventStringPtr(request.Dispatch.Execution.RequestID),
 		TraceIds:   modelEventStringSlicePtr(request.Dispatch.Execution.TraceID),
