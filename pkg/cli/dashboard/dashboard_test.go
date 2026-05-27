@@ -35,7 +35,8 @@ func buildTestTopology() *state.Net {
 }
 
 func TestFormatSimpleDashboardWithRenderData_RendersSessionMetricsAndActiveRows(t *testing.T) {
-	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
+	localOffset := time.FixedZone("UTC+07", 7*60*60)
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, localOffset)
 	topology := buildTestTopology()
 
 	output := FormatSimpleDashboardWithRenderData(
