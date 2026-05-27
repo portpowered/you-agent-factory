@@ -45,11 +45,22 @@ type FactoryWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
 >[number];
 type FactoryWorkstationIO = FactoryWorkstation["inputs"][number];
+type LegacyFactoryWorkstationIO = FactoryWorkstationIO & {
+  work_type?: string;
+};
 type FactoryWorkstationRoute =
-  | FactoryWorkstationIO
-  | FactoryWorkstationIO[]
+  | LegacyFactoryWorkstationIO
+  | LegacyFactoryWorkstationIO[]
   | null
   | undefined;
+type LegacyFactoryDefinition = CanonicalFactoryDefinition & {
+  work_types?: CanonicalFactoryDefinition["workTypes"];
+};
+type LegacyFactoryWorkstation = FactoryWorkstation & {
+  on_continue?: FactoryWorkstationRoute;
+  on_failure?: FactoryWorkstationRoute;
+  on_rejection?: FactoryWorkstationRoute;
+};
 type DashboardWorkstationKind = NonNullable<
   DashboardWorkstationNode["workstation_kind"]
 >;
@@ -91,7 +102,7 @@ function factoryEntityPlace(
 function stateCategoryByName(factory: CanonicalFactoryDefinition) {
   const categories = new Map<string, StateCategory>();
 
-  for (const workType of factory.workTypes ?? []) {
+  for (const workType of factoryWorkTypes(factory)) {
     for (const state of workType.states) {
       categories.set(workStatePlaceId(workType.name, state.name), state.type);
     }
@@ -101,18 +112,28 @@ function stateCategoryByName(factory: CanonicalFactoryDefinition) {
 }
 
 function workStatePlace(
-  io: FactoryWorkstationIO,
+  io: LegacyFactoryWorkstationIO,
   categories: ReadonlyMap<string, StateCategory>,
 ): DashboardPlaceRef {
-  const placeId = workStatePlaceId(io.workType, io.state);
+  const workType = workstationIOWorkType(io);
+  const placeId = workStatePlaceId(workType, io.state);
 
   return {
     kind: "work_state",
     place_id: placeId,
     state_category: categories.get(placeId),
     state_value: io.state,
-    type_id: io.workType,
+    type_id: workType,
   };
+}
+
+function factoryWorkTypes(factory: CanonicalFactoryDefinition) {
+  const legacyFactory = factory as LegacyFactoryDefinition;
+  return legacyFactory.workTypes ?? legacyFactory.work_types ?? [];
+}
+
+function workstationIOWorkType(io: LegacyFactoryWorkstationIO): string {
+  return io.workType ?? io.work_type ?? "";
 }
 
 function dashboardWorkstationKind(
@@ -133,18 +154,22 @@ function dashboardWorkstationKind(
 
 function dashboardWorkstationOutputRoutes(
   workstation: FactoryWorkstation,
-): FactoryWorkstationIO[] {
+): LegacyFactoryWorkstationIO[] {
+  const legacyWorkstation = workstation as LegacyFactoryWorkstation;
   return [
     ...workstationRouteIOs(workstation.outputs),
     ...workstationRouteIOs(workstation.onContinue),
+    ...workstationRouteIOs(legacyWorkstation.on_continue),
     ...workstationRouteIOs(workstation.onRejection),
+    ...workstationRouteIOs(legacyWorkstation.on_rejection),
     ...workstationRouteIOs(workstation.onFailure),
+    ...workstationRouteIOs(legacyWorkstation.on_failure),
   ];
 }
 
 function workstationRouteIOs(
   routes: FactoryWorkstationRoute,
-): FactoryWorkstationIO[] {
+): LegacyFactoryWorkstationIO[] {
   if (!routes) {
     return [];
   }
@@ -416,23 +441,23 @@ export function dashboardWorkstationFromFactory(
 
   return {
     input_place_ids: (workstation.inputs ?? []).map((input) =>
-      workStatePlaceId(input.workType, input.state),
+      workStatePlaceId(workstationIOWorkType(input), input.state),
     ),
     input_places: (workstation.inputs ?? []).map((input) => ({
       kind: "work_state",
-      place_id: workStatePlaceId(input.workType, input.state),
+      place_id: workStatePlaceId(workstationIOWorkType(input), input.state),
       state_value: input.state,
-      type_id: input.workType,
+      type_id: workstationIOWorkType(input),
     })),
     node_id: workstation.id || workstation.name,
     output_place_ids: outputRoutes.map((output) =>
-      workStatePlaceId(output.workType, output.state),
+      workStatePlaceId(workstationIOWorkType(output), output.state),
     ),
     output_places: outputRoutes.map((output) => ({
       kind: "work_state",
-      place_id: workStatePlaceId(output.workType, output.state),
+      place_id: workStatePlaceId(workstationIOWorkType(output), output.state),
       state_value: output.state,
-      type_id: output.workType,
+      type_id: workstationIOWorkType(output),
     })),
     transition_id: workstation.id || workstation.name,
     workstation_kind: dashboardWorkstationKind(workstation.behavior),
@@ -497,7 +522,7 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
     }
   }
 
-  for (const workType of factory.workTypes ?? []) {
+  for (const workType of factoryWorkTypes(factory)) {
     addAuxiliaryNode(
       nodes,
       factoryEntityPlace("constraint", "work-type", workType.name),
@@ -514,6 +539,7 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
   }
 
   for (const workstation of factory.workstations ?? []) {
+    const legacyWorkstation = workstation as LegacyFactoryWorkstation;
     addWorkstationNode(nodes, workstation);
     appendWorkerEdge(workstation, nodes, edges);
     appendResourceEdges(workstation, nodes, edges);
@@ -529,7 +555,7 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
     appendRouteEdges(
       workstation,
       "workstation-on-continue",
-      workstation.onContinue,
+      workstation.onContinue ?? legacyWorkstation.on_continue,
       categories,
       nodes,
       edges,
@@ -537,7 +563,7 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
     appendRouteEdges(
       workstation,
       "workstation-on-rejection",
-      workstation.onRejection,
+      workstation.onRejection ?? legacyWorkstation.on_rejection,
       categories,
       nodes,
       edges,
@@ -545,7 +571,7 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
     appendRouteEdges(
       workstation,
       "workstation-on-failure",
-      workstation.onFailure,
+      workstation.onFailure ?? legacyWorkstation.on_failure,
       categories,
       nodes,
       edges,

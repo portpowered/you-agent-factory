@@ -250,6 +250,23 @@ afterEach(() => {
 });
 
 describe("ReactFlowCurrentActivityCard edit integration", () => {
+  it("renders observe-mode graph edges with semantic React Flow handles", async () => {
+    renderCurrentActivity();
+
+    const edge = await screen.findByRole("button", {
+      name: "workstation-output:workstation:review->place:story:done",
+    });
+
+    expect(edge.getAttribute("data-source-handle")).toBe(
+      "workstation-output-source",
+    );
+    expect(edge.getAttribute("data-target-handle")).toBe(
+      "workstation-output-target",
+    );
+    expect(edge.getAttribute("data-source-handle")).not.toMatch(/^out-/);
+    expect(edge.getAttribute("data-target-handle")).not.toMatch(/^in-/);
+  });
+
   it("renders newly added graph nodes after add-node interactions", async () => {
     renderCurrentActivity();
     enterEditorMode();
