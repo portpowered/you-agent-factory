@@ -1,8 +1,11 @@
 import { expect, test, vi } from "vitest";
 
 import {
+  buildUiCoveragePhases,
+  defaultMainCoveredMaxWorkers,
   formatElapsedMs,
   formatPhaseElapsed,
+  getMainCoveredMaxWorkers,
   phaseLogPrefix,
   runTimedPhase,
   uiCoveragePhases,
@@ -22,6 +25,27 @@ test("keeps coverage phase names stable and explicit", () => {
     "Blob report merge pass",
     "Standalone script-style test",
   ]);
+});
+
+test("uses safe parallelism for the main covered pass only", () => {
+  const [mainCoveredPass, isolatedReactFlowPass] = buildUiCoveragePhases({
+    mainCoveredMaxWorkers: defaultMainCoveredMaxWorkers,
+  });
+
+  expect(mainCoveredPass.args).toContain(
+    `--maxWorkers=${defaultMainCoveredMaxWorkers}`,
+  );
+  expect(mainCoveredPass.args).not.toContain("--maxWorkers=1");
+  expect(isolatedReactFlowPass.args).toContain("--maxWorkers=1");
+});
+
+test("allows repo-owned coverage command to tune main covered pass workers", () => {
+  expect(
+    getMainCoveredMaxWorkers({ UI_COVERAGE_MAIN_MAX_WORKERS: "50%" }),
+  ).toBe("50%");
+  expect(buildUiCoveragePhases({ env: {} })[0].args).toContain(
+    `--maxWorkers=${defaultMainCoveredMaxWorkers}`,
+  );
 });
 
 test("emits elapsed output before returning a failing phase status", () => {
