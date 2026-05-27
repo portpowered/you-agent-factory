@@ -145,6 +145,44 @@ func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	}
 }
 
+func TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"ui-test-coverage":         "@printf '%s\\n' 'stub:ui-test-coverage'\n",
+		"ui-replay-coverage-check": "@printf '%s\\n' 'stub:ui-replay-coverage-check'\n",
+	})
+
+	output, err := runMakefileTarget(repoRoot, makefilePath, "test-ui-coverage")
+	if err != nil {
+		t.Fatalf("run test-ui-coverage wrapper: %v\n%s", err, output)
+	}
+
+	assertOutputOrder(t, output,
+		"stub:ui-test-coverage",
+		"stub:ui-replay-coverage-check",
+	)
+}
+
+func TestUIPackageCoverageCommandSmoke_InvokesPackageOwnedCoverageScript(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	scriptPath := writeMakeEchoScript(t, "ui-script")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, nil)
+
+	output, err := runMakefileTargetWithArgs(
+		repoRoot,
+		makefilePath,
+		"ui-test-coverage",
+		fmt.Sprintf("UI_SCRIPT=%s", scriptPath),
+	)
+	if err != nil {
+		t.Fatalf("run ui-test-coverage wrapper: %v\n%s", err, output)
+	}
+
+	if !strings.Contains(output, "ui-script:test:coverage") {
+		t.Fatalf("ui-test-coverage did not invoke package-owned test:coverage script:\n%s", output)
+	}
+}
+
 func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -263,17 +301,23 @@ func writeVerifyFastWrapperMakefile(t *testing.T, repoRoot string, overrides map
 }
 
 func runMakefileTarget(repoRoot, makefilePath, target string) (string, error) {
+	return runMakefileTargetWithArgs(repoRoot, makefilePath, target)
+}
+
+func runMakefileTargetWithArgs(repoRoot, makefilePath, target string, args ...string) (string, error) {
 	makePath, err := exec.LookPath("make")
 	if err != nil {
 		return "", err
 	}
 
-	cmd := exec.Command(
-		makePath,
+	makeArgs := []string{
 		"-f", makefilePath,
 		fmt.Sprintf("MAKE=%s -f %s", makePath, makefilePath),
-		target,
-	)
+	}
+	makeArgs = append(makeArgs, args...)
+	makeArgs = append(makeArgs, target)
+
+	cmd := exec.Command(makePath, makeArgs...)
 	cmd.Dir = repoRoot
 
 	var output bytes.Buffer
@@ -282,6 +326,17 @@ func runMakefileTarget(repoRoot, makefilePath, target string) (string, error) {
 
 	err = cmd.Run()
 	return output.String(), err
+}
+
+func writeMakeEchoScript(t *testing.T, label string) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), label)
+	body := fmt.Sprintf("#!/bin/sh\nprintf '%%s:' %q\nprintf '%%s\\n' \"$*\"\n", label)
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatalf("write echo script: %v", err)
+	}
+	return path
 }
 
 func assertOutputOrder(t *testing.T, output string, markers ...string) {
