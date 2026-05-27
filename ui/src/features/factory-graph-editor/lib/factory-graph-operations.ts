@@ -8,8 +8,6 @@ import type {
   FactoryGraphDraft,
   FactoryGraphDraftEdgeChange,
   FactoryGraphDraftValidationError,
-  FactoryGraphEdge,
-  FactoryGraphNode,
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
 import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
@@ -30,6 +28,15 @@ import {
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
 } from "./factory-graph-editor-removals";
+
+export {
+  type FactoryGraphReactFlowEdge,
+  type FactoryGraphReactFlowEditorOverlay,
+  type FactoryGraphReactFlowNode,
+  type FactoryGraphReactFlowProjection,
+  type FactoryGraphReactFlowRuntimeOverlay,
+  projectFactoryGraphToReactFlow,
+} from "./factory-graph-react-flow-projection";
 
 export type FactoryGraphOperationReason =
   | "BLOCKED_REMOVAL"
@@ -60,34 +67,6 @@ export interface FactoryGraphState {
   pendingFactoryDefinition: CanonicalFactoryDefinition | null;
   saveInput: CanonicalFactoryDefinition | null;
   validationErrors: FactoryGraphDraftValidationError[];
-}
-
-export interface FactoryGraphReactFlowNode {
-  data: {
-    kind: FactoryGraphNode["kind"];
-    label: string;
-  };
-  id: string;
-  position: {
-    x: number;
-    y: number;
-  };
-  type: FactoryGraphNode["kind"];
-}
-
-export interface FactoryGraphReactFlowEdge {
-  data: {
-    kind: FactoryGraphEdge["kind"];
-  };
-  id: string;
-  source: string;
-  target: string;
-  type: FactoryGraphEdge["kind"];
-}
-
-export interface FactoryGraphReactFlowProjection {
-  edges: FactoryGraphReactFlowEdge[];
-  nodes: FactoryGraphReactFlowNode[];
 }
 
 export function buildFactoryGraphState(options: {
@@ -333,32 +312,4 @@ export function buildFactoryGraphSaveInput(options: {
   draft: FactoryGraphDraft;
 }): FactoryGraphOperationResult<CanonicalFactoryDefinition> {
   return applyFactoryGraphPendingEdits(options);
-}
-
-export function projectFactoryGraphToReactFlow(
-  graph: FactoryGraphTopology,
-): FactoryGraphReactFlowProjection {
-  return {
-    edges: graph.edges.map((edge) => ({
-      data: {
-        kind: edge.kind,
-      },
-      id: edge.id,
-      source: edge.sourceId,
-      target: edge.targetId,
-      type: edge.kind,
-    })),
-    nodes: graph.nodes.map((node, index) => ({
-      data: {
-        kind: node.kind,
-        label: node.label,
-      },
-      id: node.id,
-      position: {
-        x: (index % 4) * 240,
-        y: Math.floor(index / 4) * 160,
-      },
-      type: node.kind,
-    })),
-  };
 }

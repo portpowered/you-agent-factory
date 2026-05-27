@@ -246,7 +246,9 @@ describe("factory graph operations", () => {
     );
 
     const projection = projectFactoryGraphToReactFlow(state.graph);
-    expect(projection.nodes[0]).toEqual(
+    expect(
+      projection.nodes.find((node) => node.id === "work-state:story:done"),
+    ).toEqual(
       expect.objectContaining({
         id: "work-state:story:done",
         position: expect.objectContaining({

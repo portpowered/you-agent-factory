@@ -12,3 +12,4 @@ export * from "../lib/factory-graph-editor-runtime";
 export * from "../lib/factory-graph-editor-save-summary";
 export * from "../lib/factory-graph-field-operations";
 export * from "../lib/factory-graph-operations";
+export * from "../lib/factory-graph-react-flow-projection";
