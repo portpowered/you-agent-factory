@@ -23,6 +23,7 @@ import { GraphSemanticIcon } from "./graph-semantic-icon";
 export interface BasePlaceNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   activeItemLabels: string[];
+  factoryGraphNodeId?: string;
   handles?: ActivityGraphNodeHandle[];
   incomingHandleCount: number;
   kind?: FactoryGraphNodeKind;

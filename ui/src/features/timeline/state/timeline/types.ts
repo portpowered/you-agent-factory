@@ -1,9 +1,9 @@
 import type {
-  DashboardSnapshot,
-  DashboardRuntime,
   DashboardFailedWorkDetail,
   DashboardInferenceAttempt,
   DashboardProviderSessionAttempt,
+  DashboardRuntime,
+  DashboardSnapshot,
   DashboardTrace,
   DashboardTraceMutation,
   DashboardTraceToken,
@@ -12,11 +12,12 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
 import type {
+  FactoryDefinition,
   FactoryPlace,
-  FactoryRelation,
-  FactoryWorkItem,
   FactoryProviderSession,
+  FactoryRelation,
   FactoryTerminalWork,
+  FactoryWorkItem,
 } from "../../../../api/events";
 
 export interface ResourceUnit {
@@ -145,7 +146,10 @@ export interface TimelineWorldViewBase {
   occupancyByID: Record<string, PlaceOccupancy>;
   providerSessions: DashboardProviderSessionAttempt[];
   relationsByWorkID: Record<string, FactoryRelation[]>;
-  scriptRequestsByDispatchID: Record<string, Record<string, WorldScriptRequest>>;
+  scriptRequestsByDispatchID: Record<
+    string,
+    Record<string, WorldScriptRequest>
+  >;
   scriptResponsesByDispatchID: Record<
     string,
     Record<string, WorldScriptResponse>
@@ -159,6 +163,7 @@ export interface TimelineWorldViewBase {
 }
 
 export interface ReplayWorldState extends TimelineWorldViewBase {
+  factory?: FactoryDefinition;
   factory_state: string;
   runtime: DashboardRuntime;
   tick_count: number;

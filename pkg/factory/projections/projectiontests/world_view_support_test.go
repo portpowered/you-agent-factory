@@ -115,12 +115,34 @@ func TestBuildFactoryWorldView_HidesSystemTimeWorkFromNormalDashboardProjection(
 	if got := view.Runtime.CurrentWorkItemsByPlaceID["task:init"]; len(got) != 1 || got[0].WorkID != "work-1" {
 		t.Fatalf("customer task:init current work = %#v, want work-1", got)
 	}
-	encodedView, err := json.Marshal(view)
+	assertCanonicalFactoryKeepsSystemTimeWhileDashboardSurfacesHideIt(t, view)
+}
+
+func assertCanonicalFactoryKeepsSystemTimeWhileDashboardSurfacesHideIt(
+	t *testing.T,
+	view interfaces.FactoryWorldView,
+) {
+	t.Helper()
+
+	encodedFactory, err := json.Marshal(view.Factory)
 	if err != nil {
-		t.Fatalf("marshal dashboard view: %v", err)
+		t.Fatalf("marshal canonical factory graph: %v", err)
 	}
-	if strings.Contains(string(encodedView), interfaces.SystemTimeWorkTypeID) {
-		t.Fatalf("dashboard view leaked raw system time identifier: %s", string(encodedView))
+	if !strings.Contains(string(encodedFactory), interfaces.SystemTimeWorkTypeID) {
+		t.Fatalf("canonical factory graph omitted raw system time identifier: %s", string(encodedFactory))
+	}
+	encodedDashboardSurfaces, err := json.Marshal(struct {
+		Topology interfaces.FactoryWorldTopologyView `json:"topology"`
+		Runtime  interfaces.FactoryWorldRuntimeView  `json:"runtime"`
+	}{
+		Topology: view.Topology,
+		Runtime:  view.Runtime,
+	})
+	if err != nil {
+		t.Fatalf("marshal dashboard topology/runtime: %v", err)
+	}
+	if strings.Contains(string(encodedDashboardSurfaces), interfaces.SystemTimeWorkTypeID) {
+		t.Fatalf("dashboard topology/runtime leaked raw system time identifier: %s", string(encodedDashboardSurfaces))
 	}
 }
 

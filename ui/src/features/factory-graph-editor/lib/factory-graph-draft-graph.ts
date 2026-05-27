@@ -1,6 +1,5 @@
 import type {
   CanonicalFactoryDefinition,
-  DashboardTopology,
   FactoryGraphEdge,
   FactoryGraphNode,
   FactoryGraphNodeReference,
@@ -12,6 +11,11 @@ import { buildEdge, buildNode, nodeKeyId } from "./factory-graph-draft-types";
 
 type NodeMap = Map<string, FactoryGraphNode>;
 type EdgeMap = Map<string, FactoryGraphEdge>;
+type WorkstationRouteInput =
+  | FactoryWorkstationIO
+  | FactoryWorkstationIO[]
+  | null
+  | undefined;
 
 export function buildFactoryGraphTopologyFromDefinition(
   factoryDefinition: CanonicalFactoryDefinition,
@@ -23,54 +27,6 @@ export function buildFactoryGraphTopologyFromDefinition(
   appendWorkerNodes(factoryDefinition, nodes, edges);
   appendWorkTypeNodes(factoryDefinition, nodes, edges);
   appendWorkstationNodes(factoryDefinition, nodes, edges);
-
-  return {
-    edges: Array.from(edges.values()).sort((left, right) =>
-      left.id.localeCompare(right.id),
-    ),
-    nodes: Array.from(nodes.values()).sort((left, right) =>
-      left.id.localeCompare(right.id),
-    ),
-  };
-}
-
-export function buildFactoryGraphTopologyFromDashboardTopology(
-  topology: DashboardTopology | undefined,
-): FactoryGraphTopology {
-  if (!topology) {
-    return { edges: [], nodes: [] };
-  }
-
-  const nodes = new Map<string, FactoryGraphNode>();
-  const edges = new Map<string, FactoryGraphEdge>();
-
-  for (const workstationId of topology.workstation_node_ids) {
-    const workstation = topology.workstation_nodes_by_id[workstationId];
-    if (!workstation) {
-      continue;
-    }
-
-    const workstationKey: FactoryGraphNodeReference = {
-      kind: "workstation",
-      name: workstation.workstation_name,
-    };
-    nodes.set(nodeKeyId(workstationKey), buildNode(workstationKey));
-
-    appendProjectedStateEdges(
-      workstation.input_places,
-      "workstation-input",
-      workstationKey,
-      nodes,
-      edges,
-    );
-    appendProjectedStateEdges(
-      workstation.output_places,
-      "workstation-output",
-      workstationKey,
-      nodes,
-      edges,
-    );
-  }
 
   return {
     edges: Array.from(edges.values()).sort((left, right) =>
@@ -158,11 +114,41 @@ function appendWorkstationNodes(
 
     appendWorkstationWorkerEdge(workstation, workstationKey, nodes, edges);
     appendWorkstationResourceEdges(workstation, workstationKey, nodes, edges);
-    appendWorkstationStateEdges(workstation.inputs, "workstation-input", workstationKey, nodes, edges);
-    appendWorkstationStateEdges(workstation.outputs, "workstation-output", workstationKey, nodes, edges);
-    appendWorkstationStateEdges(workstation.onContinue, "workstation-on-continue", workstationKey, nodes, edges);
-    appendWorkstationStateEdges(workstation.onFailure, "workstation-on-failure", workstationKey, nodes, edges);
-    appendWorkstationStateEdges(workstation.onRejection, "workstation-on-rejection", workstationKey, nodes, edges);
+    appendWorkstationStateEdges(
+      workstation.inputs,
+      "workstation-input",
+      workstationKey,
+      nodes,
+      edges,
+    );
+    appendWorkstationStateEdges(
+      workstation.outputs,
+      "workstation-output",
+      workstationKey,
+      nodes,
+      edges,
+    );
+    appendWorkstationStateEdges(
+      workstation.onContinue,
+      "workstation-on-continue",
+      workstationKey,
+      nodes,
+      edges,
+    );
+    appendWorkstationStateEdges(
+      workstation.onFailure,
+      "workstation-on-failure",
+      workstationKey,
+      nodes,
+      edges,
+    );
+    appendWorkstationStateEdges(
+      workstation.onRejection,
+      "workstation-on-rejection",
+      workstationKey,
+      nodes,
+      edges,
+    );
   }
 }
 
@@ -203,7 +189,7 @@ function appendWorkstationResourceEdges(
 }
 
 function appendWorkstationStateEdges(
-  items: FactoryWorkstationIO[] | undefined,
+  items: WorkstationRouteInput,
   kind:
     | "workstation-input"
     | "workstation-on-continue"
@@ -214,37 +200,19 @@ function appendWorkstationStateEdges(
   nodes: NodeMap,
   edges: EdgeMap,
 ) {
-  for (const item of items ?? []) {
+  for (const item of workstationRouteIOs(items)) {
     const edge = buildWorkstationIOEdge(kind, item, workstationKey, nodes);
     edges.set(edge.id, edge);
   }
 }
 
-function appendProjectedStateEdges(
-  places:
-    | DashboardTopology["workstation_nodes_by_id"][string]["input_places"]
-    | DashboardTopology["workstation_nodes_by_id"][string]["output_places"],
-  kind: "workstation-input" | "workstation-output",
-  workstationKey: FactoryGraphNodeReference,
-  nodes: NodeMap,
-  edges: EdgeMap,
-) {
-  for (const place of places ?? []) {
-    if (!place.type_id || !place.state_value) {
-      continue;
-    }
-    const workStateKey: FactoryGraphWorkStateReference = {
-      kind: "work-state",
-      stateName: place.state_value,
-      workTypeName: place.type_id,
-    };
-    nodes.set(nodeKeyId(workStateKey), buildNode(workStateKey));
-    const edge =
-      kind === "workstation-input"
-        ? buildEdge(kind, workStateKey, workstationKey)
-        : buildEdge(kind, workstationKey, workStateKey);
-    edges.set(edge.id, edge);
+function workstationRouteIOs(
+  items: WorkstationRouteInput,
+): FactoryWorkstationIO[] {
+  if (!items) {
+    return [];
   }
+  return Array.isArray(items) ? items : [items];
 }
 
 function buildWorkstationIOEdge(

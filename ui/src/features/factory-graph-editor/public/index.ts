@@ -1,4 +1,6 @@
 export * from "../hooks/factory-graph-draft-hook";
+export * from "../hooks/use-editable-factory-graph";
+export * from "../hooks/use-editable-factory-graph-types";
 export * from "../lib/factory-graph-draft-apply";
 export * from "../lib/factory-graph-draft-graph";
 export * from "../lib/factory-graph-draft-types";
@@ -8,3 +10,6 @@ export * from "../lib/factory-graph-editor-connections";
 export * from "../lib/factory-graph-editor-removals";
 export * from "../lib/factory-graph-editor-runtime";
 export * from "../lib/factory-graph-editor-save-summary";
+export * from "../lib/factory-graph-field-operations";
+export * from "../lib/factory-graph-operations";
+export * from "../lib/factory-graph-react-flow-projection";

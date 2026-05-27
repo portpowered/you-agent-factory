@@ -3,9 +3,11 @@ import {
   type LocalizedMessageCatalog,
   resolveLocalizedMessages,
 } from "../../../i18n";
+import type {
+  FactoryGraphNodeKind,
+  FactoryWorkState,
+} from "../lib/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
-import type { FactoryGraphNodeKind } from "../lib/factory-graph-draft-types";
-import type { FactoryWorkState } from "../lib/factory-graph-draft-types";
 import type { FactoryGraphWorkerRuntimeStatus } from "../lib/factory-graph-editor-runtime";
 
 export interface FactoryGraphEditorMessages {
@@ -41,6 +43,7 @@ export interface FactoryGraphEditorMessages {
     targetAnchor: string,
     targetNode: string,
   ) => string;
+  connectionSelectSourceNotice: string;
   draftActionsAriaLabel: string;
   draftActionsDiscard: string;
   draftActionsSave: string;
@@ -88,6 +91,10 @@ export interface FactoryGraphEditorMessages {
   noticeStaleTitle: string;
   noticeTopologyBlockedDescription: string;
   noticeTopologyBlockedTitle: string;
+  operationConnectionInvalid: string;
+  operationEdgeNotFound: (edgeId: string) => string;
+  operationGraphEditsInvalid: string;
+  operationNodeNotFound: (nodeId: string) => string;
   saveConfirmAction: string;
   saveBlockedActiveWork: string;
   saveBlockedStaleDraft: string;
@@ -439,6 +446,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         targetNode,
       ) =>
         `${sourceAnchor} connections from ${sourceNode} cannot connect to ${targetAnchor} on ${targetNode}.`,
+      connectionSelectSourceNotice:
+        "Select a source anchor before choosing a target anchor.",
       draftActionsAriaLabel: "Pending graph changes",
       draftActionsDiscard: "Discard changes",
       draftActionsSave: "Save changes",
@@ -483,6 +492,13 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       noticeTopologyBlockedDescription:
         "Save is unavailable while active work is still running in the current factory.",
       noticeTopologyBlockedTitle: "Topology edits are blocked",
+      operationConnectionInvalid: "Graph connection is invalid.",
+      operationEdgeNotFound: (edgeId) =>
+        `Graph edge "${edgeId}" was not found.`,
+      operationGraphEditsInvalid:
+        "Graph edits must be valid before they can be applied.",
+      operationNodeNotFound: (nodeId) =>
+        `Graph node "${nodeId}" was not found.`,
       saveConfirmAction: "Save topology",
       saveBlockedActiveWork:
         "Topology save is unavailable while active work is still running in this factory.",
@@ -753,6 +769,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         targetNode,
       ) =>
         `${sourceNode} 的${sourceAnchor}连接不能连接到 ${targetNode} 上的${targetAnchor}。`,
+      connectionSelectSourceNotice: "请先选择源锚点，再选择目标锚点。",
       draftActionsAriaLabel: "待处理图更改",
       draftActionsDiscard: "放弃更改",
       draftActionsSave: "保存更改",
@@ -829,6 +846,10 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       noticeTopologyBlockedDescription:
         "当前工厂仍有活动工作在运行，因此无法保存。",
       noticeTopologyBlockedTitle: "拓扑编辑被阻止",
+      operationConnectionInvalid: "图连接无效。",
+      operationEdgeNotFound: (edgeId) => `未找到图边“${edgeId}”。`,
+      operationGraphEditsInvalid: "图编辑必须有效后才能应用。",
+      operationNodeNotFound: (nodeId) => `未找到图节点“${nodeId}”。`,
       saveConfirmAction: "保存拓扑",
       saveBlockedActiveWork: "此工厂仍有活动工作在运行，因此无法保存拓扑。",
       saveBlockedStaleDraft:

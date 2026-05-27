@@ -2,12 +2,13 @@
 import { act, renderHook } from "@testing-library/react";
 
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
-import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
 import type {
   FactoryGraphDraft,
   FactoryGraphTopology,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/public";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 
@@ -106,84 +107,76 @@ describe("current activity graph editor controllers", () => {
       targetNodeId: "work-state:story:done",
       targetStateName: "done",
     },
-  ])(
-    "commits %s keyboard anchor connections and clears the pending source",
-    ({
-      edgeKind,
-      sourceAnchorId,
-      targetAnchorId,
-      targetNodeId,
-      targetStateName,
-    }) => {
-      const graph = createDraftState().graph;
-      const updateDraft = vi.fn(
-        (updater: (draft: FactoryGraphDraft) => FactoryGraphDraft) =>
-          updater(createEmptyFactoryGraphDraft()),
-      );
-      const draftState = createDraftState({
-        graph: {
-          ...graph,
-          edges: graph.edges.filter((edge) => edge.kind !== edgeKind),
-        },
-        updateDraft,
-      });
-
-      const { result } = renderHook(() =>
-        useFactoryGraphConnectionController({
-          activeTool: "connect",
-          canInteractWithEditor: true,
-          draftState,
-        }),
-      );
-
-      act(() => {
-        result.current.handleConnectionAnchorClick({
-          anchorId: sourceAnchorId,
-          nodeId: "workstation:review",
-        });
-      });
-
-      expect(result.current.pendingConnectionSource).toEqual({
-        anchorId: sourceAnchorId,
-        nodeId: "workstation:review",
-      });
-
-      act(() => {
-        result.current.handleConnectionAnchorClick({
-          anchorId: targetAnchorId,
-          nodeId: targetNodeId,
-        });
-      });
-
-      expect(updateDraft).toHaveBeenCalledTimes(1);
-      expect(updateDraft.mock.results[0]?.value.edgeChanges.additions).toEqual([
-        {
-          kind: edgeKind,
-          source: {
-            kind: "workstation",
-            name: "review",
-          },
-          target: {
-            kind: "work-state",
-            stateName: targetStateName,
-            workTypeName: "story",
-          },
-        },
-      ]);
-      expect(result.current.connectionNotice).toBeNull();
-      expect(result.current.pendingConnectionSource).toBeNull();
-    },
-  );
-
-  it("shows actionable connection notices for invalid connection paths", () => {
-    const updateDraft = vi.fn();
-    const draftState = createDraftState({ updateDraft });
+  ])("commits %s keyboard anchor connections and clears the pending source", ({
+    edgeKind,
+    sourceAnchorId,
+    targetAnchorId,
+    targetNodeId,
+  }) => {
+    const graph = createDraftState().graph;
+    const draftState = createDraftState({
+      graph: {
+        ...graph,
+        edges: graph.edges.filter((edge) => edge.kind !== edgeKind),
+      },
+    });
+    const editableGraph = createEditableGraph();
 
     const { result } = renderHook(() =>
       useFactoryGraphConnectionController({
         activeTool: "connect",
         canInteractWithEditor: true,
         draftState,
+        editableGraph,
+      }),
+    );
+
+    act(() => {
+      result.current.handleConnectionAnchorClick({
+        anchorId: sourceAnchorId,
+        nodeId: "workstation:review",
+      });
+    });
+
+    expect(result.current.pendingConnectionSource).toEqual({
+      anchorId: sourceAnchorId,
+      nodeId: "workstation:review",
+    });
+
+    act(() => {
+      result.current.handleConnectionAnchorClick({
+        anchorId: targetAnchorId,
+        nodeId: targetNodeId,
+      });
+    });
+
+    expect(editableGraph.actions.connectNodes).toHaveBeenCalledWith({
+      sourceAnchorId,
+      sourceNodeId: "workstation:review",
+      targetAnchorId,
+      targetNodeId,
+    });
+    expect(result.current.connectionNotice).toBeNull();
+    expect(result.current.pendingConnectionSource).toBeNull();
+  });
+
+  it("shows actionable connection notices for invalid connection paths", () => {
+    const draftState = createDraftState();
+    const editableGraph = createEditableGraph({
+      connectNodes: vi.fn(() => ({
+        message:
+          "Failure connections from review cannot connect to Continue on story:done.",
+        ok: false,
+        reason: "INVALID_CONNECTION",
+      })),
+    });
+
+    const { result } = renderHook(() =>
+      useFactoryGraphConnectionController({
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
       }),
     );
 
@@ -210,22 +203,20 @@ describe("current activity graph editor controllers", () => {
     expect(result.current.connectionNotice).toBe(
       "Failure connections from review cannot connect to Continue on story:done.",
     );
-    expect(updateDraft).not.toHaveBeenCalled();
+    expect(editableGraph.actions.connectNodes).toHaveBeenCalledTimes(1);
   });
 
   it("opens removable edge confirmations and applies confirmed edge removals", () => {
-    const updateDraft = vi.fn(
-      (updater: (draft: FactoryGraphDraft) => FactoryGraphDraft) =>
-        updater(createEmptyFactoryGraphDraft()),
-    );
     const reset = vi.fn();
-    const draftState = createDraftState({ updateDraft });
+    const draftState = createDraftState();
+    const editableGraph = createEditableGraph();
 
     const { result } = renderHook(() =>
       useFactoryGraphRemovalController({
         activeTool: "delete",
         canInteractWithEditor: true,
         draftState,
+        editableGraph,
         saveEditableDefinition: {
           reset,
           status: "idle",
@@ -249,33 +240,30 @@ describe("current activity graph editor controllers", () => {
       result.current.handleConfirmRemoval();
     });
 
-    expect(updateDraft).toHaveBeenCalledTimes(1);
-    expect(updateDraft.mock.results[0]?.value.edgeChanges.removals).toEqual([
-      {
-        kind: "workstation-output",
-        source: {
-          kind: "workstation",
-          name: "review",
-        },
-        target: {
-          kind: "work-state",
-          stateName: "done",
-          workTypeName: "story",
-        },
-      },
-    ]);
+    expect(editableGraph.actions.disconnectEdge).toHaveBeenCalledWith(
+      "workstation-output:workstation:review->work-state:story:done",
+    );
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
   it("surfaces blocked node-removal reasons through the shared removal state", () => {
     const reset = vi.fn();
     const draftState = createDraftState();
+    const editableGraph = createEditableGraph({
+      removeNode: vi.fn(() => ({
+        message:
+          "This worker is still assigned to 1 workstation. Reassign or remove those workstations before deleting writer.",
+        ok: false,
+        reason: "BLOCKED_REMOVAL",
+      })),
+    });
 
     const { result } = renderHook(() =>
       useFactoryGraphRemovalController({
         activeTool: "delete",
         canInteractWithEditor: true,
         draftState,
+        editableGraph,
         saveEditableDefinition: {
           reset,
           status: "idle",
@@ -288,6 +276,9 @@ describe("current activity graph editor controllers", () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
+      "worker:writer",
+    );
     expect(result.current.blockedRemovalReason).toBe(
       "This worker is still assigned to 1 workstation. Reassign or remove those workstations before deleting writer.",
     );
@@ -316,5 +307,49 @@ function createDraftState({
     source: "current-factory" as const,
     updateDraft,
     validationErrors: [],
+  };
+}
+
+function createEditableGraph(
+  actionOverrides: Partial<EditableFactoryGraphViewModel["actions"]> = {},
+): EditableFactoryGraphViewModel {
+  const emptyDraft = createEmptyFactoryGraphDraft();
+
+  return {
+    actions: {
+      addNode: vi.fn(() => ({ ok: true, value: emptyDraft })),
+      connectNodes: vi.fn(() => ({ ok: true, value: emptyDraft })),
+      discard: vi.fn(),
+      disconnectEdge: vi.fn(() => ({ ok: true, value: emptyDraft })),
+      removeNode: vi.fn(() => ({ ok: true, value: emptyDraft })),
+      save: vi.fn(async () => true),
+      updateNodeField: vi.fn(() => ({
+        ok: true,
+        value: baseFactoryDefinition,
+      })),
+      ...actionOverrides,
+    },
+    blockedOperation: null,
+    draftState: createDraftState(),
+    graphState: null,
+    pendingState: {
+      hasChanges: false,
+      pendingFactoryDefinition: baseFactoryDefinition,
+    },
+    projection: {
+      edges: [],
+      nodes: [],
+    },
+    saveState: {
+      canSave: false,
+      isSaving: false,
+      isStale: false,
+      lastError: null,
+      lastSuccess: false,
+    },
+    validationState: {
+      errors: [],
+      isValid: true,
+    },
   };
 }

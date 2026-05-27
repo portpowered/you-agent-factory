@@ -1,0 +1,472 @@
+import { type Edge, MarkerType, type Node } from "@xyflow/react";
+
+import type { ActivityGraphNodeHandle } from "../../flowchart/components/current-activity-node-shell";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
+import type {
+  FactoryGraphDraftValidationError,
+  FactoryGraphEdge,
+  FactoryGraphNode,
+  FactoryGraphNodeKind,
+  FactoryGraphTopology,
+} from "./factory-graph-draft-types";
+import type { FactoryGraphConnectionEndpoint } from "./factory-graph-editor-connections";
+import {
+  getFactoryGraphConnectionAnchors,
+  isValidFactoryGraphConnection,
+} from "./factory-graph-editor-connections";
+import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
+
+export type FactoryGraphReactFlowMode = "editor" | "observer";
+
+export type FactoryGraphReactFlowNode = Node<
+  {
+    active: boolean;
+    activeFlow: boolean;
+    activeTool: "add" | "connect" | "delete" | null;
+    canEditConnections: boolean;
+    connectionAnchors: ActivityGraphNodeHandle[];
+    connectionHint: string;
+    draftStatus: "addition" | "none" | "removal";
+    focused: boolean;
+    incomingHandleCount: number;
+    kind: FactoryGraphNodeKind;
+    kindLabel: string;
+    label: string;
+    muted: boolean;
+    outgoingHandleCount: number;
+    pendingLabel: string;
+    removingLabel: string;
+    selectedWorkId: string | null;
+    tokenCount: number | null;
+    validationMessage: string | null;
+    workerStatus?: FactoryGraphWorkerRuntimeStatus;
+    workerStatusLabel?: string;
+  },
+  "factoryEntity"
+>;
+
+export type FactoryGraphReactFlowEdge = Edge<{
+  active: boolean;
+  alwaysShowLabel: boolean;
+  kind: FactoryGraphEdge["kind"];
+  label: string;
+  pendingStatus: "addition" | "none" | "removal";
+}>;
+
+export interface FactoryGraphReactFlowProjection {
+  edges: FactoryGraphReactFlowEdge[];
+  nodes: FactoryGraphReactFlowNode[];
+}
+
+export interface FactoryGraphReactFlowRuntimeOverlay {
+  activeEdgeIds?: ReadonlySet<string>;
+  activeNodeIds?: ReadonlySet<string>;
+  focusedNodeIds?: ReadonlySet<string>;
+  mutedNodeIds?: ReadonlySet<string>;
+  placeTokenCountsByNodeId?: ReadonlyMap<string, number>;
+  selectedWorkId?: string | null;
+  workerStatusByName?: ReadonlyMap<string, FactoryGraphWorkerRuntimeStatus>;
+}
+
+export interface FactoryGraphReactFlowEditorOverlay {
+  activeTool?: "add" | "connect" | "delete" | null;
+  canEditConnections: boolean;
+  onConnectionAnchorClick?: (endpoint: FactoryGraphConnectionEndpoint) => void;
+  pendingAdditionEdgeIds: ReadonlySet<string>;
+  pendingAdditionNodeIds: ReadonlySet<string>;
+  pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
+  pendingRemovalEdgeIds: ReadonlySet<string>;
+  pendingRemovalNodeIds: ReadonlySet<string>;
+  validationErrors?: readonly FactoryGraphDraftValidationError[];
+}
+
+export interface ProjectFactoryGraphToReactFlowOptions {
+  editor?: FactoryGraphReactFlowEditorOverlay;
+  layoutPositionsByNodeId?: ReadonlyMap<string, { x: number; y: number }>;
+  locale?: string;
+  mode?: FactoryGraphReactFlowMode;
+  runtime?: FactoryGraphReactFlowRuntimeOverlay;
+  topology: FactoryGraphTopology;
+}
+
+const COLUMN_BY_KIND: Record<FactoryGraphNodeKind, number> = {
+  resource: 0,
+  worker: 1,
+  workstation: 2,
+  "work-type": 3,
+  "work-state": 4,
+};
+const EDGE_COLOR_BY_KIND = {
+  "worker-assignment": "var(--color-af-info)",
+  "worker-resource": "var(--color-af-success)",
+  "work-type-state": "var(--color-af-overlay)",
+  "workstation-input": "var(--color-af-accent)",
+  "workstation-on-continue": "var(--color-af-info)",
+  "workstation-on-failure": "var(--color-af-danger-text)",
+  "workstation-on-rejection": "var(--color-af-warning-text)",
+  "workstation-output": "var(--color-af-accent)",
+  "workstation-resource": "var(--color-af-success)",
+} as const;
+const COLUMN_X = 232;
+const ROW_Y = 118;
+
+const EMPTY_SET: ReadonlySet<string> = new Set();
+
+export function projectFactoryGraphToReactFlow(
+  options: FactoryGraphTopology | ProjectFactoryGraphToReactFlowOptions,
+): FactoryGraphReactFlowProjection {
+  const input = normalizeProjectionOptions(options);
+  const messages = getFactoryGraphEditorMessages(input.locale);
+  const rowCounts = new Map<number, number>();
+  const counts = countHandles(input.topology);
+  const validationMessages = validationMessagesByNodeId(
+    input.editor?.validationErrors ?? [],
+  );
+
+  return {
+    edges: input.topology.edges.map((edge) =>
+      buildFactoryGraphReactFlowEdge(edge, input),
+    ),
+    nodes: [...input.topology.nodes].sort(sortFactoryGraphNodes).map((node) => {
+      const column = COLUMN_BY_KIND[node.kind];
+      const row = rowCounts.get(column) ?? 0;
+      rowCounts.set(column, row + 1);
+      const workerStatus =
+        node.kind === "worker"
+          ? (input.runtime?.workerStatusByName?.get(node.label) ?? "idle")
+          : undefined;
+
+      return {
+        className: nodeClassName(node.id, input),
+        data: {
+          active: input.runtime?.activeNodeIds?.has(node.id) ?? false,
+          activeFlow: input.runtime?.activeNodeIds?.has(node.id) ?? false,
+          activeTool: input.editor?.activeTool ?? null,
+          canEditConnections: input.editor?.canEditConnections ?? false,
+          connectionAnchors: buildNodeHandles({
+            editor: input.editor,
+            locale: input.locale,
+            node,
+            topology: input.topology,
+          }),
+          connectionHint: messages.flowConnectionHint,
+          draftStatus: draftStatusForNode(node.id, input.editor),
+          focused: input.runtime?.focusedNodeIds?.has(node.id) ?? false,
+          incomingHandleCount: counts.incoming.get(node.id) ?? 1,
+          kind: node.kind,
+          kindLabel: messages.kindLabel(node.kind),
+          label: node.label,
+          muted: input.runtime?.mutedNodeIds?.has(node.id) ?? false,
+          outgoingHandleCount: counts.outgoing.get(node.id) ?? 1,
+          pendingLabel: messages.flowPendingLabel,
+          removingLabel: messages.flowRemovingLabel,
+          selectedWorkId: input.runtime?.selectedWorkId ?? null,
+          tokenCount:
+            input.runtime?.placeTokenCountsByNodeId?.get(node.id) ?? null,
+          validationMessage: validationMessages.get(node.id) ?? null,
+          workerStatus,
+          workerStatusLabel: workerStatus
+            ? messages.workerStatusLabel(workerStatus)
+            : undefined,
+        },
+        draggable: true,
+        id: node.id,
+        position: input.layoutPositionsByNodeId?.get(node.id) ?? {
+          x: column * COLUMN_X,
+          y: row * ROW_Y,
+        },
+        type: "factoryEntity",
+      } satisfies FactoryGraphReactFlowNode;
+    }),
+  };
+}
+
+function normalizeProjectionOptions(
+  options: FactoryGraphTopology | ProjectFactoryGraphToReactFlowOptions,
+): ProjectFactoryGraphToReactFlowOptions {
+  if ("topology" in options) {
+    return options;
+  }
+
+  return {
+    topology: options,
+  };
+}
+
+function sortFactoryGraphNodes(
+  left: FactoryGraphNode,
+  right: FactoryGraphNode,
+) {
+  const leftColumn = COLUMN_BY_KIND[left.kind];
+  const rightColumn = COLUMN_BY_KIND[right.kind];
+  if (leftColumn !== rightColumn) {
+    return leftColumn - rightColumn;
+  }
+  return left.label.localeCompare(right.label);
+}
+
+function buildFactoryGraphReactFlowEdge(
+  edge: FactoryGraphEdge,
+  input: ProjectFactoryGraphToReactFlowOptions,
+) {
+  const messages = getFactoryGraphEditorMessages(input.locale);
+  const color = EDGE_COLOR_BY_KIND[edge.kind];
+  const pendingAddition =
+    input.editor?.pendingAdditionEdgeIds.has(edge.id) ?? false;
+  const pendingRemoval =
+    input.editor?.pendingRemovalEdgeIds.has(edge.id) ?? false;
+  const active = input.runtime?.activeEdgeIds?.has(edge.id) ?? false;
+  const edgeLabel = messages.edgeKindLabel(edge.kind);
+  const handleAssignment = getEdgeHandleAssignment(edge);
+
+  return {
+    animated:
+      active ||
+      edge.kind === "workstation-on-continue" ||
+      edge.kind === "workstation-on-failure" ||
+      edge.kind === "workstation-on-rejection",
+    className: [
+      active ? "agent-factory-editor-edge--active" : "",
+      pendingAddition ? "agent-factory-editor-edge--pending-addition" : "",
+      pendingRemoval ? "agent-factory-editor-edge--pending-removal" : "",
+    ]
+      .filter(Boolean)
+      .join(" "),
+    data: {
+      active,
+      alwaysShowLabel:
+        input.editor?.canEditConnections === true ||
+        input.editor?.pendingConnectionSource !== null,
+      kind: edge.kind,
+      label: edgeLabel,
+      pendingStatus: pendingRemoval
+        ? "removal"
+        : pendingAddition
+          ? "addition"
+          : "none",
+    },
+    ariaLabel: messages.edgeAriaLabel(
+      edgeLabel,
+      describeNodeKey(edge.source),
+      describeNodeKey(edge.target),
+    ),
+    ariaRole: "button",
+    focusable: true,
+    id: edge.id,
+    interactionWidth: 24,
+    markerEnd: {
+      color: pendingRemoval
+        ? "var(--color-af-danger-text)"
+        : pendingAddition
+          ? "var(--color-af-warning-text)"
+          : active
+            ? "var(--color-af-success)"
+            : color,
+      type: MarkerType.ArrowClosed,
+    },
+    source: edge.sourceId,
+    sourceHandle: handleAssignment?.sourceHandle,
+    style: {
+      opacity: pendingRemoval ? 0.48 : undefined,
+      stroke: pendingRemoval
+        ? "var(--color-af-danger-text)"
+        : pendingAddition
+          ? "var(--color-af-warning-text)"
+          : active
+            ? "var(--color-af-success)"
+            : color,
+      strokeDasharray: pendingRemoval
+        ? "7 5"
+        : pendingAddition
+          ? "9 4"
+          : edge.kind === "worker-resource" ||
+              edge.kind === "workstation-resource"
+            ? "4 5"
+            : undefined,
+      strokeWidth: pendingRemoval || pendingAddition || active ? 2 : 1.7,
+    },
+    target: edge.targetId,
+    targetHandle: handleAssignment?.targetHandle,
+    type: "factoryEditorEdge",
+  } satisfies FactoryGraphReactFlowEdge;
+}
+
+function describeNodeKey(key: FactoryGraphEdge["source"]) {
+  return key.kind === "work-state"
+    ? `${key.workTypeName}:${key.stateName}`
+    : key.name;
+}
+
+function getEdgeHandleAssignment(
+  edge: FactoryGraphEdge,
+): { sourceHandle: string; targetHandle: string } | null {
+  const sourceHandle = getNodeHandleId(edge.source.kind, edge.kind, "source");
+  const targetHandle = getNodeHandleId(edge.target.kind, edge.kind, "target");
+  if (!sourceHandle || !targetHandle) {
+    return null;
+  }
+  return { sourceHandle, targetHandle };
+}
+
+function getNodeHandleId(
+  nodeKind: FactoryGraphNodeKind,
+  edgeKind: FactoryGraphEdge["kind"],
+  role: "source" | "target",
+) {
+  return (
+    getFactoryGraphConnectionAnchors(nodeKind).find(
+      (anchor) => anchor.role === role && anchor.edgeKind === edgeKind,
+    )?.id ?? null
+  );
+}
+
+function buildNodeHandles(input: {
+  editor?: FactoryGraphReactFlowEditorOverlay;
+  locale?: string;
+  node: FactoryGraphNode;
+  topology: FactoryGraphTopology;
+}): ActivityGraphNodeHandle[] {
+  const messages = getFactoryGraphEditorMessages(input.locale);
+  const selectedSource =
+    input.editor?.pendingConnectionSource?.nodeId === input.node.id
+      ? input.editor.pendingConnectionSource
+      : null;
+  const nodeIsPendingRemoval =
+    input.editor?.pendingRemovalNodeIds.has(input.node.id) ?? false;
+  const canEditConnections = input.editor?.canEditConnections ?? false;
+
+  return getFactoryGraphConnectionAnchors(input.node.kind).map((anchor) => {
+    const selected =
+      selectedSource?.anchorId === anchor.id && anchor.role === "source";
+    const compatible =
+      input.editor?.pendingConnectionSource !== null &&
+      input.editor?.pendingConnectionSource !== undefined &&
+      input.editor.pendingConnectionSource.nodeId !== input.node.id &&
+      anchor.role === "target" &&
+      isValidFactoryGraphConnection({
+        sourceAnchorId: input.editor.pendingConnectionSource.anchorId,
+        sourceNodeKind: findNode(
+          input.topology,
+          input.editor.pendingConnectionSource.nodeId,
+        ).kind,
+        targetAnchorId: anchor.id,
+        targetNodeKind: input.node.kind,
+      });
+
+    return {
+      buttonAriaLabel:
+        anchor.role === "source"
+          ? `${messages.toolbarConnectLabel}: ${input.node.label} ${anchor.label}`
+          : `${messages.toolbarConnectLabel}: ${input.node.label} ${anchor.label}`,
+      buttonDisabled: !canEditConnections || nodeIsPendingRemoval,
+      buttonPressed: selected || undefined,
+      buttonTitle: anchor.description,
+      connectable: canEditConnections && !nodeIsPendingRemoval,
+      id: anchor.id,
+      label: anchor.label,
+      onButtonClick:
+        input.editor?.onConnectionAnchorClick &&
+        canEditConnections &&
+        !nodeIsPendingRemoval
+          ? () =>
+              input.editor?.onConnectionAnchorClick?.({
+                anchorId: anchor.id,
+                nodeId: input.node.id,
+              })
+          : undefined,
+      side: anchor.side,
+      type: anchor.role,
+      variant: selected
+        ? "selected"
+        : compatible
+          ? "valid-target"
+          : canEditConnections
+            ? "default"
+            : "muted",
+    } satisfies ActivityGraphNodeHandle;
+  });
+}
+
+function countHandles(topology: FactoryGraphTopology) {
+  const incoming = new Map<string, number>();
+  const outgoing = new Map<string, number>();
+
+  for (const edge of topology.edges) {
+    incoming.set(edge.targetId, (incoming.get(edge.targetId) ?? 0) + 1);
+    outgoing.set(edge.sourceId, (outgoing.get(edge.sourceId) ?? 0) + 1);
+  }
+
+  return { incoming, outgoing };
+}
+
+function findNode(topology: FactoryGraphTopology, nodeId: string) {
+  const node = topology.nodes.find((entry) => entry.id === nodeId);
+  if (!node) {
+    throw new Error(
+      `Expected graph node "${nodeId}" to exist in editor topology.`,
+    );
+  }
+  return node;
+}
+
+function draftStatusForNode(
+  nodeId: string,
+  editor: FactoryGraphReactFlowEditorOverlay | undefined,
+) {
+  if (editor?.pendingRemovalNodeIds.has(nodeId)) {
+    return "removal";
+  }
+  if (editor?.pendingAdditionNodeIds.has(nodeId)) {
+    return "addition";
+  }
+  return "none";
+}
+
+function nodeClassName(
+  nodeId: string,
+  input: ProjectFactoryGraphToReactFlowOptions,
+) {
+  return [
+    input.runtime?.activeNodeIds?.has(nodeId)
+      ? "agent-factory-editor-node--active"
+      : "",
+    input.runtime?.focusedNodeIds?.has(nodeId)
+      ? "agent-factory-editor-node--focused"
+      : "",
+    input.runtime?.mutedNodeIds?.has(nodeId)
+      ? "agent-factory-editor-node--muted"
+      : "",
+    input.editor?.pendingAdditionNodeIds.has(nodeId)
+      ? "agent-factory-editor-node--pending-addition"
+      : "",
+    input.editor?.pendingRemovalNodeIds.has(nodeId)
+      ? "agent-factory-editor-node--pending-removal"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function validationMessagesByNodeId(
+  errors: readonly FactoryGraphDraftValidationError[],
+) {
+  const messages = new Map<string, string>();
+  for (const error of errors) {
+    if (error.target.kind !== "node") {
+      continue;
+    }
+    messages.set(error.target.id, error.message);
+  }
+  return messages;
+}
+
+export function emptyFactoryGraphReactFlowEditorOverlay(): FactoryGraphReactFlowEditorOverlay {
+  return {
+    canEditConnections: false,
+    pendingAdditionEdgeIds: EMPTY_SET,
+    pendingAdditionNodeIds: EMPTY_SET,
+    pendingConnectionSource: null,
+    pendingRemovalEdgeIds: EMPTY_SET,
+    pendingRemovalNodeIds: EMPTY_SET,
+  };
+}

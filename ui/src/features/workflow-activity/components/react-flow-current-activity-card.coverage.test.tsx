@@ -19,13 +19,14 @@ import {
 } from "../../current-factory-definition/public";
 import {
   createEmptyFactoryGraphDraft,
+  type EditableFactoryGraphViewModel,
   useFactoryGraphDraftState,
 } from "../../factory-graph-editor/public";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
 import {
-  ReactFlowCurrentActivityCard,
   type CurrentActivitySelection,
+  ReactFlowCurrentActivityCard,
   useCurrentActivityGraphViewModel,
 } from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
@@ -617,12 +618,17 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
   });
 
   it("adds draft edges from valid controller connections", () => {
-    const updateDraft = vi.fn();
+    const connectNodes = vi.fn(() => ({
+      ok: true as const,
+      value: createEmptyFactoryGraphDraft(),
+    }));
+    const editableGraph = createConnectionEditableGraph({ connectNodes });
     const { result } = renderHook(() =>
       useFactoryGraphConnectionController({
         activeTool: "connect",
         canInteractWithEditor: true,
-        draftState: createConnectionDraftState(updateDraft),
+        draftState: createConnectionDraftState(),
+        editableGraph,
       }),
     );
 
@@ -635,33 +641,31 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       });
     });
 
-    expect(updateDraft).toHaveBeenCalledTimes(1);
-    const nextDraft = updateDraft.mock.calls[0][0](
-      createEmptyFactoryGraphDraft(),
-    );
-    expect(nextDraft.edgeChanges.additions).toEqual([
-      {
-        kind: "workstation-output",
-        source: { kind: "workstation", name: "review" },
-        target: {
-          kind: "work-state",
-          stateName: "done",
-          workTypeName: "story",
-        },
-      },
-    ]);
+    expect(connectNodes).toHaveBeenCalledWith({
+      sourceAnchorId: "workstation-output-source",
+      sourceNodeId: "workstation:review",
+      targetAnchorId: "workstation-output-target",
+      targetNodeId: "work-state:story:done",
+    });
     expect(result.current.connectionNotice).toBeNull();
     expect(result.current.pendingConnectionSource).toBeNull();
   });
 
   it("keeps controller connection attempts explicit when disabled or incompatible", () => {
-    const updateDraft = vi.fn();
+    const connectNodes = vi.fn(() => ({
+      message:
+        "Success connections from review cannot connect to Failure on story:done.",
+      ok: false as const,
+      reason: "INVALID_CONNECTION" as const,
+    }));
+    const editableGraph = createConnectionEditableGraph({ connectNodes });
     const { rerender, result } = renderHook(
       ({ activeTool, canInteractWithEditor }) =>
         useFactoryGraphConnectionController({
           activeTool,
           canInteractWithEditor,
-          draftState: createConnectionDraftState(updateDraft),
+          draftState: createConnectionDraftState(),
+          editableGraph,
         }),
       {
         initialProps: {
@@ -679,7 +683,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         targetHandle: "workstation-output-target",
       });
     });
-    expect(updateDraft).not.toHaveBeenCalled();
+    expect(connectNodes).not.toHaveBeenCalled();
 
     rerender({ activeTool: "connect", canInteractWithEditor: true });
     act(() => {
@@ -713,6 +717,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(result.current.connectionNotice).toBe(
       "Success connections from review cannot connect to Failure on story:done.",
     );
+    expect(connectNodes).toHaveBeenCalledTimes(1);
 
     rerender({ activeTool: "delete", canInteractWithEditor: true });
     expect(result.current.pendingConnectionSource).toBeNull();
@@ -791,7 +796,7 @@ function renderViewport({
   );
 }
 
-function createConnectionDraftState(updateDraft: ReturnType<typeof vi.fn>) {
+function createConnectionDraftState() {
   return {
     ...defaultDraftState,
     draft: createEmptyFactoryGraphDraft(),
@@ -812,6 +817,28 @@ function createConnectionDraftState(updateDraft: ReturnType<typeof vi.fn>) {
         },
       ],
     },
-    updateDraft,
+    updateDraft: vi.fn(),
   } as ReturnType<typeof useFactoryGraphDraftState>;
+}
+
+function createConnectionEditableGraph(
+  actions: Partial<EditableFactoryGraphViewModel["actions"]>,
+): EditableFactoryGraphViewModel {
+  const draft = createEmptyFactoryGraphDraft();
+
+  return {
+    actions: {
+      addNode: vi.fn(() => ({ ok: true, value: draft })),
+      connectNodes: vi.fn(() => ({ ok: true, value: draft })),
+      discard: vi.fn(),
+      disconnectEdge: vi.fn(() => ({ ok: true, value: draft })),
+      removeNode: vi.fn(() => ({ ok: true, value: draft })),
+      save: vi.fn(async () => true),
+      updateNodeField: vi.fn(() => ({
+        ok: true,
+        value: semanticWorkflowDashboardSnapshot.factory ?? {},
+      })),
+      ...actions,
+    },
+  } as EditableFactoryGraphViewModel;
 }

@@ -1,4 +1,4 @@
-import type { InferenceOutcome } from "../events";
+import type { FactoryDefinition, InferenceOutcome } from "../events";
 import type { components } from "../generated/openapi";
 
 type DashboardRunnerID = components["schemas"]["RunnerID"];
@@ -383,6 +383,7 @@ export interface DashboardRuntime {
 
 export interface DashboardSnapshot {
   factory_state: string;
+  factory?: FactoryDefinition;
   uptime_seconds: number;
   tick_count: number;
   topology: DashboardTopology;

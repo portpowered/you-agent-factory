@@ -1,16 +1,16 @@
+import {
+  DEFAULT_WORKSTATION_BEHAVIOR,
+  type EditableWorkstationBehavior,
+  resolveEditableWorkstationBehaviorOptions,
+  workerSupportsPollerBehavior,
+} from "../../current-factory-definition/public";
 import type { FactoryGraphEditorMenuAction } from "../components/factory-graph-editor-controls";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
   FactoryWorkState,
 } from "./factory-graph-draft-types";
-import {
-  DEFAULT_WORKSTATION_BEHAVIOR,
-  resolveEditableWorkstationBehaviorOptions,
-  workerSupportsPollerBehavior,
-  type EditableWorkstationBehavior,
-} from "../../current-factory-definition/public";
-import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 export type FactoryGraphAddEntityKind =
   | "resource"
@@ -154,6 +154,7 @@ export function createFactoryGraphAddEntityDraft(
 export function validateFactoryGraphAddEntityDraft(
   draft: FactoryGraphAddEntityDraft,
   factoryDefinition: CanonicalFactoryDefinition | null,
+  _locale?: string | null,
 ): FactoryGraphAddEntityFieldErrors {
   const errors: FactoryGraphAddEntityFieldErrors = {};
   const name = draft.name.trim();
@@ -172,7 +173,8 @@ export function validateFactoryGraphAddEntityDraft(
   if (draft.kind === "resource") {
     const capacity = Number.parseInt(draft.capacity, 10);
     if (!Number.isInteger(capacity) || capacity < 1) {
-      errors.capacity = "Resource capacity must be a whole number greater than zero.";
+      errors.capacity =
+        "Resource capacity must be a whole number greater than zero.";
     }
   }
 
@@ -180,7 +182,10 @@ export function validateFactoryGraphAddEntityDraft(
     errors.model = "Enter a model identifier for the new worker.";
   }
 
-  if (draft.kind === "work-type" && draft.initialStateName.trim().length === 0) {
+  if (
+    draft.kind === "work-type" &&
+    draft.initialStateName.trim().length === 0
+  ) {
     errors.initialStateName =
       "Enter the first ordered work state for this work type.";
   }
@@ -196,8 +201,7 @@ export function validateFactoryGraphAddEntityDraft(
       name.length > 0 &&
       workStateExists(draft.workTypeName, name, factoryDefinition)
     ) {
-      errors.name =
-        `Work type "${draft.workTypeName}" already defines a state named "${name}".`;
+      errors.name = `Work type "${draft.workTypeName}" already defines a state named "${name}".`;
     }
   }
 
@@ -290,10 +294,14 @@ function entityNameExists(
   factoryDefinition: CanonicalFactoryDefinition | null,
 ) {
   if (kind === "resource") {
-    return (factoryDefinition?.resources ?? []).some((resource) => resource.name === name);
+    return (factoryDefinition?.resources ?? []).some(
+      (resource) => resource.name === name,
+    );
   }
   if (kind === "worker") {
-    return (factoryDefinition?.workers ?? []).some((worker) => worker.name === name);
+    return (factoryDefinition?.workers ?? []).some(
+      (worker) => worker.name === name,
+    );
   }
   if (kind === "work-type") {
     return (factoryDefinition?.workTypes ?? []).some(
@@ -338,5 +346,7 @@ function workerExists(
 }
 
 export function editableWorkstationBehaviorOptions() {
-  return resolveEditableWorkstationBehaviorOptions(DEFAULT_WORKSTATION_BEHAVIOR);
+  return resolveEditableWorkstationBehaviorOptions(
+    DEFAULT_WORKSTATION_BEHAVIOR,
+  );
 }

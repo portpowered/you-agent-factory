@@ -68,6 +68,133 @@ func TestBuildFactoryWorldView_ProjectsFromReconstructedWorldState(t *testing.T)
 	}
 }
 
+func TestBuildFactoryWorldView_ExposesCanonicalFactoryGraphFromStructureEvents(t *testing.T) {
+	t0 := time.Date(2026, 5, 27, 1, 0, 0, 0, time.UTC)
+	workerType := factoryapi.WorkerTypeModelWorker
+	workerProvider := factoryapi.WorkerModelProviderCodex
+	workstationKind := factoryapi.WorkstationKindStandard
+	maxRetries := 3
+	promptBody := "Review the work and either continue, reject, or fail it."
+	payload := factoryapi.InitialStructureRequestEventPayload{
+		Factory: factoryapi.Factory{
+			Name:      "graph-source",
+			Resources: &[]factoryapi.Resource{{Name: "agent-slot", Capacity: 2}},
+			Workers: &[]factoryapi.Worker{{
+				Name:          "reviewer",
+				Type:          &workerType,
+				ModelProvider: &workerProvider,
+				Model:         stringPtrForProjectionTest("gpt-5.4"),
+				Resources:     &[]factoryapi.ResourceRequirement{{Name: "agent-slot", Capacity: 1}},
+			}},
+			WorkTypes: &[]factoryapi.WorkType{{
+				Name: "story",
+				States: []factoryapi.WorkState{
+					{Name: "new", Type: factoryapi.WorkStateTypeINITIAL},
+					{Name: "review", Type: factoryapi.WorkStateTypePROCESSING},
+					{Name: "continue", Type: factoryapi.WorkStateTypePROCESSING},
+					{Name: "rejected", Type: factoryapi.WorkStateTypePROCESSING},
+					{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+					{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
+				},
+			}, {
+				Name: interfaces.SystemTimeWorkTypeID,
+				States: []factoryapi.WorkState{
+					{Name: "pending", Type: factoryapi.WorkStateTypePROCESSING},
+				},
+			}},
+			Workstations: &[]factoryapi.Workstation{{
+				Id:         stringPtrForProjectionTest("review"),
+				Name:       "Review",
+				Worker:     "reviewer",
+				Behavior:   &workstationKind,
+				Body:       &promptBody,
+				Inputs:     []factoryapi.WorkstationIO{{WorkType: "story", State: "new"}},
+				Outputs:    &[]factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
+				OnContinue: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "continue"}},
+				OnRejection: &[]factoryapi.WorkstationIO{{
+					WorkType: "story",
+					State:    "rejected",
+				}},
+				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "failed"}},
+				Resources: &[]factoryapi.ResourceRequirement{{Name: "agent-slot", Capacity: 1}},
+				Limits:    &factoryapi.WorkstationLimits{MaxRetries: &maxRetries},
+			}, {
+				Id:      stringPtrForProjectionTest(interfaces.SystemTimeExpiryTransitionID),
+				Name:    interfaces.SystemTimeExpiryTransitionID,
+				Inputs:  []factoryapi.WorkstationIO{{WorkType: interfaces.SystemTimeWorkTypeID, State: "pending"}},
+				Outputs: &[]factoryapi.WorkstationIO{},
+				Worker:  "",
+			}},
+		},
+	}
+	events := []factoryapi.FactoryEvent{
+		generatedProjectionEvent(factoryapi.FactoryEventTypeInitialStructureRequest, "initial-canonical-factory", 0, t0, factoryapi.FactoryEventContext{}, payload),
+	}
+	worldState, err := ReconstructFactoryWorldState(events, 0)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	view := BuildFactoryWorldView(worldState)
+
+	assertCanonicalFactoryGraphPreserved(t, worldState, view, payload.Factory)
+	assertCanonicalFactoryWorkstationDetailsPreserved(t, *view.Factory, promptBody, maxRetries)
+}
+
+func assertCanonicalFactoryGraphPreserved(
+	t *testing.T,
+	worldState interfaces.FactoryWorldState,
+	view interfaces.FactoryWorldView,
+	want factoryapi.Factory,
+) {
+	t.Helper()
+
+	if worldState.Factory == nil {
+		t.Fatal("world state factory = nil, want canonical factory graph")
+	}
+	if view.Factory == nil {
+		t.Fatal("world view factory = nil, want canonical factory graph")
+	}
+	if !reflect.DeepEqual(*worldState.Factory, want) {
+		t.Fatalf("world state factory = %#v, want canonical payload", *worldState.Factory)
+	}
+	if !reflect.DeepEqual(*view.Factory, want) {
+		t.Fatalf("world view factory = %#v, want canonical payload", *view.Factory)
+	}
+}
+
+func assertCanonicalFactoryWorkstationDetailsPreserved(
+	t *testing.T,
+	factory factoryapi.Factory,
+	promptBody string,
+	maxRetries int,
+) {
+	t.Helper()
+
+	workstation := (*factory.Workstations)[0]
+	assertCanonicalFactoryRoutePreserved(t, workstation.OnContinue, "continue", "onContinue")
+	assertCanonicalFactoryRoutePreserved(t, workstation.OnRejection, "rejected", "onRejection")
+	assertCanonicalFactoryRoutePreserved(t, workstation.OnFailure, "failed", "onFailure")
+	if workstation.Body == nil || *workstation.Body != promptBody {
+		t.Fatalf("body = %#v, want prompt body preserved", workstation.Body)
+	}
+	if workstation.Limits == nil || workstation.Limits.MaxRetries == nil || *workstation.Limits.MaxRetries != maxRetries {
+		t.Fatalf("limits = %#v, want max retries preserved", workstation.Limits)
+	}
+}
+
+func assertCanonicalFactoryRoutePreserved(
+	t *testing.T,
+	routes *[]factoryapi.WorkstationIO,
+	wantState string,
+	label string,
+) {
+	t.Helper()
+
+	if routes == nil || len(*routes) != 1 || (*routes)[0].State != wantState {
+		t.Fatalf("%s = %#v, want %s route", label, routes, wantState)
+	}
+}
+
 func TestBuildFactoryWorldViewWithActiveThrottlePauses_ProjectsRuntimePauseMetadata(t *testing.T) {
 	view := BuildFactoryWorldViewWithActiveThrottlePauses(
 		interfaces.FactoryWorldState{

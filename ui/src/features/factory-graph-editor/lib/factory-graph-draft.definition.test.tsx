@@ -1,6 +1,5 @@
 import { renderHook } from "@testing-library/react";
 
-import type { DashboardTopology } from "../../../api/dashboard/types";
 import {
   buildFactoryGraphTopologyFromDefinition,
   buildPendingFactoryDefinition,
@@ -34,6 +33,29 @@ it("derives graph nodes and relations from the canonical editable definition", (
     "workstation-output:workstation:draft->work-state:story:done",
     "workstation-resource:resource:gpu->workstation:draft",
   ]);
+});
+
+it("derives graph relations from legacy singular workstation route objects", () => {
+  const topology = buildFactoryGraphTopologyFromDefinition({
+    ...baseFactoryDefinition,
+    workstations: [
+      {
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "draft",
+        onContinue: { state: "queued", workType: "story" },
+        onFailure: { state: "done", workType: "story" },
+        outputs: [],
+        worker: "writer",
+      } as NonNullable<typeof baseFactoryDefinition.workstations>[number],
+    ],
+  });
+
+  expect(topology.edges.map((edge) => edge.id)).toEqual(
+    expect.arrayContaining([
+      "workstation-on-continue:workstation:draft->work-state:story:queued",
+      "workstation-on-failure:workstation:draft->work-state:story:done",
+    ]),
+  );
 });
 
 it("builds a pending full factory definition while preserving untouched content", () => {
@@ -252,7 +274,9 @@ it("reports missing required draft names before save-building", () => {
       }),
     ]),
   );
-  expect(buildPendingFactoryDefinition(baseFactoryDefinition, draft)).toBeNull();
+  expect(
+    buildPendingFactoryDefinition(baseFactoryDefinition, draft),
+  ).toBeNull();
 });
 
 it("reports unknown edge nodes when a draft edge references a workstation outside the supported draft state", () => {
@@ -286,64 +310,49 @@ it("reports unknown edge nodes when a draft edge references a workstation outsid
       }),
     ]),
   );
-  expect(buildPendingFactoryDefinition(baseFactoryDefinition, draft)).toBeNull();
+  expect(
+    buildPendingFactoryDefinition(baseFactoryDefinition, draft),
+  ).toBeNull();
 });
 
-it("falls back to projection topology until the editable definition is available", () => {
-  const projectedTopology: DashboardTopology = {
-    edges: [],
-    workstation_node_ids: ["draft"],
-    workstation_nodes_by_id: {
-      draft: {
-        input_places: [
-          {
-            kind: "work_state",
-            place_id: "story:queued",
-            state_category: "INITIAL",
-            state_value: "queued",
-            type_id: "story",
-          },
-        ],
-        node_id: "draft",
-        output_places: [
-          {
-            kind: "work_state",
-            place_id: "story:done",
-            state_category: "TERMINAL",
-            state_value: "done",
-            type_id: "story",
-          },
-        ],
-        transition_id: "draft",
-        workstation_name: "draft",
-      },
-    },
-  };
-
+it("uses the projected canonical factory until the editable definition is available", () => {
   const { result, rerender } = renderHook(
     (props: {
       currentFactoryDocument?: typeof currentFactoryDocument;
-      projectedTopology?: DashboardTopology;
+      projectedFactory?: typeof baseFactoryDefinition;
     }) => useFactoryGraphDraftState(props),
     {
       initialProps: {
-        projectedTopology,
+        projectedFactory: baseFactoryDefinition,
       },
     },
   );
 
   expect(result.current.source).toBe("projection");
   expect(result.current.graph.nodes.map((node) => node.id)).toEqual([
+    "resource:gpu",
     "work-state:story:done",
     "work-state:story:queued",
+    "work-type:story",
+    "worker:writer",
     "workstation:draft",
   ]);
 
   rerender({
     currentFactoryDocument,
-    projectedTopology,
+    projectedFactory: baseFactoryDefinition,
   });
 
   expect(result.current.source).toBe("current-factory");
   expect(result.current.baseDocument?.version.logical).toBe(5);
+});
+
+it("returns an empty projection when no canonical factory is available", () => {
+  const { result } = renderHook(() => useFactoryGraphDraftState({}));
+
+  expect(result.current.source).toBe("projection");
+  expect(result.current.graph).toEqual({
+    edges: [],
+    nodes: [],
+  });
 });

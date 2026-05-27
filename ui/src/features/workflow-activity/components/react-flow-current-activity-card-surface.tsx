@@ -3,8 +3,8 @@ import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import type { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
+import type { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 export function CurrentActivityGraphSurface({
@@ -23,10 +23,7 @@ export function CurrentActivityGraphSurface({
   snapshot: DashboardSnapshot;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
-  if (
-    snapshot.topology.workstation_node_ids.length === 0 &&
-    !editor.editorMode
-  ) {
+  if (!snapshotHasObserverGraph(snapshot) && !editor.editorMode) {
     return <EmptyCurrentActivityState locale={locale} />;
   }
 
@@ -114,6 +111,13 @@ export function CurrentActivityGraphSurface({
         setStoredNodePosition={graph.setStoredNodePosition}
       />
     </div>
+  );
+}
+
+function snapshotHasObserverGraph(snapshot: DashboardSnapshot): boolean {
+  return (
+    snapshot.topology.workstation_node_ids.length > 0 ||
+    (snapshot.factory?.workstations?.length ?? 0) > 0
   );
 }
 

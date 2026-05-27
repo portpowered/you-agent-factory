@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { useCurrentActivityGraphLayout } from "./react-flow-current-activity-card-graph-layout";
@@ -76,5 +76,133 @@ describe("useCurrentActivityGraphLayout", () => {
       expect(result.current.nodes).toHaveLength(0);
       expect(result.current.edges).toHaveLength(0);
     });
+  });
+
+  it("builds observer graph layout from the snapshot factory graph when available", async () => {
+    const snapshot: DashboardSnapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: {
+        name: "canonical-observer",
+        resources: [{ capacity: 2, name: "gpu" }],
+        workers: [
+          {
+            model: "gpt-5",
+            name: "writer",
+            resources: [{ capacity: 1, name: "gpu" }],
+            type: "MODEL_WORKER",
+          },
+        ],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "queued", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            id: "draft",
+            inputs: [{ state: "queued", workType: "story" }],
+            name: "Draft",
+            outputs: [{ state: "done", workType: "story" }],
+            resources: [{ capacity: 1, name: "gpu" }],
+            type: "MODEL_WORKSTATION",
+            worker: "writer",
+          },
+        ],
+      },
+      topology: {
+        edges: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphLayout(snapshot),
+    );
+
+    await waitFor(() => {
+      expect(result.current.nodes.length).toBeGreaterThan(0);
+    });
+
+    expect(mockBuildGraphLayout).not.toHaveBeenCalled();
+    expect(result.current.nodes.map((node) => node.nodeId).sort()).toEqual([
+      "place:gpu:available",
+      "place:story:done",
+      "place:story:queued",
+      "place:work-type:story",
+      "place:worker:writer",
+      "workstation:Draft",
+    ]);
+    expect(result.current.edges.map((edge) => edge.edgeId).sort()).toEqual([
+      "worker-assignment:place:worker:writer->workstation:Draft",
+      "worker-resource:place:gpu:available->place:worker:writer",
+      "workstation-input:place:story:queued->workstation:Draft",
+      "workstation-output:workstation:Draft->place:story:done",
+      "workstation-resource:place:gpu:available->workstation:Draft",
+    ]);
+  });
+});
+
+describe("useCurrentActivityGraphLayout legacy routes", () => {
+  beforeEach(() => {
+    mockBuildGraphLayout.mockReset();
+    window.localStorage.clear();
+  });
+
+  it("accepts legacy singular workstation routes while preserving the canonical factory source", async () => {
+    const snapshot: DashboardSnapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: {
+        name: "legacy-route-observer",
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "queued", type: "INITIAL" },
+              { name: "retry", type: "PROCESSING" },
+              { name: "failed", type: "FAILED" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            id: "draft",
+            inputs: [{ state: "queued", workType: "story" }],
+            name: "Draft",
+            onContinue: { state: "retry", workType: "story" },
+            onFailure: { state: "failed", workType: "story" },
+            outputs: [],
+            type: "MODEL_WORKSTATION",
+            worker: "",
+          } as NonNullable<
+            DashboardSnapshot["factory"]
+          >["workstations"][number],
+        ],
+      },
+      topology: {
+        edges: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphLayout(snapshot),
+    );
+
+    await waitFor(() => {
+      expect(result.current.edges.length).toBeGreaterThan(0);
+    });
+
+    expect(result.current.edges.map((edge) => edge.edgeId).sort()).toContain(
+      "workstation-on-continue:workstation:Draft->place:story:retry",
+    );
+    expect(result.current.edges.map((edge) => edge.edgeId).sort()).toContain(
+      "workstation-on-failure:workstation:Draft->place:story:failed",
+    );
   });
 });

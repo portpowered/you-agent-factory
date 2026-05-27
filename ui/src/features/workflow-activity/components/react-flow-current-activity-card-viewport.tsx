@@ -10,32 +10,31 @@ import {
   ReactFlow,
   type XYPosition,
 } from "@xyflow/react";
-
-import { cn } from "../../../lib/cn";
+import { useCallback } from "react";
 import {
   DashboardGraphBackground,
   DashboardGraphControls,
 } from "../../../components/dashboard/dashboard-graph";
+import { cn } from "../../../lib/cn";
 import {
-  FactoryGraphEditorToolbar,
   type FactoryGraphEditorMenuAction,
+  FactoryGraphEditorToolbar,
 } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
   getDefaultDashboardFlowAxisLegendIconItems,
 } from "./dashboard-flow-axis-legend";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
   GraphDropOverlay,
   graphDropStateAttribute,
 } from "./react-flow-current-activity-card-import";
 
-const CURRENT_ACTIVITY_LEGEND_CLASS =
-  "absolute left-4 right-4 top-4 z-10";
+const CURRENT_ACTIVITY_LEGEND_CLASS = "absolute left-4 right-4 top-4 z-10";
 
 function CurrentActivityEditorToolbar(props: {
   activeTool: "add" | "connect" | "delete" | null;
@@ -119,6 +118,13 @@ function buildCurrentActivityIsValidConnection({
   };
 }
 
+function factoryGraphNodeIdForConnectionNode(nodes: Node[], nodeId: string) {
+  const node = nodes.find((entry) => entry.id === nodeId);
+  return (
+    (node?.data as { factoryGraphNodeId?: string }).factoryGraphNodeId ?? nodeId
+  );
+}
+
 export function CurrentActivityGraphViewport({
   activeTool,
   addMenuActions,
@@ -190,6 +196,20 @@ export function CurrentActivityGraphViewport({
     editorMode,
     nodes,
   });
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      onConnect?.({
+        ...connection,
+        source: connection.source
+          ? factoryGraphNodeIdForConnectionNode(nodes, connection.source)
+          : connection.source,
+        target: connection.target
+          ? factoryGraphNodeIdForConnectionNode(nodes, connection.target)
+          : connection.target,
+      });
+    },
+    [nodes, onConnect],
+  );
 
   return (
     <div className="relative min-h-0 flex-1">
@@ -238,7 +258,7 @@ export function CurrentActivityGraphViewport({
           nodes={nodes}
           edgesFocusable={editorMode}
           nodesConnectable={editorMode && activeTool === "connect"}
-          onConnect={onConnect}
+          onConnect={handleConnect}
           onEdgeClick={(_, edge) => {
             if (editorMode) {
               onEditorEdgeClick?.(edge.id);

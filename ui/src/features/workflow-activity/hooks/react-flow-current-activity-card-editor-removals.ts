@@ -1,31 +1,33 @@
 import { useCallback, useState } from "react";
 
 import type { useSaveCurrentFactory } from "../../current-factory-definition/public";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import {
-  applyFactoryGraphEntityRemoval,
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
-  type useFactoryGraphDraftState,
+  type EditableFactoryGraphViewModel,
 } from "../../factory-graph-editor/public";
-import { applyFactoryGraphEdgeRemoval } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 
 export function useFactoryGraphRemovalController({
   activeTool,
   canInteractWithEditor,
   draftState,
+  editableGraph,
   locale,
   saveEditableDefinition,
 }: {
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
-  draftState: ReturnType<typeof useFactoryGraphDraftState>;
-  locale?: string;
+  draftState: EditableFactoryGraphViewModel["draftState"];
+  editableGraph: EditableFactoryGraphViewModel;
+  locale?: string | null;
   saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
 }) {
   const {
     blockedRemovalReason,
+    pendingRemovalEdgeId,
     pendingRemovalIntent,
+    pendingRemovalNodeId,
     setBlockedRemovalReason,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
@@ -35,6 +37,7 @@ export function useFactoryGraphRemovalController({
       activeTool,
       canInteractWithEditor,
       draftState,
+      editableGraph,
       locale,
       saveEditableDefinition,
       setBlockedRemovalReason,
@@ -43,34 +46,33 @@ export function useFactoryGraphRemovalController({
     });
 
   const handleConfirmRemoval = useCallback(() => {
-    const latestDocument = draftState.latestDocument;
-    if (!latestDocument || !pendingRemovalIntent) {
+    if (!pendingRemovalIntent) {
       return;
     }
 
-    if ("key" in pendingRemovalIntent) {
-      draftState.updateDraft((currentDraft) =>
-        applyFactoryGraphEntityRemoval(
-          currentDraft,
-          latestDocument,
-          pendingRemovalIntent.key,
-        ),
-      );
+    if ("key" in pendingRemovalIntent && pendingRemovalNodeId) {
+      const result = editableGraph.actions.removeNode(pendingRemovalNodeId);
+      if (!result.ok) {
+        setBlockedRemovalReason(result.message);
+        return;
+      }
+    } else if (pendingRemovalEdgeId) {
+      const result = editableGraph.actions.disconnectEdge(pendingRemovalEdgeId);
+      if (!result.ok) {
+        setBlockedRemovalReason(result.message);
+        return;
+      }
     } else {
-      draftState.updateDraft((currentDraft) =>
-        applyFactoryGraphEdgeRemoval(
-          currentDraft,
-          draftState.graph,
-          pendingRemovalIntent.edge,
-        ),
-      );
+      return;
     }
     setBlockedRemovalReason(null);
     setPendingRemovalEdgeId(null);
     setPendingRemovalNodeId(null);
   }, [
-    draftState,
+    editableGraph.actions,
     pendingRemovalIntent,
+    pendingRemovalEdgeId,
+    pendingRemovalNodeId,
     setBlockedRemovalReason,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
@@ -92,6 +94,7 @@ function useFactoryGraphDeleteTargetHandlers({
   activeTool,
   canInteractWithEditor,
   draftState,
+  editableGraph,
   locale,
   saveEditableDefinition,
   setBlockedRemovalReason,
@@ -100,8 +103,9 @@ function useFactoryGraphDeleteTargetHandlers({
 }: {
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
-  draftState: ReturnType<typeof useFactoryGraphDraftState>;
-  locale?: string;
+  draftState: EditableFactoryGraphViewModel["draftState"];
+  editableGraph: EditableFactoryGraphViewModel;
+  locale?: string | null;
   saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
   setBlockedRemovalReason: (reason: string | null) => void;
   setPendingRemovalEdgeId: (edgeId: string | null) => void;
@@ -127,6 +131,7 @@ function useFactoryGraphDeleteTargetHandlers({
         return;
       }
       if (intent.ineligibleReason) {
+        editableGraph.actions.removeNode(nodeId);
         setBlockedRemovalReason(intent.ineligibleReason);
         saveEditableDefinition.reset();
         return;
@@ -142,6 +147,7 @@ function useFactoryGraphDeleteTargetHandlers({
       canInteractWithEditor,
       draftState.draft,
       draftState.latestDocument,
+      editableGraph.actions,
       locale,
       saveEditableDefinition,
       setBlockedRemovalReason,
@@ -169,6 +175,7 @@ function useFactoryGraphDeleteTargetHandlers({
         return;
       }
       if (intent.ineligibleReason) {
+        editableGraph.actions.disconnectEdge(edgeId);
         setBlockedRemovalReason(intent.ineligibleReason);
         saveEditableDefinition.reset();
         return;
@@ -184,6 +191,7 @@ function useFactoryGraphDeleteTargetHandlers({
       canInteractWithEditor,
       draftState.draft,
       draftState.latestDocument,
+      editableGraph.actions,
       locale,
       saveEditableDefinition,
       setBlockedRemovalReason,
@@ -199,8 +207,8 @@ function useFactoryGraphDeleteTargetHandlers({
 }
 
 function usePendingRemovalIntentState(
-  draftState: ReturnType<typeof useFactoryGraphDraftState>,
-  locale?: string,
+  draftState: EditableFactoryGraphViewModel["draftState"],
+  locale?: string | null,
 ) {
   const [pendingRemovalNodeId, setPendingRemovalNodeId] = useState<
     string | null
@@ -232,7 +240,9 @@ function usePendingRemovalIntentState(
 
   return {
     blockedRemovalReason,
+    pendingRemovalEdgeId,
     pendingRemovalIntent: pendingNodeRemovalIntent ?? pendingEdgeRemovalIntent,
+    pendingRemovalNodeId,
     setBlockedRemovalReason,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,

@@ -107,7 +107,6 @@ const hookState = vi.hoisted(() => ({
     status: "idle" as const,
   },
   unsupportedFromDefinition: undefined as string | undefined,
-  unsupportedFromTopology: undefined as string | undefined,
 }));
 
 vi.mock("../../current-factory-definition/public", () => ({
@@ -117,19 +116,48 @@ vi.mock("../../current-factory-definition/public", () => ({
 
 vi.mock("../../factory-graph-editor/public", () => ({
   createEmptyFactoryGraphDraft,
-  useFactoryGraphDraftState: () => hookState.draftState,
-}));
-
-vi.mock("../../factory-graph-editor/lib/factory-graph-editor-additions", () => ({
-  buildFactoryGraphAddEntityMenuActions: () => [],
-}));
-
-vi.mock("../../factory-graph-editor/lib/factory-graph-editor-save-summary", () => ({
-  buildFactoryGraphSaveSummary: () => ({
-    additions: [],
-    removals: [],
+  useEditableFactoryGraph: () => ({
+    actions: {
+      discard: hookState.draftState.resetDraft,
+      save: async () => {
+        if (!hookState.draftState.pendingFactoryDefinition) {
+          return false;
+        }
+        await hookState.saveEditableDefinition.mutateAsync({
+          baseVersion: hookState.draftState.latestDocument?.version,
+          factoryDefinition: hookState.draftState.pendingFactoryDefinition,
+        });
+        hookState.draftState.replaceDraft(createEmptyFactoryGraphDraft());
+        return true;
+      },
+    },
+    draftState: hookState.draftState,
+    saveState: {
+      canSave:
+        hookState.draftState.hasChanges &&
+        hookState.draftState.pendingFactoryDefinition !== null &&
+        hookState.draftState.latestDocument !== null,
+      isStale: false,
+    },
   }),
 }));
+
+vi.mock(
+  "../../factory-graph-editor/lib/factory-graph-editor-additions",
+  () => ({
+    buildFactoryGraphAddEntityMenuActions: () => [],
+  }),
+);
+
+vi.mock(
+  "../../factory-graph-editor/lib/factory-graph-editor-save-summary",
+  () => ({
+    buildFactoryGraphSaveSummary: () => ({
+      additions: [],
+      removals: [],
+    }),
+  }),
+);
 
 vi.mock("../components/react-flow-current-activity-card-editor-chrome", () => ({
   useFactoryGraphAddEntityController: () => hookState.addEntityController,
@@ -138,8 +166,6 @@ vi.mock("../components/react-flow-current-activity-card-editor-chrome", () => ({
 vi.mock("./factory-graph-editor-availability", () => ({
   findClassifierGraphEditorUnsupportedWorkstationName: () =>
     hookState.unsupportedFromDefinition,
-  findClassifierGraphEditorUnsupportedWorkstationNameFromTopology: () =>
-    hookState.unsupportedFromTopology,
 }));
 
 vi.mock("./react-flow-current-activity-card-editor-connections", () => ({
@@ -151,9 +177,8 @@ vi.mock("./react-flow-current-activity-card-editor-removals", () => ({
 }));
 
 vi.mock("./react-flow-current-activity-card-editor-value", () => ({
-  buildCurrentActivityGraphEditorValue: (
-    value: Record<string, unknown>,
-  ) => value,
+  buildCurrentActivityGraphEditorValue: (value: Record<string, unknown>) =>
+    value,
 }));
 
 describe("useCurrentActivityGraphEditor", () => {
@@ -189,7 +214,6 @@ describe("useCurrentActivityGraphEditor", () => {
       status: "idle",
     };
     hookState.unsupportedFromDefinition = undefined;
-    hookState.unsupportedFromTopology = undefined;
   });
 
   it("enters and leaves editor mode while resetting transient state", () => {
@@ -217,9 +241,9 @@ describe("useCurrentActivityGraphEditor", () => {
     expect(result.current.activeTool).toBeNull();
     expect(hookState.addEntityController.reset).toHaveBeenCalledTimes(1);
     expect(hookState.saveEditableDefinition.reset).toHaveBeenCalledTimes(1);
-    expect(hookState.connectionController.setConnectionNotice).toHaveBeenCalledWith(
-      null,
-    );
+    expect(
+      hookState.connectionController.setConnectionNotice,
+    ).toHaveBeenCalledWith(null);
     expect(
       hookState.removalController.setPendingRemovalEdgeId,
     ).toHaveBeenCalledWith(null);

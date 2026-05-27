@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -13,9 +14,21 @@ import (
 func BuildFactoryWorldView(state interfaces.FactoryWorldState) interfaces.FactoryWorldView {
 	simpleDashboardProjection := BuildSimpleDashboardProjection(state)
 	return interfaces.FactoryWorldView{
+		Factory:  factoryWorldViewFactory(state.Factory),
 		Topology: buildFactoryWorldTopologyView(state.Topology),
 		Runtime:  buildFactoryWorldRuntimeView(state, simpleDashboardProjection.Runtime),
 	}
+}
+
+func factoryWorldViewFactory(factory *factoryapi.Factory) *factoryapi.Factory {
+	if factory == nil {
+		return nil
+	}
+	clone, err := cloneGeneratedFactory(*factory)
+	if err != nil {
+		return nil
+	}
+	return &clone
 }
 
 func customerActiveDispatchIDs(state interfaces.FactoryWorldState) []string {

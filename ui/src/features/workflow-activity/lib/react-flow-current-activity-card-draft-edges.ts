@@ -1,25 +1,39 @@
 import type { DashboardEdgeOutcomeKind } from "../../../api/dashboard/types";
-import type { GraphLayout, PositionedEdge } from "../../flowchart/lib/layout";
 import type {
   FactoryGraphDraft,
   FactoryGraphDraftEdgeChange,
-  FactoryGraphNodeKey,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { GraphLayout, PositionedEdge } from "../../flowchart/lib/layout";
+import { currentActivityNodeIdForFactoryGraphKey } from "./current-activity-factory-graph-node-ids";
 import { buildVisibleGraphEdges } from "./react-flow-current-activity-card-graph";
 
-function currentActivityEdgeNodeId(key: FactoryGraphNodeKey): string {
+function legacyCurrentActivityNodeIdForFactoryGraphKey(
+  key: FactoryGraphDraftEdgeChange["source"],
+): string {
   if (key.kind === "workstation") {
-    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `workstation:${key.name}`;
   }
-
-  if (key.kind !== "work-state") {
-    // hardcoded-ui-copy-exception: non-product-diagnostic
-    return `place:${key.name}`;
+  if (key.kind === "work-state") {
+    return `place:${key.workTypeName}:${key.stateName}`;
   }
 
-  // hardcoded-ui-copy-exception: non-product-diagnostic
-  return `place:${key.workTypeName}:${key.stateName}`;
+  return `place:${key.name}`;
+}
+
+function resolveVisibleNodeId(
+  graphLayout: GraphLayout,
+  key: FactoryGraphDraftEdgeChange["source"],
+): string | null {
+  const preferredNodeId = currentActivityNodeIdForFactoryGraphKey(key);
+  if (graphLayout.nodes.some((node) => node.nodeId === preferredNodeId)) {
+    return preferredNodeId;
+  }
+  const legacyNodeId = legacyCurrentActivityNodeIdForFactoryGraphKey(key);
+  if (graphLayout.nodes.some((node) => node.nodeId === legacyNodeId)) {
+    return legacyNodeId;
+  }
+
+  return null;
 }
 
 function positionedEdgeOutcomeKind(
@@ -46,6 +60,9 @@ function supportedCurrentActivityDraftEdge(
   graphLayout: GraphLayout,
 ): PositionedEdge | null {
   if (
+    edgeChange.kind !== "worker-assignment" &&
+    edgeChange.kind !== "worker-resource" &&
+    edgeChange.kind !== "workstation-resource" &&
     edgeChange.kind !== "workstation-input" &&
     edgeChange.kind !== "workstation-output" &&
     edgeChange.kind !== "workstation-on-continue" &&
@@ -55,11 +72,9 @@ function supportedCurrentActivityDraftEdge(
     return null;
   }
 
-  const sourceNodeId = currentActivityEdgeNodeId(edgeChange.source);
-  const targetNodeId = currentActivityEdgeNodeId(edgeChange.target);
-  const hasSourceNode = graphLayout.nodes.some((node) => node.nodeId === sourceNodeId);
-  const hasTargetNode = graphLayout.nodes.some((node) => node.nodeId === targetNodeId);
-  if (!hasSourceNode || !hasTargetNode) {
+  const sourceNodeId = resolveVisibleNodeId(graphLayout, edgeChange.source);
+  const targetNodeId = resolveVisibleNodeId(graphLayout, edgeChange.target);
+  if (!sourceNodeId || !targetNodeId) {
     return null;
   }
 
@@ -75,11 +90,23 @@ function supportedCurrentActivityDraftEdge(
     outcomeKind: positionedEdgeOutcomeKind(edgeChange.kind),
     path: "",
     sourcePlaceKind:
-      edgeChange.source.kind === "work-state" ? "work_state" : undefined,
+      edgeChange.source.kind === "work-state"
+        ? "work_state"
+        : edgeChange.source.kind === "resource"
+          ? "resource"
+          : edgeChange.source.kind === "worker" ||
+              edgeChange.source.kind === "work-type"
+            ? "constraint"
+            : undefined,
     stateCategory:
       edgeChange.kind === "workstation-on-failure" ? "FAILED" : undefined,
     targetPlaceKind:
-      edgeChange.target.kind === "work-state" ? "work_state" : undefined,
+      edgeChange.target.kind === "work-state"
+        ? "work_state"
+        : edgeChange.target.kind === "worker" ||
+            edgeChange.target.kind === "work-type"
+          ? "constraint"
+          : undefined,
     toNodeId: targetNodeId,
   };
 }
@@ -111,7 +138,8 @@ export function buildVisibleGraphEdgesWithDraft(options: {
   const visibleGraphEdges = [
     ...baseEdges.filter((edge) => !edgeIdsToRemove.has(edge.edgeId)),
     ...pendingAdditionEdges.filter(
-      (edge) => !baseEdges.some((existingEdge) => existingEdge.edgeId === edge.edgeId),
+      (edge) =>
+        !baseEdges.some((existingEdge) => existingEdge.edgeId === edge.edgeId),
     ),
   ];
 

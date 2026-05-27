@@ -1,6 +1,8 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: shared graph-handle and pending-edge coverage stays grouped around one layout fixture seam.
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
+import { buildCurrentActivityGraphLayoutFromFactory } from "./current-activity-factory-graph-layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
   buildEditorHandles,
@@ -16,6 +18,105 @@ import {
 } from "./react-flow-current-activity-card-graph";
 
 describe("current activity graph editor handles", () => {
+  it("uses semantic handles for visible worker and resource relationships in editor mode", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workers: [
+        {
+          ...baseFactoryDefinition.workers?.[0],
+          name: "writer",
+          resources: [{ name: "gpu" }],
+          type: "MODEL_WORKER" as const,
+        },
+      ],
+    };
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const handleAssignments = buildHandleAssignments(visibleGraphEdges, {
+      editorMode: true,
+    });
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: {
+          anchorId: "worker-resource-source",
+          nodeId: "resource:gpu",
+        },
+      },
+      graphLayout,
+      handleAssignments,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot: semanticWorkflowDashboardSnapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const edges = buildGraphEdges(
+      buildActiveGraphHighlights([], visibleGraphEdges),
+      handleAssignments,
+      new Set(),
+      visibleGraphEdges,
+    );
+
+    expect(edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "worker-resource:place:gpu:available->place:worker:writer",
+          sourceHandle: "worker-resource-source",
+          targetHandle: "worker-resource-target",
+        }),
+        expect.objectContaining({
+          id: "worker-assignment:place:worker:writer->workstation:draft",
+          sourceHandle: "worker-assignment-source",
+          targetHandle: "worker-assignment-target",
+        }),
+        expect.objectContaining({
+          id: "workstation-resource:place:gpu:available->workstation:draft",
+          sourceHandle: "workstation-resource-source",
+          targetHandle: "workstation-resource-target",
+        }),
+      ]),
+    );
+    expect(edges).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({ sourceHandle: "out-0" }),
+        expect.objectContaining({ targetHandle: "in-0" }),
+      ]),
+    );
+    expect(
+      nodes.find((node) => node.id === "place:gpu:available")?.data,
+    ).toMatchObject({
+      factoryGraphNodeId: "resource:gpu",
+      handles: expect.arrayContaining([
+        expect.objectContaining({ id: "worker-resource-source" }),
+        expect.objectContaining({ id: "workstation-resource-source" }),
+      ]),
+      kind: "resource",
+    });
+    expect(
+      nodes.find((node) => node.id === "place:worker:writer")?.data,
+    ).toMatchObject({
+      factoryGraphNodeId: "worker:writer",
+      handles: expect.arrayContaining([
+        expect.objectContaining({
+          id: "worker-resource-target",
+          variant: "valid-target",
+        }),
+        expect.objectContaining({ id: "worker-assignment-source" }),
+      ]),
+      kind: "worker",
+    });
+  });
+
   it("binds shared workstation and work-state edges to the editor anchor ids", async () => {
     const graphLayout = await buildGraphLayout(
       semanticWorkflowDashboardSnapshot.topology,
@@ -82,9 +183,9 @@ describe("current activity graph editor handles", () => {
         }),
       ]),
     );
-    expect(workstationNode?.data.handles).toHaveLength(5);
+    expect(workstationNode?.data.handles).toHaveLength(7);
     expect(workstationNode?.data.handles).toEqual(
-      expect.not.arrayContaining([
+      expect.arrayContaining([
         expect.objectContaining({
           id: "worker-assignment-target",
           label: "Worker",
@@ -188,7 +289,6 @@ describe("current activity graph editor handles", () => {
       nodeId: "work-state:story:done",
     });
   });
-
 });
 
 describe("current activity graph active item labels", () => {

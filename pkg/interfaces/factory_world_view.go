@@ -2,6 +2,8 @@ package interfaces
 
 import (
 	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 // FactoryWorldView is a presentation projection derived from
@@ -9,6 +11,7 @@ import (
 // snapshots; callers must build the generic world state from canonical events
 // first.
 type FactoryWorldView struct {
+	Factory  *factoryapi.Factory      `json:"factory,omitempty"`
 	Topology FactoryWorldTopologyView `json:"topology"`
 	Runtime  FactoryWorldRuntimeView  `json:"runtime"`
 }

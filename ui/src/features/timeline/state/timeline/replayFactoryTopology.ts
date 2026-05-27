@@ -2,14 +2,19 @@ import type {
   FactoryDefinition,
   FactoryPlace,
   FactoryWork,
-  FactoryWorkItem,
   FactoryWorker,
+  FactoryWorkItem,
   FactoryWorkstation,
   FactoryWorkType,
   InitialStructureRequestPayload,
   WorkstationIO,
 } from "../../../../api/events";
-import { dashboardWorkstationName, isSystemTimeWorkType, isSystemTimeWorkstation, SYSTEM_TIME_PENDING_PLACE_ID } from "./systemTime";
+import {
+  dashboardWorkstationName,
+  isSystemTimeWorkstation,
+  isSystemTimeWorkType,
+  SYSTEM_TIME_PENDING_PLACE_ID,
+} from "./systemTime";
 import type { ProjectedInitialStructure, ReplayWorldState } from "./types";
 
 function factoryWorkTypes(factory: FactoryDefinition): FactoryWorkType[] {
@@ -37,42 +42,65 @@ function workstationRouteIOs(
   return Array.isArray(value) ? value : [value];
 }
 
-function workstationFailureIO(workstation: FactoryWorkstation): WorkstationIO[] {
+function workstationFailureIO(
+  workstation: FactoryWorkstation,
+): WorkstationIO[] {
   return workstationRouteIOs(
-    (workstation as FactoryWorkstation & { onFailure?: WorkstationIO[] | WorkstationIO | null })
-      .onFailure,
+    (
+      workstation as FactoryWorkstation & {
+        onFailure?: WorkstationIO[] | WorkstationIO | null;
+      }
+    ).onFailure,
   );
 }
 
-function workstationContinueIO(workstation: FactoryWorkstation): WorkstationIO[] {
+function workstationContinueIO(
+  workstation: FactoryWorkstation,
+): WorkstationIO[] {
   return workstationRouteIOs(
-    (workstation as FactoryWorkstation & { onContinue?: WorkstationIO[] | WorkstationIO | null })
-      .onContinue,
+    (
+      workstation as FactoryWorkstation & {
+        onContinue?: WorkstationIO[] | WorkstationIO | null;
+      }
+    ).onContinue,
   );
 }
 
-function workstationRejectionIO(workstation: FactoryWorkstation): WorkstationIO[] {
+function workstationRejectionIO(
+  workstation: FactoryWorkstation,
+): WorkstationIO[] {
   return workstationRouteIOs(
-    (workstation as FactoryWorkstation & { onRejection?: WorkstationIO[] | WorkstationIO | null })
-      .onRejection,
+    (
+      workstation as FactoryWorkstation & {
+        onRejection?: WorkstationIO[] | WorkstationIO | null;
+      }
+    ).onRejection,
   );
 }
 
 function workstationOutputIO(workstation: FactoryWorkstation): WorkstationIO[] {
   const directOutputs = workstationRouteIOs(
-    (workstation as FactoryWorkstation & { outputs?: WorkstationIO[] | WorkstationIO | null })
-      .outputs,
+    (
+      workstation as FactoryWorkstation & {
+        outputs?: WorkstationIO[] | WorkstationIO | null;
+      }
+    ).outputs,
   );
-  const classificationOutputs =
-    (workstation.classificationRoutes ?? []).flatMap((route) => route.outputs ?? []);
+  const classificationOutputs = (
+    workstation.classificationRoutes ?? []
+  ).flatMap((route) => route.outputs ?? []);
   return [...directOutputs, ...classificationOutputs];
 }
 
-function workstationSchedulingKind(workstation: FactoryWorkstation): string | undefined {
+function workstationSchedulingKind(
+  workstation: FactoryWorkstation,
+): string | undefined {
   return workstation.behavior ?? workstation.type;
 }
 
-export function workerModelProvider(worker: FactoryWorker | undefined): string | undefined {
+export function workerModelProvider(
+  worker: FactoryWorker | undefined,
+): string | undefined {
   return worker?.modelProvider;
 }
 
@@ -92,21 +120,31 @@ function projectWorkstationTopology(
   workstation: FactoryWorkstation,
 ): NonNullable<ProjectedInitialStructure["workstations"]>[number] {
   const inputs = workstation.inputs.filter(isPublicWorkstationIO);
-  const outputs = workstationOutputIO(workstation).filter(isPublicWorkstationIO);
-  const continuation = workstationContinueIO(workstation).filter(isPublicWorkstationIO);
-  const failure = workstationFailureIO(workstation).filter(isPublicWorkstationIO);
-  const rejection = workstationRejectionIO(workstation).filter(isPublicWorkstationIO);
+  const outputs = workstationOutputIO(workstation).filter(
+    isPublicWorkstationIO,
+  );
+  const continuation = workstationContinueIO(workstation).filter(
+    isPublicWorkstationIO,
+  );
+  const failure = workstationFailureIO(workstation).filter(
+    isPublicWorkstationIO,
+  );
+  const rejection = workstationRejectionIO(workstation).filter(
+    isPublicWorkstationIO,
+  );
 
   return {
     continue_place_ids:
       continuation.length > 0 ? continuation.map(placeIDFromIO) : undefined,
-    failure_place_ids: failure.length > 0 ? failure.map(placeIDFromIO) : undefined,
+    failure_place_ids:
+      failure.length > 0 ? failure.map(placeIDFromIO) : undefined,
     id: workstation.id ?? workstation.name,
     input_place_ids: inputs.map(placeIDFromIO),
     kind: workstationSchedulingKind(workstation),
     name: workstation.name,
     output_place_ids: outputs.map(placeIDFromIO),
-    rejection_place_ids: rejection.length > 0 ? rejection.map(placeIDFromIO) : undefined,
+    rejection_place_ids:
+      rejection.length > 0 ? rejection.map(placeIDFromIO) : undefined,
     worker_id: workstation.worker,
   };
 }
@@ -156,10 +194,17 @@ export function normalizeFactoryPayload(
   }
   for (const resource of factory.resources ?? []) {
     const id = `${resource.name}:available`;
-    places.set(id, { category: "PROCESSING", id, state: "available", type_id: resource.name });
+    places.set(id, {
+      category: "PROCESSING",
+      id,
+      state: "available",
+      type_id: resource.name,
+    });
   }
   return {
-    places: [...places.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    places: [...places.values()].sort((left, right) =>
+      left.id.localeCompare(right.id),
+    ),
     resources: (factory.resources ?? []).map((resource) => ({
       capacity: resource.capacity ?? 0,
       id: resource.name,
@@ -193,7 +238,8 @@ export function seedResourceOccupancy(
     const place = (state.topology.places ?? [])
       .filter((candidate) => candidate.type_id === resource.id)
       .sort((left, right) => {
-        if (left.state === "available" && right.state !== "available") return -1;
+        if (left.state === "available" && right.state !== "available")
+          return -1;
         if (right.state === "available" && left.state !== "available") return 1;
         return left.id.localeCompare(right.id);
       })[0];
@@ -206,14 +252,17 @@ export function seedResourceOccupancy(
   }
 }
 
-type FactoryWorkstationShape = NonNullable<ProjectedInitialStructure["workstations"]>[number];
+type FactoryWorkstationShape = NonNullable<
+  ProjectedInitialStructure["workstations"]
+>[number];
 
 function topologyWorkstation(
   topology: ProjectedInitialStructure,
   transitionID: string,
 ): FactoryWorkstationShape | undefined {
   return (topology.workstations ?? []).find(
-    (workstation) => workstation.id === transitionID || workstation.name === transitionID,
+    (workstation) =>
+      workstation.id === transitionID || workstation.name === transitionID,
   );
 }
 
@@ -236,7 +285,9 @@ export function topologyWorker(
   if (!workstation?.worker_id) {
     return undefined;
   }
-  return (topology.workers ?? []).find((worker) => worker.id === workstation.worker_id);
+  return (topology.workers ?? []).find(
+    (worker) => worker.id === workstation.worker_id,
+  );
 }
 
 export function factoryWorkToItem(
@@ -252,27 +303,49 @@ export function factoryWorkToItem(
     work_type_id?: string;
   };
   const workID =
-    ("workId" in work && typeof work.workId === "string" ? work.workId : undefined) ??
+    ("workId" in work && typeof work.workId === "string"
+      ? work.workId
+      : undefined) ??
     legacyWork.work_id ??
     ("name" in work && typeof work.name === "string" ? work.name : undefined) ??
     "";
   const existing = state.workItemsByID[workID];
   const workTypeID =
-    ("workTypeName" in work && typeof work.workTypeName === "string" ? work.workTypeName : undefined) ??
-    ("work_type_name" in work && typeof work.work_type_name === "string" ? work.work_type_name : undefined) ??
+    ("workTypeName" in work && typeof work.workTypeName === "string"
+      ? work.workTypeName
+      : undefined) ??
+    ("work_type_name" in work && typeof work.work_type_name === "string"
+      ? work.work_type_name
+      : undefined) ??
     legacyWork.work_type_id ??
     existing?.work_type_id;
-  const placeIDValue = placeIDOverride ?? existing?.place_id ?? (isSystemTimeWorkType(workTypeID) ? SYSTEM_TIME_PENDING_PLACE_ID : undefined);
+  const placeIDValue =
+    placeIDOverride ??
+    existing?.place_id ??
+    (isSystemTimeWorkType(workTypeID)
+      ? SYSTEM_TIME_PENDING_PLACE_ID
+      : undefined);
   return {
-    current_chaining_trace_id: legacyWork.current_chaining_trace_id ?? existing?.current_chaining_trace_id,
-    display_name: ("name" in work && typeof work.name === "string" ? work.name : undefined) || existing?.display_name,
+    current_chaining_trace_id:
+      legacyWork.current_chaining_trace_id ??
+      existing?.current_chaining_trace_id,
+    display_name:
+      ("name" in work && typeof work.name === "string"
+        ? work.name
+        : undefined) || existing?.display_name,
     id: workID,
     place_id: placeIDValue,
-    previous_chaining_trace_ids: legacyWork.previous_chaining_trace_ids ?? existing?.previous_chaining_trace_ids,
+    previous_chaining_trace_ids:
+      legacyWork.previous_chaining_trace_ids ??
+      existing?.previous_chaining_trace_ids,
     tags: ("tags" in work ? work.tags : undefined) ?? existing?.tags,
     trace_id:
-      ("traceId" in work && typeof work.traceId === "string" ? work.traceId : undefined) ??
-      ("trace_id" in work && typeof work.trace_id === "string" ? work.trace_id : undefined) ??
+      ("traceId" in work && typeof work.traceId === "string"
+        ? work.traceId
+        : undefined) ??
+      ("trace_id" in work && typeof work.trace_id === "string"
+        ? work.trace_id
+        : undefined) ??
       existing?.trace_id,
     work_type_id: workTypeID ?? existing?.work_type_id ?? "",
   };
@@ -317,12 +390,14 @@ function outputPlaceForProjectedWorkstation(
     outcome === "CONTINUE" && workstation.continue_place_ids?.length
       ? workstation.continue_place_ids
       : outcome === "FAILED" && workstation.failure_place_ids?.length
-      ? workstation.failure_place_ids
-      : outcome === "REJECTED" && workstation.rejection_place_ids?.length
-        ? workstation.rejection_place_ids
-        : workstation.output_place_ids ?? [];
+        ? workstation.failure_place_ids
+        : outcome === "REJECTED" && workstation.rejection_place_ids?.length
+          ? workstation.rejection_place_ids
+          : (workstation.output_place_ids ?? []);
   return routePlaceIDs.find(
-    (placeIDValue) => topology.places?.find((place) => place.id === placeIDValue)?.type_id === workTypeID,
+    (placeIDValue) =>
+      topology.places?.find((place) => place.id === placeIDValue)?.type_id ===
+      workTypeID,
   );
 }
 
@@ -341,5 +416,10 @@ export function outputPlaceForWorkstation(
       return explicitPlace;
     }
   }
-  return outputPlaceForProjectedWorkstation(topology, transitionID, outcome, workTypeID);
+  return outputPlaceForProjectedWorkstation(
+    topology,
+    transitionID,
+    outcome,
+    workTypeID,
+  );
 }

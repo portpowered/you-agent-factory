@@ -9,23 +9,22 @@ import {
 } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
-  applyFactoryGraphAddEntityDraft,
   type CanonicalFactoryDefinition,
   createFactoryGraphAddEntityDraft,
+  type EditableFactoryGraphViewModel,
   type FactoryGraphAddEntityDraft,
   type FactoryGraphAddEntityFieldErrors,
   type FactoryGraphAddEntityKind,
-  type useFactoryGraphDraftState,
   validateFactoryGraphAddEntityDraft,
 } from "../../factory-graph-editor/public";
 
 export function useFactoryGraphAddEntityController({
   currentFactoryDefinition,
-  draftState,
+  editableGraph,
   setActiveTool,
 }: {
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
-  draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  editableGraph: EditableFactoryGraphViewModel;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
 }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -63,12 +62,15 @@ export function useFactoryGraphAddEntityController({
       return;
     }
 
-    draftState.updateDraft((currentDraft) =>
-      applyFactoryGraphAddEntityDraft(currentDraft, addEntityDraft),
-    );
+    const addResult = editableGraph.actions.addNode(addEntityDraft);
+    if (!addResult.ok) {
+      setAddEntityErrors(addResult.fieldErrors ?? { name: addResult.message });
+      return;
+    }
+
     setAddEntityDraft(null);
     setAddEntityErrors({});
-  }, [addEntityDraft, currentFactoryDefinition, draftState]);
+  }, [addEntityDraft, currentFactoryDefinition, editableGraph.actions]);
 
   const reset = useCallback(() => {
     setAddMenuOpen(false);

@@ -34,28 +34,37 @@ import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
+import {
+  addFactoryGraphNode,
+  connectFactoryGraphNodes,
+  disconnectFactoryGraphEdge,
+  removeFactoryGraphNode,
+} from "../../factory-graph-editor/lib/factory-graph-operations";
+import {
+  useEditableFactoryGraph,
+  useFactoryGraphDraftState,
+} from "../../factory-graph-editor/public";
+import { buildGraphLayout } from "../../flowchart/lib/layout";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../../flowchart/public";
-import { buildGraphLayout } from "../../flowchart/lib/layout";
+import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import type {
   FactoryPngImportValue,
   ReadFactoryImportFile,
 } from "../../import/public";
-import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
+import { buildVisibleGraphEdges } from "../lib/react-flow-current-activity-card-graph";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
+import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import {
   currentActivityGraphKey,
   currentActivityTopologyKey,
   ReactFlowCurrentActivityCard,
 } from "./react-flow-current-activity-card";
-import { buildVisibleGraphEdges } from "../lib/react-flow-current-activity-card-graph";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 
 vi.mock("../../current-factory-definition/public", async () => {
   const actual = await vi.importActual(
@@ -74,6 +83,7 @@ vi.mock("../../factory-graph-editor/public", async () => {
 
   return {
     ...actual,
+    useEditableFactoryGraph: vi.fn(),
     useFactoryGraphDraftState: vi.fn(),
   };
 });
@@ -349,6 +359,105 @@ function workerDenseSnapshot(): DashboardSnapshot {
   return snapshot;
 }
 
+function canonicalObserverSnapshot(): DashboardSnapshot {
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  snapshot.factory = {
+    name: "canonical-observer",
+    resources: [{ capacity: 2, name: "agent-slot" }],
+    workers: [
+      {
+        model: "gpt-5",
+        name: "planner",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5",
+        name: "agent",
+        resources: [{ capacity: 1, name: "agent-slot" }],
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [
+      {
+        name: "story",
+        states: [
+          { name: "init", type: "INITIAL" },
+          { name: "ready", type: "PROCESSING" },
+          { name: "implemented", type: "PROCESSING" },
+          { name: "documented", type: "PROCESSING" },
+          { name: "blocked", type: "FAILED" },
+          { name: "complete", type: "TERMINAL" },
+        ],
+      },
+    ],
+    workstations: [
+      {
+        behavior: "STANDARD",
+        id: "plan",
+        inputs: [{ state: "init", workType: "story" }],
+        name: "Plan",
+        outputs: [{ state: "ready", workType: "story" }],
+        type: "MODEL_WORKSTATION",
+        worker: "planner",
+      },
+      {
+        behavior: "REPEATER",
+        id: "implement",
+        inputs: [{ state: "ready", workType: "story" }],
+        name: "Implement",
+        onFailure: [{ state: "blocked", workType: "story" }],
+        outputs: [{ state: "implemented", workType: "story" }],
+        resources: [{ capacity: 1, name: "agent-slot" }],
+        type: "MODEL_WORKSTATION",
+        worker: "agent",
+      },
+      {
+        behavior: "STANDARD",
+        id: "document",
+        inputs: [{ state: "ready", workType: "story" }],
+        name: "Document",
+        outputs: [{ state: "documented", workType: "story" }],
+        type: "MODEL_WORKSTATION",
+        worker: "agent",
+      },
+      {
+        behavior: "REPEATER",
+        id: "review",
+        inputs: [
+          { state: "implemented", workType: "story" },
+          { state: "documented", workType: "story" },
+        ],
+        name: "Review",
+        onContinue: [{ state: "ready", workType: "story" }],
+        outputs: [{ state: "complete", workType: "story" }],
+        type: "MODEL_WORKSTATION",
+        worker: "reviewer",
+      },
+      {
+        behavior: "STANDARD",
+        id: "repair",
+        inputs: [{ state: "blocked", workType: "story" }],
+        name: "Repair",
+        outputs: [{ state: "ready", workType: "story" }],
+        type: "MODEL_WORKSTATION",
+        worker: "agent",
+      },
+    ],
+  };
+  snapshot.topology = {
+    edges: [],
+    workstation_node_ids: [],
+    workstation_nodes_by_id: {},
+  };
+
+  return snapshot;
+}
+
 async function getStateNodeArticle(label: string): Promise<HTMLElement> {
   const button = await screen.findByRole("button", {
     name: `Select ${label} state`,
@@ -423,6 +532,168 @@ function renderWithQueryClient(view: ReactElement) {
   return render(
     <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
   );
+}
+
+function createEditableGraphTestViewModel(
+  options: Parameters<typeof useEditableFactoryGraph>[0],
+): ReturnType<typeof useEditableFactoryGraph> {
+  const draftState = vi.mocked(useFactoryGraphDraftState)();
+  const baseFactoryDefinition =
+    draftState.latestDocument ?? draftState.baseDocument ?? null;
+  const activeWorkCount = options.activeWorkCount ?? 0;
+  const isStale =
+    draftState.hasChanges &&
+    draftState.baseDocument?.version !== undefined &&
+    draftState.latestDocument?.version !== undefined &&
+    (draftState.baseDocument.version.logical !==
+      draftState.latestDocument.version.logical ||
+      draftState.baseDocument.version.physical !==
+        draftState.latestDocument.version.physical);
+
+  return {
+    actions: {
+      addNode: (node) => {
+        const result = baseFactoryDefinition
+          ? addFactoryGraphNode({
+              baseFactoryDefinition,
+              draft: draftState.draft,
+              node,
+            })
+          : {
+              message: "Load the current factory before editing graph nodes.",
+              ok: false as const,
+              reason: "INVALID_FIELD" as const,
+            };
+        if (result.ok) {
+          draftState.replaceDraft(result.value);
+        }
+        return result;
+      },
+      connectNodes: (connection) => {
+        const result = baseFactoryDefinition
+          ? connectFactoryGraphNodes({
+              baseFactoryDefinition,
+              draft: draftState.draft,
+              ...connection,
+            })
+          : {
+              message:
+                "Load the current factory before connecting graph nodes.",
+              ok: false as const,
+              reason: "INVALID_CONNECTION" as const,
+            };
+        if (result.ok) {
+          draftState.replaceDraft(result.value);
+        }
+        return result;
+      },
+      discard: draftState.resetDraft,
+      disconnectEdge: (edgeId) => {
+        const result = baseFactoryDefinition
+          ? disconnectFactoryGraphEdge({
+              baseFactoryDefinition,
+              draft: draftState.draft,
+              edgeId,
+            })
+          : {
+              message:
+                "Load the current factory before disconnecting graph edges.",
+              ok: false as const,
+              reason: "UNKNOWN_EDGE" as const,
+            };
+        if (result.ok) {
+          draftState.replaceDraft(result.value);
+        }
+        return result;
+      },
+      removeNode: (nodeId) => {
+        const result = baseFactoryDefinition
+          ? removeFactoryGraphNode({
+              baseFactoryDefinition,
+              draft: draftState.draft,
+              nodeId,
+            })
+          : {
+              message: "Load the current factory before removing graph nodes.",
+              ok: false as const,
+              reason: "NODE_NOT_FOUND" as const,
+            };
+        if (result.ok) {
+          draftState.replaceDraft(result.value);
+        }
+        return result;
+      },
+      save: async () => {
+        if (
+          !options.saveFactoryDefinition ||
+          !draftState.hasChanges ||
+          !draftState.pendingFactoryDefinition ||
+          !draftState.latestDocument ||
+          activeWorkCount > 0
+        ) {
+          return false;
+        }
+        await options.saveFactoryDefinition({
+          baseVersion: draftState.latestDocument.version,
+          factoryDefinition: draftState.pendingFactoryDefinition,
+        });
+        draftState.replaceDraft({
+          additions: {
+            resources: [],
+            workers: [],
+            workStates: [],
+            workTypes: [],
+            workstations: [],
+          },
+          edgeChanges: {
+            additions: [],
+            removals: [],
+          },
+          removals: {
+            resources: [],
+            workers: [],
+            workStates: [],
+            workTypes: [],
+            workstations: [],
+          },
+        });
+        return true;
+      },
+      updateNodeField: () => ({
+        message: "Field editing is not exercised by this component test.",
+        ok: false,
+        reason: "INVALID_FIELD",
+      }),
+    },
+    blockedOperation: null,
+    draftState,
+    graphState: null,
+    pendingState: {
+      hasChanges: draftState.hasChanges,
+      pendingFactoryDefinition: draftState.pendingFactoryDefinition,
+    },
+    projection: {
+      edges: [],
+      nodes: [],
+    },
+    saveState: {
+      canSave:
+        Boolean(options.saveFactoryDefinition) &&
+        draftState.hasChanges &&
+        draftState.pendingFactoryDefinition !== null &&
+        draftState.latestDocument !== null &&
+        activeWorkCount === 0 &&
+        !isStale,
+      isSaving: false,
+      isStale,
+      lastError: null,
+      lastSuccess: false,
+    },
+    validationState: {
+      errors: draftState.validationErrors,
+      isValid: draftState.validationErrors.length === 0,
+    },
+  };
 }
 
 function createFactoryImportValue(): FactoryPngImportValue {
@@ -804,6 +1075,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
     vi.mocked(useFactoryGraphDraftState).mockReturnValue(
       defaultDraftState as never,
     );
+    vi.mocked(useEditableFactoryGraph).mockImplementation((options) =>
+      createEditableGraphTestViewModel(options as never),
+    );
   });
 
   afterEach(() => {
@@ -861,18 +1135,34 @@ function registerCurrentActivityCardTestLifecycle(): void {
     const snapshot = dashboardSnapshotWithActiveWorkItemCount(0);
     snapshot.topology.workstation_nodes_by_id.review.workstation_kind =
       "CLASSIFIER_WORKSTATION";
+    snapshot.factory = structuredClone(editableFactoryDefinition);
+    const reviewWorkstation = snapshot.factory?.workstations?.find(
+      (workstation) => workstation.name === "review",
+    );
+    if (reviewWorkstation) {
+      reviewWorkstation.type = "CLASSIFIER_WORKSTATION";
+      reviewWorkstation.classificationRoutes = [
+        {
+          label: "approved",
+          output: {
+            state: "complete",
+            workType: "story",
+          },
+        },
+      ];
+    }
 
     renderCurrentActivity({
       snapshot,
     });
 
     const enterEditorButton = screen.getByRole("button", {
-      name: 'Factory graph editing does not yet support classifier workstation routes. "Review" stays read-only in this view until labeled route editing is available.',
+      name: 'Factory graph editing does not yet support classifier workstation routes. "review" stays read-only in this view until labeled route editing is available.',
     });
     expect(enterEditorButton.getAttribute("disabled")).not.toBeNull();
     expect(
       screen.getByText(
-        'Editor unavailable: Factory graph editing does not yet support classifier workstation routes. "Review" stays read-only in this view until labeled route editing is available.',
+        'Editor unavailable: Factory graph editing does not yet support classifier workstation routes. "review" stays read-only in this view until labeled route editing is available.',
       ),
     ).toBeTruthy();
 
@@ -887,7 +1177,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("lists the supported add-entity options and validates duplicate worker names before mutating the draft", async () => {
-    const updateDraft = vi.fn();
+    const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -895,7 +1185,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
-      updateDraft,
+      replaceDraft,
     } as never);
 
     renderCurrentActivity({
@@ -924,11 +1214,11 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(
       screen.getByText('A worker named "writer" already exists in the draft.'),
     ).toBeTruthy();
-    expect(updateDraft).not.toHaveBeenCalled();
+    expect(replaceDraft).not.toHaveBeenCalled();
   });
 
   it("submits valid add-entity forms into the pending graph draft", async () => {
-    const updateDraft = vi.fn();
+    const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -936,7 +1226,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
-      updateDraft,
+      replaceDraft,
     } as never);
 
     renderCurrentActivity({
@@ -958,10 +1248,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
     });
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
-    expect(updateDraft).toHaveBeenCalledTimes(1);
-    const updater = updateDraft.mock
-      .calls[0]?.[0] as typeof defaultDraftState.updateDraft;
-    const nextDraft = updater(defaultDraftState.draft);
+    expect(replaceDraft).toHaveBeenCalledTimes(1);
+    const nextDraft = replaceDraft.mock.calls[0]?.[0];
     expect(nextDraft.additions.workTypes).toEqual([
       {
         name: "essay",
@@ -976,7 +1264,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("distinguishes work-state creation from work-type creation and blocks missing work-type association", async () => {
-    const updateDraft = vi.fn();
+    const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -984,7 +1272,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
-      updateDraft,
+      replaceDraft,
     } as never);
 
     renderCurrentActivity({
@@ -1026,11 +1314,11 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(
       screen.getByText("Choose a work type before adding a work state."),
     ).toBeTruthy();
-    expect(updateDraft).not.toHaveBeenCalled();
+    expect(replaceDraft).not.toHaveBeenCalled();
   });
 
   it("submits valid work-state add-entity forms into the pending graph draft", async () => {
-    const updateDraft = vi.fn();
+    const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -1038,7 +1326,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
-      updateDraft,
+      replaceDraft,
     } as never);
 
     renderCurrentActivity({
@@ -1060,10 +1348,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
     });
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
-    expect(updateDraft).toHaveBeenCalledTimes(1);
-    const updater = updateDraft.mock
-      .calls[0]?.[0] as typeof defaultDraftState.updateDraft;
-    const nextDraft = updater(defaultDraftState.draft);
+    expect(replaceDraft).toHaveBeenCalledTimes(1);
+    const nextDraft = replaceDraft.mock.calls[0]?.[0];
 
     expect(nextDraft.additions.workStates).toEqual([
       {
@@ -1137,7 +1423,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(screen.queryByText("Pending")).toBeNull();
   });
 
-  it("does not swap editor mode onto the worker and resource editor graph lanes", async () => {
+  it("renders worker and resource nodes from the canonical snapshot factory in observer mode", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
       error: null,
@@ -1148,14 +1434,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
       latestDocument: workerDenseFactoryDefinitionDocument,
       pendingFactoryDefinition: workerDenseFactoryDefinitionDocument,
     } as never);
+    const snapshot = workerDenseSnapshot();
+    snapshot.factory = workerDenseFactoryDefinitionDocument;
 
     renderCurrentActivity({
-      snapshot: workerDenseSnapshot(),
+      snapshot,
     });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
 
     await waitFor(() => {
       expect(
@@ -1165,10 +1449,20 @@ function registerCurrentActivityCardTestLifecycle(): void {
       ).toBeTruthy();
     });
 
-    expect(screen.queryByText("writer")).toBeNull();
-    expect(screen.queryByText("reviewer")).toBeNull();
-    expect(screen.queryByText("stalled")).toBeNull();
-    expect(screen.queryByText("gpu")).toBeNull();
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-id="place:worker:writer"]'),
+      ).toBeTruthy();
+      expect(
+        document.querySelector('[data-id="place:worker:reviewer"]'),
+      ).toBeTruthy();
+      expect(
+        document.querySelector('[data-id="place:worker:stalled"]'),
+      ).toBeTruthy();
+      expect(
+        document.querySelector('[data-id="place:gpu:available"]'),
+      ).toBeTruthy();
+    });
   });
 
   it("does not render the editor-only visibility preset controls in embedded editor mode", async () => {
@@ -1240,29 +1534,29 @@ function registerCurrentActivityCardTestLifecycle(): void {
       }),
     ).not.toHaveLength(0);
     expect(
-      screen.queryByRole("button", {
+      screen.queryAllByRole("button", {
         name: "Assign this worker to a workstation.",
       }),
-    ).toBeNull();
+    ).toHaveLength(0);
     expect(
-      screen.queryByRole("button", {
+      screen.getAllByRole("button", {
         name: "Accept a worker assignment for this workstation.",
       }),
-    ).toBeNull();
+    ).not.toHaveLength(0);
     expect(
-      screen.queryByRole("button", {
+      screen.getAllByRole("button", {
         name: "Accept a resource requirement for this workstation.",
       }),
-    ).toBeNull();
+    ).not.toHaveLength(0);
     expect(
-      screen.queryByRole("button", {
+      screen.getAllByRole("button", {
         name: "Provide this resource to a workstation.",
       }),
-    ).toBeNull();
+    ).not.toHaveLength(0);
   });
 
   it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {
-    const updateDraft = vi.fn();
+    const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -1296,7 +1590,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
           },
         ],
       },
-      updateDraft,
+      replaceDraft,
     } as never);
 
     renderCurrentActivity({
@@ -1326,10 +1620,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
       }),
     );
 
-    expect(updateDraft).toHaveBeenCalledTimes(1);
-    const updater = updateDraft.mock
-      .calls[0]?.[0] as typeof defaultDraftState.updateDraft;
-    const nextDraft = updater(defaultDraftState.draft);
+    expect(replaceDraft).toHaveBeenCalledTimes(1);
+    const nextDraft = replaceDraft.mock.calls[0]?.[0];
     expect(nextDraft.removals.workstations).toEqual(["review"]);
   });
 
@@ -1383,17 +1675,13 @@ function registerCurrentActivityCardTestLifecycle(): void {
         name: "Select writer worker",
       }),
     ).toBeNull();
-    expect(
-      screen.queryByText("writer"),
-    ).toBeNull();
+    expect(screen.queryByText("writer")).toBeNull();
     expect(
       await screen.findByRole("button", {
         name: "Select Review workstation",
       }),
     ).toBeTruthy();
-    expect(
-      screen.queryByText("Removal blocked"),
-    ).toBeNull();
+    expect(screen.queryByText("Removal blocked")).toBeNull();
     expect(
       screen.queryByRole("dialog", { name: "Remove writer worker?" }),
     ).toBeNull();
@@ -2216,6 +2504,73 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
 
 describe("ReactFlowCurrentActivityCard graph semantics", () => {
   registerCurrentActivityCardTestLifecycle();
+
+  it("renders active observer graph state from the canonical snapshot factory without topology fallback", async () => {
+    renderCurrentActivity({ snapshot: canonicalObserverSnapshot() });
+
+    expect(
+      await screen.findByRole("region", { name: "Work graph viewport" }),
+    ).toBeTruthy();
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("button", { name: /Select .* workstation/ }),
+      ).toHaveLength(5);
+    });
+
+    expect(screen.getByLabelText("agent-slot:available")).toBeTruthy();
+    expect(screen.getByText("worker:agent")).toBeTruthy();
+    expect(screen.getByText("worker:reviewer")).toBeTruthy();
+    expect(screen.getByLabelText("2 resource tokens")).toBeTruthy();
+    expect(screen.getByText("Active Story")).toBeTruthy();
+    expect(
+      within(screen.getByRole("button", { name: "Select Review workstation" }))
+        .getByRole("img", { name: "Repeater workstation" })
+        .getAttribute("data-graph-semantic-icon"),
+    ).toBe("repeater");
+    expect(
+      within(screen.getByRole("button", { name: "Select Review workstation" }))
+        .getByRole("img", { name: "Active" })
+        .getAttribute("data-graph-semantic-icon"),
+    ).toBe("active-work");
+    expect(
+      (await getStateNodeArticle("story:complete"))
+        .querySelector("article")
+        ?.className.includes("border-af-success-border"),
+    ).toBe(true);
+    expect(
+      (await getStateNodeArticle("story:documented"))
+        .querySelector("article")
+        ?.className.includes("opacity-[0.45]"),
+    ).toBe(true);
+  });
+
+  it("keeps observer selection callbacks stable for canonical factory-backed graph nodes", async () => {
+    const { onSelectStateNode, onSelectWorkID, onSelectWorkstation } =
+      renderCurrentActivity({
+        snapshot: canonicalObserverSnapshot(),
+        selection: { kind: "state-node", placeId: "story:implemented" },
+      });
+
+    const implementedState = await screen.findByRole("button", {
+      name: "Select story:implemented state",
+    });
+    expect(implementedState.getAttribute("data-selected-state")).toBe("true");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select Review workstation" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select story:ready state" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Active Story/ }));
+
+    expect(onSelectWorkstation).toHaveBeenCalledWith("review");
+    expect(onSelectStateNode).toHaveBeenCalledWith("story:ready");
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story", {
+      dispatchID: "dispatch-review-active",
+      nodeID: "review",
+    });
+  });
 
   it("renders semantic workflow activity with active, terminal, and failed graph states", async () => {
     renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
@@ -3627,7 +3982,9 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
           .getAttribute("data-graph-semantic-icon"),
       ).toBe("queue");
       expect(
-        await screen.findByRole("button", { name: "Select Review workstation" }),
+        await screen.findByRole("button", {
+          name: "Select Review workstation",
+        }),
       ).toBeTruthy();
     },
     workflowGraphLocaleFallbackTimeoutMs,

@@ -1,18 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { buildPendingFactoryDefinition } from "../lib/factory-graph-draft-apply";
+import { buildFactoryGraphTopologyFromDefinition } from "../lib/factory-graph-draft-graph";
 import {
-  buildFactoryGraphTopologyFromDashboardTopology,
-  buildFactoryGraphTopologyFromDefinition,
-} from "../lib/factory-graph-draft-graph";
-import {
-  createEmptyFactoryGraphDraft,
-  hasFactoryGraphDraftChanges,
+  type CanonicalFactoryDefinition,
   type CurrentFactoryDocument,
+  createEmptyFactoryGraphDraft,
   type FactoryGraphDraftDerivedState,
   type FactoryGraphDraftSessionState,
   type FactoryGraphDraftValidationError,
-  type DashboardTopology,
+  hasFactoryGraphDraftChanges,
 } from "../lib/factory-graph-draft-types";
 import { validateFactoryGraphDraft } from "../lib/factory-graph-draft-validation";
 
@@ -25,8 +22,8 @@ type FactoryGraphDraftCallbacks = Pick<
 
 interface UseFactoryGraphDraftStateOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
-  locale?: string;
-  projectedTopology?: DashboardTopology;
+  locale?: string | null;
+  projectedFactory?: CanonicalFactoryDefinition;
 }
 
 export function useFactoryGraphDraftState(
@@ -36,8 +33,10 @@ export function useFactoryGraphDraftState(
   const emptyDraft = useMemo(() => createEmptyFactoryGraphDraft(), []);
   const projectedGraph = useMemo(
     () =>
-      buildFactoryGraphTopologyFromDashboardTopology(options.projectedTopology),
-    [options.projectedTopology],
+      options.projectedFactory
+        ? buildFactoryGraphTopologyFromDefinition(options.projectedFactory)
+        : { edges: [], nodes: [] },
+    [options.projectedFactory],
   );
   const [sessionState, setSessionState] =
     useState<FactoryGraphDraftSessionState | null>(null);
@@ -154,7 +153,7 @@ function createCurrentFactoryGraphDraftState({
   sessionState,
 }: {
   callbacks: FactoryGraphDraftCallbacks;
-  locale?: string;
+  locale?: string | null;
   sessionState: FactoryGraphDraftSessionState;
 }): FactoryGraphDraftDerivedState {
   const pendingFactoryDefinition = buildPendingFactoryDefinition(

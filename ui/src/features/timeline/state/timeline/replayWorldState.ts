@@ -40,9 +40,9 @@ import {
   syncCompletedDispatchAttempt,
 } from "./replayWorldStateSupport";
 import type {
-  FactoryChangeEvent,
   DispatchRequestEvent,
   DispatchResponseEvent,
+  FactoryChangeEvent,
   FactoryStateResponseEvent,
   InferenceRequestEvent,
   InferenceResponseEvent,
@@ -112,6 +112,9 @@ export function reconstructWorldState(
 function applyEvent(state: ReplayWorldState, event: FactoryEvent): void {
   switch (event.type) {
     case FACTORY_EVENT_TYPES.runRequest:
+      state.factory = structuredClone(
+        (event as RunRequestEvent).payload.factory,
+      );
       state.topology = normalizeFactoryPayload(
         (event as RunRequestEvent).payload,
       );
@@ -120,12 +123,18 @@ function applyEvent(state: ReplayWorldState, event: FactoryEvent): void {
     case FACTORY_EVENT_TYPES.runResponse:
       return;
     case FACTORY_EVENT_TYPES.initialStructureRequest:
+      state.factory = structuredClone(
+        (event as InitialStructureRequestEvent).payload.factory,
+      );
       state.topology = normalizeFactoryPayload(
         (event as InitialStructureRequestEvent).payload,
       );
       seedResourceOccupancy(state);
       return;
     case FACTORY_EVENT_TYPES.factoryChange:
+      state.factory = structuredClone(
+        (event as FactoryChangeEvent).payload.factory,
+      );
       state.topology = normalizeFactoryPayload(
         (event as FactoryChangeEvent).payload,
       );
@@ -300,8 +309,7 @@ function applyInferenceRequest(
   const attempts = inferenceAttemptsForDispatch(state, dispatchID);
   const current = attempts[payload.inferenceRequestId];
   const transitionID =
-    current?.transition_id ??
-    resolveDispatchTransitionID(state, dispatchID);
+    current?.transition_id ?? resolveDispatchTransitionID(state, dispatchID);
   if (!transitionID) {
     return;
   }
@@ -330,8 +338,7 @@ function applyInferenceResponse(
   const attempts = inferenceAttemptsForDispatch(state, dispatchID);
   const current = attempts[payload.inferenceRequestId];
   const transitionID =
-    current?.transition_id ??
-    resolveDispatchTransitionID(state, dispatchID);
+    current?.transition_id ?? resolveDispatchTransitionID(state, dispatchID);
   if (!transitionID) {
     return;
   }
