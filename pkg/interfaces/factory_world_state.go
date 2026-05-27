@@ -1,6 +1,8 @@
 package interfaces
 
-import "time"
+import (
+	"time"
+)
 
 // FactoryWorldState is the dashboard-agnostic reconstruction of factory state
 // from canonical factory events up to one selected engine tick.
