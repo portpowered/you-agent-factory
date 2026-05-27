@@ -15,7 +15,56 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
+
+var providerAutomationEnvDefaults = []workerprocess.CommandEnvEntry{
+	{Name: "GIT_EDITOR", Value: "true"},
+	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
+	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
+	{Name: "GIT_TERMINAL_PROMPT", Value: "0"},
+	{Name: "EDITOR", Value: "true"},
+	{Name: "VISUAL", Value: "true"},
+}
+
+func envSliceToMap(env []string) map[string]string {
+	if len(env) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(env))
+	for _, pair := range env {
+		name, value, ok := strings.Cut(pair, "=")
+		if !ok {
+			continue
+		}
+		out[name] = value
+	}
+	return out
+}
+
+func assertEnvValue(t testingT, env []string, name, want string) {
+	values := envSliceToMap(env)
+	if got := values[name]; got != want {
+		t.Fatalf("expected env %s=%q, got %q", name, want, got)
+	}
+}
+
+func assertEnvEntryCount(t testingT, env []string, name string, want int) {
+	prefix := name + "="
+	got := 0
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			got++
+		}
+	}
+	if got != want {
+		t.Fatalf("expected env %s to appear %d time(s), got %d in %v", name, want, got, env)
+	}
+}
+
+type testingT interface {
+	Fatalf(format string, args ...any)
+}
 
 type capturingCommandRunner struct {
 	mu      sync.Mutex
@@ -88,47 +137,6 @@ func echoCommand(msg string) (string, []string) {
 		return "cmd", []string{"/C", "echo " + msg}
 	}
 	return "echo", []string{msg}
-}
-
-func failCommand(msg string) (string, []string) {
-	if runtime.GOOS == "windows" {
-		return "cmd", []string{"/C", "echo " + msg + " 1>&2 && exit 1"}
-	}
-	return "sh", []string{"-c", "echo '" + msg + "' >&2; exit 1"}
-}
-
-func TestScriptExecutor_SuccessfulEcho_PopulatesOutput(t *testing.T) {
-	cmd, args := echoCommand("hello world")
-	executor := &ScriptExecutor{Command: cmd, Args: args}
-
-	result, err := executor.Execute(context.Background(), testScriptRequest(interfaces.WorkDispatch{DispatchID: "d-1", TransitionID: "t-1"}))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
-	}
-	if !strings.Contains(result.Output, "hello world") {
-		t.Fatalf("Output = %q", result.Output)
-	}
-}
-
-func TestScriptExecutor_FailingCommand_ReturnsFailedResult(t *testing.T) {
-	cmd, args := failCommand("something went wrong")
-	executor := &ScriptExecutor{Command: cmd, Args: args}
-
-	result, err := executor.Execute(context.Background(), testScriptRequest(interfaces.WorkDispatch{DispatchID: "d-1", TransitionID: "t-2"}))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
-	}
-	if !strings.Contains(result.Error, "something went wrong") {
-		t.Fatalf("Error = %q", result.Error)
-	}
 }
 
 func TestScriptExecutor_CancellationReturnsFailedResult(t *testing.T) {

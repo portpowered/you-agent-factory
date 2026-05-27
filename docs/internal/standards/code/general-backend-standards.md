@@ -2,7 +2,7 @@
 
 ---
 author: andreas abdi
-last modified: 2026, may, 1
+last modified: 2026, may, 27
 doc-id: STD-017
 ---
 
@@ -127,6 +127,14 @@ Default review thresholds:
 - Go functions longer than 80 lines **SHOULD** be treated as exceptions that need justification.
 - Files that accumulate multiple unrelated responsibilities **SHOULD** be split.
 - New package-level variables **SHOULD** be reviewed with extra scrutiny.
+
+Repository package-size policy:
+
+- Checked backend package directories under `pkg/` **MUST NOT** contain more than 15 counted Go files.
+- Counted files are hand-maintained `.go` files in the same package directory, including package-local `_test.go` files.
+- Generated Go files, vendored code, and non-owned fixture roots such as `testdata` are excluded from the package file-count gate.
+- When `make pkg-file-count` or `make lint` reports an oversized package, contributors **SHOULD** split files by durable package responsibility or remove dead files. Broad permanent exceptions for oversized `pkg/` packages are prohibited.
+- Run `make pkg-file-count` for the focused package-size check, or `make lint` before review for the full backend lint path that includes this gate.
 
 ### 5. Error Handling and Contracts
 

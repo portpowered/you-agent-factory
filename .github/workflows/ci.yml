@@ -205,6 +205,10 @@ jobs:
         timeout-minutes: 10
         run: make pkg-maint
 
+      - name: Run pkg file-count verification
+        timeout-minutes: 10
+        run: make pkg-file-count
+
       - name: Run backend deadcode verification
         timeout-minutes: 10
         run: make deadcode

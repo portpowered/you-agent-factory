@@ -1,6 +1,8 @@
 package interfaces
 
-import "time"
+import (
+	"time"
+)
 
 // FactoryWorldView is a presentation projection derived from
 // FactoryWorldState. It intentionally does not reconstruct from runtime

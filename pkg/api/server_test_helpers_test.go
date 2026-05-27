@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -285,18 +284,6 @@ func derefString(value *string) string {
 		return ""
 	}
 	return *value
-}
-
-func embeddedDashboardAssetPath(t *testing.T, html string) string {
-	t.Helper()
-
-	pattern := regexp.MustCompile(`(?:src|href)="(/dashboard/ui/assets/[^"]+)"`)
-	matches := pattern.FindStringSubmatch(html)
-	if len(matches) != 2 {
-		t.Fatalf("expected embedded dashboard asset path in html: %s", html)
-	}
-
-	return matches[1]
 }
 
 func testFactoryEvent(t *testing.T, eventType factoryapi.FactoryEventType, id string, context factoryapi.FactoryEventContext, payload any) factoryapi.FactoryEvent {

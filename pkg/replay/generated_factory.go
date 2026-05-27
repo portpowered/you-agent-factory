@@ -1,8 +1,12 @@
 package replay
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
@@ -17,6 +21,77 @@ type generatedFactoryOptions struct {
 	sourceDirectory string
 	workflowID      string
 	metadata        map[string]string
+}
+
+const (
+	metadataFactoryHash        = "factory_hash"
+	metadataWorkersHash        = "workers_hash"
+	metadataWorkstationsHash   = "workstations_hash"
+	metadataRuntimeConfigHash  = "runtime_config_hash"
+	metadataReplaySourceFormat = "source_format"
+)
+
+// MetadataMismatchWarning describes replay artifact metadata that differs from
+// the current checkout's loadable runtime config.
+type MetadataMismatchWarning struct {
+	Key      string
+	Artifact string
+	Current  string
+}
+
+// EmbeddedRuntimeConfig is the canonical runtime lookup reconstructed from an
+// artifact's embedded configuration. It intentionally avoids filesystem reads.
+type EmbeddedRuntimeConfig struct {
+	Factory          *interfaces.FactoryConfig
+	FactoryDirPath   string
+	WorkerConfigs    map[string]*interfaces.WorkerConfig
+	Workstations     map[string]*interfaces.FactoryWorkstationConfig
+	WorkersByID      map[string]*interfaces.WorkerConfig
+	WorkstationsByID map[string]*interfaces.FactoryWorkstationConfig
+}
+
+var _ interfaces.RuntimeConfigLookup = (*EmbeddedRuntimeConfig)(nil)
+
+// FactoryConfig returns the embedded canonical public factory configuration.
+func (c *EmbeddedRuntimeConfig) FactoryConfig() *interfaces.FactoryConfig {
+	if c == nil {
+		return nil
+	}
+	return c.Factory
+}
+
+// FactoryDir returns the authored factory root embedded in the replay artifact.
+func (c *EmbeddedRuntimeConfig) FactoryDir() string {
+	if c == nil {
+		return ""
+	}
+	return c.FactoryDirPath
+}
+
+// RuntimeBaseDir returns the effective execution base for relative runtime
+// paths during replay-backed execution. Replay artifacts do not carry a
+// separate runtime-base override, so relative runtime paths fall back to the
+// embedded factory root.
+func (c *EmbeddedRuntimeConfig) RuntimeBaseDir() string {
+	return c.FactoryDir()
+}
+
+// Worker returns the embedded worker definition for the configured worker name.
+func (c *EmbeddedRuntimeConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
+	if c == nil {
+		return nil, false
+	}
+	def, ok := c.WorkerConfigs[name]
+	return def, ok
+}
+
+// Workstation returns the embedded workstation definition for the configured workstation name.
+func (c *EmbeddedRuntimeConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+	if c == nil {
+		return nil, false
+	}
+	def, ok := c.Workstations[name]
+	return def, ok
 }
 
 // WithGeneratedFactorySourceDirectory records the source factory directory used
@@ -98,6 +173,129 @@ func GeneratedFactoryFromRuntimeConfig(factoryDir string, factoryCfg *interfaces
 	return generated, nil
 }
 
+// RuntimeConfigFromGeneratedFactory rebuilds the canonical runtime lookup
+// contract from a generated Factory payload carried by RUN_REQUEST. Replay
+// uses this path so artifacts remain self-contained without a secondary config
+// schema, and relative runtime paths resolve from the embedded factory root
+// because replay does not persist a separate runtime-base override.
+func RuntimeConfigFromGeneratedFactory(generated factoryapi.Factory) (*EmbeddedRuntimeConfig, error) {
+	if !generatedFactoryHasConfig(generated) {
+		return nil, errors.New("replay artifact factory is required")
+	}
+
+	factoryCopy, err := factoryConfigFromGeneratedAPI(generated)
+	if err != nil {
+		return nil, err
+	}
+	restoreReplayResourceUsage(generated, factoryCopy)
+
+	runtimeCfg := &EmbeddedRuntimeConfig{
+		Factory:          factoryCopy,
+		FactoryDirPath:   stringValue(generated.FactoryDirectory),
+		WorkerConfigs:    make(map[string]*interfaces.WorkerConfig),
+		Workstations:     make(map[string]*interfaces.FactoryWorkstationConfig),
+		WorkersByID:      make(map[string]*interfaces.WorkerConfig),
+		WorkstationsByID: make(map[string]*interfaces.FactoryWorkstationConfig),
+	}
+
+	if generated.Workers != nil {
+		for _, worker := range *generated.Workers {
+			if !generatedWorkerHasRuntimeDefinition(worker) {
+				continue
+			}
+			converted, err := config.WorkerConfigFromOpenAPI(worker)
+			if err != nil {
+				return nil, fmt.Errorf("convert worker %q: %w", worker.Name, err)
+			}
+			if converted.Name == "" {
+				converted.Name = worker.Name
+			}
+			if converted.ExecutorProvider != "" {
+				converted.ExecutorProvider = normalizeReplayWorkerProvider(converted.ExecutorProvider)
+			}
+			defCopy := config.CloneWorkerConfig(converted)
+			runtimeCfg.WorkerConfigs[converted.Name] = &defCopy
+			runtimeCfg.WorkersByID[converted.Name] = &defCopy
+		}
+	}
+
+	if generated.Workstations != nil {
+		for _, workstation := range *generated.Workstations {
+			cfg, err := workstationConfigFromGeneratedAPI(workstation)
+			if err != nil {
+				return nil, err
+			}
+			defCopy := config.CloneWorkstationConfig(cfg)
+			runtimeCfg.Workstations[workstation.Name] = &defCopy
+			if cfg.ID != "" {
+				runtimeCfg.WorkstationsByID[cfg.ID] = &defCopy
+			}
+		}
+	}
+
+	return runtimeCfg, nil
+}
+
+// FactoryMetadataWarnings compares replay Factory metadata against the current
+// checkout's generated Factory metadata. Replay callers should warn but still
+// allow replay because artifacts are authoritative for runtime configuration.
+func FactoryMetadataWarnings(artifactFactory, currentFactory factoryapi.Factory) []MetadataMismatchWarning {
+	artifactMetadata := stringMapValue(artifactFactory.Metadata)
+	currentMetadata := stringMapValue(currentFactory.Metadata)
+	keys := []string{
+		metadataFactoryHash,
+		metadataWorkersHash,
+		metadataWorkstationsHash,
+		metadataRuntimeConfigHash,
+	}
+	warnings := make([]MetadataMismatchWarning, 0, len(keys))
+	for _, key := range keys {
+		artifactValue := artifactMetadata[key]
+		currentValue := currentMetadata[key]
+		if artifactValue == "" || currentValue == "" || artifactValue == currentValue {
+			continue
+		}
+		warnings = append(warnings, MetadataMismatchWarning{
+			Key:      key,
+			Artifact: artifactValue,
+			Current:  currentValue,
+		})
+	}
+	return warnings
+}
+
+func generatedFactoryAPIFromConfig(cfg *interfaces.FactoryConfig) factoryapi.Factory {
+	return config.FactoryConfigToOpenAPI(cfg)
+}
+
+func generatedWorkstationAPIFromConfig(name string, cfg interfaces.FactoryWorkstationConfig) factoryapi.Workstation {
+	workstation := config.WorkstationConfigToOpenAPI(cfg)
+	if workstation.Name == "" {
+		workstation.Name = name
+	}
+	return workstation
+}
+
+func generatedWorkerAPIFromConfig(name string, cfg interfaces.WorkerConfig) factoryapi.Worker {
+	worker := config.WorkerConfigToOpenAPI(cfg)
+	if worker.Name == "" {
+		worker.Name = name
+	}
+	return worker
+}
+
+func factoryConfigFromGeneratedAPI(generated factoryapi.Factory) (*interfaces.FactoryConfig, error) {
+	cfg, err := config.FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func workstationConfigFromGeneratedAPI(workstation factoryapi.Workstation) (interfaces.FactoryWorkstationConfig, error) {
+	return config.WorkstationConfigFromOpenAPI(workstation)
+}
+
 func runtimeWorkersByName(factoryCfg *interfaces.FactoryConfig, runtimeCfg interfaces.RuntimeDefinitionLookup) map[string]interfaces.WorkerConfig {
 	workers := make(map[string]interfaces.WorkerConfig)
 	for _, workerCfg := range factoryCfg.Workers {
@@ -121,6 +319,56 @@ func runtimeWorkstationsByName(factoryCfg *interfaces.FactoryConfig, runtimeCfg 
 		workstations[workstationCfg.Name] = mergeRuntimeWorkstationForGeneratedFactory(workstationCfg, *def)
 	}
 	return workstations
+}
+
+func generatedFactoryHasConfig(generated factoryapi.Factory) bool {
+	return generated.WorkTypes != nil ||
+		generated.Resources != nil ||
+		generated.Workers != nil ||
+		generated.Workstations != nil ||
+		generated.InputTypes != nil ||
+		generated.Id != nil ||
+		generated.FactoryDirectory != nil ||
+		generated.SourceDirectory != nil ||
+		generated.Metadata != nil
+}
+
+func generatedWorkerHasRuntimeDefinition(worker factoryapi.Worker) bool {
+	return worker.Type != nil ||
+		worker.Command != nil ||
+		worker.Model != nil ||
+		worker.ModelProvider != nil ||
+		worker.ExecutorProvider != nil ||
+		worker.SkipPermissions != nil ||
+		worker.StopToken != nil ||
+		worker.Timeout != nil ||
+		worker.Body != nil ||
+		worker.Args != nil ||
+		worker.Resources != nil
+}
+
+func normalizeReplayWorkerProvider(value string) string {
+	return interfaces.PermissivePublicFactoryWorkerProvider(strings.TrimSpace(value))
+}
+
+func sha256JSON(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "sha256:error"
+	}
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("sha256:%s", hex.EncodeToString(sum[:]))
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 func mergeRuntimeWorkstationForGeneratedFactory(base, runtime interfaces.FactoryWorkstationConfig) interfaces.FactoryWorkstationConfig {

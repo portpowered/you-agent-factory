@@ -9,12 +9,35 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/service/localmodel"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
+
+type staticModelAssetPuller struct {
+	pullResult apisurface.ModelPullResult
+	pullErr    error
+	ensureErr  error
+	cache      localModelCacheLayout
+	cacheErr   error
+}
+
+func (s staticModelAssetPuller) PullModel(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ string) (apisurface.ModelPullResult, error) {
+	return s.pullResult, s.pullErr
+}
+
+func (s staticModelAssetPuller) EnsureModelAvailable(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) error {
+	return s.ensureErr
+}
+
+func (s staticModelAssetPuller) ResolveModelCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) (localModelCacheLayout, error) {
+	return s.cache, s.cacheErr
+}
 
 type fakeLocalModelRuntime struct {
 	mu          sync.Mutex
@@ -26,7 +49,7 @@ type fakeLocalModelRuntime struct {
 }
 
 func (r *fakeLocalModelRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {
-	return canonicalBackendName(resource.Backend) == "LLAMACPP" && canonicalModelName(worker.Model) == canonicalModelName("OMNIVOICE_Q4_K_M")
+	return localmodel.CanonicalBackendName(resource.Backend) == "LLAMACPP" && canonicalModelName(worker.Model) == canonicalModelName("OMNIVOICE_Q4_K_M")
 }
 
 func (r *fakeLocalModelRuntime) Load(_ context.Context, request localModelLoadRequest) (localModelHandle, error) {
@@ -617,6 +640,23 @@ func mustMarshalAudioContentResponse(t *testing.T, audioPath string) string {
 	return string(data)
 }
 
+func mustGeneratedServiceTextPart(t *testing.T, text string) factoryapi.WorkContentPart {
+	t.Helper()
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeTextUpper,
+		Text: text,
+		Slot: stringPtr("text"),
+	}); err != nil {
+		t.Fatalf("build text content part: %v", err)
+	}
+	return part
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
 func localModelDispatch() interfaces.WorkDispatch {
 	return interfaces.WorkDispatch{
 		DispatchID:      "dispatch-tts",
@@ -714,4 +754,107 @@ type recordingModelRunnerFunc func(context.Context, interfaces.RunnerExecutionRe
 
 func (fn recordingModelRunnerFunc) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
 	return fn(ctx, request)
+}
+
+type blockingRunner struct {
+	mu          sync.Mutex
+	current     int
+	maxObserved int
+	enterCh     chan struct{}
+	releaseCh   chan struct{}
+}
+
+func newBlockingRunner() *blockingRunner {
+	return &blockingRunner{
+		enterCh:   make(chan struct{}, 8),
+		releaseCh: make(chan struct{}),
+	}
+}
+
+func (r *blockingRunner) Execute(_ context.Context, _ interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+	r.mu.Lock()
+	r.current++
+	if r.current > r.maxObserved {
+		r.maxObserved = r.current
+	}
+	r.mu.Unlock()
+
+	r.enterCh <- struct{}{}
+	<-r.releaseCh
+
+	r.mu.Lock()
+	r.current--
+	r.mu.Unlock()
+	return interfaces.RunnerExecutionResult{Content: "ok"}, nil
+}
+
+func (r *blockingRunner) MaxObserved() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.maxObserved
+}
+
+func TestLocalModelResourceLimiter_BoundsSharedLocalModelConcurrencyAcrossSessions(t *testing.T) {
+	limiter := newLocalModelResourceLimiter()
+	factoryCfg := &interfaces.FactoryConfig{
+		Resources: []interfaces.ResourceConfig{{
+			Name:       "omnivoice-cache",
+			Type:       interfaces.ResourceTypeModel,
+			Capacity:   1,
+			Model:      "OMNIVOICE_Q4_K_M",
+			Backend:    "LLAMACPP",
+			LoadPolicy: "ON_DEMAND",
+		}},
+	}
+	workerDef := &interfaces.WorkerConfig{
+		Name:          "tts-worker",
+		ModelLocality: interfaces.ModelLocalityLocal,
+		Resources:     []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}},
+	}
+
+	inner := newBlockingRunner()
+	first := limiter.WrapRunner(inner, factoryCfg, workerDef)
+	second := limiter.WrapRunner(inner, factoryCfg, workerDef)
+
+	ctx := context.Background()
+	firstDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		_, _ = first.Execute(ctx, interfaces.RunnerExecutionRequest{})
+	}()
+
+	select {
+	case <-inner.enterCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first execution did not enter runner")
+	}
+
+	secondDone := make(chan struct{})
+	go func() {
+		defer close(secondDone)
+		_, _ = second.Execute(ctx, interfaces.RunnerExecutionRequest{})
+	}()
+
+	select {
+	case <-inner.enterCh:
+		t.Fatal("second execution entered before shared local model resource was released")
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	close(inner.releaseCh)
+
+	select {
+	case <-secondDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second execution did not complete after release")
+	}
+	select {
+	case <-firstDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first execution did not complete after release")
+	}
+
+	if got := inner.MaxObserved(); got != 1 {
+		t.Fatalf("max observed local-model concurrency = %d, want 1", got)
+	}
 }

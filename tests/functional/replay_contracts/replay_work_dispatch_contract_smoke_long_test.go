@@ -332,7 +332,7 @@ func assertCommandInputToken(t *testing.T, req workers.CommandRequest, want expe
 func firstCommandRequestInputToken(t *testing.T, req workers.CommandRequest) interfaces.Token {
 	t.Helper()
 
-	tokens := workers.CommandRequestInputTokens(req)
+	tokens := commandRequestInputTokens(req)
 	if len(tokens) == 0 {
 		t.Fatal("command request has no input tokens")
 	}
@@ -343,6 +343,28 @@ func firstCommandRequestInputToken(t *testing.T, req workers.CommandRequest) int
 	}
 	t.Fatal("command request has no work input token")
 	return interfaces.Token{}
+}
+
+func commandRequestInputTokens(req workers.CommandRequest) []interfaces.Token {
+	if len(req.InputTokens) == 0 {
+		return nil
+	}
+	tokens := make([]interfaces.Token, 0, len(req.InputTokens))
+	for _, raw := range req.InputTokens {
+		if token, ok := raw.(interfaces.Token); ok {
+			tokens = append(tokens, token)
+			continue
+		}
+		encoded, err := json.Marshal(raw)
+		if err != nil {
+			continue
+		}
+		var token interfaces.Token
+		if err := json.Unmarshal(encoded, &token); err == nil {
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
 }
 
 func assertDispatchSmokeEventCorrelation(

@@ -46,13 +46,15 @@ endif
 
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_MIN ?= 80.0
+PACKAGE_FILE_COUNT_ROOT ?= .
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count deadcode
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
 	@$(MAKE) $(1) || { status=$$?; printf '%s\n' "FAIL: $(2) [make $(1)] failed. Rerun with: make $(1)"; exit $$status; }
 endef
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-extended verify-build-contracts verify-tests verify test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-extended verify-build-contracts verify-tests verify test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -172,18 +174,18 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "Test(ReplayEventStreamArtifactSmoke_|WorkerPublicContractSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
-	$(MAKE) ui-lint
-	$(MAKE) ui-deadcode
-	$(GO) vet ./...
-	$(MAKE) backend-size
-	$(MAKE) pkg-maint
-	$(MAKE) deadcode
+	@for target in $(LINT_TARGETS); do \
+		$(MAKE) $$target || exit $$?; \
+	done
 
 backend-size:
 	$(GO) run ./cmd/backendsizecheck
 
 pkg-maint:
 	$(GO) run ./cmd/pkgmaintcheck ./pkg
+
+pkg-file-count:
+	$(GO) run ./cmd/pkgfilecountcheck -root $(PACKAGE_FILE_COUNT_ROOT)
 
 deadcode:
 	$(GO) run ./cmd/deadcodecheck
