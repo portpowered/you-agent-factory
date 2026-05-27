@@ -27,6 +27,10 @@ describe("formatDurationMillis", () => {
   it("clamps negative durations to zero milliseconds", () => {
     expect(formatDurationMillis(-100)).toBe("0ms");
   });
+
+  it("does not leak invalid numeric duration values into display labels", () => {
+    expect(formatDurationMillis(Number.NaN)).toBe("");
+  });
 });
 
 describe("formatDurationMillisVerbose", () => {

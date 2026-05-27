@@ -1,6 +1,7 @@
 package timedisplay
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -17,8 +18,12 @@ func TestTimestampUsesExplicitUTCDisplay(t *testing.T) {
 }
 
 func TestTimestampMissingValue(t *testing.T) {
-	if got := Timestamp(time.Time{}); got != "n/a" {
+	got := Timestamp(time.Time{})
+	if got != "n/a" {
 		t.Fatalf("Timestamp(zero) = %q, want n/a", got)
+	}
+	if strings.Contains(got, "0001-01-01") {
+		t.Fatalf("Timestamp(zero) = %q, must not expose Go zero-time output", got)
 	}
 }
 
@@ -49,7 +54,11 @@ func TestDuration(t *testing.T) {
 
 func TestElapsedSinceMissingInput(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
-	if got := ElapsedSince(time.Time{}, now); got != "n/a" {
+	got := ElapsedSince(time.Time{}, now)
+	if got != "n/a" {
 		t.Fatalf("ElapsedSince(zero, now) = %q, want n/a", got)
+	}
+	if strings.Contains(got, "0001-01-01") {
+		t.Fatalf("ElapsedSince(zero, now) = %q, must not expose Go zero-time output", got)
 	}
 }
