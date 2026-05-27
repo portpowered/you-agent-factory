@@ -1,19 +1,21 @@
-import type { DashboardTopology } from "../../../api/dashboard/types";
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 
-type FactoryResource = NonNullable<CanonicalFactoryDefinition["resources"]>[number];
+type FactoryResource = NonNullable<
+  CanonicalFactoryDefinition["resources"]
+>[number];
 type FactoryWorker = NonNullable<CanonicalFactoryDefinition["workers"]>[number];
-type FactoryWorkType = NonNullable<CanonicalFactoryDefinition["workTypes"]>[number];
+type FactoryWorkType = NonNullable<
+  CanonicalFactoryDefinition["workTypes"]
+>[number];
 type FactoryWorkState = FactoryWorkType["states"][number];
 type FactoryWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
 >[number];
 type FactoryWorkstationIO = FactoryWorkstation["inputs"][number];
 
-export type { DashboardTopology };
 export type {
   CanonicalFactoryDefinition,
   CurrentFactoryDocument,
@@ -154,7 +156,9 @@ export interface FactoryGraphDraftDerivedState {
   replaceDraft: (draft: FactoryGraphDraft) => void;
   resetDraft: () => void;
   source: "current-factory" | "projection";
-  updateDraft: (updater: (draft: FactoryGraphDraft) => FactoryGraphDraft) => void;
+  updateDraft: (
+    updater: (draft: FactoryGraphDraft) => FactoryGraphDraft,
+  ) => void;
   validationErrors: FactoryGraphDraftValidationError[];
 }
 

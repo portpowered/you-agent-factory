@@ -8,21 +8,18 @@ import {
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
+import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/public";
 import {
   type EditableFactoryGraphViewModel,
   useEditableFactoryGraph,
 } from "../../factory-graph-editor/public";
 import { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
-import {
-  findClassifierGraphEditorUnsupportedWorkstationName,
-  findClassifierGraphEditorUnsupportedWorkstationNameFromTopology,
-} from "./factory-graph-editor-availability";
+import { findClassifierGraphEditorUnsupportedWorkstationName } from "./factory-graph-editor-availability";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 import { buildCurrentActivityGraphEditorValue } from "./react-flow-current-activity-card-editor-value";
 
 export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
-  const projectedTopology = snapshot.topology;
   const [editorMode, setEditorMode] = useState(false);
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
   const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] = useState(false);
@@ -30,7 +27,6 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
   const { currentFactoryQuery, editableGraph, saveEditableDefinition } =
     useCurrentActivityEditableGraph({
       editorMode,
-      projectedTopology,
       snapshot,
     });
   const editableDefinitionQuery = currentFactoryQuery;
@@ -51,7 +47,7 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
     editableGraph,
     editorMode,
     editableDefinitionQuery: currentFactoryQuery,
-    projectedTopology,
+    projectedFactory: snapshot.factory,
     saveEditableDefinition,
   });
   const addEntityController = useFactoryGraphAddEntityController({
@@ -133,11 +129,9 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
 
 function useCurrentActivityEditableGraph({
   editorMode,
-  projectedTopology,
   snapshot,
 }: {
   editorMode: boolean;
-  projectedTopology: DashboardSnapshot["topology"];
   snapshot: DashboardSnapshot;
 }) {
   const currentFactoryQuery = useCurrentFactoryDocument(editorMode);
@@ -146,7 +140,6 @@ function useCurrentActivityEditableGraph({
     activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
     currentFactoryDocument: currentFactoryQuery.data,
     projectedFactory: snapshot.factory,
-    projectedTopology,
     saveFactoryDefinition: saveEditableDefinition.mutateAsync,
   });
 
@@ -196,7 +189,7 @@ function useFactoryGraphEditorSessionState({
   editableGraph,
   editorMode,
   editableDefinitionQuery,
-  projectedTopology,
+  projectedFactory,
   saveEditableDefinition,
 }: {
   activeWorkCount: number;
@@ -204,29 +197,21 @@ function useFactoryGraphEditorSessionState({
   editableGraph: EditableFactoryGraphViewModel;
   editorMode: boolean;
   editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
-  projectedTopology: DashboardSnapshot["topology"];
+  projectedFactory?: CanonicalFactoryDefinition;
   saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
 }) {
   const hasActiveWork = activeWorkCount > 0;
-  const editorUnavailableClassifierWorkstationName = editorMode
-    ? (findClassifierGraphEditorUnsupportedWorkstationName(
-        draftState.pendingFactoryDefinition ??
-          draftState.latestDocument ??
-          draftState.baseDocument ??
-          null,
-      ) ??
-      findClassifierGraphEditorUnsupportedWorkstationNameFromTopology(
-        projectedTopology,
-      ))
-    : (findClassifierGraphEditorUnsupportedWorkstationNameFromTopology(
-        projectedTopology,
-      ) ??
-      findClassifierGraphEditorUnsupportedWorkstationName(
-        draftState.pendingFactoryDefinition ??
-          draftState.latestDocument ??
-          draftState.baseDocument ??
-          null,
-      ));
+  const currentFactoryDefinition =
+    draftState.pendingFactoryDefinition ??
+    draftState.latestDocument ??
+    draftState.baseDocument ??
+    null;
+  const editorUnavailableClassifierWorkstationName =
+    findClassifierGraphEditorUnsupportedWorkstationName(
+      editorMode
+        ? (currentFactoryDefinition ?? projectedFactory ?? null)
+        : (projectedFactory ?? currentFactoryDefinition),
+    );
   const isStaleDraft = editableGraph.saveState.isStale;
   const canInteractWithEditor =
     editorMode &&
@@ -237,11 +222,6 @@ function useFactoryGraphEditorSessionState({
     editableGraph.saveState.canSave &&
     editorUnavailableClassifierWorkstationName === undefined &&
     !hasActiveWork;
-  const currentFactoryDefinition =
-    draftState.pendingFactoryDefinition ??
-    draftState.latestDocument ??
-    draftState.baseDocument ??
-    null;
   const saveBlockedReason = hasActiveWork
     ? "Topology save is unavailable while active work is still running in this factory."
     : isStaleDraft

@@ -1,6 +1,5 @@
 import { renderHook } from "@testing-library/react";
 
-import type { DashboardTopology } from "../../../api/dashboard/types";
 import {
   buildFactoryGraphTopologyFromDefinition,
   buildPendingFactoryDefinition,
@@ -293,85 +292,17 @@ it("reports unknown edge nodes when a draft edge references a workstation outsid
   ).toBeNull();
 });
 
-it("falls back to projection topology until the editable definition is available", () => {
-  const projectedTopology: DashboardTopology = {
-    edges: [],
-    workstation_node_ids: ["draft"],
-    workstation_nodes_by_id: {
-      draft: {
-        input_places: [
-          {
-            kind: "work_state",
-            place_id: "story:queued",
-            state_category: "INITIAL",
-            state_value: "queued",
-            type_id: "story",
-          },
-        ],
-        node_id: "draft",
-        output_places: [
-          {
-            kind: "work_state",
-            place_id: "story:done",
-            state_category: "TERMINAL",
-            state_value: "done",
-            type_id: "story",
-          },
-        ],
-        transition_id: "draft",
-        workstation_name: "draft",
-      },
-    },
-  };
-
+it("uses the projected canonical factory until the editable definition is available", () => {
   const { result, rerender } = renderHook(
     (props: {
       currentFactoryDocument?: typeof currentFactoryDocument;
-      projectedTopology?: DashboardTopology;
+      projectedFactory?: typeof baseFactoryDefinition;
     }) => useFactoryGraphDraftState(props),
     {
       initialProps: {
-        projectedTopology,
+        projectedFactory: baseFactoryDefinition,
       },
     },
-  );
-
-  expect(result.current.source).toBe("projection");
-  expect(result.current.graph.nodes.map((node) => node.id)).toEqual([
-    "work-state:story:done",
-    "work-state:story:queued",
-    "workstation:draft",
-  ]);
-
-  rerender({
-    currentFactoryDocument,
-    projectedTopology,
-  });
-
-  expect(result.current.source).toBe("current-factory");
-  expect(result.current.baseDocument?.version.logical).toBe(5);
-});
-
-it("uses the projected snapshot factory graph before falling back to dashboard topology", () => {
-  const projectedTopology: DashboardTopology = {
-    edges: [],
-    workstation_node_ids: ["lossy-draft"],
-    workstation_nodes_by_id: {
-      "lossy-draft": {
-        input_places: [],
-        node_id: "lossy-draft",
-        output_places: [],
-        transition_id: "lossy-draft",
-        workstation_name: "lossy-draft",
-      },
-    },
-  };
-
-  const { result } = renderHook(() =>
-    useFactoryGraphDraftState({
-      projectedFactory: baseFactoryDefinition,
-      projectedTopology,
-    }),
   );
 
   expect(result.current.source).toBe("projection");
@@ -383,7 +314,22 @@ it("uses the projected snapshot factory graph before falling back to dashboard t
     "worker:writer",
     "workstation:draft",
   ]);
-  expect(result.current.graph.edges.map((edge) => edge.id)).toContain(
-    "worker-assignment:worker:writer->workstation:draft",
-  );
+
+  rerender({
+    currentFactoryDocument,
+    projectedFactory: baseFactoryDefinition,
+  });
+
+  expect(result.current.source).toBe("current-factory");
+  expect(result.current.baseDocument?.version.logical).toBe(5);
+});
+
+it("returns an empty projection when no canonical factory is available", () => {
+  const { result } = renderHook(() => useFactoryGraphDraftState({}));
+
+  expect(result.current.source).toBe("projection");
+  expect(result.current.graph).toEqual({
+    edges: [],
+    nodes: [],
+  });
 });

@@ -1135,18 +1135,34 @@ function registerCurrentActivityCardTestLifecycle(): void {
     const snapshot = dashboardSnapshotWithActiveWorkItemCount(0);
     snapshot.topology.workstation_nodes_by_id.review.workstation_kind =
       "CLASSIFIER_WORKSTATION";
+    snapshot.factory = structuredClone(editableFactoryDefinition);
+    const reviewWorkstation = snapshot.factory?.workstations?.find(
+      (workstation) => workstation.name === "review",
+    );
+    if (reviewWorkstation) {
+      reviewWorkstation.type = "CLASSIFIER_WORKSTATION";
+      reviewWorkstation.classificationRoutes = [
+        {
+          label: "approved",
+          output: {
+            state: "complete",
+            workType: "story",
+          },
+        },
+      ];
+    }
 
     renderCurrentActivity({
       snapshot,
     });
 
     const enterEditorButton = screen.getByRole("button", {
-      name: 'Factory graph editing does not yet support classifier workstation routes. "Review" stays read-only in this view until labeled route editing is available.',
+      name: 'Factory graph editing does not yet support classifier workstation routes. "review" stays read-only in this view until labeled route editing is available.',
     });
     expect(enterEditorButton.getAttribute("disabled")).not.toBeNull();
     expect(
       screen.getByText(
-        'Editor unavailable: Factory graph editing does not yet support classifier workstation routes. "Review" stays read-only in this view until labeled route editing is available.',
+        'Editor unavailable: Factory graph editing does not yet support classifier workstation routes. "review" stays read-only in this view until labeled route editing is available.',
       ),
     ).toBeTruthy();
 

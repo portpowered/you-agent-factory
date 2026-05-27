@@ -1,7 +1,6 @@
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryDocument,
-  DashboardTopology,
   FactoryGraphDraft,
   FactoryGraphDraftValidationError,
 } from "../lib/factory-graph-draft-types";
@@ -23,7 +22,6 @@ export interface UseEditableFactoryGraphOptions {
   activeWorkCount?: number;
   currentFactoryDocument?: CurrentFactoryDocument;
   projectedFactory?: CanonicalFactoryDefinition;
-  projectedTopology?: DashboardTopology;
   saveFactoryDefinition?: (
     input: EditableFactoryGraphSaveInput,
   ) => Promise<unknown>;

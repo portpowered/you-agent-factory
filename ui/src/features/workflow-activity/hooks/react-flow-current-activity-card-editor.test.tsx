@@ -107,7 +107,6 @@ const hookState = vi.hoisted(() => ({
     status: "idle" as const,
   },
   unsupportedFromDefinition: undefined as string | undefined,
-  unsupportedFromTopology: undefined as string | undefined,
 }));
 
 vi.mock("../../current-factory-definition/public", () => ({
@@ -167,8 +166,6 @@ vi.mock("../components/react-flow-current-activity-card-editor-chrome", () => ({
 vi.mock("./factory-graph-editor-availability", () => ({
   findClassifierGraphEditorUnsupportedWorkstationName: () =>
     hookState.unsupportedFromDefinition,
-  findClassifierGraphEditorUnsupportedWorkstationNameFromTopology: () =>
-    hookState.unsupportedFromTopology,
 }));
 
 vi.mock("./react-flow-current-activity-card-editor-connections", () => ({
@@ -217,7 +214,6 @@ describe("useCurrentActivityGraphEditor", () => {
       status: "idle",
     };
     hookState.unsupportedFromDefinition = undefined;
-    hookState.unsupportedFromTopology = undefined;
   });
 
   it("enters and leaves editor mode while resetting transient state", () => {

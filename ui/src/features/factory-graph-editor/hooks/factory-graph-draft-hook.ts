@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { buildPendingFactoryDefinition } from "../lib/factory-graph-draft-apply";
-import {
-  buildFactoryGraphTopologyFromDashboardTopology,
-  buildFactoryGraphTopologyFromDefinition,
-} from "../lib/factory-graph-draft-graph";
+import { buildFactoryGraphTopologyFromDefinition } from "../lib/factory-graph-draft-graph";
 import {
   type CanonicalFactoryDefinition,
   type CurrentFactoryDocument,
   createEmptyFactoryGraphDraft,
-  type DashboardTopology,
   type FactoryGraphDraftDerivedState,
   type FactoryGraphDraftSessionState,
   type FactoryGraphDraftValidationError,
@@ -27,7 +23,6 @@ type FactoryGraphDraftCallbacks = Pick<
 interface UseFactoryGraphDraftStateOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
   projectedFactory?: CanonicalFactoryDefinition;
-  projectedTopology?: DashboardTopology;
 }
 
 export function useFactoryGraphDraftState(
@@ -39,10 +34,8 @@ export function useFactoryGraphDraftState(
     () =>
       options.projectedFactory
         ? buildFactoryGraphTopologyFromDefinition(options.projectedFactory)
-        : buildFactoryGraphTopologyFromDashboardTopology(
-            options.projectedTopology,
-          ),
-    [options.projectedFactory, options.projectedTopology],
+        : { edges: [], nodes: [] },
+    [options.projectedFactory],
   );
   const [sessionState, setSessionState] =
     useState<FactoryGraphDraftSessionState | null>(null);
