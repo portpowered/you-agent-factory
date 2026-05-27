@@ -286,6 +286,7 @@ function getMapAccessTargetExpression(path: string) {
 
   const inputTagsMatch = path.match(/^\.Inputs\[(\d+)\]\.Tags\["KEY"\]$/);
   if (inputTagsMatch?.[1]) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `(index .Inputs ${inputTagsMatch[1]}).Tags`;
   }
 
