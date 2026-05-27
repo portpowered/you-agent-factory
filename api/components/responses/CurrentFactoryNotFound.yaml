@@ -1,0 +1,12 @@
+description: Current named factory was not found.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
+    examples:
+      currentFactoryMissing:
+        summary: No current named factory is available.
+        value:
+          message: Current named factory not found.
+          family: NOT_FOUND
+          code: NOT_FOUND

@@ -1,4 +1,5 @@
 import type { TraceGridState } from "../components/trace-grid-card";
+import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { useDashboardTrace } from "./useTrace";
 
 export interface UseTraceDrilldownResult {
@@ -9,7 +10,9 @@ export interface UseTraceDrilldownResult {
 export function useTraceDrilldown(
   selectedWorkID: string | null,
   selectedTraceID?: string | null,
+  locale?: string | null,
 ): UseTraceDrilldownResult {
+  const messages = getTraceDrilldownMessages(locale);
   const traceQuery = useDashboardTrace(selectedWorkID, selectedTraceID);
   const selectedTrace = traceQuery.data;
   const traceUnavailable =
@@ -19,7 +22,7 @@ export function useTraceDrilldown(
     selectedWorkID === null
       ? {
           status: "idle",
-          message: "Select active, completed, or failed work to inspect retained trace history.",
+          message: messages.idleMessage,
         }
       : traceQuery.isLoading
         ? { status: "loading", workID: selectedWorkID }
@@ -31,7 +34,7 @@ export function useTraceDrilldown(
               ? { status: "ready", trace: selectedTrace }
               : {
                   status: "idle",
-                  message: "Select active, completed, or failed work to inspect retained trace history.",
+                  message: messages.idleMessage,
                 };
 
   return { selectedTrace, traceGridState };

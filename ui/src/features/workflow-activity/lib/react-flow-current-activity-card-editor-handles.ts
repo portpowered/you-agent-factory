@@ -4,7 +4,7 @@ import type {
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   type FactoryGraphConnectionEndpoint,
-  getFactoryGraphConnectionAnchors,
+  getLocalizedFactoryGraphConnectionAnchors,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import type { ActivityGraphNodeHandle } from "../../flowchart/components/current-activity-node-shell";
 import type { PositionedEdge } from "../../flowchart/lib/layout";
@@ -106,13 +106,17 @@ export function supportedEditorHandleIdsForEdge(edge: PositionedEdge) {
 
 export function buildEditorHandles(args: {
   editor: CurrentActivityEditorState;
+  locale?: string | null;
   nodeId: string;
   nodeKind: FactoryGraphNodeKind;
 }) {
   const connectable =
     args.editor.canInteractWithEditor && args.editor.activeTool === "connect";
 
-  return getFactoryGraphConnectionAnchors(args.nodeKind).map((anchor) => {
+  return getLocalizedFactoryGraphConnectionAnchors(
+    args.nodeKind,
+    args.locale,
+  ).map((anchor) => {
     const selected =
       args.editor.pendingConnectionSource?.nodeId === args.nodeId &&
       args.editor.pendingConnectionSource.anchorId === anchor.id;

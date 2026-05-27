@@ -11,6 +11,7 @@ import {
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
+import { getActivityGraphMessages } from "../messages/activity-graph";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { workstationIconMetadata } from "../lib/workstation-icon-metadata";
 import {
@@ -59,7 +60,10 @@ export function WorkstationNodeView({
   data,
 }: NodeProps<CurrentActivityWorkstationNode>) {
   const messages = getWorkflowActivityShellMessages(data.locale);
-  const semanticIconMetadata = workstationIconMetadata(data.workstation);
+  const semanticIconMetadata = workstationIconMetadata(
+    data.workstation,
+    data.locale,
+  );
   const exhaustionRule = semanticIconMetadata.semanticKind === "exhaustion";
   const selectedWork = data.selectedWorkID !== null;
   const workItemEntries = data.executions.flatMap((execution) =>
@@ -109,6 +113,7 @@ export function WorkstationNodeView({
         <ExhaustionRuleNodeButton
           data={data}
           messages={messages}
+          semanticIconMetadata={semanticIconMetadata}
           workstationTitle={workstationTitle}
         />
       ) : (
@@ -129,14 +134,14 @@ export function WorkstationNodeView({
 function ExhaustionRuleNodeButton({
   data,
   messages,
+  semanticIconMetadata,
   workstationTitle,
 }: {
   data: WorkstationNodeData;
   messages: ReturnType<typeof getWorkflowActivityShellMessages>;
+  semanticIconMetadata: ReturnType<typeof workstationIconMetadata>;
   workstationTitle: string;
 }) {
-  const semanticIconMetadata = workstationIconMetadata(data.workstation);
-
   return (
     <GraphNodeButton
       aria-label={messages.selectExhaustionRuleLabel(workstationTitle)}
@@ -156,6 +161,7 @@ function ExhaustionRuleNodeButton({
           className={cn("h-4 w-4", semanticIconMetadata.className)}
           kind={semanticIconMetadata.iconKind}
           label={semanticIconMetadata.label}
+          locale={data.locale}
         />
       </span>
       <span
@@ -215,6 +221,7 @@ function ActiveWorkstationNodeContent({
             className={cn("h-4 w-4", semanticIconMetadata.className)}
             kind={semanticIconMetadata.iconKind}
             label={semanticIconMetadata.label}
+            locale={data.locale}
           />
         </span>
         <span
@@ -231,7 +238,8 @@ function ActiveWorkstationNodeContent({
             <GraphSemanticIcon
               className="h-3.5 w-3.5 text-af-success"
               kind="active-work"
-              label="Active"
+              label={getActivityGraphMessages(data.locale).activeBadgeLabel}
+              locale={data.locale}
             />
           </ActivityGraphNodeBadge>
         ) : null}
@@ -282,15 +290,21 @@ function ActiveWorkstationNodeContent({
           );
         })}
       </ul>
-      {workstationOverflowMarkers(
-        workItemEntries.length,
-        visibleWorkItemEntries.length,
-      )}
+          {workstationOverflowMarkers(
+            workItemEntries.length,
+            visibleWorkItemEntries.length,
+            data.locale,
+          )}
     </div>
   );
 }
 
-function workstationOverflowMarkers(totalCount: number, visibleCount: number) {
+function workstationOverflowMarkers(
+  totalCount: number,
+  visibleCount: number,
+  locale?: string,
+) {
+  const messages = getActivityGraphMessages(locale);
   const remainingCount = Math.max(0, totalCount - visibleCount);
   if (remainingCount === 0) {
     return null;
@@ -299,7 +313,7 @@ function workstationOverflowMarkers(totalCount: number, visibleCount: number) {
   if (remainingCount > WORKSTATION_SUMMARY_DOT_LIMIT) {
     return (
       <span
-        aria-label={`${totalCount} active items`}
+        aria-label={messages.activeItemCountLabel(totalCount)}
         className="mt-2 flex min-h-7 w-full items-center justify-center rounded-lg border border-af-success-border bg-af-success-surface px-3 py-1 font-mono text-[0.9rem] font-bold leading-none text-af-success"
         data-workstation-work-progress="numeric"
         role="status"
@@ -311,7 +325,7 @@ function workstationOverflowMarkers(totalCount: number, visibleCount: number) {
 
   return (
     <span
-      aria-label={`${totalCount} active items`}
+      aria-label={messages.activeItemCountLabel(totalCount)}
       className="mt-2 flex min-h-7 items-center justify-center gap-1 rounded-lg border border-af-success-border bg-af-success-surface px-2"
       data-workstation-work-progress="dots"
       role="status"

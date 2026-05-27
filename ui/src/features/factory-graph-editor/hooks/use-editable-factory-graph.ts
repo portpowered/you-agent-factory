@@ -36,20 +36,27 @@ export function useEditableFactoryGraph(
   const graphState = useEditableFactoryGraphState({
     baseFactoryDefinition,
     draftState,
+    locale: options.locale,
   });
   const projection = useMemo(
-    () => projectFactoryGraphToReactFlow(draftState.graph),
-    [draftState.graph],
+    () =>
+      projectFactoryGraphToReactFlow({
+        locale: options.locale ?? undefined,
+        topology: draftState.graph,
+      }),
+    [draftState.graph, options.locale],
   );
   const saveController = useEditableFactoryGraphSaveController({
     activeWorkCount: options.activeWorkCount ?? 0,
     draftState,
+    locale: options.locale,
     saveFactoryDefinition: options.saveFactoryDefinition,
     setBlockedOperation,
   });
   const mutationActions = useEditableFactoryGraphMutationActions({
     baseFactoryDefinition,
     draftState,
+    locale: options.locale,
     setBlockedOperation,
   });
   const discard = useCallback(() => {
@@ -93,9 +100,11 @@ export function useEditableFactoryGraph(
 function useEditableFactoryGraphState({
   baseFactoryDefinition,
   draftState,
+  locale,
 }: {
   baseFactoryDefinition: CanonicalFactoryDefinition | null;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  locale?: string | null;
 }) {
   return useMemo(
     () =>
@@ -103,19 +112,22 @@ function useEditableFactoryGraphState({
         ? buildFactoryGraphState({
             baseFactoryDefinition,
             draft: draftState.draft,
+            locale,
           })
         : null,
-    [baseFactoryDefinition, draftState.draft],
+    [baseFactoryDefinition, draftState.draft, locale],
   );
 }
 
 function useEditableFactoryGraphMutationActions({
   baseFactoryDefinition,
   draftState,
+  locale,
   setBlockedOperation,
 }: {
   baseFactoryDefinition: CanonicalFactoryDefinition | null;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  locale?: string | null;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
@@ -142,13 +154,14 @@ function useEditableFactoryGraphMutationActions({
           ? addFactoryGraphNode({
               baseFactoryDefinition,
               draft: draftState.draft,
+              locale,
               node,
             })
           : missingFactoryResult(
               "Load the current factory before editing graph nodes.",
             ),
       ),
-    [applyDraftOperation, baseFactoryDefinition, draftState.draft],
+    [applyDraftOperation, baseFactoryDefinition, draftState.draft, locale],
   );
   const removeNode = useCallback(
     (nodeId: string) =>
@@ -157,23 +170,26 @@ function useEditableFactoryGraphMutationActions({
           ? removeFactoryGraphNode({
               baseFactoryDefinition,
               draft: draftState.draft,
+              locale,
               nodeId,
             })
           : missingFactoryResult(
               "Load the current factory before removing graph nodes.",
             ),
       ),
-    [applyDraftOperation, baseFactoryDefinition, draftState.draft],
+    [applyDraftOperation, baseFactoryDefinition, draftState.draft, locale],
   );
   const connectNodes = useConnectNodesAction({
     applyDraftOperation,
     baseFactoryDefinition,
     draft: draftState.draft,
+    locale,
   });
   const disconnectEdge = useDisconnectEdgeAction({
     applyDraftOperation,
     baseFactoryDefinition,
     draft: draftState.draft,
+    locale,
   });
   const updateNodeField = useUpdateNodeFieldAction({
     baseFactoryDefinition,
@@ -193,12 +209,14 @@ function useConnectNodesAction({
   applyDraftOperation,
   baseFactoryDefinition,
   draft,
+  locale,
 }: {
   applyDraftOperation: (
     operation: () => FactoryGraphOperationResult<FactoryGraphDraft>,
   ) => FactoryGraphOperationResult<FactoryGraphDraft>;
   baseFactoryDefinition: CanonicalFactoryDefinition | null;
   draft: FactoryGraphDraft;
+  locale?: string | null;
 }) {
   return useCallback(
     (connection: {
@@ -212,13 +230,14 @@ function useConnectNodesAction({
           ? connectFactoryGraphNodes({
               baseFactoryDefinition,
               draft,
+              locale,
               ...connection,
             })
           : missingFactoryResult(
               "Load the current factory before connecting graph nodes.",
             ),
       ),
-    [applyDraftOperation, baseFactoryDefinition, draft],
+    [applyDraftOperation, baseFactoryDefinition, draft, locale],
   );
 }
 
@@ -226,12 +245,14 @@ function useDisconnectEdgeAction({
   applyDraftOperation,
   baseFactoryDefinition,
   draft,
+  locale,
 }: {
   applyDraftOperation: (
     operation: () => FactoryGraphOperationResult<FactoryGraphDraft>,
   ) => FactoryGraphOperationResult<FactoryGraphDraft>;
   baseFactoryDefinition: CanonicalFactoryDefinition | null;
   draft: FactoryGraphDraft;
+  locale?: string | null;
 }) {
   return useCallback(
     (edgeId: string) =>
@@ -241,12 +262,13 @@ function useDisconnectEdgeAction({
               baseFactoryDefinition,
               draft,
               edgeId,
+              locale,
             })
           : missingFactoryResult(
               "Load the current factory before disconnecting graph edges.",
             ),
       ),
-    [applyDraftOperation, baseFactoryDefinition, draft],
+    [applyDraftOperation, baseFactoryDefinition, draft, locale],
   );
 }
 
@@ -285,11 +307,13 @@ function useUpdateNodeFieldAction({
 function useEditableFactoryGraphSaveController({
   activeWorkCount,
   draftState,
+  locale,
   saveFactoryDefinition,
   setBlockedOperation,
 }: {
   activeWorkCount: number;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  locale?: string | null;
   saveFactoryDefinition?: (
     input: EditableFactoryGraphSaveInput,
   ) => Promise<unknown>;
@@ -317,6 +341,7 @@ function useEditableFactoryGraphSaveController({
   const save = useSaveEditableFactoryGraph({
     canSave,
     draftState,
+    locale,
     resetSaveState,
     saveFactoryDefinition,
     setBlockedOperation,
@@ -339,6 +364,7 @@ function useEditableFactoryGraphSaveController({
 function useSaveEditableFactoryGraph({
   canSave,
   draftState,
+  locale,
   resetSaveState,
   saveFactoryDefinition,
   setBlockedOperation,
@@ -348,6 +374,7 @@ function useSaveEditableFactoryGraph({
 }: {
   canSave: boolean;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  locale?: string | null;
   resetSaveState: () => void;
   saveFactoryDefinition?: (
     input: EditableFactoryGraphSaveInput,
@@ -367,6 +394,7 @@ function useSaveEditableFactoryGraph({
     const saveInput = applyFactoryGraphPendingEdits({
       baseFactoryDefinition: draftState.latestDocument,
       draft: draftState.draft,
+      locale,
     });
     if (!saveInput.ok) {
       setBlockedOperation(saveInput as FactoryGraphOperationResult<never>);
@@ -395,6 +423,7 @@ function useSaveEditableFactoryGraph({
   }, [
     canSave,
     draftState,
+    locale,
     resetSaveState,
     saveFactoryDefinition,
     setBlockedOperation,

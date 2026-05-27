@@ -177,6 +177,28 @@ Use the lane-specific targets below when you need to rerun one required CI lane 
 
 `make verify` remains as a compatibility alias for `make verify-pr` while existing references migrate.
 
+## Website Copy Localization Guardrail
+
+User-facing dashboard copy belongs in locale-aware message catalogs instead of inline React component text. When adding or changing visible UI text, validation messages, empty states, toast or dialog text, chart labels, accessible names, or other customer-facing metadata under `ui/src/`, put the message in the owning feature catalog under `ui/src/features/<feature>/messages/`. Shared primitive copy belongs under `ui/src/components/<shared>/messages/` only when the shared component owns the reusable wording. Keep IDs, enum values, API codes, CSS classes, and other structural values out of catalogs unless they are actually rendered as product copy.
+
+Run the hardcoded-copy guard locally from the UI package:
+
+```bash
+cd ui && bun run check:localized-copy
+```
+
+The normal UI lint path also runs this guard through:
+
+```bash
+cd ui && bun run lint
+```
+
+The guard intentionally excludes tests, stories, generated API code, fixtures, developer-testing seams, and message-catalog files. Do not add product UI copy to `ui/scripts/hardcoded-ui-copy-baseline.txt`; the baseline is expected to stay empty for product copy. If the scanner reports a literal that is truly not product UI copy, such as a structural node id, an API error code, a class recipe, or maintainer-only diagnostic text, document that exact literal with the inline marker `hardcoded-ui-copy-exception: non-product-diagnostic` near the source. Use that marker narrowly and never as a bypass for customer-facing copy.
+
+Localization changes should include tests at the layer where users observe the message. Prefer assertions against rendered text, accessible names, formatted labels, emitted validation errors, or pure message helper output, and cover at least one non-default locale when the behavior depends on locale selection, fallback, or interpolation. Avoid testing the source inventory itself; the guard already owns scanner behavior.
+
+Reviewers should block new product copy that bypasses message catalogs, concatenates translated fragments instead of authoring a complete localized message, omits tests for dynamic interpolation or fallback behavior, or skips browser evidence for visible UI changes. For browser-backed dashboard proof, use the maintained Storybook or integration-test lanes described in this guide and record the relevant command and scenario in the PR notes.
+
 Treat the opt-in long and specialty commands as a separate maintainer tier rather than hidden follow-on work inside `make verify-fast` or `make verify-pr`:
 
 - `make verify-extended` is the canonical "everything above plus the deeper safety nets" pass. Use it after `make verify-pr` when a change may have touched managed-local runtime behavior or the real local inference path and you want one aggregate command that still preserves exact rerun hints.

@@ -7,6 +7,7 @@ import type {
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
 import { edgeChangeId } from "./factory-graph-draft-types";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 export interface FactoryGraphConnectionAnchor {
   description: string;
@@ -28,78 +29,78 @@ const ANCHORS_BY_KIND: Record<
 > = {
   resource: [
     {
-      description: "Provide this resource to a worker.",
+      description: "",
       edgeKind: "worker-resource",
       id: "worker-resource-source",
-      label: "Worker",
+      label: "",
       role: "source",
       side: "right",
     },
     {
-      description: "Provide this resource to a workstation.",
+      description: "",
       edgeKind: "workstation-resource",
       id: "workstation-resource-source",
-      label: "Station",
+      label: "",
       role: "source",
       side: "right",
     },
   ],
   worker: [
     {
-      description: "Accept a resource required by this worker.",
+      description: "",
       edgeKind: "worker-resource",
       id: "worker-resource-target",
-      label: "Resource",
+      label: "",
       role: "target",
       side: "left",
     },
     {
-      description: "Assign this worker to a workstation.",
+      description: "",
       edgeKind: "worker-assignment",
       id: "worker-assignment-source",
-      label: "Assign",
+      label: "",
       role: "source",
       side: "right",
     },
   ],
   "work-state": [
     {
-      description: "Route this work state into a workstation input.",
+      description: "",
       edgeKind: "workstation-input",
       id: "workstation-input-source",
-      label: "Input",
+      label: "",
       role: "source",
       side: "right",
     },
     {
-      description: "Receive a successful workstation output.",
+      description: "",
       edgeKind: "workstation-output",
       id: "workstation-output-target",
-      label: "Success",
+      label: "",
       role: "target",
       side: "left",
     },
     {
-      description: "Receive a workstation continue transition.",
+      description: "",
       edgeKind: "workstation-on-continue",
       id: "workstation-on-continue-target",
-      label: "Continue",
+      label: "",
       role: "target",
       side: "left",
     },
     {
-      description: "Receive a workstation failure transition.",
+      description: "",
       edgeKind: "workstation-on-failure",
       id: "workstation-on-failure-target",
-      label: "Failure",
+      label: "",
       role: "target",
       side: "left",
     },
     {
-      description: "Receive a workstation rejection transition.",
+      description: "",
       edgeKind: "workstation-on-rejection",
       id: "workstation-on-rejection-target",
-      label: "Reject",
+      label: "",
       role: "target",
       side: "left",
     },
@@ -107,58 +108,58 @@ const ANCHORS_BY_KIND: Record<
   "work-type": [],
   workstation: [
     {
-      description: "Accept an input work state for this workstation.",
+      description: "",
       edgeKind: "workstation-input",
       id: "workstation-input-target",
-      label: "Input",
+      label: "",
       role: "target",
       side: "left",
     },
     {
-      description: "Accept a worker assignment for this workstation.",
+      description: "",
       edgeKind: "worker-assignment",
       id: "worker-assignment-target",
-      label: "Worker",
+      label: "",
       role: "target",
       side: "left",
     },
     {
-      description: "Accept a resource requirement for this workstation.",
+      description: "",
       edgeKind: "workstation-resource",
       id: "workstation-resource-target",
-      label: "Resource",
+      label: "",
       role: "target",
       side: "left",
     },
     {
-      description: "Route successful output from this workstation.",
+      description: "",
       edgeKind: "workstation-output",
       id: "workstation-output-source",
-      label: "Success",
+      label: "",
       role: "source",
       side: "right",
     },
     {
-      description: "Route a continue transition from this workstation.",
+      description: "",
       edgeKind: "workstation-on-continue",
       id: "workstation-on-continue-source",
-      label: "Continue",
+      label: "",
       role: "source",
       side: "right",
     },
     {
-      description: "Route a failure transition from this workstation.",
+      description: "",
       edgeKind: "workstation-on-failure",
       id: "workstation-on-failure-source",
-      label: "Failure",
+      label: "",
       role: "source",
       side: "right",
     },
     {
-      description: "Route a rejection transition from this workstation.",
+      description: "",
       edgeKind: "workstation-on-rejection",
       id: "workstation-on-rejection-source",
-      label: "Reject",
+      label: "",
       role: "source",
       side: "right",
     },
@@ -167,6 +168,18 @@ const ANCHORS_BY_KIND: Record<
 
 export function getFactoryGraphConnectionAnchors(kind: FactoryGraphNodeKind) {
   return ANCHORS_BY_KIND[kind];
+}
+
+export function getLocalizedFactoryGraphConnectionAnchors(
+  kind: FactoryGraphNodeKind,
+  locale?: string | null,
+) {
+  const messages = getFactoryGraphEditorMessages(locale);
+  return ANCHORS_BY_KIND[kind].map((anchor) => ({
+    ...anchor,
+    description: messages.connectionAnchorDescription(anchor.id),
+    label: messages.connectionAnchorLabel(anchor.id),
+  }));
 }
 
 export function getFactoryGraphConnectionAnchor(
@@ -319,11 +332,13 @@ export function applyFactoryGraphEdgeRemoval(
 }
 
 export function buildFactoryGraphConnectionNotice(options: {
+  locale?: string | null;
   sourceAnchorId: string;
   sourceNode: FactoryGraphNode;
   targetAnchorId: string;
   targetNode: FactoryGraphNode;
 }) {
+  const messages = getFactoryGraphEditorMessages(options.locale);
   const sourceAnchor = getFactoryGraphConnectionAnchor(
     options.sourceNode.kind,
     options.sourceAnchorId,
@@ -333,10 +348,15 @@ export function buildFactoryGraphConnectionNotice(options: {
     options.targetAnchorId,
   );
   if (!sourceAnchor || !targetAnchor) {
-    return "Choose a compatible source and target anchor before creating a connection.";
+    return messages.connectionFallbackNotice;
   }
 
-  return `${sourceAnchor.label} connections from ${options.sourceNode.label} cannot connect to ${targetAnchor.label} on ${options.targetNode.label}.`;
+  return messages.connectionIncompatibleNotice(
+    messages.connectionAnchorLabel(sourceAnchor.id),
+    options.sourceNode.label,
+    messages.connectionAnchorLabel(targetAnchor.id),
+    options.targetNode.label,
+  );
 }
 
 function appendUniqueEdgeChange(

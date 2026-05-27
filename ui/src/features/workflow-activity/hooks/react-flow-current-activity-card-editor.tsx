@@ -8,6 +8,7 @@ import {
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/public";
 import {
   type EditableFactoryGraphViewModel,
@@ -19,7 +20,10 @@ import { useFactoryGraphConnectionController } from "./react-flow-current-activi
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 import { buildCurrentActivityGraphEditorValue } from "./react-flow-current-activity-card-editor-value";
 
-export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
+export function useCurrentActivityGraphEditor(
+  snapshot: DashboardSnapshot,
+  locale?: string | null,
+) {
   const [editorMode, setEditorMode] = useState(false);
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
   const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] = useState(false);
@@ -27,6 +31,7 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
   const { currentFactoryQuery, editableGraph, saveEditableDefinition } =
     useCurrentActivityEditableGraph({
       editorMode,
+      locale,
       snapshot,
     });
   const editableDefinitionQuery = currentFactoryQuery;
@@ -47,6 +52,7 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
     editableGraph,
     editorMode,
     editableDefinitionQuery: currentFactoryQuery,
+    locale,
     projectedFactory: snapshot.factory,
     saveEditableDefinition,
   });
@@ -60,6 +66,7 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
     canInteractWithEditor,
     draftState,
     editableGraph,
+    locale,
     saveEditableDefinition,
   });
   const {
@@ -129,9 +136,11 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
 
 function useCurrentActivityEditableGraph({
   editorMode,
+  locale,
   snapshot,
 }: {
   editorMode: boolean;
+  locale?: string | null;
   snapshot: DashboardSnapshot;
 }) {
   const currentFactoryQuery = useCurrentFactoryDocument(editorMode);
@@ -139,6 +148,7 @@ function useCurrentActivityEditableGraph({
   const editableGraph = useEditableFactoryGraph({
     activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
     currentFactoryDocument: currentFactoryQuery.data,
+    locale,
     projectedFactory: snapshot.factory,
     saveFactoryDefinition: saveEditableDefinition.mutateAsync,
   });
@@ -155,12 +165,14 @@ function useFactoryGraphEditorControllers({
   canInteractWithEditor,
   draftState,
   editableGraph,
+  locale,
   saveEditableDefinition,
 }: {
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
   draftState: EditableFactoryGraphViewModel["draftState"];
   editableGraph: EditableFactoryGraphViewModel;
+  locale?: string | null;
   saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
 }) {
   const connectionController = useFactoryGraphConnectionController({
@@ -168,12 +180,14 @@ function useFactoryGraphEditorControllers({
     canInteractWithEditor,
     draftState,
     editableGraph,
+    locale,
   });
   const removalController = useFactoryGraphRemovalController({
     activeTool,
     canInteractWithEditor,
     draftState,
     editableGraph,
+    locale,
     saveEditableDefinition,
   });
 
@@ -189,6 +203,7 @@ function useFactoryGraphEditorSessionState({
   editableGraph,
   editorMode,
   editableDefinitionQuery,
+  locale,
   projectedFactory,
   saveEditableDefinition,
 }: {
@@ -197,6 +212,7 @@ function useFactoryGraphEditorSessionState({
   editableGraph: EditableFactoryGraphViewModel;
   editorMode: boolean;
   editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
+  locale?: string | null;
   projectedFactory?: CanonicalFactoryDefinition;
   saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
 }) {
@@ -222,15 +238,17 @@ function useFactoryGraphEditorSessionState({
     editableGraph.saveState.canSave &&
     editorUnavailableClassifierWorkstationName === undefined &&
     !hasActiveWork;
+  const messages = getFactoryGraphEditorMessages(locale);
   const saveBlockedReason = hasActiveWork
-    ? "Topology save is unavailable while active work is still running in this factory."
+    ? messages.saveBlockedActiveWork
     : isStaleDraft
-      ? "A newer factory topology arrived while this draft was open. Refresh or discard before saving."
+      ? messages.saveBlockedStaleDraft
       : undefined;
 
   return {
     addMenuActions: buildFactoryGraphAddEntityMenuActions(
       currentFactoryDefinition,
+      locale,
     ),
     canInteractWithEditor,
     canSaveDraft,
@@ -239,7 +257,7 @@ function useFactoryGraphEditorSessionState({
     hasActiveWork,
     isStaleDraft,
     saveBlockedReason,
-    saveSummary: buildFactoryGraphSaveSummary(draftState.draft),
+    saveSummary: buildFactoryGraphSaveSummary(draftState.draft, locale),
   };
 }
 

@@ -1,6 +1,7 @@
 import type { Connection } from "@xyflow/react";
 import { useCallback, useEffect, useState } from "react";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
   type EditableFactoryGraphViewModel,
   type FactoryGraphConnectionEndpoint,
@@ -12,11 +13,13 @@ export function useFactoryGraphConnectionController({
   canInteractWithEditor,
   draftState,
   editableGraph,
+  locale,
 }: {
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
   draftState: EditableFactoryGraphViewModel["draftState"];
   editableGraph: EditableFactoryGraphViewModel;
+  locale?: string | null;
 }) {
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
   const [pendingConnectionSource, setPendingConnectionSource] =
@@ -98,9 +101,8 @@ export function useFactoryGraphConnectionController({
       }
 
       if (!pendingConnectionSource) {
-        setConnectionNotice(
-          "Select a source anchor before choosing a target anchor.",
-        );
+        const messages = getFactoryGraphEditorMessages(locale);
+        setConnectionNotice(messages.connectionSelectSourceNotice);
         return;
       }
 
@@ -116,6 +118,7 @@ export function useFactoryGraphConnectionController({
       canInteractWithEditor,
       commitConnection,
       draftState.graph.nodes,
+      locale,
       pendingConnectionSource,
     ],
   );

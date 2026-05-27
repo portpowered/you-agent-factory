@@ -1,0 +1,8 @@
+name: maxResults
+in: query
+required: false
+description: Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
+schema:
+  type: integer
+  minimum: 1
+  default: 50

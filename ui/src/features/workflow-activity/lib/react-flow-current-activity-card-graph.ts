@@ -275,6 +275,7 @@ function buildPlaceNode(
       input.editor?.editorMode && factoryGraphNode
         ? buildEditorHandles({
             editor: input.editor,
+            locale: input.locale,
             nodeId: factoryGraphNode.nodeId,
             nodeKind: factoryGraphNode.kind,
           })
@@ -368,6 +369,7 @@ function buildWorkstationNode(
       handles: input.editor?.editorMode
         ? buildEditorHandles({
             editor: input.editor,
+            locale: input.locale,
             nodeId: positionedNode.nodeId,
             nodeKind: "workstation",
           })

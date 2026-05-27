@@ -59,6 +59,11 @@ function phaseDefinitions(cwd = process.cwd(), platform = process.platform, comm
       command: redoclyCommand(platform),
       args: redoclyArgs(['bundle', specRoot, '--output', specOutput], platform),
     },
+    'lint:main-components': {
+      label: 'OpenAPI main component decomposition lint',
+      command: nodeCommand,
+      args: [scriptPath('lint-openapi-main-components.js'), specRoot],
+    },
     validate: {
       label: 'OpenAPI validation',
       command: redoclyCommand(platform),
@@ -66,8 +71,18 @@ function phaseDefinitions(cwd = process.cwd(), platform = process.platform, comm
     },
     'validate:main': {
       label: 'OpenAPI main validation',
-      command: redoclyCommand(platform),
-      args: redoclyArgs(['lint', specRoot], platform),
+      phases: [
+        {
+          label: 'OpenAPI main component decomposition lint',
+          command: nodeCommand,
+          args: [scriptPath('lint-openapi-main-components.js'), specRoot],
+        },
+        {
+          label: 'OpenAPI main validation',
+          command: redoclyCommand(platform),
+          args: redoclyArgs(['lint', specRoot], platform),
+        },
+      ],
     }
   };
 }
@@ -192,7 +207,7 @@ function runApiCommand(commandName, options = {}) {
 function main(argv = process.argv.slice(2)) {
   const commandName = argv[0];
   if (!commandName) {
-    console.error('Usage: node run-quiet-api-command.js <bundle|bundle:rest|validate|validate:main> [spec-root] [spec-output]');
+    console.error('Usage: node run-quiet-api-command.js <bundle|bundle:rest|lint:main-components|validate|validate:main> [spec-root] [spec-output]');
     process.exitCode = 1;
     return;
   }

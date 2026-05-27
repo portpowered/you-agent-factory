@@ -1,3 +1,4 @@
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 import {
   buildDraftAppliedFactoryDefinition,
   buildPendingFactoryDefinition,
@@ -72,10 +73,12 @@ export interface FactoryGraphState {
 export function buildFactoryGraphState(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
+  locale?: string | null;
 }): FactoryGraphState {
   const validationErrors = validateFactoryGraphDraft(
     options.baseFactoryDefinition,
     options.draft,
+    options.locale,
   );
   const pendingFactoryDefinition =
     validationErrors.length === 0
@@ -99,6 +102,7 @@ export function buildFactoryGraphState(options: {
 export function addFactoryGraphNode(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
+  locale?: string | null;
   node: FactoryGraphAddEntityDraft;
 }): FactoryGraphOperationResult<FactoryGraphDraft> {
   const currentFactoryDefinition =
@@ -109,6 +113,7 @@ export function addFactoryGraphNode(options: {
   const fieldErrors = validateFactoryGraphAddEntityDraft(
     options.node,
     currentFactoryDefinition,
+    options.locale,
   );
   const firstFieldError = Object.values(fieldErrors).find(Boolean);
 
@@ -133,12 +138,14 @@ export function addFactoryGraphNode(options: {
 export function removeFactoryGraphNode(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
+  locale?: string | null;
   nodeId: string;
 }): FactoryGraphOperationResult<FactoryGraphDraft> {
+  const messages = getFactoryGraphEditorMessages(options.locale);
   const intent = buildFactoryGraphRemovalIntent(options);
   if (!intent) {
     return {
-      message: `Graph node "${options.nodeId}" was not found.`,
+      message: messages.operationNodeNotFound(options.nodeId),
       ok: false,
       reason: "NODE_NOT_FOUND",
     };
@@ -164,11 +171,13 @@ export function removeFactoryGraphNode(options: {
 export function connectFactoryGraphNodes(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
+  locale?: string | null;
   sourceAnchorId: string;
   sourceNodeId: string;
   targetAnchorId: string;
   targetNodeId: string;
 }): FactoryGraphOperationResult<FactoryGraphDraft> {
+  const messages = getFactoryGraphEditorMessages(options.locale);
   const state = buildFactoryGraphState(options);
   const edgeChange = buildFactoryGraphEdgeChangeFromConnection(state.graph, {
     sourceAnchorId: options.sourceAnchorId,
@@ -193,8 +202,9 @@ export function connectFactoryGraphNodes(options: {
               sourceNode,
               targetAnchorId: options.targetAnchorId,
               targetNode,
+              locale: options.locale,
             })
-          : "Choose compatible graph connection handles.",
+          : messages.connectionFallbackNotice,
       ok: false,
       reason: "INVALID_CONNECTION",
     };
@@ -204,6 +214,7 @@ export function connectFactoryGraphNodes(options: {
     baseFactoryDefinition: options.baseFactoryDefinition,
     draft: options.draft,
     edgeChange,
+    locale: options.locale,
   });
 }
 
@@ -211,6 +222,7 @@ export function connectFactoryGraphEdgeChange(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
   edgeChange: FactoryGraphDraftEdgeChange;
+  locale?: string | null;
 }): FactoryGraphOperationResult<FactoryGraphDraft> {
   const state = buildFactoryGraphState(options);
   const nextDraft = applyFactoryGraphEdgeAddition(
@@ -221,10 +233,13 @@ export function connectFactoryGraphEdgeChange(options: {
   const validationErrors = validateFactoryGraphDraft(
     options.baseFactoryDefinition,
     nextDraft,
+    options.locale,
   );
   if (validationErrors.length > 0) {
+    const messages = getFactoryGraphEditorMessages(options.locale);
     return {
-      message: validationErrors[0]?.message ?? "Graph connection is invalid.",
+      message:
+        validationErrors[0]?.message ?? messages.operationConnectionInvalid,
       ok: false,
       reason: "INVALID_CONNECTION",
       validationErrors,
@@ -241,11 +256,13 @@ export function disconnectFactoryGraphEdge(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
   edgeId: string;
+  locale?: string | null;
 }): FactoryGraphOperationResult<FactoryGraphDraft> {
+  const messages = getFactoryGraphEditorMessages(options.locale);
   const intent = buildFactoryGraphEdgeRemovalIntent(options);
   if (!intent) {
     return {
-      message: `Graph edge "${options.edgeId}" was not found.`,
+      message: messages.operationEdgeNotFound(options.edgeId),
       ok: false,
       reason: "UNKNOWN_EDGE",
     };
@@ -272,26 +289,30 @@ export function disconnectFactoryGraphEdge(options: {
 export function validateFactoryGraphState(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
+  locale?: string | null;
 }): FactoryGraphDraftValidationError[] {
   return validateFactoryGraphDraft(
     options.baseFactoryDefinition,
     options.draft,
+    options.locale,
   );
 }
 
 export function applyFactoryGraphPendingEdits(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
+  locale?: string | null;
 }): FactoryGraphOperationResult<CanonicalFactoryDefinition> {
   const validationErrors = validateFactoryGraphDraft(
     options.baseFactoryDefinition,
     options.draft,
+    options.locale,
   );
   if (validationErrors.length > 0) {
+    const messages = getFactoryGraphEditorMessages(options.locale);
     return {
       message:
-        validationErrors[0]?.message ??
-        "Graph edits must be valid before they can be applied.",
+        validationErrors[0]?.message ?? messages.operationGraphEditsInvalid,
       ok: false,
       reason: "INVALID_SAVE",
       validationErrors,
@@ -310,6 +331,7 @@ export function applyFactoryGraphPendingEdits(options: {
 export function buildFactoryGraphSaveInput(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
+  locale?: string | null;
 }): FactoryGraphOperationResult<CanonicalFactoryDefinition> {
   return applyFactoryGraphPendingEdits(options);
 }

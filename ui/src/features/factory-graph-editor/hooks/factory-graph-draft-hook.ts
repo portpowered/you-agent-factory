@@ -22,6 +22,7 @@ type FactoryGraphDraftCallbacks = Pick<
 
 interface UseFactoryGraphDraftStateOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
+  locale?: string | null;
   projectedFactory?: CanonicalFactoryDefinition;
 }
 
@@ -122,10 +123,11 @@ export function useFactoryGraphDraftState(
               resetDraft,
               updateDraft,
             },
+            locale: options.locale,
             sessionState,
           })
         : null,
-    [replaceDraft, resetDraft, sessionState, updateDraft],
+    [options.locale, replaceDraft, resetDraft, sessionState, updateDraft],
   );
 
   const projectionState = useMemo<FactoryGraphDraftDerivedState>(
@@ -147,9 +149,11 @@ export function useFactoryGraphDraftState(
 
 function createCurrentFactoryGraphDraftState({
   callbacks,
+  locale,
   sessionState,
 }: {
   callbacks: FactoryGraphDraftCallbacks;
+  locale?: string | null;
   sessionState: FactoryGraphDraftSessionState;
 }): FactoryGraphDraftDerivedState {
   const pendingFactoryDefinition = buildPendingFactoryDefinition(
@@ -159,6 +163,7 @@ function createCurrentFactoryGraphDraftState({
   const validationErrors = validateFactoryGraphDraft(
     sessionState.latestDocument,
     sessionState.draft,
+    locale,
   );
 
   return {

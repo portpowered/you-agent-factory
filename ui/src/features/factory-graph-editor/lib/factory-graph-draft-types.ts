@@ -244,14 +244,19 @@ export function edgeChangeId(
 export function nodeKeyId(key: FactoryGraphNodeKey): string {
   switch (key.kind) {
     case "resource":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return `resource:${key.name}`;
     case "worker":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return `worker:${key.name}`;
     case "work-state":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return `work-state:${key.workTypeName}:${key.stateName}`;
     case "work-type":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return `work-type:${key.name}`;
     case "workstation":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return `workstation:${key.name}`;
   }
 }

@@ -11,6 +11,7 @@ import {
   waitForStoryRender,
 } from "./storybook-responsive-helpers.mjs";
 import { verifyDashboardSessionTabs as verifyDashboardSessionTabsImpl } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
+import { verifyBentoCardCatalogResponsive as verifyBentoCardCatalogResponsiveImpl } from "./verify-bento-card-catalog-storybook-responsive.mjs";
 import {
   verifyEditorGraphParity as verifyEditorGraphParityImpl,
   verifyObserverGraphParity as verifyObserverGraphParityImpl,
@@ -150,6 +151,11 @@ export const storyChecks = [
     assertions: verifyCurrentSelectionPromptHint,
     id: "you-agent-factory-workflow-dashboard--current-selection-prompt-hint-verification",
     label: "current selection prompt hinting",
+  },
+  {
+    assertions: verifyBentoCardCatalogResponsive,
+    id: "you-agent-factory-dashboard-bento-cards--responsive-verification",
+    label: "bento card catalog",
   },
   {
     assertions: verifyObserverGraphParity,
@@ -337,6 +343,14 @@ export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
 }
 export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {
   return verifyCurrentSelectionPromptHintImpl({
+    expectNoHorizontalOverflow,
+    expectVisible,
+    page,
+    viewport,
+  });
+}
+export async function verifyBentoCardCatalogResponsive(page, _dialog, viewport) {
+  return verifyBentoCardCatalogResponsiveImpl({
     expectNoHorizontalOverflow,
     expectVisible,
     page,

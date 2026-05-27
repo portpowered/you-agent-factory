@@ -117,7 +117,7 @@ export function FailureTrendCard({
           >
             {THROUGHPUT_RANGE_OPTIONS.map((option) => (
               <option key={option.id} value={option.id}>
-                {messages.rangeOptionLabel(option.id, option.label)}
+                {messages.rangeOptionLabel(option.id, option.id)}
               </option>
             ))}
           </select>
@@ -251,7 +251,7 @@ export function ReworkTrendCard({
               r={REWORK_TREND_CHART_STYLE.pointRadius}
             >
               <title>
-                {point.dispatchLabel}: {point.reworkCount} retry or rework events
+                {messages.reworkPointLabel(point.dispatchLabel, point.reworkCount)}
               </title>
             </circle>
           ))}
