@@ -1,9 +1,11 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: factory graph editor copy stays consolidated so message keys and locale fallbacks remain auditable during hardcoded-copy cleanup.
 import {
   type LocalizedMessageCatalog,
   resolveLocalizedMessages,
 } from "../../../i18n";
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
 import type { FactoryGraphNodeKind } from "../lib/factory-graph-draft-types";
+import type { FactoryWorkState } from "../lib/factory-graph-draft-types";
 import type { FactoryGraphWorkerRuntimeStatus } from "../lib/factory-graph-editor-runtime";
 
 export interface FactoryGraphEditorMessages {
@@ -26,6 +28,19 @@ export interface FactoryGraphEditorMessages {
   addDialogTitle: (kind: FactoryGraphAddEntityDraft["kind"]) => string;
   addDialogWorkTypeLabel: string;
   addDialogWorkTypePlaceholder: string;
+  addMenuAction: (kind: FactoryGraphAddEntityDraft["kind"]) => {
+    description: string;
+    label: string;
+  };
+  connectionAnchorDescription: (anchorId: string) => string;
+  connectionAnchorLabel: (anchorId: string) => string;
+  connectionFallbackNotice: string;
+  connectionIncompatibleNotice: (
+    sourceAnchor: string,
+    sourceNode: string,
+    targetAnchor: string,
+    targetNode: string,
+  ) => string;
   draftActionsAriaLabel: string;
   draftActionsDiscard: string;
   draftActionsSave: string;
@@ -74,8 +89,16 @@ export interface FactoryGraphEditorMessages {
   noticeTopologyBlockedDescription: string;
   noticeTopologyBlockedTitle: string;
   saveConfirmAction: string;
+  saveBlockedActiveWork: string;
+  saveBlockedStaleDraft: string;
   saveConfirmTitle: string;
+  saveSummaryDescription: (summary: {
+    changedEdges: number;
+    createdEntities: number;
+    removedEntities: number;
+  }) => string;
   stateCollapsed: string;
+  stateTypeLabel: (stateType: FactoryWorkState["type"]) => string;
   stateVisible: string;
   toolbarAddDescription: string;
   toolbarAddLabel: string;
@@ -96,6 +119,48 @@ export interface FactoryGraphEditorMessages {
   visibilityPresetWorkflowLabel: string;
   visibilityPresetsAriaLabel: string;
   viewportLabel: string;
+  validationDuplicateIdentifier: (nodeId: string) => string;
+  validationIncompatibleEdge: (
+    relationship: string,
+    source: string,
+    target: string,
+  ) => string;
+  validationMissingRequiredIdentifier: (kind: FactoryGraphNodeKind) => string;
+  validationMissingWorkerAssignment: (workstationName: string) => string;
+  validationUnknownEdgeNode: (
+    relationship: string,
+    which: "source" | "target",
+  ) => string;
+  removalDescription: (input: {
+    connectedEdgeCount: number;
+    impactedStateCount: number;
+    kind: FactoryGraphNodeKind;
+    label: string;
+  }) => string;
+  removalEdgeConfirmLabel: (edgeLabel: string) => string;
+  removalEdgeDescription: (
+    kind: Parameters<FactoryGraphEditorMessages["edgeKindLabel"]>[0],
+    source: string,
+    target: string,
+  ) => string;
+  removalEdgeIneligibleWorkTypeState: string;
+  removalEdgeLabel: (
+    kind: Parameters<FactoryGraphEditorMessages["edgeKindLabel"]>[0],
+    source: string,
+  ) => string;
+  removalEdgeTitle: (edgeLabel: string) => string;
+  removalEntityConfirmLabel: (
+    label: string,
+    kind: FactoryGraphNodeKind,
+  ) => string;
+  removalEntityTitle: (label: string, kind: FactoryGraphNodeKind) => string;
+  removalFallbackConfirmDescription: string;
+  removalFallbackConfirmLabel: string;
+  removalFallbackTitle: string;
+  removalWorkerAssignedReason: (
+    workstationCount: number,
+    workerLabel: string,
+  ) => string;
   workerStatusLabel: (status: FactoryGraphWorkerRuntimeStatus) => string;
 }
 
@@ -177,6 +242,163 @@ function describeEnglishEdgeKind(
   }
 }
 
+function pluralizeEnglish(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function describeEnglishCount(count: number, singular: string) {
+  if (count === 0) {
+    return null;
+  }
+  const plural =
+    singular === "created entity" || singular === "deleted entity"
+      ? `${singular.slice(0, -1)}ies`
+      : `${singular}s`;
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function describeEnglishSaveSummary(summary: {
+  changedEdges: number;
+  createdEntities: number;
+  removedEntities: number;
+}) {
+  const segments = [
+    describeEnglishCount(summary.createdEntities, "created entity"),
+    describeEnglishCount(summary.removedEntities, "deleted entity"),
+    describeEnglishCount(summary.changedEdges, "changed edge"),
+  ].filter((segment) => segment !== null);
+
+  if (segments.length === 0) {
+    return "No graph changes are pending.";
+  }
+  if (segments.length === 1) {
+    return `This save will apply ${segments[0]}.`;
+  }
+
+  const finalSegment = segments[segments.length - 1];
+  return `This save will apply ${segments.slice(0, -1).join(", ")} and ${finalSegment}.`;
+}
+
+function describeEnglishAddMenuAction(
+  kind: FactoryGraphAddEntityDraft["kind"],
+) {
+  switch (kind) {
+    case "workstation":
+      return {
+        description:
+          "Create a pending workstation and assign an existing worker.",
+        label: "Workstation",
+      };
+    case "worker":
+      return {
+        description: "Add a model worker that can be assigned to workstations.",
+        label: "Worker",
+      };
+    case "work-type":
+      return {
+        description: "Define a new work type with its first ordered state.",
+        label: "Work type",
+      };
+    case "work-state":
+      return {
+        description: "Append a state to an existing work type.",
+        label: "Work state",
+      };
+    case "resource":
+      return {
+        description:
+          "Register a resource that workers or workstations can consume.",
+        label: "Resource",
+      };
+  }
+}
+
+function describeEnglishConnectionAnchor(anchorId: string) {
+  switch (anchorId) {
+    case "worker-resource-source":
+      return {
+        description: "Provide this resource to a worker.",
+        label: "Worker",
+      };
+    case "workstation-resource-source":
+      return {
+        description: "Provide this resource to a workstation.",
+        label: "Station",
+      };
+    case "worker-resource-target":
+      return {
+        description: "Accept a resource required by this worker.",
+        label: "Resource",
+      };
+    case "worker-assignment-source":
+      return {
+        description: "Assign this worker to a workstation.",
+        label: "Assign",
+      };
+    case "workstation-input-source":
+    case "workstation-input-target":
+      return {
+        description:
+          anchorId === "workstation-input-source"
+            ? "Route this work state into a workstation input."
+            : "Accept an input work state for this workstation.",
+        label: "Input",
+      };
+    case "workstation-output-source":
+    case "workstation-output-target":
+      return {
+        description:
+          anchorId === "workstation-output-source"
+            ? "Route successful output from this workstation."
+            : "Receive a successful workstation output.",
+        label: "Success",
+      };
+    case "workstation-on-continue-source":
+    case "workstation-on-continue-target":
+      return {
+        description:
+          anchorId === "workstation-on-continue-source"
+            ? "Route a continue transition from this workstation."
+            : "Receive a workstation continue transition.",
+        label: "Continue",
+      };
+    case "workstation-on-failure-source":
+    case "workstation-on-failure-target":
+      return {
+        description:
+          anchorId === "workstation-on-failure-source"
+            ? "Route a failure transition from this workstation."
+            : "Receive a workstation failure transition.",
+        label: "Failure",
+      };
+    case "workstation-on-rejection-source":
+    case "workstation-on-rejection-target":
+      return {
+        description:
+          anchorId === "workstation-on-rejection-source"
+            ? "Route a rejection transition from this workstation."
+            : "Receive a workstation rejection transition.",
+        label: "Reject",
+      };
+    case "worker-assignment-target":
+      return {
+        description: "Accept a worker assignment for this workstation.",
+        label: "Worker",
+      };
+    case "workstation-resource-target":
+      return {
+        description: "Accept a resource requirement for this workstation.",
+        label: "Resource",
+      };
+    default:
+      return { description: "", label: "" };
+  }
+}
+
+function describeEnglishStateType(stateType: FactoryWorkState["type"]) {
+  return stateType;
+}
+
 const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEditorMessages> =
   {
     en: {
@@ -203,12 +425,27 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogTitle: describeEnglishAddDialogTitle,
       addDialogWorkTypeLabel: "Work type",
       addDialogWorkTypePlaceholder: "Select a work type",
+      addMenuAction: describeEnglishAddMenuAction,
+      connectionAnchorDescription: (anchorId) =>
+        describeEnglishConnectionAnchor(anchorId).description,
+      connectionAnchorLabel: (anchorId) =>
+        describeEnglishConnectionAnchor(anchorId).label,
+      connectionFallbackNotice:
+        "Choose a compatible source and target anchor before creating a connection.",
+      connectionIncompatibleNotice: (
+        sourceAnchor,
+        sourceNode,
+        targetAnchor,
+        targetNode,
+      ) =>
+        `${sourceAnchor} connections from ${sourceNode} cannot connect to ${targetAnchor} on ${targetNode}.`,
       draftActionsAriaLabel: "Pending graph changes",
       draftActionsDiscard: "Discard changes",
       draftActionsSave: "Save changes",
       draftActionsSaving: "Saving...",
       draftActionsTitle: "Pending graph changes",
-      edgeAriaLabel: (label, source, target) => `${label} from ${source} to ${target}`,
+      edgeAriaLabel: (label, source, target) =>
+        `${label} from ${source} to ${target}`,
       edgeKindLabel: describeEnglishEdgeKind,
       flowConnectionHint: "Use labeled anchors for compatible connections.",
       flowPendingLabel: "Pending",
@@ -247,8 +484,14 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         "Save is unavailable while active work is still running in the current factory.",
       noticeTopologyBlockedTitle: "Topology edits are blocked",
       saveConfirmAction: "Save topology",
+      saveBlockedActiveWork:
+        "Topology save is unavailable while active work is still running in this factory.",
+      saveBlockedStaleDraft:
+        "A newer factory topology arrived while this draft was open. Refresh or discard before saving.",
       saveConfirmTitle: "Save factory graph changes?",
+      saveSummaryDescription: describeEnglishSaveSummary,
       stateCollapsed: "Collapsed",
+      stateTypeLabel: describeEnglishStateType,
       stateVisible: "Visible",
       toolbarAddDescription: "Add supported graph entities",
       toolbarAddLabel: "Add",
@@ -270,6 +513,99 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       visibilityPresetWorkflowLabel: "Workflow",
       visibilityPresetsAriaLabel: "Factory graph visibility presets",
       viewportLabel: "Work graph viewport",
+      validationDuplicateIdentifier: (nodeId) =>
+        `Duplicate graph identifier "${nodeId}" is not allowed.`,
+      validationIncompatibleEdge: (relationship, source, target) =>
+        `Relationship "${relationship}" cannot connect ${source} to ${target}.`,
+      validationMissingRequiredIdentifier: (kind) =>
+        `${kind} identifiers are required before save.`,
+      validationMissingWorkerAssignment: (workstationName) =>
+        `Workstation "${workstationName}" must keep one worker assignment.`,
+      validationUnknownEdgeNode: (relationship, which) =>
+        `Relationship "${relationship}" references an unknown ${which} node.`,
+      removalDescription: ({
+        connectedEdgeCount,
+        impactedStateCount,
+        kind,
+        label,
+      }) => {
+        const edgeSummary =
+          connectedEdgeCount > 0
+            ? `This will remove ${pluralizeEnglish(connectedEdgeCount, "graph edge")}.`
+            : "This entity has no connected graph edges to remove.";
+
+        if (kind === "work-type") {
+          return `${edgeSummary} ${label} also owns ${pluralizeEnglish(
+            impactedStateCount,
+            "work state",
+          )}, which will be removed with it.`;
+        }
+        if (kind === "work-state") {
+          return `${edgeSummary} Any workstation routes that reference ${label} will be cleared from the pending draft.`;
+        }
+        if (kind === "resource") {
+          return `${edgeSummary} Worker and workstation resource references that depend on ${label} will be cleared from the pending draft.`;
+        }
+        return edgeSummary;
+      },
+      removalEdgeConfirmLabel: (edgeLabel) => `Remove ${edgeLabel}`,
+      removalEdgeDescription: (kind, source, target) => {
+        switch (kind) {
+          case "worker-assignment":
+            return `This will unassign ${source} from ${target}. The workstation will need another worker before topology save can succeed.`;
+          case "worker-resource":
+            return `This will remove ${source} from ${target}'s available resources in the pending draft.`;
+          case "workstation-resource":
+            return `This will remove ${source} from ${target}'s required resources in the pending draft.`;
+          case "workstation-input":
+            return `This will stop routing ${source} into ${target}.`;
+          case "workstation-output":
+            return `This will remove the success route from ${source} to ${target}.`;
+          case "workstation-on-continue":
+            return `This will remove the continue route from ${source} to ${target}.`;
+          case "workstation-on-failure":
+            return `This will remove the failure route from ${source} to ${target}.`;
+          case "workstation-on-rejection":
+            return `This will remove the rejection route from ${source} to ${target}.`;
+          case "work-type-state":
+            return "";
+        }
+      },
+      removalEdgeIneligibleWorkTypeState:
+        "Work type ordering edges are managed by work-state membership and cannot be removed directly.",
+      removalEdgeLabel: (kind, source) => {
+        switch (kind) {
+          case "worker-assignment":
+            return `${source} assignment`;
+          case "worker-resource":
+          case "workstation-resource":
+            return `${source} resource link`;
+          case "workstation-input":
+            return `${source} input route`;
+          case "workstation-output":
+            return `${source} success route`;
+          case "workstation-on-continue":
+            return `${source} continue route`;
+          case "workstation-on-failure":
+            return `${source} failure route`;
+          case "workstation-on-rejection":
+            return `${source} rejection route`;
+          case "work-type-state":
+            return `${source} state membership`;
+        }
+      },
+      removalEdgeTitle: (edgeLabel) => `Remove ${edgeLabel}?`,
+      removalEntityConfirmLabel: (label, kind) => `Delete ${label} ${kind}`,
+      removalEntityTitle: (label, kind) => `Remove ${label} ${kind}?`,
+      removalFallbackConfirmDescription:
+        "Remove this graph entity from the current draft.",
+      removalFallbackConfirmLabel: "Delete entity",
+      removalFallbackTitle: "Remove graph entity?",
+      removalWorkerAssignedReason: (workstationCount, workerLabel) =>
+        `This worker is still assigned to ${pluralizeEnglish(
+          workstationCount,
+          "workstation",
+        )}. Reassign or remove those workstations before deleting ${workerLabel}.`,
       workerStatusLabel: describeEnglishWorkerStatus,
     },
     "zh-CN": {
@@ -311,12 +647,119 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       },
       addDialogWorkTypeLabel: "工作类型",
       addDialogWorkTypePlaceholder: "选择一个工作类型",
+      addMenuAction: (kind) => {
+        switch (kind) {
+          case "workstation":
+            return {
+              description: "创建一个待处理工作站并分配现有工作者。",
+              label: "工作站",
+            };
+          case "worker":
+            return {
+              description: "添加可分配给工作站的模型工作者。",
+              label: "工作者",
+            };
+          case "work-type":
+            return {
+              description: "定义一个包含首个有序状态的新工作类型。",
+              label: "工作类型",
+            };
+          case "work-state":
+            return {
+              description: "向现有工作类型追加一个状态。",
+              label: "工作状态",
+            };
+          case "resource":
+            return {
+              description: "注册工作者或工作站可消耗的资源。",
+              label: "资源",
+            };
+        }
+      },
+      connectionAnchorDescription: (anchorId) => {
+        switch (anchorId) {
+          case "worker-resource-source":
+            return "将此资源提供给工作者。";
+          case "workstation-resource-source":
+            return "将此资源提供给工作站。";
+          case "worker-resource-target":
+            return "接收此工作者所需的资源。";
+          case "worker-assignment-source":
+            return "将此工作者分配给工作站。";
+          case "workstation-input-source":
+            return "将此工作状态路由到工作站输入。";
+          case "workstation-input-target":
+            return "接收此工作站的输入工作状态。";
+          case "workstation-output-target":
+            return "接收工作站的成功输出。";
+          case "workstation-on-continue-target":
+            return "接收工作站的继续转换。";
+          case "workstation-on-failure-target":
+            return "接收工作站的失败转换。";
+          case "workstation-on-rejection-target":
+            return "接收工作站的拒绝转换。";
+          case "worker-assignment-target":
+            return "接收此工作站的工作者分配。";
+          case "workstation-resource-target":
+            return "接收此工作站的资源需求。";
+          case "workstation-output-source":
+            return "从此工作站路由成功输出。";
+          case "workstation-on-continue-source":
+            return "从此工作站路由继续转换。";
+          case "workstation-on-failure-source":
+            return "从此工作站路由失败转换。";
+          case "workstation-on-rejection-source":
+            return "从此工作站路由拒绝转换。";
+          default:
+            return "";
+        }
+      },
+      connectionAnchorLabel: (anchorId) => {
+        switch (anchorId) {
+          case "worker-resource-source":
+          case "worker-assignment-target":
+            return "工作者";
+          case "workstation-resource-source":
+            return "工作站";
+          case "worker-resource-target":
+          case "workstation-resource-target":
+            return "资源";
+          case "worker-assignment-source":
+            return "分配";
+          case "workstation-input-source":
+          case "workstation-input-target":
+            return "输入";
+          case "workstation-output-source":
+          case "workstation-output-target":
+            return "成功";
+          case "workstation-on-continue-source":
+          case "workstation-on-continue-target":
+            return "继续";
+          case "workstation-on-failure-source":
+          case "workstation-on-failure-target":
+            return "失败";
+          case "workstation-on-rejection-source":
+          case "workstation-on-rejection-target":
+            return "拒绝";
+          default:
+            return "";
+        }
+      },
+      connectionFallbackNotice: "请先选择兼容的源锚点和目标锚点再创建连接。",
+      connectionIncompatibleNotice: (
+        sourceAnchor,
+        sourceNode,
+        targetAnchor,
+        targetNode,
+      ) =>
+        `${sourceNode} 的${sourceAnchor}连接不能连接到 ${targetNode} 上的${targetAnchor}。`,
       draftActionsAriaLabel: "待处理图更改",
       draftActionsDiscard: "放弃更改",
       draftActionsSave: "保存更改",
       draftActionsSaving: "保存中...",
       draftActionsTitle: "待处理图更改",
-      edgeAriaLabel: (label, source, target) => `${label}：从 ${source} 到 ${target}`,
+      edgeAriaLabel: (label, source, target) =>
+        `${label}：从 ${source} 到 ${target}`,
       edgeKindLabel: (kind) => {
         switch (kind) {
           case "worker-assignment":
@@ -387,8 +830,43 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         "当前工厂仍有活动工作在运行，因此无法保存。",
       noticeTopologyBlockedTitle: "拓扑编辑被阻止",
       saveConfirmAction: "保存拓扑",
+      saveBlockedActiveWork: "此工厂仍有活动工作在运行，因此无法保存拓扑。",
+      saveBlockedStaleDraft:
+        "此草稿打开后收到了更新的工厂拓扑。请先刷新或放弃再保存。",
       saveConfirmTitle: "保存工厂图更改？",
+      saveSummaryDescription: (summary) => {
+        const segments = [
+          summary.createdEntities > 0
+            ? `${summary.createdEntities} 个新增实体`
+            : null,
+          summary.removedEntities > 0
+            ? `${summary.removedEntities} 个删除实体`
+            : null,
+          summary.changedEdges > 0 ? `${summary.changedEdges} 条更改边` : null,
+        ].filter((segment) => segment !== null);
+
+        if (segments.length === 0) {
+          return "没有待处理的图更改。";
+        }
+        if (segments.length === 1) {
+          return `此保存将应用 ${segments[0]}。`;
+        }
+        const finalSegment = segments[segments.length - 1];
+        return `此保存将应用 ${segments.slice(0, -1).join("、")} 和 ${finalSegment}。`;
+      },
       stateCollapsed: "已折叠",
+      stateTypeLabel: (stateType) => {
+        switch (stateType) {
+          case "INITIAL":
+            return "初始";
+          case "PROCESSING":
+            return "处理中";
+          case "TERMINAL":
+            return "终止";
+          case "FAILED":
+            return "失败";
+        }
+      },
       stateVisible: "可见",
       toolbarAddDescription: "添加受支持的图实体",
       toolbarAddLabel: "添加",
@@ -409,6 +887,94 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       visibilityPresetWorkflowLabel: "工作流",
       visibilityPresetsAriaLabel: "工厂图可见性预设",
       viewportLabel: "工作图视口",
+      validationDuplicateIdentifier: (nodeId) =>
+        `不允许重复的图标识符“${nodeId}”。`,
+      validationIncompatibleEdge: (relationship, source, target) =>
+        `关系“${relationship}”不能将 ${source} 连接到 ${target}。`,
+      validationMissingRequiredIdentifier: (kind) =>
+        `保存前必须填写${getFactoryGraphEditorMessages("zh-CN").kindLabel(kind)}标识符。`,
+      validationMissingWorkerAssignment: (workstationName) =>
+        `工作站“${workstationName}”必须保留一个工作者分配。`,
+      validationUnknownEdgeNode: (relationship, which) =>
+        `关系“${relationship}”引用了未知的${which === "source" ? "源" : "目标"}节点。`,
+      removalDescription: ({
+        connectedEdgeCount,
+        impactedStateCount,
+        kind,
+        label,
+      }) => {
+        const edgeSummary =
+          connectedEdgeCount > 0
+            ? `这将移除 ${connectedEdgeCount} 条图边。`
+            : "此实体没有要移除的已连接图边。";
+
+        if (kind === "work-type") {
+          return `${edgeSummary} ${label} 还拥有 ${impactedStateCount} 个工作状态，这些状态也会一并移除。`;
+        }
+        if (kind === "work-state") {
+          return `${edgeSummary} 引用 ${label} 的所有工作站路由都将从待处理草稿中清除。`;
+        }
+        if (kind === "resource") {
+          return `${edgeSummary} 依赖 ${label} 的工作者和工作站资源引用都将从待处理草稿中清除。`;
+        }
+        return edgeSummary;
+      },
+      removalEdgeConfirmLabel: (edgeLabel) => `移除${edgeLabel}`,
+      removalEdgeDescription: (kind, source, target) => {
+        switch (kind) {
+          case "worker-assignment":
+            return `这会将 ${source} 从 ${target} 取消分配。该工作站需要另一个工作者后拓扑保存才能成功。`;
+          case "worker-resource":
+            return `这会从待处理草稿中移除 ${target} 的可用资源 ${source}。`;
+          case "workstation-resource":
+            return `这会从待处理草稿中移除 ${target} 的必需资源 ${source}。`;
+          case "workstation-input":
+            return `这会停止将 ${source} 路由到 ${target}。`;
+          case "workstation-output":
+            return `这会移除从 ${source} 到 ${target} 的成功路由。`;
+          case "workstation-on-continue":
+            return `这会移除从 ${source} 到 ${target} 的继续路由。`;
+          case "workstation-on-failure":
+            return `这会移除从 ${source} 到 ${target} 的失败路由。`;
+          case "workstation-on-rejection":
+            return `这会移除从 ${source} 到 ${target} 的拒绝路由。`;
+          case "work-type-state":
+            return "";
+        }
+      },
+      removalEdgeIneligibleWorkTypeState:
+        "工作类型排序边由工作状态归属管理，不能直接移除。",
+      removalEdgeLabel: (kind, source) => {
+        switch (kind) {
+          case "worker-assignment":
+            return `${source} 分配`;
+          case "worker-resource":
+          case "workstation-resource":
+            return `${source} 资源链接`;
+          case "workstation-input":
+            return `${source} 输入路由`;
+          case "workstation-output":
+            return `${source} 成功路由`;
+          case "workstation-on-continue":
+            return `${source} 继续路由`;
+          case "workstation-on-failure":
+            return `${source} 失败路由`;
+          case "workstation-on-rejection":
+            return `${source} 拒绝路由`;
+          case "work-type-state":
+            return `${source} 状态归属`;
+        }
+      },
+      removalEdgeTitle: (edgeLabel) => `移除${edgeLabel}？`,
+      removalEntityConfirmLabel: (label, kind) =>
+        `删除 ${label} ${getFactoryGraphEditorMessages("zh-CN").kindLabel(kind)}`,
+      removalEntityTitle: (label, kind) =>
+        `移除 ${label} ${getFactoryGraphEditorMessages("zh-CN").kindLabel(kind)}？`,
+      removalFallbackConfirmDescription: "从当前草稿中移除此图实体。",
+      removalFallbackConfirmLabel: "删除实体",
+      removalFallbackTitle: "移除图实体？",
+      removalWorkerAssignedReason: (workstationCount, workerLabel) =>
+        `此工作者仍分配给 ${workstationCount} 个工作站。删除 ${workerLabel} 前，请重新分配或移除这些工作站。`,
       workerStatusLabel: (status) => {
         switch (status) {
           case "active":

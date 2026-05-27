@@ -98,7 +98,7 @@ export function ExportFactoryDialog({
   const formState = useExportFactoryDialogState({
     factory,
     initialFactoryName,
-    isOpen,
+    isOpen, locale,
     messages,
     onClose,
     preparationFailure,
@@ -310,7 +310,7 @@ function ExportFactoryDialogMessages({
 function useExportFactoryDialogState({
   factory,
   initialFactoryName,
-  isOpen,
+  isOpen, locale,
   messages,
   onClose,
   preparationFailure,
@@ -318,7 +318,7 @@ function useExportFactoryDialogState({
 }: {
   factory: FactoryValue | null;
   initialFactoryName: string;
-  isOpen: boolean;
+  isOpen: boolean; locale?: string | null;
   messages: ReturnType<typeof getExportDialogMessages>;
   onClose: () => void;
   preparationFailure?: CurrentFactoryExportFailure | null;
@@ -394,6 +394,7 @@ function useExportFactoryDialogState({
         name: trimmedExportName,
       },
       image: selectedImage,
+      ...(locale && locale !== "en" ? { locale } : {}),
     });
 
     if (exportAttemptRef.current !== exportAttempt) {

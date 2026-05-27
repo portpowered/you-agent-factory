@@ -165,6 +165,121 @@ test("CLI output reports actionable hardcoded-copy failures", async () => {
   }
 });
 
+test("runHardcodedUiCopyCheck rejects hardcoded JSX text, attributes, and component props with an empty baseline", async () => {
+  const tempRoot = await mkdtemp(
+    path.join(os.tmpdir(), "hardcoded-copy-rejects-"),
+  );
+  const srcDir = path.join(tempRoot, "src");
+  const baselinePath = path.join(tempRoot, "hardcoded-ui-copy-baseline.txt");
+  const reportMessages: string[] = [];
+
+  try {
+    await mkdir(path.join(srcDir, "features"), { recursive: true });
+    await writeFile(
+      path.join(srcDir, "features", "feature.tsx"),
+      `
+        export function Feature() {
+          return (
+            <section aria-label="Retry panel">
+              Retry request
+              <MetricCard title="Attempt history" />
+            </section>
+          );
+        }
+      `,
+    );
+    await writeFile(
+      baselinePath,
+      "# Baseline for the hardcoded UI copy check.\n# Entries are path|line|column|kind|text.\n",
+    );
+
+    await expect(
+      runHardcodedUiCopyCheck({
+        baselinePath,
+        report: (message) => reportMessages.push(message),
+        sourceRoot: srcDir,
+      }),
+    ).resolves.toBe(false);
+
+    expect(reportMessages).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("New hardcoded UI copy was found"),
+        expect.stringContaining("[jsx-attribute] Retry panel"),
+        expect.stringContaining("[jsx-text] Retry request"),
+        expect.stringContaining("[jsx-prop] Attempt history"),
+      ]),
+    );
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test("runHardcodedUiCopyCheck allows catalogs, tests, stories, and documented diagnostics", async () => {
+  const tempRoot = await mkdtemp(
+    path.join(os.tmpdir(), "hardcoded-copy-allows-"),
+  );
+  const srcDir = path.join(tempRoot, "src");
+  const baselinePath = path.join(tempRoot, "hardcoded-ui-copy-baseline.txt");
+
+  try {
+    await mkdir(path.join(srcDir, "features", "orders", "messages"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(srcDir, "features", "orders", "messages", "orders.ts"),
+      `
+        export const orderMessages = {
+          en: {
+            title: "Retry request",
+          },
+        };
+      `,
+    );
+    await writeFile(
+      path.join(srcDir, "features", "orders", "orders.test.tsx"),
+      `
+        export function Fixture() {
+          return <section aria-label="Retry panel">Retry request</section>;
+        }
+      `,
+    );
+    await writeFile(
+      path.join(srcDir, "features", "orders", "orders.stories.tsx"),
+      `
+        export function Story() {
+          return <section aria-label="Retry panel">Retry request</section>;
+        }
+      `,
+    );
+    await writeFile(
+      path.join(srcDir, "features", "orders", "orders.tsx"),
+      `
+        export function Diagnostic({ eventType }: { eventType: string }) {
+          return (
+            <section>
+              {/* hardcoded-ui-copy-exception: non-product-diagnostic */}
+              <p>{\`type=\${eventType}\`}</p>
+            </section>
+          );
+        }
+      `,
+    );
+    await writeFile(
+      baselinePath,
+      "# Baseline for the hardcoded UI copy check.\n# Entries are path|line|column|kind|text.\n",
+    );
+
+    await expect(
+      runHardcodedUiCopyCheck({
+        baselinePath,
+        sourceRoot: srcDir,
+      }),
+    ).resolves.toBe(true);
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
 test("runHardcodedUiCopyCheck writes the reviewed baseline for current findings", async () => {
   const tempRoot = await mkdtemp(
     path.join(os.tmpdir(), "hardcoded-copy-baseline-"),

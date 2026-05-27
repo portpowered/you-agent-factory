@@ -10,18 +10,23 @@ import {
   type FactoryGraphConnectionEndpoint,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: connection controller keeps the React Flow gesture lifecycle together while this story only threads localized notices.
 export function useFactoryGraphConnectionController({
   activeTool,
   canInteractWithEditor,
   draftState,
+  locale,
 }: {
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  locale?: string;
 }) {
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
-  const [pendingConnectionSource, setPendingConnectionSource] = useState<FactoryGraphConnectionEndpoint | null>(null);
+  const [pendingConnectionSource, setPendingConnectionSource] =
+    useState<FactoryGraphConnectionEndpoint | null>(null);
   useEffect(() => {
     if (activeTool !== "connect") {
       setPendingConnectionSource(null);
@@ -45,6 +50,7 @@ export function useFactoryGraphConnectionController({
         const targetNode = draftState.graph.nodes.find(
           (node) => node.id === connection.targetNodeId,
         );
+        const messages = getFactoryGraphEditorMessages(locale);
         setConnectionNotice(
           sourceNode && targetNode
             ? buildFactoryGraphConnectionNotice({
@@ -52,18 +58,23 @@ export function useFactoryGraphConnectionController({
                 sourceNode,
                 targetAnchorId: connection.targetAnchorId,
                 targetNode,
+                locale,
               })
-            : "Choose a compatible source and target anchor before creating a connection.",
+            : messages.connectionFallbackNotice,
         );
         return;
       }
       draftState.updateDraft((currentDraft) =>
-        applyFactoryGraphEdgeAddition(currentDraft, draftState.graph, edgeChange),
+        applyFactoryGraphEdgeAddition(
+          currentDraft,
+          draftState.graph,
+          edgeChange,
+        ),
       );
       setConnectionNotice(null);
       setPendingConnectionSource(null);
     },
-    [draftState],
+    [draftState, locale],
   );
   const handleEditorConnect = useCallback(
     (connection: Connection) => {
@@ -92,12 +103,17 @@ export function useFactoryGraphConnectionController({
         return;
       }
 
-      const node = draftState.graph.nodes.find((entry) => entry.id === endpoint.nodeId);
+      const node = draftState.graph.nodes.find(
+        (entry) => entry.id === endpoint.nodeId,
+      );
       if (!node) {
         return;
       }
 
-      const anchor = getFactoryGraphConnectionAnchor(node.kind, endpoint.anchorId);
+      const anchor = getFactoryGraphConnectionAnchor(
+        node.kind,
+        endpoint.anchorId,
+      );
       if (!anchor) {
         return;
       }
@@ -128,7 +144,19 @@ export function useFactoryGraphConnectionController({
         targetNodeId: endpoint.nodeId,
       });
     },
-    [activeTool, canInteractWithEditor, commitConnection, draftState.graph.nodes, pendingConnectionSource],
+    [
+      activeTool,
+      canInteractWithEditor,
+      commitConnection,
+      draftState.graph.nodes,
+      pendingConnectionSource,
+    ],
   );
-  return { connectionNotice, handleConnectionAnchorClick, handleEditorConnect, pendingConnectionSource, setConnectionNotice };
+  return {
+    connectionNotice,
+    handleConnectionAnchorClick,
+    handleEditorConnect,
+    pendingConnectionSource,
+    setConnectionNotice,
+  };
 }

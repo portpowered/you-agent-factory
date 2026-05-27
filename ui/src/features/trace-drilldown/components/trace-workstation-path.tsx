@@ -322,13 +322,14 @@ function dispatchDependencyGraph(
     outputSummary: string;
   }>;
 } {
+  const messages = getTraceDrilldownMessages(locale);
   const nodes = dispatches.map((dispatch) => ({
     id: dispatch.dispatch_id,
     inputSummary: summarizeWorkItems(dispatch.input_items, locale),
     label:
       dispatch.workstation_name ||
       dispatch.transition_id ||
-      "Unknown workstation",
+      messages.unknownWorkstationLabel,
     outcome: dispatch.outcome,
     outputSummary: summarizeWorkItems(dispatch.output_items, locale),
   }));
@@ -502,6 +503,7 @@ function dedupeWorkItems(
 
 function outcomeToneClassName(outcome?: string): string {
   if (!outcome) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return "border-af-border bg-af-surface";
   }
 
@@ -509,8 +511,10 @@ function outcomeToneClassName(outcome?: string): string {
     outcome.toUpperCase() === "FAILED" ||
     outcome.toUpperCase() === "REJECTED"
   ) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return "border-af-danger-border bg-af-danger-surface";
   }
 
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return "border-af-success-border bg-af-success-surface";
 }

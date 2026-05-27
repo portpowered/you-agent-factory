@@ -2,9 +2,7 @@ import { FactoryGraphEditorAddEntityDialog } from "../../factory-graph-editor/co
 import { FactoryGraphEditorConfirmationDialog } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/components/factory-graph-editor-leave-dialog";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import {
-  FactoryImportPreviewDialog,
-} from "../../import/public";
+import { FactoryImportPreviewDialog } from "../../import/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { GraphImportErrorPanel } from "./react-flow-current-activity-card-import";
@@ -82,12 +80,15 @@ export function CurrentActivityGraphEditorDialogs({
         title={messages.saveConfirmTitle}
       />
       <FactoryGraphEditorConfirmationDialog
-        cancelLabel="Cancel removal"
-        confirmLabel={editor.pendingRemovalIntent?.confirmLabel ?? "Delete entity"}
+        cancelLabel={messages.leaveDialogKeepEditing}
+        confirmLabel={
+          editor.pendingRemovalIntent?.confirmLabel ??
+          messages.removalFallbackConfirmLabel
+        }
         confirmTone="destructive"
         description={
           editor.pendingRemovalIntent?.confirmDescription ??
-          "Remove this graph entity from the current draft."
+          messages.removalFallbackConfirmDescription
         }
         isOpen={editor.pendingRemovalIntent !== null}
         onCancel={() => {
@@ -95,7 +96,9 @@ export function CurrentActivityGraphEditorDialogs({
           editor.setPendingRemovalNodeId(null);
         }}
         onConfirm={editor.handleConfirmRemoval}
-        title={editor.pendingRemovalIntent?.title ?? "Remove graph entity?"}
+        title={
+          editor.pendingRemovalIntent?.title ?? messages.removalFallbackTitle
+        }
       />
       <FactoryGraphEditorAddEntityDialog
         currentFactoryDefinition={editor.currentFactoryDefinition}

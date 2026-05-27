@@ -8,6 +8,7 @@ import {
   formatRelativeTime,
   formatTime,
 } from "../../i18n/formatters";
+import { getSharedPrimitiveMessages } from "./messages/shared-primitives";
 
 const LOCAL_JSONL_EXTENSION = ".jsonl";
 const SESSION_LOG_HREF_PROTOCOLS = new Set(["file:", "http:", "https:"]);
@@ -142,7 +143,9 @@ export function formatWorkItemLabel(workItem: DashboardWorkItemRef): string {
   return UNKNOWN_WORK_LABEL;
 }
 
-export function formatTypedWorkItemLabel(workItem: DashboardWorkItemRef): string {
+export function formatTypedWorkItemLabel(
+  workItem: DashboardWorkItemRef,
+): string {
   const name = formatWorkItemLabel(workItem).replace(/"/g, '\\"');
   const workType = workItem.work_type_id?.trim();
 
@@ -153,9 +156,12 @@ export function formatTypedWorkItemLabel(workItem: DashboardWorkItemRef): string
   return `(${workType}):${name}`;
 }
 
-export function formatTraceOutcome(outcome: string): string {
+export function formatTraceOutcome(
+  outcome: string,
+  locale?: string | null,
+): string {
   if (outcome === "") {
-    return "Unknown";
+    return getSharedPrimitiveMessages(locale).formatTraceUnknownLabel;
   }
 
   return outcome
@@ -185,7 +191,10 @@ export function getProviderSessionLogTarget(
     };
   }
 
-  const inferredSessionLogPath = inferCodexSessionLogPath(session?.id, startedAt);
+  const inferredSessionLogPath = inferCodexSessionLogPath(
+    session?.id,
+    startedAt,
+  );
   if (!inferredSessionLogPath) {
     return null;
   }
@@ -196,9 +205,12 @@ export function getProviderSessionLogTarget(
   };
 }
 
-export function formatList(values: string[] | undefined): string {
+export function formatList(
+  values: string[] | undefined,
+  locale?: string | null,
+): string {
   if (!values || values.length === 0) {
-    return "None";
+    return getSharedPrimitiveMessages(locale).formatListEmptyLabel;
   }
   return values.join(", ");
 }
@@ -242,5 +254,9 @@ function inferCodexSessionLogPath(
   const year = timestamp.getFullYear().toString().padStart(4, "0");
   const month = `${timestamp.getMonth() + 1}`.padStart(2, "0");
   const day = `${timestamp.getDate()}`.padStart(2, "0");
-  return `~/.codex/sessions/${year}/${month}/${day}/rollout-${normalizedSessionID}.jsonl`;
+  return getSharedPrimitiveMessages()
+    .sessionLogPathTemplate.replace("{{year}}", year)
+    .replace("{{month}}", month)
+    .replace("{{day}}", day)
+    .replace("{{sessionID}}", normalizedSessionID);
 }

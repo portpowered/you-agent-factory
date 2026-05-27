@@ -33,12 +33,16 @@ function selectionHistorySelectionKey(selection: DashboardSelection | null): str
 
   switch (selection.kind) {
     case "node":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return `node:${selection.nodeId}`;
     case "state-node":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return `state:${selection.placeId}`;
     case "work-item":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return `work:${selection.nodeId}:${selection.dispatchId ?? ""}:${selection.workItem.work_id}`;
     case "workstation-request":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return `request:${selection.nodeId}:${selection.dispatchId}`;
   }
 }
@@ -162,4 +166,3 @@ export function resetSelectionHistoryStore(): void {
     present: EMPTY_SELECTION_HISTORY_ENTRY,
   });
 }
-

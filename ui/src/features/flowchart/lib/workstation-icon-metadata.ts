@@ -1,5 +1,6 @@
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import type { GraphSemanticIconKind } from "../components/graph-semantic-icon";
+import { getActivityGraphMessages } from "../messages/activity-graph";
 import { EXHAUSTION_WORKSTATION_KIND, isExhaustionWorkstation } from "./workstation-semantics";
 
 export const STANDARD_WORKSTATION_KIND = "standard";
@@ -30,31 +31,31 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
   [CRON_WORKSTATION_KIND]: {
     className: "text-af-success",
     iconKind: "cron",
-    label: "Cron workstation",
+    label: getActivityGraphMessages().workstationIconLabel(CRON_WORKSTATION_KIND),
     semanticKind: CRON_WORKSTATION_KIND,
   },
   [POLLER_WORKSTATION_KIND]: {
     className: "text-af-accent",
     iconKind: "poller",
-    label: "Poller workstation",
+    label: getActivityGraphMessages().workstationIconLabel(POLLER_WORKSTATION_KIND),
     semanticKind: POLLER_WORKSTATION_KIND,
   },
   [EXHAUSTION_WORKSTATION_KIND]: {
     className: "text-af-danger",
     iconKind: "exhaustion",
-    label: "Exhaustion rule",
+    label: getActivityGraphMessages().workstationIconLabel(EXHAUSTION_WORKSTATION_KIND),
     semanticKind: EXHAUSTION_WORKSTATION_KIND,
   },
   [REPEATER_WORKSTATION_KIND]: {
     className: "text-af-info",
     iconKind: "repeater",
-    label: "Repeater workstation",
+    label: getActivityGraphMessages().workstationIconLabel(REPEATER_WORKSTATION_KIND),
     semanticKind: REPEATER_WORKSTATION_KIND,
   },
   [STANDARD_WORKSTATION_KIND]: {
     className: "text-af-text-subtle",
     iconKind: "workstation",
-    label: "Standard workstation",
+    label: getActivityGraphMessages().workstationIconLabel(STANDARD_WORKSTATION_KIND),
     semanticKind: STANDARD_WORKSTATION_KIND,
   },
 } satisfies Record<WorkstationSemanticKind, WorkstationIconMetadata>;
@@ -85,6 +86,14 @@ export function workstationSemanticKind(
 
 export function workstationIconMetadata(
   workstation: DashboardWorkstationNode,
+  locale?: string | null,
 ): WorkstationIconMetadata {
-  return WORKSTATION_ICON_METADATA_BY_KIND[workstationSemanticKind(workstation)];
+  const metadata = WORKSTATION_ICON_METADATA_BY_KIND[workstationSemanticKind(workstation)];
+
+  return {
+    ...metadata,
+    label: getActivityGraphMessages(locale).workstationIconLabel(
+      metadata.semanticKind,
+    ),
+  };
 }

@@ -1,0 +1,5 @@
+description: Server failed while reading or building runtime state.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

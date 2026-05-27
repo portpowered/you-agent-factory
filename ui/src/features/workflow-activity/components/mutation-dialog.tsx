@@ -72,6 +72,7 @@ export function DashboardMutationDialog({
   locale,
   media,
   onClose,
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   overlayClassName = "fixed inset-0 px-5 py-6",
   showCloseButton = true,
   title,

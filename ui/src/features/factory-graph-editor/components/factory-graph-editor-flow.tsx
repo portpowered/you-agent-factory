@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: existing React Flow editor composition remains colocated while this story only localizes handle copy.
 import {
   MarkerType,
   type Edge,
@@ -14,7 +15,10 @@ import {
   ActivityGraphNodeShell,
   type ActivityGraphNodeHandle,
 } from "../../flowchart/components/current-activity-node-shell";
-import { GraphSemanticIcon, type GraphSemanticIconKind } from "../../flowchart/components/graph-semantic-icon";
+import {
+  GraphSemanticIcon,
+  type GraphSemanticIconKind,
+} from "../../flowchart/components/graph-semantic-icon";
 import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "./factory-graph-editor-edge";
 import type {
   FactoryGraphNodeKind,
@@ -22,12 +26,11 @@ import type {
 } from "../lib/factory-graph-draft-types";
 import {
   getFactoryGraphConnectionAnchors,
+  getLocalizedFactoryGraphConnectionAnchors,
   isValidFactoryGraphConnection,
   type FactoryGraphConnectionEndpoint,
 } from "../lib/factory-graph-editor-connections";
-import type {
-  FactoryGraphWorkerRuntimeStatus,
-} from "../lib/factory-graph-editor-runtime";
+import type { FactoryGraphWorkerRuntimeStatus } from "../lib/factory-graph-editor-runtime";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 type FactoryGraphEditorNode = Node<
@@ -139,7 +142,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
           removingLabel: messages.flowRemovingLabel,
           workerStatus:
             node.kind === "worker"
-              ? input.workerStatusByName?.get(node.label) ?? "idle"
+              ? (input.workerStatusByName?.get(node.label) ?? "idle")
               : undefined,
           workerStatusLabel:
             node.kind === "worker"
@@ -150,17 +153,18 @@ export function buildFactoryGraphEditorFlowModel(input: {
         },
         draggable: true,
         id: node.id,
-        position:
-          input.layoutPositionsByNodeId?.get(node.id) ?? {
-            x: column * COLUMN_X,
-            y: row * ROW_Y,
-          },
+        position: input.layoutPositionsByNodeId?.get(node.id) ?? {
+          x: column * COLUMN_X,
+          y: row * ROW_Y,
+        },
         type: "factoryEntity",
       } satisfies FactoryGraphEditorNode;
     });
 
   return {
-    edges: input.topology.edges.map((edge) => buildFactoryGraphEditorEdge(edge, input)),
+    edges: input.topology.edges.map((edge) =>
+      buildFactoryGraphEditorEdge(edge, input),
+    ),
     nodes: nodes.map((node) => ({
       ...node,
       data: {
@@ -230,7 +234,8 @@ function buildFactoryGraphEditorEdge(
         ? "7 5"
         : pendingAddition
           ? "9 4"
-          : edge.kind === "worker-resource" || edge.kind === "workstation-resource"
+          : edge.kind === "worker-resource" ||
+              edge.kind === "workstation-resource"
             ? "4 5"
             : undefined,
       strokeWidth: pendingRemoval || pendingAddition ? 2 : 1.7,
@@ -242,7 +247,9 @@ function buildFactoryGraphEditorEdge(
 }
 
 function describeNodeKey(key: FactoryGraphTopology["edges"][number]["source"]) {
-  return key.kind === "work-state" ? `${key.workTypeName}:${key.stateName}` : key.name;
+  return key.kind === "work-state"
+    ? `${key.workTypeName}:${key.stateName}`
+    : key.name;
 }
 
 function getEdgeHandleAssignment(
@@ -301,10 +308,7 @@ function FactoryGraphEditorNodeView({
               title={data.kindLabel}
             >
               <GraphSemanticIcon
-                className={cn(
-                  "h-4 w-4",
-                  semanticIconClassName(data.kind),
-                )}
+                className={cn("h-4 w-4", semanticIconClassName(data.kind))}
                 kind={semanticIconKind(data.kind)}
                 label={data.kindLabel}
               />
@@ -393,7 +397,10 @@ function buildNodeHandles(input: {
       : null;
   const nodeIsPendingRemoval = input.pendingRemovalNodeIds.has(input.node.id);
 
-  return getFactoryGraphConnectionAnchors(input.node.kind).map((anchor) => {
+  return getLocalizedFactoryGraphConnectionAnchors(
+    input.node.kind,
+    input.locale,
+  ).map((anchor) => {
     const selected =
       selectedSource?.anchorId === anchor.id && anchor.role === "source";
     const compatible =
@@ -447,7 +454,9 @@ function buildNodeHandles(input: {
 function findNode(topology: FactoryGraphTopology, nodeId: string) {
   const node = topology.nodes.find((entry) => entry.id === nodeId);
   if (!node) {
-    throw new Error(`Expected graph node "${nodeId}" to exist in editor topology.`);
+    throw new Error(
+      `Expected graph node "${nodeId}" to exist in editor topology.`,
+    );
   }
   return node;
 }

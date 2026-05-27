@@ -126,4 +126,18 @@ describe("workstationIconMetadata", () => {
       semanticKind: STANDARD_WORKSTATION_KIND,
     });
   });
+
+  it("localizes workstation semantic labels without changing icon contracts", () => {
+    expect(
+      workstationIconMetadata(
+        dashboardWorkstationNode({ workstation_kind: REPEATER_WORKSTATION_KIND }),
+        "zh-CN",
+      ),
+    ).toEqual({
+      className: "text-af-info",
+      iconKind: "repeater",
+      label: "重复器工作站",
+      semanticKind: REPEATER_WORKSTATION_KIND,
+    });
+  });
 });

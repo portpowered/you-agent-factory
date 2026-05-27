@@ -217,6 +217,7 @@ export function resourceAvailablePlaceID(resourceID: string): string {
 }
 
 export function resourceTokenID(resourceID: string, index: number): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `${resourceID}:resource:${index}`;
 }
 
@@ -273,5 +274,4 @@ export function traceToken(item: FactoryWorkItem, eventTime: string): DashboardT
     work_type_id: dashboardWorkTypeID(item.work_type_id),
   };
 }
-
 

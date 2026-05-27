@@ -28,6 +28,7 @@ export interface CurrentActivityImportController {
 
 export interface UseCurrentActivityImportControllerOptions {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
+  locale?: string | null;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
@@ -35,6 +36,7 @@ export interface UseCurrentActivityImportControllerOptions {
 
 export function useCurrentActivityImportController({
   activateFactory,
+  locale,
   onFactoryActivated,
   onFactoryImportReady,
   readFactoryImportFile,
@@ -63,6 +65,7 @@ export function useCurrentActivityImportController({
     openPreview(value, file);
   }, [clearActivationError, openPreview]);
   const drop = useFactoryPngDrop({
+    locale,
     onImportReady: handleImportPreviewReady,
     readFactoryImportFile,
   });

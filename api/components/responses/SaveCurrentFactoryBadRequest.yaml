@@ -1,0 +1,15 @@
+description: Current factory save request failed validation.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
+    examples:
+      invalidFactory:
+        summary: Factory payload failed validation.
+        value:
+          message: Factory payload is not a valid Agent Factory definition.
+          family: BAD_REQUEST
+          code: INVALID_FACTORY
+          targets:
+            - kind: form
+              field: factory

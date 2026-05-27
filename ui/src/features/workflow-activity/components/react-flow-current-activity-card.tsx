@@ -127,6 +127,7 @@ function useCurrentActivityBaseNodes({
   editor,
   graphLayout,
   handleAssignments,
+  locale,
   now,
   onSelectStateNode,
   onSelectWorkID,
@@ -141,6 +142,7 @@ function useCurrentActivityBaseNodes({
   | "onSelectWorkID"
   | "onSelectWorkstation"
   | "selection"
+  | "locale"
   | "snapshot"
 > & {
   activeExecutionsByWorkstationNodeID: Record<
@@ -169,6 +171,7 @@ function useCurrentActivityBaseNodes({
         },
         graphLayout,
         handleAssignments,
+        locale,
         now,
         onSelectStateNode,
         onSelectWorkID,
@@ -184,6 +187,7 @@ function useCurrentActivityBaseNodes({
       editor,
       graphLayout,
       handleAssignments,
+      locale,
       now,
       onSelectStateNode,
       onSelectWorkID,
@@ -197,6 +201,7 @@ function useCurrentActivityBaseNodes({
 
 export function useCurrentActivityGraphViewModel({
   editor,
+  locale,
   now,
   onSelectStateNode,
   onSelectWorkID,
@@ -210,6 +215,7 @@ export function useCurrentActivityGraphViewModel({
   | "onSelectWorkID"
   | "onSelectWorkstation"
   | "selection"
+  | "locale"
   | "snapshot"
 > & {
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
@@ -260,6 +266,7 @@ export function useCurrentActivityGraphViewModel({
     editor,
     graphLayout,
     handleAssignments,
+    locale,
     now,
     onSelectStateNode,
     onSelectWorkID,
@@ -329,7 +336,7 @@ export function useCurrentActivityGraphViewModel({
 export function ReactFlowCurrentActivityCard(
   props: ReactFlowCurrentActivityCardProps,
 ) {
-  const editor = useCurrentActivityGraphEditor(props.snapshot);
+  const editor = useCurrentActivityGraphEditor(props.snapshot, props.locale);
   return (
     <ReactFlowCurrentActivityCardView
       {...props}
@@ -352,6 +359,7 @@ export function ReactFlowCurrentActivityCardView(
   const graph = useCurrentActivityGraphViewModel({ ...props, editor });
   const fallbackImportController = useCurrentActivityImportController({
     activateFactory: props.activateFactory,
+    locale: props.locale,
     onFactoryActivated: props.onFactoryActivated,
     onFactoryImportReady: props.onFactoryImportReady,
     readFactoryImportFile: props.readFactoryImportFile,
@@ -386,7 +394,10 @@ export function ReactFlowCurrentActivityCardView(
         </div>
       ) : null}
       {showHeaderActions ? (
-        <CurrentActivityCardHeading headingID={headingID} locale={props.locale} />
+        <CurrentActivityCardHeading
+          headingID={headingID}
+          locale={props.locale}
+        />
       ) : (
         <CurrentActivityCardHeading
           headingID={headingID}

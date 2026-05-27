@@ -10,6 +10,7 @@ import {
   workerSupportsPollerBehavior,
   type EditableWorkstationBehavior,
 } from "../../current-factory-definition/public";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 export type FactoryGraphAddEntityKind =
   | "resource"
@@ -67,37 +68,39 @@ const DEFAULT_WORK_STATE_TYPE: FactoryWorkState["type"] = "PROCESSING";
 
 export function buildFactoryGraphAddEntityMenuActions(
   factoryDefinition: CanonicalFactoryDefinition | null,
+  locale?: string | null,
 ): FactoryGraphEditorMenuAction[] {
   const hasWorkers = (factoryDefinition?.workers?.length ?? 0) > 0;
   const hasWorkTypes = (factoryDefinition?.workTypes?.length ?? 0) > 0;
+  const messages = getFactoryGraphEditorMessages(locale);
 
   return [
     {
-      description: "Create a pending workstation and assign an existing worker.",
+      description: messages.addMenuAction("workstation").description,
       disabled: !hasWorkers,
       id: "workstation",
-      label: "Workstation",
+      label: messages.addMenuAction("workstation").label,
     },
     {
-      description: "Add a model worker that can be assigned to workstations.",
+      description: messages.addMenuAction("worker").description,
       id: "worker",
-      label: "Worker",
+      label: messages.addMenuAction("worker").label,
     },
     {
-      description: "Define a new work type with its first ordered state.",
+      description: messages.addMenuAction("work-type").description,
       id: "work-type",
-      label: "Work type",
+      label: messages.addMenuAction("work-type").label,
     },
     {
-      description: "Append a state to an existing work type.",
+      description: messages.addMenuAction("work-state").description,
       disabled: !hasWorkTypes,
       id: "work-state",
-      label: "Work state",
+      label: messages.addMenuAction("work-state").label,
     },
     {
-      description: "Register a resource that workers or workstations can consume.",
+      description: messages.addMenuAction("resource").description,
       id: "resource",
-      label: "Resource",
+      label: messages.addMenuAction("resource").label,
     },
   ];
 }

@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { useAppLocale } from "../../i18n";
+import { getSharedPrimitiveMessages } from "./messages/shared-primitives";
 import {
   Table,
   TableBody,
@@ -24,6 +26,7 @@ export interface DataTableProps<Row> {
   ariaLabel?: string;
   caption?: ReactNode;
   emptyMessage?: ReactNode;
+  locale?: string | null;
   rowClassName?: (row: Row) => string | undefined;
   tableClassName?: string;
 }
@@ -34,17 +37,25 @@ export function DataTable<Row>({
   getRowKey,
   ariaLabel,
   caption,
-  emptyMessage = "No rows available.",
+  emptyMessage,
+  locale: localeOverride,
   rowClassName,
   tableClassName,
 }: DataTableProps<Row>) {
+  const { locale } = useAppLocale(localeOverride);
+  const messages = getSharedPrimitiveMessages(locale);
+
   return (
     <Table aria-label={ariaLabel} className={tableClassName}>
       {caption ? <TableCaption>{caption}</TableCaption> : null}
       <TableHeader>
         <TableRow>
           {columns.map((column) => (
-            <TableHead className={column.headerClassName} key={column.id} scope="col">
+            <TableHead
+              className={column.headerClassName}
+              key={column.id}
+              scope="col"
+            >
               {column.header}
             </TableHead>
           ))}
@@ -64,7 +75,7 @@ export function DataTable<Row>({
         ) : (
           <TableRow>
             <TableCell className="text-af-text-subtle" colSpan={columns.length}>
-              {emptyMessage}
+              {emptyMessage ?? messages.emptyTableMessage}
             </TableCell>
           </TableRow>
         )}
