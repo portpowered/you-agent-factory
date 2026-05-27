@@ -138,6 +138,24 @@ describe("current-selection prompt hint responsive schedule", () => {
   });
 });
 
+describe("bento card catalog responsive schedule", () => {
+  test("keeps the bento catalog story in the default responsive schedule", () => {
+    const bentoCatalogStory = storyChecks.find(
+      (storyCheck) => storyCheck.label === "bento card catalog",
+    );
+
+    expect(bentoCatalogStory?.id).toBe(
+      "you-agent-factory-dashboard-bento-cards--responsive-verification",
+    );
+    expect(bentoCatalogStory?.dialogName).toBeUndefined();
+    expect(viewportChecks).toEqual([
+      { height: 844, label: "mobile", width: 390 },
+      { height: 1024, label: "tablet", width: 768 },
+      { height: 900, label: "desktop", width: 1440 },
+    ]);
+  });
+});
+
 describe("provider-session detail responsive schedule", () => {
   test("keeps the provider-session success story in the default responsive schedule", () => {
     const providerSessionStory = storyChecks.find(

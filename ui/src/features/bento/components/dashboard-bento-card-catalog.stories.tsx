@@ -11,7 +11,10 @@ import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
   semanticWorkflowDashboardSnapshot,
 } from "../../../components/dashboard/test-fixtures";
-import type { AgentBentoLayoutItem } from "../../../components/ui";
+import type {
+  AgentBentoLayoutCard,
+  AgentBentoLayoutItem,
+} from "../../../components/ui";
 import "../../../styles.css";
 import {
   CurrentSelectionWidget,
@@ -817,6 +820,291 @@ function renderSubmitWorkStatusCard({
   });
 }
 
+function responsiveCatalogLayout(): AgentBentoLayoutItem[] {
+  return [
+    layoutFor(DASHBOARD_WIDGET_IDS.workTotals, {
+      h: 2,
+      id: "work-totals::responsive",
+      w: 4,
+      x: 0,
+      y: 0,
+    }),
+    layoutFor(DASHBOARD_WIDGET_IDS.submitWork, {
+      h: 6,
+      id: "submit-work::responsive",
+      w: 4,
+      x: 4,
+      y: 0,
+    }),
+    layoutFor(DASHBOARD_WIDGET_IDS.workOutcomeChart, {
+      h: 6,
+      id: "work-outcome-chart::responsive",
+      w: 4,
+      x: 8,
+      y: 0,
+    }),
+    layoutFor(DASHBOARD_WIDGET_IDS.workGraph, {
+      h: 7,
+      id: "work-graph::responsive",
+      w: 8,
+      x: 0,
+      y: 2,
+    }),
+    layoutFor(DASHBOARD_WIDGET_IDS.currentSelection, {
+      h: 5,
+      id: "current-selection::responsive",
+      w: 4,
+      x: 8,
+      y: 6,
+    }),
+    layoutFor(DASHBOARD_WIDGET_IDS.providerSession, {
+      h: 6,
+      id: "provider-session::responsive",
+      w: 4,
+      x: 0,
+      y: 9,
+    }),
+    layoutFor(DASHBOARD_WIDGET_IDS.terminalWork, {
+      h: 5,
+      id: "terminal-work::responsive",
+      w: 4,
+      x: 4,
+      y: 9,
+    }),
+    layoutFor(DASHBOARD_WIDGET_IDS.trace, {
+      h: 8,
+      id: "trace::responsive",
+      w: 4,
+      x: 8,
+      y: 11,
+    }),
+    layoutFor(DASHBOARD_WIDGET_IDS.addWidget, {
+      h: 4,
+      id: "add-widget::responsive",
+      w: 4,
+      x: 0,
+      y: 15,
+    }),
+  ];
+}
+
+interface ResponsiveCatalogContext {
+  currentSelection: ReturnType<typeof useCurrentSelection>;
+  details: ReturnType<typeof useCurrentSelectionDetails>;
+  importController: ReturnType<typeof useCurrentActivityImportController>;
+  layout: AgentBentoLayoutItem[];
+  pickerOpen: boolean;
+  providerSessionState: ReturnType<typeof useSelectedProviderSessionState>;
+  setPickerOpen: (open: boolean) => void;
+}
+
+function responsiveCatalogMetricCards(): AgentBentoLayoutCard[] {
+  return [
+    {
+      children: <WorkTotalsWidget snapshot={semanticWorkflowDashboardSnapshot} />,
+      id: "work-totals::responsive",
+      widgetType: DASHBOARD_WIDGET_IDS.workTotals,
+    },
+    {
+      children: (
+        <SubmitWorkWidget
+          submitWorkTypes={
+            semanticWorkflowDashboardSnapshot.topology.submit_work_types
+          }
+        />
+      ),
+      id: "submit-work::responsive",
+      widgetType: DASHBOARD_WIDGET_IDS.submitWork,
+    },
+    {
+      children: (
+        <WorkOutcomeWidget
+          model={workOutcomeModel}
+          widgetId="work-outcome-chart::responsive"
+        />
+      ),
+      id: "work-outcome-chart::responsive",
+      widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
+    },
+  ];
+}
+
+function responsiveCatalogSelectionCards({
+  currentSelection,
+  details,
+  importController,
+  providerSessionState,
+}: ResponsiveCatalogContext): AgentBentoLayoutCard[] {
+  return [
+    {
+      children: (
+        <WorkflowActivityWidget
+          importController={importController}
+          now={STORY_NOW}
+          onSelectStateNode={currentSelection.selectStateNode}
+          onSelectWorkID={currentSelection.selectWorkByID}
+          onSelectWorkstation={currentSelection.selectWorkstation}
+          selection={currentSelection.selection}
+          snapshot={semanticWorkflowDashboardSnapshot}
+          widgetInstanceID="work-graph::responsive"
+        />
+      ),
+      id: "work-graph::responsive",
+      widgetType: DASHBOARD_WIDGET_IDS.workGraph,
+    },
+    {
+      children: (
+        <CurrentSelectionWidget
+          activeTraceID={storyTrace.trace_id}
+          currentSelection={currentSelection}
+          failedWorkDetailsByWorkID={
+            semanticWorkflowDashboardSnapshot.runtime.session
+              .failed_work_details_by_work_id
+          }
+          now={STORY_NOW}
+          onSelectProviderSession={
+            providerSessionState.setSelectedProviderSession
+          }
+          onSelectTraceID={() => undefined}
+          selectedProviderSessionKey={
+            providerSessionState.selectedProviderSessionKey
+          }
+          selectedTrace={storyTrace}
+          selectedWorkExecutionDetails={details.selectedWorkExecutionDetails}
+          selectedWorkRelationshipGraph={details.selectedWorkRelationshipGraph}
+          widgetId="current-selection::responsive"
+        />
+      ),
+      id: "current-selection::responsive",
+      widgetType: DASHBOARD_WIDGET_IDS.currentSelection,
+    },
+  ];
+}
+
+function responsiveCatalogDetailCards({
+  layout,
+  pickerOpen,
+  setPickerOpen,
+}: ResponsiveCatalogContext): AgentBentoLayoutCard[] {
+  return [
+    {
+      children: (
+        <ProviderSessionWidget
+          selectedProviderSession={populatedProviderSession}
+          widgetId="provider-session::responsive"
+        />
+      ),
+      id: "provider-session::responsive",
+      widgetType: DASHBOARD_WIDGET_IDS.providerSession,
+    },
+    {
+      children: (
+        <TerminalWorkWidget
+          completedItems={[
+            {
+              attempts: [completedAttempt],
+              label: "Done Story",
+              traceWorkID: "work-done-story",
+            },
+          ]}
+          failedItems={[
+            {
+              attempts: [failedAttempt],
+              label: "Failed Story",
+              traceWorkID: "work-failed-story",
+            },
+          ]}
+          onSelectItem={() => undefined}
+          selectedItem={{ label: "Failed Story", status: "failed" }}
+          widgetId="terminal-work::responsive"
+        />
+      ),
+      id: "terminal-work::responsive",
+      widgetType: DASHBOARD_WIDGET_IDS.terminalWork,
+    },
+    {
+      children: (
+        <TraceDrilldownWidget
+          state={
+            {
+              status: "ready",
+              trace: storyTrace,
+            } satisfies ReturnType<typeof useTraceDrilldown>["traceGridState"]
+          }
+          widgetId="trace::responsive"
+        />
+      ),
+      id: "trace::responsive",
+      widgetType: DASHBOARD_WIDGET_IDS.trace,
+    },
+    {
+      children: (
+        <InlineAddWidgetCard
+          onPickerOpenChange={setPickerOpen}
+          onSelectWidget={() => undefined}
+          pickerAvailability={getDashboardWidgetPickerAvailability(layout)}
+          pickerOpen={pickerOpen}
+        />
+      ),
+      id: "add-widget::responsive",
+      widgetType: DASHBOARD_WIDGET_IDS.addWidget,
+    },
+  ];
+}
+
+function DashboardBentoResponsiveStory() {
+  const currentSelection = useCurrentSelection({
+    sessionID: DEFAULT_FACTORY_SESSION_ID,
+    snapshot: semanticWorkflowDashboardSnapshot,
+    workstationRequestsByDispatchID:
+      semanticWorkflowDashboardSnapshot.runtime
+        .workstation_requests_by_dispatch_id,
+  });
+  const importController = useCurrentActivityImportController({
+    onFactoryActivated: () => undefined,
+  });
+  const providerSessionState =
+    useSelectedProviderSessionState(currentSelection);
+  const details = useCurrentSelectionDetails({
+    currentSelection,
+    selectedTrace: storyTrace,
+    snapshot: semanticWorkflowDashboardSnapshot,
+    workstationRequestsByDispatchID:
+      semanticWorkflowDashboardSnapshot.runtime
+        .workstation_requests_by_dispatch_id,
+  });
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const layout = responsiveCatalogLayout();
+  const context = {
+    currentSelection,
+    details,
+    importController,
+    layout,
+    pickerOpen,
+    providerSessionState,
+    setPickerOpen,
+  };
+
+  useEffect(() => {
+    currentSelection.selectWorkstation("implement");
+  }, [currentSelection.selectWorkstation]);
+
+  return (
+    <div style={{ boxSizing: "border-box", padding: "1rem", width: "100%" }}>
+      <AgentBentoLayout
+        cards={[
+          ...responsiveCatalogMetricCards(),
+          ...responsiveCatalogSelectionCards(context),
+          ...responsiveCatalogDetailCards(context),
+        ]}
+        initialWidth={1180}
+        layout={layout}
+        responsiveMode="adaptive"
+      />
+    </div>
+  );
+}
+
 export default {
   title: "you-agent-factory/Dashboard/Bento Cards",
   tags: ["test"],
@@ -1455,5 +1743,58 @@ export const InlineAddWidget = {
     await expect(
       canvas.getByRole("button", { name: "Move Add widget" }),
     ).toBeVisible();
+  },
+};
+
+export const ResponsiveVerification = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [providerSessionFetchMock],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => <DashboardBentoResponsiveStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(
+      await canvas.findByRole("article", { name: "Work totals" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", { name: "Factory graph" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", { name: "Current selection" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", { name: "Provider session" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", { name: "Submit work" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", { name: "Work outcome chart" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", { name: "Trace drill-down" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", {
+        name: "Completed and failed work",
+      }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", { name: "Add widget" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("button", { name: "Submit work" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("img", {
+        name: "Work outcome chart for Session",
+      }),
+    ).toBeVisible();
+    await expect(await canvas.findByText("trace-active-story")).toBeVisible();
+    await expect(await canvas.findByText("Transcript")).toBeVisible();
   },
 };
