@@ -252,10 +252,11 @@ export function useCurrentActivityGraphViewModel({
       }),
     [editor.editorMode, visibleGraphEdges],
   );
-  const activeGraphHighlights = useMemo(
-    () => buildActiveGraphHighlights(activeExecutions, visibleGraphEdges),
-    [activeExecutions, visibleGraphEdges],
-  );
+  const activeGraphHighlights = useActiveGraphHighlights({
+    activeExecutions,
+    graphLayout,
+    visibleGraphEdges,
+  });
   const activeItemLabelsByPlaceId = useMemo(
     () => buildActiveItemLabelsByPlaceId(activeExecutions),
     [activeExecutions],
@@ -332,6 +333,26 @@ export function useCurrentActivityGraphViewModel({
     nodes,
     setStoredNodePosition,
   };
+}
+
+function useActiveGraphHighlights({
+  activeExecutions,
+  graphLayout,
+  visibleGraphEdges,
+}: {
+  activeExecutions: DashboardActiveExecution[];
+  graphLayout: GraphLayout;
+  visibleGraphEdges: GraphLayout["edges"];
+}) {
+  return useMemo(
+    () =>
+      buildActiveGraphHighlights(
+        activeExecutions,
+        visibleGraphEdges,
+        graphLayout.nodes,
+      ),
+    [activeExecutions, graphLayout.nodes, visibleGraphEdges],
+  );
 }
 
 function useEditorCurrentActivityGraphLayout(

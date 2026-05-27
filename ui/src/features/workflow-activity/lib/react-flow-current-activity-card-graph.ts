@@ -114,17 +114,28 @@ export function buildHandleAssignments(
 export function buildActiveGraphHighlights(
   activeExecutions: DashboardActiveExecution[],
   edges: PositionedEdge[],
+  nodes: GraphLayout["nodes"] = [],
 ): ActiveGraphHighlights {
   const activeEdgeIds = new Set<string>();
   const activePlaceNodeIds = new Set<string>();
   const activeWorkstationNodeIds = new Set<string>();
   const consumedPlaceNodeIds = new Set<string>();
   const relatedNodeIds = new Set<string>();
+  const visibleWorkstationNodeIdsByRuntimeId = new Map<string, string>();
+
+  for (const node of nodes) {
+    if (node.nodeKind === "workstation") {
+      visibleWorkstationNodeIdsByRuntimeId.set(
+        node.workstationNodeId,
+        node.nodeId,
+      );
+    }
+  }
 
   for (const execution of activeExecutions) {
-    const workstationNodeId = workstationGraphNodeId(
-      execution.workstation_node_id,
-    );
+    const workstationNodeId =
+      visibleWorkstationNodeIdsByRuntimeId.get(execution.workstation_node_id) ??
+      workstationGraphNodeId(execution.workstation_node_id);
     activeWorkstationNodeIds.add(workstationNodeId);
     relatedNodeIds.add(workstationNodeId);
 
