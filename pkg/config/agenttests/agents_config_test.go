@@ -1,13 +1,24 @@
-package config
+package agenttests
 
 import (
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+func containsAll(value string, substrings ...string) bool {
+	for _, substring := range substrings {
+		if !strings.Contains(value, substring) {
+			return false
+		}
+	}
+	return true
+}
 
 func TestLoadWorkerConfig_ModelWorker(t *testing.T) {
 	dir := t.TempDir()

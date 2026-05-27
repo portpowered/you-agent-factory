@@ -1,6 +1,7 @@
-package config
+package openapitests
 
 import (
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"

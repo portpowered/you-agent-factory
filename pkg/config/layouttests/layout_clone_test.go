@@ -1,6 +1,7 @@
-package config
+package layouttests
 
 import (
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"reflect"
 	"testing"
 

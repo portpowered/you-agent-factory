@@ -1,6 +1,7 @@
-package config
+package runtimetests
 
 import (
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"testing"
 	"time"
 

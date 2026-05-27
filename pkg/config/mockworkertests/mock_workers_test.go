@@ -1,6 +1,7 @@
-package config
+package mockworkertests
 
 import (
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"os"
 	"path/filepath"
 	"strings"
