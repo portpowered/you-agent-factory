@@ -1,25 +1,31 @@
+// pkgmaintcheck:ignore-file-lines consolidated same-package service tests remain on root-only runtime seams until dedicated service test seams are extracted.
+// backendsizecheck:ignore-file consolidated same-package service tests remain on root-only runtime seams until dedicated service test seams are extracted.
 package service
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/service/hostedlinear"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 const (
@@ -890,4 +896,1470 @@ func TestFactoryService_BatchModeDoesNotStartCronWatchers(t *testing.T) {
 		t.Fatalf("batch-mode cron watcher submitted unexpectedly: %#v", record)
 	default:
 	}
+}
+
+func cronFactoryConfig(schedule string) map[string]any {
+	return map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{{"name": "cron-worker"}},
+		"workstations": []map[string]any{
+			{
+				"name":     "poll-for-work",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron":     map[string]string{"schedule": schedule, "expiryWindow": "500ms"},
+				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
+			},
+		},
+	}
+}
+
+func cronFactoryConfigWithTriggerAtStart(schedule string, triggerAtStart bool) map[string]any {
+	cfg := cronFactoryConfig(schedule)
+	workstations := cfg["workstations"].([]map[string]any)
+	workstations[0]["cron"] = map[string]any{
+		"schedule":       schedule,
+		"expiryWindow":   "500ms",
+		"triggerAtStart": triggerAtStart,
+	}
+	return cfg
+}
+
+func cronLoadedFactoryConfigForServiceTest(t *testing.T, factoryDir string, triggerAtStart bool) *config.LoadedFactoryConfig {
+	t.Helper()
+
+	ws := interfaces.FactoryWorkstationConfig{
+		Name: "poll-for-work",
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{
+			Schedule:       "* * * * *",
+			TriggerAtStart: triggerAtStart,
+		},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}
+	return newLoadedFactoryConfigForServiceTest(
+		t,
+		factoryDir,
+		&interfaces.FactoryConfig{
+			WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{ws},
+		},
+		nil,
+		map[string]*interfaces.FactoryWorkstationConfig{ws.Name: &ws},
+	)
+}
+
+func cronFactoryConfigWithOutputState(schedule, outputState string) map[string]any {
+	cfg := cronFactoryConfig(schedule)
+	workTypes := cfg["workTypes"].([]map[string]any)
+	task := workTypes[0]
+	task["states"] = []map[string]string{
+		{"name": "init", "type": "INITIAL"},
+		{"name": "ready", "type": "PROCESSING"},
+		{"name": "complete", "type": "TERMINAL"},
+		{"name": "failed", "type": "FAILED"},
+	}
+	workstations := cfg["workstations"].([]map[string]any)
+	workstations[0]["outputs"] = []map[string]string{{"workType": "task", "state": outputState}}
+	return cfg
+}
+
+func requiredInputCronFactoryConfigWithExpiry(schedule, expiryWindow string) map[string]any {
+	cron := map[string]string{"schedule": schedule}
+	if expiryWindow != "" {
+		cron["expiryWindow"] = expiryWindow
+	}
+	return map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "signal",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{{"name": "cron-worker"}},
+		"workstations": []map[string]any{
+			{
+				"name":     "poll-with-input",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron":     cron,
+				"inputs":   []map[string]string{{"workType": "signal", "state": "init"}},
+				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
+			},
+		},
+	}
+}
+
+func TestFactoryService_ServiceModeCronScheduleConfigStartsAndStopsService(t *testing.T) {
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, cronFactoryConfig("* * * * *"))
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default cron runtime")
+	stopServiceModeRun(t, cancelRun, errCh)
+}
+
+func TestIsCanceledServiceStartup(t *testing.T) {
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if !isCanceledServiceStartup(canceledCtx, context.Canceled) {
+		t.Fatal("expected canceled startup to be treated as graceful shutdown")
+	}
+	if isCanceledServiceStartup(context.Background(), context.Canceled) {
+		t.Fatal("expected uncanceled parent context to preserve startup cancellation as an error")
+	}
+	if isCanceledServiceStartup(canceledCtx, context.DeadlineExceeded) {
+		t.Fatal("expected non-cancellation startup errors to remain failures")
+	}
+}
+
+func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCronWorkstations(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	currentFactory := &aggregateSnapshotFactory{}
+	replacementFactory := &aggregateSnapshotFactory{}
+	validCron := interfaces.FactoryWorkstationConfig{
+		Name: "valid-cron",
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{
+			Schedule:       "* * * * *",
+			TriggerAtStart: true,
+		},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}
+	manual := interfaces.FactoryWorkstationConfig{
+		Name: "manual-step",
+		Kind: interfaces.WorkstationKindStandard,
+		Inputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "complete",
+		}},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		"factory-alpha",
+		&interfaces.FactoryConfig{
+			WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{manual, validCron},
+		},
+		nil,
+		map[string]*interfaces.FactoryWorkstationConfig{
+			manual.Name:    &manual,
+			validCron.Name: &validCron,
+		},
+	)
+	observedRequests := make(chan interfaces.WorkRequest, 8)
+	replacementFactory.submitFunc = func(_ context.Context, request interfaces.WorkRequest) error {
+		select {
+		case observedRequests <- request:
+		default:
+			t.Fatalf("cron request channel overflow")
+		}
+		return nil
+	}
+	svc := &FactoryService{
+		cfg:     &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
+		factory: currentFactory,
+		logger:  zap.New(logCore),
+		clock:   fakeClock,
+	}
+	handle := &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			factory:    replacementFactory,
+			runtimeCfg: runtimeCfg,
+		},
+	}
+	sidecarCtx, cancelSidecars := context.WithCancel(context.Background())
+	defer cancelSidecars()
+
+	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+	defer svc.stopLiveRuntimeSidecars(handle)
+
+	startupRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
+	assertCronWorkRequestNominalAt(t, startupRequest, start)
+	if got := startupRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
+		t.Fatalf("startup cron workstation tag = %q, want valid-cron", got)
+	}
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	assertNoCronWorkRequestQueued(t, observedRequests)
+	fakeClock.Advance(time.Minute)
+	scheduledRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
+	assertCronWorkRequestNominalAt(t, scheduledRequest, start.Add(time.Minute))
+	if got := scheduledRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
+		t.Fatalf("scheduled cron workstation tag = %q, want valid-cron", got)
+	}
+	assertNoCronWorkRequestQueued(t, observedRequests)
+
+	if currentFactory.submitCalls != 0 {
+		t.Fatalf("current runtime submit calls = %d, want 0", currentFactory.submitCalls)
+	}
+	if replacementFactory.submitCalls != 2 {
+		t.Fatalf("replacement runtime submit calls = %d, want 2", replacementFactory.submitCalls)
+	}
+	assertCronWatcherRegistrationLog(t, observedLogs, "valid-cron")
+	assertCronSchedulerStartedLog(t, observedLogs, 1)
+}
+
+func TestFactoryService_StartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingValidCronJobs(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	observedRequests := make(chan interfaces.WorkRequest, 8)
+	validCron := interfaces.FactoryWorkstationConfig{
+		Name: "valid-cron",
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{
+			Schedule:       "* * * * *",
+			TriggerAtStart: true,
+		},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}
+	invalidCron := interfaces.FactoryWorkstationConfig{
+		Name: "invalid-cron",
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{
+			Schedule:       "not-a-cron",
+			TriggerAtStart: true,
+		},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		"factory-alpha",
+		&interfaces.FactoryConfig{
+			WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{validCron, invalidCron},
+		},
+		nil,
+		map[string]*interfaces.FactoryWorkstationConfig{
+			validCron.Name:   &validCron,
+			invalidCron.Name: &invalidCron,
+		},
+	)
+	svc := &FactoryService{
+		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
+		logger: zap.New(logCore),
+		clock:  fakeClock,
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	svc.startCronWatchersForRuntime(
+		runCtx,
+		&sidecars,
+		"factory-alpha",
+		runtimeCfg.FactoryConfig(),
+		runtimeCfg,
+		func(_ context.Context, request interfaces.WorkRequest) error {
+			select {
+			case observedRequests <- request:
+			default:
+				t.Fatalf("cron request channel overflow")
+			}
+			return nil
+		},
+	)
+	t.Cleanup(func() {
+		cancelRun()
+		sidecars.Wait()
+	})
+
+	startupRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
+	assertCronWorkRequestForWorkstation(t, startupRequest, start, "valid-cron")
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	assertNoCronWorkRequestQueued(t, observedRequests)
+	fakeClock.Advance(time.Minute)
+	scheduledRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
+	assertCronWorkRequestForWorkstation(t, scheduledRequest, start.Add(time.Minute), "valid-cron")
+	assertNoCronWorkRequestQueued(t, observedRequests)
+
+	cancelRun()
+	sidecars.Wait()
+	assertCronWatcherRegistrationLog(t, observedLogs, "valid-cron")
+	assertCronWatcherDisabledLog(t, observedLogs, "invalid-cron")
+	assertCronSchedulerStartedLog(t, observedLogs, 1)
+	if observedLogs.FilterMessage("cron watcher trigger retrying").Len() != 0 {
+		t.Fatalf("retry log count = %d, want 0", observedLogs.FilterMessage("cron watcher trigger retrying").Len())
+	}
+	if observedLogs.FilterMessage("cron watcher trigger exhausted").Len() != 0 {
+		t.Fatalf("exhausted log count = %d, want 0", observedLogs.FilterMessage("cron watcher trigger exhausted").Len())
+	}
+	stopped := observedLogs.FilterMessage("cron scheduler stopped").All()
+	if len(stopped) != 1 {
+		t.Fatalf("cron scheduler stopped log count = %d, want 1", len(stopped))
+	}
+}
+
+func TestFactoryService_ServiceModeCronSchedulerUsesFakeClockAndStopsOnCancel(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, cronFactoryConfigWithTriggerAtStart("* * * * *", false))
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 8)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		Clock:             fakeClock,
+		ExtraOptions: []factory.FactoryOption{
+			factory.WithSubmissionRecorder(nonBlockingSubmissionRecorder(observedSubmissions)),
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	assertNoCronSubmissionQueued(t, observedSubmissions)
+
+	fakeClock.Advance(time.Minute)
+	record := waitForCronSubmission(t, observedSubmissions, time.Second)
+	wantNominalAt := start.Add(time.Minute).Format(time.RFC3339Nano)
+	if record.Request.Tags[interfaces.TimeWorkTagKeyNominalAt] != wantNominalAt {
+		cancelRun()
+		t.Fatalf("cron nominal_at tag = %q, want %q", record.Request.Tags[interfaces.TimeWorkTagKeyNominalAt], wantNominalAt)
+	}
+	if record.Request.Tags[cronWorkstationTag] != "poll-for-work" {
+		cancelRun()
+		t.Fatalf("cron workstation tag = %q, want poll-for-work", record.Request.Tags[cronWorkstationTag])
+	}
+
+	cancelRun()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service-mode cron scheduler to stop")
+	}
+
+	fakeClock.Advance(time.Minute)
+	assertNoCronSubmissionQueued(t, observedSubmissions)
+}
+
+func TestFactoryService_ServiceModeCronTriggerAtStartSubmitsOnceAndKeepsSchedule(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, cronFactoryConfigWithTriggerAtStart("* * * * *", true))
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 8)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		Clock:             fakeClock,
+		ExtraOptions: []factory.FactoryOption{
+			factory.WithSubmissionRecorder(nonBlockingSubmissionRecorder(observedSubmissions)),
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+
+	startupRecord := waitForCronSubmission(t, observedSubmissions, time.Second)
+	assertCronSubmissionNominalAt(t, startupRecord, start)
+	waitForCompletedDispatchConsumingWorkID(t, svc, startupRecord.Request.WorkID, time.Second)
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	assertNoCronSubmissionQueued(t, observedSubmissions)
+	fakeClock.Advance(time.Minute)
+	scheduledRecord := waitForCronSubmission(t, observedSubmissions, time.Second)
+	assertCronSubmissionNominalAt(t, scheduledRecord, start.Add(time.Minute))
+	if scheduledRecord.Request.WorkID == startupRecord.Request.WorkID {
+		cancelRun()
+		t.Fatal("scheduled cron fire reused startup trigger work ID")
+	}
+
+	cancelRun()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service-mode cron scheduler to stop")
+	}
+}
+
+func TestFactoryService_StartLiveRuntimeSidecars_BindsCronTriggerAtStartToReplacementRuntime(t *testing.T) {
+	fakeClock := clockwork.NewFakeClock()
+	currentFactory := &aggregateSnapshotFactory{}
+	replacementFactory := &aggregateSnapshotFactory{}
+	svc := &FactoryService{
+		cfg:        &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
+		factory:    currentFactory,
+		runtimeCfg: cronLoadedFactoryConfigForServiceTest(t, "alpha", true),
+		logger:     zap.NewNop(),
+		clock:      fakeClock,
+	}
+	handle := &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			factory:    replacementFactory,
+			runtimeCfg: cronLoadedFactoryConfigForServiceTest(t, "beta", true),
+		},
+	}
+	sidecarCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+	defer svc.stopLiveRuntimeSidecars(handle)
+
+	if currentFactory.submitCalls != 0 {
+		t.Fatalf("current runtime submit calls = %d, want 0", currentFactory.submitCalls)
+	}
+	if replacementFactory.submitCalls != 1 {
+		t.Fatalf("replacement runtime submit calls = %d, want 1", replacementFactory.submitCalls)
+	}
+	if got := replacementFactory.submissions[0].Works[0].WorkTypeID; got != interfaces.SystemTimeWorkTypeID {
+		t.Fatalf("replacement runtime submission work type = %q, want %q", got, interfaces.SystemTimeWorkTypeID)
+	}
+}
+
+func TestFactoryService_CronTickSubmitsThroughEngineIngressAndAppearsInSnapshot(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	svc, runCtx, errCh, cancelRun := buildCronServiceForIngressTest(t, fakeClock, cronFactoryConfig("* * * * *"), observedSubmissions)
+	defer cancelRun()
+
+	ws := configuredCronWorkstationForServiceTest(t, svc, "poll-for-work")
+	if err := svc.submitCronTick(runCtx, ws, start); err != nil {
+		t.Fatalf("submitCronTick: %v", err)
+	}
+
+	record := waitForCronSubmission(t, observedSubmissions, time.Second)
+	assertCronSubmissionRecord(t, record, "poll-for-work")
+	assertCronDispatchAndOutput(t, svc, record.Request.WorkID, "task:init")
+	stopServiceModeRun(t, cancelRun, errCh)
+}
+
+func assertCronWatcherRegistrationLog(t *testing.T, observedLogs *observer.ObservedLogs, workstation string) {
+	t.Helper()
+	registered := observedLogs.FilterMessage("cron watcher registered").All()
+	if len(registered) != 1 {
+		t.Fatalf("registered cron watcher count = %d, want 1", len(registered))
+	}
+	if got := registered[0].ContextMap()["workstation"]; got != workstation {
+		t.Fatalf("registered cron watcher workstation = %#v, want %s", got, workstation)
+	}
+}
+
+func assertCronWatcherDisabledLog(t *testing.T, observedLogs *observer.ObservedLogs, workstation string) {
+	t.Helper()
+	disabled := observedLogs.FilterMessage("cron watcher disabled").All()
+	if len(disabled) != 1 {
+		t.Fatalf("disabled cron watcher count = %d, want 1", len(disabled))
+	}
+	if got := disabled[0].ContextMap()["workstation"]; got != workstation {
+		t.Fatalf("disabled cron watcher workstation = %#v, want %s", got, workstation)
+	}
+}
+
+func assertCronSchedulerStartedLog(t *testing.T, observedLogs *observer.ObservedLogs, jobs int64) {
+	t.Helper()
+	started := observedLogs.FilterMessage("cron scheduler started").All()
+	if len(started) != 1 {
+		t.Fatalf("cron scheduler started log count = %d, want 1", len(started))
+	}
+	if got := started[0].ContextMap()["jobs"]; got != jobs {
+		t.Fatalf("cron scheduler started jobs = %#v, want %d", got, jobs)
+	}
+}
+
+func buildCronServiceForIngressTest(
+	t *testing.T,
+	fakeClock *clockwork.FakeClock,
+	cfg map[string]any,
+	observedSubmissions chan interfaces.FactorySubmissionRecord,
+) (*FactoryService, context.Context, <-chan error, context.CancelFunc) {
+	t.Helper()
+
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, cfg)
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		Clock:             fakeClock,
+		ExtraOptions: []factory.FactoryOption{
+			factory.WithSubmissionRecorder(nonBlockingSubmissionRecorder(observedSubmissions)),
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		handle := svc.currentLiveRuntime()
+		if handle != nil {
+			startCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			err := svc.waitForLiveRuntimeStart(startCtx, handle)
+			cancel()
+			if err != nil {
+				t.Fatalf("wait for cron service startup: %v", err)
+			}
+			return svc, runCtx, errCh, cancelRun
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for cron service runtime handle")
+	return svc, runCtx, errCh, cancelRun
+}
+
+func assertCronSubmissionRecord(t *testing.T, record interfaces.FactorySubmissionRecord, workstation string) {
+	t.Helper()
+	if record.Source != "external-submit" {
+		t.Fatalf("cron submission source = %q, want external-submit", record.Source)
+	}
+	if record.Request.WorkTypeID != interfaces.SystemTimeWorkTypeID {
+		t.Fatalf("cron submission work type = %q, want %q", record.Request.WorkTypeID, interfaces.SystemTimeWorkTypeID)
+	}
+	if record.Request.TargetState != interfaces.SystemTimePendingState {
+		t.Fatalf("cron submission target state = %q, want %q", record.Request.TargetState, interfaces.SystemTimePendingState)
+	}
+	if record.Request.Tags[cronSourceTag] != "cron" {
+		t.Fatalf("cron submission source tag = %q, want cron", record.Request.Tags[cronSourceTag])
+	}
+	if record.Request.Tags[cronWorkstationTag] != workstation {
+		t.Fatalf("cron submission workstation tag = %q, want %q", record.Request.Tags[cronWorkstationTag], workstation)
+	}
+}
+
+func assertCronDispatchAndOutput(t *testing.T, svc *FactoryService, workID, outputPlace string) {
+	t.Helper()
+	dispatch := waitForCompletedDispatchConsumingWorkID(t, svc, workID, time.Second)
+	matched := consumedTokenWithWorkID(dispatch.ConsumedTokens, workID)
+	if matched == nil {
+		t.Fatalf("completed cron dispatch did not retain consumed time token %q: %#v", workID, dispatch.ConsumedTokens)
+	}
+	if matched.Color.WorkTypeID != interfaces.SystemTimeWorkTypeID {
+		t.Fatalf("cron token work type = %q, want %q", matched.Color.WorkTypeID, interfaces.SystemTimeWorkTypeID)
+	}
+	if matched.Color.TraceID == "" {
+		t.Fatal("expected cron token to receive a trace ID")
+	}
+	if matched.Color.Name != cronSubmissionNamePref+"poll-for-work" {
+		t.Fatalf("cron token name = %q, want %q", matched.Color.Name, cronSubmissionNamePref+"poll-for-work")
+	}
+	if matched.Color.Tags[cronSourceTag] != "cron" {
+		t.Fatalf("cron token source tag = %q, want cron", matched.Color.Tags[cronSourceTag])
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal(matched.Color.Payload, &payload); err != nil {
+		t.Fatalf("cron token payload is not JSON: %v\npayload=%s", err, matched.Color.Payload)
+	}
+	if payload["cron_workstation"] != "poll-for-work" {
+		t.Fatalf("cron payload workstation = %q, want poll-for-work", payload["cron_workstation"])
+	}
+	for _, key := range []string{"nominal_at", "due_at", "expires_at", "jitter", "source"} {
+		if payload[key] == "" {
+			t.Fatalf("expected cron payload to include %s, got %#v", key, payload)
+		}
+	}
+	if tags := matched.Color.Tags; tags[interfaces.TimeWorkTagKeyNominalAt] == "" || tags[interfaces.TimeWorkTagKeyDueAt] == "" || tags[interfaces.TimeWorkTagKeyExpiresAt] == "" {
+		t.Fatalf("expected cron timing tags, got %#v", tags)
+	}
+
+	output := waitForTokenInPlaceByParent(t, svc, outputPlace, workID, time.Second)
+	if output.Color.WorkTypeID != "task" {
+		t.Fatalf("cron worker-backed output work type = %q, want task", output.Color.WorkTypeID)
+	}
+}
+
+func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waiters int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := fakeClock.BlockUntilContext(ctx, waiters); err != nil {
+		t.Fatalf("timed out waiting for %d fake-clock waiter(s): %v", waiters, err)
+	}
+}
+
+func waitForCronSubmission(t *testing.T, submissions <-chan interfaces.FactorySubmissionRecord, timeout time.Duration) interfaces.FactorySubmissionRecord {
+	t.Helper()
+	select {
+	case record := <-submissions:
+		if record.Request.WorkTypeID != interfaces.SystemTimeWorkTypeID {
+			t.Fatalf("cron submission work type = %q, want %q", record.Request.WorkTypeID, interfaces.SystemTimeWorkTypeID)
+		}
+		return record
+	case <-time.After(timeout):
+		t.Fatal("timed out waiting for cron submission")
+	}
+	return interfaces.FactorySubmissionRecord{}
+}
+
+func assertCronSubmissionNominalAt(t *testing.T, record interfaces.FactorySubmissionRecord, want time.Time) {
+	assertCronSubmissionNominalAtForWorkstation(t, record, want, "poll-for-work")
+}
+
+func assertCronSubmissionNominalAtForWorkstation(t *testing.T, record interfaces.FactorySubmissionRecord, want time.Time, workstation string) {
+	t.Helper()
+	got := record.Request.Tags[interfaces.TimeWorkTagKeyNominalAt]
+	if got != want.Format(time.RFC3339Nano) {
+		t.Fatalf("cron nominal_at tag = %q, want %q", got, want.Format(time.RFC3339Nano))
+	}
+	if record.Request.Tags[cronWorkstationTag] != workstation {
+		t.Fatalf("cron workstation tag = %q, want %s", record.Request.Tags[cronWorkstationTag], workstation)
+	}
+}
+
+func assertNoCronSubmissionQueued(t *testing.T, submissions <-chan interfaces.FactorySubmissionRecord) {
+	t.Helper()
+	select {
+	case record := <-submissions:
+		t.Fatalf("cron submission observed unexpectedly: %#v", record)
+	default:
+	}
+}
+
+func waitForCronWorkRequest(t *testing.T, requests <-chan interfaces.WorkRequest, timeout time.Duration) interfaces.WorkRequest {
+	t.Helper()
+	select {
+	case request := <-requests:
+		if len(request.Works) != 1 || request.Works[0].WorkTypeID != interfaces.SystemTimeWorkTypeID {
+			t.Fatalf("cron work request works = %#v, want one internal time work item", request.Works)
+		}
+		return request
+	case <-time.After(timeout):
+		t.Fatal("timed out waiting for cron work request")
+	}
+	return interfaces.WorkRequest{}
+}
+
+func assertCronWorkRequestNominalAt(t *testing.T, request interfaces.WorkRequest, want time.Time) {
+	t.Helper()
+	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeyNominalAt]; got != want.Format(time.RFC3339Nano) {
+		t.Fatalf("cron nominal_at tag = %q, want %q", got, want.Format(time.RFC3339Nano))
+	}
+}
+
+func assertCronWorkRequestForWorkstation(t *testing.T, request interfaces.WorkRequest, want time.Time, workstation string) {
+	t.Helper()
+	if request.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("cron work request type = %q, want %q", request.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
+	}
+	assertCronWorkRequestNominalAt(t, request, want)
+	if got := request.Works[0].Tags[cronWorkstationTag]; got != workstation {
+		t.Fatalf("cron workstation tag = %q, want %q", got, workstation)
+	}
+	if got := request.Works[0].Tags[cronSourceTag]; got != "cron" {
+		t.Fatalf("cron source tag = %q, want cron", got)
+	}
+}
+
+func assertNoCronWorkRequestQueued(t *testing.T, requests <-chan interfaces.WorkRequest) {
+	t.Helper()
+	select {
+	case request := <-requests:
+		t.Fatalf("cron work request observed unexpectedly: %#v", request)
+	default:
+	}
+}
+
+func matchedTokenSnapshotTokensInPlace(t *testing.T, svc *FactoryService, placeID string) []interfaces.Token {
+	t.Helper()
+	snap, err := svc.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	return snap.Marking.TokensInPlace(placeID)
+}
+
+func configuredCronWorkstationForServiceTest(t *testing.T, svc *FactoryService, name string) interfaces.FactoryWorkstationConfig {
+	t.Helper()
+	if svc == nil || svc.runtimeCfg == nil {
+		t.Fatal("expected loaded service runtime config")
+	}
+	ws, ok := svc.runtimeCfg.Workstation(name)
+	if !ok {
+		t.Fatalf("expected cron workstation config %q", name)
+	}
+	return *ws
+}
+
+func waitForCompletedDispatchConsumingWorkID(t *testing.T, svc *FactoryService, workID string, timeout time.Duration) interfaces.CompletedDispatch {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		snap, err := svc.GetEngineStateSnapshot(context.Background())
+		if err != nil {
+			t.Fatalf("GetEngineStateSnapshot dispatch history: %v", err)
+		}
+		for _, dispatch := range snap.DispatchHistory {
+			if consumedTokenWithWorkID(dispatch.ConsumedTokens, workID) != nil {
+				return dispatch
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for completed dispatch consuming work %q", workID)
+	return interfaces.CompletedDispatch{}
+}
+
+func consumedTokenWithWorkID(tokens []interfaces.Token, workID string) *interfaces.Token {
+	for i := range tokens {
+		if tokens[i].Color.WorkID == workID {
+			return &tokens[i]
+		}
+	}
+	return nil
+}
+
+func nonBlockingSubmissionRecorder(records chan<- interfaces.FactorySubmissionRecord) func(interfaces.FactorySubmissionRecord) {
+	return func(record interfaces.FactorySubmissionRecord) {
+		select {
+		case records <- record:
+		default:
+		}
+	}
+}
+
+func waitForTokenInPlaceByParent(t *testing.T, svc *FactoryService, placeID string, parentID string, timeout time.Duration) interfaces.Token {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		snap, err := svc.GetEngineStateSnapshot(context.Background())
+		if err != nil {
+			t.Fatalf("GetEngineStateSnapshot output token: %v", err)
+		}
+		for _, token := range snap.Marking.TokensInPlace(placeID) {
+			if token.Color.ParentID == parentID {
+				return token
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for token in %s with parent %q", placeID, parentID)
+	return interfaces.Token{}
+}
+
+func TestFactoryService_CronTickTargetsInternalTimePlaceDespiteConfiguredOutputState(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	svc, runCtx, errCh, cancelRun := buildCronServiceForIngressTest(t, fakeClock, cronFactoryConfigWithOutputState("* * * * *", "ready"), observedSubmissions)
+	defer cancelRun()
+
+	ws := configuredCronWorkstationForServiceTest(t, svc, "poll-for-work")
+	if err := svc.submitCronTick(runCtx, ws, start); err != nil {
+		t.Fatalf("submitCronTick: %v", err)
+	}
+
+	record := waitForCronSubmission(t, observedSubmissions, time.Second)
+	if record.Request.WorkTypeID != interfaces.SystemTimeWorkTypeID {
+		t.Fatalf("cron submission work type = %q, want %q", record.Request.WorkTypeID, interfaces.SystemTimeWorkTypeID)
+	}
+	if record.Request.TargetState != interfaces.SystemTimePendingState {
+		t.Fatalf("cron submission target state = %q, want %q", record.Request.TargetState, interfaces.SystemTimePendingState)
+	}
+	assertCronDispatchAndOutput(t, svc, record.Request.WorkID, "task:ready")
+	if tokens := matchedTokenSnapshotTokensInPlace(t, svc, "task:init"); len(tokens) != 0 {
+		t.Fatalf("cron created customer token in initial state despite configured output state: %#v", tokens)
+	}
+	stopServiceModeRun(t, cancelRun, errCh)
+}
+
+func TestRunHostedLinearPollCycle_SubmitsFilteredIssuesAndPersistsCheckpoint(t *testing.T) {
+	var authHeaders []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeaders = append(authHeaders, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"issues": {
+					"nodes": [
+						{
+							"id": "issue-new",
+							"identifier": "ENG-101",
+							"title": "Newest issue",
+							"description": "First",
+							"updatedAt": "2026-05-22T07:10:00Z",
+							"url": "https://linear.app/example/issue/ENG-101",
+							"team": {"id": "team-1", "key": "ENG", "name": "Engineering"},
+							"state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+							"assignee": {"id": "user-1", "name": "Alex", "email": "alex@example.com"}
+						},
+						{
+							"id": "issue-skip",
+							"identifier": "OPS-4",
+							"title": "Skip issue",
+							"description": "",
+							"updatedAt": "2026-05-22T07:05:00Z",
+							"url": "https://linear.app/example/issue/OPS-4",
+							"team": {"id": "team-2", "key": "OPS", "name": "Operations"},
+							"state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+							"assignee": null
+						},
+						{
+							"id": "issue-old",
+							"identifier": "ENG-55",
+							"title": "Older issue",
+							"description": "Second",
+							"updatedAt": "2026-05-22T07:00:00Z",
+							"url": "https://linear.app/example/issue/ENG-55",
+							"team": {"id": "team-1", "key": "ENG", "name": "Engineering"},
+							"state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+							"assignee": null
+						}
+					],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	worker := hostedLinearWorkerConfigForTest(
+		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		func(cfg *interfaces.HostedLinearWorkerConfig) {
+			cfg.TeamIDs = []string{"team-1"}
+			cfg.StateIDs = []string{"state-1"}
+			cfg.Claim = &interfaces.HostedLinearWorkerClaimConfig{AssigneeField: "ownerEmail"}
+		},
+	)
+	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
+	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
+
+	var submitted []interfaces.WorkRequest
+	result, err := hostedlinear.RunPollCycle(
+		context.Background(),
+		hostedlinear.Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
+		nil,
+		workstation,
+		worker,
+		func(_ context.Context, request interfaces.WorkRequest) error {
+			submitted = append(submitted, request)
+			return nil
+		},
+		checkpointPath,
+		"linear-secret-key",
+		zap.NewNop(),
+	)
+	if err != nil {
+		t.Fatalf("hostedlinear.RunPollCycle: %v", err)
+	}
+	if !result.FoundNewer {
+		t.Fatal("expected hosted linear cycle to report newer issues")
+	}
+	if len(submitted) != 1 {
+		t.Fatalf("submitted requests = %d, want 1", len(submitted))
+	}
+	if got := authHeaders; len(got) != 1 || got[0] != "linear-secret-key" {
+		t.Fatalf("authorization headers = %#v, want raw API key once", got)
+	}
+
+	normalized := normalizeSubmittedLinearWorkRequest(t, submitted[0])
+	assertNormalizedHostedLinearIssues(t, normalized)
+	checkpoint := readLinearCheckpointForTest(t, checkpointPath)
+	if checkpoint.IssueID != "issue-new" || checkpoint.UpdatedAt != "2026-05-22T07:10:00Z" {
+		t.Fatalf("checkpoint = %#v, want newest issue fingerprint", checkpoint)
+	}
+}
+
+func TestRunHostedLinearPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"issues": {
+					"nodes": [
+						{
+							"id": "issue-new",
+							"identifier": "ENG-101",
+							"title": "Newest issue",
+							"description": "",
+							"updatedAt": "2026-05-22T07:10:00Z",
+							"url": "https://linear.app/example/issue/ENG-101",
+							"team": {"id": "team-1", "key": "ENG", "name": "Engineering"},
+							"state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+							"assignee": null
+						},
+						{
+							"id": "issue-old",
+							"identifier": "ENG-55",
+							"title": "Older issue",
+							"description": "",
+							"updatedAt": "2026-05-22T07:00:00Z",
+							"url": "https://linear.app/example/issue/ENG-55",
+							"team": {"id": "team-1", "key": "ENG", "name": "Engineering"},
+							"state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+							"assignee": null
+						}
+					],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	worker := hostedLinearWorkerConfigForTest(
+		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		nil,
+	)
+	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
+	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
+	saveLinearCheckpoint(t, checkpointPath, hostedlinear.Checkpoint{
+		IssueID:   "issue-old",
+		UpdatedAt: "2026-05-22T07:00:00Z",
+	})
+
+	submitCalls := 0
+	first, err := hostedlinear.RunPollCycle(
+		context.Background(),
+		hostedlinear.Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
+		nil,
+		workstation,
+		worker,
+		func(_ context.Context, request interfaces.WorkRequest) error {
+			submitCalls++
+			if len(request.Works) != 1 || request.Works[0].WorkID != "linear:issue-new" {
+				t.Fatalf("submitted request = %#v, want only newest issue above checkpoint", request)
+			}
+			return nil
+		},
+		checkpointPath,
+		"linear-secret-key",
+		zap.NewNop(),
+	)
+	if err != nil {
+		t.Fatalf("first hostedlinear.RunPollCycle: %v", err)
+	}
+	if !first.FoundNewer || submitCalls != 1 {
+		t.Fatalf("first cycle foundNewer=%t submitCalls=%d, want true and 1", first.FoundNewer, submitCalls)
+	}
+
+	second, err := hostedlinear.RunPollCycle(
+		context.Background(),
+		hostedlinear.Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
+		nil,
+		workstation,
+		worker,
+		func(_ context.Context, request interfaces.WorkRequest) error {
+			t.Fatalf("unexpected resubmission: %#v", request)
+			return nil
+		},
+		checkpointPath,
+		"linear-secret-key",
+		zap.NewNop(),
+	)
+	if err != nil {
+		t.Fatalf("second hostedlinear.RunPollCycle: %v", err)
+	}
+	if second.FoundNewer {
+		t.Fatal("expected second cycle to stop at checkpoint with no newer issues")
+	}
+}
+
+func TestRunHostedLinearPollCycle_PushesFiltersIntoProviderQueryForBoundedResume(t *testing.T) {
+	var capturedQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		capturedQuery = payload.Query
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"issues": {
+					"nodes": [
+						{
+							"id": "issue-match",
+							"identifier": "ENG-144",
+							"title": "Filtered issue",
+							"description": "Visible only when provider-side filters apply",
+							"updatedAt": "2026-05-22T08:00:00Z",
+							"url": "https://linear.app/example/issue/ENG-144",
+							"team": {"id": "team-match", "key": "ENG", "name": "Engineering"},
+							"state": {"id": "state-match", "name": "Todo", "type": "unstarted"},
+							"assignee": null
+						}
+					],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	worker := hostedLinearWorkerConfigForTest(
+		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		func(cfg *interfaces.HostedLinearWorkerConfig) {
+			cfg.TeamIDs = []string{"team-match"}
+			cfg.StateIDs = []string{"state-match"}
+		},
+	)
+	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
+	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
+	saveLinearCheckpoint(t, checkpointPath, hostedlinear.Checkpoint{
+		IssueID:   "issue-older-match",
+		UpdatedAt: "2026-05-22T07:00:00Z",
+	})
+
+	var submitted []interfaces.WorkRequest
+	result, err := hostedlinear.RunPollCycle(
+		context.Background(),
+		hostedlinear.Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
+		nil,
+		workstation,
+		worker,
+		func(_ context.Context, request interfaces.WorkRequest) error {
+			submitted = append(submitted, request)
+			return nil
+		},
+		checkpointPath,
+		"linear-secret-key",
+		zap.NewNop(),
+	)
+	if err != nil {
+		t.Fatalf("hostedlinear.RunPollCycle: %v", err)
+	}
+	if !strings.Contains(capturedQuery, `team: { id: { in: ["team-match"] } }`) {
+		t.Fatalf("query = %q, want team filter pushed into provider request", capturedQuery)
+	}
+	if !strings.Contains(capturedQuery, `state: { id: { in: ["state-match"] } }`) {
+		t.Fatalf("query = %q, want state filter pushed into provider request", capturedQuery)
+	}
+	if !result.FoundNewer {
+		t.Fatal("expected hosted linear cycle to report newer filtered issues")
+	}
+	if len(submitted) != 1 {
+		t.Fatalf("submitted requests = %d, want 1", len(submitted))
+	}
+	normalized := normalizeSubmittedLinearWorkRequest(t, submitted[0])
+	if len(normalized) != 1 || normalized[0].WorkID != "linear:issue-match" {
+		t.Fatalf("normalized submissions = %#v, want only filtered issue", normalized)
+	}
+	checkpoint := readLinearCheckpointForTest(t, checkpointPath)
+	if checkpoint.IssueID != "issue-match" || checkpoint.UpdatedAt != "2026-05-22T08:00:00Z" {
+		t.Fatalf("checkpoint = %#v, want newest filtered issue fingerprint", checkpoint)
+	}
+}
+
+func hostedLinearWorkerConfigForTest(
+	mapping interfaces.HostedLinearWorkerMappingConfig,
+	mutate func(*interfaces.HostedLinearWorkerConfig),
+) *interfaces.WorkerConfig {
+	worker := &interfaces.WorkerConfig{
+		Name:     "linear-poller",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: interfaces.HostedWorkerProviderLinear,
+		Linear: &interfaces.HostedLinearWorkerConfig{
+			Mapping: mapping,
+		},
+	}
+	if mutate != nil {
+		mutate(worker.Linear)
+	}
+	return worker
+}
+
+func normalizeSubmittedLinearWorkRequest(t *testing.T, request interfaces.WorkRequest) []interfaces.SubmitRequest {
+	t.Helper()
+
+	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+	if err != nil {
+		t.Fatalf("NormalizeWorkRequest: %v", err)
+	}
+	return normalized
+}
+
+func assertNormalizedHostedLinearIssues(t *testing.T, normalized []interfaces.SubmitRequest) {
+	t.Helper()
+
+	if len(normalized) != 2 {
+		t.Fatalf("normalized submissions = %d, want 2 filtered issues", len(normalized))
+	}
+	if normalized[0].WorkID != "linear:issue-old" || normalized[1].WorkID != "linear:issue-new" {
+		t.Fatalf("normalized work IDs = [%s %s], want oldest-first filtered issues", normalized[0].WorkID, normalized[1].WorkID)
+	}
+	if normalized[0].RequestID != normalized[1].RequestID || normalized[0].RequestID == "" {
+		t.Fatalf("deterministic batch request IDs = [%q %q], want shared non-empty ID", normalized[0].RequestID, normalized[1].RequestID)
+	}
+	if normalized[1].Tags["linear_issue_identifier"] != "ENG-101" {
+		t.Fatalf("linear tags = %#v, want identifier tag", normalized[1].Tags)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(normalized[1].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	claims, _ := payload["claims"].(map[string]any)
+	if claims["ownerEmail"] != "alex@example.com" {
+		t.Fatalf("claims = %#v, want ownerEmail claim", claims)
+	}
+}
+
+func saveLinearCheckpoint(t *testing.T, checkpointPath string, checkpoint hostedlinear.Checkpoint) {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(checkpointPath), 0o755); err != nil {
+		t.Fatalf("create checkpoint dir: %v", err)
+	}
+	data, err := json.Marshal(checkpoint)
+	if err != nil {
+		t.Fatalf("marshal checkpoint: %v", err)
+	}
+	if err := os.WriteFile(checkpointPath, data, 0o600); err != nil {
+		t.Fatalf("write checkpoint: %v", err)
+	}
+}
+
+func readLinearCheckpointForTest(t *testing.T, checkpointPath string) hostedlinear.Checkpoint {
+	t.Helper()
+
+	checkpointData, err := os.ReadFile(checkpointPath)
+	if err != nil {
+		t.Fatalf("read checkpoint: %v", err)
+	}
+
+	var checkpoint hostedlinear.Checkpoint
+	if err := json.Unmarshal(checkpointData, &checkpoint); err != nil {
+		t.Fatalf("decode checkpoint: %v", err)
+	}
+	return checkpoint
+}
+
+func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"issues": {
+					"nodes": [
+						{
+							"id": "issue-new",
+							"identifier": "ENG-101",
+							"title": "Newest issue",
+							"description": "First",
+							"updatedAt": "2026-05-22T07:10:00Z",
+							"url": "https://linear.app/example/issue/ENG-101",
+							"team": {"id": "team-1", "key": "ENG", "name": "Engineering"},
+							"state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+							"assignee": null
+						}
+					],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	factoryDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(factoryDir, "secrets"), 0o755); err != nil {
+		t.Fatalf("mkdir secrets: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "secrets", "linear-api-key"), []byte("runtime-linear-key\n"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+
+	submitted := &aggregateSnapshotFactory{}
+	svc := &FactoryService{
+		cfg: &FactoryServiceConfig{
+			RuntimeMode:            interfaces.RuntimeModeService,
+			HostedPollerHTTPClient: server.Client(),
+			HostedLinearEndpoint:   server.URL,
+		},
+		logger: zap.NewNop(),
+	}
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "linear-poller",
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		factoryDir,
+		&interfaces.FactoryConfig{
+			Workers:      []interfaces.WorkerConfig{{Name: "linear-poller"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{poller},
+		},
+		map[string]*interfaces.WorkerConfig{
+			"linear-poller": {
+				Name:     "linear-poller",
+				Type:     interfaces.WorkerTypeHosted,
+				Provider: interfaces.HostedWorkerProviderLinear,
+				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear: &interfaces.HostedLinearWorkerConfig{
+					PollInterval: "1h",
+					Mapping: interfaces.HostedLinearWorkerMappingConfig{
+						WorkType: "story",
+						State:    "init",
+					},
+				},
+			},
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
+	)
+	handle := &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			runtimeCfg: runtimeCfg,
+			factory:    submitted,
+		},
+	}
+	sidecarCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+	defer svc.stopLiveRuntimeSidecars(handle)
+
+	waitForHostedPollerSubmission(t, submitted, 1, time.Second)
+	if submitted.submitCalls != 1 {
+		t.Fatalf("submit calls = %d, want 1", submitted.submitCalls)
+	}
+	if got := submitted.submissions[0].Works[0].WorkID; got != "linear:issue-new" {
+		t.Fatalf("submitted work id = %q, want linear:issue-new", got)
+	}
+}
+
+func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLifecycle(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"issues": {
+					"nodes": [],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	factoryDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(factoryDir, "secrets"), 0o755); err != nil {
+		t.Fatalf("mkdir secrets: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "secrets", "linear-api-key"), []byte("runtime-linear-key\n"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	svc := &FactoryService{
+		cfg: &FactoryServiceConfig{
+			RuntimeMode:            interfaces.RuntimeModeService,
+			HostedPollerHTTPClient: server.Client(),
+			HostedLinearEndpoint:   server.URL,
+		},
+		logger: zap.New(logCore),
+	}
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "linear-poller",
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		factoryDir,
+		&interfaces.FactoryConfig{
+			Workers:      []interfaces.WorkerConfig{{Name: "linear-poller"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{poller},
+		},
+		map[string]*interfaces.WorkerConfig{
+			"linear-poller": {
+				Name:     "linear-poller",
+				Type:     interfaces.WorkerTypeHosted,
+				Provider: interfaces.HostedWorkerProviderLinear,
+				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear: &interfaces.HostedLinearWorkerConfig{
+					PollInterval: "1h",
+					Mapping: interfaces.HostedLinearWorkerMappingConfig{
+						WorkType: "story",
+						State:    "init",
+					},
+				},
+			},
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
+	)
+	handle := &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			runtimeCfg: runtimeCfg,
+			factory:    &aggregateSnapshotFactory{},
+		},
+	}
+
+	if err := svc.startLiveRuntimeSidecars(context.Background(), handle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+
+	waitForObservedLogMessage(t, observedLogs, "hosted linear poller started", time.Second)
+	svc.stopLiveRuntimeSidecars(handle)
+
+	stopped := observedLogs.FilterMessage("hosted linear poller stopped").All()
+	if len(stopped) != 1 {
+		t.Fatalf("hosted linear poller stopped log count = %d, want 1", len(stopped))
+	}
+	if got := fieldString(stopped[0].ContextMap()["reason"]); got != "context canceled" {
+		t.Fatalf("hosted linear poller stop reason = %q, want context canceled", got)
+	}
+}
+
+func TestResolveHostedSecretRef_PrefersEnvThenRuntimeFile(t *testing.T) {
+	factoryDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(factoryDir, "secrets"), 0o755); err != nil {
+		t.Fatalf("mkdir secrets: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "secrets", "linear-api-key"), []byte("file-secret"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, factoryDir, &interfaces.FactoryConfig{}, nil, nil)
+
+	envName := hostedlinear.SecretEnvName("secrets/linear-api-key")
+	if envName == "" || !strings.Contains(envName, "SECRETS_LINEAR_API_KEY") {
+		t.Fatalf("hostedlinear.SecretEnvName = %q, want normalized name", envName)
+	}
+	t.Setenv(envName, "env-secret")
+	got, err := hostedlinear.ResolveSecretRef(context.Background(), runtimeCfg, "secrets/linear-api-key")
+	if err != nil {
+		t.Fatalf("hostedlinear.ResolveSecretRef env: %v", err)
+	}
+	if got != "env-secret" {
+		t.Fatalf("resolved env secret = %q, want env-secret", got)
+	}
+
+	t.Setenv(envName, "")
+	got, err = hostedlinear.ResolveSecretRef(context.Background(), runtimeCfg, "secrets/linear-api-key")
+	if err != nil {
+		t.Fatalf("hostedlinear.ResolveSecretRef file: %v", err)
+	}
+	if got != "file-secret" {
+		t.Fatalf("resolved file secret = %q, want file-secret", got)
+	}
+}
+
+func waitForHostedPollerSubmission(t *testing.T, submitted *aggregateSnapshotFactory, want int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if submitted.submitCalls >= want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d hosted poller submission(s); got %d", want, submitted.submitCalls)
+}
+
+func waitForObservedLogMessage(t *testing.T, logs *observer.ObservedLogs, message string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if logs.FilterMessage(message).Len() > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for log message %q", message)
 }
