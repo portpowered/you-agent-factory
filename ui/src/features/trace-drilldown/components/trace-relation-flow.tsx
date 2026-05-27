@@ -22,6 +22,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
 import {
   getCachedTraceGraphLayout,
@@ -268,7 +269,7 @@ function RelationWorkNode({ data }: NodeProps<RelationFlowNode>) {
 
   if (data.selectable && data.workID && data.onSelectWorkID) {
     return (
-      <button
+      <GraphNodeButton
         aria-label={data.label}
         className={cn(
           RELATION_NODE_CLASS,
@@ -277,10 +278,9 @@ function RelationWorkNode({ data }: NodeProps<RelationFlowNode>) {
         )}
         onClick={handleSelectWork}
         title={data.workID}
-        type="button"
       >
         {content}
-      </button>
+      </GraphNodeButton>
     );
   }
 

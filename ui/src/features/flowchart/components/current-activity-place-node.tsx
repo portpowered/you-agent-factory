@@ -2,6 +2,7 @@ import type { Node, NodeProps } from "@xyflow/react";
 import type { ReactNode } from "react";
 
 import type { DashboardPlaceRef } from "../../../api/dashboard/types";
+import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import {
   formatDashboardPlaceLabel,
   getDashboardPlaceLabelParts,
@@ -115,26 +116,22 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
       outgoingHandleCount={data.outgoingHandleCount}
     >
       {selectable ? (
-        <button
+        <GraphNodeButton
           aria-label={messages.selectStateLabel(placeLabel)}
           aria-pressed={data.selectedStateNode}
-          className={cn(
-            "nodrag nopan cursor-pointer border-0 bg-transparent p-0 text-left text-inherit",
-            STATE_POSITION_CONTENT_CONTAINER_CLASSNAME,
-          )}
+          className={STATE_POSITION_CONTENT_CONTAINER_CLASSNAME}
           data-selected-state={data.selectedStateNode ? "true" : undefined}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectStateNode?.(data.place.place_id);
           }}
-          type="button"
         >
           <StatePositionNodeContent
             locale={data.locale}
             place={data.place}
             tokenCount={data.tokenCount}
           />
-        </button>
+        </GraphNodeButton>
       ) : showStateMarkers ? (
         <StatePositionNodeContent
           locale={data.locale}

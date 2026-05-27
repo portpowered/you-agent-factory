@@ -184,6 +184,11 @@ describe("SubmitWorkWidget form behavior", () => {
         name: "Add input",
       }),
     ).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Add input",
+      }).className,
+    ).toContain("min-h-9");
   });
 
   it("adds typed items from the shared add-input control and renders their type cues", () => {
@@ -306,6 +311,8 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       />,
     );
 
+    expect(screen.getByText("Choose file").className).toContain("min-h-9");
+
     const dropzoneLabel = screen.getByText("Image file");
     const dropzone = dropzoneLabel.closest("label");
     if (!(dropzone instanceof HTMLLabelElement)) {
@@ -351,6 +358,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
 
     expect(screen.getByText("ui.png (image/png)")).toBeTruthy();
     expect(screen.getByText("Replace file")).toBeTruthy();
+    expect(screen.getByText("Replace file").className).toContain("min-h-9");
   });
 
   it("renders file-staging failures as item-scoped errors and keeps submit disabled", () => {
@@ -856,6 +864,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     const removeButton = screen.getByRole<HTMLButtonElement>("button", {
       name: "Remove text item 1",
     });
+    expect(removeButton.className).toContain("h-11");
     fireEvent.click(removeButton);
 
     expect(removeButton.disabled).toBe(true);

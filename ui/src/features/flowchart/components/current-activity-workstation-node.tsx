@@ -5,6 +5,7 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationNode,
 } from "../../../api/dashboard/types";
+import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import {
   formatDurationFromISO,
   formatWorkItemLabel,
@@ -141,15 +142,14 @@ function ExhaustionRuleNodeButton({
   workstationTitle: string;
 }) {
   return (
-    <button
+    <GraphNodeButton
       aria-label={messages.selectExhaustionRuleLabel(workstationTitle)}
       aria-pressed={data.selectedWorkstation}
-      className="nodrag flex h-full min-w-0 w-full cursor-pointer items-center gap-2 overflow-hidden border-0 bg-transparent p-0 text-left text-inherit"
+      className="flex h-full min-w-0 w-full items-center gap-2 overflow-hidden"
       data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
       data-workstation-kind={semanticIconMetadata.semanticKind}
       onClick={() => data.onSelectWorkstation(data.workstation.node_id)}
       title={workstationTitle}
-      type="button"
     >
       <span
         className="flex min-h-4 items-center"
@@ -169,7 +169,7 @@ function ExhaustionRuleNodeButton({
       >
         {workstationTitle}
       </span>
-    </button>
+    </GraphNodeButton>
   );
 }
 
@@ -204,13 +204,12 @@ function ActiveWorkstationNodeContent({
       data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
       data-workstation-kind={semanticIconMetadata.semanticKind}
     >
-      <button
+      <GraphNodeButton
         aria-label={messages.selectWorkstationLabel(workstationTitle)}
         aria-pressed={data.selectedWorkstation}
-        className="nodrag flex min-w-0 w-full cursor-pointer items-center justify-between gap-2 overflow-hidden border-0 bg-transparent p-0 text-left text-inherit"
+        className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
         onClick={() => data.onSelectWorkstation(data.workstation.node_id)}
         title={workstationTitle}
-        type="button"
       >
         <span
           className="flex min-h-5 shrink-0 items-center"
@@ -243,7 +242,7 @@ function ActiveWorkstationNodeContent({
             />
           </ActivityGraphNodeBadge>
         ) : null}
-      </button>
+      </GraphNodeButton>
 
       <ul className="mt-2 grid min-w-0 list-none content-start gap-1 p-0">
         {visibleWorkItemEntries.map(({ execution, workItem }) => {
@@ -256,10 +255,10 @@ function ActiveWorkstationNodeContent({
 
           return (
             <li key={`${execution.dispatch_id}:${workItem.work_id}`}>
-              <button
+              <GraphNodeButton
                 aria-pressed={workItemSelected}
                 className={cn(
-                  "nodrag nopan grid min-w-0 w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-af-border bg-af-surface px-2 py-1.5 text-left text-[0.74rem] text-inherit",
+                  "grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-af-border bg-af-surface px-2 py-1.5 text-[0.74rem]",
                   workItemSelected &&
                     "border-af-info-border bg-af-info-surface shadow-af-info-chip",
                 )}
@@ -272,7 +271,6 @@ function ActiveWorkstationNodeContent({
                   });
                 }}
                 title={`${workItemLabel} - ${durationLabel}`}
-                type="button"
               >
                 <span
                   className={workItemLabelClassName(workItemLabel)}
@@ -286,7 +284,7 @@ function ActiveWorkstationNodeContent({
                 >
                   {durationLabel}
                 </span>
-              </button>
+              </GraphNodeButton>
             </li>
           );
         })}

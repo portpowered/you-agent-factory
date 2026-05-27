@@ -1,6 +1,7 @@
 import { Handle, Position } from "@xyflow/react";
 import type { ReactNode } from "react";
 
+import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
 
 export type PlaceNodeType = "constraint" | "resource" | "statePosition";
@@ -157,17 +158,16 @@ function NodeHandleBadge({
         position={position}
         type={handle.type}
       />
-      <button
+      <GraphNodeButton
         aria-label={handle.buttonAriaLabel}
         aria-pressed={handle.buttonPressed}
         className={cn("pointer-events-auto", buttonClassName)}
         disabled={handle.buttonDisabled}
         onClick={handle.onButtonClick}
         title={handle.buttonTitle}
-        type="button"
       >
         {handle.label}
-      </button>
+      </GraphNodeButton>
     </div>
   );
 }

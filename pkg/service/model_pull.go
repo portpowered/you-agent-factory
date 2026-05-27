@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -28,6 +30,8 @@ const (
 	defaultModelAssetBaseURL       = "https://huggingface.co"
 	defaultModelAssetAPIBaseURL    = "https://huggingface.co/api"
 	modelAssetMetadataFileName     = ".managed-cache.json"
+	modelAssetRequestTimeout       = 45 * time.Second
+	modelAssetMaxAttempts          = 3
 )
 
 type modelAssetPuller interface {
@@ -133,7 +137,7 @@ func newHuggingFaceModelAssetPuller(cacheDir string) *huggingFaceModelAssetPulle
 		cacheDir:   strings.TrimSpace(cacheDir),
 		baseURL:    defaultModelAssetBaseURL,
 		apiBaseURL: defaultModelAssetAPIBaseURL,
-		client:     &http.Client{},
+		client:     &http.Client{Timeout: modelAssetRequestTimeout},
 		goos:       runtime.GOOS,
 		goarch:     runtime.GOARCH,
 	}
@@ -305,7 +309,7 @@ func (p *huggingFaceModelAssetPuller) fetchManifest(ctx context.Context, spec mo
 	if err != nil {
 		return modelAssetManifest{}, fmt.Errorf("build model-manifest request: %w", err)
 	}
-	resp, err := p.client.Do(req)
+	resp, err := p.doWithRetry(req, shouldRetryModelAssetResponse)
 	if err != nil {
 		return modelAssetManifest{}, fmt.Errorf("pull model manifest for %q: %w", spec.ModelName, err)
 	}
@@ -552,7 +556,7 @@ func (p *huggingFaceModelAssetPuller) downloadFile(ctx context.Context, remote m
 	if err != nil {
 		return fmt.Errorf("build model download request for %q: %w", remote.Path, err)
 	}
-	resp, err := p.client.Do(req)
+	resp, err := p.doWithRetry(req, shouldRetryModelAssetResponse)
 	if err != nil {
 		return fmt.Errorf("download model asset %q: %w", remote.Path, err)
 	}
@@ -589,6 +593,58 @@ func (p *huggingFaceModelAssetPuller) downloadFile(ctx context.Context, remote m
 		return fmt.Errorf("commit model asset %q into managed cache: %w", remote.Path, err)
 	}
 	return nil
+}
+
+func (p *huggingFaceModelAssetPuller) doWithRetry(req *http.Request, shouldRetryResponse func(*http.Response) bool) (*http.Response, error) {
+	if p == nil || p.client == nil {
+		return nil, fmt.Errorf("model asset HTTP client is not configured")
+	}
+	attempts := modelAssetMaxAttempts
+	if attempts < 1 {
+		attempts = 1
+	}
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		resp, err := p.client.Do(req.Clone(req.Context()))
+		if err == nil {
+			if shouldRetryResponse(resp) && attempt < attempts {
+				lastErr = fmt.Errorf("unexpected status %d", resp.StatusCode)
+				resp.Body.Close()
+				continue
+			}
+			return resp, nil
+		}
+		lastErr = err
+		if attempt == attempts || !shouldRetryModelAssetError(err) {
+			return nil, err
+		}
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("model asset request failed")
+	}
+	return nil, lastErr
+}
+
+func shouldRetryModelAssetResponse(resp *http.Response) bool {
+	if resp == nil {
+		return false
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return true
+	}
+	return resp.StatusCode >= http.StatusInternalServerError
+}
+
+func shouldRetryModelAssetError(err error) bool {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	return false
 }
 
 func fileSHA256(path string) (string, error) {

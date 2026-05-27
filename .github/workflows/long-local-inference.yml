@@ -1,10 +1,17 @@
 name: Long Local Inference
+run-name: >-
+  Long Local Inference (${{
+    github.event_name == 'push' && 'post-merge verification' ||
+    github.event_name == 'schedule' && 'scheduled verification' ||
+    'manual verification'
+  }})
 
 on:
-  pull_request:
   push:
     branches:
       - main
+  schedule:
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 permissions:

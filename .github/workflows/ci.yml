@@ -25,9 +25,88 @@ env:
   GO_VERSION: 1.24.2
 
 jobs:
+  classify-pr-impact:
+    name: Classify PR Impact
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      classification: ${{ steps.classify.outputs.classification || steps.classify_push.outputs.classification }}
+      docs_only: ${{ steps.classify.outputs.docs_only || steps.classify_push.outputs.docs_only }}
+      ui_only: ${{ steps.classify.outputs.ui_only || steps.classify_push.outputs.ui_only }}
+      backend_only: ${{ steps.classify.outputs.backend_only || steps.classify_push.outputs.backend_only }}
+      shared_risk: ${{ steps.classify.outputs.shared_risk || steps.classify_push.outputs.shared_risk }}
+      full_run_required: ${{ steps.classify.outputs.full_run_required || steps.classify_push.outputs.full_run_required }}
+      areas: ${{ steps.classify.outputs.areas || steps.classify_push.outputs.areas }}
+      changed_files_count: ${{ steps.classify.outputs.changed_files_count || steps.classify_push.outputs.changed_files_count }}
+      reason: ${{ steps.classify.outputs.reason || steps.classify_push.outputs.reason }}
+      full_run_command: ${{ steps.classify.outputs.full_run_command || steps.classify_push.outputs.full_run_command }}
+      run_ui_coverage: ${{ steps.classify.outputs.run_ui_coverage || steps.classify_push.outputs.run_ui_coverage }}
+      ui_coverage_reason: ${{ steps.classify.outputs.ui_coverage_reason || steps.classify_push.outputs.ui_coverage_reason }}
+      ui_coverage_command: ${{ steps.classify.outputs.ui_coverage_command || steps.classify_push.outputs.ui_coverage_command }}
+      run_ui_browser_integration: ${{ steps.classify.outputs.run_ui_browser_integration || steps.classify_push.outputs.run_ui_browser_integration }}
+      ui_browser_integration_reason: ${{ steps.classify.outputs.ui_browser_integration_reason || steps.classify_push.outputs.ui_browser_integration_reason }}
+      ui_browser_integration_command: ${{ steps.classify.outputs.ui_browser_integration_command || steps.classify_push.outputs.ui_browser_integration_command }}
+      run_backend_verification: ${{ steps.classify.outputs.run_backend_verification || steps.classify_push.outputs.run_backend_verification }}
+      backend_verification_reason: ${{ steps.classify.outputs.backend_verification_reason || steps.classify_push.outputs.backend_verification_reason }}
+      backend_verification_command: ${{ steps.classify.outputs.backend_verification_command || steps.classify_push.outputs.backend_verification_command }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Classify change impact
+        id: classify
+        if: github.event_name == 'pull_request'
+        run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha }}" -head "${{ github.event.pull_request.head.sha }}"
+
+      - name: Default push events to full verification
+        id: classify_push
+        if: github.event_name != 'pull_request'
+        run: |
+          {
+            echo "classification=shared-risk"
+            echo "docs_only=false"
+            echo "ui_only=false"
+            echo "backend_only=false"
+            echo "shared_risk=true"
+            echo "full_run_required=true"
+            echo "full_run_command=make verify"
+            echo "areas=shared-risk"
+            echo "changed_files_count=0"
+            echo "reason=Push events stay on the full shared-risk verification path."
+            echo "run_ui_coverage=true"
+            echo "ui_coverage_reason=Runs because shared-risk changes stay on the full verification safety path."
+            echo "ui_coverage_command=make test-ui-coverage"
+            echo "run_ui_browser_integration=true"
+            echo "ui_browser_integration_reason=Runs because shared-risk changes stay on the full verification safety path."
+            echo "ui_browser_integration_command=make ui-integration-test"
+            echo "run_backend_verification=true"
+            echo "backend_verification_reason=Runs because shared-risk changes stay on the full verification safety path."
+            echo "backend_verification_command=make test-backend-verification"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Pull request impact classification"
+            echo
+            echo "- Classification: \`shared-risk\`"
+            echo "- Areas touched: \`shared-risk\`"
+            echo "- Changed files: \`0\`"
+            echo "- Reason: Push events stay on the full shared-risk verification path."
+            echo "- Full required rerun: \`make verify\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
+    needs: classify-pr-impact
     timeout-minutes: 20
     steps:
       - name: Check out repository
@@ -137,15 +216,31 @@ jobs:
   ui-coverage:
     name: UI Coverage
     runs-on: ubuntu-latest
-    needs: verify-build-contracts
+    needs:
+      - classify-pr-impact
+      - verify-build-contracts
     timeout-minutes: 40
     steps:
+      - name: Report lane routing
+        run: |
+          {
+            echo "## UI Coverage"
+            echo
+            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
+            echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_ui_coverage == 'true' && 'run' || 'skip' }}\`"
+            echo "- Local command: \`${{ needs.classify-pr-impact.outputs.ui_coverage_command }}\`"
+            echo "- Reason: ${{ needs.classify-pr-impact.outputs.ui_coverage_reason }}"
+            echo "- Full required rerun: \`${{ needs.classify-pr-impact.outputs.full_run_command }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check out repository
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -153,16 +248,19 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Set up Bun for the dashboard workspace
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Set up Node for dashboard runtime
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Restore Bun package cache
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -171,25 +269,94 @@ jobs:
             ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
 
       - name: Install dashboard dependencies
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
         timeout-minutes: 10
         run: make ui-deps
 
       - name: Run dashboard coverage lane
+        id: run_ui_coverage
+        if: needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
+        continue-on-error: true
+        shell: bash
         timeout-minutes: 30
-        run: make test-ui-coverage
+        run: |
+          set -o pipefail
+          artifact_root=".artifacts/ui-coverage"
+          mkdir -p "$artifact_root"
+          make test-ui-coverage 2>&1 | tee "$artifact_root/command.log"
+
+      - name: Report lane execution
+        if: always() && needs.classify-pr-impact.outputs.run_ui_coverage == 'true'
+        shell: bash
+        run: |
+          artifact_name="ui-coverage-failure-artifacts"
+          artifact_root=".artifacts/ui-coverage"
+          if [[ "${{ steps.run_ui_coverage.outcome }}" == "success" ]]; then
+            {
+              echo "### Execution result"
+              echo
+              echo "- Verified: UI coverage and replay-coverage checks through \`${{ needs.classify-pr-impact.outputs.ui_coverage_command }}\`."
+              echo "- Result: \`passed\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "### Execution result"
+            echo
+            echo "- Verified: UI coverage and replay-coverage checks through \`${{ needs.classify-pr-impact.outputs.ui_coverage_command }}\`."
+            echo "- Result: \`failed\`"
+            echo "- Retained artifact: \`$artifact_name\` for 14 days"
+            echo "- Primary log: \`$artifact_root/command.log\`"
+            echo
+            echo "#### Failing log tail"
+            echo
+            echo '```text'
+            tail -n 40 "$artifact_root/command.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload UI coverage failure artifacts
+        if: always() && needs.classify-pr-impact.outputs.run_ui_coverage == 'true' && steps.run_ui_coverage.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage-failure-artifacts
+          path: .artifacts/ui-coverage/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail for UI coverage lane errors
+        if: always() && needs.classify-pr-impact.outputs.run_ui_coverage == 'true' && steps.run_ui_coverage.outcome == 'failure'
+        run: exit 1
 
   ui-browser-integration:
     name: UI Browser Integration
     runs-on: ubuntu-latest
-    needs: verify-build-contracts
+    needs:
+      - classify-pr-impact
+      - verify-build-contracts
     timeout-minutes: 25
     steps:
+      - name: Report lane routing
+        run: |
+          {
+            echo "## UI Browser Integration"
+            echo
+            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
+            echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true' && 'run' || 'skip' }}\`"
+            echo "- Local command: \`${{ needs.classify-pr-impact.outputs.ui_browser_integration_command }}\`"
+            echo "- Reason: ${{ needs.classify-pr-impact.outputs.ui_browser_integration_reason }}"
+            echo "- Full required rerun: \`${{ needs.classify-pr-impact.outputs.full_run_command }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check out repository
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -197,16 +364,19 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Set up Bun for the dashboard workspace
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Set up Node for dashboard runtime
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Restore Bun package cache
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -215,6 +385,7 @@ jobs:
             ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
 
       - name: Install dashboard dependencies
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         timeout-minutes: 10
         run: make ui-deps
 
@@ -226,25 +397,97 @@ jobs:
       # Playwright recommends against caching browser binaries in CI because restore
       # time is usually comparable to a fresh download on hosted runners.
       - name: Install Playwright browser for dashboard integration tests
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         timeout-minutes: 10
         run: make ui-install-playwright
 
       - name: Run dashboard browser integration suite
+        id: run_ui_browser_integration
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
+        continue-on-error: true
+        env:
+          AGENT_FACTORY_BROWSER_ARTIFACT_DIR: ../.artifacts/ui-browser-integration/browser
+        shell: bash
         timeout-minutes: 15
-        run: make ui-integration-test
+        run: |
+          set -o pipefail
+          artifact_root=".artifacts/ui-browser-integration"
+          mkdir -p "$artifact_root"
+          make ui-integration-test 2>&1 | tee "$artifact_root/command.log"
+
+      - name: Report lane execution
+        if: always() && needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
+        shell: bash
+        run: |
+          artifact_name="ui-browser-integration-failure-artifacts"
+          artifact_root=".artifacts/ui-browser-integration"
+          if [[ "${{ steps.run_ui_browser_integration.outcome }}" == "success" ]]; then
+            {
+              echo "### Execution result"
+              echo
+              echo "- Verified: Browser-backed dashboard integration through \`${{ needs.classify-pr-impact.outputs.ui_browser_integration_command }}\`."
+              echo "- Result: \`passed\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "### Execution result"
+            echo
+            echo "- Verified: Browser-backed dashboard integration through \`${{ needs.classify-pr-impact.outputs.ui_browser_integration_command }}\`."
+            echo "- Result: \`failed\`"
+            echo "- Retained artifact: \`$artifact_name\` for 14 days"
+            echo "- Evidence: Playwright trace, final screenshot, page HTML snapshot, diagnostics JSON, and the lane command log"
+            echo "- Primary log: \`$artifact_root/command.log\`"
+            echo
+            echo "#### Failing log tail"
+            echo
+            echo '```text'
+            tail -n 40 "$artifact_root/command.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload UI browser integration failure artifacts
+        if: always() && needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true' && steps.run_ui_browser_integration.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-browser-integration-failure-artifacts
+          path: .artifacts/ui-browser-integration/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail for UI browser integration lane errors
+        if: always() && needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true' && steps.run_ui_browser_integration.outcome == 'failure'
+        run: exit 1
 
   backend-verification:
     name: Backend Verification
     runs-on: ubuntu-latest
-    needs: verify-build-contracts
+    needs:
+      - classify-pr-impact
+      - verify-build-contracts
     timeout-minutes: 35
     steps:
+      - name: Report lane routing
+        run: |
+          {
+            echo "## Backend Verification"
+            echo
+            echo "- Classification: \`${{ needs.classify-pr-impact.outputs.classification }}\`"
+            echo "- Decision: \`${{ needs.classify-pr-impact.outputs.run_backend_verification == 'true' && 'run' || 'skip' }}\`"
+            echo "- Local command: \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`"
+            echo "- Reason: ${{ needs.classify-pr-impact.outputs.backend_verification_reason }}"
+            echo "- Full required rerun: \`${{ needs.classify-pr-impact.outputs.full_run_command }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check out repository
+        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go from go.mod
+        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -252,5 +495,57 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Run merged backend coverage and functional verification
+        id: run_backend_verification
+        if: needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        continue-on-error: true
+        shell: bash
         timeout-minutes: 15
-        run: make test-backend-verification
+        run: |
+          set -o pipefail
+          artifact_root=".artifacts/backend-verification"
+          mkdir -p "$artifact_root"
+          make test-backend-verification 2>&1 | tee "$artifact_root/command.log"
+
+      - name: Report lane execution
+        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        shell: bash
+        run: |
+          artifact_name="backend-verification-failure-artifacts"
+          artifact_root=".artifacts/backend-verification"
+          if [[ "${{ steps.run_backend_verification.outcome }}" == "success" ]]; then
+            {
+              echo "### Execution result"
+              echo
+              echo "- Verified: Backend coverage and required short functional checks through \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`."
+              echo "- Result: \`passed\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "### Execution result"
+            echo
+            echo "- Verified: Backend coverage and required short functional checks through \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`."
+            echo "- Result: \`failed\`"
+            echo "- Retained artifact: \`$artifact_name\` for 14 days"
+            echo "- Primary log: \`$artifact_root/command.log\`"
+            echo
+            echo "#### Failing log tail"
+            echo
+            echo '```text'
+            tail -n 40 "$artifact_root/command.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload backend verification failure artifacts
+        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true' && steps.run_backend_verification.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-verification-failure-artifacts
+          path: .artifacts/backend-verification/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail for backend verification lane errors
+        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true' && steps.run_backend_verification.outcome == 'failure'
+        run: exit 1

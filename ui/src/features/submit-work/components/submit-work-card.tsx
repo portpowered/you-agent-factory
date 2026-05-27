@@ -10,7 +10,6 @@ import {
   PopoverTrigger,
   Select,
   Textarea,
-  buttonVariants,
 } from "../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
@@ -287,13 +286,16 @@ function AddSubmissionItemMenu({
   return (
     <div className="flex justify-start">
       <Popover onOpenChange={onOpenChange} open={isOpen}>
-        <PopoverTrigger
-          aria-label={messages.addItemAction}
-          className={buttonVariants({ size: "sm", tone: "outline" })}
-          disabled={controlsDisabled}
-          type="button"
-        >
-          {messages.addItemAction}
+        <PopoverTrigger asChild>
+          <Button
+            aria-label={messages.addItemAction}
+            disabled={controlsDisabled}
+            size="sm"
+            tone="outline"
+            type="button"
+          >
+            {messages.addItemAction}
+          </Button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
@@ -305,22 +307,19 @@ function AddSubmissionItemMenu({
             {ADDABLE_ITEM_TYPES.map((itemType) => {
               const typeLabel = itemTypeLabel(messages, itemType);
               return (
-                <button
+                <Button
                   aria-label={typeLabel}
-                  className={buttonVariants({
-                    className:
-                      "justify-start rounded-lg border-af-border text-left font-medium",
-                    tone: "outline",
-                  })}
+                  className="justify-start border-af-border text-left font-medium"
                   key={itemType}
                   onClick={() => {
                     onAddItem(itemType);
                     onOpenChange(false);
                   }}
+                  tone="outline"
                   type="button"
                 >
                   {typeLabel}
-                </button>
+                </Button>
               );
             })}
           </div>

@@ -21,4 +21,17 @@ describe("Button", () => {
     expect(destructiveButton.className.includes("hover:border-af-danger-hover")).toBe(true);
     expect(destructiveButton.className.includes("brightness-")).toBe(false);
   });
+
+  it("can project shared button styling onto child elements when structure requires it", () => {
+    render(
+      <Button asChild size="sm" tone="outline">
+        <span>Projected button label</span>
+      </Button>,
+    );
+
+    const projectedLabel = screen.getByText("Projected button label");
+
+    expect(projectedLabel.className).toContain("min-h-9");
+    expect(projectedLabel.className).toContain("border-af-border");
+  });
 });
