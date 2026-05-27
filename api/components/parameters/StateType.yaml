@@ -1,0 +1,6 @@
+name: state.type
+in: query
+required: false
+description: Optional current work state type filter.
+schema:
+  $ref: '../schemas/data-models/WorkStateType.yaml'

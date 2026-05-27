@@ -1,0 +1,24 @@
+description: Current factory could not be saved because the runtime or submitted version is not safe to replace.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
+    examples:
+      staleFactoryVersion:
+        summary: Submitted version is stale.
+        value:
+          message: Current factory definition is stale. Refresh the graph before saving.
+          family: CONFLICT
+          code: STALE_FACTORY_VERSION
+          targets:
+            - kind: save
+              id: stale-version
+      factoryNotIdle:
+        summary: Runtime is not idle.
+        value:
+          message: Current factory runtime must be idle before activation.
+          family: CONFLICT
+          code: FACTORY_NOT_IDLE
+          targets:
+            - kind: save
+              id: active-work

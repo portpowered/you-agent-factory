@@ -1,0 +1,5 @@
+description: Request payload or parameter was invalid.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
