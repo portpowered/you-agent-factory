@@ -54,6 +54,19 @@ define run_verification_step
 	@$(MAKE) $(1) || { status=$$?; printf '%s\n' "FAIL: $(2) [make $(1)] failed. Rerun with: make $(1)"; exit $$status; }
 endef
 
+define run_timed_step
+	@start=$$(date +%s); \
+	if $(1); then \
+		status=0; \
+	else \
+		status=$$?; \
+	fi; \
+	end=$$(date +%s); \
+	elapsed=$$((end - start)); \
+	printf '%s\n' "[ui-coverage] $(2) elapsed: $${elapsed}.00s"; \
+	exit $$status
+endef
+
 .PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-extended verify-build-contracts verify-tests verify test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
@@ -286,9 +299,9 @@ ui-test-coverage:
 
 ui-replay-coverage-check:
 ifeq ($(BUN_BIN),)
-	cd ui && $(NPM) exec tsx scripts/write-replay-coverage-report.ts --check
+	$(call run_timed_step,cd ui && $(NPM) exec tsx scripts/write-replay-coverage-report.ts --check,Replay coverage check)
 else
-	cd ui && $(UI_SCRIPT) replay:coverage:check
+	$(call run_timed_step,cd ui && $(UI_SCRIPT) replay:coverage:check,Replay coverage check)
 endif
 
 ui-install-playwright:
