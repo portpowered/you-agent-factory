@@ -99,9 +99,3 @@ func InputTokens(tokens ...interfaces.Token) []any {
 func WorkDispatchInputTokens(dispatch interfaces.WorkDispatch) []interfaces.Token {
 	return cloneInputTokens(dispatch.InputTokens)
 }
-
-// CommandRequestInputTokens returns the subprocess request token payload as typed
-// petri tokens.
-func CommandRequestInputTokens(request CommandRequest) []interfaces.Token {
-	return cloneInputTokens(request.InputTokens)
-}

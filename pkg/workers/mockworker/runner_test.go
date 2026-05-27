@@ -1,4 +1,4 @@
-package workers
+package mockworker
 
 import (
 	"context"
@@ -6,7 +6,11 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	runtimefixtures "github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
+
+type staticRuntimeConfig = runtimefixtures.RuntimeConfigLookupFixture
 
 func TestMockWorkerCommandRunner_DefaultAcceptIncludesConfiguredStopToken(t *testing.T) {
 	runner := &MockWorkerCommandRunner{
@@ -19,7 +23,7 @@ func TestMockWorkerCommandRunner_DefaultAcceptIncludesConfiguredStopToken(t *tes
 		Next: failCommandRunner{t: t},
 	}
 
-	result, err := runner.Run(context.Background(), CommandRequest{
+	result, err := runner.Run(context.Background(), workerprocess.CommandRequest{
 		WorkerType: "worker",
 	})
 	if err != nil {
@@ -48,7 +52,7 @@ func TestMockWorkerCommandRunner_RejectConfigPreservesObservableOutput(t *testin
 		Next: failCommandRunner{t: t},
 	}
 
-	result, err := runner.Run(context.Background(), CommandRequest{
+	result, err := runner.Run(context.Background(), workerprocess.CommandRequest{
 		WorkerType: "worker",
 	})
 	if err != nil {
@@ -77,7 +81,7 @@ func TestMockWorkerCommandRunner_RejectConfigWithZeroExitCodeStillFails(t *testi
 		Next: failCommandRunner{t: t},
 	}
 
-	result, err := runner.Run(context.Background(), CommandRequest{
+	result, err := runner.Run(context.Background(), workerprocess.CommandRequest{
 		WorkerType: "worker",
 	})
 	if err != nil {
@@ -118,13 +122,13 @@ func TestMockWorkerCommandRunner_SelectsByWorkerWorkstationAndInput(t *testing.T
 		Next: failCommandRunner{t: t},
 	}
 
-	result, err := runner.Run(context.Background(), CommandRequest{
+	result, err := runner.Run(context.Background(), workerprocess.CommandRequest{
 		WorkerType:      "worker",
 		WorkstationName: "process",
 		InputBindings: map[string][]string{
 			"work": {"token-1"},
 		},
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: inputTokens(interfaces.Token{
 			ID:      "token-1",
 			PlaceID: "task:init",
 			Color: interfaces.TokenColor{
@@ -147,7 +151,15 @@ type failCommandRunner struct {
 	t *testing.T
 }
 
-func (r failCommandRunner) Run(context.Context, CommandRequest) (CommandResult, error) {
+func (r failCommandRunner) Run(context.Context, workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
 	r.t.Fatal("next command runner should not be called")
-	return CommandResult{}, nil
+	return workerprocess.CommandResult{}, nil
+}
+
+func inputTokens(tokens ...interfaces.Token) []any {
+	out := make([]any, 0, len(tokens))
+	for _, token := range tokens {
+		out = append(out, token)
+	}
+	return out
 }

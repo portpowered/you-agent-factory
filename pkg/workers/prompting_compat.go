@@ -37,14 +37,6 @@ func ResolveTemplateFields(
 	return workerprompting.ResolveTemplateFields(workingDirTemplate, envTemplates, tokens, wfCtx, worktreeTemplate)
 }
 
-func BuildPromptTemplateContract(inputCount int) PromptTemplateContract {
-	return workerprompting.BuildPromptTemplateContract(inputCount)
-}
-
-func ValidatePromptTemplate(tmpl string, inputCount int) PromptTemplateValidationResult {
-	return workerprompting.ValidatePromptTemplate(tmpl, inputCount)
-}
-
 func applyResolvedFields(base *factory_context.FactoryContext, resolved *ResolvedFields) *factory_context.FactoryContext {
 	return workerprompting.ApplyResolvedFields(base, resolved)
 }

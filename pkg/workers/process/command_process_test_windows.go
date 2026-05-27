@@ -1,6 +1,6 @@
 //go:build windows
 
-package workers
+package process
 
 import "golang.org/x/sys/windows"
 

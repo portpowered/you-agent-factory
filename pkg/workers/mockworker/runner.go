@@ -1,9 +1,10 @@
-package workers
+package mockworker
 
 import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -21,13 +22,13 @@ const defaultMockWorkerAcceptedOutput = "mock worker accepted"
 type MockWorkerCommandRunner struct {
 	Config        *factoryconfig.MockWorkersConfig
 	RuntimeConfig interfaces.RuntimeDefinitionLookup
-	Next          CommandRunner
+	Next          workerprocess.CommandRunner
 }
 
-var _ CommandRunner = (*MockWorkerCommandRunner)(nil)
+var _ workerprocess.CommandRunner = (*MockWorkerCommandRunner)(nil)
 
 // Run implements CommandRunner.
-func (r *MockWorkerCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
+func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
 	if r.Config == nil {
 		return r.runNext(ctx, req)
 	}
@@ -48,15 +49,15 @@ func (r *MockWorkerCommandRunner) Run(ctx context.Context, req CommandRequest) (
 	}
 }
 
-func (r *MockWorkerCommandRunner) runScript(ctx context.Context, req CommandRequest, cfg *factoryconfig.MockWorkerScriptConfig) (CommandResult, error) {
+func (r *MockWorkerCommandRunner) runScript(ctx context.Context, req workerprocess.CommandRequest, cfg *factoryconfig.MockWorkerScriptConfig) (workerprocess.CommandResult, error) {
 	if cfg == nil {
-		return CommandResult{Stderr: []byte("mock scriptConfig is required"), ExitCode: 1}, nil
+		return workerprocess.CommandResult{Stderr: []byte("mock scriptConfig is required"), ExitCode: 1}, nil
 	}
 	scriptCtx := ctx
 	if cfg.Timeout != "" {
 		timeout, err := time.ParseDuration(cfg.Timeout)
 		if err != nil {
-			return CommandResult{
+			return workerprocess.CommandResult{
 				Stderr:   []byte(fmt.Sprintf("invalid mock script timeout %q: %v", cfg.Timeout, err)),
 				ExitCode: 1,
 			}, nil
@@ -79,7 +80,7 @@ func (r *MockWorkerCommandRunner) runScript(ctx context.Context, req CommandRequ
 	return r.runNext(scriptCtx, scriptReq)
 }
 
-func (r *MockWorkerCommandRunner) runNext(ctx context.Context, req CommandRequest) (CommandResult, error) {
+func (r *MockWorkerCommandRunner) runNext(ctx context.Context, req workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
 	next := r.Next
 	if next == nil {
 		next = workerprocess.ExecCommandRunner{}
@@ -87,20 +88,20 @@ func (r *MockWorkerCommandRunner) runNext(ctx context.Context, req CommandReques
 	return next.Run(ctx, req)
 }
 
-func (r *MockWorkerCommandRunner) acceptResult(req CommandRequest) CommandResult {
+func (r *MockWorkerCommandRunner) acceptResult(req workerprocess.CommandRequest) workerprocess.CommandResult {
 	output := defaultMockWorkerAcceptedOutput
 	if r.RuntimeConfig != nil && req.WorkerType != "" {
 		if def, ok := r.RuntimeConfig.Worker(req.WorkerType); ok && def != nil && def.StopToken != "" {
 			output += "\n" + def.StopToken
 		}
 	}
-	return CommandResult{Stdout: []byte(output)}
+	return workerprocess.CommandResult{Stdout: []byte(output)}
 }
 
-func rejectResult(cfg *factoryconfig.MockWorkerRejectConfig) CommandResult {
+func rejectResult(cfg *factoryconfig.MockWorkerRejectConfig) workerprocess.CommandResult {
 	exitCode := 1
 	if cfg == nil {
-		return CommandResult{ExitCode: exitCode}
+		return workerprocess.CommandResult{ExitCode: exitCode}
 	}
 	if cfg.ExitCode != nil {
 		exitCode = *cfg.ExitCode
@@ -108,14 +109,14 @@ func rejectResult(cfg *factoryconfig.MockWorkerRejectConfig) CommandResult {
 			exitCode = 1
 		}
 	}
-	return CommandResult{
+	return workerprocess.CommandResult{
 		Stdout:   []byte(cfg.Stdout),
 		Stderr:   []byte(cfg.Stderr),
 		ExitCode: exitCode,
 	}
 }
 
-func (r *MockWorkerCommandRunner) match(req CommandRequest) (factoryconfig.MockWorkerConfig, bool) {
+func (r *MockWorkerCommandRunner) match(req workerprocess.CommandRequest) (factoryconfig.MockWorkerConfig, bool) {
 	for _, candidate := range r.Config.MockWorkers {
 		if mockWorkerMatches(candidate, req) {
 			return candidate, true
@@ -124,7 +125,7 @@ func (r *MockWorkerCommandRunner) match(req CommandRequest) (factoryconfig.MockW
 	return factoryconfig.MockWorkerConfig{}, false
 }
 
-func mockWorkerMatches(candidate factoryconfig.MockWorkerConfig, req CommandRequest) bool {
+func mockWorkerMatches(candidate factoryconfig.MockWorkerConfig, req workerprocess.CommandRequest) bool {
 	if candidate.WorkerName != "" && candidate.WorkerName != req.WorkerType {
 		return false
 	}
@@ -132,11 +133,43 @@ func mockWorkerMatches(candidate factoryconfig.MockWorkerConfig, req CommandRequ
 		return false
 	}
 	for _, selector := range candidate.WorkInputs {
-		if !mockWorkInputSelectorMatches(selector, CommandRequestInputTokens(req), req.InputBindings) {
+		if !mockWorkInputSelectorMatches(selector, commandRequestInputTokens(req), req.InputBindings) {
 			return false
 		}
 	}
 	return true
+}
+
+func commandRequestInputTokens(request workerprocess.CommandRequest) []interfaces.Token {
+	if len(request.InputTokens) == 0 {
+		return nil
+	}
+
+	out := make([]interfaces.Token, 0, len(request.InputTokens))
+	for _, raw := range request.InputTokens {
+		token, ok := decodeToken(raw)
+		if !ok {
+			continue
+		}
+		out = append(out, token)
+	}
+	return out
+}
+
+func decodeToken(raw any) (interfaces.Token, bool) {
+	if token, ok := raw.(interfaces.Token); ok {
+		return token, true
+	}
+
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return interfaces.Token{}, false
+	}
+	var token interfaces.Token
+	if err := json.Unmarshal(encoded, &token); err != nil {
+		return interfaces.Token{}, false
+	}
+	return token, true
 }
 
 func mockWorkInputSelectorMatches(selector factoryconfig.MockWorkInputSelector, tokens []interfaces.Token, bindings map[string][]string) bool {

@@ -2,6 +2,7 @@ package workers
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,6 +10,32 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+func canonicalWorkerTestPath(value string) string {
+	if value == "" {
+		return ""
+	}
+
+	cleaned := filepath.Clean(value)
+	current := cleaned
+	var suffix []string
+	for {
+		if _, err := os.Stat(current); err == nil {
+			if resolved, err := filepath.EvalSymlinks(current); err == nil && resolved != "" {
+				parts := append([]string{resolved}, suffix...)
+				return filepath.Join(parts...)
+			}
+			break
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		suffix = append([]string{filepath.Base(current)}, suffix...)
+		current = parent
+	}
+	return cleaned
+}
 
 func TestResolveTemplateFields_WorkingDirectory(t *testing.T) {
 	tokens := []interfaces.Token{

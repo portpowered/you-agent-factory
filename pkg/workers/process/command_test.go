@@ -1,4 +1,4 @@
-package workers
+package process
 
 import (
 	"context"
@@ -286,8 +286,8 @@ func assertLoggingCommandRunnerOutcome(t *testing.T, result CommandResult, err e
 
 func assertLoggingCommandRunnerRequestLog(t *testing.T, fields map[string]any) {
 	t.Helper()
-	if fields["event_name"] != WorkLogEventCommandRunnerRequested {
-		t.Fatalf("request event_name = %#v, want %q", fields["event_name"], WorkLogEventCommandRunnerRequested)
+	if fields["event_name"] != workLogEventCommandRunnerRequested {
+		t.Fatalf("request event_name = %#v, want %q", fields["event_name"], workLogEventCommandRunnerRequested)
 	}
 	if fields["status"] != "requested" {
 		t.Fatalf("request status = %#v, want requested", fields["status"])
@@ -299,8 +299,8 @@ func assertLoggingCommandRunnerRequestLog(t *testing.T, fields map[string]any) {
 
 func assertLoggingCommandRunnerVerboseRequestLog(t *testing.T, fields map[string]any) {
 	t.Helper()
-	if fields["event_name"] != WorkLogEventCommandRunnerRequestDetails {
-		t.Fatalf("verbose request event_name = %#v, want %q", fields["event_name"], WorkLogEventCommandRunnerRequestDetails)
+	if fields["event_name"] != workLogEventCommandRunnerRequestDetails {
+		t.Fatalf("verbose request event_name = %#v, want %q", fields["event_name"], workLogEventCommandRunnerRequestDetails)
 	}
 	if fields["args_count"] != 2 {
 		t.Fatalf("verbose request args_count = %#v, want 2", fields["args_count"])
@@ -312,8 +312,8 @@ func assertLoggingCommandRunnerVerboseRequestLog(t *testing.T, fields map[string
 
 func assertLoggingCommandRunnerCompletionLog(t *testing.T, fields map[string]any, req CommandRequest, tc loggingCommandRunnerCase) {
 	t.Helper()
-	if fields["event_name"] != WorkLogEventCommandRunnerCompleted {
-		t.Fatalf("completion event_name = %#v, want %q", fields["event_name"], WorkLogEventCommandRunnerCompleted)
+	if fields["event_name"] != workLogEventCommandRunnerCompleted {
+		t.Fatalf("completion event_name = %#v, want %q", fields["event_name"], workLogEventCommandRunnerCompleted)
 	}
 	if fields["status"] != tc.wantStatus {
 		t.Fatalf("completion status = %#v, want %q", fields["status"], tc.wantStatus)
@@ -348,8 +348,8 @@ func assertLoggingCommandRunnerCommandData(t *testing.T, fields map[string]any, 
 
 func assertLoggingCommandRunnerVerboseCompletionLog(t *testing.T, fields map[string]any, req CommandRequest) {
 	t.Helper()
-	if fields["event_name"] != WorkLogEventCommandRunnerOutputDetails {
-		t.Fatalf("verbose completion event_name = %#v, want %q", fields["event_name"], WorkLogEventCommandRunnerOutputDetails)
+	if fields["event_name"] != workLogEventCommandRunnerOutputDetails {
+		t.Fatalf("verbose completion event_name = %#v, want %q", fields["event_name"], workLogEventCommandRunnerOutputDetails)
 	}
 	if fields["command"] != req.Command {
 		t.Fatalf("verbose completion command = %#v, want %q", fields["command"], req.Command)
