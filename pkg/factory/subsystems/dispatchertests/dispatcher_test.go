@@ -1,4 +1,4 @@
-package subsystems
+package subsystems_test
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -106,13 +107,13 @@ func TestDispatcher_ExecuteExposesActiveThrottlePausesFromLoweredInferenceThrott
 			},
 		},
 	}
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		&mockScheduler{},
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return now }),
-		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+		subsystems.WithDispatcherClock(func() time.Time { return now }),
+		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
 			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
 		)),
@@ -158,7 +159,7 @@ func TestDispatcher_ExecuteOmitsThrottlePauseObservabilityWithoutAuthoredInferen
 			},
 		},
 	}
-	dispatcher := NewDispatcher(n, &mockScheduler{}, nil, nil, WithDispatcherClock(func() time.Time { return now }))
+	dispatcher := subsystems.NewDispatcher(n, &mockScheduler{}, nil, nil, subsystems.WithDispatcherClock(func() time.Time { return now }))
 
 	result, err := dispatcher.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -195,13 +196,13 @@ func TestDispatcher_ExecuteLeavesLaneRunnableWhenAuthoredThrottleRuntimeLookupIs
 		},
 	}
 	sched := &recordingScheduler{}
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		sched,
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return now }),
-		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig()),
+		subsystems.WithDispatcherClock(func() time.Time { return now }),
+		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig()),
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -271,7 +272,7 @@ func TestDispatcher_PreservesCanonicalChainingLineageWhenLegacyTraceDiffers(t *t
 		},
 	}
 
-	dispatcher := NewDispatcher(n, sched, nil, nil)
+	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
 			"tok1": {
@@ -349,7 +350,7 @@ func TestDispatcher_MultipleDecisionsProcessInOneTick(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(n, sched, nil, nil)
+	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
 
 	markingSnap := makeDispatcherSnapshot(map[string]*interfaces.Token{
 		"tok-a": {ID: "tok-a", PlaceID: "p-init-a", Color: interfaces.TokenColor{WorkID: "w-a", WorkTypeID: "wt"}},
@@ -406,7 +407,7 @@ func TestDispatcher_AllowsRepeatedTransitionWithDistinctTokensInOneTick(t *testi
 			{TransitionID: "process", ConsumeTokens: []string{"tok-b"}, WorkerType: "script"},
 		},
 	}
-	dispatcher := NewDispatcher(n, sched, nil, nil)
+	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
 		"tok-a": {ID: "tok-a", PlaceID: "p-init", Color: interfaces.TokenColor{WorkID: "w-a", WorkTypeID: "task"}},
 		"tok-b": {ID: "tok-b", PlaceID: "p-init", Color: interfaces.TokenColor{WorkID: "w-b", WorkTypeID: "task"}},
@@ -473,7 +474,7 @@ func TestDispatcher_InvalidAndDuplicateDecisionTargetsAreSkipped(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(n, sched, nil, nil)
+	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
 
 	markingSnap := makeDispatcherSnapshot(map[string]*interfaces.Token{
 		"tok-a": {ID: "tok-a", PlaceID: "p-init-a", Color: interfaces.TokenColor{WorkID: "w-a", WorkTypeID: "wt"}},
@@ -533,7 +534,7 @@ func TestDispatcher_AlwaysProducesDispatches(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(n, sched, nil, nil)
+	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
 
 	markingSnap := makeDispatcherSnapshot(map[string]*interfaces.Token{
 		"tok1": {ID: "tok1", PlaceID: "p-init", Color: interfaces.TokenColor{WorkID: "w1", WorkTypeID: "wt-code"}},
@@ -572,7 +573,7 @@ func TestDispatcher_NoEnabledTransitions(t *testing.T) {
 	}
 
 	sched := &mockScheduler{}
-	dispatcher := NewDispatcher(n, sched, nil, nil)
+	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
 
 	markingSnap := makeDispatcherSnapshot(map[string]*interfaces.Token{})
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
@@ -600,7 +601,7 @@ func throttledCompletedDispatch(dispatchID string, transitionID string, endTime 
 	}
 }
 
-func newSingleTransitionDispatchFixture() (*DispatcherSubsystem, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
+func newSingleTransitionDispatchFixture() (*subsystems.DispatcherSubsystem, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
 	n := &state.Net{
 		Places: map[string]*petri.Place{
 			"p-init": {ID: "p-init"},
@@ -621,7 +622,7 @@ func newSingleTransitionDispatchFixture() (*DispatcherSubsystem, *interfaces.Eng
 		},
 	}
 
-	dispatcher := NewDispatcher(n, &mockScheduler{
+	dispatcher := subsystems.NewDispatcher(n, &mockScheduler{
 		decisions: []interfaces.FiringDecision{
 			{TransitionID: "t1", ConsumeTokens: []string{"tok1"}, WorkerType: "script"},
 		},

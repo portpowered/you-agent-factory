@@ -1,4 +1,4 @@
-package subsystems
+package subsystems_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -50,12 +51,12 @@ func TestDispatcher_CronTransitionDispatchesThroughWorkerPathWithTimeToken(t *te
 		},
 	}
 
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		scheduler.NewFIFOScheduler(),
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return currentTime }),
+		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
 	)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
@@ -151,7 +152,7 @@ func TestDispatcher_RepeatedRunsProduceStableDispatchAndTokenSequences(t *testin
 	wantResourceTokens := []string{"slot-a-1", "slot-b-1"}
 
 	for i := 0; i < 10; i++ {
-		dispatcher := NewDispatcher(n, scheduler.NewFIFOScheduler(), nil, nil)
+		dispatcher := subsystems.NewDispatcher(n, scheduler.NewFIFOScheduler(), nil, nil)
 		snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 			Marking: petri.MarkingSnapshot{
 				Tokens: map[string]*interfaces.Token{
@@ -221,12 +222,12 @@ func TestDispatcher_UsesDispatcherClockForCronTimeWindowGuard(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		scheduler.NewFIFOScheduler(),
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return currentTime }),
+		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
 	)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{

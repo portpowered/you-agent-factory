@@ -1,4 +1,4 @@
-package subsystems
+package subsystems_test
 
 import "github.com/portpowered/infinite-you/pkg/interfaces"
 

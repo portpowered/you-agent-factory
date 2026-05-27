@@ -1,4 +1,4 @@
-package subsystems
+package subsystems_test
 
 import (
 	"context"
@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {
 	n := buildTerminationNet()
-	tc := NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
@@ -31,7 +32,7 @@ func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {
 
 func TestTerminationCheck_DoesNotTerminateWithNonTerminalWork(t *testing.T) {
 	n := buildTerminationNet()
-	tc := NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
@@ -51,7 +52,7 @@ func TestTerminationCheck_DoesNotTerminateWithNonTerminalWork(t *testing.T) {
 
 func TestTerminationCheck_TerminatesWhenAllWorkIsTerminal(t *testing.T) {
 	n := buildTerminationNet()
-	tc := NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
@@ -71,7 +72,7 @@ func TestTerminationCheck_TerminatesWhenAllWorkIsTerminal(t *testing.T) {
 
 func TestTerminationCheck_TerminatesWhenAllWorkHasFailed(t *testing.T) {
 	n := buildTerminationNet()
-	tc := NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
@@ -91,7 +92,7 @@ func TestTerminationCheck_TerminatesWhenAllWorkHasFailed(t *testing.T) {
 
 func TestTerminationCheck_DoesNotTerminateWhileDispatchesAreInFlight(t *testing.T) {
 	n := buildTerminationNet()
-	tc := NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		InFlightCount: 1,
@@ -112,7 +113,7 @@ func TestTerminationCheck_DoesNotTerminateWhileDispatchesAreInFlight(t *testing.
 
 func TestTerminationCheck_DoesNotTerminateUntilResourcesReturn(t *testing.T) {
 	n := buildTerminationNet()
-	tc := NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
@@ -131,7 +132,7 @@ func TestTerminationCheck_DoesNotTerminateUntilResourcesReturn(t *testing.T) {
 
 func TestTerminationCheck_ResourcesOnlyTerminates(t *testing.T) {
 	n := buildTerminationNetNoTransitions()
-	tc := NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
@@ -150,7 +151,7 @@ func TestTerminationCheck_ResourcesOnlyTerminates(t *testing.T) {
 
 func TestTerminationCheck_ServiceModeDoesNotTerminateIdleRuntime(t *testing.T) {
 	n := buildTerminationNetNoTransitions()
-	tc := NewTerminationCheck(n, nil, interfaces.RuntimeModeService)
+	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeService)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{

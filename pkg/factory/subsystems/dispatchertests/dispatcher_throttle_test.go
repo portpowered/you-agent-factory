@@ -1,4 +1,4 @@
-package subsystems
+package subsystems_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
@@ -47,13 +48,13 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 	}
 	sched := &recordingScheduler{}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		sched,
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return now }),
-		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+		subsystems.WithDispatcherClock(func() time.Time { return now }),
+		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
 			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
 		)),
@@ -129,7 +130,7 @@ func TestDispatcher_ThrottleHistoryWithoutAuthoredGuardDoesNotFilterEnabledTrans
 	}
 	sched := &recordingScheduler{}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := NewDispatcher(n, sched, nil, nil, WithDispatcherClock(func() time.Time { return now }))
+	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil, subsystems.WithDispatcherClock(func() time.Time { return now }))
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
@@ -199,13 +200,13 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 		},
 	}
 	currentTime := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		sched,
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return currentTime }),
-		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
+		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
 			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
@@ -274,13 +275,13 @@ func TestDispatcher_ThrottlePauseRemainsObservedWhileWindowStaysActive(t *testin
 		},
 	}
 	currentTime := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		&mockScheduler{},
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return currentTime }),
-		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
+		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
 			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
@@ -346,13 +347,13 @@ func TestDispatcher_OverlappingThrottleFailuresExtendPauseWithoutResettingPaused
 	}
 	sched := &mockScheduler{}
 	currentTime := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		sched,
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return currentTime }),
-		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
+		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
 			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
@@ -409,13 +410,13 @@ func TestDispatcher_ThrottlePauseObservedWhenCronTransitionPausedBeforeSchedulin
 		},
 	}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		&mockScheduler{},
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return now }),
-		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+		subsystems.WithDispatcherClock(func() time.Time { return now }),
+		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
 			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
@@ -460,13 +461,13 @@ func TestDispatcher_ThrottlePauseSkipsSchedulerWhenAllEnabledLanesPaused(t *test
 	}
 	sched := &recordingScheduler{}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		sched,
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return now }),
-		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+		subsystems.WithDispatcherClock(func() time.Time { return now }),
+		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
 			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
@@ -516,13 +517,13 @@ func TestDispatcher_ExpiredThrottlePauseObservedWhenSchedulerReturnsNoDecisions(
 		},
 	}
 	currentTime := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		&mockScheduler{},
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return currentTime }),
-		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
+		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
 			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
@@ -604,13 +605,13 @@ func TestDispatcher_ThrottlePauseExcludesPausedLaneBeforeSchedulingSharedResourc
 	}
 	sched := &recordingScheduler{}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		sched,
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return now }),
-		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+		subsystems.WithDispatcherClock(func() time.Time { return now }),
+		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
 			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
 		)),
@@ -676,13 +677,13 @@ func TestDispatcher_AuthoredThrottleGuard_BlocksSiblingTransitionFromRuntimeSnap
 	}
 	sched := &recordingScheduler{}
 	now := time.Date(2026, time.May, 2, 5, 0, 0, 0, time.UTC)
-	dispatcher := NewDispatcher(
+	dispatcher := subsystems.NewDispatcher(
 		n,
 		sched,
 		nil,
 		nil,
-		WithDispatcherClock(func() time.Time { return now }),
-		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+		subsystems.WithDispatcherClock(func() time.Time { return now }),
+		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
 			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
