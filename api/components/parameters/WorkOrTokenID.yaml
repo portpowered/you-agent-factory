@@ -1,0 +1,6 @@
+name: id
+in: path
+required: true
+description: Work or token identifier, depending on route.
+schema:
+  type: string

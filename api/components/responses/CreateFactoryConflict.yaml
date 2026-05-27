@@ -1,0 +1,18 @@
+description: Named factory could not be activated because the name already exists or the current runtime is not idle.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
+    examples:
+      factoryAlreadyExists:
+        summary: Factory name already exists.
+        value:
+          message: Named factory already exists.
+          family: CONFLICT
+          code: FACTORY_ALREADY_EXISTS
+      factoryNotIdle:
+        summary: Runtime is not idle.
+        value:
+          message: Current factory runtime must be idle before activation.
+          family: CONFLICT
+          code: FACTORY_NOT_IDLE

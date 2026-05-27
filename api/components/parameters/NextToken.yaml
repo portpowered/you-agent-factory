@@ -1,0 +1,6 @@
+name: nextToken
+in: query
+required: false
+description: Optional base64-encoded token ID cursor.
+schema:
+  type: string

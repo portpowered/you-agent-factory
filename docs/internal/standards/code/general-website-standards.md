@@ -125,8 +125,7 @@ All UI **MUST** be composed from reusable components with explicit contracts.
 Rules:
 
 - Components **MUST** have clear, typed props and a single understandable responsibility.
-- Repeated UI patterns **MUST** be extracted once they are used in more than one place or are likely to drift.
-- Large components **SHOULD** be split when they mix layout, data access, formatting, and interaction logic in one file.
+- Compound UI **SHOULD** be decomposed into focused child components with explicit props when a parent combines multiple independently understandable controls, regions, or interaction responsibilities. Keep orchestration, state ownership, and data preparation in the parent component or hook, and let child components render one clear piece of UI. Prefer shared chrome and layout primitives for repeated structural patterns, and keep utility surfaces terse: expose the core control, primary action, and necessary state without redundant explanatory copy.
 - Feature components **SHOULD** receive prepared data from hooks or view-model helpers rather than performing dense transformation logic inline.
 - Interactive components **MUST** expose disabled, loading, and error-friendly behavior where applicable.
 - Components for complex interactive surfaces **SHOULD** receive compact action/view-model props rather than many low-level callbacks that expose internal state machinery.
@@ -172,6 +171,7 @@ Rules:
 - Ordinary layout spacing **MUST** use the approved Tailwind spacing scale instead of arbitrary bracket values when styling padding, margin, gap, inset, width or height spacing, border radius, scroll margin or padding, and layout rhythm.
 - Responsive layout changes **MUST** use the approved breakpoint variants instead of custom bracket variants for ordinary mobile, tablet, and desktop behavior.
 - Shared typography, card, button, field, and panel patterns **SHOULD** be centralized and reused.
+- Component-local class name constants such as `CARD_CLASS`, `HEADER_CLASS`, or `ACTION_CLASS` are an anti-pattern when they are only used to keep JSX shorter. Put Tailwind classes directly on the element, using inline `cn(...)` calls when conditional classes or shared typography tokens are needed. Extract a style helper only when it represents a reused variant, shared primitive, or non-trivial state mapping.
 - Visual language **MUST** remain consistent across screens in the same product area.
 - Any lint or static check that enforces token usage **MUST** pass before merge.
 
@@ -214,7 +214,7 @@ Rules:
 - Every interactive control **MUST** be keyboard reachable and operable.
 - Focus indicators **MUST** remain visible and meet contrast expectations.
 - Forms **MUST** provide labels, error messaging, and programmatic relationships between controls and validation text.
-- Icons **MUST** have accessible names when they convey meaning.
+- Icons **MUST** use `lucide-react` when a suitable Lucide icon exists, instead of handwritten inline SVGs or feature-local icon components. Icons **MUST** have accessible names when they convey meaning; decorative icons **MUST** be hidden from assistive technology and paired with text or an accessible label on the owning control.
 - Color **MUST NOT** be the only means of communicating state.
 - Heading order and landmark usage **SHOULD** preserve a sensible document outline.
 - Tables, dialogs, menus, disclosure widgets, and drag interactions **MUST** follow their expected accessibility patterns.

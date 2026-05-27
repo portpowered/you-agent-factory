@@ -1,4 +1,9 @@
-import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
+import type {
+  CSSProperties,
+  HTMLAttributes,
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+} from "react";
 import { createContext, useContext } from "react";
 import {
   Legend as RechartsLegend,
@@ -14,8 +19,8 @@ import type {
   NameType,
   ValueType,
 } from "recharts/types/component/DefaultTooltipContent";
-
 import { cn } from "../../lib/cn";
+import { Button } from "./button";
 
 export interface ChartConfigEntry {
   color: string;
@@ -151,13 +156,25 @@ export function ChartTooltipContent({
 
 export function ChartLegendContent({
   className,
+  getToggleLabel,
+  hiddenSeries = new Set<string>(),
+  onToggleSeries,
   payload,
-}: RechartsLegendContentProps & { className?: string }) {
+}: RechartsLegendContentProps & {
+  className?: string;
+  getToggleLabel?: (label: string, hidden: boolean) => string;
+  hiddenSeries?: ReadonlySet<string>;
+  onToggleSeries?: (key: string) => void;
+}) {
   const config = useChartConfig();
 
   if (!payload?.length) {
     return null;
   }
+
+  const stopChartInteraction = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+  };
 
   return (
     <div
@@ -169,17 +186,55 @@ export function ChartLegendContent({
       {payload.map((entry: LegendPayload) => {
         const key = entry.dataKey?.toString() ?? "";
         const item = config[key];
-
-        return (
-          <div className="flex items-center gap-2" key={key}>
+        const label = item?.label ?? key;
+        const hidden = hiddenSeries.has(key);
+        const content = (
+          <>
             <span
-              className="h-2.5 w-2.5 rounded-full"
+              aria-hidden="true"
+              className={cn(
+                "h-2.5 w-2.5 rounded-full",
+                hidden ? "border border-af-border bg-af-surface-subtle" : "",
+              )}
               style={{
-                backgroundColor: item?.color ?? entry.color ?? "currentColor",
+                backgroundColor: hidden
+                  ? undefined
+                  : (item?.color ?? entry.color ?? "currentColor"),
               }}
             />
-            <span>{item?.label ?? key}</span>
-          </div>
+            <span>{label}</span>
+          </>
+        );
+
+        if (!onToggleSeries) {
+          return (
+            <div className="flex items-center gap-2" key={key}>
+              {content}
+            </div>
+          );
+        }
+
+        return (
+          <Button
+            aria-label={getToggleLabel?.(label, hidden) ?? label}
+            aria-pressed={!hidden}
+            className={cn(
+              "min-h-0 rounded-md border-transparent px-0 py-1 text-left font-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-focus",
+              hidden ? "text-af-text-disabled" : "",
+            )}
+            data-chart-legend-series={key}
+            data-chart-legend-series-hidden={hidden ? "true" : "false"}
+            key={key}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleSeries(key);
+            }}
+            onMouseDown={stopChartInteraction}
+            size="sm"
+            tone="ghost"
+          >
+            {content}
+          </Button>
         );
       })}
     </div>

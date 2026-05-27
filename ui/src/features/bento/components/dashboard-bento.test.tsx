@@ -292,7 +292,7 @@ vi.mock("./agent-bento", () => ({
   ),
 }));
 
-vi.mock("./inline-add-widget-card", () => ({
+vi.mock("../../dashboard-add-card/components/inline-add-widget-card", () => ({
   InlineAddWidgetCard: ({
     onSelectWidget,
   }: {

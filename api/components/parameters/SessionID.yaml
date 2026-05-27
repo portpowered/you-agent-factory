@@ -1,0 +1,6 @@
+name: session_id
+in: path
+required: true
+description: Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly.
+schema:
+  type: string

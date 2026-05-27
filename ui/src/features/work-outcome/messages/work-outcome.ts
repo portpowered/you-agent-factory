@@ -13,6 +13,7 @@ export interface WorkOutcomeMessages {
     emptyTitle: string;
     errorMessage: string;
     errorTitle: string;
+    hideSeriesLabel: (seriesLabel: string) => string;
     loadingMessage: string;
     loadingTitle: string;
     resetZoomAction: string;
@@ -25,6 +26,7 @@ export interface WorkOutcomeMessages {
     };
     seriesPointLabel: (seriesLabel: string, value: number) => string;
     sessionRangeLabel: string;
+    showSeriesLabel: (seriesLabel: string) => string;
     tickLabel: (tick: number) => string;
     workTypeFailureLabel: (workType: string) => string;
     xAxisLabel: string;
@@ -76,6 +78,7 @@ const workOutcomeMessagesByLocale = {
       errorMessage:
         "Chart data is incomplete, so the dashboard cannot draw this work outcome view yet.",
       errorTitle: "Work outcome chart unavailable",
+      hideSeriesLabel: (seriesLabel) => `Hide ${seriesLabel} series`,
       loadingMessage: "Waiting for dashboard timeline data.",
       loadingTitle: "Loading work outcome samples",
       resetZoomAction: "Reset zoom",
@@ -89,6 +92,7 @@ const workOutcomeMessagesByLocale = {
       seriesPointLabel: (seriesLabel, value) =>
         `${seriesLabel}: ${formatNumber(value, "en")}`,
       sessionRangeLabel: "Session",
+      showSeriesLabel: (seriesLabel) => `Show ${seriesLabel} series`,
       tickLabel: (tick) => `Tick ${formatNumber(tick, "en")}`,
       workTypeFailureLabel: (workType) => `Work type: ${workType}`,
       xAxisLabel: "Ticks",
@@ -100,11 +104,13 @@ const workOutcomeMessagesByLocale = {
       causeGroupsLabel: "Cause groups",
       causeGroupsRegionLabel: "Failure cause groups",
       failedInRangeLabel: "Failed in range",
-      failureChartAriaLabel: (rangeLabel) => `Failed work trend for ${rangeLabel}`,
+      failureChartAriaLabel: (rangeLabel) =>
+        `Failed work trend for ${rangeLabel}`,
       failureEmptyMessage:
         "Failure trend data appears after the event stream receives work history.",
       failureEmptyTitle: "No failure samples",
-      failureSummary: "Failed work and cause groups from the selected factory timeline.",
+      failureSummary:
+        "Failed work and cause groups from the selected factory timeline.",
       failureTitle: "Failure trend",
       fastestDurationLabel: "Fastest",
       latestDurationLabel: "Latest",
@@ -113,11 +119,13 @@ const workOutcomeMessagesByLocale = {
       rangeOptionLabel: (_rangeId, defaultLabel) => defaultLabel,
       reworkPointLabel: (dispatchLabel, reworkCount) =>
         `${dispatchLabel}: ${formatNumber(reworkCount, "en")} retry or rework events`,
-      reworkChartAriaLabel: (workLabel) => `Retry and rework trend for ${workLabel}`,
+      reworkChartAriaLabel: (workLabel) =>
+        `Retry and rework trend for ${workLabel}`,
       reworkEmptyMessage:
         "Select active work with retained trace history to see retry activity.",
       reworkEmptyTitle: "No selected trace",
-      reworkSummary: "Reject, retry, or rework activity from the selected work trace.",
+      reworkSummary:
+        "Reject, retry, or rework activity from the selected work trace.",
       reworkTitle: "Retry and rework trend",
       retryOrReworkLabel: "Retry or rework",
       slowestDurationLabel: "Slowest dispatch",
@@ -140,6 +148,7 @@ const workOutcomeMessagesByLocale = {
       emptyTitle: "暂无工作结果样本",
       errorMessage: "图表数据不完整，因此仪表板暂时无法绘制这个工作结果视图。",
       errorTitle: "工作结果图表不可用",
+      hideSeriesLabel: (seriesLabel) => `隐藏${seriesLabel}序列`,
       loadingMessage: "正在等待仪表板时间线数据。",
       loadingTitle: "正在加载工作结果样本",
       resetZoomAction: "重置缩放",
@@ -153,6 +162,7 @@ const workOutcomeMessagesByLocale = {
       seriesPointLabel: (seriesLabel, value) =>
         `${seriesLabel}：${formatNumber(value, "zh-CN")}`,
       sessionRangeLabel: "会话",
+      showSeriesLabel: (seriesLabel) => `显示${seriesLabel}序列`,
       tickLabel: (tick) => `刻度 ${formatNumber(tick, "zh-CN")}`,
       workTypeFailureLabel: (workType) => `工作类型：${workType}`,
       xAxisLabel: "刻度",
@@ -195,7 +205,9 @@ const workOutcomeMessagesByLocale = {
   },
 } satisfies LocalizedMessageCatalog<WorkOutcomeMessages>;
 
-export function getWorkOutcomeMessages(locale?: string | null): WorkOutcomeMessages {
+export function getWorkOutcomeMessages(
+  locale?: string | null,
+): WorkOutcomeMessages {
   return resolveLocalizedMessages(workOutcomeMessagesByLocale, locale);
 }
 

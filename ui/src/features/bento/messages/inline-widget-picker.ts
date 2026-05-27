@@ -4,7 +4,6 @@ import {
 } from "../../../i18n";
 import {
   DASHBOARD_WIDGET_PICKER_WIDGET_TYPES,
-  type DashboardWidgetPickerAvailability,
   type DashboardWidgetPickerWidgetType,
 } from "../lib/dashboard-widget-picker";
 
@@ -33,34 +32,41 @@ const inlineWidgetPickerMessagesByLocale = {
   en: {
     addedState: "Already on dashboard",
     closeLabel: "Close widget picker",
-    description: "Choose from the dashboard widgets available for inline management.",
+    description:
+      "Choose from the dashboard widgets available for inline management.",
     dismissAction: "Close",
     duplicateBadge: "Duplicate allowed",
     enabledState: "Add widget",
     openAction: "Browse widgets",
     options: {
       "current-selection": {
-        description: "Keep the active work, node, and trace context visible while you explore the factory.",
+        description:
+          "Keep the active work, node, and trace context visible while you explore the factory.",
         title: "Current selection",
       },
       "provider-session": {
-        description: "Follow the selected provider session without leaving the dashboard grid.",
+        description:
+          "Follow the selected provider session without leaving the dashboard grid.",
         title: "Provider session",
       },
       "submit-work": {
-        description: "Create new work requests directly from the dashboard surface.",
+        description:
+          "Create new work requests directly from the dashboard surface.",
         title: "Submit work",
       },
       "terminal-work": {
-        description: "Review finished and failed work items in one compact list.",
+        description:
+          "Review finished and failed work items in one compact list.",
         title: "Terminal work",
       },
       trace: {
-        description: "Inspect trace details and related state transitions inline.",
+        description:
+          "Inspect trace details and related state transitions inline.",
         title: "Trace drilldown",
       },
       "work-graph": {
-        description: "Watch workflow activity and navigate the graph from the main dashboard board.",
+        description:
+          "Watch workflow activity and navigate the graph from the main dashboard board.",
         title: "Workflow activity",
       },
       "work-outcome-chart": {
@@ -68,7 +74,8 @@ const inlineWidgetPickerMessagesByLocale = {
         title: "Work outcome chart",
       },
       "work-totals": {
-        description: "Track headline counts for dispatched, completed, and failed work.",
+        description:
+          "Track headline counts for dispatched, completed, and failed work.",
         title: "Work totals",
       },
     },
@@ -140,22 +147,6 @@ export function getInlineWidgetPickerOptions(locale?: string | null): Array<{
     title: messages.options[widgetType].title,
     widgetType,
   }));
-}
-
-export function getInlineWidgetPickerStatus(
-  availability: DashboardWidgetPickerAvailability,
-  locale?: string | null,
-): string {
-  const messages = getInlineWidgetPickerMessages(locale);
-  if (availability.enabled) {
-    return availability.duplicateCapable
-      ? messages.duplicateBadge
-      : messages.enabledState;
-  }
-
-  return availability.duplicateCapable
-    ? messages.duplicateBadge
-    : messages.addedState;
 }
 
 export { inlineWidgetPickerMessagesByLocale };

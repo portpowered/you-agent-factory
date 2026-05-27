@@ -153,7 +153,7 @@ export function formatTypedWorkItemLabel(
     return `"${name}"`;
   }
 
-  return `${workType}:"${name}"`;
+  return `(${workType}):${name}`;
 }
 
 export function formatTraceOutcome(

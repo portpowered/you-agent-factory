@@ -47,7 +47,7 @@ import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
 
 const TRACE_EXPANDER_HEADER_CLASS =
-  "flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2";
+  "flex items-center justify-between gap-3  py-sm rounded-lg ";
 const TRACE_EXPANDER_TOGGLE_CLASS = "min-h-9 shrink-0 px-2.5 py-2";
 const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-48";
 // tailwind-exception: intrinsic-sizing
@@ -190,7 +190,6 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           <dd>{trace.dispatches.length}</dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.workItemsLabel}</dt>
           <dd>
             {workItems.length > 0 ? (
               <Collapsible
@@ -215,7 +214,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
                           DASHBOARD_SUPPORTING_LABEL_CLASS,
                         )}
                         size="sm"
-                        tone="secondary"
+                        tone="outline"
                       >
                         {messages.workItemsExpandLabel(workItemsExpanded)}
                       </Button>
@@ -354,7 +353,7 @@ function SelectableWorkList({
               onClick={() => onSelectWorkID(workItem.work_id)}
               size="sm"
               title={workItem.work_id}
-              tone="secondary"
+              tone="outline"
             >
               {formatTypedWorkItemLabel(workItem)}
             </Button>
