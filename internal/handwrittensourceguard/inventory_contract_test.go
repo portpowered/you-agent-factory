@@ -1,4 +1,4 @@
-package testutil
+package handwrittensourceguard
 
 import (
 	"path/filepath"
@@ -8,7 +8,7 @@ import (
 func TestHandwrittenSourceGuardInventory_CoversTargetedGuardsAndClassifications(t *testing.T) {
 	t.Parallel()
 
-	inventory := HandwrittenSourceGuardInventory()
+	inventory := Inventory()
 	if len(inventory) != 5 {
 		t.Fatalf("inventory entries = %d, want 5 targeted handwritten-source guards", len(inventory))
 	}
@@ -29,7 +29,7 @@ func TestHandwrittenSourceGuardInventory_CoversTargetedGuardsAndClassifications(
 
 		var hasHandwritten bool
 		for _, rule := range entry.Rules {
-			if rule.Class == HandwrittenSourcePathClassScanHandwritten {
+			if rule.Class == PathClassScanHandwritten {
 				hasHandwritten = true
 			}
 			if rule.Path == "" || rule.Why == "" {
@@ -49,7 +49,7 @@ func TestHandwrittenSourceGuardInventory_CoversTargetedGuardsAndClassifications(
 func TestHandwrittenSourceGuardInventory_RecordsHiddenAndGeneratedExclusionsForBroadWalkers(t *testing.T) {
 	t.Parallel()
 
-	inventory := HandwrittenSourceGuardInventory()
+	inventory := Inventory()
 	for _, entry := range inventory {
 		if entry.WalkRoot != "repo-root" && entry.WalkRoot != "pkg" {
 			continue
@@ -59,9 +59,9 @@ func TestHandwrittenSourceGuardInventory_RecordsHiddenAndGeneratedExclusionsForB
 		var hasHidden bool
 		for _, rule := range entry.Rules {
 			switch rule.Class {
-			case HandwrittenSourcePathClassExcludeGenerated:
+			case PathClassExcludeGenerated:
 				hasGenerated = true
-			case HandwrittenSourcePathClassExcludeHiddenRoot:
+			case PathClassExcludeHiddenRoot:
 				hasHidden = true
 			}
 		}
@@ -79,24 +79,24 @@ func TestShouldSkipHandwrittenSourceDir_UsesInventoryGeneratedAndHiddenRules(t *
 	t.Parallel()
 
 	repoRoot := filepath.Join("repo", "root")
-	if !ShouldSkipHandwrittenSourceDir("pkg/petri/transition_contract_guard_test.go", repoRoot, filepath.Join(repoRoot, ".claude", "worktrees")) {
+	if !ShouldSkipDir("pkg/petri/transition_contract_guard_test.go", repoRoot, filepath.Join(repoRoot, ".claude", "worktrees")) {
 		t.Fatal("repo-root handwritten-source guard must skip hidden metadata directories")
 	}
-	if !ShouldSkipHandwrittenSourceDir("pkg/petri/transition_contract_guard_test.go", repoRoot, filepath.Join(repoRoot, "pkg", "api", "generated")) {
+	if !ShouldSkipDir("pkg/petri/transition_contract_guard_test.go", repoRoot, filepath.Join(repoRoot, "pkg", "api", "generated")) {
 		t.Fatal("repo-root handwritten-source guard must skip generated API output")
 	}
-	if ShouldSkipHandwrittenSourceDir("pkg/petri/transition_contract_guard_test.go", repoRoot, filepath.Join(repoRoot, "pkg", "petri")) {
+	if ShouldSkipDir("pkg/petri/transition_contract_guard_test.go", repoRoot, filepath.Join(repoRoot, "pkg", "petri")) {
 		t.Fatal("repo-root handwritten-source guard must keep handwritten source directories")
 	}
 
 	pkgRoot := filepath.Join("repo", "root", "pkg")
-	if !ShouldSkipHandwrittenSourceDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", pkgRoot, filepath.Join(pkgRoot, "api", "generated")) {
+	if !ShouldSkipDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", pkgRoot, filepath.Join(pkgRoot, "api", "generated")) {
 		t.Fatal("pkg-root handwritten-source guard must skip generated API output")
 	}
-	if !ShouldSkipHandwrittenSourceDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", pkgRoot, filepath.Join(pkgRoot, ".cache")) {
+	if !ShouldSkipDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", pkgRoot, filepath.Join(pkgRoot, ".cache")) {
 		t.Fatal("pkg-root handwritten-source guard must skip hidden directories")
 	}
-	if ShouldSkipHandwrittenSourceDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", pkgRoot, filepath.Join(pkgRoot, "interfaces")) {
+	if ShouldSkipDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", pkgRoot, filepath.Join(pkgRoot, "interfaces")) {
 		t.Fatal("pkg-root handwritten-source guard must keep handwritten package directories")
 	}
 }

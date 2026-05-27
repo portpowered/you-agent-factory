@@ -1,4 +1,4 @@
-package testutil
+package testpath
 
 import (
 	"os"
@@ -6,15 +6,13 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/portpowered/infinite-you/internal/testpath"
 )
 
 func TestArtifactContractInventory_CheckedInExistsAndObsoleteStaysAbsent(t *testing.T) {
 	t.Parallel()
 
-	repoRoot := MustRepoRoot(t)
-	for _, entry := range testpath.ArtifactContractInventory() {
+	repoRoot := mustRepoRootFromWorkingDir(t)
+	for _, entry := range ArtifactContractInventory() {
 		path := filepath.Join(repoRoot, filepath.FromSlash(entry.Path))
 		_, err := os.Stat(path)
 		switch entry.Classification {
@@ -36,8 +34,8 @@ func TestArtifactContractInventory_CheckedInExistsAndObsoleteStaysAbsent(t *test
 func TestArtifactContractInventory_CanonicalMaintainerBacklogSurfaceIsSingular(t *testing.T) {
 	t.Parallel()
 
-	repoRoot := MustRepoRoot(t)
-	inventory := testpath.ArtifactContractInventory()
+	repoRoot := mustRepoRootFromWorkingDir(t)
+	inventory := ArtifactContractInventory()
 	got := checkedInMaintainerPaths(inventory)
 	want := []string{
 		"factory/internal/asks.md",
@@ -81,7 +79,7 @@ func TestArtifactContractInventory_CanonicalMaintainerBacklogSurfaceIsSingular(t
 	}
 }
 
-func checkedInMaintainerPaths(entries []testpath.ArtifactContractEntry) []string {
+func checkedInMaintainerPaths(entries []ArtifactContractEntry) []string {
 	paths := make([]string, 0, 4)
 	for _, entry := range entries {
 		if entry.Classification != "checked_in" {
@@ -99,11 +97,30 @@ func checkedInMaintainerPaths(entries []testpath.ArtifactContractEntry) []string
 	return paths
 }
 
-func classificationForPath(entries []testpath.ArtifactContractEntry, path string) string {
+func classificationForPath(entries []ArtifactContractEntry, path string) string {
 	for _, entry := range entries {
 		if entry.Path == path {
 			return entry.Classification
 		}
 	}
 	return ""
+}
+
+func mustRepoRootFromWorkingDir(t *testing.T) string {
+	t.Helper()
+
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	for {
+		if isRepoRoot(dir) {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("could not find repo root from %s", dir)
+		}
+		dir = parent
+	}
 }
