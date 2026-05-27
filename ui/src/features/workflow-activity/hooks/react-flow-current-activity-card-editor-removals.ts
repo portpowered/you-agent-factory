@@ -14,14 +14,14 @@ export function useFactoryGraphRemovalController({
   activeTool,
   canInteractWithEditor,
   draftState,
+  locale,
   saveEditableDefinition,
 }: {
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
-  saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentFactory
-  >;
+  locale?: string;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
 }) {
   const {
     blockedRemovalReason,
@@ -29,12 +29,13 @@ export function useFactoryGraphRemovalController({
     setBlockedRemovalReason,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
-  } = usePendingRemovalIntentState(draftState);
+  } = usePendingRemovalIntentState(draftState, locale);
   const { handleEditorEdgeDelete, handleEditorNodeDelete } =
     useFactoryGraphDeleteTargetHandlers({
       activeTool,
       canInteractWithEditor,
       draftState,
+      locale,
       saveEditableDefinition,
       setBlockedRemovalReason,
       setPendingRemovalEdgeId,
@@ -91,6 +92,7 @@ function useFactoryGraphDeleteTargetHandlers({
   activeTool,
   canInteractWithEditor,
   draftState,
+  locale,
   saveEditableDefinition,
   setBlockedRemovalReason,
   setPendingRemovalEdgeId,
@@ -99,9 +101,8 @@ function useFactoryGraphDeleteTargetHandlers({
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
-  saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentFactory
-  >;
+  locale?: string;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
   setBlockedRemovalReason: (reason: string | null) => void;
   setPendingRemovalEdgeId: (edgeId: string | null) => void;
   setPendingRemovalNodeId: (nodeId: string | null) => void;
@@ -119,6 +120,7 @@ function useFactoryGraphDeleteTargetHandlers({
       const intent = buildFactoryGraphRemovalIntent({
         baseFactoryDefinition: draftState.latestDocument,
         draft: draftState.draft,
+        locale,
         nodeId,
       });
       if (!intent) {
@@ -140,6 +142,7 @@ function useFactoryGraphDeleteTargetHandlers({
       canInteractWithEditor,
       draftState.draft,
       draftState.latestDocument,
+      locale,
       saveEditableDefinition,
       setBlockedRemovalReason,
       setPendingRemovalEdgeId,
@@ -160,6 +163,7 @@ function useFactoryGraphDeleteTargetHandlers({
         baseFactoryDefinition: draftState.latestDocument,
         draft: draftState.draft,
         edgeId,
+        locale,
       });
       if (!intent) {
         return;
@@ -180,6 +184,7 @@ function useFactoryGraphDeleteTargetHandlers({
       canInteractWithEditor,
       draftState.draft,
       draftState.latestDocument,
+      locale,
       saveEditableDefinition,
       setBlockedRemovalReason,
       setPendingRemovalEdgeId,
@@ -195,6 +200,7 @@ function useFactoryGraphDeleteTargetHandlers({
 
 function usePendingRemovalIntentState(
   draftState: ReturnType<typeof useFactoryGraphDraftState>,
+  locale?: string,
 ) {
   const [pendingRemovalNodeId, setPendingRemovalNodeId] = useState<
     string | null
@@ -210,6 +216,7 @@ function usePendingRemovalIntentState(
       ? buildFactoryGraphRemovalIntent({
           baseFactoryDefinition: draftState.latestDocument,
           draft: draftState.draft,
+          locale,
           nodeId: pendingRemovalNodeId,
         })
       : null;
@@ -219,6 +226,7 @@ function usePendingRemovalIntentState(
           baseFactoryDefinition: draftState.latestDocument,
           draft: draftState.draft,
           edgeId: pendingRemovalEdgeId,
+          locale,
         })
       : null;
 

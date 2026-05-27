@@ -70,6 +70,15 @@ describe("factory graph editor edge removal copy", () => {
     expect(describeEdgeLabel(graphEdge)).toBe(expectedLabel);
     expect(buildEdgeRemovalDescription(graphEdge)).toBe(expectedDescription);
   });
+
+  it("describes destructive edge removal copy in a non-default locale", () => {
+    const graphEdge = edge("worker-assignment", workerKey, workstationKey);
+
+    expect(describeEdgeLabel(graphEdge, "zh-CN")).toBe("writer 分配");
+    expect(buildEdgeRemovalDescription(graphEdge, "zh-CN")).toBe(
+      "这会将 writer 从 review 取消分配。该工作站需要另一个工作者后拓扑保存才能成功。",
+    );
+  });
 });
 
 function edge(

@@ -9,10 +9,12 @@ import type {
 import { buildNode, nodeKeyId } from "./factory-graph-draft-types";
 import { buildDraftAppliedFactoryDefinition } from "./factory-graph-draft-apply";
 import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 export function validateFactoryGraphDraft(
   baseFactoryDefinition: CanonicalFactoryDefinition,
   draft: FactoryGraphDraft,
+  locale?: string | null,
 ): FactoryGraphDraftValidationError[] {
   const errors: FactoryGraphDraftValidationError[] = [];
   const pendingFactoryDefinition = buildDraftAppliedFactoryDefinition(
@@ -27,28 +29,28 @@ export function validateFactoryGraphDraft(
   seedRemovalEdgeNodes(draft, nodeIndex);
 
   for (const resource of draft.additions.resources) {
-    validateRequiredName(resource.name, "resource", errors);
+    validateRequiredName(resource.name, "resource", errors, locale);
   }
   for (const worker of draft.additions.workers) {
-    validateRequiredName(worker.name, "worker", errors);
+    validateRequiredName(worker.name, "worker", errors, locale);
   }
   for (const workType of draft.additions.workTypes) {
-    validateRequiredName(workType.name, "work-type", errors);
+    validateRequiredName(workType.name, "work-type", errors, locale);
   }
   for (const workstation of draft.additions.workstations) {
-    validateRequiredName(workstation.name, "workstation", errors);
+    validateRequiredName(workstation.name, "workstation", errors, locale);
     if (workstation.worker.trim().length === 0) {
-      errors.push(missingWorkerError(workstation.name));
+      errors.push(missingWorkerError(workstation.name, locale));
     }
   }
   for (const workState of draft.additions.workStates) {
-    validateRequiredName(workState.state.name, "work-state", errors);
-    validateRequiredName(workState.workTypeName, "work-type", errors);
+    validateRequiredName(workState.state.name, "work-state", errors, locale);
+    validateRequiredName(workState.workTypeName, "work-type", errors, locale);
   }
 
-  validateDuplicateIdentifiers(pendingFactoryDefinition, errors);
-  validateEdgeChanges(draft, nodeIndex, errors);
-  validateFinalWorkerAssignments(pendingFactoryDefinition, errors);
+  validateDuplicateIdentifiers(pendingFactoryDefinition, errors, locale);
+  validateEdgeChanges(draft, nodeIndex, errors, locale);
+  validateFinalWorkerAssignments(pendingFactoryDefinition, errors, locale);
 
   return dedupeValidationErrors(errors);
 }
@@ -56,7 +58,9 @@ export function validateFactoryGraphDraft(
 function validateDuplicateIdentifiers(
   factoryDefinition: CanonicalFactoryDefinition,
   errors: FactoryGraphDraftValidationError[],
+  locale?: string | null,
 ) {
+  const messages = getFactoryGraphEditorMessages(locale);
   const countsById = new Map<string, number>();
 
   for (const nodeId of collectFactoryGraphNodeIds(factoryDefinition)) {
@@ -67,7 +71,7 @@ function validateDuplicateIdentifiers(
     if (count > 1) {
       errors.push({
         code: "DUPLICATE_IDENTIFIER",
-        message: `Duplicate graph identifier "${nodeId}" is not allowed.`,
+        message: messages.validationDuplicateIdentifier(nodeId),
         target: {
           kind: "node",
           id: nodeId,
@@ -81,12 +85,13 @@ function validateEdgeChanges(
   draft: FactoryGraphDraft,
   nodeIndex: Map<string, FactoryGraphNode>,
   errors: FactoryGraphDraftValidationError[],
+  locale?: string | null,
 ) {
   for (const edgeChange of draft.edgeChanges.additions) {
-    validateEdgeChange(edgeChange, nodeIndex, errors);
+    validateEdgeChange(edgeChange, nodeIndex, errors, locale);
   }
   for (const edgeChange of draft.edgeChanges.removals) {
-    validateEdgeChange(edgeChange, nodeIndex, errors);
+    validateEdgeChange(edgeChange, nodeIndex, errors, locale);
   }
 }
 
@@ -110,10 +115,11 @@ function seedRemovalEdgeNodes(
 function validateFinalWorkerAssignments(
   pendingFactoryDefinition: CanonicalFactoryDefinition,
   errors: FactoryGraphDraftValidationError[],
+  locale?: string | null,
 ) {
   for (const workstation of pendingFactoryDefinition.workstations ?? []) {
     if (workstation.worker.trim().length === 0) {
-      errors.push(missingWorkerError(workstation.name));
+      errors.push(missingWorkerError(workstation.name, locale));
     }
   }
 }
@@ -122,14 +128,16 @@ function validateRequiredName(
   value: string,
   kind: FactoryGraphNodeKind,
   errors: FactoryGraphDraftValidationError[],
+  locale?: string | null,
 ) {
   if (value.trim().length > 0) {
     return;
   }
+  const messages = getFactoryGraphEditorMessages(locale);
   errors.push({
     code: "MISSING_REQUIRED_FIELD",
     field: "name",
-    message: `${kind} identifiers are required before save.`,
+    message: messages.validationMissingRequiredIdentifier(kind),
     target: {
       kind: "field",
       field: `${kind}.name`,
@@ -141,24 +149,31 @@ function validateEdgeChange(
   edgeChange: FactoryGraphDraftEdgeChange,
   nodeIndex: Map<string, FactoryGraphNode>,
   errors: FactoryGraphDraftValidationError[],
+  locale?: string | null,
 ) {
+  const messages = getFactoryGraphEditorMessages(locale);
   const source = nodeIndex.get(nodeKeyId(edgeChange.source));
   const target = nodeIndex.get(nodeKeyId(edgeChange.target));
-  const relationshipId =
-    `${edgeChange.kind}:${nodeKeyId(edgeChange.source)}->${nodeKeyId(edgeChange.target)}`;
+  const relationshipId = `${edgeChange.kind}:${nodeKeyId(edgeChange.source)}->${nodeKeyId(edgeChange.target)}`;
 
   if (!source) {
-    errors.push(unknownEdgeNodeError(relationshipId, "source"));
+    errors.push(unknownEdgeNodeError(relationshipId, "source", locale));
     return;
   }
   if (!target) {
-    errors.push(unknownEdgeNodeError(relationshipId, "target"));
+    errors.push(unknownEdgeNodeError(relationshipId, "target", locale));
     return;
   }
-  if (!edgeKindsByNodeKinds(source.kind, target.kind).includes(edgeChange.kind)) {
+  if (
+    !edgeKindsByNodeKinds(source.kind, target.kind).includes(edgeChange.kind)
+  ) {
     errors.push({
       code: "INCOMPATIBLE_EDGE",
-      message: `Relationship "${edgeChange.kind}" cannot connect ${source.kind} to ${target.kind}.`,
+      message: messages.validationIncompatibleEdge(
+        edgeChange.kind,
+        source.kind,
+        target.kind,
+      ),
       target: { kind: "edge", id: relationshipId },
     });
   }
@@ -257,11 +272,13 @@ function collectFactoryGraphNodeIds(
 
 function missingWorkerError(
   workstationName: string,
+  locale?: string | null,
 ): FactoryGraphDraftValidationError {
+  const messages = getFactoryGraphEditorMessages(locale);
   return {
     code: "MISSING_REQUIRED_FIELD",
     field: "worker",
-    message: `Workstation "${workstationName}" must keep one worker assignment.`,
+    message: messages.validationMissingWorkerAssignment(workstationName),
     target: {
       kind: "node",
       id: nodeKeyId({
@@ -275,10 +292,12 @@ function missingWorkerError(
 function unknownEdgeNodeError(
   relationshipId: string,
   which: "source" | "target",
+  locale?: string | null,
 ): FactoryGraphDraftValidationError {
+  const messages = getFactoryGraphEditorMessages(locale);
   return {
     code: "UNKNOWN_NODE",
-    message: `Relationship "${relationshipId}" references an unknown ${which} node.`,
+    message: messages.validationUnknownEdgeNode(relationshipId, which),
     target: { kind: "edge", id: relationshipId },
   };
 }

@@ -4,6 +4,7 @@ import {
   buildEdgeRemovalDescription,
   describeEdgeLabel,
 } from "./factory-graph-editor-edge-removal-copy";
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -40,14 +41,21 @@ export interface FactoryGraphEdgeRemovalIntent {
 export function buildFactoryGraphRemovalIntent(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
+  locale?: string | null;
   nodeId: string;
 }): FactoryGraphRemovalIntent | null {
+  const messages = getFactoryGraphEditorMessages(options.locale);
   const currentFactoryDefinition =
-    buildPendingFactoryDefinition(options.baseFactoryDefinition, options.draft) ??
-    options.baseFactoryDefinition;
-  const currentTopology =
-    buildFactoryGraphTopologyFromDefinition(currentFactoryDefinition);
-  const node = currentTopology.nodes.find((entry) => entry.id === options.nodeId);
+    buildPendingFactoryDefinition(
+      options.baseFactoryDefinition,
+      options.draft,
+    ) ?? options.baseFactoryDefinition;
+  const currentTopology = buildFactoryGraphTopologyFromDefinition(
+    currentFactoryDefinition,
+  );
+  const node = currentTopology.nodes.find(
+    (entry) => entry.id === options.nodeId,
+  );
 
   if (!node || !REMOVABLE_NODE_KINDS.has(node.kind)) {
     return null;
@@ -63,24 +71,23 @@ export function buildFactoryGraphRemovalIntent(options: {
     node.kind === "work-type" && node.key.kind === "work-type"
       ? node.key.name
       : null;
-  const impactedStateCount =
-    removedWorkTypeName
-      ? currentTopology.nodes.filter(
-          (entry) =>
-            entry.kind === "work-state" &&
-            entry.key.kind === "work-state" &&
-            entry.key.workTypeName === removedWorkTypeName,
-        ).length
-      : 0;
+  const impactedStateCount = removedWorkTypeName
+    ? currentTopology.nodes.filter(
+        (entry) =>
+          entry.kind === "work-state" &&
+          entry.key.kind === "work-state" &&
+          entry.key.workTypeName === removedWorkTypeName,
+      ).length
+    : 0;
 
   if (node.kind === "worker" && workstationAssignments.length > 0) {
     return {
       confirmDescription: "",
       confirmLabel: "",
-      ineligibleReason: `This worker is still assigned to ${pluralize(
+      ineligibleReason: messages.removalWorkerAssignedReason(
         workstationAssignments.length,
-        "workstation",
-      )}. Reassign or remove those workstations before deleting ${node.label}.`,
+        node.label,
+      ),
       key: node.key,
       title: "",
     };
@@ -92,10 +99,11 @@ export function buildFactoryGraphRemovalIntent(options: {
       node.label,
       connectedEdges.length,
       impactedStateCount,
+      options.locale,
     ),
-    confirmLabel: `Delete ${node.label} ${node.kind}`,
+    confirmLabel: messages.removalEntityConfirmLabel(node.label, node.kind),
     key: node.key,
-    title: `Remove ${node.label} ${node.kind}?`,
+    title: messages.removalEntityTitle(node.label, node.kind),
   };
 }
 
@@ -121,13 +129,20 @@ export function buildFactoryGraphEdgeRemovalIntent(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
   edgeId: string;
+  locale?: string | null;
 }): FactoryGraphEdgeRemovalIntent | null {
+  const messages = getFactoryGraphEditorMessages(options.locale);
   const currentFactoryDefinition =
-    buildPendingFactoryDefinition(options.baseFactoryDefinition, options.draft) ??
-    options.baseFactoryDefinition;
-  const currentTopology =
-    buildFactoryGraphTopologyFromDefinition(currentFactoryDefinition);
-  const edge = currentTopology.edges.find((entry) => entry.id === options.edgeId);
+    buildPendingFactoryDefinition(
+      options.baseFactoryDefinition,
+      options.draft,
+    ) ?? options.baseFactoryDefinition;
+  const currentTopology = buildFactoryGraphTopologyFromDefinition(
+    currentFactoryDefinition,
+  );
+  const edge = currentTopology.edges.find(
+    (entry) => entry.id === options.edgeId,
+  );
 
   if (!edge) {
     return null;
@@ -137,17 +152,17 @@ export function buildFactoryGraphEdgeRemovalIntent(options: {
       confirmDescription: "",
       confirmLabel: "",
       edge,
-      ineligibleReason:
-        "Work type ordering edges are managed by work-state membership and cannot be removed directly.",
+      ineligibleReason: messages.removalEdgeIneligibleWorkTypeState,
       title: "",
     };
   }
 
+  const edgeLabel = describeEdgeLabel(edge, options.locale);
   return {
-    confirmDescription: buildEdgeRemovalDescription(edge),
-    confirmLabel: `Remove ${describeEdgeLabel(edge)}`,
+    confirmDescription: buildEdgeRemovalDescription(edge, options.locale),
+    confirmLabel: messages.removalEdgeConfirmLabel(edgeLabel),
     edge,
-    title: `Remove ${describeEdgeLabel(edge)}?`,
+    title: messages.removalEdgeTitle(edgeLabel),
   };
 }
 
@@ -198,9 +213,14 @@ export function collectPendingRemovalEdgeIds(
   baseFactoryDefinition: CanonicalFactoryDefinition,
   draft: FactoryGraphDraft,
 ): Set<string> {
-  const pendingNodeIds = collectPendingRemovalNodeIds(baseFactoryDefinition, draft);
+  const pendingNodeIds = collectPendingRemovalNodeIds(
+    baseFactoryDefinition,
+    draft,
+  );
   const pendingEdgeIds = new Set<string>();
-  const baseTopology = buildFactoryGraphTopologyFromDefinition(baseFactoryDefinition);
+  const baseTopology = buildFactoryGraphTopologyFromDefinition(
+    baseFactoryDefinition,
+  );
 
   for (const edge of baseTopology.edges) {
     if (
@@ -215,7 +235,10 @@ export function collectPendingRemovalEdgeIds(
   return pendingEdgeIds;
 }
 
-function removeDraftAddition(draft: FactoryGraphDraft, key: FactoryGraphNodeKey) {
+function removeDraftAddition(
+  draft: FactoryGraphDraft,
+  key: FactoryGraphNodeKey,
+) {
   switch (key.kind) {
     case "resource":
       draft.additions.resources = draft.additions.resources.filter(
@@ -259,7 +282,10 @@ function addDraftRemoval(
   switch (key.kind) {
     case "resource":
       if (entityExists(baseFactoryDefinition.resources, key.name)) {
-        draft.removals.resources = appendUnique(draft.removals.resources, key.name);
+        draft.removals.resources = appendUnique(
+          draft.removals.resources,
+          key.name,
+        );
       }
       return;
     case "worker":
@@ -269,7 +295,10 @@ function addDraftRemoval(
       return;
     case "work-type":
       if (entityExists(baseFactoryDefinition.workTypes, key.name)) {
-        draft.removals.workTypes = appendUnique(draft.removals.workTypes, key.name);
+        draft.removals.workTypes = appendUnique(
+          draft.removals.workTypes,
+          key.name,
+        );
       }
       return;
     case "work-state":
@@ -300,7 +329,10 @@ function addDraftRemoval(
   }
 }
 
-function pruneEdgeChangesForNode(draft: FactoryGraphDraft, key: FactoryGraphNodeKey) {
+function pruneEdgeChangesForNode(
+  draft: FactoryGraphDraft,
+  key: FactoryGraphNodeKey,
+) {
   draft.edgeChanges.additions = draft.edgeChanges.additions.filter(
     (edge) => !edgeTouchesNode(edge, key),
   );
@@ -314,8 +346,9 @@ function addRelationshipRemovals(
   currentFactoryDefinition: CanonicalFactoryDefinition,
   key: FactoryGraphNodeKey,
 ) {
-  const currentTopology =
-    buildFactoryGraphTopologyFromDefinition(currentFactoryDefinition);
+  const currentTopology = buildFactoryGraphTopologyFromDefinition(
+    currentFactoryDefinition,
+  );
 
   for (const edge of currentTopology.edges) {
     if (!shouldRemoveEdgeForNode(edge, key)) {
@@ -335,7 +368,10 @@ function addRelationshipRemovals(
   }
 }
 
-function shouldRemoveEdgeForNode(edge: FactoryGraphEdge, key: FactoryGraphNodeKey) {
+function shouldRemoveEdgeForNode(
+  edge: FactoryGraphEdge,
+  key: FactoryGraphNodeKey,
+) {
   if (key.kind === "workstation") {
     return false;
   }
@@ -389,7 +425,10 @@ function nodeKeyMatches(left: FactoryGraphNodeKey, right: FactoryGraphNodeKey) {
   return nodeKeyId(left) === nodeKeyId(right);
 }
 
-function entityExists<T extends { name: string }>(items: T[] | undefined, name: string) {
+function entityExists<T extends { name: string }>(
+  items: T[] | undefined,
+  name: string,
+) {
   return items?.some((item) => item.name === name) ?? false;
 }
 
@@ -397,7 +436,11 @@ function appendUnique<T>(items: T[], value: T): T[] {
   return items.includes(value) ? items : [...items, value];
 }
 
-function appendUniqueBy<T>(items: T[], value: T, getKey: (value: T) => string): T[] {
+function appendUniqueBy<T>(
+  items: T[],
+  value: T,
+  getKey: (value: T) => string,
+): T[] {
   const valueKey = getKey(value);
   return items.some((item) => getKey(item) === valueKey)
     ? items
@@ -409,30 +452,13 @@ function buildRemovalDescription(
   label: string,
   connectedEdgeCount: number,
   impactedStateCount: number,
+  locale?: string | null,
 ) {
-  const edgeSummary =
-    connectedEdgeCount > 0
-      ? `This will remove ${pluralize(connectedEdgeCount, "graph edge")}.`
-      : "This entity has no connected graph edges to remove.";
-
-  if (kind === "work-type") {
-    return `${edgeSummary} ${label} also owns ${pluralize(
-      impactedStateCount,
-      "work state",
-    )}, which will be removed with it.`;
-  }
-
-  if (kind === "work-state") {
-    return `${edgeSummary} Any workstation routes that reference ${label} will be cleared from the pending draft.`;
-  }
-
-  if (kind === "resource") {
-    return `${edgeSummary} Worker and workstation resource references that depend on ${label} will be cleared from the pending draft.`;
-  }
-
-  return edgeSummary;
-}
-
-function pluralize(count: number, noun: string) {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+  const messages = getFactoryGraphEditorMessages(locale);
+  return messages.removalDescription({
+    connectedEdgeCount,
+    impactedStateCount,
+    kind,
+    label,
+  });
 }

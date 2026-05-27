@@ -329,7 +329,7 @@ export function useCurrentActivityGraphViewModel({
 export function ReactFlowCurrentActivityCard(
   props: ReactFlowCurrentActivityCardProps,
 ) {
-  const editor = useCurrentActivityGraphEditor(props.snapshot);
+  const editor = useCurrentActivityGraphEditor(props.snapshot, props.locale);
   return (
     <ReactFlowCurrentActivityCardView
       {...props}
@@ -386,7 +386,10 @@ export function ReactFlowCurrentActivityCardView(
         </div>
       ) : null}
       {showHeaderActions ? (
-        <CurrentActivityCardHeading headingID={headingID} locale={props.locale} />
+        <CurrentActivityCardHeading
+          headingID={headingID}
+          locale={props.locale}
+        />
       ) : (
         <CurrentActivityCardHeading
           headingID={headingID}

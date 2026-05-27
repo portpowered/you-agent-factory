@@ -4,9 +4,12 @@ import {
   applyFactoryGraphEdgeAddition,
   buildFactoryGraphConnectionNotice,
   buildFactoryGraphEdgeChangeFromConnection,
-  getFactoryGraphConnectionAnchors,
+  getLocalizedFactoryGraphConnectionAnchors,
 } from "./factory-graph-editor-connections";
-import type { FactoryGraphDraft, FactoryGraphTopology } from "./factory-graph-draft-types";
+import type {
+  FactoryGraphDraft,
+  FactoryGraphTopology,
+} from "./factory-graph-draft-types";
 
 const baseDraft: FactoryGraphDraft = {
   additions: {
@@ -53,7 +56,9 @@ const connectableTopology: FactoryGraphTopology = {
 
 describe("factory graph editor connections", () => {
   it("exposes separate workstation transition anchors for success, continue, failure, and rejection", () => {
-    expect(getFactoryGraphConnectionAnchors("workstation")).toEqual(
+    expect(
+      getLocalizedFactoryGraphConnectionAnchors("workstation", "en"),
+    ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           edgeKind: "workstation-output",
@@ -134,13 +139,27 @@ describe("factory graph editor connections", () => {
     expect(
       buildFactoryGraphConnectionNotice({
         sourceAnchorId: "workstation-on-failure-source",
-        sourceNode: connectableTopology.nodes[1] as FactoryGraphTopology["nodes"][number],
+        sourceNode: connectableTopology
+          .nodes[1] as FactoryGraphTopology["nodes"][number],
         targetAnchorId: "workstation-on-continue-target",
-        targetNode: connectableTopology.nodes[0] as FactoryGraphTopology["nodes"][number],
+        targetNode: connectableTopology
+          .nodes[0] as FactoryGraphTopology["nodes"][number],
       }),
     ).toBe(
       "Failure connections from review cannot connect to Continue on story:queued.",
     );
+
+    expect(
+      buildFactoryGraphConnectionNotice({
+        locale: "zh-CN",
+        sourceAnchorId: "workstation-on-failure-source",
+        sourceNode: connectableTopology
+          .nodes[1] as FactoryGraphTopology["nodes"][number],
+        targetAnchorId: "workstation-on-continue-target",
+        targetNode: connectableTopology
+          .nodes[0] as FactoryGraphTopology["nodes"][number],
+      }),
+    ).toBe("review 的失败连接不能连接到 story:queued 上的继续。");
   });
 
   it("records existing edge removals in the draft", () => {

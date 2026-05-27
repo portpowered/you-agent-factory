@@ -43,7 +43,7 @@ export function WorkflowActivityBentoCard({
   onSelectWorkstation,
 }: WorkflowActivityBentoCardProps) {
   const messages = getWorkflowActivityShellMessages(locale);
-  const editor = useCurrentActivityGraphEditor(snapshot);
+  const editor = useCurrentActivityGraphEditor(snapshot, locale);
 
   return (
     <AgentBentoCard

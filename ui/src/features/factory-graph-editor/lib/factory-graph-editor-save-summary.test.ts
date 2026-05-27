@@ -40,13 +40,37 @@ describe("buildFactoryGraphSaveSummary", () => {
   });
 
   it("returns an empty summary when the draft has no pending changes", () => {
-    expect(buildFactoryGraphSaveSummary(createEmptyFactoryGraphDraft())).toEqual(
-      {
-        changedEdges: 0,
-        createdEntities: 0,
-        description: "No graph changes are pending.",
-        removedEntities: 0,
+    expect(
+      buildFactoryGraphSaveSummary(createEmptyFactoryGraphDraft()),
+    ).toEqual({
+      changedEdges: 0,
+      createdEntities: 0,
+      description: "No graph changes are pending.",
+      removedEntities: 0,
+    });
+  });
+
+  it("summarizes graph edits in a non-default locale", () => {
+    const draft = createEmptyFactoryGraphDraft();
+    draft.additions.workers.push({
+      model: "gpt-5-mini",
+      name: "writer",
+      type: "MODEL_WORKER",
+    });
+    draft.edgeChanges.removals.push({
+      kind: "worker-assignment",
+      source: {
+        kind: "worker",
+        name: "writer",
       },
+      target: {
+        kind: "workstation",
+        name: "review",
+      },
+    });
+
+    expect(buildFactoryGraphSaveSummary(draft, "zh-CN").description).toBe(
+      "此保存将应用 1 个新增实体 和 1 条更改边。",
     );
   });
 });

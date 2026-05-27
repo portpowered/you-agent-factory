@@ -120,4 +120,37 @@ describe("getFactoryGraphEditorMessages", () => {
     expect(messages.workerStatusLabel("idle")).toBe("空闲");
     expect(messages.workerStatusLabel("unavailable")).toBe("不可用");
   });
+
+  it("resolves localized add-menu, state, validation, connection, and removal helpers", () => {
+    const messages = getFactoryGraphEditorMessages("zh-CN");
+
+    expect(messages.addMenuAction("workstation")).toEqual({
+      description: "创建一个待处理工作站并分配现有工作者。",
+      label: "工作站",
+    });
+    expect(messages.stateTypeLabel("PROCESSING")).toBe("处理中");
+    expect(
+      messages.connectionIncompatibleNotice(
+        "失败",
+        "review",
+        "继续",
+        "story:queued",
+      ),
+    ).toBe("review 的失败连接不能连接到 story:queued 上的继续。");
+    expect(messages.validationMissingWorkerAssignment("review")).toBe(
+      "工作站“review”必须保留一个工作者分配。",
+    );
+    expect(
+      messages.removalEdgeDescription("worker-assignment", "writer", "review"),
+    ).toBe(
+      "这会将 writer 从 review 取消分配。该工作站需要另一个工作者后拓扑保存才能成功。",
+    );
+    expect(
+      messages.saveSummaryDescription({
+        changedEdges: 1,
+        createdEntities: 2,
+        removedEntities: 1,
+      }),
+    ).toBe("此保存将应用 2 个新增实体、1 个删除实体 和 1 条更改边。");
+  });
 });

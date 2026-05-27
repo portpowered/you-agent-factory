@@ -1,6 +1,6 @@
 import {
   type FactoryGraphConnectionEndpoint,
-  getFactoryGraphConnectionAnchors,
+  getLocalizedFactoryGraphConnectionAnchors,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import type { ActivityGraphNodeHandle } from "../../flowchart/components/current-activity-node-shell";
 import type { PositionedEdge } from "../../flowchart/lib/layout";
@@ -14,14 +14,15 @@ export interface CurrentActivityEditorState {
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
 }
 
-const SUPPORTED_EDITOR_EDGE_KINDS: ReadonlySet<FactoryGraphDraftEdgeChange["kind"]> =
-  new Set([
-    "workstation-input",
-    "workstation-output",
-    "workstation-on-continue",
-    "workstation-on-failure",
-    "workstation-on-rejection",
-  ]);
+const SUPPORTED_EDITOR_EDGE_KINDS: ReadonlySet<
+  FactoryGraphDraftEdgeChange["kind"]
+> = new Set([
+  "workstation-input",
+  "workstation-output",
+  "workstation-on-continue",
+  "workstation-on-failure",
+  "workstation-on-rejection",
+]);
 
 export function supportedEditorHandleIdsForEdge(edge: PositionedEdge) {
   const sourceIsWorkstation = edge.fromNodeId.startsWith("workstation:");
@@ -67,39 +68,44 @@ export function supportedEditorHandleIdsForEdge(edge: PositionedEdge) {
 
 export function buildEditorHandles(args: {
   editor: CurrentActivityEditorState;
+  locale?: string;
   nodeId: string;
   nodeKind: "work-state" | "workstation";
 }) {
   const connectable =
     args.editor.canInteractWithEditor && args.editor.activeTool === "connect";
 
-  return getFactoryGraphConnectionAnchors(args.nodeKind)
+  return getLocalizedFactoryGraphConnectionAnchors(args.nodeKind, args.locale)
     .filter((anchor) => SUPPORTED_EDITOR_EDGE_KINDS.has(anchor.edgeKind))
     .map((anchor) => {
       const selected =
         args.editor.pendingConnectionSource?.nodeId === args.nodeId &&
         args.editor.pendingConnectionSource.anchorId === anchor.id;
-    const validTarget =
-      connectable &&
-      args.editor.pendingConnectionSource !== null &&
-      args.editor.pendingConnectionSource.nodeId !== args.nodeId &&
-      anchor.role === "target";
+      const validTarget =
+        connectable &&
+        args.editor.pendingConnectionSource !== null &&
+        args.editor.pendingConnectionSource.nodeId !== args.nodeId &&
+        anchor.role === "target";
 
-    return {
-      buttonAriaLabel: anchor.description,
-      buttonPressed: selected || undefined,
-      buttonTitle: anchor.description,
-      connectable,
-      id: anchor.id,
-      label: anchor.label,
-      onButtonClick: () =>
-        args.editor.onConnectionAnchorClick({
-          anchorId: anchor.id,
-          nodeId: args.nodeId,
-        }),
-      side: anchor.side,
-      type: anchor.role,
-      variant: selected ? "selected" : validTarget ? "valid-target" : "default",
-    } satisfies ActivityGraphNodeHandle;
+      return {
+        buttonAriaLabel: anchor.description,
+        buttonPressed: selected || undefined,
+        buttonTitle: anchor.description,
+        connectable,
+        id: anchor.id,
+        label: anchor.label,
+        onButtonClick: () =>
+          args.editor.onConnectionAnchorClick({
+            anchorId: anchor.id,
+            nodeId: args.nodeId,
+          }),
+        side: anchor.side,
+        type: anchor.role,
+        variant: selected
+          ? "selected"
+          : validTarget
+            ? "valid-target"
+            : "default",
+      } satisfies ActivityGraphNodeHandle;
     });
 }

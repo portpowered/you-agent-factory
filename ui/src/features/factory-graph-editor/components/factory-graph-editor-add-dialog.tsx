@@ -200,10 +200,13 @@ function renderEntitySpecificFields({
             });
           }}
           options={[
-            { label: "INITIAL", value: "INITIAL" },
-            { label: "PROCESSING", value: "PROCESSING" },
-            { label: "TERMINAL", value: "TERMINAL" },
-            { label: "FAILED", value: "FAILED" },
+            { label: messages.stateTypeLabel("INITIAL"), value: "INITIAL" },
+            {
+              label: messages.stateTypeLabel("PROCESSING"),
+              value: "PROCESSING",
+            },
+            { label: messages.stateTypeLabel("TERMINAL"), value: "TERMINAL" },
+            { label: messages.stateTypeLabel("FAILED"), value: "FAILED" },
           ]}
           value={draft.stateType}
         />
