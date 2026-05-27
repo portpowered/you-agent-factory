@@ -64,10 +64,17 @@ describe("factory graph editor toolbar controls", () => {
 
     const menu = await screen.findByLabelText("Add graph entity menu");
     expect(menu).toBeTruthy();
+    expect(menu.getAttribute("data-side")).toBe("top");
+    expect(menu.className).toContain(
+      "max-h-[min(var(--radix-popover-content-available-height),calc(100vh-8rem))]",
+    );
     expect(addMenuButton.getAttribute("aria-expanded")).toBe("true");
     expect(
       within(menu).getByRole("button", { name: "Workstation" }),
     ).toBeTruthy();
+    expect(
+      within(menu).getByRole("button", { name: "Workstation" }).className,
+    ).toContain("rounded-lg");
     const pendingPill = screen.getByText("Draft changes pending");
     expect(pendingPill).toBeTruthy();
     expect(pendingPill.className).toContain("border-af-warning-border");

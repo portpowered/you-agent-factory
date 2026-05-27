@@ -13,12 +13,14 @@ const monacoEditorPlugin =
     : monacoEditorPluginModule.default;
 const optimizedDeps = isVitestRun
   ? ([
+      "@radix-ui/react-slot",
       "react",
       "react-dom",
       "react/jsx-runtime",
       "react/jsx-dev-runtime",
     ] as const)
   : ([
+      "@radix-ui/react-slot",
       "monaco-editor/esm/vs/editor/editor.api.js",
       "react",
       "react-dom",

@@ -112,6 +112,14 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
   const currentSelection = page.getByRole("article", {
     name: "Current selection",
   });
+  if (!(await currentSelection.isVisible().catch(() => false))) {
+    const selectReviewWorkstationButton = page.getByRole("button", {
+      name: "Select Review workstation",
+    });
+    if ((await selectReviewWorkstationButton.count()) > 0) {
+      await selectReviewWorkstationButton.click();
+    }
+  }
   await currentSelection.waitFor({ state: "visible" });
 
   const summaryHeading = currentSelection.getByRole("heading", {

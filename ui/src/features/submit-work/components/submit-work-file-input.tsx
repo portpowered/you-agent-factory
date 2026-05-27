@@ -1,6 +1,6 @@
 import { useState, type DragEvent } from "react";
 
-import { buttonVariants } from "../../../components/ui";
+import { Button } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import type { SubmitWorkMessages } from "../messages/submit-work";
 import type { SubmitWorkDraftFileItem } from "./submit-work-card";
@@ -104,17 +104,18 @@ export function FileSubmissionItemEditor({
           <span className={helpTextClassName}>{stateDescription}</span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <span
-            className={buttonVariants({
-              className: "pointer-events-none",
-              size: "sm",
-              tone: item.stagingStatus === "failure" ? "destructive" : "outline",
-            })}
+          <Button
+            asChild
+            className="pointer-events-none"
+            size="sm"
+            tone={item.stagingStatus === "failure" ? "destructive" : "outline"}
           >
-            {item.stagingStatus === "ready"
-              ? messages.replaceFileAction
-              : messages.chooseFileAction}
-          </span>
+            <span>
+              {item.stagingStatus === "ready"
+                ? messages.replaceFileAction
+                : messages.chooseFileAction}
+            </span>
+          </Button>
           {(item.fileName ?? "").length > 0 ? (
             <span className={helpTextClassName}>
               {messages.fileItemMetadata(item.fileName ?? "", item.mediaType ?? "")}
