@@ -286,6 +286,10 @@ prompts, payloads, stdout, stderr, and diagnostic metadata. The first version
 does not delete old artifacts automatically, so manage retention in your own
 home directory or CI workspace.
 
+Maintainers who need the internal event-log and fixture workflow can use
+[`docs/internal/development/record-replay.md`](../internal/development/record-replay.md);
+customer runs only need the CLI flags above.
+
 ### 4. Submit work
 
 Create a startup or watched-file request:

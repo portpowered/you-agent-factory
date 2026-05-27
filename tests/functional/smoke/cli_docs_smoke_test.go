@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	agentcli "github.com/portpowered/infinite-you/pkg/cli"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -21,12 +22,39 @@ type docsSmokeTopic struct {
 }
 
 var docsSmokeTopics = []docsSmokeTopic{
-	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "docs/reference/config.md", "docs/reference/work.md", "you-agent-factory run"}, absent: []string{"Agent Factory run"}},
+	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "docs/reference/config.md", "docs/reference/work.md", "docs/reference/authoring-factories.md", "--with-mock-workers", "--record", "--replay", "--no-record", "you-agent-factory run"}, absent: []string{"Agent Factory run"}},
 	{name: "workstation", heading: "# Workstation", markers: []string{"inputs", "outputs", "LOGICAL_MOVE", "docs/reference/workstations.md"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
 	{name: "workers", heading: "# Workers", markers: []string{"MODEL_WORKER", "SCRIPT_WORKER", "modelProvider", "docs/reference/workers.md"}, absent: []string{"docs/reference/workstations-and-workers.md"}},
 	{name: "resources", heading: "# Resources", markers: []string{"capacity", "workstations", "agent-slot", "docs/reference/resources.md"}},
 	{name: "batch-work", heading: "# Batch Work", markers: []string{"FACTORY_REQUEST_BATCH", "DEPENDS_ON", "docs/reference/batch-inputs.md"}, absent: []string{"docs/reference/batch-work.md"}},
 	{name: "templates", heading: "# Templates", markers: []string{".Context.Project", ".Context.WorkDir", "docs/reference/templates.md", "text/template"}, absent: []string{"docs/reference/prompt-variables.md"}},
+}
+
+func TestAuthoringFactoriesDocs_LinkMockWorkerReplayExamplesFromCustomerPath(t *testing.T) {
+	repoRoot := testutil.MustRepoRoot(t)
+	path := filepath.Join(repoRoot, "docs", "reference", "authoring-factories.md")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read authoring factories docs: %v", err)
+	}
+	doc := string(content)
+
+	for _, marker := range []string{
+		"## Test Workflows With Mock Workers",
+		"you run --dir ./factory --with-mock-workers",
+		"you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json",
+		"../examples/mock-workers.json",
+		"../examples/startup-work.json",
+		"../examples/README.md",
+		"--record ./docs/examples/sample-run.replay.json",
+		"--replay ./docs/examples/sample-run.replay.json",
+		"--no-record",
+		"docs/internal/development/record-replay.md",
+	} {
+		if !strings.Contains(doc, marker) {
+			t.Fatalf("authoring factories docs missing marker %q", marker)
+		}
+	}
 }
 
 var retiredDocsInvocationPatterns = []*regexp.Regexp{
