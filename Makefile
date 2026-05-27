@@ -47,6 +47,7 @@ endif
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_MIN ?= 80.0
 PACKAGE_FILE_COUNT_ROOT ?= .
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count deadcode
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
@@ -173,13 +174,9 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "Test(ReplayEventStreamArtifactSmoke_|WorkerPublicContractSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
-	$(MAKE) ui-lint
-	$(MAKE) ui-deadcode
-	$(GO) vet ./...
-	$(MAKE) backend-size
-	$(MAKE) pkg-maint
-	$(MAKE) pkg-file-count
-	$(MAKE) deadcode
+	@for target in $(LINT_TARGETS); do \
+		$(MAKE) $$target || exit $$?; \
+	done
 
 backend-size:
 	$(GO) run ./cmd/backendsizecheck

@@ -201,19 +201,30 @@ func TestMakePkgFileCountTargetFailsForOversizedOwnedPackage(t *testing.T) {
 	}
 }
 
-func TestMakeLintRunsPkgFileCountTarget(t *testing.T) {
+func TestMakeLintPathFailsForOversizedOwnedPackage(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	fixtureRoot := t.TempDir()
+	writePackageFiles(t, fixtureRoot, "pkg/service", 16)
 
-	cmd := exec.Command("make", "-n", "lint")
+	cmd := exec.Command("make", "lint", "LINT_TARGETS=pkg-file-count", "PACKAGE_FILE_COUNT_ROOT="+fixtureRoot)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("make -n lint failed: %v\n%s", err, output)
+	if err == nil {
+		t.Fatalf("make lint succeeded, want oversized package failure through lint path; output:\n%s", output)
 	}
 
 	got := string(output)
-	if !strings.Contains(got, "make pkg-file-count") {
-		t.Fatalf("make -n lint output = %q, want pkg-file-count target in lint path", got)
+	for _, want := range []string{
+		"go run ./cmd/pkgfilecountcheck -root " + fixtureRoot,
+		"[agent-factory:pkg-file-count] oversized package: pkg/service",
+		"  package files: 16",
+		"  limit: 15",
+		"[agent-factory:pkg-file-count] found 1 package file-count violation(s)",
+		"*** [pkg-file-count]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("make lint output = %q, want substring %q", got, want)
+		}
 	}
 }
 
