@@ -2,7 +2,7 @@
 
 ---
 author: andreas abdi
-last modified: 2026, may, 2
+last modified: 2026, may, 27
 doc-id: STD-018
 ---
 
@@ -19,6 +19,8 @@ Every contributor or agent who creates or updates a PRD, `prd.json`, or work-sto
 - Keep stories vertically sliced and independently reviewable, implementable, and testable whenever practical.
 - Acceptance criteria **MUST** describe outcomes a reviewer can verify, not hidden implementation details.
 - Every plan **MUST** reflect the repository's review and engineering standards, including correctness, architecture fit, readability, and test evidence.
+- Complex frontend plans **MUST** identify canonical state, operation/service boundaries, projection boundaries, and the evidence that proves each layer.
+- Frontend plans **SHOULD** prefer existing shared UI primitives and concise action/copy patterns unless a new reusable primitive is justified.
 - Avoid bundling unrelated cleanup, opportunistic refactors, or broad topology changes into a behavior-focused lane.
 - Call out quality gates directly when the work touches backend, frontend, contracts, or generated artifacts.
 
@@ -31,6 +33,7 @@ Before a PRD or story breakdown is accepted, reviewers **SHOULD** confirm:
 - Stories are sequenced so they can be implemented and reviewed in a stable order.
 - Acceptance criteria are concrete, behavior-focused, and testable.
 - The plan names the right verification surfaces such as unit, integration, functional, contract, UI, or stress coverage where relevant.
+- Complex frontend plans distinguish canonical data from projected UI-library state and name the operations that mutate canonical state.
 - The plan does not widen into unrelated cleanup, broad rewrites, or inventory work unless the customer ask explicitly requires it.
 - The work respects repository architecture and dependency boundaries.
 
@@ -95,7 +98,20 @@ Rules:
 - When a change touches generated artifacts or public contracts, the plan **MUST** call out contract alignment and generated-output expectations explicitly.
 - AI-authored plans **MUST** be written with the expectation of extra implementation and review scrutiny.
 
-### 5. Prefer Dependency-Aware Sequencing
+### 5. Plan Complex Frontend Data Boundaries
+
+Complex frontend plans **MUST** define source-of-truth and projection boundaries before implementation starts.
+
+Rules:
+
+- Plans **MUST** name the canonical API or domain model when one exists.
+- Plans **MUST** distinguish durable or editable state from UI-library projection state, such as graph nodes, table rows, chart series, canvas geometry, or drag-surface state.
+- Plans **MUST** name the feature operations or service methods that own mutations when the feature includes behaviors such as add, remove, connect, disconnect, reorder, validate, filter, or save.
+- Plans **SHOULD** describe how components or hooks consume those operations without turning component state into the domain source of truth.
+- Plans **SHOULD** call out replacement or removal expectations for old compatibility paths when a new canonical path is introduced.
+- Frontend UI plans **SHOULD** name existing shared primitives to reuse for standard actions, dialogs, popovers, form controls, tables, shells, and status treatments. New bespoke controls should be justified as reusable primitives.
+
+### 6. Prefer Dependency-Aware Sequencing
 
 Stories **MUST** be ordered so implementation can proceed without unnecessary blocking or churn.
 
@@ -106,7 +122,7 @@ Rules:
 - The plan **SHOULD NOT** force reviewers to approve speculative later work before the core behavior is defined.
 - If a story is purely enabling, it **MUST** be narrowly justified and kept smaller than the dependent behavior stories where possible.
 
-### 6. Prove Behavior with the Right Evidence
+### 7. Prove Behavior with the Right Evidence
 
 Plans **MUST** name the evidence needed to trust the change.
 
@@ -116,8 +132,11 @@ Rules:
 - Observable regressions **SHOULD** be proven through direct behavioral tests rather than topology or inventory assertions.
 - Plans **SHOULD** prefer focused regression coverage over broad unrelated suite churn.
 - When concurrency, contracts, browser behavior, or dependency failure are part of the risk, the plan **MUST** name that verification need explicitly.
+- Complex frontend plans **SHOULD** include operation tests, projection tests, hook or mutation tests, focused component tests, and a small number of integration tests for high-risk UI-library behavior when those layers are applicable.
+- Plans **SHOULD NOT** rely on mounted component tests as the only proof for domain mutations that can be tested as pure operations.
+- Plans involving third-party UI libraries **SHOULD** prove both the pure projected state and at least one user interaction path where the library dispatches the expected operation.
 
-### 7. Keep Planning Output Clean and Actionable
+### 8. Keep Planning Output Clean and Actionable
 
 Planning artifacts **MUST** remain implementation-ready and reviewer-friendly.
 
@@ -137,5 +156,7 @@ Before handing a plan to implementation, authors **SHOULD** confirm:
 - Acceptance criteria are concrete and reviewer-verifiable.
 - The plan names the right quality gates and test evidence.
 - Backend, frontend, contract, and generated-artifact expectations are called out where relevant.
+- Complex frontend plans identify canonical state, operations, projections, component wiring, and old-path cleanup where applicable.
+- UI plans reuse shared primitives or justify new reusable primitives.
 - Scope stays narrow and avoids unrelated cleanup.
 - Story order supports incremental implementation and review.

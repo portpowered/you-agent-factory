@@ -330,6 +330,11 @@ describe("DashboardHeader", () => {
     );
     expect(
       screen.getByRole("menuitemradio", {
+        name: NATIVE_LANGUAGE_LABELS.en,
+      }).className,
+    ).toContain("rounded-lg");
+    expect(
+      screen.getByRole("menuitemradio", {
         name: NATIVE_LANGUAGE_LABELS["zh-CN"],
       }),
     ).toBeTruthy();

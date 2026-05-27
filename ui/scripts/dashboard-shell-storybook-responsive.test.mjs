@@ -142,5 +142,8 @@ describe("verifyDashboardShellConsolidation", () => {
     expect(toolbar.getByRole).toHaveBeenCalledWith("slider", {
       name: "Timeline tick",
     });
+    expect(toolbar.getByRole).toHaveBeenCalledWith("status", {
+      name: /Event stream/i,
+    });
   });
 });
