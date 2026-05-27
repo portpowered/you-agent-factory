@@ -5,13 +5,13 @@ import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
 import {
   createEmptyFactoryGraphDraft,
   useFactoryGraphDraftState,
 } from "../../factory-graph-editor/public";
-import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
-import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
 import { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import {
   findClassifierGraphEditorUnsupportedWorkstationName,
@@ -31,6 +31,7 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
   const editableDefinitionQuery = currentFactoryQuery;
   const draftState = useFactoryGraphDraftState({
     currentFactoryDocument: currentFactoryQuery.data,
+    projectedFactory: snapshot.factory,
     projectedTopology,
   });
   const saveEditableDefinition = useSaveCurrentFactory();
@@ -136,9 +137,7 @@ function useFactoryGraphEditorControllers({
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
-  saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentFactory
-  >;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
 }) {
   const connectionController = useFactoryGraphConnectionController({
     activeTool,
@@ -169,17 +168,13 @@ function useFactoryGraphEditorSessionState({
   activeWorkCount: number;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   editorMode: boolean;
-  editableDefinitionQuery: ReturnType<
-    typeof useCurrentFactoryDocument
-  >;
+  editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
   projectedTopology: DashboardSnapshot["topology"];
-  saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentFactory
-  >;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
 }) {
   const hasActiveWork = activeWorkCount > 0;
   const editorUnavailableClassifierWorkstationName = editorMode
-    ? findClassifierGraphEditorUnsupportedWorkstationName(
+    ? (findClassifierGraphEditorUnsupportedWorkstationName(
         draftState.pendingFactoryDefinition ??
           draftState.latestDocument ??
           draftState.baseDocument ??
@@ -187,8 +182,8 @@ function useFactoryGraphEditorSessionState({
       ) ??
       findClassifierGraphEditorUnsupportedWorkstationNameFromTopology(
         projectedTopology,
-      )
-    : findClassifierGraphEditorUnsupportedWorkstationNameFromTopology(
+      ))
+    : (findClassifierGraphEditorUnsupportedWorkstationNameFromTopology(
         projectedTopology,
       ) ??
       findClassifierGraphEditorUnsupportedWorkstationName(
@@ -196,7 +191,7 @@ function useFactoryGraphEditorSessionState({
           draftState.latestDocument ??
           draftState.baseDocument ??
           null,
-      );
+      ));
   const isStaleDraft =
     draftState.hasChanges &&
     draftState.baseDocument !== null &&
@@ -264,9 +259,7 @@ function useFactoryGraphEditorLeaveHandlers({
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
-  saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentFactory
-  >;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setConnectionNotice: ReturnType<
     typeof useFactoryGraphConnectionController

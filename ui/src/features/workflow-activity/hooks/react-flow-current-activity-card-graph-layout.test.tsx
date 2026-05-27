@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { useCurrentActivityGraphLayout } from "./react-flow-current-activity-card-graph-layout";
@@ -76,5 +76,73 @@ describe("useCurrentActivityGraphLayout", () => {
       expect(result.current.nodes).toHaveLength(0);
       expect(result.current.edges).toHaveLength(0);
     });
+  });
+
+  it("builds observer graph layout from the snapshot factory graph when available", async () => {
+    const snapshot: DashboardSnapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: {
+        name: "canonical-observer",
+        resources: [{ capacity: 2, name: "gpu" }],
+        workers: [
+          {
+            model: "gpt-5",
+            name: "writer",
+            resources: [{ capacity: 1, name: "gpu" }],
+            type: "MODEL_WORKER",
+          },
+        ],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "queued", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            id: "draft",
+            inputs: [{ state: "queued", workType: "story" }],
+            name: "Draft",
+            outputs: [{ state: "done", workType: "story" }],
+            resources: [{ capacity: 1, name: "gpu" }],
+            type: "MODEL_WORKSTATION",
+            worker: "writer",
+          },
+        ],
+      },
+      topology: {
+        edges: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphLayout(snapshot),
+    );
+
+    await waitFor(() => {
+      expect(result.current.nodes.length).toBeGreaterThan(0);
+    });
+
+    expect(mockBuildGraphLayout).not.toHaveBeenCalled();
+    expect(result.current.nodes.map((node) => node.nodeId).sort()).toEqual([
+      "place:gpu:available",
+      "place:story:done",
+      "place:story:queued",
+      "place:work-type:story",
+      "place:worker:writer",
+      "workstation:draft",
+    ]);
+    expect(result.current.edges.map((edge) => edge.edgeId).sort()).toEqual([
+      "worker-assignment:place:worker:writer->workstation:draft",
+      "worker-resource:place:gpu:available->place:worker:writer",
+      "workstation-input:place:story:queued->workstation:draft",
+      "workstation-output:workstation:draft->place:story:done",
+      "workstation-resource:place:gpu:available->workstation:draft",
+    ]);
   });
 });

@@ -15,6 +15,7 @@ import type {
   GraphNodePosition,
   GraphNodePositions,
 } from "../state/currentActivityGraphStore";
+import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 import {
   buildEditorHandles,
   type CurrentActivityEditorState,
@@ -355,7 +356,11 @@ function buildWorkstationNode(
   const workstation =
     input.snapshot.topology.workstation_nodes_by_id[
       positionedNode.workstationNodeId
-    ];
+    ] ??
+    findFactoryWorkstationByNodeId(
+      input.snapshot.factory,
+      positionedNode.workstationNodeId,
+    );
   if (!workstation) {
     return null;
   }

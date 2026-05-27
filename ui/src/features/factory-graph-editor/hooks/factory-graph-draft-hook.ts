@@ -6,13 +6,14 @@ import {
   buildFactoryGraphTopologyFromDefinition,
 } from "../lib/factory-graph-draft-graph";
 import {
-  createEmptyFactoryGraphDraft,
-  hasFactoryGraphDraftChanges,
+  type CanonicalFactoryDefinition,
   type CurrentFactoryDocument,
+  createEmptyFactoryGraphDraft,
+  type DashboardTopology,
   type FactoryGraphDraftDerivedState,
   type FactoryGraphDraftSessionState,
   type FactoryGraphDraftValidationError,
-  type DashboardTopology,
+  hasFactoryGraphDraftChanges,
 } from "../lib/factory-graph-draft-types";
 import { validateFactoryGraphDraft } from "../lib/factory-graph-draft-validation";
 
@@ -25,6 +26,7 @@ type FactoryGraphDraftCallbacks = Pick<
 
 interface UseFactoryGraphDraftStateOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
+  projectedFactory?: CanonicalFactoryDefinition;
   projectedTopology?: DashboardTopology;
 }
 
@@ -35,8 +37,12 @@ export function useFactoryGraphDraftState(
   const emptyDraft = useMemo(() => createEmptyFactoryGraphDraft(), []);
   const projectedGraph = useMemo(
     () =>
-      buildFactoryGraphTopologyFromDashboardTopology(options.projectedTopology),
-    [options.projectedTopology],
+      options.projectedFactory
+        ? buildFactoryGraphTopologyFromDefinition(options.projectedFactory)
+        : buildFactoryGraphTopologyFromDashboardTopology(
+            options.projectedTopology,
+          ),
+    [options.projectedFactory, options.projectedTopology],
   );
   const [sessionState, setSessionState] =
     useState<FactoryGraphDraftSessionState | null>(null);
@@ -44,8 +50,7 @@ export function useFactoryGraphDraftState(
   const replaceDraft = useCallback(
     (draft: FactoryGraphDraftSessionState["draft"]) => {
       setSessionState((currentState) => {
-        const document =
-          currentFactoryDocument ?? currentState?.latestDocument;
+        const document = currentFactoryDocument ?? currentState?.latestDocument;
         if (!document) {
           return currentState;
         }
@@ -67,8 +72,7 @@ export function useFactoryGraphDraftState(
       ) => FactoryGraphDraftSessionState["draft"],
     ) => {
       setSessionState((currentState) => {
-        const document =
-          currentFactoryDocument ?? currentState?.latestDocument;
+        const document = currentFactoryDocument ?? currentState?.latestDocument;
         if (!document) {
           return currentState;
         }
@@ -112,28 +116,24 @@ export function useFactoryGraphDraftState(
     }
 
     setSessionState((currentState) =>
-      syncFactoryGraphDraftSession(
-        currentState,
-        currentFactoryDocument,
-      ),
+      syncFactoryGraphDraftSession(currentState, currentFactoryDocument),
     );
   }, [currentFactoryDocument]);
 
-  const currentFactoryState =
-    useMemo<FactoryGraphDraftDerivedState | null>(
-      () =>
-        sessionState
-          ? createCurrentFactoryGraphDraftState({
-              callbacks: {
-                replaceDraft,
-                resetDraft,
-                updateDraft,
-              },
-              sessionState,
-            })
-          : null,
-      [replaceDraft, resetDraft, sessionState, updateDraft],
-    );
+  const currentFactoryState = useMemo<FactoryGraphDraftDerivedState | null>(
+    () =>
+      sessionState
+        ? createCurrentFactoryGraphDraftState({
+            callbacks: {
+              replaceDraft,
+              resetDraft,
+              updateDraft,
+            },
+            sessionState,
+          })
+        : null,
+    [replaceDraft, resetDraft, sessionState, updateDraft],
+  );
 
   const projectionState = useMemo<FactoryGraphDraftDerivedState>(
     () =>

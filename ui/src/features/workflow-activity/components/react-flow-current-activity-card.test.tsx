@@ -35,27 +35,27 @@ import {
   useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
+import { buildGraphLayout } from "../../flowchart/lib/layout";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../../flowchart/public";
-import { buildGraphLayout } from "../../flowchart/lib/layout";
+import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import type {
   FactoryPngImportValue,
   ReadFactoryImportFile,
 } from "../../import/public";
-import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
+import { buildVisibleGraphEdges } from "../lib/react-flow-current-activity-card-graph";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
+import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import {
   currentActivityGraphKey,
   currentActivityTopologyKey,
   ReactFlowCurrentActivityCard,
 } from "./react-flow-current-activity-card";
-import { buildVisibleGraphEdges } from "../lib/react-flow-current-activity-card-graph";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 
 vi.mock("../../current-factory-definition/public", async () => {
   const actual = await vi.importActual(
@@ -1137,7 +1137,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(screen.queryByText("Pending")).toBeNull();
   });
 
-  it("does not swap editor mode onto the worker and resource editor graph lanes", async () => {
+  it("renders worker and resource nodes from the canonical snapshot factory in observer mode", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
       error: null,
@@ -1148,14 +1148,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
       latestDocument: workerDenseFactoryDefinitionDocument,
       pendingFactoryDefinition: workerDenseFactoryDefinitionDocument,
     } as never);
+    const snapshot = workerDenseSnapshot();
+    snapshot.factory = workerDenseFactoryDefinitionDocument;
 
     renderCurrentActivity({
-      snapshot: workerDenseSnapshot(),
+      snapshot,
     });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
 
     await waitFor(() => {
       expect(
@@ -1165,10 +1163,20 @@ function registerCurrentActivityCardTestLifecycle(): void {
       ).toBeTruthy();
     });
 
-    expect(screen.queryByText("writer")).toBeNull();
-    expect(screen.queryByText("reviewer")).toBeNull();
-    expect(screen.queryByText("stalled")).toBeNull();
-    expect(screen.queryByText("gpu")).toBeNull();
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-id="place:worker:writer"]'),
+      ).toBeTruthy();
+      expect(
+        document.querySelector('[data-id="place:worker:reviewer"]'),
+      ).toBeTruthy();
+      expect(
+        document.querySelector('[data-id="place:worker:stalled"]'),
+      ).toBeTruthy();
+      expect(
+        document.querySelector('[data-id="place:gpu:available"]'),
+      ).toBeTruthy();
+    });
   });
 
   it("does not render the editor-only visibility preset controls in embedded editor mode", async () => {
@@ -1383,17 +1391,13 @@ function registerCurrentActivityCardTestLifecycle(): void {
         name: "Select writer worker",
       }),
     ).toBeNull();
-    expect(
-      screen.queryByText("writer"),
-    ).toBeNull();
+    expect(screen.queryByText("writer")).toBeNull();
     expect(
       await screen.findByRole("button", {
         name: "Select Review workstation",
       }),
     ).toBeTruthy();
-    expect(
-      screen.queryByText("Removal blocked"),
-    ).toBeNull();
+    expect(screen.queryByText("Removal blocked")).toBeNull();
     expect(
       screen.queryByRole("dialog", { name: "Remove writer worker?" }),
     ).toBeNull();
@@ -3627,7 +3631,9 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
           .getAttribute("data-graph-semantic-icon"),
       ).toBe("queue");
       expect(
-        await screen.findByRole("button", { name: "Select Review workstation" }),
+        await screen.findByRole("button", {
+          name: "Select Review workstation",
+        }),
       ).toBeTruthy();
     },
     workflowGraphLocaleFallbackTimeoutMs,

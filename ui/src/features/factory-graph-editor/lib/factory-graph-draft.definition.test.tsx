@@ -252,7 +252,9 @@ it("reports missing required draft names before save-building", () => {
       }),
     ]),
   );
-  expect(buildPendingFactoryDefinition(baseFactoryDefinition, draft)).toBeNull();
+  expect(
+    buildPendingFactoryDefinition(baseFactoryDefinition, draft),
+  ).toBeNull();
 });
 
 it("reports unknown edge nodes when a draft edge references a workstation outside the supported draft state", () => {
@@ -286,7 +288,9 @@ it("reports unknown edge nodes when a draft edge references a workstation outsid
       }),
     ]),
   );
-  expect(buildPendingFactoryDefinition(baseFactoryDefinition, draft)).toBeNull();
+  expect(
+    buildPendingFactoryDefinition(baseFactoryDefinition, draft),
+  ).toBeNull();
 });
 
 it("falls back to projection topology until the editable definition is available", () => {
@@ -346,4 +350,40 @@ it("falls back to projection topology until the editable definition is available
 
   expect(result.current.source).toBe("current-factory");
   expect(result.current.baseDocument?.version.logical).toBe(5);
+});
+
+it("uses the projected snapshot factory graph before falling back to dashboard topology", () => {
+  const projectedTopology: DashboardTopology = {
+    edges: [],
+    workstation_node_ids: ["lossy-draft"],
+    workstation_nodes_by_id: {
+      "lossy-draft": {
+        input_places: [],
+        node_id: "lossy-draft",
+        output_places: [],
+        transition_id: "lossy-draft",
+        workstation_name: "lossy-draft",
+      },
+    },
+  };
+
+  const { result } = renderHook(() =>
+    useFactoryGraphDraftState({
+      projectedFactory: baseFactoryDefinition,
+      projectedTopology,
+    }),
+  );
+
+  expect(result.current.source).toBe("projection");
+  expect(result.current.graph.nodes.map((node) => node.id)).toEqual([
+    "resource:gpu",
+    "work-state:story:done",
+    "work-state:story:queued",
+    "work-type:story",
+    "worker:writer",
+    "workstation:draft",
+  ]);
+  expect(result.current.graph.edges.map((edge) => edge.id)).toContain(
+    "worker-assignment:worker:writer->workstation:draft",
+  );
 });
