@@ -564,6 +564,34 @@ func assertStringArrayProperty(t *testing.T, properties map[string]any, property
 	}
 }
 
+func assertDateTimeStringProperty(t *testing.T, properties map[string]any, propertyName string) {
+	t.Helper()
+	property, ok := properties[propertyName].(map[string]any)
+	if !ok {
+		t.Fatalf("properties.%s is missing", propertyName)
+	}
+	if got, ok := property["type"].(string); !ok || got != "string" {
+		t.Fatalf("properties.%s.type = %v, want string", propertyName, property["type"])
+	}
+	if got, ok := property["format"].(string); !ok || got != "date-time" {
+		t.Fatalf("properties.%s.format = %v, want date-time", propertyName, property["format"])
+	}
+}
+
+func assertInt64Property(t *testing.T, properties map[string]any, propertyName string) {
+	t.Helper()
+	property, ok := properties[propertyName].(map[string]any)
+	if !ok {
+		t.Fatalf("properties.%s is missing", propertyName)
+	}
+	if got, ok := property["type"].(string); !ok || got != "integer" {
+		t.Fatalf("properties.%s.type = %v, want integer", propertyName, property["type"])
+	}
+	if got, ok := property["format"].(string); !ok || got != "int64" {
+		t.Fatalf("properties.%s.format = %v, want int64", propertyName, property["format"])
+	}
+}
+
 func assertProjectionSchemasPresent(t *testing.T, schemas map[string]any) {
 	t.Helper()
 	for _, schema := range []string{
@@ -643,6 +671,7 @@ func assertWorkstationRequestRequestSchema(t *testing.T, schemas map[string]any)
 	requestPayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestRequestView")
 	requestPayloadProperties := schemaProperties(t, requestPayload, "FactoryWorldWorkstationRequestRequestView")
 	assertSchemaPropertiesPresent(t, requestPayloadProperties, "FactoryWorldWorkstationRequestRequestView", "startedAt", "currentChainingTraceId")
+	assertDateTimeStringProperty(t, requestPayloadProperties, "startedAt")
 	assertStringArrayProperty(t, requestPayloadProperties, "previousChainingTraceIds")
 	assertArrayItemRef(t, requestPayloadProperties, "inputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, requestPayloadProperties, "consumedTokens", "#/components/schemas/FactoryWorldTokenView")
@@ -676,6 +705,8 @@ func assertWorkstationRequestPayloadSchemas(t *testing.T, schemas map[string]any
 	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
 	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureReason", "failureMessage", "endTime", "durationMillis")
+	assertDateTimeStringProperty(t, responsePayloadProperties, "endTime")
+	assertInt64Property(t, responsePayloadProperties, "durationMillis")
 }
 
 func assertWorkstationRequestScriptBoundarySchemas(t *testing.T, schemas map[string]any) {

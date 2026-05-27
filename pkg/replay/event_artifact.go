@@ -685,9 +685,9 @@ func generatedWorkMetrics(metrics interfaces.WorkMetrics) *factoryapi.WorkMetric
 		return nil
 	}
 	return &factoryapi.WorkMetrics{
-		DurationNanos: int64PtrIfNonZero(metrics.Duration.Nanoseconds()),
-		Cost:          float64PtrIfNonZero(metrics.Cost),
-		RetryCount:    intPtrIfNonZero(metrics.RetryCount),
+		DurationMillis: int64PtrIfNonZero(metrics.Duration.Milliseconds()),
+		Cost:           float64PtrIfNonZero(metrics.Cost),
+		RetryCount:     intPtrIfNonZero(metrics.RetryCount),
 	}
 }
 
@@ -696,7 +696,7 @@ func replayWorkMetricsFromGenerated(metrics *factoryapi.WorkMetrics) interfaces.
 		return interfaces.WorkMetrics{}
 	}
 	return interfaces.WorkMetrics{
-		Duration:   time.Duration(int64Value(metrics.DurationNanos)),
+		Duration:   time.Duration(int64Value(metrics.DurationMillis)) * time.Millisecond,
 		Cost:       float64Value(metrics.Cost),
 		RetryCount: intValue(metrics.RetryCount),
 	}

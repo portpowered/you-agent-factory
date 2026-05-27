@@ -187,6 +187,10 @@ func assertUnifiedDispatchEvents(t *testing.T, schemas map[string]any) {
 	assertArrayItemRef(t, dispatchResponseProperties, "outputResources", "#/components/schemas/Resource")
 	assertPropertiesAbsent(t, dispatchResponseProperties, "DispatchResponseEventPayload", "dispatchId", "workstation", "worker", "inputs", "providerSession", "diagnostics")
 	assertNoDispatchConfigCopies(t, dispatchResponseProperties, "DispatchResponseEventPayload")
+
+	workMetricsProperties := schemaProperties(t, schemaObject(t, schemas, "WorkMetrics"), "WorkMetrics")
+	assertInt64Property(t, workMetricsProperties, "durationMillis")
+	assertPropertiesAbsent(t, workMetricsProperties, "WorkMetrics", "durationNanos")
 }
 
 func assertUnifiedInferenceEvents(t *testing.T, schemas map[string]any) {

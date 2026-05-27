@@ -807,9 +807,9 @@ func serviceWorkMetricsPtr(metrics interfaces.WorkMetrics) *factoryapi.WorkMetri
 		return nil
 	}
 	return &factoryapi.WorkMetrics{
-		DurationNanos: serviceInt64Ptr(metrics.Duration.Nanoseconds()),
-		Cost:          serviceFloat64Ptr(metrics.Cost),
-		RetryCount:    serviceIntPtr(metrics.RetryCount),
+		DurationMillis: serviceInt64Ptr(metrics.Duration.Milliseconds()),
+		Cost:           serviceFloat64Ptr(metrics.Cost),
+		RetryCount:     serviceIntPtr(metrics.RetryCount),
 	}
 }
 

@@ -337,6 +337,9 @@ func assertBundledEventPayloadRefs(t *testing.T, schemas map[string]any) {
 	assertPropertyRef(t, dispatchResponseProperties, "outcome", "#/components/schemas/WorkOutcome")
 	assertPropertyRef(t, dispatchResponseProperties, "providerFailure", "#/components/schemas/ProviderFailureMetadata")
 	assertPropertyRef(t, dispatchResponseProperties, "metrics", "#/components/schemas/WorkMetrics")
+	workMetricsProperties := schemaProperties(t, schemaObject(t, schemas, "WorkMetrics"), "WorkMetrics")
+	assertInt64Property(t, workMetricsProperties, "durationMillis")
+	assertPropertiesAbsent(t, workMetricsProperties, "WorkMetrics", "durationNanos")
 	assertPublishedWorkFailureSchemas(t, schemas, schemaProperties(t, schemaObject(t, schemas, "ProviderFailureMetadata"), "ProviderFailureMetadata"))
 
 	providerFailureProperties := schemaProperties(t, schemaObject(t, schemas, "ProviderFailureMetadata"), "ProviderFailureMetadata")

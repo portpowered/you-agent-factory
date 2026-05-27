@@ -731,6 +731,7 @@ func assertProjectionRoundTripDetachesState(t *testing.T, state interfaces.Facto
 	if err := json.Unmarshal(encoded, &roundTripped); err != nil {
 		t.Fatalf("Unmarshal(roundTripped): %v", err)
 	}
+	assertProjectionJSONUsesCanonicalTimes(t, encoded)
 	if roundTripped.WorkstationRequestsByDispatchId == nil {
 		t.Fatal("round-tripped projection slice missing request map")
 	}
@@ -744,6 +745,42 @@ func assertProjectionRoundTripDetachesState(t *testing.T, state interfaces.Facto
 	}
 	if got := (*roundTripped.WorkstationRequestsByDispatchId)["dispatch-completed"].Response.OutputMutations; got == nil || (*got)[0].Token == nil || (*got)[0].Token.Name == nil || *(*got)[0].Token.Name != "Completed story" {
 		t.Fatalf("round-tripped completed mutation token = %#v, want detached Completed story", got)
+	}
+}
+
+func assertProjectionJSONUsesCanonicalTimes(t *testing.T, encoded []byte) {
+	t.Helper()
+	var payload struct {
+		WorkstationRequestsByDispatchID map[string]struct {
+			Request struct {
+				StartedAt string `json:"startedAt"`
+			} `json:"request"`
+			Response *struct {
+				EndTime        string `json:"endTime"`
+				DurationMillis int64  `json:"durationMillis"`
+			} `json:"response"`
+		} `json:"workstationRequestsByDispatchId"`
+	}
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatalf("Unmarshal projection time payload: %v", err)
+	}
+	completed := payload.WorkstationRequestsByDispatchID["dispatch-completed"]
+	if completed.Request.StartedAt != "2026-04-21T12:00:02Z" {
+		t.Fatalf("completed startedAt JSON = %q, want RFC3339 UTC timestamp", completed.Request.StartedAt)
+	}
+	if completed.Response == nil {
+		t.Fatal("completed response missing from projection time payload")
+	}
+	if completed.Response.EndTime != "2026-04-21T12:00:04Z" {
+		t.Fatalf("completed endTime JSON = %q, want RFC3339 UTC timestamp", completed.Response.EndTime)
+	}
+	if completed.Response.DurationMillis != 1200 {
+		t.Fatalf("completed durationMillis JSON = %d, want 1200", completed.Response.DurationMillis)
+	}
+	for _, value := range []string{completed.Request.StartedAt, completed.Response.EndTime} {
+		if _, err := time.Parse(time.RFC3339Nano, value); err != nil {
+			t.Fatalf("parse projection timestamp %q as RFC3339Nano: %v", value, err)
+		}
 	}
 }
 

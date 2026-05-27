@@ -5,6 +5,7 @@ properties:
     $ref: './FactoryWorldSelectedRunnerView.yaml'
   startedAt:
     type: string
+    format: date-time
   inputWorkItems:
     type: array
     items:

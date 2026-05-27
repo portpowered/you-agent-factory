@@ -1087,6 +1087,7 @@ export interface components {
         };
         FactoryWorldWorkstationRequestRequestView: {
             runner?: components["schemas"]["FactoryWorldSelectedRunnerView"];
+            /** Format: date-time */
             startedAt?: string;
             inputWorkItems?: components["schemas"]["FactoryWorldWorkItemRef"][];
             inputWorkTypeIds?: string[];
@@ -1104,6 +1105,7 @@ export interface components {
             failureReason?: string;
             failureMessage?: string;
             scriptResponse?: components["schemas"]["FactoryWorldScriptResponseView"];
+            /** Format: date-time */
             endTime?: string;
             /** Format: int64 */
             durationMillis?: number;
@@ -1445,7 +1447,7 @@ export interface components {
         };
         WorkMetrics: {
             /** Format: int64 */
-            durationNanos?: number;
+            durationMillis?: number;
             /** Format: double */
             cost?: number;
             retryCount?: number;

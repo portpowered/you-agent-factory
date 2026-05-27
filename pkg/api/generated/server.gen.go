@@ -1036,14 +1036,14 @@ type FactoryWorldWorkstationRequestRequestView struct {
 	PreviousChainingTraceIds *[]string                       `json:"previousChainingTraceIds,omitempty"`
 	Runner                   *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
 	ScriptRequest            *FactoryWorldScriptRequestView  `json:"scriptRequest,omitempty"`
-	StartedAt                *string                         `json:"startedAt,omitempty"`
+	StartedAt                *time.Time                      `json:"startedAt,omitempty"`
 	TraceIds                 *[]string                       `json:"traceIds,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestResponseView defines model for FactoryWorldWorkstationRequestResponseView.
 type FactoryWorldWorkstationRequestResponseView struct {
 	DurationMillis              *int64                          `json:"durationMillis,omitempty"`
-	EndTime                     *string                         `json:"endTime,omitempty"`
+	EndTime                     *time.Time                      `json:"endTime,omitempty"`
 	FailureMessage              *string                         `json:"failureMessage,omitempty"`
 	FailureReason               *string                         `json:"failureReason,omitempty"`
 	Feedback                    *string                         `json:"feedback,omitempty"`
@@ -2318,9 +2318,9 @@ type WorkJsonContentPart struct {
 
 // WorkMetrics defines model for WorkMetrics.
 type WorkMetrics struct {
-	Cost          *float64 `json:"cost,omitempty"`
-	DurationNanos *int64   `json:"durationNanos,omitempty"`
-	RetryCount    *int     `json:"retryCount,omitempty"`
+	Cost           *float64 `json:"cost,omitempty"`
+	DurationMillis *int64   `json:"durationMillis,omitempty"`
+	RetryCount     *int     `json:"retryCount,omitempty"`
 }
 
 // WorkOutcome Result category returned by a workstation execution.
