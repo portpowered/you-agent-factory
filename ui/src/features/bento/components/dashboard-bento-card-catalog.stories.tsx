@@ -21,7 +21,11 @@ import {
 } from "../../current-selection/public";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
 import { SubmitWorkWidget } from "../../submit-work/public";
-import { SubmitWorkCard } from "../../submit-work/components/submit-work-card";
+import {
+  SubmitWorkCard,
+  type SubmitWorkDraft,
+  type SubmitWorkStatus,
+} from "../../submit-work/components/submit-work-card";
 import { TerminalWorkWidget } from "../../terminal-work/public";
 import {
   TraceDrilldownWidget,
@@ -38,8 +42,12 @@ import {
   DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
 } from "../hooks/dashboardLayoutSchema";
-import { getDashboardWidgetPickerAvailability } from "../lib/dashboard-widget-picker";
+import {
+  getDashboardWidgetPickerAvailability,
+  type DashboardWidgetPickerWidgetType,
+} from "../lib/dashboard-widget-picker";
 import { AgentBentoLayout } from "./agent-bento";
+import { DashboardWidgetRemoveButton } from "./dashboard-widget-remove-button";
 import { InlineAddWidgetCard } from "./inline-add-widget-card";
 
 const STORY_NOW = Date.parse("2026-04-08T12:05:00Z");
@@ -509,24 +517,157 @@ function CurrentSelectionCardStory() {
 
 function InlineAddWidgetCardStory() {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectedWidgetType, setSelectedWidgetType] =
+    useState<DashboardWidgetPickerWidgetType | null>(null);
+
+  return (
+    <div>
+      {renderCardFrame({
+        children: (
+          <InlineAddWidgetCard
+            onPickerOpenChange={setPickerOpen}
+            onSelectWidget={setSelectedWidgetType}
+            pickerAvailability={getDashboardWidgetPickerAvailability([
+              layoutFor(DASHBOARD_WIDGET_IDS.addWidget),
+              layoutFor(DASHBOARD_WIDGET_IDS.currentSelection),
+            ])}
+            pickerOpen={pickerOpen}
+          />
+        ),
+        layout: layoutFor(DASHBOARD_WIDGET_IDS.addWidget, {
+          h: 4,
+          id: "add-widget::story",
+          w: 5,
+        }),
+      })}
+      <p role="status">
+        {selectedWidgetType
+          ? `Selected widget: ${selectedWidgetType}`
+          : "No widget selected yet."}
+      </p>
+    </div>
+  );
+}
+
+function SubmitWorkInteractiveStory() {
+  const [draft, setDraft] = useState<SubmitWorkDraft>({
+    items: [
+      {
+        id: "submit-work-interactive-text-item",
+        text: "",
+        type: "text" as const,
+      },
+    ],
+    requestName: "",
+    workTypeName: "",
+  });
+  const [status, setStatus] = useState<SubmitWorkStatus>({
+    kind: "guidance" as const,
+    message: "Fill out the request and submit work.",
+  });
 
   return renderCardFrame({
     children: (
-      <InlineAddWidgetCard
-        onPickerOpenChange={setPickerOpen}
-        onSelectWidget={() => undefined}
-        pickerAvailability={getDashboardWidgetPickerAvailability([
-          layoutFor(DASHBOARD_WIDGET_IDS.addWidget),
-        ])}
-        pickerOpen={pickerOpen}
+      <SubmitWorkCard
+        draft={draft}
+        headerAction={
+          <DashboardWidgetRemoveButton
+            onClick={() => undefined}
+            widgetTitle="Submit work"
+          />
+        }
+        onAddItem={(type) => {
+          setDraft((currentDraft) => ({
+            ...currentDraft,
+            items: [
+              ...currentDraft.items,
+              type === "text"
+                ? {
+                    id: `submit-work-interactive-text-item-${currentDraft.items.length + 1}`,
+                    text: "",
+                    type: "text",
+                  }
+                : {
+                    id: `submit-work-interactive-file-item-${currentDraft.items.length + 1}`,
+                    stagingStatus: "idle",
+                    type,
+                  },
+            ],
+          }));
+        }}
+        onItemTextChange={(itemId, value) => {
+          setDraft((currentDraft) => ({
+            ...currentDraft,
+            items: currentDraft.items.map((item) =>
+              item.id === itemId && item.type === "text"
+                ? { ...item, text: value }
+                : item,
+            ),
+          }));
+        }}
+        onRemoveItem={(itemId) => {
+          setDraft((currentDraft) => ({
+            ...currentDraft,
+            items: currentDraft.items.filter((item) => item.id !== itemId),
+          }));
+        }}
+        onRequestNameChange={(requestName) => {
+          setDraft((currentDraft) => ({ ...currentDraft, requestName }));
+        }}
+        onStageFileItems={() => undefined}
+        onSubmit={() => {
+          setStatus({
+            kind: "success",
+            message: `Submitted ${draft.requestName} as ${draft.workTypeName}.`,
+          });
+        }}
+        onWorkTypeNameChange={(workTypeName) => {
+          setDraft((currentDraft) => ({ ...currentDraft, workTypeName }));
+        }}
+        status={status}
+        submitWorkTypeNames={["story", "bug"]}
+        widgetId="submit-work-interactive::story"
       />
     ),
-    layout: layoutFor(DASHBOARD_WIDGET_IDS.addWidget, {
-      h: 4,
-      id: "add-widget::story",
+    layout: layoutFor(DASHBOARD_WIDGET_IDS.submitWork, {
+      h: 6,
+      id: "submit-work-interactive::story",
       w: 5,
     }),
   });
+}
+
+function TraceDrilldownInteractiveStory() {
+  const [selectedWorkID, setSelectedWorkID] = useState<string | null>(null);
+
+  return (
+    <div>
+      {renderCardFrame({
+        children: (
+          <TraceDrilldownWidget
+            onSelectWorkID={setSelectedWorkID}
+            state={
+              {
+                status: "ready",
+                trace: storyTrace,
+              } satisfies ReturnType<typeof useTraceDrilldown>["traceGridState"]
+            }
+            widgetId="trace-interactive::story"
+          />
+        ),
+        layout: layoutFor(DASHBOARD_WIDGET_IDS.trace, {
+          h: 8,
+          id: "trace-interactive::story",
+          w: 8,
+        }),
+      })}
+      <p role="status">
+        {selectedWorkID
+          ? `Selected trace work item: ${selectedWorkID}`
+          : "No trace work item selected."}
+      </p>
+    </div>
+  );
 }
 
 function renderProviderSessionStateCard({
@@ -732,6 +873,16 @@ export const WorkflowGraph = {
         name: "Select Implement workstation",
       }),
     ).toBeVisible();
+    await userEvent.click(
+      await within(card).findByRole("button", {
+        name: "Select Implement workstation",
+      }),
+    );
+    await expect(
+      await within(card).findByRole("button", {
+        name: "Select Implement workstation",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
     await expect(
       canvas.getByRole("button", { name: "Move Factory graph" }),
     ).toBeVisible();
@@ -1060,6 +1211,39 @@ export const SubmitWork = {
   },
 };
 
+export const SubmitWorkInteractive = {
+  render: () => <SubmitWorkInteractiveStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", { name: "Submit work" });
+
+    await expect(
+      within(card).getByRole("button", {
+        name: "Remove Submit work widget from dashboard",
+      }),
+    ).toBeVisible();
+    await userEvent.selectOptions(
+      within(card).getByRole("combobox", { name: "Work type" }),
+      "story",
+    );
+    await userEvent.type(
+      within(card).getByRole("textbox", { name: "Request name" }),
+      "Interactive coverage",
+    );
+    await userEvent.type(
+      within(card).getByRole("textbox", { name: "Text item 1" }),
+      "Verify the bento card interaction path.",
+    );
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Submit work" }),
+    );
+
+    await expect(await within(card).findByRole("status")).toHaveTextContent(
+      "Submitted Interactive coverage as story.",
+    );
+  },
+};
+
 export const SubmitWorkEmpty = {
   render: () =>
     renderSubmitWorkStatusCard({
@@ -1154,6 +1338,27 @@ export const TraceDrilldown = {
   },
 };
 
+export const TraceDrilldownInteractive = {
+  render: () => <TraceDrilldownInteractiveStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Trace drill-down",
+    });
+
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Expand" }),
+    );
+    await userEvent.click(
+      within(card).getAllByRole("button", { name: /Active Story/ })[0],
+    );
+
+    await expect(await canvas.findByRole("status")).toHaveTextContent(
+      "Selected trace work item: work-active-story",
+    );
+  },
+};
+
 export const TraceDrilldownLoading = {
   render: () =>
     renderTraceStateCard({
@@ -1221,16 +1426,32 @@ export const InlineAddWidget = {
     const canvas = within(canvasElement);
     const page = within(canvasElement.ownerDocument.body);
     const card = await canvas.findByRole("article", { name: "Add widget" });
+    const addWidgetButton = within(card).getByRole("button", {
+      name: "Add widget",
+    });
 
+    await expect(addWidgetButton).toBeVisible();
+    addWidgetButton.focus();
+    await expect(addWidgetButton).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    const dialog = await page.findByRole("dialog", {
+      name: "Add dashboard widget",
+    });
+
+    await expect(dialog).toBeVisible();
     await expect(
-      within(card).getByRole("button", { name: "Add widget" }),
-    ).toBeVisible();
+      within(dialog).getByRole("button", {
+        name: "Browse widgets: Current selection",
+      }),
+    ).toBeDisabled();
     await userEvent.click(
-      within(card).getByRole("button", { name: "Add widget" }),
+      within(dialog).getByRole("button", {
+        name: "Browse widgets: Work totals",
+      }),
     );
-    await expect(
-      await page.findByRole("dialog", { name: "Add dashboard widget" }),
-    ).toBeVisible();
+    await expect(await canvas.findByRole("status")).toHaveTextContent(
+      "Selected widget: work-totals",
+    );
     await expect(
       canvas.getByRole("button", { name: "Move Add widget" }),
     ).toBeVisible();
