@@ -1,17 +1,17 @@
 import {
-  CURRENT_SELECTION_ALERT_PANEL_CLASS,
-  CURRENT_SELECTION_CODE_SUBTLE_CLASS,
-  CURRENT_SELECTION_FIELD_PANEL_CLASS,
-  CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
-} from "./detail-card-shared";
-import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
-import type { WorkstationDetailCardProps } from "./detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
+import {
+  CURRENT_SELECTION_ALERT_PANEL_CLASS,
+  CURRENT_SELECTION_CODE_SUBTLE_CLASS,
+  CURRENT_SELECTION_FIELD_PANEL_CLASS,
+  CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
+} from "./detail-card-shared";
+import type { WorkstationDetailCardProps } from "./detail-card-types";
 import { WorkstationPromptEditor } from "./workstation-prompt-editor";
 
 export function EditableConfigurationPromptInput({
@@ -38,7 +38,7 @@ export function EditableConfigurationPromptInput({
       <div>
         <WorkstationPromptEditor
           ariaLabel={messages.promptFieldLabel}
-          aria-describedby={describedBy || undefined}
+          ariaDescribedBy={describedBy || undefined}
           ariaInvalid={Boolean(state.validationErrors.prompt)}
           autocompleteState={state.promptHelpState}
           className={cn(
@@ -90,7 +90,10 @@ function EditableConfigurationPromptAutocompleteFeedback({
   if (state.promptHelpState.status === "error") {
     return (
       <p
-        className={cn("m-0 text-af-danger-text", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+        className={cn(
+          "m-0 text-af-danger-text",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
         role="alert"
       >
         {messages.editableConfigurationPromptHelpErrorPrefix}{" "}
@@ -115,7 +118,12 @@ function EditableConfigurationPromptAutocompleteFeedback({
           state.promptHelpState.contract.inputCount,
         )}
       </p>
-      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p
+        className={cn(
+          "m-0 text-af-text-subtle",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
         {messages.editableConfigurationPromptAutocompleteDetail}
       </p>
     </div>
@@ -170,7 +178,12 @@ function EditableConfigurationPromptValidationFeedback({
       <p className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}>
         {messages.editableConfigurationPromptDiagnosticsSummary}
       </p>
-      <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p
+        className={cn(
+          "m-0 text-af-text-subtle",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
         {messages.editableConfigurationPromptValidationDetail}
       </p>
       <div className="grid gap-2">
@@ -191,9 +204,13 @@ function EditableConfigurationPromptValidationFeedback({
               ].join(":")}
             >
               <p
-                className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+                className={cn(
+                  "m-0 text-af-danger-text",
+                  DASHBOARD_BODY_TEXT_CLASS,
+                )}
               >
-                {diagnosticLabel(diagnostic.kind, messages)}: {diagnostic.message}
+                {diagnosticLabel(diagnostic.kind, messages)}:{" "}
+                {diagnostic.message}
               </p>
               {diagnostic.path ? (
                 <code className={CURRENT_SELECTION_CODE_SUBTLE_CLASS}>
