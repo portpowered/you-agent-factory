@@ -24,6 +24,7 @@ export interface WorkstationNodeData extends Record<string, unknown> {
   active: boolean;
   activeFlow: boolean;
   executions: DashboardActiveExecution[];
+  factoryGraphNodeId?: string;
   handles?: ActivityGraphNodeHandle[];
   incomingHandleCount: number;
   kind?: "workstation";

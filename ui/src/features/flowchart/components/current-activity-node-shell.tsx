@@ -40,6 +40,7 @@ export function ActivityGraphNodeShell({
   const leftHandles = handles?.filter((handle) => handle.side === "left") ?? [];
   const rightHandles =
     handles?.filter((handle) => handle.side === "right") ?? [];
+  const renderPositionalHandles = handles === undefined;
 
   return (
     <article
@@ -56,20 +57,21 @@ export function ActivityGraphNodeShell({
           top={handlePosition(handleNumber, leftHandles.length)}
         />
       ))}
-      {Array.from({ length: incomingHandleCount }, (_, handleNumber) => {
-        const top = handlePosition(handleNumber, incomingHandleCount);
-        const handleId = `in-${handleNumber}`;
-        return (
-          <Handle
-            className="pointer-events-none opacity-0"
-            id={handleId}
-            key={`incoming-${top}`}
-            position={Position.Left}
-            style={{ top }}
-            type="target"
-          />
-        );
-      })}
+      {renderPositionalHandles &&
+        Array.from({ length: incomingHandleCount }, (_, handleNumber) => {
+          const top = handlePosition(handleNumber, incomingHandleCount);
+          const handleId = `in-${handleNumber}`;
+          return (
+            <Handle
+              className="pointer-events-none opacity-0"
+              id={handleId}
+              key={`incoming-${top}`}
+              position={Position.Left}
+              style={{ top }}
+              type="target"
+            />
+          );
+        })}
       {rightHandles.map((handle, handleNumber) => (
         <NodeHandleBadge
           handle={handle}
@@ -77,20 +79,21 @@ export function ActivityGraphNodeShell({
           top={handlePosition(handleNumber, rightHandles.length)}
         />
       ))}
-      {Array.from({ length: outgoingHandleCount }, (_, handleNumber) => {
-        const top = handlePosition(handleNumber, outgoingHandleCount);
-        const handleId = `out-${handleNumber}`;
-        return (
-          <Handle
-            className="pointer-events-none opacity-0"
-            id={handleId}
-            key={`outgoing-${top}`}
-            position={Position.Right}
-            style={{ top }}
-            type="source"
-          />
-        );
-      })}
+      {renderPositionalHandles &&
+        Array.from({ length: outgoingHandleCount }, (_, handleNumber) => {
+          const top = handlePosition(handleNumber, outgoingHandleCount);
+          const handleId = `out-${handleNumber}`;
+          return (
+            <Handle
+              className="pointer-events-none opacity-0"
+              id={handleId}
+              key={`outgoing-${top}`}
+              position={Position.Right}
+              style={{ top }}
+              type="source"
+            />
+          );
+        })}
       {children}
     </article>
   );

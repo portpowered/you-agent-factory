@@ -2,7 +2,6 @@ import type {
   DashboardActiveExecution,
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
-import { nodeKeyId } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type {
   GraphLayout,
   PositionedEdge,
@@ -16,6 +15,7 @@ import type {
   GraphNodePositions,
 } from "../state/currentActivityGraphStore";
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
+import { resolveFactoryGraphPlaceNode } from "./current-activity-factory-graph-node-ids";
 import {
   buildEditorHandles,
   type CurrentActivityEditorState,
@@ -72,29 +72,6 @@ function workstationGraphNodeId(nodeId: string): string {
 
 function placeGraphNodeId(placeId: string): string {
   return `place:${placeId}`;
-}
-
-function resolveEditorPlaceNodeId(
-  positionedNodeId: string,
-  place: {
-    kind: string;
-    state_value?: string;
-    type_id?: string;
-  },
-): string {
-  if (
-    place.kind === "work_state" &&
-    typeof place.type_id === "string" &&
-    typeof place.state_value === "string"
-  ) {
-    return nodeKeyId({
-      kind: "work-state",
-      stateName: place.state_value,
-      workTypeName: place.type_id,
-    });
-  }
-
-  return positionedNodeId;
 }
 
 export function buildHandleAssignments(
@@ -287,17 +264,19 @@ function buildPlaceNode(
     position,
     width: positionedNode.width,
   };
+  const factoryGraphNode = resolveFactoryGraphPlaceNode(place);
   const basePlaceData = {
     activeFlow: input.activeGraphHighlights.activePlaceNodeIds.has(
       positionedNode.nodeId,
     ),
     activeItemLabels: input.activeItemLabelsByPlaceId.get(place.place_id) ?? [],
+    factoryGraphNodeId: factoryGraphNode?.nodeId ?? positionedNode.nodeId,
     handles:
-      input.editor?.editorMode && place.kind === "work_state"
+      input.editor?.editorMode && factoryGraphNode
         ? buildEditorHandles({
             editor: input.editor,
-            nodeId: resolveEditorPlaceNodeId(positionedNode.nodeId, place),
-            nodeKind: "work-state",
+            nodeId: factoryGraphNode.nodeId,
+            nodeKind: factoryGraphNode.kind,
           })
         : undefined,
     incomingHandleCount:
@@ -335,7 +314,7 @@ function buildPlaceNode(
   if (place.kind === "resource") {
     return {
       ...basePlaceNode,
-      data: { ...basePlaceData, place },
+      data: { ...basePlaceData, kind: "resource" as const, place },
       selectable: false,
       type: "resource",
     };
@@ -343,7 +322,11 @@ function buildPlaceNode(
 
   return {
     ...basePlaceNode,
-    data: { ...basePlaceData, place },
+    data: {
+      ...basePlaceData,
+      kind: factoryGraphNode?.kind,
+      place,
+    },
     selectable: false,
     type: "constraint",
   };
@@ -381,6 +364,7 @@ function buildWorkstationNode(
         positionedNode.nodeId,
       ),
       executions,
+      factoryGraphNodeId: positionedNode.nodeId,
       handles: input.editor?.editorMode
         ? buildEditorHandles({
             editor: input.editor,
