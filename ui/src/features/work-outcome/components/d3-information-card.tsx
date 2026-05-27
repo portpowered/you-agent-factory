@@ -1,13 +1,12 @@
 import type { ReactNode } from "react";
-
-import { getDashboardWorkChartSeriesDefinitions } from "../lib/chart-contract";
-import { cn } from "../../../lib/cn";
-import type { WorkChartModel } from "../lib/trends";
-import { WorkChart } from "./work-chart";
-import type { WorkChartSeriesDefinition, WorkChartState } from "./work-chart";
 import { DASHBOARD_WIDGET_CLASS } from "../../../components/dashboard/widget-board";
 import { AgentBentoCard } from "../../../components/ui";
+import { cn } from "../../../lib/cn";
+import { getDashboardWorkChartSeriesDefinitions } from "../lib/chart-contract";
+import type { WorkChartModel } from "../lib/trends";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
+import type { WorkChartSeriesDefinition, WorkChartState } from "./work-chart";
+import { WorkChart } from "./work-chart";
 
 export interface WorkChartCardProps {
   chartState?: WorkChartState;
@@ -20,7 +19,7 @@ export interface WorkChartCardProps {
 }
 
 const WORK_CHART_BODY_CLASS =
-  "!flex !min-h-0 !flex-col !gap-0 !overflow-hidden !p-0";
+  "!flex !min-h-0 !flex-col !gap-0 !overflow-hidden px-0 pb-5";
 const WORK_CHART_REGION_CLASS = "flex min-h-0 flex-1 px-4 sm:px-5";
 
 export function WorkChartCard({
@@ -34,7 +33,9 @@ export function WorkChartCard({
 }: WorkChartCardProps) {
   const messages = getWorkOutcomeMessages(locale);
   const chartMessages = messages.chart;
-  const chartRegionID = widgetId ? `${widgetId}-chart-region` : "work-outcome-chart-region";
+  const chartRegionID = widgetId
+    ? `${widgetId}-chart-region`
+    : "work-outcome-chart-region";
   const cardClassName = cn(DASHBOARD_WIDGET_CLASS, className);
   const resolvedTitle = title ?? chartMessages.cardTitle;
   const chartSeries: readonly WorkChartSeriesDefinition[] =
