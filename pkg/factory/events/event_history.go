@@ -166,7 +166,7 @@ func (h *FactoryEventHistory) RecordInitialStructure() {
 	if h == nil {
 		return
 	}
-	eventTime := h.now()
+	eventTime := interfaces.CanonicalEventTime(h.now())
 	payload := projections.ProjectInitialStructure(h.net, h.runtimeConfig)
 	h.appendGenerated(factoryEvent(
 		factoryapi.FactoryEventTypeInitialStructureRequest,
@@ -182,6 +182,7 @@ func (h *FactoryEventHistory) RecordFactoryChange(tick int, payload factoryapi.F
 	if h == nil {
 		return
 	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
 	h.appendGenerated(factoryEvent(
 		factoryapi.FactoryEventTypeFactoryChange,
 		fmt.Sprintf("%s/%d", eventIDFactoryChangePrefix, tick),
@@ -201,7 +202,7 @@ func (h *FactoryEventHistory) RecordRunRequest() {
 		h.mu.Unlock()
 		return
 	}
-	recordedAt := h.now()
+	recordedAt := interfaces.CanonicalEventTime(h.now())
 	h.runRecordedAt = recordedAt
 	h.hasRunRequest = true
 	h.mu.Unlock()
@@ -232,6 +233,7 @@ func (h *FactoryEventHistory) RecordWorkRequest(tick int, record interfaces.Work
 	if h == nil || record.RequestID == "" {
 		return
 	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
 	context := factoryapi.FactoryEventContext{
 		Tick:      tick,
 		EventTime: eventTime,
@@ -262,6 +264,7 @@ func (h *FactoryEventHistory) RecordRelationshipChange(tick int, requestID strin
 	if h == nil || relation.Type == "" || relation.TargetWorkID == "" {
 		return
 	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
 	if relation.RequestID == "" {
 		relation.RequestID = requestID
 	}
@@ -288,6 +291,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 	if h == nil || dispatchID == "" {
 		return
 	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
 	inputTokens := workers.WorkDispatchInputTokens(record.Dispatch)
 	runnerSelection := h.resolvedRunnerSelectionForDispatch(record.Dispatch)
 	h.appendGenerated(factoryEvent(
@@ -323,6 +327,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result interfa
 	if eventTime.IsZero() {
 		eventTime = h.now()
 	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
 	failureReason, failureMessage := failureDetailsForResult(result)
 	h.appendGenerated(factoryEvent(
 		factoryapi.FactoryEventTypeDispatchResponse,
@@ -361,6 +366,7 @@ func (h *FactoryEventHistory) RecordInferenceEvent(event factoryapi.FactoryEvent
 	if h == nil || !isInferenceEventType(event.Type) {
 		return
 	}
+	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
 	h.appendGenerated(event)
 }
 
@@ -370,6 +376,7 @@ func (h *FactoryEventHistory) RecordModelEvent(event factoryapi.FactoryEvent) {
 	if h == nil || !isModelEventType(event.Type) {
 		return
 	}
+	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
 	h.appendGenerated(event)
 }
 
@@ -379,6 +386,7 @@ func (h *FactoryEventHistory) RecordScriptEvent(event factoryapi.FactoryEvent) {
 	if h == nil || !isScriptEventType(event.Type) {
 		return
 	}
+	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
 	h.appendGenerated(event)
 }
 
@@ -388,6 +396,7 @@ func (h *FactoryEventHistory) AppendRecordedEvent(event factoryapi.FactoryEvent)
 	if h == nil {
 		return
 	}
+	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
 	h.appendGenerated(event)
 }
 
@@ -407,6 +416,8 @@ func (h *FactoryEventHistory) RecordRunResponse(tick int, state interfaces.Facto
 		recordedAt = eventTime
 		h.runRecordedAt = recordedAt
 	}
+	recordedAt = interfaces.CanonicalEventTime(recordedAt)
+	eventTime = interfaces.CanonicalEventTime(eventTime)
 	h.hasRunResponse = true
 	h.mu.Unlock()
 
@@ -431,6 +442,7 @@ func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interf
 	if h == nil || previous == next {
 		return
 	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
 	h.appendGenerated(factoryEvent(
 		factoryapi.FactoryEventTypeFactoryStateResponse,
 		fmt.Sprintf("%s/%d/%s", eventIDStateChangePrefix, tick, next),
@@ -634,6 +646,7 @@ func timePtrIfNotZero(value time.Time) *time.Time {
 	if value.IsZero() {
 		return nil
 	}
+	value = interfaces.CanonicalEventTime(value)
 	return &value
 }
 

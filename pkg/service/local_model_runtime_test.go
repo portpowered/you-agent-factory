@@ -484,6 +484,23 @@ func assertRecordedLocalModelExecutionEvents(t *testing.T, events []factoryapi.F
 	assertRecordedLocalModelResponsePayload(t, events[1], audioPath)
 }
 
+func TestModelEventContext_NormalizesEventTimeToUTC(t *testing.T) {
+	localZone := time.FixedZone("Model/Local", 9*60*60)
+	context := modelEventContext(interfaces.RunnerExecutionRequest{
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID: "dispatch-model",
+			Execution:  interfaces.ExecutionMetadata{CurrentTick: 6},
+		},
+	}, time.Date(2026, 4, 20, 21, 15, 0, 0, localZone))
+
+	if context.EventTime.Location() != time.UTC {
+		t.Fatalf("event time location = %v, want UTC", context.EventTime.Location())
+	}
+	if got, want := context.EventTime.Format(time.RFC3339), "2026-04-20T12:15:00Z"; got != want {
+		t.Fatalf("event time = %q, want %q", got, want)
+	}
+}
+
 func assertRecordedLocalModelRequestPayload(t *testing.T, event factoryapi.FactoryEvent) {
 	t.Helper()
 	requestPayload, err := event.Payload.AsModelRequestEventPayload()

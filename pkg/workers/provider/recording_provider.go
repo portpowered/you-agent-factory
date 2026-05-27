@@ -185,7 +185,7 @@ func diagnosticsFromInferenceError(err error) *interfaces.WorkDiagnostics {
 func inferenceEventContext(req interfaces.ProviderInferenceRequest, eventTime time.Time) factoryapi.FactoryEventContext {
 	return factoryapi.FactoryEventContext{
 		Tick:       inferenceEventTick(req.Dispatch.Execution),
-		EventTime:  eventTime,
+		EventTime:  interfaces.CanonicalEventTime(eventTime),
 		DispatchId: stringPtrIfNotEmpty(req.Dispatch.DispatchID),
 		RequestId:  stringPtrIfNotEmpty(req.Dispatch.Execution.RequestID),
 		TraceIds:   stringSlicePtr(req.Dispatch.Execution.TraceID),

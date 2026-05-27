@@ -36,6 +36,7 @@ type ScriptExecutor struct {
 	CommandRunner CommandRunner
 	Logger        logging.Logger
 	recorder      ScriptEventRecorder
+	now           func() time.Time
 }
 
 // ScriptEventRecorder receives generated script-boundary events.
@@ -59,6 +60,16 @@ func WithScriptEventRecorder(recorder ScriptEventRecorder) ScriptExecutorOption 
 func WithScriptFactoryDir(factoryDir string) ScriptExecutorOption {
 	return func(se *ScriptExecutor) {
 		se.FactoryDir = strings.TrimSpace(factoryDir)
+	}
+}
+
+// WithScriptClock sets the clock used for script event occurrence times and
+// subprocess duration measurement.
+func WithScriptClock(now func() time.Time) ScriptExecutorOption {
+	return func(se *ScriptExecutor) {
+		if now != nil {
+			se.now = now
+		}
 	}
 }
 
@@ -97,12 +108,12 @@ func NewScriptExecutorWithRunner(def *interfaces.WorkerConfig, runner CommandRun
 // Exit code 0 produces ACCEPTED with stdout in Output.
 // Non-zero exit code produces FAILED with stderr as Error.
 func (se *ScriptExecutor) Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
-	start := time.Now()
+	start := se.clockNow()
 	logger := logging.EnsureLogger(se.Logger)
 
 	commandReq, err := se.commandRequest(request)
 	if err != nil {
-		return argTemplateErrorResult(request.Dispatch, start, err), nil
+		return argTemplateErrorResult(request.Dispatch, se.clockNow().Sub(start), err), nil
 	}
 	attempt := 1
 	requestID := scriptRequestID(commandReq.DispatchID, attempt)
@@ -116,24 +127,32 @@ func (se *ScriptExecutor) Execute(ctx context.Context, request interfaces.Workst
 			"dispatch_id", request.Dispatch.DispatchID)...)
 
 	commandResult, runErr := se.commandRunner().Run(ctx, commandReq)
-	duration := time.Since(start)
+	finished := se.clockNow()
+	duration := finished.Sub(start)
 	diagnostics := commandDiagnostics(commandReq, commandResult, duration, false)
 
 	if runErr != nil {
 		result := scriptRunErrorResult(ctx, logger, request.Dispatch, commandResult, diagnostics, duration, runErr)
-		se.record(scriptResponseEvent(commandReq, result, attempt, requestID, start.Add(duration)))
+		se.record(scriptResponseEvent(commandReq, result, attempt, requestID, finished))
 		return result, nil
 	}
 
 	if commandResult.ExitCode != 0 {
 		result := scriptExitFailureResult(logger, request.Dispatch, commandResult, diagnostics, duration)
-		se.record(scriptResponseEvent(commandReq, result, attempt, requestID, start.Add(duration)))
+		se.record(scriptResponseEvent(commandReq, result, attempt, requestID, finished))
 		return result, nil
 	}
 
 	result := scriptAcceptedResult(logger, request.Dispatch, commandResult, diagnostics, duration)
-	se.record(scriptResponseEvent(commandReq, result, attempt, requestID, start.Add(duration)))
+	se.record(scriptResponseEvent(commandReq, result, attempt, requestID, finished))
 	return result, nil
+}
+
+func (se *ScriptExecutor) clockNow() time.Time {
+	if se != nil && se.now != nil {
+		return se.now()
+	}
+	return time.Now()
 }
 
 func (se *ScriptExecutor) commandRequest(request interfaces.WorkstationExecutionRequest) (CommandRequest, error) {
@@ -222,7 +241,7 @@ func scriptResponseEvent(req CommandRequest, result interfaces.WorkResult, attem
 func scriptEventContext(req CommandRequest, eventTime time.Time) factoryapi.FactoryEventContext {
 	return factoryapi.FactoryEventContext{
 		Tick:       scriptEventTick(req.Execution),
-		EventTime:  eventTime,
+		EventTime:  interfaces.CanonicalEventTime(eventTime),
 		DispatchId: stringPtrIfNotEmpty(req.DispatchID),
 		RequestId:  stringPtrIfNotEmpty(req.Execution.RequestID),
 		TraceIds:   stringSlicePtr(req.Execution.TraceID),
@@ -319,13 +338,13 @@ func scriptCommandDiagnostic(result interfaces.WorkResult) (*interfaces.CommandD
 	return result.Diagnostics.Command, true
 }
 
-func argTemplateErrorResult(dispatch interfaces.WorkDispatch, start time.Time, err error) interfaces.WorkResult {
+func argTemplateErrorResult(dispatch interfaces.WorkDispatch, duration time.Duration, err error) interfaces.WorkResult {
 	return interfaces.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
 		Outcome:      interfaces.OutcomeFailed,
 		Error:        "arg template error: " + err.Error(),
-		Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+		Metrics:      interfaces.WorkMetrics{Duration: duration},
 	}
 }
 

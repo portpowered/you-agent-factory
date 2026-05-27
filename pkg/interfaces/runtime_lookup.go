@@ -4,6 +4,15 @@ import (
 	"time"
 )
 
+// CanonicalEventTime normalizes runtime event boundary timestamps to UTC while
+// preserving zero values so optional/fallback handling remains explicit.
+func CanonicalEventTime(value time.Time) time.Time {
+	if value.IsZero() {
+		return value
+	}
+	return value.UTC()
+}
+
 // RuntimeWorkstationLookup resolves runtime workstation definitions by authored name.
 type RuntimeWorkstationLookup interface {
 	Workstation(name string) (*FactoryWorkstationConfig, bool)
