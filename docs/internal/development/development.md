@@ -63,6 +63,8 @@ make ui-test-storybook
 
 The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automatically on pull requests and branch pushes and is intentionally limited to validation only. This first-pass workflow does not package or deploy releases.
 
+Expensive specialty verification that is useful for maintainer confidence but not required to merge a pull request should stay off the required PR path. The current example is `.github/workflows/long-local-inference.yml`, which runs long OMNIVOICE managed-runtime and functional-runtime coverage only through post-merge pushes to `main`, the daily `06:00 UTC` schedule, or explicit `workflow_dispatch` runs. Use that workflow when a change may affect managed local inference runtime setup, model download and cache behavior, or long-running real local inference behavior that the required PR lanes do not need to block on every narrow pull request.
+
 The maintainer-owned CLI release policy lives in [CLI release policy](cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
 
 The workflow currently executes these repository-owned commands through one prerequisite lane and three required verification lanes:
@@ -124,6 +126,23 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make ui-integration-test`, and `make test-backend-verification`, prints the owned lane label before each one, and emits the exact lane rerun command if one fails. The GitHub Actions workflow fans those commands out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Verification` jobs so required failures point at one lane instead of a mixed `make ui-test` rerun.
 
+Every pull request still runs the same prerequisite path before any lane-specific skips happen:
+
+1. `Classify PR Impact`
+2. `Typecheck`
+3. `Build, Lint, and API`
+
+The classifier is what decides whether the three downstream required test lanes run or skip. Treat its four classifications as the maintained routing contract:
+
+| Classification | Touched surfaces | Required downstream lanes | Local rerun guidance |
+| --- | --- | --- | --- |
+| `docs-only` | `docs/**` plus root-level docs or text files such as `README.md`, `*.md`, `*.mdx`, and `*.txt` | skip `UI Coverage`, skip `UI Browser Integration`, skip `Backend Verification` | No downstream lane rerun is expected; if the change was misclassified, rerun the classifier logic through `go run ./cmd/ciclassify ...` or use the full path with `make verify`. |
+| `ui-only` | `ui/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | run `UI Coverage`, run `UI Browser Integration`, skip `Backend Verification` | `make test-ui-coverage` and `make ui-integration-test` |
+| `backend-only` | `cmd/**`, `pkg/**`, or `tests/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | skip `UI Coverage`, skip `UI Browser Integration`, run `Backend Verification` | `make test-backend-verification` |
+| `shared-risk` | mixed product areas or explicit shared surfaces such as `.github/workflows/**`, `api/**`, `pkg/api/**`, `pkg/apisurface/**`, `Makefile`, `go.mod`, or `go.sum` | run `UI Coverage`, run `UI Browser Integration`, run `Backend Verification` | `make verify` |
+
+The workflow publishes this routing decision twice in GitHub Actions: the `Classify PR Impact` job summary shows the overall classification, changed-file count, touched areas, and the full required rerun command, and each downstream lane summary shows its own `run` versus `skip` decision together with the specific local rerun command and the short reason emitted by `cmd/ciclassify`.
+
 Treat those lanes as the stable contributor mental model:
 
 | CI lane | Owned checks | Local rerun command | Why this lane stays separate |
@@ -135,6 +154,18 @@ Treat those lanes as the stable contributor mental model:
 The backend lane is intentionally merged. `make test-backend-verification` shells through `cmd/gocoveragecheck`, and that command's default package discovery already executes the maintained short functional packages under `tests/functional/...` in the same covered `go test` invocation as `./cmd/factory` and backend-owned `./pkg/...` packages. Because that coverage lane already includes `tests/functional/bootstrap_portability`, `guards_batch`, `providers`, `replay_contracts`, `runtime_api`, `smoke`, and `workflow` while excluding only the internal support helper package, a separate required `make test-backend-functional` lane would only rerun the same short functional corpus without adding pull-request confidence. Keep `make test-backend-functional` as a compatibility alias for ad hoc local usage, but treat `make test-backend-verification` as the required PR backend lane.
 
 The browser-backed lane remains self-building for the same reason: `make ui-integration-test` delegates into the shared browser harness that runs `bun run build` with a test-owned API origin and serves that exact build with `vite preview`. Treat that build plus preview startup as part of the lane's owned runtime contract instead of uploading `ui/dist` from another job.
+
+When a required lane fails, GitHub Actions keeps the lane-owned failure evidence for 14 days and names it explicitly in the lane summary:
+
+| CI lane | Failure artifact name | Retained evidence |
+| --- | --- | --- |
+| `UI Coverage` | `ui-coverage-failure-artifacts` | lane `command.log` with the failing command output |
+| `UI Browser Integration` | `ui-browser-integration-failure-artifacts` | lane `command.log` plus the shared harness browser evidence: Playwright trace, final screenshot, page HTML snapshot, and diagnostics JSON |
+| `Backend Verification` | `backend-verification-failure-artifacts` | lane `command.log` with the covered Go test and maintained short functional output |
+
+Those lane summaries also include the last 40 lines of the failing command log so maintainers can see the immediate error surface before downloading artifacts.
+
+Treat `Long Local Inference` as the maintainer-owned follow-up lane for expensive real-runtime coverage rather than as part of merge-blocking pull-request CI. In GitHub Actions, its run names distinguish `post-merge verification`, `scheduled verification`, and `manual verification` so maintainers can tell why it ran from the workflow list. Reach for it after merging runtime-sensitive local-model changes, before a risky runtime release, or when you need to confirm that OMNIVOICE-specific setup and long-running inference still work outside the required short PR checks.
 
 Use the lane-specific targets below when you need to rerun one required CI lane locally without replaying the full suite:
 
