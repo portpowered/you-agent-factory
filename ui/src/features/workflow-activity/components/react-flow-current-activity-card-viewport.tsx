@@ -24,6 +24,7 @@ import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factor
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
+import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
@@ -259,6 +260,7 @@ export function CurrentActivityGraphViewport({
           edgesFocusable={editorMode}
           nodesConnectable={editorMode && activeTool === "connect"}
           onConnect={handleConnect}
+          onError={handleCurrentActivityReactFlowError}
           onEdgeClick={(_, edge) => {
             if (editorMode) {
               onEditorEdgeClick?.(edge.id);
