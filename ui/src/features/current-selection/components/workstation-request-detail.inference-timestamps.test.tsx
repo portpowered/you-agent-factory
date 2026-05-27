@@ -1,5 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { formatLocalDateTime } from "../../../components/ui/formatters";
+import {
+  formatLocalDateTime,
+  formatLocalTimezoneContext,
+} from "../../../components/ui/formatters";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import {
   inferenceAttempt,
@@ -36,6 +39,7 @@ it("rerenders request and response timestamps for the active locale", () => {
   expect(
     screen.getByText("Times on this card are shown in your local timezone."),
   ).toBeTruthy();
+  expect(screen.getByText(formatLocalTimezoneContext("Timezone", "en"))).toBeTruthy();
   const expectedEnglishRequestTime = formatLocalDateTime(
     requestTime,
     "Unavailable",
@@ -75,6 +79,7 @@ it("rerenders request and response timestamps for the active locale", () => {
     screen.getByRole("region", { name: "推理尝试" }),
   );
   expect(screen.getByText("此卡片中的时间会按你的本地时区显示。")).toBeTruthy();
+  expect(screen.getByText(formatLocalTimezoneContext("时区", "zh-CN"))).toBeTruthy();
   const expectedChineseRequestTime = formatLocalDateTime(
     requestTime,
     "不可用",

@@ -37,6 +37,7 @@ export interface ProviderSessionDetailMessages {
   parseSummaryHeading: string;
   providerLabel: string;
   localizedTimezoneContext: string;
+  localizedTimezoneLabel: string;
   rawTimestampDetailsLabel: string;
   noTimestamp: string;
   orderLabel: (params: { order: number; turnIndex?: number | null }) => string;

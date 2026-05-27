@@ -98,7 +98,10 @@ function WorkstationRequestSummary({
   return (
     <>
       <p className={WIDGET_SUBTITLE_CLASS}>{view.requestTitle}</p>
-      <LocalizedTimezoneNote>
+      <LocalizedTimezoneNote
+        locale={locale}
+        timezoneLabel={messages.localizedTimezoneLabel}
+      >
         {messages.localizedTimezoneContext}
       </LocalizedTimezoneNote>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>

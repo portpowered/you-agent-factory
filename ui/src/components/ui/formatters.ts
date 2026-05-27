@@ -19,6 +19,11 @@ export interface ProviderSessionLogTarget {
   href: string;
 }
 
+export interface LocalDateTimeDisplay {
+  label: string;
+  rawTimestamp: string | null;
+}
+
 export function formatDurationMillis(
   durationMillis: number,
   locale?: string | null,
@@ -114,19 +119,54 @@ export function formatLocalDateTime(
   unavailableLabel: string,
   locale?: string | null,
 ): string {
-  const normalizedTimestamp = timestamp?.trim();
+  const normalizedTimestamp = normalizeValidTimestamp(timestamp);
   if (!normalizedTimestamp) {
     return unavailableLabel;
   }
 
-  const timestampMs = Date.parse(normalizedTimestamp);
-  if (Number.isNaN(timestampMs)) {
-    return unavailableLabel;
-  }
-
-  return formatDateTime(timestampMs, locale, {
+  return formatDateTime(normalizedTimestamp, locale, {
     fallback: unavailableLabel,
   });
+}
+
+export function getLocalDateTimeDisplay(
+  timestamp: string | null | undefined,
+  unavailableLabel: string,
+  locale?: string | null,
+  options?: {
+    missingLabel?: string;
+  },
+): LocalDateTimeDisplay {
+  if (!timestamp?.trim()) {
+    return {
+      label: options?.missingLabel ?? unavailableLabel,
+      rawTimestamp: null,
+    };
+  }
+
+  const normalizedTimestamp = normalizeValidTimestamp(timestamp);
+  if (!normalizedTimestamp) {
+    return {
+      label: unavailableLabel,
+      rawTimestamp: null,
+    };
+  }
+
+  return {
+    label: formatLocalDateTime(normalizedTimestamp, unavailableLabel, locale),
+    rawTimestamp: normalizedTimestamp,
+  };
+}
+
+export function formatLocalTimezoneContext(
+  timezoneLabel: string,
+  locale?: string | null,
+): string {
+  const timeZone =
+    new Intl.DateTimeFormat(locale ?? undefined).resolvedOptions().timeZone ||
+    "local timezone";
+
+  return `${timezoneLabel}: ${timeZone}`;
 }
 
 export function formatWorkItemLabel(workItem: DashboardWorkItemRef): string {
@@ -218,6 +258,17 @@ export function formatList(
 function normalizeNonEmptyText(value: string | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeValidTimestamp(timestamp?: string | null): string | null {
+  const normalizedTimestamp = timestamp?.trim();
+  if (!normalizedTimestamp) {
+    return null;
+  }
+
+  return Number.isNaN(Date.parse(normalizedTimestamp))
+    ? null
+    : normalizedTimestamp;
 }
 
 function isAllowedSessionLogURL(value: string): boolean {

@@ -47,6 +47,7 @@ export interface CurrentSelectionDetailMessages {
   providerResponseUnavailable: string;
   providerSessionLabel: string;
   localizedTimezoneContext: string;
+  localizedTimezoneLabel: string;
   runnerLabel: string;
   runnerCapabilityImageInputLabel: string;
   runnerCapabilitySessionResumeLabel: string;
@@ -206,6 +207,7 @@ const currentSelectionDetailMessagesByLocale = {
     providerSessionLabel: "Provider session",
     localizedTimezoneContext:
       "Times on this card are shown in your local timezone.",
+    localizedTimezoneLabel: "Timezone",
     runnerLabel: "Runner",
     runnerCapabilityImageInputLabel: "Image input",
     runnerCapabilitySessionResumeLabel: "Session resume",
@@ -349,6 +351,7 @@ const currentSelectionDetailMessagesByLocale = {
     providerSessionLabel: "Provider session",
     localizedTimezoneContext:
       "このカードの時刻は、あなたのローカルタイムゾーンで表示されます。",
+    localizedTimezoneLabel: "タイムゾーン",
     runnerLabel: "Runner",
     runnerCapabilityImageInputLabel: "画像入力",
     runnerCapabilitySessionResumeLabel: "セッション再開",
@@ -492,6 +495,7 @@ const currentSelectionDetailMessagesByLocale = {
     providerSessionLabel: "Provider session",
     localizedTimezoneContext:
       "이 카드의 시간은 사용자의 로컬 시간대로 표시됩니다.",
+    localizedTimezoneLabel: "시간대",
     runnerLabel: "Runner",
     runnerCapabilityImageInputLabel: "이미지 입력",
     runnerCapabilitySessionResumeLabel: "세션 재개",
@@ -622,6 +626,7 @@ const currentSelectionDetailMessagesByLocale = {
     providerResponseUnavailable: "此推理尝试没有可用的提供方响应文本。",
     providerSessionLabel: "Provider session",
     localizedTimezoneContext: "此卡片中的时间会按你的本地时区显示。",
+    localizedTimezoneLabel: "时区",
     runnerLabel: "Runner",
     runnerCapabilityImageInputLabel: "图片输入",
     runnerCapabilitySessionResumeLabel: "会话恢复",
