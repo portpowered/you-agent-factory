@@ -68,7 +68,13 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	for _, finding := range findings {
-		fmt.Fprintf(stderr, "%s | package files=%d limit=%d counted=%s\n", finding.packagePath, len(finding.files), finding.limit, strings.Join(finding.files, ","))
+		fmt.Fprintf(stderr, "[agent-factory:pkg-file-count] oversized package: %s\n", finding.packagePath)
+		fmt.Fprintf(stderr, "  package files: %d\n", len(finding.files))
+		fmt.Fprintf(stderr, "  limit: %d\n", finding.limit)
+		fmt.Fprintln(stderr, "  counted files:")
+		for _, file := range finding.files {
+			fmt.Fprintf(stderr, "    - %s\n", file)
+		}
 	}
 	return fmt.Errorf("[agent-factory:pkg-file-count] found %d package file-count violation(s)", len(findings))
 }

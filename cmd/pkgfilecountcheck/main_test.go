@@ -54,11 +54,31 @@ func TestRunFailsWhenPackageExceedsPackageFileLimit(t *testing.T) {
 	}
 
 	errOutput := stderr.String()
-	if !strings.Contains(errOutput, "pkg/service | package files=16 limit=15 counted=") {
-		t.Fatalf("run() stderr = %q, want package count details", errOutput)
-	}
-	if !strings.Contains(errOutput, "pkg/service/file_01.go") || !strings.Contains(errOutput, "pkg/service/file_16.go") {
-		t.Fatalf("run() stderr = %q, want counted file paths", errOutput)
+	wantOutput := strings.Join([]string{
+		"[agent-factory:pkg-file-count] oversized package: pkg/service",
+		"  package files: 16",
+		"  limit: 15",
+		"  counted files:",
+		"    - pkg/service/file_01.go",
+		"    - pkg/service/file_02.go",
+		"    - pkg/service/file_03.go",
+		"    - pkg/service/file_04.go",
+		"    - pkg/service/file_05.go",
+		"    - pkg/service/file_06.go",
+		"    - pkg/service/file_07.go",
+		"    - pkg/service/file_08.go",
+		"    - pkg/service/file_09.go",
+		"    - pkg/service/file_10.go",
+		"    - pkg/service/file_11.go",
+		"    - pkg/service/file_12.go",
+		"    - pkg/service/file_13.go",
+		"    - pkg/service/file_14.go",
+		"    - pkg/service/file_15.go",
+		"    - pkg/service/file_16.go",
+		"",
+	}, "\n")
+	if errOutput != wantOutput {
+		t.Fatalf("run() stderr = %q, want deterministic package count details %q", errOutput, wantOutput)
 	}
 	if got := err.Error(); got != "[agent-factory:pkg-file-count] found 1 package file-count violation(s)" {
 		t.Fatalf("run() error = %q, want violation count", got)
@@ -141,10 +161,13 @@ func TestRunReportsMultiplePackagesDeterministically(t *testing.T) {
 	}
 
 	errOutput := stderr.String()
-	alphaIndex := strings.Index(errOutput, "pkg/alpha | package files=16 limit=15")
-	zetaIndex := strings.Index(errOutput, "pkg/zeta | package files=16 limit=15")
+	alphaIndex := strings.Index(errOutput, "[agent-factory:pkg-file-count] oversized package: pkg/alpha")
+	zetaIndex := strings.Index(errOutput, "[agent-factory:pkg-file-count] oversized package: pkg/zeta")
 	if alphaIndex < 0 || zetaIndex < 0 || alphaIndex > zetaIndex {
 		t.Fatalf("run() stderr = %q, want packages reported in path order", errOutput)
+	}
+	if got := strings.Count(errOutput, "  counted files:\n"); got != 2 {
+		t.Fatalf("run() stderr = %q, want counted file section for each package", errOutput)
 	}
 	if got := err.Error(); got != "[agent-factory:pkg-file-count] found 2 package file-count violation(s)" {
 		t.Fatalf("run() error = %q, want two violation count", got)
