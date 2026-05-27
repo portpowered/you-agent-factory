@@ -1,0 +1,6 @@
+name: state.name
+in: query
+required: false
+description: Optional current work state name filter.
+schema:
+  type: string

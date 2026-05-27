@@ -748,169 +748,36 @@ paths:
 components:
   parameters:
     SessionID:
-      name: session_id
-      in: path
-      required: true
-      description: Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly.
-      schema:
-        type: string
+      $ref: './components/parameters/SessionID.yaml'
     MaxResults:
-      name: maxResults
-      in: query
-      required: false
-      description: Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
-      schema:
-        type: integer
-        minimum: 1
-        default: 50
+      $ref: './components/parameters/MaxResults.yaml'
     NextToken:
-      name: nextToken
-      in: query
-      required: false
-      description: Optional base64-encoded token ID cursor.
-      schema:
-        type: string
+      $ref: './components/parameters/NextToken.yaml'
     StateName:
-      name: state.name
-      in: query
-      required: false
-      description: Optional current work state name filter.
-      schema:
-        type: string
+      $ref: './components/parameters/StateName.yaml'
     StateType:
-      name: state.type
-      in: query
-      required: false
-      description: Optional current work state type filter.
-      schema:
-        $ref: '#/components/schemas/WorkStateType'
+      $ref: './components/parameters/StateType.yaml'
     SortBy:
-      name: sortBy
-      in: query
-      required: false
-      description: Optional list-work sort field. Use state.type to order by current work state type.
-      schema:
-        type: string
-        enum:
-          - state.type
+      $ref: './components/parameters/SortBy.yaml'
     WorkOrTokenID:
-      name: id
-      in: path
-      required: true
-      description: Work or token identifier, depending on route.
-      schema:
-        type: string
+      $ref: './components/parameters/WorkOrTokenID.yaml'
   responses:
     BadRequest:
-      description: Request payload or parameter was invalid.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
+      $ref: './components/responses/BadRequest.yaml'
     CreateFactoryBadRequest:
-      description: Named factory name or payload was invalid.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          examples:
-            invalidFactoryName:
-              summary: Factory name failed validation.
-              value:
-                message: Factory name must be a safe directory segment without path separators.
-                family: BAD_REQUEST
-                code: INVALID_FACTORY_NAME
-            invalidFactory:
-              summary: Factory payload failed validation.
-              value:
-                message: Factory payload is not a valid Agent Factory definition.
-                family: BAD_REQUEST
-                code: INVALID_FACTORY
+      $ref: './components/responses/CreateFactoryBadRequest.yaml'
     CreateFactoryConflict:
-      description: Named factory could not be activated because the name already exists or the current runtime is not idle.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          examples:
-            factoryAlreadyExists:
-              summary: Factory name already exists.
-              value:
-                message: Named factory already exists.
-                family: CONFLICT
-                code: FACTORY_ALREADY_EXISTS
-            factoryNotIdle:
-              summary: Runtime is not idle.
-              value:
-                message: Current factory runtime must be idle before activation.
-                family: CONFLICT
-                code: FACTORY_NOT_IDLE
+      $ref: './components/responses/CreateFactoryConflict.yaml'
     NotFound:
-      description: Requested resource was not found.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
+      $ref: './components/responses/NotFound.yaml'
     CurrentFactoryNotFound:
-      description: Current named factory was not found.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          examples:
-            currentFactoryMissing:
-              summary: No current named factory is available.
-              value:
-                message: Current named factory not found.
-                family: NOT_FOUND
-                code: NOT_FOUND
+      $ref: './components/responses/CurrentFactoryNotFound.yaml'
     SaveCurrentFactoryBadRequest:
-      description: Current factory save request failed validation.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          examples:
-            invalidFactory:
-              summary: Factory payload failed validation.
-              value:
-                message: Factory payload is not a valid Agent Factory definition.
-                family: BAD_REQUEST
-                code: INVALID_FACTORY
-                targets:
-                  - kind: form
-                    field: factory
+      $ref: './components/responses/SaveCurrentFactoryBadRequest.yaml'
     SaveCurrentFactoryConflict:
-      description: Current factory could not be saved because the runtime or submitted version is not safe to replace.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          examples:
-            staleFactoryVersion:
-              summary: Submitted version is stale.
-              value:
-                message: Current factory definition is stale. Refresh the graph before saving.
-                family: CONFLICT
-                code: STALE_FACTORY_VERSION
-                targets:
-                  - kind: save
-                    id: stale-version
-            factoryNotIdle:
-              summary: Runtime is not idle.
-              value:
-                message: Current factory runtime must be idle before activation.
-                family: CONFLICT
-                code: FACTORY_NOT_IDLE
-                targets:
-                  - kind: save
-                    id: active-work
+      $ref: './components/responses/SaveCurrentFactoryConflict.yaml'
     InternalError:
-      description: Server failed while reading or building runtime state.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
+      $ref: './components/responses/InternalError.yaml'
   schemas:
     SubmitWorkRequest:
       $ref: './components/schemas/api/SubmitWorkRequest.yaml'

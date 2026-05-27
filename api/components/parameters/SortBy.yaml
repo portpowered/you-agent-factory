@@ -1,0 +1,8 @@
+name: sortBy
+in: query
+required: false
+description: Optional list-work sort field. Use state.type to order by current work state type.
+schema:
+  type: string
+  enum:
+    - state.type
