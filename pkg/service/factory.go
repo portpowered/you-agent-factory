@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
+	"github.com/portpowered/infinite-you/pkg/service/localmodel"
 	"github.com/portpowered/infinite-you/pkg/workers"
 
 	"go.uber.org/zap"
@@ -63,6 +64,14 @@ var ErrInvalidNamedFactory = apisurface.ErrInvalidNamedFactory
 // ErrCurrentFactoryNotFound reports that no durable current-factory pointer
 // could be resolved for canonical current-factory reads.
 var ErrCurrentFactoryNotFound = apisurface.ErrCurrentFactoryNotFound
+
+type localModelCacheLayout = localmodel.CacheLayout
+type localModelLoadRequest = localmodel.LoadRequest
+type localModelInvocationRequest = localmodel.InvocationRequest
+type localModelHandle = localmodel.Handle
+type localModelRuntime = localmodel.Runtime
+type localModelResourceLimiter = localmodel.ResourceLimiter
+type managedLocalModelManager = localmodel.Manager
 
 type replacementFactoryRuntime struct {
 	dir            string

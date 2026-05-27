@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service/localmodel"
 	"github.com/portpowered/infinite-you/pkg/service/modelassets"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -574,7 +575,7 @@ func assertOmniVoiceCommandRequest(t *testing.T, got workers.CommandRequest, wor
 
 func assertOmniVoiceInvocationPayload(t *testing.T, stdin []byte) {
 	t.Helper()
-	var payload omniVoiceInvocationPayload
+	var payload localmodel.OmniVoiceInvocationPayload
 	if err := json.Unmarshal(stdin, &payload); err != nil {
 		t.Fatalf("decode stdin payload: %v", err)
 	}
@@ -592,7 +593,7 @@ func assertOmniVoiceResponseContent(t *testing.T, responseContent string) {
 	if len(content) != 1 {
 		t.Fatalf("content count = %d, want 1", len(content))
 	}
-	if content[0].Type != interfaces.WorkContentPartTypeAudio || content[0].ContentType != omniVoiceAudioContentType || strings.TrimSpace(content[0].File) == "" {
+	if content[0].Type != interfaces.WorkContentPartTypeAudio || content[0].ContentType != localmodel.OmniVoiceAudioContentType || strings.TrimSpace(content[0].File) == "" {
 		t.Fatalf("content = %#v, want AUDIO content with output file", content)
 	}
 	if _, err := os.Stat(content[0].File); err != nil {

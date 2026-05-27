@@ -1,4 +1,4 @@
-package service
+package localmodel
 
 import (
 	"context"
@@ -15,14 +15,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
-type localModelCacheLayout struct {
+type CacheLayout struct {
 	ModelName string
 	CachePath string
 	Revision  string
 	Files     []string
 }
 
-type localModelLoadRequest struct {
+type LoadRequest struct {
 	Resource  interfaces.ResourceConfig
 	Worker    *interfaces.WorkerConfig
 	ModelName string
@@ -31,53 +31,67 @@ type localModelLoadRequest struct {
 	Files     []string
 }
 
-type localModelInvocationRequest struct {
+type InvocationRequest struct {
 	Resource interfaces.ResourceConfig
 	Worker   *interfaces.WorkerConfig
 	Request  interfaces.RunnerExecutionRequest
 }
 
-type localModelHandle interface {
-	Invoke(context.Context, localModelInvocationRequest) (interfaces.InferenceResponse, error)
+type Handle interface {
+	Invoke(context.Context, InvocationRequest) (interfaces.InferenceResponse, error)
 }
 
-type localModelRuntime interface {
+type Runtime interface {
 	Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool
-	Load(context.Context, localModelLoadRequest) (localModelHandle, error)
+	Load(context.Context, LoadRequest) (Handle, error)
 }
 
-type managedLocalModelManager struct {
+type AssetPuller interface {
+	ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error)
+}
+
+type Hooks struct {
+	MarkResourceWaitStarted  func(context.Context, time.Time)
+	MarkResourceWaitFinished func(context.Context, time.Time, bool)
+	MarkLoadRequested        func(context.Context, time.Time)
+	MarkLoadFinished         func(context.Context, time.Time)
+	MarkLoadReused           func(context.Context)
+}
+
+type Manager struct {
 	mu          sync.Mutex
 	entries     map[string]*managedLocalModelEntry
-	assetPuller modelAssetPuller
-	runtime     localModelRuntime
+	assetPuller AssetPuller
+	runtime     Runtime
+	hooks       Hooks
 }
 
 type managedLocalModelEntry struct {
 	mu     sync.Mutex
-	handle localModelHandle
+	handle Handle
 }
 
 type localModelRunner struct {
 	inner      workers.Runner
-	manager    *managedLocalModelManager
+	manager    *Manager
 	runtimeCfg interfaces.RuntimeConfigLookup
 	factoryCfg *interfaces.FactoryConfig
 	workerDef  *interfaces.WorkerConfig
 }
 
-func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localModelRuntime) *managedLocalModelManager {
+func NewManager(assetPuller AssetPuller, runtime Runtime, hooks Hooks) *Manager {
 	if assetPuller == nil || runtime == nil {
 		return nil
 	}
-	return &managedLocalModelManager{
+	return &Manager{
 		entries:     make(map[string]*managedLocalModelEntry),
 		assetPuller: assetPuller,
 		runtime:     runtime,
+		hooks:       hooks,
 	}
 }
 
-func (m *managedLocalModelManager) wrapRunner(
+func (m *Manager) WrapRunner(
 	inner workers.Runner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
@@ -109,14 +123,14 @@ func (r *localModelRunner) Execute(ctx context.Context, request interfaces.Runne
 	return response, err
 }
 
-func (m *managedLocalModelManager) execute(
+func (m *Manager) execute(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
 	workerDef *interfaces.WorkerConfig,
 	request interfaces.RunnerExecutionRequest,
 ) (interfaces.InferenceResponse, bool, error) {
-	resource, resourceKey, ok := localModelRuntimeResource(factoryCfg, workerDef)
+	resource, resourceKey, ok := RuntimeResource(factoryCfg, workerDef)
 	if !ok || !m.runtime.Supports(resource, workerDef) {
 		return interfaces.InferenceResponse{}, false, nil
 	}
@@ -129,7 +143,7 @@ func (m *managedLocalModelManager) execute(
 		return interfaces.InferenceResponse{}, true, err
 	}
 	loadWorker := factoryconfig.CloneWorkerConfig(*workerDef)
-	handle, err := m.loadHandle(ctx, resourceKey, localModelLoadRequest{
+	handle, err := m.loadHandle(ctx, resourceKey, LoadRequest{
 		Resource:  resource,
 		Worker:    &loadWorker,
 		ModelName: cacheLayout.ModelName,
@@ -141,7 +155,7 @@ func (m *managedLocalModelManager) execute(
 		return interfaces.InferenceResponse{}, true, err
 	}
 	invokeWorker := factoryconfig.CloneWorkerConfig(*workerDef)
-	response, err := handle.Invoke(ctx, localModelInvocationRequest{
+	response, err := handle.Invoke(ctx, InvocationRequest{
 		Resource: resource,
 		Worker:   &invokeWorker,
 		Request:  interfaces.CloneProviderInferenceRequest(request),
@@ -157,27 +171,35 @@ func runtimeCfgForLocalModel(runtimeCfg interfaces.RuntimeConfigLookup) (*factor
 	return loaded, nil
 }
 
-func (m *managedLocalModelManager) loadHandle(ctx context.Context, key string, request localModelLoadRequest) (localModelHandle, error) {
+func (m *Manager) loadHandle(ctx context.Context, key string, request LoadRequest) (Handle, error) {
 	entry := m.entry(key)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
 	if entry.handle != nil {
-		markModelExecutionLoadReused(ctx)
+		if m.hooks.MarkLoadReused != nil {
+			m.hooks.MarkLoadReused(ctx)
+		}
 		return entry.handle, nil
 	}
-	markModelExecutionLoadRequested(ctx, time.Now())
+	if m.hooks.MarkLoadRequested != nil {
+		m.hooks.MarkLoadRequested(ctx, time.Now())
+	}
 	handle, err := m.runtime.Load(ctx, request)
 	if err != nil {
-		markModelExecutionLoadFinished(ctx, time.Now())
+		if m.hooks.MarkLoadFinished != nil {
+			m.hooks.MarkLoadFinished(ctx, time.Now())
+		}
 		return nil, err
 	}
-	markModelExecutionLoadFinished(ctx, time.Now())
+	if m.hooks.MarkLoadFinished != nil {
+		m.hooks.MarkLoadFinished(ctx, time.Now())
+	}
 	entry.handle = handle
 	return handle, nil
 }
 
-func (m *managedLocalModelManager) entry(key string) *managedLocalModelEntry {
+func (m *Manager) entry(key string) *managedLocalModelEntry {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -190,7 +212,7 @@ func (m *managedLocalModelManager) entry(key string) *managedLocalModelEntry {
 	return entry
 }
 
-func localModelRuntimeResource(factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.WorkerConfig) (interfaces.ResourceConfig, string, bool) {
+func RuntimeResource(factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.WorkerConfig) (interfaces.ResourceConfig, string, bool) {
 	if factoryCfg == nil || workerDef == nil || workerDef.ModelLocality != interfaces.ModelLocalityLocal {
 		return interfaces.ResourceConfig{}, "", false
 	}
@@ -218,14 +240,18 @@ func localModelRuntimeResource(factoryCfg *interfaces.FactoryConfig, workerDef *
 	return interfaces.ResourceConfig{}, "", false
 }
 
-func canonicalBackendName(value string) string {
+func CanonicalBackendName(value string) string {
+	return strings.ToUpper(strings.TrimSpace(value))
+}
+
+func canonicalModelName(value string) string {
 	return strings.ToUpper(strings.TrimSpace(value))
 }
 
 const (
-	defaultOmniVoiceCommand       = "omnivoice-llamacpp"
+	DefaultOmniVoiceCommand       = "omnivoice-llamacpp"
 	omniVoiceInvokeSubcommand     = "invoke"
-	omniVoiceAudioContentType     = "audio/wav"
+	OmniVoiceAudioContentType     = "audio/wav"
 	omniVoiceModelSlotNameText    = "text"
 	omniVoiceModelSlotNameAudio   = "audio"
 	omniVoiceTokenizerNameSnippet = "tokenizer"
@@ -246,7 +272,7 @@ type omniVoiceLocalHandle struct {
 	tokenizerPath string
 }
 
-type omniVoiceInvocationPayload struct {
+type OmniVoiceInvocationPayload struct {
 	Operation  string                                     `json:"operation"`
 	ModelName  string                                     `json:"modelName"`
 	Revision   string                                     `json:"revision,omitempty"`
@@ -255,7 +281,7 @@ type omniVoiceInvocationPayload struct {
 	Bindings   []interfaces.ResolvedModelOperationBinding `json:"bindings,omitempty"`
 }
 
-func newOmniVoiceLocalRuntime(runner workers.CommandRunner) localModelRuntime {
+func NewOmniVoiceRuntime(runner workers.CommandRunner) Runtime {
 	if runner == nil {
 		runner = workers.ExecCommandRunner{}
 	}
@@ -267,11 +293,11 @@ func (r *omniVoiceLocalRuntime) Supports(resource interfaces.ResourceConfig, wor
 		return false
 	}
 	return strings.TrimSpace(worker.ModelLocality) == interfaces.ModelLocalityLocal &&
-		canonicalBackendName(resource.Backend) == "LLAMACPP" &&
+		CanonicalBackendName(resource.Backend) == "LLAMACPP" &&
 		canonicalModelName(worker.Model) == canonicalModelName("OMNIVOICE_Q4_K_M")
 }
 
-func (r *omniVoiceLocalRuntime) Load(_ context.Context, request localModelLoadRequest) (localModelHandle, error) {
+func (r *omniVoiceLocalRuntime) Load(_ context.Context, request LoadRequest) (Handle, error) {
 	if !r.Supports(request.Resource, request.Worker) {
 		return nil, fmt.Errorf("unsupported local model runtime for model %q with backend %q", request.ModelName, request.Resource.Backend)
 	}
@@ -292,7 +318,7 @@ func (r *omniVoiceLocalRuntime) Load(_ context.Context, request localModelLoadRe
 	}, nil
 }
 
-func (h *omniVoiceLocalHandle) Invoke(ctx context.Context, request localModelInvocationRequest) (interfaces.InferenceResponse, error) {
+func (h *omniVoiceLocalHandle) Invoke(ctx context.Context, request InvocationRequest) (interfaces.InferenceResponse, error) {
 	if h == nil {
 		return interfaces.InferenceResponse{}, fmt.Errorf("local model handle is required")
 	}
@@ -309,7 +335,7 @@ func (h *omniVoiceLocalHandle) Invoke(ctx context.Context, request localModelInv
 		return interfaces.InferenceResponse{}, err
 	}
 
-	payload := omniVoiceInvocationPayload{
+	payload := OmniVoiceInvocationPayload{
 		Operation:  operation,
 		ModelName:  h.modelName,
 		Revision:   h.revision,
@@ -376,11 +402,11 @@ func omniVoiceCacheFiles(files []string) (string, string, error) {
 
 func omniVoiceCommandForWorker(worker *interfaces.WorkerConfig) (string, []string) {
 	if worker == nil {
-		return defaultOmniVoiceCommand, nil
+		return DefaultOmniVoiceCommand, nil
 	}
 	command := strings.TrimSpace(worker.Command)
 	if command == "" {
-		command = defaultOmniVoiceCommand
+		command = DefaultOmniVoiceCommand
 	}
 	return command, append([]string(nil), worker.Args...)
 }
@@ -485,7 +511,7 @@ func omniVoiceResponseContent(stdout string, outputFile string) ([]interfaces.Wo
 			Type:        interfaces.WorkContentPartTypeAudio,
 			Slot:        omniVoiceModelSlotNameAudio,
 			File:        outputFile,
-			ContentType: omniVoiceAudioContentType,
+			ContentType: OmniVoiceAudioContentType,
 		}}
 	}
 	audioFound := false
@@ -498,7 +524,7 @@ func omniVoiceResponseContent(stdout string, outputFile string) ([]interfaces.Wo
 			content[i].File = outputFile
 		}
 		if strings.TrimSpace(content[i].ContentType) == "" {
-			content[i].ContentType = omniVoiceAudioContentType
+			content[i].ContentType = OmniVoiceAudioContentType
 		}
 		if strings.TrimSpace(content[i].Slot) == "" {
 			content[i].Slot = omniVoiceModelSlotNameAudio
@@ -509,7 +535,7 @@ func omniVoiceResponseContent(stdout string, outputFile string) ([]interfaces.Wo
 			Type:        interfaces.WorkContentPartTypeAudio,
 			Slot:        omniVoiceModelSlotNameAudio,
 			File:        outputFile,
-			ContentType: omniVoiceAudioContentType,
+			ContentType: OmniVoiceAudioContentType,
 		})
 	}
 	if _, err := os.Stat(outputFile); err != nil {
@@ -524,12 +550,13 @@ type localModelResourceReservation struct {
 	capacity int
 }
 
-type localModelResourceLimiter struct {
+type ResourceLimiter struct {
 	mu      sync.Mutex
-	entries map[string]*localModelResourceLimiterEntry
+	entries map[string]*ResourceLimiterEntry
+	hooks   Hooks
 }
 
-type localModelResourceLimiterEntry struct {
+type ResourceLimiterEntry struct {
 	mu       sync.Mutex
 	cond     *sync.Cond
 	capacity int
@@ -538,23 +565,24 @@ type localModelResourceLimiterEntry struct {
 
 type localModelLimitedRunner struct {
 	inner        workers.Runner
-	limiter      *localModelResourceLimiter
+	limiter      *ResourceLimiter
 	reservations []localModelResourceReservation
 }
 
-func newLocalModelResourceLimiter() *localModelResourceLimiter {
-	return &localModelResourceLimiter{
-		entries: make(map[string]*localModelResourceLimiterEntry),
+func NewResourceLimiter(hooks Hooks) *ResourceLimiter {
+	return &ResourceLimiter{
+		entries: make(map[string]*ResourceLimiterEntry),
+		hooks:   hooks,
 	}
 }
 
-func newLocalModelResourceLimiterEntry(capacity int) *localModelResourceLimiterEntry {
-	entry := &localModelResourceLimiterEntry{capacity: capacity}
+func newLocalModelResourceLimiterEntry(capacity int) *ResourceLimiterEntry {
+	entry := &ResourceLimiterEntry{capacity: capacity}
 	entry.cond = sync.NewCond(&entry.mu)
 	return entry
 }
 
-func (l *localModelResourceLimiter) wrapRunner(
+func (l *ResourceLimiter) WrapRunner(
 	inner workers.Runner,
 	factoryCfg *interfaces.FactoryConfig,
 	workerDef *interfaces.WorkerConfig,
@@ -634,28 +662,34 @@ func localModelResourceKey(resource interfaces.ResourceConfig) string {
 	return strings.Join([]string{model, backend, loadPolicy}, "|")
 }
 
-func (l *localModelResourceLimiter) acquire(ctx context.Context, reservations []localModelResourceReservation) error {
+func (l *ResourceLimiter) acquire(ctx context.Context, reservations []localModelResourceReservation) error {
 	if l == nil || len(reservations) == 0 {
 		return nil
 	}
 
 	waitStartedAt := time.Now()
-	markModelExecutionResourceWaitStarted(ctx, waitStartedAt)
+	if l.hooks.MarkResourceWaitStarted != nil {
+		l.hooks.MarkResourceWaitStarted(ctx, waitStartedAt)
+	}
 	acquired := make([]localModelResourceReservation, 0, len(reservations))
 	for _, reservation := range reservations {
 		entry := l.entry(reservation.key, reservation.capacity)
 		if err := entry.acquire(ctx, reservation.count); err != nil {
-			markModelExecutionResourceWaitFinished(ctx, time.Now(), false)
+			if l.hooks.MarkResourceWaitFinished != nil {
+				l.hooks.MarkResourceWaitFinished(ctx, time.Now(), false)
+			}
 			l.release(acquired)
 			return err
 		}
 		acquired = append(acquired, reservation)
 	}
-	markModelExecutionResourceWaitFinished(ctx, time.Now(), true)
+	if l.hooks.MarkResourceWaitFinished != nil {
+		l.hooks.MarkResourceWaitFinished(ctx, time.Now(), true)
+	}
 	return nil
 }
 
-func (l *localModelResourceLimiter) release(reservations []localModelResourceReservation) {
+func (l *ResourceLimiter) release(reservations []localModelResourceReservation) {
 	if l == nil || len(reservations) == 0 {
 		return
 	}
@@ -666,7 +700,7 @@ func (l *localModelResourceLimiter) release(reservations []localModelResourceRes
 	}
 }
 
-func (l *localModelResourceLimiter) entry(key string, capacity int) *localModelResourceLimiterEntry {
+func (l *ResourceLimiter) entry(key string, capacity int) *ResourceLimiterEntry {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -686,7 +720,7 @@ func (l *localModelResourceLimiter) entry(key string, capacity int) *localModelR
 	return entry
 }
 
-func (e *localModelResourceLimiterEntry) acquire(ctx context.Context, count int) error {
+func (e *ResourceLimiterEntry) acquire(ctx context.Context, count int) error {
 	if e == nil || count <= 0 {
 		return nil
 	}
@@ -711,7 +745,7 @@ func (e *localModelResourceLimiterEntry) acquire(ctx context.Context, count int)
 	return nil
 }
 
-func (e *localModelResourceLimiterEntry) release(count int) {
+func (e *ResourceLimiterEntry) release(count int) {
 	if e == nil || count <= 0 {
 		return
 	}

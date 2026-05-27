@@ -13,6 +13,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/service/localmodel"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -26,7 +27,7 @@ type fakeLocalModelRuntime struct {
 }
 
 func (r *fakeLocalModelRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {
-	return canonicalBackendName(resource.Backend) == "LLAMACPP" && canonicalModelName(worker.Model) == canonicalModelName("OMNIVOICE_Q4_K_M")
+	return localmodel.CanonicalBackendName(resource.Backend) == "LLAMACPP" && canonicalModelName(worker.Model) == canonicalModelName("OMNIVOICE_Q4_K_M")
 }
 
 func (r *fakeLocalModelRuntime) Load(_ context.Context, request localModelLoadRequest) (localModelHandle, error) {
@@ -773,8 +774,8 @@ func TestLocalModelResourceLimiter_BoundsSharedLocalModelConcurrencyAcrossSessio
 	}
 
 	inner := newBlockingRunner()
-	first := limiter.wrapRunner(inner, factoryCfg, workerDef)
-	second := limiter.wrapRunner(inner, factoryCfg, workerDef)
+	first := limiter.WrapRunner(inner, factoryCfg, workerDef)
+	second := limiter.WrapRunner(inner, factoryCfg, workerDef)
 
 	ctx := context.Background()
 	firstDone := make(chan struct{})

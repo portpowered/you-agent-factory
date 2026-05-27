@@ -18,6 +18,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/service/localmodel"
 	"go.uber.org/zap"
 )
 
@@ -252,7 +253,7 @@ func localModelLongTestFactoryConfig() *interfaces.FactoryConfig {
 			Model:         "OMNIVOICE_Q4_K_M",
 			ModelProvider: interfaces.RunnerIDCodex,
 			ModelLocality: interfaces.ModelLocalityLocal,
-			Command:       defaultOmniVoiceCommand,
+			Command:       localmodel.DefaultOmniVoiceCommand,
 			Resources: []interfaces.ResourceConfig{{
 				Name:     "omnivoice-cache",
 				Capacity: 1,

@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
+	"github.com/portpowered/infinite-you/pkg/service/localmodel"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -275,6 +276,28 @@ func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) (*localModelRes
 		localModelRuntime = newOmniVoiceLocalRuntime(nil)
 	}
 	return modelResources, modelAssets, newManagedLocalModelManager(modelAssets, localModelRuntime)
+}
+
+func localModelHooks() localmodel.Hooks {
+	return localmodel.Hooks{
+		MarkResourceWaitStarted:  markModelExecutionResourceWaitStarted,
+		MarkResourceWaitFinished: markModelExecutionResourceWaitFinished,
+		MarkLoadRequested:        markModelExecutionLoadRequested,
+		MarkLoadFinished:         markModelExecutionLoadFinished,
+		MarkLoadReused:           markModelExecutionLoadReused,
+	}
+}
+
+func newLocalModelResourceLimiter() *localModelResourceLimiter {
+	return localmodel.NewResourceLimiter(localModelHooks())
+}
+
+func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localModelRuntime) *managedLocalModelManager {
+	return localmodel.NewManager(assetPuller, runtime, localModelHooks())
+}
+
+func newOmniVoiceLocalRuntime(runner workers.CommandRunner) localModelRuntime {
+	return localmodel.NewOmniVoiceRuntime(runner)
 }
 
 func buildRuntimeRecorder(
@@ -569,8 +592,8 @@ func buildWorkerExecutor(
 		agentOpts := []workerexecutor.AgentExecutorOption{
 			workerexecutor.WithLogger(logger),
 		}
-		runner = localModels.wrapRunner(runner, runtimeCfg, factoryCfg, def)
-		runner = modelResources.wrapRunner(runner, factoryCfg, def)
+		runner = localModels.WrapRunner(runner, runtimeCfg, factoryCfg, def)
+		runner = modelResources.WrapRunner(runner, factoryCfg, def)
 		runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
 		agentExec := workerexecutor.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
 		return &workerexecutor.WorkstationExecutor{
