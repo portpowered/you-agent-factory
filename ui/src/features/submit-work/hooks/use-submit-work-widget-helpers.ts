@@ -211,11 +211,6 @@ export function validateDraft(
     validationErrors.requestName =
       messages.validationMessages.requestRequired;
   }
-  if (!hasMeaningfulSubmissionItems(draft)) {
-    validationErrors.submissionItems =
-      messages.validationMessages.submissionItemsRequired;
-    return validationErrors;
-  }
   if (hasStagingFileItems(draft)) {
     validationErrors.submissionItems =
       messages.validationMessages.fileItemStillStaging;
@@ -295,15 +290,6 @@ export async function fileToBase64(file: File): Promise<string> {
   }
 
   throw new Error("Base64 encoding is unavailable in this environment.");
-}
-
-function hasMeaningfulSubmissionItems(draft: SubmitWorkDraft): boolean {
-  return draft.items.some((item) => {
-    if (item.type === "text") {
-      return item.text.trim().length > 0;
-    }
-    return item.stagingStatus === "ready" && (item.stagedFileRef ?? "").length > 0;
-  });
 }
 
 function hasIncompleteFileItems(draft: SubmitWorkDraft): boolean {

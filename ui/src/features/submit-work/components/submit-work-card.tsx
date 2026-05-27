@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Plus } from "lucide-react";
 
 import {
   Button,
@@ -9,7 +10,6 @@ import {
   PopoverContent,
   PopoverTrigger,
   Select,
-  Textarea,
 } from "../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
@@ -18,7 +18,7 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
 import { getSubmitWorkMessages } from "../messages/submit-work";
-import { FileSubmissionItemEditor } from "./submit-work-file-input";
+import { SubmissionItemsList } from "./submit-work-items-list";
 
 export interface SubmitWorkDraft {
   items: SubmitWorkDraftItem[];
@@ -74,11 +74,10 @@ export interface SubmitWorkCardProps {
   widgetId?: string;
 }
 
-const FORM_CLASS = "grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3";
-const FORM_FIELDS_CLASS = "grid min-h-0 content-start gap-4 overflow-y-auto pb-2 pr-1";
+const FORM_CLASS = "grid h-full min-h-0 content-start gap-3";
+const FORM_FIELDS_CLASS = "grid min-h-0 content-start gap-4 overflow-y-auto pr-1";
 const FIELD_GROUP_CLASS = "grid gap-2";
-const FIELD_LABEL_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
-const ACTION_ROW_CLASS = "mt-auto grid gap-3";
+const ACTION_ROW_CLASS = "grid gap-3";
 const HELP_TEXT_CLASS = cn(
   "max-w-xl leading-relaxed text-af-text-muted",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -87,8 +86,6 @@ const VALIDATION_TEXT_CLASS = cn(
   "text-af-danger-text",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
-const ITEM_SHELL_CLASS =
-  "grid gap-3 rounded-lg border-af-border border bg-af-panel p-3";
 const STATUS_TONE_CLASS_BY_KIND: Record<SubmitWorkStatus["kind"], string> = {
   error: "text-af-danger-text",
   guidance: "text-af-text-subtle",
@@ -142,10 +139,30 @@ export function SubmitWorkCard({
   const workTypeID = `${widgetId}-work-type`;
   const workTypeErrorID = `${widgetId}-work-type-error`;
   const statusID = `${widgetId}-status`;
+  const shouldRenderStatus =
+    status.kind !== "guidance" ||
+    (status.message !== messages.statusMessages.emptyGuidance &&
+      status.message !== messages.statusMessages.ready);
 
   return (
     <DashboardWidgetFrame
-      headerAction={headerAction}
+      headerAction={
+        <SubmitWorkHeaderControls
+          controlsDisabled={controlsDisabled}
+          headerAction={headerAction}
+          isAddItemMenuOpen={isAddItemMenuOpen}
+          messages={messages}
+          onAddItem={onAddItem}
+          onAddItemMenuOpenChange={setIsAddItemMenuOpen}
+          onWorkTypeNameChange={onWorkTypeNameChange}
+          submitWorkTypeNames={submitWorkTypeNames}
+          validationErrors={validationErrors}
+          widgetId={widgetId}
+          workTypeID={workTypeID}
+          workTypeName={draft.workTypeName}
+          workTypeErrorID={workTypeErrorID}
+        />
+      }
       title={messages.cardTitle}
       widgetId={widgetId}
     >
@@ -158,36 +175,10 @@ export function SubmitWorkCard({
       >
         <div className={FORM_FIELDS_CLASS}>
           <div className={FIELD_GROUP_CLASS}>
-            <label className={FIELD_LABEL_CLASS} htmlFor={workTypeID}>
-              {messages.workTypeLabel}
-            </label>
-            <Select
-              aria-describedby={
-                validationErrors?.workTypeName ? workTypeErrorID : undefined
-              }
-              aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
-              className={DASHBOARD_BODY_TEXT_CLASS}
-              disabled={controlsDisabled}
-              id={workTypeID}
-              onChange={(event) => onWorkTypeNameChange(event.target.value)}
-              value={draft.workTypeName}
+            <label
+              className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+              htmlFor={requestNameID}
             >
-              <option value="">{messages.selectWorkTypePlaceholder}</option>
-              {submitWorkTypeNames.map((workTypeName) => (
-                <option key={workTypeName} value={workTypeName}>
-                  {workTypeName}
-                </option>
-              ))}
-            </Select>
-            {validationErrors?.workTypeName ? (
-              <p className={VALIDATION_TEXT_CLASS} id={workTypeErrorID}>
-                {validationErrors.workTypeName}
-              </p>
-            ) : null}
-          </div>
-
-          <div className={FIELD_GROUP_CLASS}>
-            <label className={FIELD_LABEL_CLASS} htmlFor={requestNameID}>
               {messages.requestNameLabel}
             </label>
             <Input
@@ -211,16 +202,9 @@ export function SubmitWorkCard({
           </div>
 
           <div className={FIELD_GROUP_CLASS}>
-            <div className={FIELD_LABEL_CLASS} id={submissionItemsID}>
+            <div className="sr-only" id={submissionItemsID}>
               {messages.submissionItemsLabel}
             </div>
-            <AddSubmissionItemMenu
-              controlsDisabled={controlsDisabled}
-              isOpen={isAddItemMenuOpen}
-              messages={messages}
-              onAddItem={onAddItem}
-              onOpenChange={setIsAddItemMenuOpen}
-            />
             <SubmissionItemsList
               controlsDisabled={controlsDisabled}
               draft={draft}
@@ -240,21 +224,23 @@ export function SubmitWorkCard({
         </div>
 
         <div className={ACTION_ROW_CLASS}>
-          <p
-            className={cn(
-              "min-w-0 flex-1",
-              HELP_TEXT_CLASS,
-              STATUS_TONE_CLASS_BY_KIND[status.kind],
-            )}
-            id={statusID}
-            role={
-              status.kind === "error" || status.kind === "validation-error"
-                ? "alert"
-                : "status"
-            }
-          >
-            {status.message}
-          </p>
+          {shouldRenderStatus ? (
+            <p
+              className={cn(
+                "min-w-0 flex-1",
+                HELP_TEXT_CLASS,
+                STATUS_TONE_CLASS_BY_KIND[status.kind],
+              )}
+              id={statusID}
+              role={
+                status.kind === "error" || status.kind === "validation-error"
+                  ? "alert"
+                  : "status"
+              }
+            >
+              {status.message}
+            </p>
+          ) : null}
           <Button
             aria-busy={isSubmitting ? "true" : undefined}
             className="w-full justify-center self-start"
@@ -270,240 +256,143 @@ export function SubmitWorkCard({
   );
 }
 
+function SubmitWorkHeaderControls({
+  controlsDisabled,
+  headerAction,
+  isAddItemMenuOpen,
+  messages,
+  onAddItem,
+  onAddItemMenuOpenChange,
+  onWorkTypeNameChange,
+  submitWorkTypeNames,
+  validationErrors,
+  widgetId,
+  workTypeErrorID,
+  workTypeID,
+  workTypeName,
+}: {
+  controlsDisabled: boolean;
+  headerAction?: ReactNode;
+  isAddItemMenuOpen: boolean;
+  messages: ReturnType<typeof getSubmitWorkMessages>;
+  onAddItem: (type: SubmitWorkDraftItemType) => void;
+  onAddItemMenuOpenChange: (open: boolean) => void;
+  onWorkTypeNameChange: (value: string) => void;
+  submitWorkTypeNames: string[];
+  validationErrors?: SubmitWorkValidationErrors;
+  widgetId: string;
+  workTypeErrorID: string;
+  workTypeID: string;
+  workTypeName: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+      <div className="grid min-w-36 gap-1">
+        <label className="sr-only" htmlFor={workTypeID}>
+          {messages.workTypeLabel}
+        </label>
+        <Select
+          aria-describedby={
+            validationErrors?.workTypeName ? workTypeErrorID : undefined
+          }
+          aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
+          className={cn("min-h-9 py-2 text-xs", DASHBOARD_BODY_TEXT_CLASS)}
+          disabled={controlsDisabled}
+          id={workTypeID}
+          onChange={(event) => onWorkTypeNameChange(event.target.value)}
+          value={workTypeName}
+        >
+          <option value="">{messages.selectWorkTypePlaceholder}</option>
+          {submitWorkTypeNames.map((submitWorkTypeName) => (
+            <option key={submitWorkTypeName} value={submitWorkTypeName}>
+              {submitWorkTypeName}
+            </option>
+          ))}
+        </Select>
+        {validationErrors?.workTypeName ? (
+          <p className="sr-only" id={workTypeErrorID}>
+            {validationErrors.workTypeName}
+          </p>
+        ) : null}
+      </div>
+      <AddSubmissionItemMenu
+        controlsDisabled={controlsDisabled}
+        isOpen={isAddItemMenuOpen}
+        messages={messages}
+        onAddItem={onAddItem}
+        onOpenChange={onAddItemMenuOpenChange}
+        widgetId={widgetId}
+      />
+      {headerAction}
+    </div>
+  );
+}
+
 function AddSubmissionItemMenu({
   controlsDisabled,
   isOpen,
   messages,
   onAddItem,
   onOpenChange,
+  widgetId,
 }: {
   controlsDisabled: boolean;
   isOpen: boolean;
   messages: ReturnType<typeof getSubmitWorkMessages>;
   onAddItem: (type: SubmitWorkDraftItemType) => void;
   onOpenChange: (open: boolean) => void;
-}) {
-  return (
-    <div className="flex justify-start">
-      <Popover onOpenChange={onOpenChange} open={isOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            aria-label={messages.addItemAction}
-            disabled={controlsDisabled}
-            size="sm"
-            tone="outline"
-            type="button"
-          >
-            {messages.addItemAction}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          aria-label={messages.addItemMenuLabel}
-          className="grid gap-3"
-        >
-          <p className={HELP_TEXT_CLASS}>{messages.addItemMenuDescription}</p>
-          <div className="grid gap-2">
-            {ADDABLE_ITEM_TYPES.map((itemType) => {
-              const typeLabel = itemTypeLabel(messages, itemType);
-              return (
-                <Button
-                  aria-label={typeLabel}
-                  className="justify-start border-af-border text-left font-medium"
-                  key={itemType}
-                  onClick={() => {
-                    onAddItem(itemType);
-                    onOpenChange(false);
-                  }}
-                  tone="outline"
-                  type="button"
-                >
-                  {typeLabel}
-                </Button>
-              );
-            })}
-          </div>
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
-}
-
-function SubmissionItemsList({
-  controlsDisabled,
-  draft,
-  messages,
-  onItemTextChange,
-  onRemoveItem,
-  onStageFileItems,
-  submissionItemsID,
-  widgetId,
-}: {
-  controlsDisabled: boolean;
-  draft: SubmitWorkDraft;
-  messages: ReturnType<typeof getSubmitWorkMessages>;
-  onItemTextChange: (itemId: string, value: string) => void;
-  onRemoveItem: (itemId: string) => void;
-  onStageFileItems: (itemId: string, files: File[]) => void;
-  submissionItemsID: string;
   widgetId: string;
 }) {
-  return (
-    <ol aria-labelledby={submissionItemsID} className="grid gap-3">
-      {draft.items.map((item, index) => {
-        const requestItemLabel = messages.requestItemLabel(index + 1);
-        const typeLabel = itemTypeLabel(messages, item.type);
+  const menuDescriptionID = `${widgetId}-add-item-menu-description`;
 
-        return (
-          <SubmitWorkItemShell
-            disabled={controlsDisabled}
-            itemTypeLabel={typeLabel}
-            key={item.id}
-            onRemove={() => onRemoveItem(item.id)}
-            removeLabel={messages.removeItemLabel(typeLabel, index + 1)}
-          >
-            {item.type === "text" ? (
-              <TextSubmissionItemEditor
-                disabled={controlsDisabled}
-                item={item}
-                itemLabel={requestItemLabel}
-                messages={messages}
-                onChange={onItemTextChange}
-                widgetId={widgetId}
-              />
-            ) : (
-              <FileSubmissionItemEditorShell
-                disabled={controlsDisabled}
-                item={item}
-                messages={messages}
-                onStageFileItems={onStageFileItems}
-                widgetId={widgetId}
-              />
-            )}
-          </SubmitWorkItemShell>
-        );
-      })}
-    </ol>
-  );
-}
-
-function SubmitWorkItemShell({
-  children,
-  disabled = false,
-  itemTypeLabel,
-  onRemove,
-  removeLabel,
-}: {
-  children: ReactNode;
-  disabled?: boolean;
-  itemTypeLabel: string;
-  onRemove: () => void;
-  removeLabel: string;
-}) {
   return (
-    <li className={ITEM_SHELL_CLASS}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid gap-1">
-          <span className={FIELD_LABEL_CLASS}>{itemTypeLabel}</span>
-        </div>
+    <Popover onOpenChange={onOpenChange} open={isOpen}>
+      <PopoverTrigger asChild>
         <DashboardIconButtonShell
-          aria-label={removeLabel}
-          className="text-af-text-subtle hover:border-af-danger-border hover:bg-af-danger-surface hover:text-af-danger-text"
-          disabled={disabled}
-          onClick={() => {
-            if (disabled) {
-              return;
-            }
-            onRemove();
-          }}
+          aria-label={messages.addItemAction}
+          disabled={controlsDisabled}
+          tone="outline"
+          type="button"
         >
-          <svg
+          <Plus
             aria-hidden="true"
-            fill="none"
-            height="16"
-            viewBox="0 0 16 16"
-            width="16"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="m4 4 8 8M12 4 4 12"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.7"
-            />
-          </svg>
+            className="size-4"
+            focusable="false"
+            strokeWidth={1.8}
+          />
         </DashboardIconButtonShell>
-      </div>
-      {children}
-    </li>
-  );
-}
-
-function TextSubmissionItemEditor({
-  disabled,
-  item,
-  itemLabel,
-  messages,
-  onChange,
-  widgetId,
-}: {
-  disabled: boolean;
-  item: SubmitWorkDraftTextItem;
-  itemLabel: string;
-  messages: ReturnType<typeof getSubmitWorkMessages>;
-  onChange: (itemId: string, value: string) => void;
-  widgetId: string;
-}) {
-  const requestTextID = `${widgetId}-${item.id}-text`;
-  const requestTextHintID = `${widgetId}-${item.id}-text-hint`;
-  const requestHint = messages.requestHint?.trim();
-
-  return (
-    <>
-      <Textarea
-        aria-label={itemLabel}
-        aria-describedby={requestHint ? requestTextHintID : undefined}
-        className={DASHBOARD_BODY_TEXT_CLASS}
-        disabled={disabled}
-        id={requestTextID}
-        onChange={(event) => onChange(item.id, event.target.value)}
-        placeholder={messages.requestPlaceholder}
-        value={item.text}
-      />
-      {requestHint ? (
-        <p className={HELP_TEXT_CLASS} id={requestTextHintID}>
-          {requestHint}
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        aria-describedby={menuDescriptionID}
+        aria-label={messages.addItemMenuLabel}
+        className="grid gap-3"
+      >
+        <p className={HELP_TEXT_CLASS} id={menuDescriptionID}>
+          {messages.addItemMenuDescription}
         </p>
-      ) : null}
-    </>
-  );
-}
-
-function FileSubmissionItemEditorShell({
-  disabled,
-  item,
-  messages,
-  onStageFileItems,
-  widgetId,
-}: {
-  disabled: boolean;
-  item: SubmitWorkDraftFileItem;
-  messages: ReturnType<typeof getSubmitWorkMessages>;
-  onStageFileItems: (itemId: string, files: File[]) => void;
-  widgetId: string;
-}) {
-  return (
-    <FileSubmissionItemEditor
-      disabled={disabled}
-      fieldLabelClassName={FIELD_LABEL_CLASS}
-      helpTextClassName={HELP_TEXT_CLASS}
-      inputID={`${widgetId}-${item.id}-file`}
-      item={item}
-      messages={messages}
-      onStageFileItems={(files: File[]) => onStageFileItems(item.id, files)}
-      validationTextClassName={VALIDATION_TEXT_CLASS}
-    />
+        <div className="grid gap-2">
+          {ADDABLE_ITEM_TYPES.map((itemType) => {
+            const typeLabel = itemTypeLabel(messages, itemType);
+            return (
+              <Button
+                aria-label={typeLabel}
+                className="justify-start border-af-border text-left font-medium"
+                key={itemType}
+                onClick={() => {
+                  onAddItem(itemType);
+                  onOpenChange(false);
+                }}
+                tone="outline"
+                type="button"
+              >
+                {typeLabel}
+              </Button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

@@ -123,10 +123,10 @@ describe("App follow-up submit request flows", () => {
     );
     expect(submitButton.disabled).toBe(true);
     expect(
-      submitWorkScope.getByText(
+      submitWorkScope.queryByText(
         "Choose a work type and enter a request name to continue.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
 
     fireEvent.change(workType, { target: { value: "story" } });
     fireEvent.change(requestName, {
@@ -156,13 +156,20 @@ describe("App follow-up submit request flows", () => {
     fireEvent.change(requestName, {
       target: { value: "Dashboard empty payload request" },
     });
+    const requestsBeforeEmptyPayloadSubmit =
+      nonPromptTemplateFetchPaths(fetchMock).length;
     fireEvent.click(submitButton);
 
-    expect(
-      await submitWorkScope.findAllByText(
-        "Add at least one non-empty text item or one staged file before submitting.",
-      ),
-    ).toHaveLength(2);
+    await waitFor(() => {
+      expect(nonPromptTemplateFetchPaths(fetchMock)).toHaveLength(
+        requestsBeforeEmptyPayloadSubmit + 1,
+      );
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
+      items: [],
+      name: "Dashboard empty payload request",
+      workTypeName: "story",
+    });
 
     fireEvent.change(requestName, {
       target: { value: "Retry dashboard request" },
@@ -178,6 +185,7 @@ describe("App follow-up submit request flows", () => {
       await submitWorkScope.findByText("work_type_name is required"),
     ).toBeTruthy();
     expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
     ]);
