@@ -51,6 +51,10 @@ function isSingleRefObject(entry) {
   );
 }
 
+function isComponentFileRef(ref) {
+  return ref.startsWith('./components/') && !ref.includes('#');
+}
+
 function lintOpenAPIMainComponentsText(text, sourceName = 'api/openapi-main.yaml') {
   const document = YAML.parseDocument(text, { prettyErrors: false });
   if (document.errors.length > 0) {
@@ -75,13 +79,15 @@ function lintOpenAPIMainComponentsText(text, sourceName = 'api/openapi-main.yaml
     }
 
     for (const [component, entry] of Object.entries(entries)) {
-      if (isSingleRefObject(entry)) {
+      const ref = refValue(entry);
+      if (isSingleRefObject(entry) && isComponentFileRef(ref)) {
         continue;
       }
 
-      const ref = refValue(entry);
       const detail = typeof ref === 'undefined'
         ? 'missing $ref'
+        : isSingleRefObject(entry)
+          ? 'must reference a component file under ./components/ without an internal fragment'
         : 'must not include sibling fields beside $ref';
       violations.push({
         section,

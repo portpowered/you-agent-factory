@@ -36,6 +36,16 @@ test('rejects component references with sibling fields', () => {
   assert.match(violations[0].message, /must not include sibling fields beside \$ref/);
 });
 
+test('rejects internal reusable component references', () => {
+  const violations = lintOpenAPIMainComponentsText(`openapi: 3.0.3\ncomponents:\n  schemas:\n    Foo:\n      $ref: '#/components/schemas/Bar'\n    Bar:\n      $ref: './components/schemas/Bar.yaml'\n`, 'fixture.yaml');
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].section, 'schemas');
+  assert.equal(violations[0].component, 'Foo');
+  assert.match(violations[0].message, /fixture\.yaml: components\.schemas\.Foo/);
+  assert.match(violations[0].message, /must reference a component file under \.\/components\/ without an internal fragment/);
+});
+
 test('validate main runs component decomposition lint before redocly lint', () => {
   const specRoot = './api/openapi-main.yaml';
   const phases = phaseDefinitions(process.cwd(), process.platform, [specRoot]);
