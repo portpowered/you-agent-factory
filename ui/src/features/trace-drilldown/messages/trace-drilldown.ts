@@ -42,6 +42,7 @@ export interface TraceDrilldownMessages {
   tableCaption: string;
   title: string;
   traceIdLabel: string;
+  unknownWorkstationLabel: string;
   unavailableValue: string;
   workItemsExpandLabel: (expanded: boolean) => string;
   workItemsLabel: string;
@@ -160,6 +161,7 @@ const traceDrilldownMessagesByLocale = {
     tableCaption: "Trace dispatch grid",
     title: "Trace drill-down",
     traceIdLabel: "Trace ID",
+    unknownWorkstationLabel: "Unknown workstation",
     unavailableValue: "Unavailable",
     workItemsExpandLabel: (expanded): string =>
       expanded ? "Collapse" : "Expand",
@@ -273,6 +275,7 @@ const traceDrilldownMessagesByLocale = {
     tableCaption: "追踪分派表",
     title: "追踪下钻",
     traceIdLabel: "追踪 ID",
+    unknownWorkstationLabel: "未知工作站",
     unavailableValue: "不可用",
     workItemsExpandLabel: (expanded): string => (expanded ? "折叠" : "展开"),
     workItemsLabel: "工作项",

@@ -127,6 +127,7 @@ function useCurrentActivityBaseNodes({
   editor,
   graphLayout,
   handleAssignments,
+  locale,
   now,
   onSelectStateNode,
   onSelectWorkID,
@@ -141,6 +142,7 @@ function useCurrentActivityBaseNodes({
   | "onSelectWorkID"
   | "onSelectWorkstation"
   | "selection"
+  | "locale"
   | "snapshot"
 > & {
   activeExecutionsByWorkstationNodeID: Record<
@@ -169,6 +171,7 @@ function useCurrentActivityBaseNodes({
         },
         graphLayout,
         handleAssignments,
+        locale,
         now,
         onSelectStateNode,
         onSelectWorkID,
@@ -184,6 +187,7 @@ function useCurrentActivityBaseNodes({
       editor,
       graphLayout,
       handleAssignments,
+      locale,
       now,
       onSelectStateNode,
       onSelectWorkID,
@@ -197,6 +201,7 @@ function useCurrentActivityBaseNodes({
 
 export function useCurrentActivityGraphViewModel({
   editor,
+  locale,
   now,
   onSelectStateNode,
   onSelectWorkID,
@@ -210,6 +215,7 @@ export function useCurrentActivityGraphViewModel({
   | "onSelectWorkID"
   | "onSelectWorkstation"
   | "selection"
+  | "locale"
   | "snapshot"
 > & {
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
@@ -260,6 +266,7 @@ export function useCurrentActivityGraphViewModel({
     editor,
     graphLayout,
     handleAssignments,
+    locale,
     now,
     onSelectStateNode,
     onSelectWorkID,

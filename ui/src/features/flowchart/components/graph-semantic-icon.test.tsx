@@ -42,4 +42,10 @@ describe("GraphSemanticIcon", () => {
 
     expect(screen.getByRole("img", { name: "Replay gate" })).toBeTruthy();
   });
+
+  it("localizes default accessible labels", () => {
+    render(<GraphSemanticIcon kind="active-work" locale="zh-CN" />);
+
+    expect(screen.getByRole("img", { name: "活动工作" })).toBeTruthy();
+  });
 });

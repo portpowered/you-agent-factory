@@ -118,6 +118,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const { selectedTrace, traceGridState } = useTraceDrilldown(
     currentSelection.selectedWorkID,
     selectedTraceID,
+    resolvedLocale,
   );
   const providerSessionState =
     useSelectedProviderSessionState(currentSelection);

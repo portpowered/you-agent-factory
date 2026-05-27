@@ -8,6 +8,7 @@ import {
 } from "../../../components/ui/place-labels";
 import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { getActivityGraphMessages } from "../messages/activity-graph";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
 import {
@@ -129,17 +130,20 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
           type="button"
         >
           <StatePositionNodeContent
+            locale={data.locale}
             place={data.place}
             tokenCount={data.tokenCount}
           />
         </button>
       ) : showStateMarkers ? (
         <StatePositionNodeContent
+          locale={data.locale}
           place={data.place}
           tokenCount={data.tokenCount}
         />
       ) : (
         <StaticPlaceNodeContent
+          locale={data.locale}
           place={data.place}
           tokenCount={data.tokenCount}
         />
@@ -154,8 +158,10 @@ function placeNodeClassName(place: DashboardPlaceRef): string {
       return "border-af-border-strong";
     }
     if (place.kind === "resource") {
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "border-af-border-strong bg-af-surface text-af-text";
     }
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return "border-dashed border-af-info-border bg-af-surface-subtle text-af-text";
   })();
   const stateClassName =
@@ -166,24 +172,6 @@ function placeNodeClassName(place: DashboardPlaceRef): string {
         : "";
 
   return cn(kindClassName, stateClassName);
-}
-
-function placeKindLabel(place: DashboardPlaceRef): string {
-  if (place.kind === "work_state") {
-    if (place.state_category === "TERMINAL") {
-      return "Terminal";
-    }
-    if (place.state_category === "FAILED") {
-      return "Failed";
-    }
-    return "Queue";
-  }
-
-  if (place.kind === "resource") {
-    return "Resource";
-  }
-
-  return place.kind === "limit" ? "Limit" : "Constraint";
 }
 
 function placeSemanticIconKind(
@@ -209,12 +197,11 @@ function placeSemanticIconKind(
   return place.kind === "limit" ? "limit" : "constraint";
 }
 
-function placeSemanticIconLabel(place: DashboardPlaceRef): string {
-  if (place.kind === "work_state" && place.state_category === "PROCESSING") {
-    return "Processing state";
-  }
-
-  return placeKindLabel(place);
+function placeSemanticIconLabel(
+  place: DashboardPlaceRef,
+  locale?: string,
+): string {
+  return getActivityGraphMessages(locale).placeSemanticIconLabel(place);
 }
 
 function placeSemanticIconClassName(place: DashboardPlaceRef): string {
@@ -238,12 +225,11 @@ function placeSemanticIconClassName(place: DashboardPlaceRef): string {
   return place.kind === "limit" ? "text-af-danger" : "text-af-info";
 }
 
-function activeItemCountLabel(count: number): string {
-  const itemLabel = count === 1 ? "item" : "items";
-  return `${count} active ${itemLabel}`;
+function activeItemCountLabel(count: number, locale?: string): string {
+  return getActivityGraphMessages(locale).activeItemCountLabel(count);
 }
 
-function statePositionMarkers(count: number): ReactNode {
+function statePositionMarkers(count: number, locale?: string): ReactNode {
   if (count === 0) {
     return null;
   }
@@ -251,7 +237,7 @@ function statePositionMarkers(count: number): ReactNode {
   if (count > STATE_NODE_DOT_LIMIT) {
     return (
       <span
-        aria-label={activeItemCountLabel(count)}
+        aria-label={activeItemCountLabel(count, locale)}
         className="inline-flex min-h-5 min-w-7 items-center justify-center rounded-full border border-af-success-border bg-af-success-surface px-2 font-mono text-[0.76rem] font-bold leading-none text-af-success"
         data-state-work-progress="numeric"
         role="status"
@@ -263,7 +249,7 @@ function statePositionMarkers(count: number): ReactNode {
 
   return (
     <span
-      aria-label={activeItemCountLabel(count)}
+      aria-label={activeItemCountLabel(count, locale)}
       className="inline-grid grid-cols-[repeat(5,0.5rem)] justify-center gap-1"
       data-state-work-progress="dots"
       role="status"
@@ -282,22 +268,22 @@ function statePositionMarkers(count: number): ReactNode {
   );
 }
 
-function tokenCountLabel(place: DashboardPlaceRef, count: number): string {
-  if (place.kind === "resource") {
-    return `${count} resource tokens`;
-  }
-
-  const tokenLabel = count === 1 ? "token" : "tokens";
-  return `${count} ${placeKindLabel(place).toLowerCase()} ${tokenLabel}`;
+function tokenCountLabel(
+  place: DashboardPlaceRef,
+  count: number,
+  locale?: string,
+): string {
+  return getActivityGraphMessages(locale).tokenCountLabel(place, count);
 }
 
 function placeTokenCountDisplay(
   place: DashboardPlaceRef,
   count: number,
+  locale?: string,
 ): ReactNode {
   return (
     <ActivityGraphNodeBadge
-      aria-label={tokenCountLabel(place, count)}
+      aria-label={tokenCountLabel(place, count, locale)}
       className="w-fit"
       data-place-token-count
       role="status"
@@ -307,17 +293,26 @@ function placeTokenCountDisplay(
   );
 }
 
-function PlaceSemanticIcon({ place }: { place: DashboardPlaceRef }) {
+function PlaceSemanticIcon({
+  locale,
+  place,
+}: {
+  locale?: string;
+  place: DashboardPlaceRef;
+}) {
+  const messages = getActivityGraphMessages(locale);
+
   return (
     <span
       className="flex min-h-4 shrink-0 items-center"
       data-place-semantic-icon
-      title={placeKindLabel(place)}
+      title={messages.placeKindLabel(place)}
     >
       <GraphSemanticIcon
         className={cn("h-3.5 w-3.5", placeSemanticIconClassName(place))}
         kind={placeSemanticIconKind(place)}
-        label={placeSemanticIconLabel(place)}
+        label={placeSemanticIconLabel(place, locale)}
+        locale={locale}
       />
     </span>
   );
@@ -356,14 +351,16 @@ function PlaceLabelText({
 }
 
 function StatePositionNodeContent({
+  locale,
   place,
   tokenCount,
 }: {
+  locale?: string;
   place: DashboardPlaceRef;
   tokenCount: number;
 }) {
   const label = formatDashboardPlaceLabel(place);
-  const marker = statePositionMarkers(tokenCount);
+  const marker = statePositionMarkers(tokenCount, locale);
 
   return (
     <>
@@ -371,7 +368,7 @@ function StatePositionNodeContent({
         className="grid h-6 max-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
         data-state-label-zone
       >
-        <PlaceSemanticIcon place={place} />
+        <PlaceSemanticIcon locale={locale} place={place} />
         <PlaceLabelText dataPrefix="state" place={place} />
       </span>
       <span
@@ -380,7 +377,9 @@ function StatePositionNodeContent({
         title={label}
       >
         {marker ?? (
-          <span className="sr-only">{activeItemCountLabel(tokenCount)}</span>
+          <span className="sr-only">
+            {activeItemCountLabel(tokenCount, locale)}
+          </span>
         )}
       </span>
     </>
@@ -388,9 +387,11 @@ function StatePositionNodeContent({
 }
 
 function StaticPlaceNodeContent({
+  locale,
   place,
   tokenCount,
 }: {
+  locale?: string;
   place: DashboardPlaceRef;
   tokenCount: number;
 }) {
@@ -407,7 +408,7 @@ function StaticPlaceNodeContent({
           data-place-label-zone
           title={label}
         >
-          <PlaceSemanticIcon place={place} />
+          <PlaceSemanticIcon locale={locale} place={place} />
           <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.86rem] font-bold leading-tight">
             {label}
           </strong>
@@ -417,7 +418,7 @@ function StaticPlaceNodeContent({
           data-place-marker-zone
           title={label}
         >
-          {placeTokenCountDisplay(place, tokenCount)}
+          {placeTokenCountDisplay(place, tokenCount, locale)}
         </span>
       </div>
     );
@@ -434,7 +435,7 @@ function StaticPlaceNodeContent({
         data-place-label-zone
         role="img"
       >
-        <PlaceSemanticIcon place={place} />
+        <PlaceSemanticIcon locale={locale} place={place} />
         <PlaceLabelText dataPrefix="place" place={place} />
       </span>
       <span
@@ -442,7 +443,7 @@ function StaticPlaceNodeContent({
         data-place-marker-zone
         title={label}
       >
-        {placeTokenCountDisplay(place, tokenCount)}
+        {placeTokenCountDisplay(place, tokenCount, locale)}
       </span>
     </div>
   );

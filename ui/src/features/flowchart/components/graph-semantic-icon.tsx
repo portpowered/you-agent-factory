@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { cn } from "../../../lib/cn";
+import { getActivityGraphMessages } from "../messages/activity-graph";
 
 export const GRAPH_SEMANTIC_ICON_KINDS = [
   "queue",
@@ -21,7 +22,6 @@ export const GRAPH_SEMANTIC_ICON_KINDS = [
 export type GraphSemanticIconKind = (typeof GRAPH_SEMANTIC_ICON_KINDS)[number];
 
 interface GraphSemanticIconDefinition {
-  label: string;
   paths: ReactNode;
 }
 
@@ -29,14 +29,12 @@ export interface GraphSemanticIconProps {
   className?: string;
   kind: GraphSemanticIconKind | (string & {});
   label?: string;
+  locale?: string;
 }
 
 const DEFAULT_ICON_CLASS_NAME = "h-4 w-4 shrink-0 text-af-text-muted";
-const UNKNOWN_ICON_LABEL = "Unknown graph semantic";
-
 const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
   "active-work": {
-    label: "Active work",
     paths: (
       <>
         <path d="M8 5v14l11-7-11-7Z" />
@@ -45,7 +43,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   constraint: {
-    label: "Constraint",
     paths: (
       <>
         <rect height="9" rx="2" width="14" x="5" y="10" />
@@ -55,7 +52,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   cron: {
-    label: "Cron workstation",
     paths: (
       <>
         <circle cx="12" cy="12" r="8" />
@@ -64,7 +60,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   poller: {
-    label: "Poller workstation",
     paths: (
       <>
         <path d="M6 6.5h8a4 4 0 1 1 0 8H9.5" />
@@ -75,7 +70,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   exhaustion: {
-    label: "Exhaustion rule",
     paths: (
       <>
         <path d="M12 4 21 19H3L12 4Z" />
@@ -85,7 +79,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   failed: {
-    label: "Failed state",
     paths: (
       <>
         <path d="M8.5 3.5h7L20.5 8.5v7l-5 5h-7l-5-5v-7l5-5Z" />
@@ -95,7 +88,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   limit: {
-    label: "Limit",
     paths: (
       <>
         <path d="M5 17a7 7 0 0 1 14 0" />
@@ -105,7 +97,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   processing: {
-    label: "Processing state",
     paths: (
       <>
         <path d="M18.5 9A7 7 0 0 0 6.2 6.2L4.5 8" />
@@ -116,7 +107,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   queue: {
-    label: "Queue state",
     paths: (
       <>
         <path d="M5 7h11" />
@@ -127,7 +117,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   repeater: {
-    label: "Repeater workstation",
     paths: (
       <>
         <path d="M17 7h-6a5 5 0 0 0 0 10h1" />
@@ -138,7 +127,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   resource: {
-    label: "Resource",
     paths: (
       <>
         <ellipse cx="12" cy="6" rx="6.5" ry="3" />
@@ -148,7 +136,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   terminal: {
-    label: "Terminal state",
     paths: (
       <>
         <circle cx="12" cy="12" r="8" />
@@ -157,7 +144,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     ),
   },
   workstation: {
-    label: "Workstation",
     paths: (
       <>
         <rect height="10" rx="2" width="14" x="5" y="5" />
@@ -178,10 +164,16 @@ function unknownIconPaths(): ReactNode {
   );
 }
 
-export function graphSemanticIconLabel(kind: GraphSemanticIconProps["kind"]): string {
+export function graphSemanticIconLabel(
+  kind: GraphSemanticIconProps["kind"],
+  locale?: string | null,
+): string {
+  const messages = getActivityGraphMessages(locale);
+
   return (
-    GRAPH_SEMANTIC_ICON_DEFINITIONS[kind as GraphSemanticIconKind]?.label ??
-    UNKNOWN_ICON_LABEL
+    GRAPH_SEMANTIC_ICON_DEFINITIONS[kind as GraphSemanticIconKind] !== undefined
+      ? messages.graphSemanticIconLabel(kind as GraphSemanticIconKind)
+      : messages.unknownGraphSemanticIconLabel
   );
 }
 
@@ -189,9 +181,10 @@ export function GraphSemanticIcon({
   className,
   kind,
   label,
+  locale,
 }: GraphSemanticIconProps) {
   const definition = GRAPH_SEMANTIC_ICON_DEFINITIONS[kind as GraphSemanticIconKind];
-  const accessibleLabel = label ?? definition?.label ?? UNKNOWN_ICON_LABEL;
+  const accessibleLabel = label ?? graphSemanticIconLabel(kind, locale);
 
   return (
     <svg

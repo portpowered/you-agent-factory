@@ -6,7 +6,6 @@ src/features/current-selection/state/selectionHistoryStore.ts|36|14|string-liter
 src/features/current-selection/state/selectionHistoryStore.ts|38|14|string-literal|state:
 src/features/current-selection/state/selectionHistoryStore.ts|40|14|string-literal|work: : :
 src/features/current-selection/state/selectionHistoryStore.ts|42|14|string-literal|request: :
-src/features/dashboard/state/dashboardStreamStore.ts|7|12|string-literal|Loading factory events...
 src/features/export/lib/factory-png-export.ts|59|18|string-literal|The selected image could not be decoded for PNG export.
 src/features/export/lib/factory-png-export.ts|82|18|string-literal|The exported PNG metadata could not be written.
 src/features/factory-graph-editor/lib/factory-graph-draft-types.ts|243|14|string-literal|resource:
@@ -15,37 +14,8 @@ src/features/factory-graph-editor/lib/factory-graph-draft-types.ts|247|14|string
 src/features/factory-graph-editor/lib/factory-graph-draft-types.ts|249|14|string-literal|work-type:
 src/features/factory-graph-editor/lib/factory-graph-draft-types.ts|251|14|string-literal|workstation:
 src/features/flowchart/components/current-activity-node-chrome.tsx|26|10|string-literal|text-[0.65rem] font-semibold uppercase tracking-[0.08em]
-src/features/flowchart/components/current-activity-place-node.tsx|157|14|string-literal|border-af-border-strong bg-af-surface text-af-text
-src/features/flowchart/components/current-activity-place-node.tsx|159|12|string-literal|border-dashed border-af-info-border bg-af-surface-subtle text-af-text
-src/features/flowchart/components/current-activity-place-node.tsx|174|14|string-literal|Terminal
-src/features/flowchart/components/current-activity-place-node.tsx|177|14|string-literal|Failed
-src/features/flowchart/components/current-activity-place-node.tsx|179|12|string-literal|Queue
-src/features/flowchart/components/current-activity-place-node.tsx|183|12|string-literal|Resource
-src/features/flowchart/components/current-activity-place-node.tsx|186|35|string-literal|Limit
-src/features/flowchart/components/current-activity-place-node.tsx|186|45|string-literal|Constraint
-src/features/flowchart/components/current-activity-place-node.tsx|214|12|string-literal|Processing state
-src/features/flowchart/components/current-activity-place-node.tsx|287|12|string-literal|resource tokens
-src/features/flowchart/components/current-activity-workstation-node.tsx|234|21|jsx-prop|Active
-src/features/flowchart/components/graph-semantic-icon.tsx|39|12|string-literal|Active work
-src/features/flowchart/components/graph-semantic-icon.tsx|48|12|string-literal|Constraint
-src/features/flowchart/components/graph-semantic-icon.tsx|58|12|string-literal|Cron workstation
-src/features/flowchart/components/graph-semantic-icon.tsx|67|12|string-literal|Poller workstation
-src/features/flowchart/components/graph-semantic-icon.tsx|78|12|string-literal|Exhaustion rule
-src/features/flowchart/components/graph-semantic-icon.tsx|88|12|string-literal|Failed state
-src/features/flowchart/components/graph-semantic-icon.tsx|98|12|string-literal|Limit
-src/features/flowchart/components/graph-semantic-icon.tsx|108|12|string-literal|Processing state
-src/features/flowchart/components/graph-semantic-icon.tsx|119|12|string-literal|Queue state
-src/features/flowchart/components/graph-semantic-icon.tsx|130|12|string-literal|Repeater workstation
-src/features/flowchart/components/graph-semantic-icon.tsx|141|12|string-literal|Resource
-src/features/flowchart/components/graph-semantic-icon.tsx|151|12|string-literal|Terminal state
-src/features/flowchart/components/graph-semantic-icon.tsx|160|12|string-literal|Workstation
 src/features/flowchart/lib/layout.ts|100|10|string-literal|workstation:
 src/features/flowchart/lib/layout.ts|104|10|string-literal|place:
-src/features/flowchart/lib/workstation-icon-metadata.ts|33|12|string-literal|Cron workstation
-src/features/flowchart/lib/workstation-icon-metadata.ts|39|12|string-literal|Poller workstation
-src/features/flowchart/lib/workstation-icon-metadata.ts|45|12|string-literal|Exhaustion rule
-src/features/flowchart/lib/workstation-icon-metadata.ts|51|12|string-literal|Repeater workstation
-src/features/flowchart/lib/workstation-icon-metadata.ts|57|12|string-literal|Standard workstation
 src/features/import/lib/factory-png-import.ts|95|18|string-literal|The selected image could not be decoded for preview.
 src/features/import/lib/factory-png-import.ts|109|18|string-literal|The browser could not create a preview for the selected image.
 src/features/import/lib/factory-png-import.ts|137|18|string-literal|The selected image could not be read.
@@ -59,12 +29,6 @@ src/features/import/lib/factory-png-import.ts|243|18|string-literal|The selected
 src/features/import/lib/factory-png-import.ts|270|18|string-literal|The you-agent-factory factory metadata does not contain a valid factory payload.
 src/features/import/lib/factory-png-import.ts|309|16|string-literal|The you-agent-factory factory metadata is missing the factory name.
 src/features/timeline/state/timeline/replayGraphState.ts|220|10|string-literal|:resource:
-src/features/trace-drilldown/components/trace-workstation-path.tsx|280|67|string-literal|Unknown workstation
-src/features/trace-drilldown/components/trace-workstation-path.tsx|431|12|string-literal|border-af-border bg-af-surface
-src/features/trace-drilldown/components/trace-workstation-path.tsx|435|12|string-literal|border-af-danger-border bg-af-danger-surface
-src/features/trace-drilldown/components/trace-workstation-path.tsx|438|10|string-literal|border-af-success-border bg-af-success-surface
-src/features/trace-drilldown/hooks/useTraceDrilldown.ts|22|20|string-literal|Select active, completed, or failed work to inspect retained trace history.
-src/features/trace-drilldown/hooks/useTraceDrilldown.ts|34|28|string-literal|Select active, completed, or failed work to inspect retained trace history.
 src/features/work-outcome/components/trend-cards.tsx|254|60|jsx-text|retry or rework events
 src/features/work-outcome/lib/trends.ts|118|27|string-literal|Queued
 src/features/work-outcome/lib/trends.ts|119|29|string-literal|In-flight

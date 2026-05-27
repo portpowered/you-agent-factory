@@ -19,6 +19,7 @@ export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
   const { locale: resolvedLocale } = useAppLocale(locale);
   const refreshToken = useDashboardBentoStore((state) => state.refreshToken);
   const { snapshot, isInitialLoading, error } = useDashboardSnapshot({
+    locale: resolvedLocale,
     refreshToken,
   });
   const messages = getHeaderControlsMessages(resolvedLocale);
