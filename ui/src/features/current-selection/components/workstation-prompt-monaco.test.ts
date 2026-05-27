@@ -105,9 +105,9 @@ describe("registerWorkstationPromptMonaco", () => {
         },
         {
           category: "INPUT",
-          description: "Payload for the first input.",
-          example: "{{ (index .Inputs 0).Payload }}",
-          path: ".Inputs[0].Payload",
+          description: "Human-readable name for the first input.",
+          example: "{{ (index .Inputs 0).Name }}",
+          path: ".Inputs[0].Name",
         },
       ],
       inputCount: 1,
@@ -124,8 +124,8 @@ describe("registerWorkstationPromptMonaco", () => {
         label: ".WorkID",
       }),
       expect.objectContaining({
-        insertText: "(index .Inputs 0).Payload",
-        label: ".Inputs[0].Payload",
+        insertText: "(index .Inputs 0).Name",
+        label: ".Inputs[0].Name",
       }),
     ]);
 
@@ -138,7 +138,7 @@ describe("registerWorkstationPromptMonaco", () => {
         insertText: "{{ .WorkID }}",
       }),
       expect.objectContaining({
-        insertText: "{{ (index .Inputs 0).Payload }}",
+        insertText: "{{ (index .Inputs 0).Name }}",
       }),
     ]);
 
@@ -150,12 +150,8 @@ describe("registerWorkstationPromptMonaco", () => {
       }),
     ).toEqual([
       expect.objectContaining({
-        insertText: ".WorkID",
-        label: ".WorkID",
-      }),
-      expect.objectContaining({
-        insertText: "Payload",
-        label: "Payload",
+        insertText: "Name",
+        label: "Name",
       }),
     ]);
 
@@ -167,12 +163,119 @@ describe("registerWorkstationPromptMonaco", () => {
       }),
     ).toEqual([
       expect.objectContaining({
-        insertText: ".WorkID",
-        label: ".WorkID",
+        insertText: "me",
+        label: "me",
       }),
+    ]);
+  });
+
+  it("filters contextual completions to input, nested history, and map prefixes", () => {
+    const contract = {
+      availableVariables: [
+        {
+          category: "INPUT",
+          description: "Human-readable work name for input 0.",
+          example: "{{ (index .Inputs 0).Name }}",
+          path: ".Inputs[0].Name",
+        },
+        {
+          category: "INPUT",
+          description: "Payload content for input 0.",
+          example: "{{ (index .Inputs 0).Payload }}",
+          path: ".Inputs[0].Payload",
+        },
+        {
+          category: "HISTORY",
+          description: "Retry and failure history for input 0.",
+          example: "{{ (index .Inputs 0).History }}",
+          path: ".Inputs[0].History",
+        },
+        {
+          category: "HISTORY",
+          description: "Current attempt number for input 0.",
+          example: "{{ (index .Inputs 0).History.AttemptNumber }}",
+          path: ".Inputs[0].History.AttemptNumber",
+        },
+        {
+          category: "HISTORY",
+          description: "Last error for input 0.",
+          example: "{{ (index .Inputs 0).History.LastError }}",
+          path: ".Inputs[0].History.LastError",
+        },
+        {
+          category: "MAP_ACCESS",
+          description: "Tag metadata for input 0.",
+          example: '{{ index (index .Inputs 0).Tags "branch" }}',
+          path: '.Inputs[0].Tags["KEY"]',
+        },
+        {
+          category: "CONTEXT",
+          description: "Execution working directory.",
+          example: "{{ .Context.WorkDir }}",
+          path: ".Context.WorkDir",
+        },
+        {
+          category: "MAP_ACCESS",
+          description: "Environment variable access.",
+          example: '{{ index .Context.Env "API_KEY" }}',
+          path: '.Context.Env["KEY"]',
+        },
+      ],
+      inputCount: 1,
+      unavailableAccessPatterns: [],
+    } as const;
+
+    expect(
+      buildWorkstationPromptCompletionItems(contract, {
+        currentTemplateExpression: "(index .Inputs 0).",
+        currentWordText: "",
+        insideTemplateExpression: true,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ insertText: "Name", label: "Name" }),
+        expect.objectContaining({ insertText: "Payload", label: "Payload" }),
+        expect.objectContaining({ insertText: "History", label: "History" }),
+      ]),
+    );
+
+    expect(
+      buildWorkstationPromptCompletionItems(contract, {
+        currentTemplateExpression: "(index .Inputs 0).History.",
+        currentWordText: "",
+        insideTemplateExpression: true,
+      }),
+    ).toEqual([
       expect.objectContaining({
-        insertText: "Payload",
-        label: "Payload",
+        insertText: "AttemptNumber",
+        label: "AttemptNumber",
+      }),
+      expect.objectContaining({ insertText: "LastError", label: "LastError" }),
+    ]);
+
+    expect(
+      buildWorkstationPromptCompletionItems(contract, {
+        currentTemplateExpression: "(index .Inputs 0).Tags",
+        currentWordText: "Tags",
+        insideTemplateExpression: true,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        insertText: 'index (index .Inputs 0).Tags "branch"',
+        label: 'index (index .Inputs 0).Tags "branch"',
+      }),
+    ]);
+
+    expect(
+      buildWorkstationPromptCompletionItems(contract, {
+        currentTemplateExpression: ".Context.En",
+        currentWordText: "En",
+        insideTemplateExpression: true,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        insertText: 'index .Context.Env "API_KEY"',
+        label: 'index .Context.Env "API_KEY"',
       }),
     ]);
   });
@@ -441,6 +544,7 @@ describe("registerWorkstationPromptMonaco", () => {
       provider.provideCompletionItems(
         {
           getOffsetAt: () => 4,
+          getPositionAt: () => ({ column: 5, lineNumber: 1 }),
           getValue: () => "Plan",
           getValueInRange: () => "Plan",
           getWordUntilPosition: () => ({
@@ -457,6 +561,7 @@ describe("registerWorkstationPromptMonaco", () => {
       provider.provideCompletionItems(
         {
           getOffsetAt: () => 4,
+          getPositionAt: () => ({ column: 5, lineNumber: 1 }),
           getValue: () => "Plan",
           getValueInRange: () => "Plan",
           getWordUntilPosition: () => ({
@@ -472,6 +577,112 @@ describe("registerWorkstationPromptMonaco", () => {
         expect.objectContaining({
           insertText: "{{ .WorkID }}",
           label: ".WorkID",
+        }),
+      ],
+    });
+  });
+
+  it("uses cursor and expression ranges for contextual Monaco completions", () => {
+    const registerCompletionItemProvider = vi.fn();
+    registerCompletionItemProvider.mockReturnValue({ dispose: vi.fn() });
+
+    registerWorkstationPromptCompletionProvider(
+      {
+        languages: {
+          CompletionItemKind: { Variable: 4 },
+          CompletionTriggerKind: { Invoke: 0, TriggerCharacter: 1 },
+          registerCompletionItemProvider,
+        },
+      } as unknown as typeof import("monaco-editor"),
+      () => ({
+        contract: {
+          availableVariables: [
+            {
+              category: "INPUT",
+              description: "Human-readable work name for input 0.",
+              example: "{{ (index .Inputs 0).Name }}",
+              path: ".Inputs[0].Name",
+            },
+            {
+              category: "MAP_ACCESS",
+              description: "Environment variable access.",
+              example: '{{ index .Context.Env "API_KEY" }}',
+              path: '.Context.Env["KEY"]',
+            },
+          ],
+          inputCount: 1,
+          unavailableAccessPatterns: [],
+        },
+        status: "ready",
+      }),
+    );
+
+    const provider = registerCompletionItemProvider.mock.calls[0]?.[1];
+    const namePrompt = "{{ (index .Inputs 0).Na";
+
+    expect(
+      provider.provideCompletionItems(
+        {
+          getOffsetAt: () => namePrompt.length,
+          getPositionAt: (offset: number) => ({
+            column: offset + 1,
+            lineNumber: 1,
+          }),
+          getValue: () => namePrompt,
+          getValueInRange: () => "Na",
+          getWordUntilPosition: () => ({
+            endColumn: namePrompt.length + 1,
+            startColumn: namePrompt.length - 1,
+          }),
+        },
+        { column: namePrompt.length + 1, lineNumber: 1 },
+        { triggerKind: 1 },
+      ),
+    ).toMatchObject({
+      suggestions: [
+        expect.objectContaining({
+          insertText: "me",
+          label: "me",
+          range: {
+            endColumn: namePrompt.length + 1,
+            endLineNumber: 1,
+            startColumn: namePrompt.length + 1,
+            startLineNumber: 1,
+          },
+        }),
+      ],
+    });
+
+    const envPrompt = "Use {{ .Context.En";
+
+    expect(
+      provider.provideCompletionItems(
+        {
+          getOffsetAt: () => envPrompt.length,
+          getPositionAt: (offset: number) => ({
+            column: offset + 1,
+            lineNumber: 1,
+          }),
+          getValue: () => envPrompt,
+          getValueInRange: () => "En",
+          getWordUntilPosition: () => ({
+            endColumn: envPrompt.length + 1,
+            startColumn: envPrompt.length - 1,
+          }),
+        },
+        { column: envPrompt.length + 1, lineNumber: 1 },
+        { triggerKind: 1 },
+      ),
+    ).toMatchObject({
+      suggestions: [
+        expect.objectContaining({
+          insertText: 'index .Context.Env "API_KEY"',
+          range: {
+            endColumn: envPrompt.length + 1,
+            endLineNumber: 1,
+            startColumn: 8,
+            startLineNumber: 1,
+          },
         }),
       ],
     });
