@@ -1,17 +1,18 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   CartesianGrid,
+  Label,
   Line,
   LineChart,
   ReferenceArea,
   XAxis,
   YAxis,
 } from "recharts";
-
 import {
-  DASHBOARD_CHART_AXIS_LABEL_CLASS,
-} from "../lib/chart-contract";
+  EMPTY_STATE_CLASS,
+  EMPTY_STATE_COMPACT_CLASS,
+} from "../../../components/dashboard/widget-board";
+import { Button } from "../../../components/ui/button";
 import {
   ChartContainer,
   ChartLegend,
@@ -19,22 +20,21 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "../../../components/ui/chart";
-import { Button } from "../../../components/ui/button";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { cn } from "../../../lib/cn";
-import {
-  EMPTY_STATE_CLASS,
-  EMPTY_STATE_COMPACT_CLASS,
-} from "../../../components/dashboard/widget-board";
-import { getWorkOutcomeMessages } from "../messages/work-outcome";
+import { DASHBOARD_CHART_AXIS_LABEL_CLASS } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";
 import {
   buildWorkChartData,
   type WorkChartBuiltSeries,
   type WorkChartData,
-  type WorkChartRow,
   type WorkChartSeriesDefinition,
 } from "../lib/work-chart-data";
+import { getWorkOutcomeMessages } from "../messages/work-outcome";
+import {
+  useReadyWorkChartInteractions,
+  type WorkChartZoomRange,
+} from "./work-chart-interactions";
 
 export type { WorkChartSeriesDefinition } from "../lib/work-chart-data";
 
@@ -46,12 +46,12 @@ const WORK_CHART_READY_CLASS =
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_STATUS_PANEL_CLASS =
   "flex h-full min-h-[14rem] min-w-0 w-full flex-1 flex-col justify-center";
-const WORK_CHART_SHELL_CLASS = "flex h-full min-h-0 min-w-0 w-full flex-1 flex-col gap-3";
+const WORK_CHART_SHELL_CLASS =
+  "flex h-full min-h-0 min-w-0 w-full flex-1 flex-col gap-3";
 const WORK_CHART_TOOLBAR_CLASS =
   "flex flex-wrap items-center justify-end gap-2";
 const WORK_CHART_OVERLAY_CLASS =
   "flex h-full flex-col gap-2 px-5 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5";
-const WORK_CHART_X_AXIS_OVERLAY_CLASS = "mt-auto self-end";
 const WORK_CHART_Y_AXIS_WIDTH = 52;
 
 export type WorkChartState =
@@ -179,49 +179,18 @@ function ReadyWorkChart({
   yAxisLabel,
 }: ReadyWorkChartProps) {
   const chartMessages = getWorkOutcomeMessages(locale).chart;
-  const [zoomRange, setZoomRange] = useState<WorkChartZoomRange | null>(null);
-  const [selectionStartTick, setSelectionStartTick] = useState<number | null>(
-    null,
-  );
-  const [selectionEndTick, setSelectionEndTick] = useState<number | null>(null);
-  const visibleRows = useMemo(
-    () => filterRowsForZoomRange(chartData.rows, zoomRange),
-    [chartData.rows, zoomRange],
-  );
-  const selectionRange = buildSelectionRange(
-    selectionStartTick,
-    selectionEndTick,
-  );
-
-  const beginSelection = (event: ReactMouseEvent<HTMLDivElement>) => {
-    const tick = readPointerTick(event, visibleRows);
-    setSelectionStartTick(tick);
-    setSelectionEndTick(tick);
-  };
-
-  const updateSelection = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (selectionStartTick === null) {
-      return;
-    }
-
-    const tick = readPointerTick(event, visibleRows);
-    if (tick !== null) {
-      setSelectionEndTick(tick);
-    }
-  };
-
-  const commitSelection = (event: ReactMouseEvent<HTMLDivElement>) => {
-    const endTick = readPointerTick(event, visibleRows) ?? selectionEndTick;
-    const nextRange = buildSelectionRange(selectionStartTick, endTick);
-    setSelectionStartTick(null);
-    setSelectionEndTick(null);
-
-    if (nextRange === null || nextRange.startTick === nextRange.endTick) {
-      return;
-    }
-
-    setZoomRange(nextRange);
-  };
+  const {
+    beginSelection,
+    commitSelection,
+    hiddenSeriesKeys,
+    resetZoom,
+    selectionRange,
+    toggleSeries,
+    updateSelection,
+    visibleRows,
+    visibleSeriesKeys,
+    zoomRange,
+  } = useReadyWorkChartInteractions(chartData);
 
   return (
     <div className={cn(WORK_CHART_SHELL_CLASS, className)}>
@@ -233,7 +202,7 @@ function ReadyWorkChart({
           <Button
             aria-label={chartMessages.resetZoomLabel}
             className="min-h-8 rounded-lg px-2.5 py-1.5 text-xs"
-            onClick={() => setZoomRange(null)}
+            onClick={resetZoom}
             size="sm"
             tone="outline"
           >
@@ -249,28 +218,15 @@ function ReadyWorkChart({
           onMouseMove: updateSelection,
           onMouseUp: commitSelection,
         }}
-        overlay={
-          <div className={WORK_CHART_OVERLAY_CLASS} data-work-chart-overlay="true">
-            <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>
-              {yAxisLabel}
-            </p>
-            <p
-              className={cn(
-                "m-0",
-                WORK_CHART_AXIS_LABEL_CLASS,
-                WORK_CHART_X_AXIS_OVERLAY_CLASS,
-              )}
-            >
-              {xAxisLabel}
-            </p>
-          </div>
-        }
         rootAttributes={{
           "data-work-chart-ready": "true",
+          "data-work-chart-hidden-series": [...hiddenSeriesKeys].join(","),
+          "data-work-chart-visible-series": visibleSeriesKeys.join(","),
           "data-work-chart-visible-ticks": visibleRows
             .map((row) => row.tick)
             .join(","),
         }}
+        overlay={<WorkChartAxisOverlay yAxisLabel={yAxisLabel} />}
         style={{ minHeight: "14rem" }}
         title={ariaLabel}
       >
@@ -287,7 +243,11 @@ function ReadyWorkChart({
             tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
             tickFormatter={(value) => formatAxisNumber(value)}
             tickLine={false}
-          />
+          >
+            <Label value="insideBottom" offset={-10} position="insideBottom">
+              {xAxisLabel}
+            </Label>
+          </XAxis>
           <YAxis
             allowDecimals={false}
             axisLine={false}
@@ -296,7 +256,16 @@ function ReadyWorkChart({
             tickFormatter={(value) => formatAxisNumber(value)}
             tickLine={false}
             width={WORK_CHART_Y_AXIS_WIDTH}
-          />
+          >
+            <Label
+              angle={-90}
+              value={yAxisLabel}
+              position="insideLeft"
+              style={{ textAnchor: "middle" }}
+            />
+          </YAxis>
+
+          <CartesianGrid strokeDasharray="3 3" />
           <ChartTooltip
             content={(props) => {
               const tickValue = props.payload?.[0]?.payload?.tick;
@@ -308,11 +277,34 @@ function ReadyWorkChart({
             }}
             cursor={{ stroke: "var(--color-af-chart-cursor)" }}
           />
-          <ChartLegend content={<ChartLegendContent />} />
+          <ChartLegend
+            content={
+              <ChartLegendContent
+                getToggleLabel={(label, hidden) =>
+                  hidden
+                    ? chartMessages.showSeriesLabel(label)
+                    : chartMessages.hideSeriesLabel(label)
+                }
+                hiddenSeries={hiddenSeriesKeys}
+                onToggleSeries={toggleSeries}
+              />
+            }
+          />
           <WorkChartSelectionArea selectionRange={selectionRange} />
-          <WorkChartLines series={chartData.series} />
+          <WorkChartLines
+            hiddenSeriesKeys={hiddenSeriesKeys}
+            series={chartData.series}
+          />
         </LineChart>
       </ChartContainer>
+    </div>
+  );
+}
+
+function WorkChartAxisOverlay({ yAxisLabel }: { yAxisLabel: string }) {
+  return (
+    <div className={WORK_CHART_OVERLAY_CLASS} data-work-chart-overlay="true">
+      <span className={WORK_CHART_AXIS_LABEL_CLASS}>{yAxisLabel}</span>
     </div>
   );
 }
@@ -340,8 +332,10 @@ function WorkChartSelectionArea({
 }
 
 function WorkChartLines({
+  hiddenSeriesKeys,
   series,
 }: {
+  hiddenSeriesKeys: ReadonlySet<string>;
   series: readonly WorkChartBuiltSeries[];
 }) {
   return series.map((seriesData) => (
@@ -357,8 +351,12 @@ function WorkChartLines({
       className={seriesData.lineClassName}
       data-chart-series={seriesData.key}
       data-chart-series-color={seriesData.lineColor}
+      data-chart-series-hidden={
+        hiddenSeriesKeys.has(seriesData.key) ? "true" : "false"
+      }
       dataKey={seriesData.key}
       dot={false}
+      hide={hiddenSeriesKeys.has(seriesData.key)}
       isAnimationActive={false}
       name={seriesData.label}
       stroke={seriesData.lineColor}
@@ -367,11 +365,6 @@ function WorkChartLines({
       type="linear"
     />
   ));
-}
-
-interface WorkChartZoomRange {
-  endTick: number;
-  startTick: number;
 }
 
 interface WorkChartStatusPanelProps {
@@ -410,55 +403,6 @@ function WorkChartStatusPanel({
       <p>{message}</p>
     </div>
   );
-}
-
-function filterRowsForZoomRange(
-  rows: readonly WorkChartRow[],
-  zoomRange: WorkChartZoomRange | null,
-): WorkChartRow[] {
-  if (zoomRange === null) {
-    return [...rows];
-  }
-
-  const filteredRows = rows.filter(
-    (row) => row.tick >= zoomRange.startTick && row.tick <= zoomRange.endTick,
-  );
-  return filteredRows.length >= 2 ? filteredRows : [...rows];
-}
-
-function buildSelectionRange(
-  startTick: number | null,
-  endTick: number | null,
-): WorkChartZoomRange | null {
-  if (startTick === null || endTick === null) {
-    return null;
-  }
-
-  return {
-    endTick: Math.max(startTick, endTick),
-    startTick: Math.min(startTick, endTick),
-  };
-}
-
-function readPointerTick(
-  event: ReactMouseEvent<HTMLDivElement>,
-  rows: readonly WorkChartRow[],
-): number | null {
-  if (rows.length === 0) {
-    return null;
-  }
-
-  const rect = event.currentTarget.getBoundingClientRect();
-  if (!Number.isFinite(rect.width) || rect.width <= 0) {
-    return null;
-  }
-
-  const relativeX = Math.min(
-    Math.max(event.clientX - rect.left, 0),
-    rect.width,
-  );
-  const rowIndex = Math.round((relativeX / rect.width) * (rows.length - 1));
-  return rows[rowIndex]?.tick ?? null;
 }
 
 function formatAxisNumber(value: number): string {

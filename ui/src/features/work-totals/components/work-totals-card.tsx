@@ -42,7 +42,7 @@ export function WorkTotalsCard({
       title={messages.cardTitle}
     >
       <section
-        className="grid grid-cols-2 gap-2"
+        className="grid grid-cols-4 gap-2"
         aria-label={messages.regionLabel}
       >
         <StatCard

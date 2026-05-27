@@ -27,8 +27,8 @@ describe("useDashboardLayout default layout", () => {
     expect(result.current.dashboardLayout).toContainEqual({
       h: 5,
       id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
-      minH: 3,
-      minW: 2,
+      minH: 1,
+      minW: 1,
       w: 4,
       widgetType: DASHBOARD_WIDGET_IDS.providerSession,
       x: 4,
@@ -48,10 +48,17 @@ describe("useDashboardLayout core migrations", () => {
 
   it("migrates saved layouts created before the provider-session widget existed", () => {
     const legacyLayout = DEFAULT_DASHBOARD_LAYOUT.filter(
-      (item) => item.id !== DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
+      (item) =>
+        item.id !== DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
     ).map((item) =>
       item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection
-        ? { h: 7, id: DASHBOARD_WIDGET_IDS.currentSelection, w: item.w, x: 1, y: 14 }
+        ? {
+            h: 7,
+            id: DASHBOARD_WIDGET_IDS.currentSelection,
+            w: item.w,
+            x: 1,
+            y: 14,
+          }
         : item,
     );
     window.localStorage.setItem(
@@ -71,7 +78,8 @@ describe("useDashboardLayout core migrations", () => {
     );
     expect(
       migratedLayout.find(
-        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
+        (item) =>
+          item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
       ),
     ).toMatchObject({
       h: 7,
@@ -81,12 +89,14 @@ describe("useDashboardLayout core migrations", () => {
     });
     expect(
       migratedLayout.find(
-        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
+        (item) =>
+          item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
       ),
     ).toEqual(
       expect.objectContaining(
         DEFAULT_DASHBOARD_LAYOUT.find(
-          (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
+          (item) =>
+            item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
         ),
       ),
     );
@@ -131,17 +141,20 @@ describe("useDashboardLayout persisted layout merging", () => {
 
     expect(
       result.current.dashboardLayout.find(
-        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
+        (item) =>
+          item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
       ),
     ).toMatchObject({
-      minH: 3,
-      minW: 2,
+      minH: 1,
+      minW: 1,
     });
     expect(
-      result.current.dashboardLayout.find((item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace),
+      result.current.dashboardLayout.find(
+        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace,
+      ),
     ).toMatchObject({
-      minH: 6,
-      minW: 4,
+      minH: 1,
+      minW: 1,
     });
   });
 
@@ -212,17 +225,20 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
     ).toMatchObject({ h: 8, y: 2 });
     expect(
       migratedLayout.find(
-        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
+        (item) =>
+          item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
       ),
     ).toMatchObject({ y: 10 });
     expect(
       migratedLayout.find(
-        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.terminalWork,
+        (item) =>
+          item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.terminalWork,
       ),
     ).toMatchObject({ x: 8, y: 10 });
     expect(
       migratedLayout.find(
-        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
+        (item) =>
+          item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
       ),
     ).toMatchObject({ y: 15 });
     expect(
@@ -231,16 +247,20 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
       ),
     ).toMatchObject({ y: 21 });
     expect(
-      migratedLayout.find((item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace),
+      migratedLayout.find(
+        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace,
+      ),
     ).toMatchObject({ y: 15 });
     expect(
       migratedLayout.find(
-        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
+        (item) =>
+          item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
       ),
     ).toEqual(
       expect.objectContaining(
         DEFAULT_DASHBOARD_LAYOUT.find(
-          (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
+          (item) =>
+            item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
         ),
       ),
     );
@@ -285,8 +305,8 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
     expect(primaryTrace).toMatchObject({
       h: 9,
       id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace,
-      minH: 6,
-      minW: 4,
+      minH: 1,
+      minW: 1,
       w: 8,
       widgetType: DASHBOARD_WIDGET_IDS.trace,
       x: 0,
@@ -330,7 +350,9 @@ describe("useDashboardLayout widget instance persistence", () => {
     expect(addWidgetCards).toHaveLength(1);
     expect(
       new Set(
-        workOutcomeCards.map((item) => `${item.x}:${item.y}:${item.w}:${item.h}`),
+        workOutcomeCards.map(
+          (item) => `${item.x}:${item.y}:${item.w}:${item.h}`,
+        ),
       ).size,
     ).toBe(2);
   });
@@ -420,7 +442,8 @@ describe("useDashboardLayout reload persistence", () => {
 
     expect(
       reloadedLayout.find(
-        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
+        (item) =>
+          item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
       ),
     ).toMatchObject({
       hidden: true,
@@ -430,11 +453,14 @@ describe("useDashboardLayout reload persistence", () => {
     expect(
       reloadedLayout.filter(
         (item) =>
-          item.widgetType === DASHBOARD_WIDGET_IDS.currentSelection && !item.hidden,
+          item.widgetType === DASHBOARD_WIDGET_IDS.currentSelection &&
+          !item.hidden,
       ),
     ).toHaveLength(0);
     expect(
-      reloadedLayout.find((item) => item.id === "work-outcome-chart::instance-1"),
+      reloadedLayout.find(
+        (item) => item.id === "work-outcome-chart::instance-1",
+      ),
     ).toMatchObject({
       h: 8,
       id: "work-outcome-chart::instance-1",
@@ -444,10 +470,14 @@ describe("useDashboardLayout reload persistence", () => {
       y: 28,
     });
     expect(
-      reloadedLayout.filter((item) => item.widgetType === DASHBOARD_WIDGET_IDS.addWidget),
+      reloadedLayout.filter(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.addWidget,
+      ),
     ).toHaveLength(1);
     expect(
-      reloadedLayout.find((item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID),
+      reloadedLayout.find(
+        (item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+      ),
     ).toMatchObject({
       h: 3,
       id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,

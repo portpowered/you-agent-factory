@@ -91,6 +91,24 @@ func withAgentModelOperation(operation string, bindings []interfaces.ResolvedMod
 	}
 }
 
+func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMetadata) {
+	t.Helper()
+	if want.RequestID != got.RequestID {
+		t.Fatalf("RequestID = %q, want %q", got.RequestID, want.RequestID)
+	}
+	if want.TraceID != got.TraceID {
+		t.Fatalf("TraceID = %q, want %q", got.TraceID, want.TraceID)
+	}
+	if len(want.WorkIDs) != len(got.WorkIDs) {
+		t.Fatalf("WorkIDs length = %d, want %d", len(got.WorkIDs), len(want.WorkIDs))
+	}
+	for i := range want.WorkIDs {
+		if want.WorkIDs[i] != got.WorkIDs[i] {
+			t.Fatalf("WorkIDs[%d] = %q, want %q", i, got.WorkIDs[i], want.WorkIDs[i])
+		}
+	}
+}
+
 func TestInferenceRequestForExecutionRequest_ForwardsModelOperationContract(t *testing.T) {
 	req := testAgentRequest(
 		interfaces.WorkDispatch{
@@ -846,22 +864,40 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 	}
 }
 
-func TestAgentExecutor_OutputSchemaSuccess_KeepsRawOutput(t *testing.T) {
-	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: `{"work_id":"w-1","tags":{"result":"done"}}`}}
+func TestAgentExecutor_RawDeadlineExceeded_RetriesBeforeSuccess(t *testing.T) {
+	provider := &agentMockProvider{
+		errors: []error{
+			context.DeadlineExceeded,
+			context.DeadlineExceeded,
+			nil,
+		},
+		responses: []interfaces.InferenceResponse{
+			{},
+			{},
+			{Content: "Recovered. COMPLETE"},
+		},
+	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
 		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
+	var sleeps []time.Duration
+	executor.retryConfig.sleep = func(_ context.Context, delay time.Duration) error {
+		sleeps = append(sleeps, delay)
+		return nil
+	}
+	executor.retryConfig.jitter = func(baseDelay time.Duration) time.Duration {
+		return baseDelay / 2
+	}
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		interfaces.WorkDispatch{
-			DispatchID:   "d-1",
-			TransitionID: "t-1",
+			DispatchID:   "d-raw-timeout-success",
+			TransitionID: "t-raw-timeout-success",
 			WorkerType:   "worker-a",
 		},
 		withAgentPrompts("sys", "msg"),
-		withAgentOutputSchema(`{"type":"object"}`),
 	))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -870,27 +906,41 @@ func TestAgentExecutor_OutputSchemaSuccess_KeepsRawOutput(t *testing.T) {
 	if result.Outcome != interfaces.OutcomeAccepted {
 		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
 	}
-	if result.Output != `{"work_id":"w-1","tags":{"result":"done"}}` {
-		t.Fatalf("Output = %q", result.Output)
+	if result.Output != "Recovered. COMPLETE" {
+		t.Fatalf("Output = %q, want %q", result.Output, "Recovered. COMPLETE")
+	}
+	if provider.callCount != 3 {
+		t.Fatalf("provider call count = %d, want 3", provider.callCount)
+	}
+	if result.Metrics.RetryCount != 2 {
+		t.Fatalf("RetryCount = %d, want 2", result.Metrics.RetryCount)
+	}
+	if len(sleeps) != 2 {
+		t.Fatalf("sleep count = %d, want 2", len(sleeps))
 	}
 }
 
-func TestAgentExecutor_OutputSchemaParseFailure_ReturnsFailedResult(t *testing.T) {
-	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "not valid json at all"}}
+func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutFailure(t *testing.T) {
+	provider := &agentMockProvider{err: context.DeadlineExceeded}
 	executor := NewAgentExecutor(staticRuntimeConfig{
 		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
+	var sleeps []time.Duration
+	executor.retryConfig.sleep = func(_ context.Context, delay time.Duration) error {
+		sleeps = append(sleeps, delay)
+		return nil
+	}
+	executor.retryConfig.jitter = func(time.Duration) time.Duration { return 0 }
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		interfaces.WorkDispatch{
-			DispatchID:   "d-1",
-			TransitionID: "t-1",
+			DispatchID:   "d-raw-timeout-fail",
+			TransitionID: "t-raw-timeout-fail",
 			WorkerType:   "worker-a",
 		},
 		withAgentPrompts("sys", "msg"),
-		withAgentOutputSchema(`{"type":"object"}`),
 	))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -899,10 +949,34 @@ func TestAgentExecutor_OutputSchemaParseFailure_ReturnsFailedResult(t *testing.T
 	if result.Outcome != interfaces.OutcomeFailed {
 		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
 	}
-	if result.Error == "" {
-		t.Fatal("expected parse error")
+	if result.Error != "execution timeout" {
+		t.Fatalf("Error = %q, want %q", result.Error, "execution timeout")
 	}
-	if result.Output != "not valid json at all" {
-		t.Fatalf("Output = %q, want raw response", result.Output)
+	if provider.callCount != 3 {
+		t.Fatalf("provider call count = %d, want 3", provider.callCount)
+	}
+	if result.Metrics.RetryCount != 2 {
+		t.Fatalf("RetryCount = %d, want 2", result.Metrics.RetryCount)
+	}
+	if len(sleeps) != 2 {
+		t.Fatalf("sleep count = %d, want 2", len(sleeps))
+	}
+	if result.FailureMetadata == nil {
+		t.Fatal("FailureMetadata = nil, want timeout metadata")
+	}
+	if result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("FailureMetadata.Type = %q, want %q", result.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
+	}
+	if result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("FailureMetadata.Family = %q, want %q", result.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	}
+	if result.ProviderFailure == nil {
+		t.Fatal("ProviderFailure = nil, want timeout metadata")
+	}
+	if result.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
+		t.Fatalf("ProviderFailure.Type = %q, want %q", result.ProviderFailure.Type, interfaces.ProviderErrorTypeTimeout)
+	}
+	if result.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
+		t.Fatalf("ProviderFailure.Family = %q, want %q", result.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
 	}
 }

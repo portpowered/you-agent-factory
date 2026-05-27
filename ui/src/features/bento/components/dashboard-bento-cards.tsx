@@ -9,6 +9,7 @@ import {
   type useCurrentSelectionDetails,
   type useSelectedProviderSessionState,
 } from "../../current-selection/public";
+import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
 import { getSubmitWorkMessages } from "../../submit-work/messages/submit-work";
@@ -39,16 +40,13 @@ import {
 } from "../lib/dashboard-widget-picker";
 import type { AgentBentoLayoutCard } from "./agent-bento";
 import { DashboardWidgetRemoveButton } from "./dashboard-widget-remove-button";
-import { InlineAddWidgetCard } from "./inline-add-widget-card";
 
 export interface DashboardCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
   dashboardLayout: AgentBentoLayoutItem[];
-  isInlineWidgetPickerOpen: boolean;
   importController: ReturnType<typeof useCurrentActivityImportController>;
   locale?: string;
   now: number;
-  onInlineWidgetPickerOpenChange: (open: boolean) => void;
   onRemoveDashboardWidget: (widgetInstanceID: string) => void;
   onSelectInlineWidget: (widgetType: DashboardWidgetPickerWidgetType) => void;
   providerSessionState: ReturnType<typeof useSelectedProviderSessionState>;
@@ -91,11 +89,9 @@ interface DashboardWidgetCardBuilderArgs {
 export function buildDashboardCards({
   currentSelection,
   dashboardLayout,
-  isInlineWidgetPickerOpen,
   importController,
   locale,
   now,
-  onInlineWidgetPickerOpenChange,
   onRemoveDashboardWidget,
   onSelectInlineWidget,
   providerSessionState,
@@ -124,10 +120,8 @@ export function buildDashboardCards({
           children: (
             <InlineAddWidgetCard
               locale={locale}
-              onPickerOpenChange={onInlineWidgetPickerOpenChange}
               onSelectWidget={onSelectInlineWidget}
               pickerAvailability={pickerAvailability}
-              pickerOpen={isInlineWidgetPickerOpen}
             />
           ),
         },

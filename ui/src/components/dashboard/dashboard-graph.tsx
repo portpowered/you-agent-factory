@@ -1,8 +1,4 @@
-import {
-  Background,
-  Controls,
-  type FitViewOptions,
-} from "@xyflow/react";
+import { Background, Controls, type FitViewOptions } from "@xyflow/react";
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
@@ -16,12 +12,22 @@ type CSSPropertiesWithVariables = CSSProperties &
 
 const DASHBOARD_GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
   "--xy-controls-box-shadow": "none",
+  "--xy-controls-button-background-color":
+    "var(--color-af-graph-controls-button-surface)",
   "--xy-controls-button-background-color-hover-props":
     "var(--color-af-graph-controls-button-surface-hover)",
   "--xy-controls-button-background-color-props":
     "var(--color-af-graph-controls-button-surface)",
-  "--xy-controls-button-border-color-props": "var(--color-af-graph-controls-border)",
-  "--xy-controls-button-color-hover-props": "var(--color-af-graph-controls-text-hover)",
+  "--xy-controls-button-background-color-hover":
+    "var(--color-af-graph-controls-button-surface-hover)",
+  "--xy-controls-button-border-color": "var(--color-af-graph-controls-border)",
+  "--xy-controls-button-border-color-props":
+    "var(--color-af-graph-controls-border)",
+  "--xy-controls-button-color": "var(--color-af-graph-controls-text)",
+  "--xy-controls-button-color-hover":
+    "var(--color-af-graph-controls-text-hover)",
+  "--xy-controls-button-color-hover-props":
+    "var(--color-af-graph-controls-text-hover)",
   "--xy-controls-button-color-props": "var(--color-af-graph-controls-text)",
   backgroundColor: "var(--color-af-graph-controls-surface)",
   border: "1px solid var(--color-af-graph-controls-border)",
@@ -42,7 +48,7 @@ export function DashboardGraphFrame({
   return (
     <section
       className={cn(
-        "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",
+        "relative min-h-0 w-full min-w-0 overflow-hidden rounded-3xl border transition-colors",
         className,
       )}
       data-dashboard-graph-frame="true"

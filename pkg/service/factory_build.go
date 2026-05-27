@@ -6,20 +6,27 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
+	"github.com/portpowered/infinite-you/pkg/service/localmodel"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
 
@@ -263,12 +270,34 @@ func buildRuntimeBundle(
 
 func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) (*localModelResourceLimiter, modelAssetPuller, *managedLocalModelManager) {
 	modelResources := newLocalModelResourceLimiter()
-	modelAssets := newHuggingFaceModelAssetPuller(strings.TrimSpace(cfg.ModelCacheDir))
+	modelAssets := newModelAssetPuller(strings.TrimSpace(cfg.ModelCacheDir))
 	localModelRuntime := cfg.LocalModelRuntimeOverride
 	if localModelRuntime == nil {
 		localModelRuntime = newOmniVoiceLocalRuntime(nil)
 	}
 	return modelResources, modelAssets, newManagedLocalModelManager(modelAssets, localModelRuntime)
+}
+
+func localModelHooks() localmodel.Hooks {
+	return localmodel.Hooks{
+		MarkResourceWaitStarted:  markModelExecutionResourceWaitStarted,
+		MarkResourceWaitFinished: markModelExecutionResourceWaitFinished,
+		MarkLoadRequested:        markModelExecutionLoadRequested,
+		MarkLoadFinished:         markModelExecutionLoadFinished,
+		MarkLoadReused:           markModelExecutionLoadReused,
+	}
+}
+
+func newLocalModelResourceLimiter() *localModelResourceLimiter {
+	return localmodel.NewResourceLimiter(localModelHooks())
+}
+
+func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localModelRuntime) *managedLocalModelManager {
+	return localmodel.NewManager(assetPuller, runtime, localModelHooks())
+}
+
+func newOmniVoiceLocalRuntime(runner workers.CommandRunner) localModelRuntime {
+	return localmodel.NewOmniVoiceRuntime(runner)
 }
 
 func buildRuntimeRecorder(
@@ -361,4 +390,298 @@ func providerCommandRunnerForMode(cfg *FactoryServiceConfig, runtimeCfg interfac
 		RuntimeConfig: runtimeCfg,
 		Next:          cfg.ProviderCommandRunnerOverride,
 	}
+}
+
+func (fs *FactoryService) dashboardLoop(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			fs.renderDashboard(ctx)
+		}
+	}
+}
+
+func (fs *FactoryService) renderDashboard(ctx context.Context) {
+	now := factory.EnsureClock(fs.clock).Now()
+	input, err := fs.buildSimpleDashboardRenderInput(ctx, now)
+	if err != nil {
+		if fs.logger != nil {
+			fs.logger.Error("simple dashboard render failed", zap.Error(err))
+		}
+		return
+	}
+	fs.cfg.SimpleDashboardRenderer(input)
+}
+
+func (fs *FactoryService) buildSimpleDashboardRenderInput(ctx context.Context, now time.Time) (SimpleDashboardRenderInput, error) {
+	es, err := fs.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return SimpleDashboardRenderInput{}, err
+	}
+	renderData, err := fs.simpleDashboardRenderData(ctx, es.TickCount, es.ActiveThrottlePauses)
+	if err != nil {
+		return SimpleDashboardRenderInput{}, err
+	}
+	return SimpleDashboardRenderInput{
+		EngineState: *es,
+		RenderData:  renderData,
+		Now:         now,
+	}, nil
+}
+
+func (fs *FactoryService) simpleDashboardRenderData(
+	ctx context.Context,
+	selectedTick int,
+	activeThrottlePauses []interfaces.ActiveThrottlePause,
+) (dashboardrender.SimpleDashboardRenderData, error) {
+	events, err := fs.GetFactoryEvents(ctx)
+	if err != nil {
+		return dashboardrender.SimpleDashboardRenderData{}, err
+	}
+	worldState, err := projections.ReconstructFactoryWorldState(events, selectedTick)
+	if err != nil {
+		return dashboardrender.SimpleDashboardRenderData{}, err
+	}
+	renderData := dashboardrender.SimpleDashboardRenderDataFromWorldState(worldState)
+	renderData.ActiveThrottlePauses = projections.ProjectActiveThrottlePauses(worldState.Topology, activeThrottlePauses)
+	return renderData, nil
+}
+
+// dirExists returns true if the path exists and is a directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
+	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
+		return runner
+	}
+	if factoryCfg == nil {
+		return ""
+	}
+	return interfaces.NormalizeRunnerID(factoryCfg.Runner)
+}
+
+// loadWorkersFromConfig instantiates worker executors from the loaded runtime config.
+// Workers missing AGENTS.md keep the existing noop behavior so topology-only tests continue to work.
+func loadWorkersFromConfig(
+	factoryDir string,
+	factoryCfg *interfaces.FactoryConfig,
+	factoryRunnerID string,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	logger logging.Logger,
+	skipBuiltInRunnerPrerequisiteValidation bool,
+	providerOverride workerprovider.Provider,
+	providerCommandRunner workers.CommandRunner,
+	cmdRunner workers.CommandRunner,
+	scriptRecorder workers.ScriptEventRecorder,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
+	modelRecorder modelEventRecorder,
+	now func() time.Time,
+	modelResources *localModelResourceLimiter,
+	localModels *managedLocalModelManager,
+) ([]factory.FactoryOption, error) {
+	var opts []factory.FactoryOption
+	logger.Info("loading workers from runtime config", "working-directory", factoryDir)
+	if factoryCfg == nil {
+		return nil, fmt.Errorf("factory config is required")
+	}
+	preflight := runnerSelectionPreflight{
+		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil || skipBuiltInRunnerPrerequisiteValidation,
+	}
+	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
+		return nil, err
+	}
+	for _, workerCfg := range factoryCfg.Workers {
+		logger.Debug("loading worker", "worker", workerCfg.Name)
+		def, ok := runtimeCfg.Worker(workerCfg.Name)
+		if !ok || def == nil || def.Type == "" {
+			logger.Debug("no AGENTS.md for worker; using noop executor", "worker", workerCfg.Name)
+			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
+			continue
+		}
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelResources, localModels)
+		if executor != nil {
+			logger.Info("loaded worker", "worker", workerCfg.Name)
+			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
+		} else {
+			logger.Error("failed to load worker", "worker", workerCfg.Name)
+			return nil, fmt.Errorf("unsupported worker type for worker %q: %s", workerCfg.Name, def.Type)
+		}
+	}
+	for _, workstationCfg := range factoryCfg.Workstations {
+		def, ok := runtimeCfg.Workstation(workstationCfg.Name)
+		if !ok || def == nil {
+			continue
+		}
+		if def.Type != interfaces.WorkstationTypeLogical || def.WorkerTypeName != "" {
+			continue
+		}
+		logger.Info("loading workerless logical workstation", "workstation", workstationCfg.Name)
+		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workerexecutor.WorkstationExecutor{
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
+			Logger:          logger,
+		}))
+	}
+	return opts, nil
+}
+
+// buildWorkerExecutor creates a WorkstationExecutor wrapping the appropriate
+// inner executor for the configured worker type. Returns nil for unsupported types.
+func buildWorkerExecutor(
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	factoryCfg *interfaces.FactoryConfig,
+	workerName string,
+	factoryRunnerID string,
+	logger logging.Logger,
+	providerOverride workerprovider.Provider,
+	providerCommandRunner workers.CommandRunner,
+	cmdRunner workers.CommandRunner,
+	scriptRecorder workers.ScriptEventRecorder,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
+	modelRecorder modelEventRecorder,
+	now func() time.Time,
+	modelResources *localModelResourceLimiter,
+	localModels *managedLocalModelManager,
+) workers.WorkerExecutor {
+	def, ok := runtimeCfg.Worker(workerName)
+	if !ok {
+		return nil
+	}
+
+	switch def.Type {
+	case interfaces.WorkerTypeModel:
+		var runner workers.Runner
+		if providerOverride != nil {
+			runner = workers.RunnerFromProvider(providerOverride)
+		} else {
+			var providerOpts []workerprovider.ScriptWrapProviderOption
+			providerOpts = append(providerOpts, workerprovider.WithSkipPermissions(def.SkipPermissions))
+			providerOpts = append(providerOpts, workerprovider.WithProviderLogger(logger))
+			if providerCommandRunner != nil {
+				providerOpts = append(providerOpts, workerprovider.WithProviderCommandRunner(providerCommandRunner))
+			}
+			runner = workerprovider.NewScriptWrapProvider(providerOpts...)
+		}
+		if inferenceRecorder != nil {
+			if providerOverride != nil {
+				provider := workerprovider.NewRecordingProvider(
+					providerOverride,
+					inferenceRecorder,
+					workerprovider.WithRecordingProviderClock(now),
+				)
+				runner = workers.RunnerFromProvider(provider)
+			} else if providerRunner, ok := runner.(*workerprovider.ScriptWrapProvider); ok {
+				provider := workerprovider.NewRecordingProvider(
+					providerRunner,
+					inferenceRecorder,
+					workerprovider.WithRecordingProviderClock(now),
+				)
+				runner = workers.RunnerFromProvider(provider)
+			}
+		}
+
+		agentOpts := []workerexecutor.AgentExecutorOption{
+			workerexecutor.WithLogger(logger),
+		}
+		runner = localModels.WrapRunner(runner, runtimeCfg, factoryCfg, def)
+		runner = modelResources.WrapRunner(runner, factoryCfg, def)
+		runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
+		agentExec := workerexecutor.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
+		return &workerexecutor.WorkstationExecutor{
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Executor:        agentExec,
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
+			Logger:          logger,
+		}
+	case interfaces.WorkstationTypeLogical:
+		return &workerexecutor.WorkstationExecutor{
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
+			Logger:          logger,
+		}
+	case interfaces.WorkerTypeScript:
+		var scriptOpts []workerexecutor.ScriptExecutorOption
+		if runtimeCfg != nil && runtimeCfg.FactoryDir() != "" {
+			scriptOpts = append(scriptOpts, workerexecutor.WithScriptFactoryDir(runtimeCfg.FactoryDir()))
+		}
+		if scriptRecorder != nil {
+			scriptOpts = append(scriptOpts, workerexecutor.WithScriptEventRecorder(scriptRecorder))
+		}
+		var scriptExec workers.WorkstationRequestExecutor
+		if cmdRunner != nil {
+			scriptExec = workerexecutor.NewScriptExecutorWithRunner(def, cmdRunner, logger, scriptOpts...)
+		} else {
+			scriptExec = workerexecutor.NewScriptExecutor(def, logger, scriptOpts...)
+		}
+		return &workerexecutor.WorkstationExecutor{
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Executor:        scriptExec,
+			Renderer:        &workerprompting.DefaultPromptRenderer{},
+			Logger:          logger,
+		}
+	default:
+		return nil
+	}
+}
+
+func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, preflight runnerSelectionPreflight) error {
+	if factoryCfg == nil {
+		return nil
+	}
+	for i, workstation := range factoryCfg.Workstations {
+		runtimeWorkstation, ok := runtimeCfg.Workstation(workstation.Name)
+		if ok && runtimeWorkstation != nil {
+			workstation = *runtimeWorkstation
+		}
+
+		worker, _ := runtimeCfg.Worker(workstation.WorkerTypeName)
+		workerModelProvider := ""
+		if worker != nil {
+			workerModelProvider = worker.ModelProvider
+		}
+
+		selection := interfaces.ResolveRunnerSelection(workstation.Runner, factoryRunnerID, workerModelProvider)
+		if !runnerSelectionRequiresValidation(selection) {
+			continue
+		}
+		if err := validateResolvedRunnerSelection(selection, preflight); err != nil {
+			return fmt.Errorf("workstations[%d](%s).runner: %w", i, workstation.Name, err)
+		}
+	}
+	return nil
+}
+
+type runnerSelectionPreflight struct {
+	skipCommandAvailability bool
+}
+
+func runnerSelectionRequiresValidation(selection interfaces.ResolvedRunnerSelection) bool {
+	return selection.Source != interfaces.RunnerSelectionSourceDefault
+}
+
+func validateResolvedRunnerSelection(selection interfaces.ResolvedRunnerSelection, preflight runnerSelectionPreflight) error {
+	if _, ok := interfaces.BuiltInRunnerMetadata(selection.RunnerID); !ok {
+		return fmt.Errorf("unknown runner %q", selection.RunnerID)
+	}
+	if status, ok := workers.BuiltInRunnerStatus(selection.RunnerID); ok && !status.Available {
+		return fmt.Errorf("%s", status.UnavailableReason)
+	}
+	if !preflight.skipCommandAvailability {
+		if err := workers.ValidateBuiltInRunnerPrerequisites(selection.RunnerID); err != nil {
+			return err
+		}
+	}
+	return nil
 }

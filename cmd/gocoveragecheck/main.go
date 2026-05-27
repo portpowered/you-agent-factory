@@ -194,18 +194,18 @@ func resolveCoverPackages(cfg config) ([]string, error) {
 	if strings.TrimSpace(cfg.coverpkg) != "" {
 		return splitList(cfg.coverpkg, ",", false), nil
 	}
-	return listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage)
+	return listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, true)
 }
 
 func resolveTestPackages(cfg config) ([]string, error) {
 	if strings.TrimSpace(cfg.packages) != "" {
 		return splitList(cfg.packages, " ", true), nil
 	}
-	return listGoPackages(defaultTestPatterns, isBackendTestPackage)
+	return listGoPackages(defaultTestPatterns, isBackendTestPackage, false)
 }
 
-func listGoPackages(patterns []string, include func(string) bool) ([]string, error) {
-	args := append([]string{"list"}, patterns...)
+func listGoPackages(patterns []string, include func(string) bool, requireNonTestGoFiles bool) ([]string, error) {
+	args := append([]string{"list", "-f", "{{.ImportPath}}\t{{len .GoFiles}}"}, patterns...)
 	cmd := execCommand("go", args...)
 	cmd.Env = os.Environ()
 	rootDir, err := repoRootDir()
@@ -232,8 +232,11 @@ func listGoPackages(patterns []string, include func(string) bool) ([]string, err
 	seen := make(map[string]struct{})
 	var packages []string
 	for _, line := range strings.Split(stdout.String(), "\n") {
-		importPath := strings.TrimSpace(line)
+		importPath, goFiles, hasGoFiles := parseGoListPackageLine(line)
 		if importPath == "" || !include(importPath) {
+			continue
+		}
+		if requireNonTestGoFiles && hasGoFiles && goFiles == 0 {
 			continue
 		}
 		if _, ok := seen[importPath]; ok {
@@ -247,6 +250,18 @@ func listGoPackages(patterns []string, include func(string) bool) ([]string, err
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
 	return packages, nil
+}
+
+func parseGoListPackageLine(line string) (string, int, bool) {
+	fields := strings.Split(strings.TrimSpace(line), "\t")
+	if len(fields) < 2 {
+		return strings.TrimSpace(line), 0, false
+	}
+	goFiles, err := strconv.Atoi(strings.TrimSpace(fields[1]))
+	if err != nil {
+		return strings.TrimSpace(fields[0]), 0, false
+	}
+	return strings.TrimSpace(fields[0]), goFiles, true
 }
 
 func repoRootDir() (string, error) {

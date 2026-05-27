@@ -2,6 +2,7 @@ package workers
 
 import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers/mockworker"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -15,6 +16,7 @@ type InferenceEventRecorder = workerprovider.InferenceEventRecorder
 type RecordingProvider = workerprovider.RecordingProvider
 type RecordingProviderOption = workerprovider.RecordingProviderOption
 type ModelProvider = workerprovider.ModelProvider
+type MockWorkerCommandRunner = mockworker.MockWorkerCommandRunner
 
 const (
 	ModelProviderClaude   = workerprovider.ModelProviderClaude

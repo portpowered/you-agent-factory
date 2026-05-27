@@ -8,6 +8,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func containsAll(value string, substrings ...string) bool {
+	for _, substring := range substrings {
+		if !strings.Contains(value, substring) {
+			return false
+		}
+	}
+	return true
+}
+
 func TestRuleFactoryGuards_InferenceThrottleRequiresModelProvider(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Guards = []interfaces.FactoryGuardConfig{{

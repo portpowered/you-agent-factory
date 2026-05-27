@@ -1,3 +1,4 @@
+import { Move } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { Layout, LayoutItem } from "react-grid-layout";
@@ -5,13 +6,13 @@ import { GridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
-import { cn } from "../../../lib/cn";
 import { DashboardIconButtonShell } from "../../../components/ui/dashboard-icon-button-shell";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { cn } from "../../../lib/cn";
 import { getAgentBentoMessages } from "../messages/agent-bento";
 
 export interface AgentBentoLayoutItem {
@@ -50,6 +51,13 @@ export interface AgentBentoCardProps {
   className?: string;
   chromeDensity?: "compact" | "default";
   headerAction?: ReactNode;
+  title: string;
+}
+
+export interface AgentBentoCardHeaderProps {
+  chromeDensity?: "compact" | "default";
+  headerAction?: ReactNode;
+  headerContent: ReactNode;
   title: string;
 }
 
@@ -319,31 +327,47 @@ export function AgentBentoCard({
       className={cardClassName}
       shellKind="grid-card"
     >
-      <header
-        className={cn(
-          BENTO_CARD_HEADER_CLASS,
-          compactChrome && BENTO_CARD_HEADER_COMPACT_CLASS,
-        )}
-      >
-        <h3 className={BENTO_CARD_TITLE_CLASS}>{title}</h3>
-        <div
-          className={cn(
-            BENTO_CARD_HEADER_TOOLS_CLASS,
-            compactChrome && BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS,
-          )}
-        >
-          {headerAction}
-          <AgentBentoDragHandle title={title} />
-        </div>
-      </header>
+      <AgentBentoCardHeader
+        chromeDensity={chromeDensity}
+        headerAction={headerAction}
+        headerContent={<h3 className={BENTO_CARD_TITLE_CLASS}>{title}</h3>}
+        title={title}
+      />
       <div className={cardBodyClassName}>{children}</div>
     </DashboardPanelShell>
   );
 }
 
-export function AgentBentoDragHandle({
+export function AgentBentoCardHeader({
+  chromeDensity = "default",
+  headerAction,
+  headerContent,
   title,
-}: AgentBentoDragHandleProps) {
+}: AgentBentoCardHeaderProps) {
+  const compactChrome = chromeDensity === "compact";
+
+  return (
+    <header
+      className={cn(
+        BENTO_CARD_HEADER_CLASS,
+        compactChrome && BENTO_CARD_HEADER_COMPACT_CLASS,
+      )}
+    >
+      <div className="min-w-0 flex-1">{headerContent}</div>
+      <div
+        className={cn(
+          BENTO_CARD_HEADER_TOOLS_CLASS,
+          compactChrome && BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS,
+        )}
+      >
+        {headerAction}
+        <AgentBentoDragHandle title={title} />
+      </div>
+    </header>
+  );
+}
+
+export function AgentBentoDragHandle({ title }: AgentBentoDragHandleProps) {
   return (
     <DashboardIconButtonShell
       aria-label={`Move ${title}`}
@@ -351,22 +375,12 @@ export function AgentBentoDragHandle({
       data-bento-drag-handle="true"
       tone="outline"
     >
-      <svg
+      <Move
         aria-hidden="true"
-        fill="none"
-        height="18"
-        viewBox="0 0 18 18"
-        width="18"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M9 1.5v15M9 1.5 6.75 3.75M9 1.5l2.25 2.25M9 16.5l-2.25-2.25M9 16.5l2.25-2.25M1.5 9h15M1.5 9l2.25-2.25M1.5 9l2.25 2.25M16.5 9l-2.25-2.25M16.5 9l-2.25 2.25"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.7"
-        />
-      </svg>
+        className="size-4"
+        focusable="false"
+        strokeWidth={1.7}
+      />
     </DashboardIconButtonShell>
   );
 }

@@ -31,9 +31,9 @@ dashboard consumers, and replay hydration.
 
 | Name | Kind | Meaning | Canonical owner | Evidence |
 | --- | --- | --- | --- | --- |
-| Generated Factory config | shared configuration shape | The self-contained factory payload serialized at record, API event, replay artifact, and dashboard boundaries. | `libraries/agent-factory/api/openapi.yaml` generated as `pkg/api/generated.Factory` | `pkg/replay/generated_factory.go`, `pkg/replay/generated_factory_runtime.go`, `pkg/api/openapi_contract_test.go` |
+| Generated Factory config | shared configuration shape | The self-contained factory payload serialized at record, API event, replay artifact, and dashboard boundaries. | `libraries/agent-factory/api/openapi.yaml` generated as `pkg/api/generated.Factory` | `pkg/replay/generated_factory.go`, `pkg/api/openapi_contract_test.go` |
 | Run-request factory payload | event payload | The config seed carried by `RUN_REQUEST.payload.factory`. | Agent Factory OpenAPI event schema | `pkg/replay/event_artifact.go`, `pkg/api/server_test.go`, `ui/src/state/factoryTimelineStore.ts` |
-| Replay runtime config | package-local hydration view | Runtime config reconstructed from generated Factory after original files are unavailable. | `pkg/replay.EmbeddedRuntimeConfig` implementing `config.RuntimeConfig` | `pkg/replay/generated_factory_runtime.go`, `pkg/service/factory.go`, `tests/functional_test/factory_only_serialization_smoke_test.go` |
+| Replay runtime config | package-local hydration view | Runtime config reconstructed from generated Factory after original files are unavailable. | `pkg/replay.EmbeddedRuntimeConfig` implementing `config.RuntimeConfig` | `pkg/replay/generated_factory.go`, `pkg/service/factory.go`, `tests/functional_test/factory_only_serialization_smoke_test.go` |
 
 ## Identifiers
 
@@ -41,14 +41,14 @@ dashboard consumers, and replay hydration.
 | --- | --- | --- | --- | --- |
 | `factory_dir` / `source_directory` | filesystem path string from the recording run | `pkg/replay.GeneratedFactoryFromLoadedConfig` | replay metadata warnings and artifact diagnostics | `pkg/service/factory_test.go`, `pkg/replay/generated_factory_test.go` |
 | `workflow_id` | caller-provided workflow identifier string | `pkg/service` record setup | replay metadata comparison and event consumers | `pkg/replay/generated_factory_test.go`, `pkg/service/factory.go` |
-| workstation and worker names | names from generated Factory arrays | `pkg/config` and generated Factory serialization | replay hydration, topology projection, dashboard reducers | `pkg/replay/effective_config_test.go`, `ui/src/state/factoryTimelineStore.test.ts` |
+| workstation and worker names | names from generated Factory arrays | `pkg/config` and generated Factory serialization | replay hydration, topology projection, dashboard reducers | `pkg/replay/configtests/effective_config_test.go`, `ui/src/state/factoryTimelineStore.test.ts` |
 
 ## Configuration Shapes
 
 | Config shape | Owner | Required fields | Defaults | Consumers | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | `pkg/api/generated.Factory` | OpenAPI schema | Work types, workers, workstations, resources, and replay metadata fields when present; guarded loop breakers are authored through workstation guards instead of a top-level exhaustion-rules contract | Runtime worker/workstation fields are embedded in generated worker/workstation entries; workstation stop handling serializes through one canonical `stopWords` array, and worker/workstation runtime resource declarations serialize through the shared `resources[{name,capacity}]` contract. | `pkg/replay`, `pkg/service`, `pkg/api`, dashboard UI, fixtures | `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/replay/generated_factory_test.go` |
-| `replay.EmbeddedRuntimeConfig` | `pkg/replay` | Factory, worker configs, workstation configs, lookup maps | Built entirely from `RUN_REQUEST.payload.factory`; no filesystem fallback in replay mode. | `pkg/service`, workers, topology projection | `pkg/replay/generated_factory_runtime.go`, `pkg/service/factory.go` |
+| `replay.EmbeddedRuntimeConfig` | `pkg/replay` | Factory, worker configs, workstation configs, lookup maps | Built entirely from `RUN_REQUEST.payload.factory`; no filesystem fallback in replay mode. | `pkg/service`, workers, topology projection | `pkg/replay/generated_factory.go`, `pkg/service/factory.go` |
 | Replay artifact JSON | `pkg/replay` | schema version, recorded time, generated Factory event log | Stored artifacts canonicalize current run-request config to `payload.factory`. | replay loader, fixture tests, functional tests | `pkg/replay/artifact.go`, `pkg/replay/fixture_safety_test.go` |
 
 ## Inter-Package Contracts
@@ -57,7 +57,7 @@ dashboard consumers, and replay hydration.
 | --- | --- | --- | --- | --- | --- |
 | OpenAPI generated Factory | `api/openapi.yaml` | Go API server, replay package, dashboard TypeScript types, fixtures | Consumers depend on generated schema fields and translate at package boundaries. | Missing factory payload rejects replay hydration and contract tests reject legacy-only config. | `pkg/api/openapi_contract_test.go`, `pkg/replay/artifact_test.go` |
 | Record artifact creation | `pkg/service` and `pkg/replay` | replay loader, event stream, dashboard reducers | Service passes loaded runtime config to replay serialization; replay emits generated event payloads. | Serialization errors abort recording setup with context. | `pkg/service/factory.go`, `pkg/service/factory_test.go` |
-| Replay hydration | `pkg/replay` | `pkg/service` replay mode, topology projection, functional harness | Replay package owns config hydration and returns the `config.RuntimeConfig` interface. | Empty factory payload returns a replay artifact config error. | `pkg/replay/generated_factory_runtime.go`, `tests/functional_test/factory_only_serialization_smoke_test.go` |
+| Replay hydration | `pkg/replay` | `pkg/service` replay mode, topology projection, functional harness | Replay package owns config hydration and returns the `config.RuntimeConfig` interface. | Empty factory payload returns a replay artifact config error. | `pkg/replay/generated_factory.go`, `tests/functional_test/factory_only_serialization_smoke_test.go` |
 
 ## Shared Package Or Package-Local Decision
 

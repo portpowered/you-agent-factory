@@ -1,8 +1,14 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import { D3CompletionInformationCard } from "./d3-information-card";
 import type { WorkChartModel } from "../lib/trends";
+import { D3CompletionInformationCard } from "./d3-information-card";
 
 const populatedTrend: WorkChartModel = {
   delta: {
@@ -127,10 +133,16 @@ describe("D3CompletionInformationCard", () => {
     );
 
     const card = screen.getByRole("article", { name: "Work outcome chart" });
-    expect(within(card).queryByRole("combobox", { name: "Time range" })).toBeNull();
-    expect(within(card).queryByRole("list", { name: "Work outcome totals" })).toBeNull();
+    expect(
+      within(card).queryByRole("combobox", { name: "Time range" }),
+    ).toBeNull();
+    expect(
+      within(card).queryByRole("list", { name: "Work outcome totals" }),
+    ).toBeNull();
     expect(within(card).queryByText("Completed in range")).toBeNull();
-    const chart = within(card).getByRole("img", { name: "Work outcome chart for 15m" });
+    const chart = within(card).getByRole("img", {
+      name: "Work outcome chart for 15m",
+    });
     expect(chart).toBeTruthy();
     expect(card.querySelector(".recharts-wrapper")).toBeTruthy();
     expect(within(chart).getByText("Queued")).toBeTruthy();
@@ -140,7 +152,9 @@ describe("D3CompletionInformationCard", () => {
     expect(within(chart).getByText("Ticks")).toBeTruthy();
     expect(within(chart).getByText("Work count")).toBeTruthy();
     expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
-    const chartRegion = within(card).getByLabelText("Work outcome chart region");
+    const chartRegion = within(card).getByLabelText(
+      "Work outcome chart region",
+    );
     expect(chartRegion.className).toContain("flex");
     expect(chartRegion.className).toContain("flex-1");
     expect(chartRegion.className).toContain("min-h-0");
@@ -158,7 +172,9 @@ describe("D3CompletionInformationCard", () => {
     expect(chart.className).toContain("sm:pt-5");
     expect(chart.style.height).toBe("");
     expect(chart.style.minHeight).toBe("14rem");
-    const overlay = chart.querySelector<HTMLElement>("[data-work-chart-overlay='true']");
+    const overlay = chart.querySelector<HTMLElement>(
+      "[data-work-chart-overlay='true']",
+    );
     expect(overlay).toBeTruthy();
     expect(overlay?.className).toContain("px-5");
     expect(overlay?.className).toContain("pb-4");
@@ -168,17 +184,60 @@ describe("D3CompletionInformationCard", () => {
     expect(overlay?.className).toContain("sm:pt-5");
   });
 
-  it("renders an explicit empty state without a chart when samples are unavailable", () => {
+  it("toggles chart lines when the legend controls are clicked", () => {
     render(
       <D3CompletionInformationCard
-        model={emptyTrend}
+        model={populatedTrend}
+        widgetId="work-outcome-chart"
       />,
     );
 
-    expect(screen.queryByRole("img", { name: "Work outcome chart for 15m" })).toBeNull();
+    const chart = screen.getByRole("img", {
+      name: "Work outcome chart for 15m",
+    });
+    const queuedLegendControl = within(chart).getByRole("button", {
+      name: "Hide Queued series",
+    });
+    expect(queuedLegendControl.getAttribute("aria-pressed")).toBe("true");
+    expect(chart.getAttribute("data-work-chart-hidden-series")).toBe("");
+    expect(chart.getAttribute("data-work-chart-visible-series")).toContain(
+      "queued",
+    );
+
+    fireEvent.click(queuedLegendControl);
+
+    expect(
+      within(chart).getByRole("button", { name: "Show Queued series" }),
+    ).toBeTruthy();
+    expect(chart.getAttribute("data-work-chart-hidden-series")).toBe("queued");
+    expect(chart.getAttribute("data-work-chart-visible-series")).not.toContain(
+      "queued",
+    );
+
+    fireEvent.click(
+      within(chart).getByRole("button", { name: "Show Queued series" }),
+    );
+
+    expect(
+      within(chart).getByRole("button", { name: "Hide Queued series" }),
+    ).toBeTruthy();
+    expect(chart.getAttribute("data-work-chart-hidden-series")).toBe("");
+    expect(chart.getAttribute("data-work-chart-visible-series")).toContain(
+      "queued",
+    );
+  });
+
+  it("renders an explicit empty state without a chart when samples are unavailable", () => {
+    render(<D3CompletionInformationCard model={emptyTrend} />);
+
+    expect(
+      screen.queryByRole("img", { name: "Work outcome chart for 15m" }),
+    ).toBeNull();
     expect(screen.getByText("No work outcome samples")).toBeTruthy();
     expect(
-      screen.getByText("Work outcome data appears after the event stream receives work history."),
+      screen.getByText(
+        "Work outcome data appears after the event stream receives work history.",
+      ),
     ).toBeTruthy();
     const emptyState = screen.getByRole("status");
     expect(emptyState.className).toContain("h-full");
@@ -198,7 +257,9 @@ describe("D3CompletionInformationCard", () => {
     );
 
     const card = screen.getByRole("article", { name: "Work outcome chart" });
-    expect(within(card).queryByRole("combobox", { name: "Time range" })).toBeNull();
+    expect(
+      within(card).queryByRole("combobox", { name: "Time range" }),
+    ).toBeNull();
     const loadingState = within(card).getByRole("status");
     expect(loadingState).toBeTruthy();
     expect(within(card).getByText("Loading work outcome samples")).toBeTruthy();
@@ -224,7 +285,9 @@ describe("D3CompletionInformationCard", () => {
     const card = screen.getByRole("article", { name: "Work outcome chart" });
     const alert = within(card).getByRole("alert");
     expect(alert).toBeTruthy();
-    expect(within(alert).getByText("Work outcome chart unavailable")).toBeTruthy();
+    expect(
+      within(alert).getByText("Work outcome chart unavailable"),
+    ).toBeTruthy();
     expect(
       within(alert).getByText(
         "Chart data is incomplete, so the dashboard cannot draw this work outcome view yet.",

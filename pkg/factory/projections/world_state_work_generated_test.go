@@ -119,3 +119,42 @@ func projectionWorkContentPartEqual(left, right interfaces.WorkContentPart) bool
 	rightMetadata, _ := json.Marshal(right.Metadata)
 	return string(leftMetadata) == string(rightMetadata)
 }
+
+func TestWorkItemRefsForProjectionOwners_FilterCustomerWorkAndPreserveLineage(t *testing.T) {
+	itemsByID := map[string]interfaces.FactoryWorkItem{
+		"work-2": {ID: "work-2", WorkTypeID: "task", DisplayName: "Second", CurrentChainingTraceID: "chain-2", PreviousChainingTraceIDs: []string{"chain-0", "chain-1"}, TraceID: "trace-2"},
+		"work-1": {ID: "work-1", WorkTypeID: "task", DisplayName: "First", CurrentChainingTraceID: "chain-1", PreviousChainingTraceIDs: []string{"chain-0"}, TraceID: "trace-1"},
+		"time-1": {ID: "time-1", WorkTypeID: interfaces.SystemTimeWorkTypeID, DisplayName: "tick"},
+	}
+
+	refsByID := workItemRefsForIDs([]string{"work-2", "time-1", "work-1", "work-2"}, itemsByID)
+	if len(refsByID) != 2 || refsByID[0].WorkID != "work-1" || refsByID[1].WorkID != "work-2" {
+		t.Fatalf("workItemRefsForIDs = %#v, want sorted customer refs", refsByID)
+	}
+	if refsByID[0].CurrentChainingTraceID != "chain-1" || len(refsByID[1].PreviousChainingTraceIDs) != 2 {
+		t.Fatalf("workItemRefsForIDs lineage = %#v, want explicit chaining fields", refsByID)
+	}
+	if refsByID[0].ChainingTraceDepth != 0 || refsByID[1].ChainingTraceDepth != 0 {
+		t.Fatalf("workItemRefsForIDs unexpected implicit depth = %#v, want zero when source depth absent", refsByID)
+	}
+
+	refsForItems := workItemRefsForItems([]interfaces.FactoryWorkItem{
+		itemsByID["work-2"],
+		itemsByID["time-1"],
+		itemsByID["work-2"],
+		itemsByID["work-1"],
+	})
+	if len(refsForItems) != 2 || refsForItems[0].WorkID != "work-2" || refsForItems[1].WorkID != "work-1" {
+		t.Fatalf("workItemRefsForItems = %#v, want first-occurrence customer refs", refsForItems)
+	}
+
+	refsForInputs := workItemRefsForInputs([]interfaces.WorkstationInput{
+		{WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "First", CurrentChainingTraceID: "chain-1", PreviousChainingTraceIDs: []string{"chain-0"}}},
+		{WorkItem: &interfaces.FactoryWorkItem{ID: "time-1", WorkTypeID: interfaces.SystemTimeWorkTypeID, DisplayName: "tick"}},
+		{WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "First", CurrentChainingTraceID: "chain-1", PreviousChainingTraceIDs: []string{"chain-0"}}},
+		{WorkItem: &interfaces.FactoryWorkItem{ID: "work-2", WorkTypeID: "task", DisplayName: "Second", CurrentChainingTraceID: "chain-2", PreviousChainingTraceIDs: []string{"chain-0", "chain-1"}}},
+	})
+	if len(refsForInputs) != 2 || refsForInputs[0].WorkID != "work-1" || refsForInputs[1].WorkID != "work-2" {
+		t.Fatalf("workItemRefsForInputs = %#v, want first-occurrence customer refs", refsForInputs)
+	}
+}

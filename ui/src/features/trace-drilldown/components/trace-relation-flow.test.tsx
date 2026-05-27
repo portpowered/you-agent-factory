@@ -9,13 +9,17 @@ import {
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import type { DashboardWorkRelation } from "../../api/dashboard/types";
 import { TraceRelationFlow } from "./trace-relation-flow";
 
 vi.mock("../lib/trace-elk-layout", () => ({
   getCachedTraceGraphLayout: () => null,
   async layoutTraceGraphWithElk<TNode>(nodes: TNode[]): Promise<TNode[]> {
-    return nodes;
+    return nodes.map((node, index) => ({
+      ...node,
+      position: { x: index * 260, y: index * 140 },
+    }));
   },
   traceGraphLayoutKey: () => "trace-relation-layout-test",
 }));
@@ -78,12 +82,14 @@ vi.mock("@xyflow/react", async () => {
       nodes: Array<{
         data: Record<string, unknown>;
         id: string;
+        position?: { x: number; y: number };
         type: string;
       }>;
     }) => (
       <div
         data-edge-payload={JSON.stringify(edges)}
         data-node-ids={JSON.stringify(nodes.map((node) => node.id))}
+        data-node-positions={JSON.stringify(nodes.map((node) => node.position))}
         data-testid="trace-relation-react-flow"
       >
         {nodes.map((node) => {
@@ -139,9 +145,28 @@ function renderedEdges() {
   }>;
 }
 
+function renderedNodePositions() {
+  const payload = screen
+    .getByTestId("trace-relation-react-flow")
+    .getAttribute("data-node-positions");
+  if (!payload) {
+    throw new Error("Expected rendered node positions.");
+  }
+
+  return JSON.parse(payload) as Array<{ x: number; y: number }>;
+}
+
 describe("TraceRelationFlow", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
   afterEach(() => {
     cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
   });
 
   it("uses the shared dashboard graph chrome and preserves work-item selection", async () => {
@@ -225,6 +250,46 @@ describe("TraceRelationFlow", () => {
     expect(edges[0]?.style?.stroke).toBe("var(--color-af-success)");
     expect(edges[0]?.style?.strokeDasharray).toBe("7 5");
     expect(edges[1]?.style?.stroke).toBe("var(--color-af-danger-text)");
+  });
+});
+
+describe("TraceRelationFlow layout", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+  });
+
+  it("applies ELK positions after layout so relation nodes do not overlay", async () => {
+    render(<TraceRelationFlow relations={RELATIONS} />);
+
+    await waitFor(() => {
+      expect(renderedNodePositions()).toEqual([
+        { x: 0, y: 0 },
+        { x: 260, y: 140 },
+        { x: 520, y: 280 },
+      ]);
+    });
+  });
+});
+
+describe("TraceRelationFlow localization", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
   });
 
   it("localizes relation enums in zh-CN and preserves raw values in unknown fallbacks", async () => {
