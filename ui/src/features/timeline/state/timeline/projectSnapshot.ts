@@ -7,6 +7,7 @@ import {
 import { projectRuntime } from "./projectRuntime";
 import { projectTopology } from "./projectTopology";
 import { projectWorkstationDispatchRequestsByID } from "./projectWorkstationRequests";
+import { projectDashboardFactoryDefinition } from "./replayFactoryTopology";
 import { isSystemTimeWorkType } from "./systemTime";
 import type { ReplayWorldState, WorldState } from "./types";
 
@@ -38,7 +39,9 @@ export function projectSnapshot(state: ReplayWorldState): WorldState {
 
   return {
     factory_state: state.factory_state,
-    factory: state.factory ? structuredClone(state.factory) : undefined,
+    factory: state.factory
+      ? projectDashboardFactoryDefinition(state.factory)
+      : undefined,
     runtime,
     tick_count: state.tick_count,
     topology: projectTopology(state.topology),

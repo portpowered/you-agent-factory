@@ -4015,6 +4015,23 @@ describe("factory timeline store replay", () => {
     expect(activeTick.topology.submit_work_types).toEqual([
       { work_type_name: "story" },
     ]);
+    expect(activeTick.factory?.workTypes).toEqual([
+      {
+        name: "story",
+        states: [
+          { name: "new", type: "INITIAL" },
+          { name: "done", type: "TERMINAL" },
+        ],
+      },
+    ]);
+    expect(activeTick.factory?.workstations).toEqual([
+      expect.objectContaining({
+        id: "daily-refresh",
+        inputs: [{ state: "new", workType: "story" }],
+        name: "Daily refresh",
+        outputs: [{ state: "done", workType: "story" }],
+      }),
+    ]);
     expect(activeTick.topology.workstation_node_ids).toEqual(["daily-refresh"]);
     expect(
       activeTick.topology.workstation_nodes_by_id["daily-refresh"],
