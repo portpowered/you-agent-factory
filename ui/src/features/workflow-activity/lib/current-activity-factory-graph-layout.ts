@@ -45,6 +45,11 @@ type FactoryWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
 >[number];
 type FactoryWorkstationIO = FactoryWorkstation["inputs"][number];
+type FactoryWorkstationRoute =
+  | FactoryWorkstationIO
+  | FactoryWorkstationIO[]
+  | null
+  | undefined;
 type DashboardWorkstationKind = NonNullable<
   DashboardWorkstationNode["workstation_kind"]
 >;
@@ -130,11 +135,20 @@ function dashboardWorkstationOutputRoutes(
   workstation: FactoryWorkstation,
 ): FactoryWorkstationIO[] {
   return [
-    ...(workstation.outputs ?? []),
-    ...(workstation.onContinue ?? []),
-    ...(workstation.onRejection ?? []),
-    ...(workstation.onFailure ?? []),
+    ...workstationRouteIOs(workstation.outputs),
+    ...workstationRouteIOs(workstation.onContinue),
+    ...workstationRouteIOs(workstation.onRejection),
+    ...workstationRouteIOs(workstation.onFailure),
   ];
+}
+
+function workstationRouteIOs(
+  routes: FactoryWorkstationRoute,
+): FactoryWorkstationIO[] {
+  if (!routes) {
+    return [];
+  }
+  return Array.isArray(routes) ? routes : [routes];
 }
 
 function addNode(
@@ -252,14 +266,14 @@ function appendRouteEdges(
     | "workstation-on-failure"
     | "workstation-on-rejection"
     | "workstation-output",
-  routes: FactoryWorkstationIO[] | undefined,
+  routes: FactoryWorkstationRoute,
   categories: ReadonlyMap<string, StateCategory>,
   nodes: Map<string, FactoryGraphSeedNode>,
   edges: Map<string, FactoryGraphSeedEdge>,
 ) {
   const workstationNodeId = workstationGraphNodeId(workstation);
 
-  for (const output of routes ?? []) {
+  for (const output of workstationRouteIOs(routes)) {
     const place = workStatePlace(output, categories);
     addPlaceNode(nodes, place);
     const toNodeId = placeGraphNodeId(place.place_id);

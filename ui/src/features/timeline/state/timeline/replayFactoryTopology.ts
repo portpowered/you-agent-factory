@@ -116,60 +116,6 @@ function isPublicWorkstationIO(io: { workType?: string }): boolean {
   return !isSystemTimeWorkType(ioWorkType(io));
 }
 
-function publicWorkstationIO(
-  value: WorkstationIO[] | WorkstationIO | null | undefined,
-): WorkstationIO[] | undefined {
-  const projected = workstationRouteIOs(value).filter(isPublicWorkstationIO);
-  return projected.length > 0 ? projected : undefined;
-}
-
-function assignPublicOptionalWorkstationIO<
-  TKey extends "outputs" | "onContinue" | "onFailure" | "onRejection",
->(workstation: FactoryWorkstation, key: TKey): void {
-  if (workstation[key] === undefined) {
-    return;
-  }
-  const projected = publicWorkstationIO(workstation[key]);
-  if (projected) {
-    workstation[key] = projected;
-    return;
-  }
-  delete workstation[key];
-}
-
-export function projectDashboardFactoryDefinition(
-  factory: FactoryDefinition,
-): FactoryDefinition {
-  const projected = structuredClone(factory);
-  projected.workTypes = (projected.workTypes ?? []).filter(
-    (workType) => !isSystemTimeWorkType(workType.name),
-  );
-  projected.workstations = (projected.workstations ?? [])
-    .filter((workstation) => !isSystemTimeWorkstation(workstation))
-    .map((workstation) => {
-      workstation.inputs = publicWorkstationIO(workstation.inputs) ?? [];
-      assignPublicOptionalWorkstationIO(workstation, "outputs");
-      assignPublicOptionalWorkstationIO(workstation, "onContinue");
-      assignPublicOptionalWorkstationIO(workstation, "onFailure");
-      assignPublicOptionalWorkstationIO(workstation, "onRejection");
-      if (workstation.classificationRoutes !== undefined) {
-        const routes = workstation.classificationRoutes
-          .map((route) => ({
-            ...route,
-            outputs: publicWorkstationIO(route.outputs) ?? [],
-          }))
-          .filter((route) => route.outputs.length > 0);
-        if (routes.length > 0) {
-          workstation.classificationRoutes = routes;
-        } else {
-          delete workstation.classificationRoutes;
-        }
-      }
-      return workstation;
-    });
-  return projected;
-}
-
 function projectWorkstationTopology(
   workstation: FactoryWorkstation,
 ): NonNullable<ProjectedInitialStructure["workstations"]>[number] {

@@ -11,6 +11,11 @@ import { buildEdge, buildNode, nodeKeyId } from "./factory-graph-draft-types";
 
 type NodeMap = Map<string, FactoryGraphNode>;
 type EdgeMap = Map<string, FactoryGraphEdge>;
+type WorkstationRouteInput =
+  | FactoryWorkstationIO
+  | FactoryWorkstationIO[]
+  | null
+  | undefined;
 
 export function buildFactoryGraphTopologyFromDefinition(
   factoryDefinition: CanonicalFactoryDefinition,
@@ -184,7 +189,7 @@ function appendWorkstationResourceEdges(
 }
 
 function appendWorkstationStateEdges(
-  items: FactoryWorkstationIO[] | undefined,
+  items: WorkstationRouteInput,
   kind:
     | "workstation-input"
     | "workstation-on-continue"
@@ -195,10 +200,19 @@ function appendWorkstationStateEdges(
   nodes: NodeMap,
   edges: EdgeMap,
 ) {
-  for (const item of items ?? []) {
+  for (const item of workstationRouteIOs(items)) {
     const edge = buildWorkstationIOEdge(kind, item, workstationKey, nodes);
     edges.set(edge.id, edge);
   }
+}
+
+function workstationRouteIOs(
+  items: WorkstationRouteInput,
+): FactoryWorkstationIO[] {
+  if (!items) {
+    return [];
+  }
+  return Array.isArray(items) ? items : [items];
 }
 
 function buildWorkstationIOEdge(

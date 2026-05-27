@@ -4023,13 +4023,24 @@ describe("factory timeline store replay", () => {
           { name: "done", type: "TERMINAL" },
         ],
       },
+      {
+        name: rawSystemTime,
+        states: [{ name: "pending", type: "PROCESSING" }],
+      },
     ]);
     expect(activeTick.factory?.workstations).toEqual([
       expect.objectContaining({
         id: "daily-refresh",
-        inputs: [{ state: "new", workType: "story" }],
+        inputs: [
+          { state: "new", workType: "story" },
+          { state: "pending", workType: rawSystemTime },
+        ],
         name: "Daily refresh",
         outputs: [{ state: "done", workType: "story" }],
+      }),
+      expect.objectContaining({
+        id: `${rawSystemTime}:expire`,
+        inputs: [{ state: "pending", workType: rawSystemTime }],
       }),
     ]);
     expect(activeTick.topology.workstation_node_ids).toEqual(["daily-refresh"]);
@@ -4062,8 +4073,12 @@ describe("factory timeline store replay", () => {
     expect(completedTick.runtime.session.dispatched_count).toBe(0);
     expect(completedTick.runtime.session.has_data).toBe(false);
     expect(completedTick.tracesByWorkID["time-daily-refresh"]).toBeUndefined();
-    expect(JSON.stringify(activeTick)).not.toContain(rawSystemTime);
-    expect(JSON.stringify(completedTick)).not.toContain(rawSystemTime);
+    expect(JSON.stringify(activeTick.factory)).toContain(rawSystemTime);
+    expect(JSON.stringify(completedTick.factory)).toContain(rawSystemTime);
+    expect(JSON.stringify(activeTick.topology)).not.toContain(rawSystemTime);
+    expect(JSON.stringify(completedTick.topology)).not.toContain(rawSystemTime);
+    expect(JSON.stringify(activeTick.runtime)).not.toContain(rawSystemTime);
+    expect(JSON.stringify(completedTick.runtime)).not.toContain(rawSystemTime);
   });
 
   it("follows latest tick in current mode and preserves selected tick in fixed mode", () => {

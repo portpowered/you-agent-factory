@@ -146,3 +146,63 @@ describe("useCurrentActivityGraphLayout", () => {
     ]);
   });
 });
+
+describe("useCurrentActivityGraphLayout legacy routes", () => {
+  beforeEach(() => {
+    mockBuildGraphLayout.mockReset();
+    window.localStorage.clear();
+  });
+
+  it("accepts legacy singular workstation routes while preserving the canonical factory source", async () => {
+    const snapshot: DashboardSnapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: {
+        name: "legacy-route-observer",
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "queued", type: "INITIAL" },
+              { name: "retry", type: "PROCESSING" },
+              { name: "failed", type: "FAILED" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            id: "draft",
+            inputs: [{ state: "queued", workType: "story" }],
+            name: "Draft",
+            onContinue: { state: "retry", workType: "story" },
+            onFailure: { state: "failed", workType: "story" },
+            outputs: [],
+            type: "MODEL_WORKSTATION",
+            worker: "",
+          } as NonNullable<
+            DashboardSnapshot["factory"]
+          >["workstations"][number],
+        ],
+      },
+      topology: {
+        edges: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphLayout(snapshot),
+    );
+
+    await waitFor(() => {
+      expect(result.current.edges.length).toBeGreaterThan(0);
+    });
+
+    expect(result.current.edges.map((edge) => edge.edgeId).sort()).toContain(
+      "workstation-on-continue:workstation:draft->place:story:retry",
+    );
+    expect(result.current.edges.map((edge) => edge.edgeId).sort()).toContain(
+      "workstation-on-failure:workstation:draft->place:story:failed",
+    );
+  });
+});

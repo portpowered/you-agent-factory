@@ -95,6 +95,11 @@ func TestBuildFactoryWorldView_ExposesCanonicalFactoryGraphFromStructureEvents(t
 					{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
 					{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
 				},
+			}, {
+				Name: interfaces.SystemTimeWorkTypeID,
+				States: []factoryapi.WorkState{
+					{Name: "pending", Type: factoryapi.WorkStateTypePROCESSING},
+				},
 			}},
 			Workstations: &[]factoryapi.Workstation{{
 				Id:         stringPtrForProjectionTest("review"),
@@ -112,6 +117,12 @@ func TestBuildFactoryWorldView_ExposesCanonicalFactoryGraphFromStructureEvents(t
 				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "failed"}},
 				Resources: &[]factoryapi.ResourceRequirement{{Name: "agent-slot", Capacity: 1}},
 				Limits:    &factoryapi.WorkstationLimits{MaxRetries: &maxRetries},
+			}, {
+				Id:      stringPtrForProjectionTest(interfaces.SystemTimeExpiryTransitionID),
+				Name:    interfaces.SystemTimeExpiryTransitionID,
+				Inputs:  []factoryapi.WorkstationIO{{WorkType: interfaces.SystemTimeWorkTypeID, State: "pending"}},
+				Outputs: &[]factoryapi.WorkstationIO{},
+				Worker:  "",
 			}},
 		},
 	}

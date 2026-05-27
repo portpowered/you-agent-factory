@@ -97,7 +97,7 @@ it("preserves the OpenAPI Factory graph beside the dashboard topology", () => {
   });
 });
 
-it("projects canonical dashboard factory snapshots without internal system-time routes", () => {
+it("preserves internal system-time routes in the canonical snapshot factory", () => {
   const initialStructure = event(
     "initial-system-time-factory",
     1,
@@ -173,7 +173,7 @@ it("projects canonical dashboard factory snapshots without internal system-time 
 
   const snapshot = buildFactoryTimelineSnapshot([initialStructure], 1);
 
-  expect(JSON.stringify(snapshot.factory)).not.toContain("__system_time");
+  expect(snapshot.factory).toEqual(initialStructure.payload.factory);
   expect(snapshot.factory?.workTypes).toEqual([
     {
       name: "story",
@@ -183,6 +183,10 @@ it("projects canonical dashboard factory snapshots without internal system-time 
         { name: "done", type: "TERMINAL" },
       ],
     },
+    {
+      name: "__system_time",
+      states: [{ name: "pending", type: "PROCESSING" }],
+    },
   ]);
   expect(snapshot.factory?.workstations).toEqual([
     expect.objectContaining({
@@ -191,16 +195,40 @@ it("projects canonical dashboard factory snapshots without internal system-time 
           label: "ready",
           outputs: [{ state: "reviewing", workType: "story" }],
         },
+        {
+          label: "tick",
+          outputs: [{ state: "pending", workType: "__system_time" }],
+        },
       ],
       id: "route-story",
-      inputs: [{ state: "new", workType: "story" }],
-      outputs: [{ state: "done", workType: "story" }],
+      inputs: [
+        { state: "new", workType: "story" },
+        { state: "pending", workType: "__system_time" },
+      ],
+      onContinue: [{ state: "pending", workType: "__system_time" }],
+      onFailure: [{ state: "pending", workType: "__system_time" }],
+      onRejection: [{ state: "pending", workType: "__system_time" }],
+      outputs: [
+        { state: "done", workType: "story" },
+        { state: "pending", workType: "__system_time" },
+      ],
     }),
-    expect.not.objectContaining({
-      classificationRoutes: expect.any(Array),
+    expect.objectContaining({
+      classificationRoutes: [
+        {
+          label: "tick",
+          outputs: [{ state: "pending", workType: "__system_time" }],
+        },
+      ],
+      id: "system-only-public-id",
+    }),
+    expect.objectContaining({
+      id: "__system_time:expire",
+      inputs: [{ state: "pending", workType: "__system_time" }],
     }),
   ]);
-  expect(snapshot.factory?.workstations?.[0]).not.toHaveProperty("onContinue");
-  expect(snapshot.factory?.workstations?.[0]).not.toHaveProperty("onFailure");
-  expect(snapshot.factory?.workstations?.[0]).not.toHaveProperty("onRejection");
+  expect(snapshot.topology.submit_work_types).toEqual([
+    { work_type_name: "story" },
+  ]);
+  expect(JSON.stringify(snapshot.topology)).not.toContain("__system_time");
 });

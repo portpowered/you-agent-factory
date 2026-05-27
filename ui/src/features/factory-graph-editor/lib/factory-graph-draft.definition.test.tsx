@@ -35,6 +35,29 @@ it("derives graph nodes and relations from the canonical editable definition", (
   ]);
 });
 
+it("derives graph relations from legacy singular workstation route objects", () => {
+  const topology = buildFactoryGraphTopologyFromDefinition({
+    ...baseFactoryDefinition,
+    workstations: [
+      {
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "draft",
+        onContinue: { state: "queued", workType: "story" },
+        onFailure: { state: "done", workType: "story" },
+        outputs: [],
+        worker: "writer",
+      } as NonNullable<typeof baseFactoryDefinition.workstations>[number],
+    ],
+  });
+
+  expect(topology.edges.map((edge) => edge.id)).toEqual(
+    expect.arrayContaining([
+      "workstation-on-continue:workstation:draft->work-state:story:queued",
+      "workstation-on-failure:workstation:draft->work-state:story:done",
+    ]),
+  );
+});
+
 it("builds a pending full factory definition while preserving untouched content", () => {
   const draft = createEmptyFactoryGraphDraft();
   draft.additions.workers.push({

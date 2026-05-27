@@ -2,8 +2,8 @@
 # Entries are path|line|column|kind|text.
 src/features/factory-graph-editor/lib/factory-graph-field-operations.ts|150|16|string-literal|Graph node " " was not found.
 src/features/factory-graph-editor/lib/factory-graph-field-operations.ts|171|14|string-literal|Graph node " " was not found.
-src/features/workflow-activity/lib/current-activity-factory-graph-layout.ts|53|10|string-literal|workstation:
-src/features/workflow-activity/lib/current-activity-factory-graph-layout.ts|61|10|string-literal|place:
+src/features/workflow-activity/lib/current-activity-factory-graph-layout.ts|58|10|string-literal|workstation:
+src/features/workflow-activity/lib/current-activity-factory-graph-layout.ts|66|10|string-literal|place:
 src/features/workflow-activity/lib/current-activity-factory-graph-node-ids.ts|59|12|string-literal|workstation:
 src/features/workflow-activity/lib/current-activity-factory-graph-node-ids.ts|62|12|string-literal|place: :available
 src/features/workflow-activity/lib/current-activity-factory-graph-node-ids.ts|65|12|string-literal|place: :
