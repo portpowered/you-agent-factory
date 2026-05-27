@@ -6,36 +6,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-// formatDurationShort formats a duration compactly: "1m2s", "2h5m", "500ms".
 func formatDurationShort(d time.Duration) string {
-	if d < time.Second {
-		return fmt.Sprintf("%dms", d.Milliseconds())
-	}
-	d = d.Truncate(time.Second)
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	}
-	if d < time.Hour {
-		m := int(d.Minutes())
-		s := int(d.Seconds()) % 60
-		if s == 0 {
-			return fmt.Sprintf("%dm", m)
-		}
-		return fmt.Sprintf("%dm%ds", m, s)
-	}
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	return fmt.Sprintf("%dh%dm", h, m)
+	return timedisplay.Duration(d)
 }
 
 func formatDashboardTime(value time.Time) string {
-	if value.IsZero() {
-		return "n/a"
-	}
-	return value.Local().Format("15:04:05")
+	return timedisplay.Timestamp(value)
+}
+
+func formatDashboardElapsed(startedAt, now time.Time) string {
+	return timedisplay.ElapsedSince(startedAt, now)
 }
 
 func dashboardSessionStartTime(uptime time.Duration, now time.Time) time.Time {
@@ -45,17 +29,9 @@ func dashboardSessionStartTime(uptime time.Duration, now time.Time) time.Time {
 	return now
 }
 
-// FormatDuration formats a duration as "Xm" or "Xh Ym".
+// FormatDuration formats a duration compactly for CLI output.
 func FormatDuration(d time.Duration) string {
-	if d < time.Minute {
-		return "0m"
-	}
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	if h > 0 {
-		return fmt.Sprintf("%dh %dm", h, m)
-	}
-	return fmt.Sprintf("%dm", m)
+	return timedisplay.Duration(d)
 }
 
 func formatDashboardWorkTypeCounts(counts map[string]int) string {

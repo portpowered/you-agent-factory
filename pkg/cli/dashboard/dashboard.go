@@ -64,8 +64,6 @@ func formatSimpleDashboard(
 	if topology == nil {
 		topology = es.Topology
 	}
-	now = now.Local()
-
 	var b strings.Builder
 
 	// Header: factory state and uptime.
@@ -94,10 +92,10 @@ func renderCompletedWorkstations(b *strings.Builder, completedHistory []dashboar
 		b.WriteString("\n")
 		b.WriteString("Completed Workstations\n")
 		b.WriteString("─────────────────────────────────────────────────────────\n")
-		fmt.Fprintf(b, "  %-10s %-20s %-10s %-10s %-8s %-20s %-20s %s\n", "Status", "Workstation", "Started", "Ended", "Duration", "Inputs", "Outputs", "Reason")
+		fmt.Fprintf(b, "  %-10s %-20s %-23s %-23s %-8s %-20s %-20s %s\n", "Status", "Workstation", "Started", "Ended", "Duration", "Inputs", "Outputs", "Reason")
 		b.WriteString("  ────────────────────────────────────────────────────\n")
 		for _, completed := range completedHistory {
-			fmt.Fprintf(b, "  %-10s %-20s %-10s %-10s %-8s %-20s %-20s %s\n",
+			fmt.Fprintf(b, "  %-10s %-20s %-23s %-23s %-8s %-20s %-20s %s\n",
 				displayCompletedDispatchStatus(completed.Outcome),
 				completed.WorkstationName,
 				formatDashboardTime(completed.StartTime),
@@ -199,14 +197,14 @@ func renderActiveWorkstations(b *strings.Builder, active dashboardActiveView, no
 	b.WriteString("\n")
 	fmt.Fprintf(b, "Active Workstations (%d)\n", active.Count)
 	b.WriteString("─────────────────────────────────────────────────────────\n")
-	fmt.Fprintf(b, "  %-18s %-20s %-10s %-8s %s\n", "Work Types", "Workstation", "Started", "Elapsed", "Name")
+	fmt.Fprintf(b, "  %-18s %-20s %-23s %-8s %s\n", "Work Types", "Workstation", "Started", "Elapsed", "Name")
 	b.WriteString("  ────────────────────────────────────────────────────\n")
 	for _, entry := range active.Entries {
-		fmt.Fprintf(b, "  %-18s %-20s %-10s %-8s %s\n",
+		fmt.Fprintf(b, "  %-18s %-20s %-23s %-8s %s\n",
 			displayStringList(entry.WorkTypeIDs),
 			displayDispatchWorkstationName(entry.WorkstationName, entry.TransitionID),
 			formatDashboardTime(entry.StartedAt),
-			formatDurationShort(now.Sub(entry.StartedAt)),
+			formatDashboardElapsed(entry.StartedAt, now),
 			displayStringList(entry.WorkLabels))
 	}
 }
