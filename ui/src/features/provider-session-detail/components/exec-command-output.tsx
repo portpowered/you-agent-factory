@@ -1,8 +1,8 @@
+import { isAPIRecord } from "../../../api/transport";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { isAPIRecord } from "../../../api/transport";
 import { formatNumber } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
@@ -27,7 +27,9 @@ export function FriendlyExecCommandOutput({
   if (friendlyOutput === null) {
     return (
       <div className="grid gap-3">
-        {text ? <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{text}</p> : null}
+        {text ? (
+          <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{text}</p>
+        ) : null}
         <ExpandableCodeBlock
           label={messages.outputLabel}
           locale={locale}
@@ -39,8 +41,10 @@ export function FriendlyExecCommandOutput({
 
   return (
     <div className="grid gap-3">
-      {text ? <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{text}</p> : null}
-      <section className="grid gap-2 rounded-lg border border-af-success-border bg-af-success-surface p-3">
+      {text ? (
+        <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{text}</p>
+      ) : null}
+      <section className="grid gap-2 rounded-lg border border-af-border bg-af-surface-subtle p-3">
         <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
           {messages.execCommandResultHeading}
         </span>
@@ -58,14 +62,13 @@ export function FriendlyExecCommandOutput({
             />
           ) : null}
           {status ? (
-            <SummaryMetric
-              label={messages.sessionStatusLabel}
-              value={status}
-            />
+            <SummaryMetric label={messages.sessionStatusLabel} value={status} />
           ) : null}
           <SummaryMetric
             label={messages.execCommandOutputSummaryLabel}
-            value={friendlyOutput.summary ?? messages.execCommandNoOutputSummary}
+            value={
+              friendlyOutput.summary ?? messages.execCommandNoOutputSummary
+            }
           />
         </div>
       </section>
@@ -117,12 +120,20 @@ function parseExecCommandOutput(output: string): {
   }
 
   const wallTimeLine = lines.find((line) => line.startsWith("Wall time:"));
-  const exitCodeLine = lines.find((line) => /^Process exited with code -?\d+/.test(line));
-  const rawCommandOutput = lines.slice(outputStartIndex + 1).join("\n").trim();
+  const exitCodeLine = lines.find((line) =>
+    /^Process exited with code -?\d+/.test(line),
+  );
+  const rawCommandOutput = lines
+    .slice(outputStartIndex + 1)
+    .join("\n")
+    .trim();
 
   return {
     exitCode: exitCodeLine
-      ? Number.parseInt(exitCodeLine.replace(/^Process exited with code /, ""), 10)
+      ? Number.parseInt(
+          exitCodeLine.replace(/^Process exited with code /, ""),
+          10,
+        )
       : null,
     summary: summarizeExecCommandText(rawCommandOutput),
     wallTime: wallTimeLine ? wallTimeLine.replace(/^Wall time:\s*/, "") : null,
@@ -198,10 +209,7 @@ function summarizeExecCommandText(value: string | null): string | null {
     : firstMeaningfulLine;
 }
 
-function formatExecCommandWallTime(
-  value: string,
-  locale?: string,
-): string {
+function formatExecCommandWallTime(value: string, locale?: string): string {
   const secondsMatch = value.match(
     /^\s*(?<seconds>\d+(?:\.\d+)?)\s+seconds?\s*$/i,
   );
@@ -216,7 +224,7 @@ function formatExecCommandWallTime(
   }
 
   const fractionDigits = secondsText.includes(".")
-    ? secondsText.split(".")[1]?.length ?? 0
+    ? (secondsText.split(".")[1]?.length ?? 0)
     : 0;
 
   return formatNumber(secondsValue, locale, {

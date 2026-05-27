@@ -53,6 +53,13 @@
   --color-af-success-surface: rgb(from var(--color-af-foundation-success) r g b / 0.12);
   --color-af-success-border: rgb(from var(--color-af-foundation-success) r g b / 0.28);
   --color-af-success-text: var(--color-af-foundation-success-ink);
+  --color-af-session-live-ping: radial-gradient(
+    circle,
+    rgb(from var(--color-af-foundation-success) r g b / 0.48) 0%,
+    rgb(from var(--color-af-foundation-success) r g b / 0.22) 36%,
+    rgb(from var(--color-af-foundation-success) r g b / 0.08) 56%,
+    transparent 76%
+  );
   --color-af-on-success: var(--color-af-text-inverse);
   --color-af-warning: var(--color-af-foundation-warning);
   --color-af-warning-surface: rgb(from var(--color-af-foundation-warning) r g b / 0.14);

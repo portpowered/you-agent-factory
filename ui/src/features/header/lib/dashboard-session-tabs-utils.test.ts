@@ -10,6 +10,7 @@ import {
   sessionPanelID,
   sessionTabID,
   sessionTabLabel,
+  sessionTabSecondaryPath,
 } from "./dashboard-session-tabs-utils";
 
 const messages = getHeaderControlsMessages("en");
@@ -58,11 +59,31 @@ describe("dashboard session tabs utils", () => {
     );
   });
 
-  it("maps validation states and API errors to the visible folder-validation messages", () => {
-    expect(folderValidationStatusMessage({ status: "idle" }, messages)).toBeNull();
+  it("shrinks long session-tab secondary paths by hiding the prefix", () => {
+    expect(sessionTabSecondaryPath("/workspace/catalog")).toBe(
+      "/workspace/catalog",
+    );
     expect(
-      folderValidationStatusMessage({ status: "pending" }, messages),
-    ).toBe(messages.openSessionValidationPendingLabel);
+      sessionTabSecondaryPath(
+        "/workspace/customers/northwind/agent-factory/examples/support",
+        28,
+      ),
+    ).toBe("...-factory/examples/support");
+    expect(
+      sessionTabSecondaryPath(
+        "/workspace/customers/northwind/agent-factory/examples/support",
+        28,
+      ),
+    ).toHaveLength(28);
+  });
+
+  it("maps validation states and API errors to the visible folder-validation messages", () => {
+    expect(
+      folderValidationStatusMessage({ status: "idle" }, messages),
+    ).toBeNull();
+    expect(folderValidationStatusMessage({ status: "pending" }, messages)).toBe(
+      messages.openSessionValidationPendingLabel,
+    );
     expect(
       folderValidationStatusMessage(
         {
@@ -120,7 +141,9 @@ describe("dashboard session tabs utils", () => {
     expect(selectedFactorySessionTarget([...targets], "named:review")).toEqual(
       targets[1],
     );
-    expect(selectedFactorySessionTarget([...targets], "named:missing")).toBeNull();
+    expect(
+      selectedFactorySessionTarget([...targets], "named:missing"),
+    ).toBeNull();
 
     const wrappedError = normalizeFactorySessionsError("boom");
     expect(wrappedError).toBeInstanceOf(FactorySessionsAPIError);

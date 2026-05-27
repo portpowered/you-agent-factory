@@ -948,6 +948,8 @@ export interface components {
             summary?: string;
             /** @description Whether the reasoning entry only exposed encrypted content. */
             encrypted?: boolean;
+            /** @description Compact encrypted reasoning payload when the provider exposes it. */
+            encryptedContent?: string;
         };
         CodexSessionTokenUsage: {
             inputTokens?: number;
@@ -2251,6 +2253,8 @@ export interface components {
             output?: string;
             /** @description Whether the entry only exposed encrypted content instead of plaintext. */
             encrypted?: boolean;
+            /** @description Compact encrypted reasoning payload when the provider exposes it. */
+            encryptedContent?: string;
         };
         /**
          * @description Built-in repository-owned hosted worker providers supported by the public factory-config contract.

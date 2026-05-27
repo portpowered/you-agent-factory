@@ -31,12 +31,12 @@ import { TickSliderControl } from "./tick-slider-control";
 
 const DASHBOARD_TOOLBAR_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
-  "mb-3 grid gap-2 p-2 md:px-3 md:py-2",
+  "mb-3 grid gap-2 ",
 );
 const DASHBOARD_HEADER_ROWS_CLASS = "flex min-w-0 flex-col gap-0";
 const DASHBOARD_PRIMARY_ROW_CLASS = cn(
   "flex min-w-0 items-stretch gap-2",
-  "max-md:flex-col",
+  "max-md:flex-col px-2",
 );
 const DASHBOARD_SECONDARY_ROW_CLASS = "flex min-w-0";
 const DASHBOARD_BRAND_SLOT_CLASS = "min-w-0 self-end pb-2";
@@ -44,7 +44,7 @@ const DASHBOARD_TIMELINE_CLUSTER_CLASS = "flex min-w-0 w-full flex-1";
 const DASHBOARD_SESSION_STRIP_CLASS =
   "flex min-w-0 h-full w-full items-stretch px-2 pt-1";
 const DASHBOARD_TIMELINE_OPERATIONS_ROW_CLASS =
-  "relative flex min-w-0 w-full items-center gap-1.5 rounded-t-2xl bg-af-surface-subtle pb-2";
+  "relative flex min-w-0 w-full rounded-sm items-center gap-1.5 rounded-t-2xl bg-af-surface-subtle pb-2 px-2 pt-1";
 const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
 const DASHBOARD_CONTROLS_CLASS = "shrink-0 self-end pb-2";
 const DASHBOARD_HEADER_ACTION_ROW_CLASS = "justify-end max-md:w-full";
@@ -339,7 +339,9 @@ function DashboardLocaleMenuList({
             aria-checked={isSelected}
             className={cn(
               LOCALE_MENU_ITEM_CLASS,
-              isSelected ? "border-af-accent-border bg-af-accent-surface text-af-text" : "text-af-text-muted",
+              isSelected
+                ? "border-af-accent-border bg-af-accent-surface text-af-text"
+                : "text-af-text-muted",
             )}
             onClick={() => {
               onChangeLocale(option.value);

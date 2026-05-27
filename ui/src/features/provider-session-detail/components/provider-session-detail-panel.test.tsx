@@ -259,7 +259,7 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("Unknown event on line 2")).toBeTruthy();
   });
 
-  it("renders parsed source metadata, turns, function calls, reasoning, token usage, and diagnostics", async () => {
+  it("renders parsed source metadata, turns, token usage, and diagnostics", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse(
         buildProviderSessionDetailResponse({
@@ -339,8 +339,8 @@ describe("ProviderSessionDetailPanel", () => {
       screen.getByRole("heading", { name: "Session analysis" }),
     ).toBeTruthy();
     expect(screen.getByText("Turn 1")).toBeTruthy();
-    expect(screen.getByText("list_dir")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Reasoning" })).toBeTruthy();
+    expect(screen.queryByText("list_dir")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Reasoning" })).toBeNull();
     expect(
       screen.getByRole("heading", { name: "Maintainer diagnostics" }),
     ).toBeTruthy();
@@ -473,7 +473,7 @@ describe("ProviderSessionDetailPanel", () => {
         .getAllByTitle("2026-05-18T14:10:04Z")
         .some((element) => element.textContent === transcriptTimestamp),
     ).toBe(true);
-    expect(screen.getAllByText("Raw ISO timestamp").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Raw ISO timestamp")).toBeNull();
 
     const expandArguments = screen.getByRole("button", {
       name: "Expand Arguments",
@@ -547,7 +547,7 @@ describe("ProviderSessionDetailPanel", () => {
     expect(rawArguments.className).toContain("af-dashboard-body-code");
   });
 
-  it("formats source, transcript, and turn timestamps in the local timezone while preserving raw ISO access", async () => {
+  it("formats source, transcript, and turn timestamps in the local timezone while preserving raw source and turn ISO access", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse(
         buildProviderSessionDetailResponse({
@@ -618,11 +618,15 @@ describe("ProviderSessionDetailPanel", () => {
         .some((element) => element.textContent === transcriptTimestamp),
     ).toBe(true);
 
-    fireEvent.click(screen.getAllByText("Raw ISO timestamp")[0]);
+    for (const rawTimestampControl of screen.getAllByText(
+      "Raw ISO timestamp",
+    )) {
+      fireEvent.click(rawTimestampControl);
+    }
 
     expect(screen.getByText("2026-05-18T14:09:59Z")).toBeTruthy();
     expect(screen.getByText("2026-05-18T14:10:00Z")).toBeTruthy();
-    expect(screen.getByText("2026-05-18T14:10:01Z")).toBeTruthy();
+    expect(screen.queryByText("2026-05-18T14:10:01Z")).toBeNull();
   });
 
   it("rerenders provider-session timestamps for zh-CN without changing raw values or payload text", async () => {
@@ -675,7 +679,9 @@ describe("ProviderSessionDetailPanel", () => {
     });
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
-        <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />
+        <ProviderSessionDetailPanel
+          selectedProviderSession={SELECTED_SESSION}
+        />
       </QueryClientProvider>,
     );
 
@@ -693,10 +699,13 @@ describe("ProviderSessionDetailPanel", () => {
         .getAllByTitle("2026-05-18T14:10:01Z")
         .some(
           (element) =>
-            element.textContent === formatDateTime("2026-05-18T14:10:01Z", "en"),
+            element.textContent ===
+            formatDateTime("2026-05-18T14:10:01Z", "en"),
         ),
     ).toBe(true);
-    expect(screen.getByText("Summarize the rollout state for this work item.")).toBeTruthy();
+    expect(
+      screen.getByText("Summarize the rollout state for this work item."),
+    ).toBeTruthy();
 
     rerender(
       <QueryClientProvider client={queryClient}>
@@ -721,16 +730,21 @@ describe("ProviderSessionDetailPanel", () => {
         .getAllByTitle("2026-05-18T14:10:01Z")
         .some(
           (element) =>
-            element.textContent === formatDateTime("2026-05-18T14:10:01Z", "zh-CN"),
+            element.textContent ===
+            formatDateTime("2026-05-18T14:10:01Z", "zh-CN"),
         ),
     ).toBe(true);
-    expect(screen.getByText("Summarize the rollout state for this work item.")).toBeTruthy();
+    expect(
+      screen.getByText("Summarize the rollout state for this work item."),
+    ).toBeTruthy();
 
-    fireEvent.click(screen.getAllByText("原始 ISO 时间戳")[0]);
+    for (const rawTimestampControl of screen.getAllByText("原始 ISO 时间戳")) {
+      fireEvent.click(rawTimestampControl);
+    }
 
     expect(screen.getByText("2026-05-18T14:09:59Z")).toBeTruthy();
     expect(screen.getByText("2026-05-18T14:10:00Z")).toBeTruthy();
-    expect(screen.getByText("2026-05-18T14:10:01Z")).toBeTruthy();
+    expect(screen.queryByText("2026-05-18T14:10:01Z")).toBeNull();
     expect(screen.getByText("sess_active")).toBeTruthy();
   });
 
@@ -879,8 +893,6 @@ describe("ProviderSessionDetailPanel", () => {
       "Session analysis",
       "Token usage",
       "Turns",
-      "Function calls",
-      "Reasoning",
       "Maintainer diagnostics",
     ];
 
@@ -998,14 +1010,14 @@ describe("ProviderSessionDetailPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Reasoning" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
     });
 
     expect(screen.getAllByText(reasoningSummary)).toHaveLength(1);
     expect(screen.getAllByText(reasoningText)).toHaveLength(1);
     expect(screen.getAllByText(callArguments)).toHaveLength(1);
     expect(screen.getAllByText(callOutput)).toHaveLength(1);
-    expect(screen.getAllByText("read_file")).toHaveLength(2);
+    expect(screen.getAllByText("read_file")).toHaveLength(1);
     expect(screen.getAllByText("Order 4 / Turn 1").length).toBeGreaterThan(0);
   });
 
@@ -1122,20 +1134,20 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("缓存输入")).toBeTruthy();
     expect(screen.getByText("轮次 2")).toBeTruthy();
     expect(screen.getByText("无时间戳")).toBeTruthy();
-    expect(screen.getAllByText("顺序 3 / 轮次 2").length).toBeGreaterThan(0);
-    expect(screen.getByText("调用 ID")).toBeTruthy();
+    expect(screen.queryByText("顺序 3 / 轮次 2")).toBeNull();
+    expect(screen.queryByText("调用 ID")).toBeNull();
     expect(screen.getAllByText("不可用").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("加密推理").length).toBeGreaterThan(0);
+    expect(screen.queryByText("加密推理")).toBeNull();
     expect(screen.getByText("命令结果")).toBeTruthy();
     expect(screen.getByText("退出代码")).toBeTruthy();
     expect(screen.getByText("耗时")).toBeTruthy();
     expect(screen.getByText("摘要")).toBeTruthy();
     expect(screen.getByText("命令执行成功")).toBeTruthy();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "此步骤确实发生了推理，但明文内容会被有意隐藏，无法直接查看。",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(screen.getByText("第 3 行")).toBeTruthy();
     expect(screen.getByText("第 2 行的未知事件")).toBeTruthy();
   });
@@ -1311,7 +1323,7 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getAllByText("类型").length).toBeGreaterThan(0);
     expect(screen.getAllByText("用户").length).toBeGreaterThan(0);
     expect(screen.getAllByText("助手").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("工具输出").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("call_exec_1").length).toBeGreaterThan(0);
     expect(screen.getAllByText("加密推理").length).toBeGreaterThan(0);
     expect(
       screen.getAllByText(
@@ -1334,10 +1346,12 @@ describe("ProviderSessionDetailPanel", () => {
         ),
     ).toBe(true);
 
-    fireEvent.click(screen.getAllByText("原始 ISO 时间戳")[0]);
+    for (const rawTimestampControl of screen.getAllByText("原始 ISO 时间戳")) {
+      fireEvent.click(rawTimestampControl);
+    }
 
     expect(screen.getByText("2026-05-18T14:09:59Z")).toBeTruthy();
-    expect(screen.getByText("2026-05-18T14:10:04Z")).toBeTruthy();
+    expect(screen.queryByText("2026-05-18T14:10:04Z")).toBeNull();
 
     const rawOutputButton = screen.getByRole("button", {
       name: "展开原始 exec_command 输出",

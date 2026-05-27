@@ -49,3 +49,6 @@ properties:
   encrypted:
     type: boolean
     description: Whether the entry only exposed encrypted content instead of plaintext.
+  encryptedContent:
+    type: string
+    description: Compact encrypted reasoning payload when the provider exposes it.
