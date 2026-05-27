@@ -2,7 +2,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import process from "node:process";
@@ -25,6 +25,7 @@ export const defaultFactorySessionID = "~default";
 const sharedApiPort = 43117;
 const sharedPreviewPort = 43118;
 const browserBuildCacheKey = "__agentFactoryBrowserIntegrationBuildComplete";
+let browserArtifactSequence = 0;
 export const exportCoverImagePath = path.resolve(
   packageRoot,
   "..",
@@ -88,6 +89,23 @@ function bunCommand() {
 
 function npmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
+}
+
+export function browserArtifactDirectory() {
+  const configuredPath = process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR?.trim();
+  if (!configuredPath) {
+    return null;
+  }
+  return path.resolve(packageRoot, configuredPath);
+}
+
+function sanitizeArtifactLabel(value) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized.length > 0 ? normalized : "browser-session";
 }
 
 function localPackageBinaryCommand(name) {
@@ -359,10 +377,19 @@ export async function loadReplayLines(fileName) {
 }
 
 export async function openBrowserPage(options = {}) {
+  browserArtifactSequence += 1;
+  const artifactDirectory = browserArtifactDirectory();
+  const artifactLabel = sanitizeArtifactLabel(
+    options.artifactLabel ??
+      `browser-session-${String(browserArtifactSequence).padStart(2, "0")}`,
+  );
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     acceptDownloads: options.acceptDownloads ?? false,
   });
+  if (artifactDirectory) {
+    await context.tracing.start({ screenshots: true, snapshots: true });
+  }
   const page = await context.newPage();
   const pageErrors = [];
   const consoleErrors = [];
@@ -377,12 +404,59 @@ export async function openBrowserPage(options = {}) {
   });
 
   return {
+    artifactDirectory,
+    artifactLabel,
     browser,
     consoleErrors,
     context,
     page,
     pageErrors,
     close: async () => {
+      const artifactWarnings = [];
+      if (artifactDirectory) {
+        await mkdir(artifactDirectory, { recursive: true });
+        if (!page.isClosed()) {
+          try {
+            await page.screenshot({
+              fullPage: true,
+              path: path.join(artifactDirectory, `${artifactLabel}.png`),
+            });
+          } catch (error) {
+            artifactWarnings.push(`screenshot: ${error.message}`);
+          }
+          try {
+            await writeFile(
+              path.join(artifactDirectory, `${artifactLabel}.html`),
+              await page.content(),
+              "utf8",
+            );
+          } catch (error) {
+            artifactWarnings.push(`html: ${error.message}`);
+          }
+        }
+        try {
+          await context.tracing.stop({
+            path: path.join(artifactDirectory, `${artifactLabel}.trace.zip`),
+          });
+        } catch (error) {
+          artifactWarnings.push(`trace: ${error.message}`);
+        }
+        await writeFile(
+          path.join(artifactDirectory, `${artifactLabel}.diagnostics.json`),
+          JSON.stringify(
+            {
+              artifactLabel,
+              consoleErrors,
+              pageErrors,
+              warnings: artifactWarnings,
+              writtenAt: new Date().toISOString(),
+            },
+            null,
+            2,
+          ),
+          "utf8",
+        );
+      }
       await page.close();
       await context.close();
       await browser.close();
