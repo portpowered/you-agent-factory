@@ -3,6 +3,7 @@ import type { DashboardInferenceAttempt } from "../../../api/dashboard/types";
 import {
   formatLocalDateTime,
   formatDurationMillis,
+  getLocalDateTimeDisplay,
   getProviderSessionLogTarget,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
@@ -211,12 +212,12 @@ function AttemptMetadataDetails({
   const provider =
     attempt.diagnostics?.provider?.provider ?? attempt.provider_session?.provider;
   const model = attempt.diagnostics?.provider?.model;
-  const requestTime = formatLocalDateTime(
+  const requestTime = getLocalDateTimeDisplay(
     attempt.request_time,
     detailMessages.timestampUnavailable,
     locale,
   );
-  const responseTime = formatLocalDateTime(
+  const responseTime = getLocalDateTimeDisplay(
     attempt.response_time,
     detailMessages.timestampUnavailable,
     locale,
@@ -245,7 +246,11 @@ function AttemptMetadataDetails({
         label={detailMessages.worktreeLabel}
         value={attempt.worktree}
       />
-      <InferenceAttemptDetail label={detailMessages.requestTimeLabel} value={requestTime} />
+      <InferenceAttemptDetail
+        label={detailMessages.requestTimeLabel}
+        rawValue={requestTime.rawTimestamp ?? undefined}
+        value={requestTime.label}
+      />
       <InferenceAttemptDetail
         code
         label={detailMessages.outcomeLabel}
@@ -263,7 +268,11 @@ function AttemptMetadataDetails({
             : undefined
         }
       />
-      <InferenceAttemptDetail label={detailMessages.responseTimeLabel} value={responseTime} />
+      <InferenceAttemptDetail
+        label={detailMessages.responseTimeLabel}
+        rawValue={responseTime.rawTimestamp ?? undefined}
+        value={responseTime.label}
+      />
       <InferenceAttemptDetail
         label={detailMessages.exitCodeLabel}
         value={attempt.exit_code}

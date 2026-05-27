@@ -161,6 +161,7 @@ export function InferenceAttemptTextSection({
 export function InferenceAttemptDetail({
   code = false,
   label,
+  rawValue,
   value,
 }: InferenceAttemptDetailProps) {
   if (value === undefined || value === "") {
@@ -171,7 +172,13 @@ export function InferenceAttemptDetail({
     <div>
       <dt>{label}</dt>
       <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-        {code ? <code className={RUNTIME_DETAIL_CODE_CLASS}>{value}</code> : value}
+        {code ? (
+          <code className={RUNTIME_DETAIL_CODE_CLASS}>{value}</code>
+        ) : rawValue ? (
+          <span title={rawValue}>{value}</span>
+        ) : (
+          value
+        )}
       </dd>
     </div>
   );

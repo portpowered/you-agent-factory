@@ -20,7 +20,10 @@ it("rerenders request and response timestamps for the active locale", () => {
         attempt: 1,
         inference_request_id:
           "dispatch-review-timestamps/inference-request/1",
+        duration_millis: 875,
+        prompt: "Review the completed runtime story.",
         request_time: requestTime,
+        response: "The completed runtime story is ready for review.",
         response_time: responseTime,
       }),
     ],
@@ -61,9 +64,21 @@ it("rerenders request and response timestamps for the active locale", () => {
   expect(inferenceAttempts.getAllByText(expectedEnglishResponseTime)).toHaveLength(
     1,
   );
+  expect(inferenceAttempts.getByTitle(requestTime)).toBeTruthy();
+  expect(inferenceAttempts.getByTitle(responseTime)).toBeTruthy();
+  expect(inferenceAttempts.getByText("Elapsed time: 875ms")).toBeTruthy();
+  fireEvent.click(
+    inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+  );
+  expect(
+    inferenceAttempts.getByText("Review the completed runtime story."),
+  ).toBeTruthy();
+  fireEvent.click(
+    inferenceAttempts.getByRole("button", { name: "Expand response body" }),
+  );
   expect(
     inferenceAttempts.getByText(
-      `Response time: ${expectedEnglishResponseTime}`,
+      "The completed runtime story is ready for review.",
     ),
   ).toBeTruthy();
   expect(inferenceAttempts.queryByText(requestTime)).toBeNull();
@@ -97,11 +112,7 @@ it("rerenders request and response timestamps for the active locale", () => {
   expect(localizedInferenceAttempts.getAllByText(expectedChineseResponseTime)).toHaveLength(
     1,
   );
-  expect(
-    localizedInferenceAttempts.getByText(
-      `响应时间: ${expectedChineseResponseTime}`,
-    ),
-  ).toBeTruthy();
+  expect(localizedInferenceAttempts.getByText("耗时: 875毫秒")).toBeTruthy();
   expect(
     localizedInferenceAttempts.queryByText(expectedEnglishRequestTime),
   ).toBeNull();
