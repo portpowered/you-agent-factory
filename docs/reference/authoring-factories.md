@@ -256,6 +256,29 @@ Use these controls when you need to override the default behavior:
 - Pass `--replay <path>` to replay an existing artifact instead of starting a
   live run.
 
+For an explicit recording path, run:
+
+```bash
+you run --dir ./factory --record ./docs/examples/sample-run.replay.json
+```
+
+To replay that artifact later, run:
+
+```bash
+you run --dir ./factory --replay ./docs/examples/sample-run.replay.json
+```
+
+To run without writing the default recording, run:
+
+```bash
+you run --dir ./factory --no-record
+```
+
+Record mode starts a live run and writes the observed runtime history to a
+replay artifact. Replay mode reads an existing artifact and uses the recorded
+runtime history instead of dispatching live workers again. `--record` and
+`--replay` cannot be used together for the same invocation.
+
 The CLI reports the resolved generated path during shutdown with
 `Recording saved: ...` so the artifact is easy to find after a failure or an
 unexpected run. Replay artifacts are sensitive because they can contain
