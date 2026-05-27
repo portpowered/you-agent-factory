@@ -29,20 +29,6 @@ export const approvedButtonUsageAllowlist = [
     relativeFilePath: "src/components/ui/graph-node-button.tsx",
   },
   {
-    rawButtonFingerprints: ['aria-expanded={pickerOpen}'],
-    rawButtonReason:
-      "The inline add-widget card is a structural popover trigger shell rather than an ordinary action button.",
-    relativeFilePath: "src/features/bento/components/inline-add-widget-card.tsx",
-  },
-  {
-    rawButtonFingerprints: [
-      "className={PICKER_ITEM_BUTTON_CLASS}",
-    ],
-    rawButtonReason:
-      "Inline widget picker options are selectable option rows inside a popover rather than ordinary action buttons.",
-    relativeFilePath: "src/features/bento/components/inline-widget-picker.tsx",
-  },
-  {
     rawButtonFingerprints: [
       'aria-haspopup="dialog"',
       'aria-controls={controlsID}',

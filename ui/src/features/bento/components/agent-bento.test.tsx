@@ -8,6 +8,7 @@ import {
 
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { NoSelectionDetailCard } from "../../current-selection/components/no-selection-detail-card";
+import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { WorkTotalsCard } from "../../work-totals/public";
 import {
   AgentBentoCard,
@@ -15,7 +16,6 @@ import {
   type AgentBentoLayoutItem,
   toCompactGridLayout,
 } from "./agent-bento";
-import { InlineAddWidgetCard } from "./inline-add-widget-card";
 
 const defaultLayout: AgentBentoLayoutItem[] = [
   { h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 },
@@ -230,7 +230,9 @@ describe("AgentBentoLayout", () => {
           },
         ]}
         initialWidth={960}
-        layout={[{ h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 }]}
+        layout={[
+          { h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 },
+        ]}
         locale="zh-CN"
       />,
     );
@@ -364,9 +366,9 @@ describe("AgentBentoLayout", () => {
       latestLayout?.filter((item) => item.widgetType === "add-widget"),
     ).toHaveLength(1);
     expect(
-      within(addWidgetItem).getByText(
-        "No additional widgets are available from this layout.",
-      ),
+      within(addWidgetItem).getByRole("option", {
+        name: "No widgets available",
+      }),
     ).toBeTruthy();
   });
 
@@ -394,8 +396,22 @@ describe("AgentBentoLayout", () => {
         ]}
         initialWidth={1180}
         layout={[
-          { h: 2, id: "work-totals", widgetType: "work-totals", w: 4, x: 0, y: 0 },
-          { h: 4, id: "current-selection", widgetType: "current-selection", w: 8, x: 4, y: 0 },
+          {
+            h: 2,
+            id: "work-totals",
+            widgetType: "work-totals",
+            w: 4,
+            x: 0,
+            y: 0,
+          },
+          {
+            h: 4,
+            id: "current-selection",
+            widgetType: "current-selection",
+            w: 8,
+            x: 4,
+            y: 0,
+          },
         ]}
       />,
     );

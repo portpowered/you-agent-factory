@@ -220,7 +220,7 @@
       sans-serif;
   }
 
-  [data-current-activity-flow] .react-flow {
+  :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow {
     @apply rounded-lg border border-af-border bg-af-surface-subtle;
     --xy-controls-box-shadow: none;
     --xy-controls-button-background-color: var(--color-af-surface-raised);
@@ -230,23 +230,23 @@
     --xy-controls-button-color-hover: var(--color-af-text);
   }
 
-  [data-current-activity-flow] .react-flow__controls {
+  :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow__controls {
     @apply overflow-hidden rounded-lg border border-af-border bg-af-surface-raised shadow-none;
   }
 
-  [data-current-activity-flow] .react-flow__controls-button {
+  :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow__controls-button {
     @apply border-b border-af-border bg-af-surface-raised text-af-text-muted transition-colors;
   }
 
-  [data-current-activity-flow] .react-flow__controls-button:hover {
+  :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow__controls-button:hover {
     @apply bg-af-overlay text-af-text;
   }
 
-  [data-current-activity-flow] .react-flow__controls-button:disabled {
+  :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow__controls-button:disabled {
     @apply text-af-text-disabled;
   }
 
-  [data-current-activity-flow] .react-flow__controls-button svg {
+  :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow__controls-button svg {
     @apply fill-current;
   }
 
