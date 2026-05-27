@@ -641,10 +641,12 @@ That is equivalent to this config:
 To target specific dispatches, pass a config path:
 
 ```bash
-you run --dir ./factory --with-mock-workers ./mock-workers.json
+you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json
 ```
 
-Example:
+The reusable example in
+[`docs/examples/mock-workers.json`](../examples/mock-workers.json) matches a
+review dispatch and returns a deterministic rejection:
 
 ```json
 {
@@ -679,7 +681,16 @@ Selection fields combine as filters:
 | `workstationName` | Workstation currently executing |
 | `workInputs` | Consumed token fields such as `workType`, `state`, `inputName`, `traceId`, or `payloadHash` |
 
+Use `workerName` for the worker declared in `workers[].name`,
+`workstationName` for the workstation currently executing, `workInputs` for
+the consumed work filters, `runType` for the outcome, and the matching
+run-type config such as `rejectConfig` or `scriptConfig` for outcome details.
 If no entry matches, mock-worker mode returns the default accepted result.
+
+The checked-in
+[`examples/write-code-review/factory.json`](../../examples/write-code-review/factory.json)
+factory is a concrete starting point for adapting this command to a
+review-loop workflow.
 
 ## Authoring Checklist
 
