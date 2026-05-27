@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  buildWorkstationPromptMarkers,
   buildWorkstationPromptCompletionItems,
+  buildWorkstationPromptMarkers,
   extractTemplateExpression,
   getCurrentTemplateExpression,
   isInsideTemplate,
   registerWorkstationPromptCompletionProvider,
-  resetWorkstationPromptMonacoRegistrationForTests,
   registerWorkstationPromptMonaco,
+  resetWorkstationPromptMonacoRegistrationForTests,
   WORKSTATION_PROMPT_LANGUAGE_ID,
   WORKSTATION_PROMPT_THEME_ID,
 } from "./workstation-prompt-monaco";
@@ -67,7 +67,10 @@ describe("registerWorkstationPromptMonaco", () => {
                 token: "delimiter.template",
               }),
             ],
-            [expect.objectContaining({ source: "\\.[A-Za-z_]\\w*" }), "variable.root"],
+            [
+              expect.objectContaining({ source: "\\.[A-Za-z_]\\w*" }),
+              "variable.root",
+            ],
           ]),
         }),
       }),
@@ -174,6 +177,156 @@ describe("registerWorkstationPromptMonaco", () => {
     ]);
   });
 
+  it("exposes expanded prompt-template contract fields as completion items", () => {
+    const contract = {
+      availableVariables: [
+        {
+          category: "INPUT",
+          description: "Human-readable work name for input 0.",
+          example: "{{ (index .Inputs 0).Name }}",
+          path: ".Inputs[0].Name",
+        },
+        {
+          category: "INPUT",
+          description: "Data type identifier for input 0.",
+          example: "{{ (index .Inputs 0).DataType }}",
+          path: ".Inputs[0].DataType",
+        },
+        {
+          category: "INPUT",
+          description: "Trace identifier for input 0.",
+          example: "{{ (index .Inputs 0).TraceID }}",
+          path: ".Inputs[0].TraceID",
+        },
+        {
+          category: "INPUT",
+          description: "Parent work identifier for input 0.",
+          example: "{{ (index .Inputs 0).ParentID }}",
+          path: ".Inputs[0].ParentID",
+        },
+        {
+          category: "INPUT",
+          description: "Payload content for input 0.",
+          example: "{{ (index .Inputs 0).Payload }}",
+          path: ".Inputs[0].Payload",
+        },
+        {
+          category: "INPUT",
+          description: "Structured content parts for input 0.",
+          example: "{{ (index .Inputs 0).Content }}",
+          path: ".Inputs[0].Content",
+        },
+        {
+          category: "INPUT",
+          description: "Tag metadata for input 0.",
+          example: '{{ index (index .Inputs 0).Tags "branch" }}',
+          path: '.Inputs[0].Tags["KEY"]',
+        },
+        {
+          category: "INPUT",
+          description: "Relation records attached to input 0.",
+          example: "{{ (index .Inputs 0).Relations }}",
+          path: ".Inputs[0].Relations",
+        },
+        {
+          category: "INPUT",
+          description: "Previous output captured for input 0 retries.",
+          example: "{{ (index .Inputs 0).PreviousOutput }}",
+          path: ".Inputs[0].PreviousOutput",
+        },
+        {
+          category: "INPUT",
+          description: "Reviewer feedback recorded for input 0.",
+          example: "{{ (index .Inputs 0).RejectionFeedback }}",
+          path: ".Inputs[0].RejectionFeedback",
+        },
+        {
+          category: "HISTORY",
+          description: "Retry and failure history for input 0.",
+          example: "{{ (index .Inputs 0).History }}",
+          path: ".Inputs[0].History",
+        },
+        {
+          category: "HISTORY",
+          description: "Current attempt number for input 0.",
+          example: "{{ (index .Inputs 0).History.AttemptNumber }}",
+          path: ".Inputs[0].History.AttemptNumber",
+        },
+        {
+          category: "HISTORY",
+          description: "Total visit count for input 0.",
+          example: "{{ (index .Inputs 0).History.TotalVisits }}",
+          path: ".Inputs[0].History.TotalVisits",
+        },
+        {
+          category: "HISTORY",
+          description: "Failure records captured for input 0.",
+          example: "{{ (index .Inputs 0).History.FailureLog }}",
+          path: ".Inputs[0].History.FailureLog",
+        },
+        {
+          category: "CONTEXT",
+          description: "Execution working directory.",
+          example: "{{ .Context.WorkDir }}",
+          path: ".Context.WorkDir",
+        },
+        {
+          category: "MAP_ACCESS",
+          description: "Environment variable access.",
+          example: '{{ index .Context.Env "API_KEY" }}',
+          path: '.Context.Env["KEY"]',
+        },
+      ],
+      inputCount: 1,
+      unavailableAccessPatterns: [
+        {
+          example: "{{ (index .Inputs 1).Payload }}",
+          path: ".Inputs[N]",
+          reason: "Only input 0 is available.",
+        },
+      ],
+    } as const;
+
+    const suggestions = buildWorkstationPromptCompletionItems(contract, {
+      insideTemplateExpression: true,
+    });
+    const labels = suggestions.map((suggestion) => suggestion.label);
+
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        ".Inputs[0].Name",
+        ".Inputs[0].DataType",
+        ".Inputs[0].TraceID",
+        ".Inputs[0].ParentID",
+        ".Inputs[0].Payload",
+        ".Inputs[0].Content",
+        '.Inputs[0].Tags["KEY"]',
+        ".Inputs[0].Relations",
+        ".Inputs[0].PreviousOutput",
+        ".Inputs[0].RejectionFeedback",
+        ".Inputs[0].History",
+        ".Inputs[0].History.AttemptNumber",
+        ".Inputs[0].History.TotalVisits",
+        ".Inputs[0].History.FailureLog",
+        ".Context.WorkDir",
+        '.Context.Env["KEY"]',
+      ]),
+    );
+    expect(labels).not.toContain(".Inputs[1].Payload");
+    expect(suggestions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          insertText: 'index (index .Inputs 0).Tags "branch"',
+          label: '.Inputs[0].Tags["KEY"]',
+        }),
+        expect.objectContaining({
+          insertText: 'index .Context.Env "API_KEY"',
+          label: '.Context.Env["KEY"]',
+        }),
+      ]),
+    );
+  });
+
   it("detects whether the caret is already inside a template expression", () => {
     expect(isInsideTemplate("Before {{ .WorkID }} after", 12)).toBe(true);
     expect(isInsideTemplate("Before {{ .WorkID }} after", 22)).toBe(false);
@@ -192,7 +345,9 @@ describe("registerWorkstationPromptMonaco", () => {
     expect(
       getCurrentTemplateExpression("Before {{ (index .Inputs 0).Na", 31),
     ).toBe("(index .Inputs 0).Na");
-    expect(getCurrentTemplateExpression("Before {{ .WorkID }} after", 26)).toBe("");
+    expect(getCurrentTemplateExpression("Before {{ .WorkID }} after", 26)).toBe(
+      "",
+    );
   });
 
   it("builds Monaco markers from authoritative byte offsets, source-text fallback, and multiline prompts", () => {
