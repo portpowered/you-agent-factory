@@ -301,7 +301,7 @@ func TestGoListCommandWithCoverageButNoTestPackages(t *testing.T) {
 		return
 	}
 
-	if slices.Contains(args[2:], "./tests/functional/...") {
+	if slices.Contains(args, "./tests/functional/...") {
 		fmt.Fprintln(os.Stdout, modulePath+"/tests/functional/internal/support")
 		os.Exit(0)
 	}
@@ -316,11 +316,12 @@ func TestGoListCommandWithDuplicatesAndExcludedPackages(t *testing.T) {
 		return
 	}
 
-	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config")
-	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config")
-	fmt.Fprintln(os.Stdout, modulePath+"/pkg/generatedclient")
-	fmt.Fprintln(os.Stdout, modulePath+"/pkg/testutil/runtimefixtures")
-	fmt.Fprintln(os.Stdout, modulePath+"/cmd/factory")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config\t2")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config\t2")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config/exhaustiontests\t0")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/generatedclient\t4")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/testutil/runtimefixtures\t1")
+	fmt.Fprintln(os.Stdout, modulePath+"/cmd/factory\t1")
 	os.Exit(0)
 }
 

@@ -378,7 +378,7 @@ func TestListGoPackagesWrapsListFailureUsingStderrDetail(t *testing.T) {
 
 	execCommand = fakeGoListCommandFailsWithStderr
 
-	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage)
+	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, true)
 	if err == nil {
 		t.Fatal("listGoPackages() unexpectedly succeeded")
 	}
@@ -402,7 +402,7 @@ func TestListGoPackagesWrapsListFailureUsingStdoutFallback(t *testing.T) {
 
 	execCommand = fakeGoListCommandFailsWithStdout
 
-	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage)
+	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, true)
 	if err == nil {
 		t.Fatal("listGoPackages() unexpectedly succeeded")
 	}
@@ -426,7 +426,7 @@ func TestListGoPackagesWrapsListFailureWithoutDetail(t *testing.T) {
 
 	execCommand = fakeGoListCommandFailsWithoutDetail
 
-	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage)
+	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, true)
 	if err == nil {
 		t.Fatal("listGoPackages() unexpectedly succeeded")
 	}
@@ -502,7 +502,7 @@ func TestListGoPackagesFiltersDuplicatesAndExcludedPackages(t *testing.T) {
 
 	execCommand = fakeGoListCommandWithDuplicatesAndExcludedPackages
 
-	packages, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage)
+	packages, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, true)
 	if err != nil {
 		t.Fatalf("listGoPackages() error = %v", err)
 	}
@@ -513,6 +513,14 @@ func TestListGoPackagesFiltersDuplicatesAndExcludedPackages(t *testing.T) {
 	}
 	if !slices.Equal(packages, want) {
 		t.Fatalf("listGoPackages() = %v, want %v", packages, want)
+	}
+
+	testPackages, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, false)
+	if err != nil {
+		t.Fatalf("listGoPackages() for test lane error = %v", err)
+	}
+	if !slices.Contains(testPackages, modulePath+"/pkg/config/exhaustiontests") {
+		t.Fatalf("listGoPackages() for test lane = %v, want test-only package included", testPackages)
 	}
 }
 
