@@ -1,8 +1,9 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: Keeps the PRD-required top-level bento card catalog in one Storybook sidebar group.
 import { useEffect, useState, type ReactNode } from "react";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import type {
+  DashboardSnapshot,
   DashboardProviderSessionAttempt,
   DashboardTrace,
 } from "../../../api/dashboard/types";
@@ -20,6 +21,7 @@ import {
 } from "../../current-selection/public";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
 import { SubmitWorkWidget } from "../../submit-work/public";
+import { SubmitWorkCard } from "../../submit-work/components/submit-work-card";
 import { TerminalWorkWidget } from "../../terminal-work/public";
 import {
   TraceDrilldownWidget,
@@ -42,6 +44,9 @@ import { InlineAddWidgetCard } from "./inline-add-widget-card";
 
 const STORY_NOW = Date.parse("2026-04-08T12:05:00Z");
 const providerSessionID = "sess-bento-card-catalog";
+const providerSessionLoadingID = "sess-bento-card-loading";
+const providerSessionEmptyID = "sess-bento-card-empty";
+const providerSessionErrorID = "sess-bento-card-error";
 
 const populatedProviderSession = {
   dispatchID: "dispatch-review-active",
@@ -215,6 +220,35 @@ const workOutcomeModel: WorkChartModel = {
   ],
 };
 
+const emptyWorkOutcomeModel: WorkChartModel = {
+  delta: {
+    completed: 0,
+    failed: 0,
+    inFlight: 0,
+    queued: 0,
+  },
+  failureGroups: [],
+  points: [],
+  rangeID: "session",
+  rangeLabel: "Session",
+  samples: [],
+  series: [],
+};
+
+const emptyDashboardSnapshot: DashboardSnapshot = {
+  ...semanticWorkflowDashboardSnapshot,
+  runtime: {
+    ...semanticWorkflowDashboardSnapshot.runtime,
+    in_flight_dispatch_count: 0,
+    session: {
+      ...semanticWorkflowDashboardSnapshot.runtime.session,
+      completed_count: 0,
+      dispatched_count: 0,
+      failed_count: 0,
+    },
+  },
+};
+
 const providerSessionFetchMock = {
   method: "GET",
   path: `/provider-sessions/detail?id=${providerSessionID}&kind=session_id&provider=codex`,
@@ -272,6 +306,70 @@ const providerSessionFetchMock = {
         },
       ],
     },
+  },
+};
+
+function providerSessionDetailPath(sessionID: string): string {
+  return `/provider-sessions/detail?id=${sessionID}&kind=session_id&provider=codex`;
+}
+
+function providerSessionRef(sessionID: string) {
+  return {
+    dispatchID: `dispatch-${sessionID}`,
+    id: sessionID,
+    kind: "session_id",
+    provider: "codex",
+  } as const;
+}
+
+const providerSessionLoadingFetchMock = {
+  method: "GET",
+  path: providerSessionDetailPath(providerSessionLoadingID),
+  response: () => new Promise<never>(() => undefined),
+};
+
+const providerSessionEmptyFetchMock = {
+  method: "GET",
+  path: providerSessionDetailPath(providerSessionEmptyID),
+  response: {
+    body: {
+      parse: {
+        eventCount: 0,
+        functionCalls: [],
+        lineCount: 0,
+        malformedLineCount: 0,
+        parseErrors: [],
+        reasoning: [],
+        tokenUsage: null,
+        turns: [],
+        unknownEventCount: 0,
+        unknownEvents: [],
+      },
+      providerSession: {
+        id: providerSessionEmptyID,
+        kind: "session_id",
+        provider: "codex",
+      },
+      source: {
+        modifiedAt: "2026-04-08T12:00:01Z",
+        relativePath: "2026/04/08/empty-session.jsonl",
+        sizeBytes: 0,
+      },
+      transcript: [],
+    },
+  },
+};
+
+const providerSessionErrorFetchMock = {
+  method: "GET",
+  path: providerSessionDetailPath(providerSessionErrorID),
+  response: {
+    body: {
+      code: "INTERNAL_ERROR",
+      message: "Storybook provider-session failure",
+    },
+    status: 500,
+    statusText: "Internal Server Error",
   },
 };
 
@@ -431,6 +529,153 @@ function InlineAddWidgetCardStory() {
   });
 }
 
+function renderProviderSessionStateCard({
+  fetchMock,
+  sessionID,
+}: {
+  fetchMock: unknown;
+  sessionID: string;
+}) {
+  return {
+    parameters: {
+      dashboardApi: {
+        fetchMocks: [fetchMock],
+        snapshot: semanticWorkflowDashboardSnapshot,
+      },
+    },
+    render: () =>
+      renderCardFrame({
+        children: (
+          <ProviderSessionWidget
+            selectedProviderSession={providerSessionRef(sessionID)}
+            widgetId={`provider-session-${sessionID}::story`}
+          />
+        ),
+        layout: layoutFor(DASHBOARD_WIDGET_IDS.providerSession, {
+          h: 6,
+          id: `provider-session-${sessionID}::story`,
+          w: 6,
+        }),
+      }),
+  };
+}
+
+function renderTraceStateCard(
+  state: ReturnType<typeof useTraceDrilldown>["traceGridState"],
+) {
+  return renderCardFrame({
+    children: (
+      <TraceDrilldownWidget state={state} widgetId={`trace-${state.status}::story`} />
+    ),
+    layout: layoutFor(DASHBOARD_WIDGET_IDS.trace, {
+      h: 8,
+      id: `trace-${state.status}::story`,
+      w: 8,
+    }),
+  });
+}
+
+function renderWorkOutcomeStateCard({
+  chartState,
+  model,
+  storyID,
+}: {
+  chartState?: { message?: string; status: "error" | "loading"; title?: string };
+  model: WorkChartModel;
+  storyID: string;
+}) {
+  return renderCardFrame({
+    children: (
+      <WorkOutcomeWidget
+        chartState={chartState}
+        model={model}
+        widgetId={storyID}
+      />
+    ),
+    layout: layoutFor(DASHBOARD_WIDGET_IDS.workOutcomeChart, {
+      h: 6,
+      id: storyID,
+      w: 6,
+    }),
+  });
+}
+
+function renderSubmitWorkStatusCard({
+  isSubmitting = false,
+  status,
+  storyID,
+  submitWorkTypeNames,
+}: {
+  isSubmitting?: boolean;
+  status: "empty" | "error" | "submitting" | "success";
+  storyID: string;
+  submitWorkTypeNames: string[];
+}) {
+  const isEmpty = status === "empty";
+  const isError = status === "error";
+
+  return renderCardFrame({
+    children: (
+      <SubmitWorkCard
+        draft={{
+          items: [
+            {
+              id: `${storyID}-text-item`,
+              text: isEmpty ? "" : "Review the state coverage story.",
+              type: "text",
+            },
+          ],
+          requestName: isEmpty ? "" : "State coverage",
+          workTypeName: isEmpty ? "" : "story",
+        }}
+        isSubmitting={isSubmitting}
+        onAddItem={() => undefined}
+        onItemTextChange={() => undefined}
+        onRemoveItem={() => undefined}
+        onRequestNameChange={() => undefined}
+        onStageFileItems={() => undefined}
+        onSubmit={() => undefined}
+        onWorkTypeNameChange={() => undefined}
+        status={
+          status === "submitting"
+            ? {
+                kind: "submitting",
+                message: "Submitting work to the selected factory.",
+              }
+            : status === "success"
+              ? {
+                  kind: "success",
+                  message: "Work submitted successfully.",
+                }
+              : isError
+                ? {
+                    kind: "error",
+                    message: "Submission failed because the factory rejected the request.",
+                  }
+                : {
+                    kind: "guidance",
+                    message: "No work types are available to submit right now.",
+                  }
+        }
+        submitWorkTypeNames={submitWorkTypeNames}
+        validationErrors={
+          isError
+            ? {
+                submissionItems: "At least one text or file item is required.",
+              }
+            : undefined
+        }
+        widgetId={storyID}
+      />
+    ),
+    layout: layoutFor(DASHBOARD_WIDGET_IDS.submitWork, {
+      h: 6,
+      id: storyID,
+      w: 5,
+    }),
+  });
+}
+
 export default {
   title: "you-agent-factory/Dashboard/Bento Cards",
   tags: ["test"],
@@ -454,6 +699,25 @@ export const WorkTotals = {
     await expect(
       canvas.getByRole("button", { name: "Move Work totals" }),
     ).toBeVisible();
+  },
+};
+
+export const WorkTotalsEmpty = {
+  render: () =>
+    renderCardFrame({
+      children: <WorkTotalsWidget snapshot={emptyDashboardSnapshot} />,
+      layout: layoutFor(DASHBOARD_WIDGET_IDS.workTotals, {
+        h: 2,
+        id: "work-totals-empty::story",
+        w: 6,
+      }),
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", { name: "Work totals" });
+
+    await expect(within(card).getByLabelText("Completed: 0")).toBeVisible();
+    await expect(within(card).getByLabelText("Failed: 0")).toBeVisible();
   },
 };
 
@@ -523,6 +787,88 @@ export const ProviderSession = {
   },
 };
 
+export const ProviderSessionLoading = {
+  ...renderProviderSessionStateCard({
+    fetchMock: providerSessionLoadingFetchMock,
+    sessionID: providerSessionLoadingID,
+  }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Provider session",
+    });
+
+    await expect(await within(card).findByRole("status")).toHaveTextContent(
+      "Loading session details...",
+    );
+  },
+};
+
+export const ProviderSessionEmpty = {
+  render: () =>
+    renderCardFrame({
+      children: (
+        <ProviderSessionWidget
+          selectedProviderSession={null}
+          widgetId="provider-session-empty::story"
+        />
+      ),
+      layout: layoutFor(DASHBOARD_WIDGET_IDS.providerSession, {
+        h: 6,
+        id: "provider-session-empty::story",
+        w: 6,
+      }),
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Provider session",
+    });
+
+    await expect(
+      within(card).getByText(
+        "Select a provider session from work-item or workstation history to inspect session details.",
+      ),
+    ).toBeVisible();
+  },
+};
+
+export const ProviderSessionEmptyFile = {
+  ...renderProviderSessionStateCard({
+    fetchMock: providerSessionEmptyFetchMock,
+    sessionID: providerSessionEmptyID,
+  }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Provider session",
+    });
+
+    await waitFor(() => {
+      expect(within(card).getByRole("status")).toHaveTextContent(
+        "The selected session file did not contain any Codex event records.",
+      );
+    });
+  },
+};
+
+export const ProviderSessionError = {
+  ...renderProviderSessionStateCard({
+    fetchMock: providerSessionErrorFetchMock,
+    sessionID: providerSessionErrorID,
+  }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Provider session",
+    });
+
+    await expect(await within(card).findByRole("alert")).toHaveTextContent(
+      "Storybook provider-session failure",
+    );
+  },
+};
+
 export const TerminalWork = {
   render: () =>
     renderCardFrame({
@@ -568,6 +914,39 @@ export const TerminalWork = {
   },
 };
 
+export const TerminalWorkEmpty = {
+  render: () =>
+    renderCardFrame({
+      children: (
+        <TerminalWorkWidget
+          completedItems={[]}
+          failedItems={[]}
+          onSelectItem={() => undefined}
+          selectedItem={null}
+          widgetId="terminal-work-empty::story"
+        />
+      ),
+      layout: layoutFor(DASHBOARD_WIDGET_IDS.terminalWork, {
+        h: 5,
+        id: "terminal-work-empty::story",
+        w: 5,
+      }),
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Completed and failed work",
+    });
+
+    await expect(
+      within(card).getByText("No completed work recorded yet."),
+    ).toBeVisible();
+    await expect(
+      within(card).getByText("No failed work recorded yet."),
+    ).toBeVisible();
+  },
+};
+
 export const WorkOutcomeChart = {
   render: () =>
     renderCardFrame({
@@ -598,6 +977,62 @@ export const WorkOutcomeChart = {
   },
 };
 
+export const WorkOutcomeChartLoading = {
+  render: () =>
+    renderWorkOutcomeStateCard({
+      chartState: { status: "loading" },
+      model: emptyWorkOutcomeModel,
+      storyID: "work-outcome-chart-loading::story",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
+
+    await expect(await within(card).findByRole("status")).toHaveTextContent(
+      "Loading work outcome samples",
+    );
+  },
+};
+
+export const WorkOutcomeChartEmpty = {
+  render: () =>
+    renderWorkOutcomeStateCard({
+      model: emptyWorkOutcomeModel,
+      storyID: "work-outcome-chart-empty::story",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
+
+    await expect(await within(card).findByRole("status")).toHaveTextContent(
+      "No work outcome samples",
+    );
+  },
+};
+
+export const WorkOutcomeChartError = {
+  render: () =>
+    renderWorkOutcomeStateCard({
+      chartState: { status: "error" },
+      model: emptyWorkOutcomeModel,
+      storyID: "work-outcome-chart-error::story",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
+
+    await expect(await within(card).findByRole("alert")).toHaveTextContent(
+      "Work outcome chart unavailable",
+    );
+  },
+};
+
 export const SubmitWork = {
   render: () =>
     renderCardFrame({
@@ -621,6 +1056,67 @@ export const SubmitWork = {
     ).toBeVisible();
     await expect(
       canvas.getByRole("button", { name: "Move Submit work" }),
+    ).toBeVisible();
+  },
+};
+
+export const SubmitWorkEmpty = {
+  render: () =>
+    renderSubmitWorkStatusCard({
+      status: "empty",
+      storyID: "submit-work-empty::story",
+      submitWorkTypeNames: [],
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", { name: "Submit work" });
+
+    await expect(
+      within(card).getByText("No work types are available to submit right now."),
+    ).toBeVisible();
+    await expect(
+      within(card).getByRole("button", { name: "Submit work" }),
+    ).toBeDisabled();
+  },
+};
+
+export const SubmitWorkSubmitting = {
+  render: () =>
+    renderSubmitWorkStatusCard({
+      isSubmitting: true,
+      status: "submitting",
+      storyID: "submit-work-submitting::story",
+      submitWorkTypeNames: ["story"],
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", { name: "Submit work" });
+
+    await expect(
+      within(card).getByRole("button", { name: "Submitting..." }),
+    ).toHaveAttribute("aria-busy", "true");
+    await expect(
+      within(card).getByText("Submitting work to the selected factory."),
+    ).toBeVisible();
+  },
+};
+
+export const SubmitWorkError = {
+  render: () =>
+    renderSubmitWorkStatusCard({
+      status: "error",
+      storyID: "submit-work-error::story",
+      submitWorkTypeNames: ["story"],
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", { name: "Submit work" });
+
+    await expect(await within(card).findByRole("alert")).toHaveTextContent(
+      "Submission failed because the factory rejected the request.",
+    );
+    await expect(
+      within(card).getByText("At least one text or file item is required."),
     ).toBeVisible();
   },
 };
@@ -654,6 +1150,67 @@ export const TraceDrilldown = {
     await expect(within(card).getByText("trace-active-story")).toBeVisible();
     await expect(
       canvas.getByRole("button", { name: "Move Trace drill-down" }),
+    ).toBeVisible();
+  },
+};
+
+export const TraceDrilldownLoading = {
+  render: () =>
+    renderTraceStateCard({
+      status: "loading",
+      workID: "work-loading-story",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Trace drill-down",
+    });
+
+    await expect(within(card).getByText("Loading trace")).toBeVisible();
+    await expect(
+      within(card).getByText("Reconstructing dispatch history for work-loading-story."),
+    ).toBeVisible();
+  },
+};
+
+export const TraceDrilldownEmpty = {
+  render: () =>
+    renderTraceStateCard({
+      status: "empty",
+      workID: "work-empty-story",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Trace drill-down",
+    });
+
+    await expect(
+      within(card).getByText("Trace history unavailable"),
+    ).toBeVisible();
+    await expect(
+      within(card).getByText(
+        "No retained dispatch history is currently available for this work item.",
+      ),
+    ).toBeVisible();
+  },
+};
+
+export const TraceDrilldownError = {
+  render: () =>
+    renderTraceStateCard({
+      message: "Trace history request failed.",
+      status: "error",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Trace drill-down",
+    });
+
+    await expect(within(card).getByText("Trace lookup failed")).toBeVisible();
+    await expect(
+      within(card).getByText("Trace history request failed."),
     ).toBeVisible();
   },
 };
