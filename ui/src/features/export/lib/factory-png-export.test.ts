@@ -111,6 +111,44 @@ describe("writeFactoryExportPng", () => {
     });
   });
 
+  it("returns localized export PNG failures", async () => {
+    const decodeResult = await writeFactoryExportPng({
+      factory: {
+        ...canonicalFactory,
+        name: "Broken Export",
+      },
+      image: new Blob(["not-an-image"], { type: "text/plain" }),
+      locale: "zh-CN",
+      rasterizeImageToPngBytes: async () => {
+        throw new Error("decode failed");
+      },
+    });
+    const metadataResult = await writeFactoryExportPng({
+      factory: {
+        ...canonicalFactory,
+        name: "Broken Export",
+      },
+      image: new Blob(["not-a-png"], { type: "image/png" }),
+      locale: "zh-CN",
+      rasterizeImageToPngBytes: async () => new Uint8Array([1, 2, 3, 4]),
+    });
+
+    expect(decodeResult).toMatchObject({
+      error: {
+        code: "IMAGE_DECODE_FAILED",
+        message: "无法解码所选图片以导出 PNG。",
+      },
+      ok: false,
+    });
+    expect(metadataResult).toMatchObject({
+      error: {
+        code: "PNG_METADATA_WRITE_FAILED",
+        message: "无法写入导出的 PNG 元数据。",
+      },
+      ok: false,
+    });
+  });
+
   it("returns an explicit metadata-write failure when the rasterized bytes are not a PNG", async () => {
     const result = await writeFactoryExportPng({
       factory: {

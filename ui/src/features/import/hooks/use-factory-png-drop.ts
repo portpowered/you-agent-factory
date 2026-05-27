@@ -10,7 +10,10 @@ import {
 
 const FILE_DRAG_DATA_TYPE = "Files";
 
-export type ReadFactoryImportFile = (file: File) => Promise<ReadFactoryImportPngResult>;
+export type ReadFactoryImportFile = (
+  file: File,
+  locale?: string | null,
+) => Promise<ReadFactoryImportPngResult>;
 
 export type FactoryPngDropState =
   | { status: "idle" }
@@ -19,6 +22,7 @@ export type FactoryPngDropState =
   | { error: ReadFactoryImportPngError; fileName: string; status: "error" };
 
 export interface UseFactoryPngDropOptions {
+  locale?: string | null;
   onImportReady?: (value: FactoryPngImportValue, file: File) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
 }
@@ -35,6 +39,7 @@ export interface UseFactoryPngDropResult {
 const IDLE_DROP_STATE: FactoryPngDropState = { status: "idle" };
 
 export function useFactoryPngDrop({
+  locale,
   onImportReady,
   readFactoryImportFile = defaultReadFactoryImportFile,
 }: UseFactoryPngDropOptions = {}): UseFactoryPngDropResult {
@@ -130,7 +135,10 @@ export function useFactoryPngDrop({
     requestIDRef.current = requestID;
     setDropState({ fileName: file.name, status: "reading" });
 
-    const result = await readFactoryImportFile(file);
+    const result =
+      locale == null
+        ? await readFactoryImportFile(file)
+        : await readFactoryImportFile(file, locale);
     if (requestIDRef.current !== requestID) {
       if (result.ok) {
         result.value.revokePreviewImageSrc();
@@ -145,7 +153,7 @@ export function useFactoryPngDrop({
 
     setDropState(IDLE_DROP_STATE);
     onImportReady?.(result.value, file);
-  }, [onImportReady, readFactoryImportFile]);
+  }, [locale, onImportReady, readFactoryImportFile]);
 
   return {
     clearError,
@@ -157,8 +165,11 @@ export function useFactoryPngDrop({
   };
 }
 
-async function defaultReadFactoryImportFile(file: File): Promise<ReadFactoryImportPngResult> {
-  return readFactoryImportPng({ file });
+async function defaultReadFactoryImportFile(
+  file: File,
+  locale?: string | null,
+): Promise<ReadFactoryImportPngResult> {
+  return readFactoryImportPng({ file, locale });
 }
 
 function isFileDragEvent(event: Pick<DragEvent, "dataTransfer">): boolean {

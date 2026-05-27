@@ -1,4 +1,5 @@
 import type { FactoryValue } from "../../../api/named-factory";
+import { getFactoryPngExportMessages } from "../messages/factory-png-export";
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const PNG_TEXT_CHUNK = "tEXt";
@@ -14,6 +15,7 @@ export interface FactoryPngMetadata extends FactoryValue {
 export interface WriteFactoryExportPngOptions {
   factory: FactoryValue;
   image: Blob;
+  locale?: string | null;
   rasterizeImageToPngBytes?: (image: Blob) => Promise<Uint8Array>;
 }
 
@@ -41,8 +43,10 @@ export interface FactoryExportPngError {
 export async function writeFactoryExportPng({
   factory,
   image,
+  locale,
   rasterizeImageToPngBytes = rasterizeImageToPngBytesInBrowser,
 }: WriteFactoryExportPngOptions): Promise<WriteFactoryExportPngResult> {
+  const messages = getFactoryPngExportMessages(locale);
   const metadata: FactoryPngMetadata = {
     ...factory,
     schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
@@ -56,7 +60,7 @@ export async function writeFactoryExportPng({
       error: {
         cause: error,
         code: "IMAGE_DECODE_FAILED",
-        message: "The selected image could not be decoded for PNG export.",
+        message: messages.imageDecodeFailed,
       },
       ok: false,
     };
@@ -79,7 +83,7 @@ export async function writeFactoryExportPng({
       error: {
         cause: error,
         code: "PNG_METADATA_WRITE_FAILED",
-        message: "The exported PNG metadata could not be written.",
+        message: messages.metadataWriteFailed,
       },
       ok: false,
     };

@@ -24,6 +24,7 @@ import {
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 
 export interface UseDashboardSnapshotOptions {
+  locale?: string | null;
   refreshToken?: number;
 }
 
@@ -34,7 +35,7 @@ interface DashboardStreamConnectionOptions {
   queryClient: ReturnType<typeof useQueryClient>;
   queuedEventsRef: RefObject<FactoryEvent[]>;
   refreshToken: number;
-  resetStreamState: () => void;
+  resetStreamState: (locale?: string | null) => void;
   resetTimeline: () => void;
   scheduleQueuedFlush: () => void;
   selectedSessionID: string | null;
@@ -43,11 +44,12 @@ interface DashboardStreamConnectionOptions {
 
 function resetDashboardSessionScopedState(
   queryClient: ReturnType<typeof useQueryClient>,
-  resetStreamState: () => void,
+  resetStreamState: (locale?: string | null) => void,
   resetTimeline: () => void,
+  locale?: string | null,
 ): void {
   resetTimeline();
-  resetStreamState();
+  resetStreamState(locale);
   resetSelectionHistoryStore();
   queryClient.removeQueries({
     queryKey: [CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
@@ -244,6 +246,7 @@ function useDashboardTimelineMemoryDebug({
 }
 
 export function useDashboardSnapshot({
+  locale,
   refreshToken = 0,
 }: UseDashboardSnapshotOptions = {}) {
   const queryClient = useQueryClient();
@@ -261,6 +264,9 @@ export function useDashboardSnapshot({
   const queuedEventsRef = useRef<FactoryEvent[]>([]);
   const flushHandleRef = useRef<number | null>(null);
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);
+  const resetLocalizedStreamState = useCallback(() => {
+    resetStreamState(locale);
+  }, [locale, resetStreamState]);
 
   const flushQueuedEvents = useCallback(() => {
     flushHandleRef.current = null;
@@ -300,7 +306,7 @@ export function useDashboardSnapshot({
     queryClient,
     queuedEventsRef,
     refreshToken,
-    resetStreamState,
+    resetStreamState: resetLocalizedStreamState,
     resetTimeline,
     scheduleQueuedFlush,
     setStreamState,

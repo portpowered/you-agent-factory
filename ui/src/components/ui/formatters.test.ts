@@ -8,6 +8,8 @@ import {
   formatDurationMillisVerbose,
   formatRelativeTimeFromISO,
   formatTimeOfDay,
+  formatTraceOutcome,
+  formatList,
   formatWorkItemLabel,
   getProviderSessionLogTarget,
 } from "./formatters";
@@ -65,9 +67,9 @@ describe("formatRelativeTimeFromISO", () => {
   it("formats relative-time labels for english and zh-CN", () => {
     const now = Date.parse("2026-04-10T12:00:04.000Z");
 
-    expect(formatRelativeTimeFromISO("2026-04-10T12:00:00.000Z", now, "en")).toBe(
-      "4 seconds ago",
-    );
+    expect(
+      formatRelativeTimeFromISO("2026-04-10T12:00:00.000Z", now, "en"),
+    ).toBe("4 seconds ago");
     expect(
       formatRelativeTimeFromISO("2026-04-10T12:00:00.000Z", now, "zh-CN"),
     ).toBe("4秒钟前");
@@ -97,6 +99,30 @@ describe("formatTimeOfDay", () => {
   });
 });
 
+describe("formatTraceOutcome", () => {
+  it("localizes the empty outcome fallback", () => {
+    expect(formatTraceOutcome("", "en")).toBe("Unknown");
+    expect(formatTraceOutcome("", "zh-CN")).toBe("未知");
+  });
+
+  it("keeps non-empty outcomes humanized from the raw status", () => {
+    expect(formatTraceOutcome("PROVIDER_RATE_LIMIT")).toBe(
+      "Provider Rate Limit",
+    );
+  });
+});
+
+describe("formatList", () => {
+  it("localizes the empty list fallback", () => {
+    expect(formatList([], "en")).toBe("None");
+    expect(formatList(undefined, "zh-CN")).toBe("无");
+  });
+
+  it("joins present values without translating identifiers", () => {
+    expect(formatList(["alpha", "beta"], "zh-CN")).toBe("alpha, beta");
+  });
+});
+
 describe("formatLocalDateTime", () => {
   it("formats ISO timestamps as local date-time values for customer-visible details", () => {
     expect(formatLocalDateTime("2026-04-10T18:16:00.000Z", "Unavailable")).toBe(
@@ -108,7 +134,9 @@ describe("formatLocalDateTime", () => {
   });
 
   it("returns the explicit unavailable fallback for invalid or missing timestamps", () => {
-    expect(formatLocalDateTime("not-a-date", "Unavailable")).toBe("Unavailable");
+    expect(formatLocalDateTime("not-a-date", "Unavailable")).toBe(
+      "Unavailable",
+    );
     expect(formatLocalDateTime(undefined, "Unavailable")).toBe("Unavailable");
     expect(formatLocalDateTime("   ", "Unavailable")).toBe("Unavailable");
   });

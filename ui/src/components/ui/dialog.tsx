@@ -1,8 +1,10 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import type { ComponentProps, HTMLAttributes } from "react";
 
+import { useAppLocale } from "../../i18n";
 import { cn } from "../../lib/cn";
 import { buttonVariants } from "./button";
+import { getSharedPrimitiveMessages } from "./messages/shared-primitives";
 
 export const Dialog = DialogPrimitive.Root;
 export const DialogPortal = DialogPrimitive.Portal;
@@ -26,12 +28,18 @@ export function DialogContent({
   children,
   className,
   closeDisabled = false,
-  closeLabel = "Close dialog",
+  closeLabel,
+  locale: localeOverride,
   ...props
 }: ComponentProps<typeof DialogPrimitive.Content> & {
   closeDisabled?: boolean;
   closeLabel?: string;
+  locale?: string | null;
 }) {
+  const { locale } = useAppLocale(localeOverride);
+  const messages = getSharedPrimitiveMessages(locale);
+  const resolvedCloseLabel = closeLabel ?? messages.dialogCloseLabel;
+
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -45,7 +53,7 @@ export function DialogContent({
         {children}
         {closeDisabled ? (
           <button
-            aria-label={closeLabel}
+            aria-label={resolvedCloseLabel}
             className={buttonVariants({
               className: "absolute right-4 top-4 min-h-9 w-9 rounded-full p-0",
               size: "icon",
@@ -54,7 +62,13 @@ export function DialogContent({
             disabled
             type="button"
           >
-            <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="18"
+              viewBox="0 0 24 24"
+              width="18"
+            >
               <path
                 d="M6 6l12 12M18 6L6 18"
                 stroke="currentColor"
@@ -66,14 +80,20 @@ export function DialogContent({
           </button>
         ) : (
           <DialogPrimitive.Close
-            aria-label={closeLabel}
+            aria-label={resolvedCloseLabel}
             className={buttonVariants({
               className: "absolute right-4 top-4 min-h-9 w-9 rounded-full p-0",
               size: "icon",
               tone: "ghost",
             })}
           >
-            <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="18"
+              viewBox="0 0 24 24"
+              width="18"
+            >
               <path
                 d="M6 6l12 12M18 6L6 18"
                 stroke="currentColor"
@@ -89,12 +109,23 @@ export function DialogContent({
   );
 }
 
-export function DialogHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+export function DialogHeader({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
   return <div className={cn("grid gap-2 text-left", className)} {...props} />;
 }
 
-export function DialogFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex flex-wrap justify-end gap-3", className)} {...props} />;
+export function DialogFooter({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("flex flex-wrap justify-end gap-3", className)}
+      {...props}
+    />
+  );
 }
 
 export function DialogTitle({
@@ -103,7 +134,10 @@ export function DialogTitle({
 }: ComponentProps<typeof DialogPrimitive.Title>) {
   return (
     <DialogPrimitive.Title
-      className={cn("font-display text-2xl leading-tight tracking-[-0.03em] text-af-text", className)}
+      className={cn(
+        "font-display text-2xl leading-tight tracking-[-0.03em] text-af-text",
+        className,
+      )}
       {...props}
     />
   );

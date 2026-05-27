@@ -66,10 +66,12 @@ function activeTokenLabel(
 }
 
 function workstationGraphNodeId(nodeId: string): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `workstation:${nodeId}`;
 }
 
 function placeGraphNodeId(placeId: string): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `place:${placeId}`;
 }
 
@@ -295,6 +297,7 @@ function buildPlaceNode(
       input.editor?.editorMode && place.kind === "work_state"
         ? buildEditorHandles({
             editor: input.editor,
+            locale: input.locale,
             nodeId: resolveEditorPlaceNodeId(positionedNode.nodeId, place),
             nodeKind: "work-state",
           })
@@ -379,6 +382,7 @@ function buildWorkstationNode(
       handles: input.editor?.editorMode
         ? buildEditorHandles({
             editor: input.editor,
+            locale: input.locale,
             nodeId: positionedNode.nodeId,
             nodeKind: "workstation",
           })

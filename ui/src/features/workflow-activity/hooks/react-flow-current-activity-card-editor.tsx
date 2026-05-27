@@ -12,6 +12,7 @@ import {
 import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import {
   findClassifierGraphEditorUnsupportedWorkstationName,
@@ -21,7 +22,10 @@ import { useFactoryGraphConnectionController } from "./react-flow-current-activi
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 import { buildCurrentActivityGraphEditorValue } from "./react-flow-current-activity-card-editor-value";
 
-export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
+export function useCurrentActivityGraphEditor(
+  snapshot: DashboardSnapshot,
+  locale?: string,
+) {
   const projectedTopology = snapshot.topology;
   const [editorMode, setEditorMode] = useState(false);
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
@@ -31,6 +35,7 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
   const editableDefinitionQuery = currentFactoryQuery;
   const draftState = useFactoryGraphDraftState({
     currentFactoryDocument: currentFactoryQuery.data,
+    locale,
     projectedTopology,
   });
   const saveEditableDefinition = useSaveCurrentFactory();
@@ -49,6 +54,7 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
     draftState,
     editorMode,
     editableDefinitionQuery: currentFactoryQuery,
+    locale,
     projectedTopology,
     saveEditableDefinition,
   });
@@ -61,6 +67,7 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
     activeTool,
     canInteractWithEditor,
     draftState,
+    locale,
     saveEditableDefinition,
   });
   const {
@@ -131,24 +138,26 @@ function useFactoryGraphEditorControllers({
   activeTool,
   canInteractWithEditor,
   draftState,
+  locale,
   saveEditableDefinition,
 }: {
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
-  saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentFactory
-  >;
+  locale?: string;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
 }) {
   const connectionController = useFactoryGraphConnectionController({
     activeTool,
     canInteractWithEditor,
     draftState,
+    locale,
   });
   const removalController = useFactoryGraphRemovalController({
     activeTool,
     canInteractWithEditor,
     draftState,
+    locale,
     saveEditableDefinition,
   });
 
@@ -163,23 +172,21 @@ function useFactoryGraphEditorSessionState({
   draftState,
   editorMode,
   editableDefinitionQuery,
+  locale,
   projectedTopology,
   saveEditableDefinition,
 }: {
   activeWorkCount: number;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   editorMode: boolean;
-  editableDefinitionQuery: ReturnType<
-    typeof useCurrentFactoryDocument
-  >;
+  editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
+  locale?: string;
   projectedTopology: DashboardSnapshot["topology"];
-  saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentFactory
-  >;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
 }) {
   const hasActiveWork = activeWorkCount > 0;
   const editorUnavailableClassifierWorkstationName = editorMode
-    ? findClassifierGraphEditorUnsupportedWorkstationName(
+    ? (findClassifierGraphEditorUnsupportedWorkstationName(
         draftState.pendingFactoryDefinition ??
           draftState.latestDocument ??
           draftState.baseDocument ??
@@ -187,8 +194,8 @@ function useFactoryGraphEditorSessionState({
       ) ??
       findClassifierGraphEditorUnsupportedWorkstationNameFromTopology(
         projectedTopology,
-      )
-    : findClassifierGraphEditorUnsupportedWorkstationNameFromTopology(
+      ))
+    : (findClassifierGraphEditorUnsupportedWorkstationNameFromTopology(
         projectedTopology,
       ) ??
       findClassifierGraphEditorUnsupportedWorkstationName(
@@ -196,7 +203,7 @@ function useFactoryGraphEditorSessionState({
           draftState.latestDocument ??
           draftState.baseDocument ??
           null,
-      );
+      ));
   const isStaleDraft =
     draftState.hasChanges &&
     draftState.baseDocument !== null &&
@@ -223,15 +230,17 @@ function useFactoryGraphEditorSessionState({
     draftState.latestDocument ??
     draftState.baseDocument ??
     null;
+  const messages = getFactoryGraphEditorMessages(locale);
   const saveBlockedReason = hasActiveWork
-    ? "Topology save is unavailable while active work is still running in this factory."
+    ? messages.saveBlockedActiveWork
     : isStaleDraft
-      ? "A newer factory topology arrived while this draft was open. Refresh or discard before saving."
+      ? messages.saveBlockedStaleDraft
       : undefined;
 
   return {
     addMenuActions: buildFactoryGraphAddEntityMenuActions(
       currentFactoryDefinition,
+      locale,
     ),
     canInteractWithEditor,
     canSaveDraft,
@@ -240,7 +249,7 @@ function useFactoryGraphEditorSessionState({
     hasActiveWork,
     isStaleDraft,
     saveBlockedReason,
-    saveSummary: buildFactoryGraphSaveSummary(draftState.draft),
+    saveSummary: buildFactoryGraphSaveSummary(draftState.draft, locale),
   };
 }
 
@@ -264,9 +273,7 @@ function useFactoryGraphEditorLeaveHandlers({
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
-  saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentFactory
-  >;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setConnectionNotice: ReturnType<
     typeof useFactoryGraphConnectionController

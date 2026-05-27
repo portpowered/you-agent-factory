@@ -9,13 +9,16 @@ import { buildVisibleGraphEdges } from "./react-flow-current-activity-card-graph
 
 function currentActivityEdgeNodeId(key: FactoryGraphNodeKey): string {
   if (key.kind === "workstation") {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `workstation:${key.name}`;
   }
 
   if (key.kind !== "work-state") {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `place:${key.name}`;
   }
 
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `place:${key.workTypeName}:${key.stateName}`;
 }
 

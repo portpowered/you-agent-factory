@@ -23,7 +23,10 @@ export interface WorkOutcomeMessages {
       inFlight: string;
       queued: string;
     };
+    seriesPointLabel: (seriesLabel: string, value: number) => string;
+    sessionRangeLabel: string;
     tickLabel: (tick: number) => string;
+    workTypeFailureLabel: (workType: string) => string;
     xAxisLabel: string;
     yAxisLabel: string;
   };
@@ -43,6 +46,7 @@ export interface WorkOutcomeMessages {
     latestOutcomeLabel: string;
     rangeLabel: string;
     rangeOptionLabel: (rangeId: string, defaultLabel: string) => string;
+    reworkPointLabel: (dispatchLabel: string, reworkCount: number) => string;
     reworkChartAriaLabel: (workLabel: string) => string;
     reworkEmptyMessage: string;
     reworkEmptyTitle: string;
@@ -82,7 +86,11 @@ const workOutcomeMessagesByLocale = {
         inFlight: "In-flight",
         queued: "Queued",
       },
+      seriesPointLabel: (seriesLabel, value) =>
+        `${seriesLabel}: ${formatNumber(value, "en")}`,
+      sessionRangeLabel: "Session",
       tickLabel: (tick) => `Tick ${formatNumber(tick, "en")}`,
+      workTypeFailureLabel: (workType) => `Work type: ${workType}`,
       xAxisLabel: "Ticks",
       yAxisLabel: "Work count",
     },
@@ -103,6 +111,8 @@ const workOutcomeMessagesByLocale = {
       latestOutcomeLabel: "Latest outcome",
       rangeLabel: "Time range",
       rangeOptionLabel: (_rangeId, defaultLabel) => defaultLabel,
+      reworkPointLabel: (dispatchLabel, reworkCount) =>
+        `${dispatchLabel}: ${formatNumber(reworkCount, "en")} retry or rework events`,
       reworkChartAriaLabel: (workLabel) => `Retry and rework trend for ${workLabel}`,
       reworkEmptyMessage:
         "Select active work with retained trace history to see retry activity.",
@@ -140,7 +150,11 @@ const workOutcomeMessagesByLocale = {
         inFlight: "进行中",
         queued: "排队中",
       },
+      seriesPointLabel: (seriesLabel, value) =>
+        `${seriesLabel}：${formatNumber(value, "zh-CN")}`,
+      sessionRangeLabel: "会话",
       tickLabel: (tick) => `刻度 ${formatNumber(tick, "zh-CN")}`,
+      workTypeFailureLabel: (workType) => `工作类型：${workType}`,
       xAxisLabel: "刻度",
       yAxisLabel: "工作计数",
     },
@@ -161,6 +175,8 @@ const workOutcomeMessagesByLocale = {
       rangeLabel: "时间范围",
       rangeOptionLabel: (rangeId, defaultLabel) =>
         rangeId === "session" ? "会话" : defaultLabel,
+      reworkPointLabel: (dispatchLabel, reworkCount) =>
+        `${dispatchLabel}：${formatNumber(reworkCount, "zh-CN")} 个重试或返工事件`,
       reworkChartAriaLabel: (workLabel) => `${workLabel} 的重试与返工趋势`,
       reworkEmptyMessage: "选择包含保留追踪历史的活动工作，以查看重试活动。",
       reworkEmptyTitle: "未选择追踪",

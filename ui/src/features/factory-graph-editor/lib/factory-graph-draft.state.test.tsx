@@ -101,7 +101,40 @@ it("returns null for save-building when the final workstation worker assignment 
       }),
     ]),
   );
-  expect(buildPendingFactoryDefinition(baseFactoryDefinition, draft)).toBeNull();
+  expect(
+    buildPendingFactoryDefinition(baseFactoryDefinition, draft),
+  ).toBeNull();
+});
+
+it("localizes interpolated validation errors for non-default locales", () => {
+  const draft = createEmptyFactoryGraphDraft();
+  draft.edgeChanges.removals.push({
+    kind: "worker-assignment",
+    source: {
+      kind: "worker",
+      name: "writer",
+    },
+    target: {
+      kind: "workstation",
+      name: "draft",
+    },
+  });
+
+  const validationErrors = validateFactoryGraphDraft(
+    baseFactoryDefinition,
+    draft,
+    "zh-CN",
+  );
+
+  expect(validationErrors).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        code: "MISSING_REQUIRED_FIELD",
+        field: "worker",
+        message: "工作站“draft”必须保留一个工作者分配。",
+      }),
+    ]),
+  );
 });
 
 it("keeps a dirty draft while newer editable-definition versions arrive", () => {

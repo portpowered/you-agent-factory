@@ -1,12 +1,12 @@
 import type {
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
+import { getWorkOutcomeMessages } from "../messages/work-outcome";
 
 export type ThroughputRangeID = "5m" | "15m" | "session";
 
 export interface ThroughputRangeOption {
   id: ThroughputRangeID;
-  label: string;
   durationMillis: number | null;
 }
 
@@ -114,11 +114,11 @@ const _TREND_HEIGHT = 120;
 const TREND_PADDING = 14;
 const MAX_RETAINED_SAMPLE_AGE_MILLIS = 60 * 60 * 1000;
 
-export const WORK_CHART_SERIES_DEFINITIONS: readonly Omit<WorkChartSeries, "points">[] = [
-  { key: "queued", label: "Queued", unit: "count" },
-  { key: "inFlight", label: "In-flight", unit: "count" },
-  { key: "completed", label: "Completed", unit: "count" },
-  { key: "failed", label: "Failed/retried", unit: "count" },
+export const WORK_CHART_SERIES_DEFINITIONS: readonly Omit<WorkChartSeries, "label" | "points">[] = [
+  { key: "queued", unit: "count" },
+  { key: "inFlight", unit: "count" },
+  { key: "completed", unit: "count" },
+  { key: "failed", unit: "count" },
 ];
 
 const WORK_CHART_SERIES_VALUE_ACCESSORS: Record<
@@ -143,9 +143,9 @@ const EMPTY_THROUGHPUT_SAMPLE: ThroughputSample = {
 };
 
 export const THROUGHPUT_RANGE_OPTIONS: ThroughputRangeOption[] = [
-  { id: "5m", label: "5m", durationMillis: 5 * 60 * 1000 },
-  { id: "15m", label: "15m", durationMillis: 15 * 60 * 1000 },
-  { id: "session", label: "Session", durationMillis: null },
+  { id: "5m", durationMillis: 5 * 60 * 1000 },
+  { id: "15m", durationMillis: 15 * 60 * 1000 },
+  { id: "session", durationMillis: null },
 ];
 
 export function recordThroughputSample(
@@ -191,7 +191,9 @@ export function buildWorkChartModel(
   samples: ThroughputSample[],
   rangeID: ThroughputRangeID,
   now: number,
+  locale?: string | null,
 ): WorkChartModel {
+  const messages = getWorkOutcomeMessages(locale).chart;
   const range = THROUGHPUT_RANGE_OPTIONS.find((option) => option.id === rangeID);
   const visibleSamples = selectVisibleSamples(samples, rangeID, now);
   const chartSamples = visibleSamples
@@ -209,7 +211,7 @@ export function buildWorkChartModel(
   const lastSample = chartSamples[chartSamples.length - 1]?.sample;
 
   const orderedPoints = chartSamples.map(({ sample }, order) => ({
-    label: `Tick ${sample.tick}`,
+    label: messages.tickLabel(sample.tick),
     order,
     observedAt: sample.observedAt,
     tick: sample.tick,
@@ -217,12 +219,13 @@ export function buildWorkChartModel(
   const orderedSamples = chartSamples.map(({ sample }) => sample);
   const series = WORK_CHART_SERIES_DEFINITIONS.map((definition) => ({
     ...definition,
+    label: messages.seriesLabels[definition.key],
     points: orderedPoints.map((point, index) => {
       const value = WORK_CHART_SERIES_VALUE_ACCESSORS[definition.key](
         orderedSamples[index] ?? (chartSamples[0]?.sample ?? EMPTY_THROUGHPUT_SAMPLE),
       );
       return {
-        label: `${definition.label}: ${value}`,
+        label: messages.seriesPointLabel(messages.seriesLabels[definition.key], value),
         observedAt: point.observedAt,
         order: point.order,
         value,
@@ -247,11 +250,14 @@ export function buildWorkChartModel(
     delta,
     failureGroups:
       lastSample && hasWorkHistory(lastSample)
-        ? buildFailureCauseGroups(lastSample)
+        ? buildFailureCauseGroups(lastSample, locale)
         : [],
     points: orderedPoints,
     rangeID,
-    rangeLabel: range?.label ?? "Session",
+    rangeLabel:
+      range?.id === "session"
+        ? messages.sessionRangeLabel
+        : (range?.id ?? messages.sessionRangeLabel),
     samples: orderedSamples,
     series,
   };
@@ -291,12 +297,16 @@ function _buildTrendPoints<Value>(
   }));
 }
 
-function buildFailureCauseGroups(sample: ThroughputSample): FailureCauseGroup[] {
+function buildFailureCauseGroups(
+  sample: ThroughputSample,
+  locale?: string | null,
+): FailureCauseGroup[] {
+  const messages = getWorkOutcomeMessages(locale).chart;
   const byWorkType = Object.entries(sample.failedByWorkType)
     .filter(([, count]) => count > 0)
     .map(([workType, count]) => ({
       count,
-      label: `Work type: ${workType}`,
+      label: messages.workTypeFailureLabel(workType),
     }));
 
   if (byWorkType.length > 0) {
