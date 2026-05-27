@@ -359,6 +359,105 @@ function workerDenseSnapshot(): DashboardSnapshot {
   return snapshot;
 }
 
+function canonicalObserverSnapshot(): DashboardSnapshot {
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  snapshot.factory = {
+    name: "canonical-observer",
+    resources: [{ capacity: 2, name: "agent-slot" }],
+    workers: [
+      {
+        model: "gpt-5",
+        name: "planner",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5",
+        name: "agent",
+        resources: [{ capacity: 1, name: "agent-slot" }],
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [
+      {
+        name: "story",
+        states: [
+          { name: "init", type: "INITIAL" },
+          { name: "ready", type: "PROCESSING" },
+          { name: "implemented", type: "PROCESSING" },
+          { name: "documented", type: "PROCESSING" },
+          { name: "blocked", type: "FAILED" },
+          { name: "complete", type: "TERMINAL" },
+        ],
+      },
+    ],
+    workstations: [
+      {
+        behavior: "STANDARD",
+        id: "plan",
+        inputs: [{ state: "init", workType: "story" }],
+        name: "Plan",
+        outputs: [{ state: "ready", workType: "story" }],
+        type: "MODEL_WORKSTATION",
+        worker: "planner",
+      },
+      {
+        behavior: "REPEATER",
+        id: "implement",
+        inputs: [{ state: "ready", workType: "story" }],
+        name: "Implement",
+        onFailure: [{ state: "blocked", workType: "story" }],
+        outputs: [{ state: "implemented", workType: "story" }],
+        resources: [{ capacity: 1, name: "agent-slot" }],
+        type: "MODEL_WORKSTATION",
+        worker: "agent",
+      },
+      {
+        behavior: "STANDARD",
+        id: "document",
+        inputs: [{ state: "ready", workType: "story" }],
+        name: "Document",
+        outputs: [{ state: "documented", workType: "story" }],
+        type: "MODEL_WORKSTATION",
+        worker: "agent",
+      },
+      {
+        behavior: "REPEATER",
+        id: "review",
+        inputs: [
+          { state: "implemented", workType: "story" },
+          { state: "documented", workType: "story" },
+        ],
+        name: "Review",
+        onContinue: [{ state: "ready", workType: "story" }],
+        outputs: [{ state: "complete", workType: "story" }],
+        type: "MODEL_WORKSTATION",
+        worker: "reviewer",
+      },
+      {
+        behavior: "STANDARD",
+        id: "repair",
+        inputs: [{ state: "blocked", workType: "story" }],
+        name: "Repair",
+        outputs: [{ state: "ready", workType: "story" }],
+        type: "MODEL_WORKSTATION",
+        worker: "agent",
+      },
+    ],
+  };
+  snapshot.topology = {
+    edges: [],
+    workstation_node_ids: [],
+    workstation_nodes_by_id: {},
+  };
+
+  return snapshot;
+}
+
 async function getStateNodeArticle(label: string): Promise<HTMLElement> {
   const button = await screen.findByRole("button", {
     name: `Select ${label} state`,
@@ -2389,6 +2488,73 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
 
 describe("ReactFlowCurrentActivityCard graph semantics", () => {
   registerCurrentActivityCardTestLifecycle();
+
+  it("renders active observer graph state from the canonical snapshot factory without topology fallback", async () => {
+    renderCurrentActivity({ snapshot: canonicalObserverSnapshot() });
+
+    expect(
+      await screen.findByRole("region", { name: "Work graph viewport" }),
+    ).toBeTruthy();
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("button", { name: /Select .* workstation/ }),
+      ).toHaveLength(5);
+    });
+
+    expect(screen.getByLabelText("agent-slot:available")).toBeTruthy();
+    expect(screen.getByText("worker:agent")).toBeTruthy();
+    expect(screen.getByText("worker:reviewer")).toBeTruthy();
+    expect(screen.getByLabelText("2 resource tokens")).toBeTruthy();
+    expect(screen.getByText("Active Story")).toBeTruthy();
+    expect(
+      within(screen.getByRole("button", { name: "Select Review workstation" }))
+        .getByRole("img", { name: "Repeater workstation" })
+        .getAttribute("data-graph-semantic-icon"),
+    ).toBe("repeater");
+    expect(
+      within(screen.getByRole("button", { name: "Select Review workstation" }))
+        .getByRole("img", { name: "Active" })
+        .getAttribute("data-graph-semantic-icon"),
+    ).toBe("active-work");
+    expect(
+      (await getStateNodeArticle("story:complete"))
+        .querySelector("article")
+        ?.className.includes("border-af-success-border"),
+    ).toBe(true);
+    expect(
+      (await getStateNodeArticle("story:documented"))
+        .querySelector("article")
+        ?.className.includes("opacity-[0.45]"),
+    ).toBe(true);
+  });
+
+  it("keeps observer selection callbacks stable for canonical factory-backed graph nodes", async () => {
+    const { onSelectStateNode, onSelectWorkID, onSelectWorkstation } =
+      renderCurrentActivity({
+        snapshot: canonicalObserverSnapshot(),
+        selection: { kind: "state-node", placeId: "story:implemented" },
+      });
+
+    const implementedState = await screen.findByRole("button", {
+      name: "Select story:implemented state",
+    });
+    expect(implementedState.getAttribute("data-selected-state")).toBe("true");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select Review workstation" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select story:ready state" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Active Story/ }));
+
+    expect(onSelectWorkstation).toHaveBeenCalledWith("review");
+    expect(onSelectStateNode).toHaveBeenCalledWith("story:ready");
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story", {
+      dispatchID: "dispatch-review-active",
+      nodeID: "review",
+    });
+  });
 
   it("renders semantic workflow activity with active, terminal, and failed graph states", async () => {
     renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });

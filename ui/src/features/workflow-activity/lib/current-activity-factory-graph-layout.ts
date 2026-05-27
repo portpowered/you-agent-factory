@@ -45,6 +45,9 @@ type FactoryWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
 >[number];
 type FactoryWorkstationIO = FactoryWorkstation["inputs"][number];
+type DashboardWorkstationKind = NonNullable<
+  DashboardWorkstationNode["workstation_kind"]
+>;
 
 function workstationGraphNodeId(workstation: FactoryWorkstation): string {
   return `workstation:${workstation.id || workstation.name}`;
@@ -105,6 +108,33 @@ function workStatePlace(
     state_value: io.state,
     type_id: io.workType,
   };
+}
+
+function dashboardWorkstationKind(
+  behavior: FactoryWorkstation["behavior"],
+): DashboardWorkstationKind {
+  switch (behavior) {
+    case "CRON":
+      return "cron";
+    case "POLLER":
+      return "poller";
+    case "REPEATER":
+      return "repeater";
+    case "STANDARD":
+    case undefined:
+      return "standard";
+  }
+}
+
+function dashboardWorkstationOutputRoutes(
+  workstation: FactoryWorkstation,
+): FactoryWorkstationIO[] {
+  return [
+    ...(workstation.outputs ?? []),
+    ...(workstation.onContinue ?? []),
+    ...(workstation.onRejection ?? []),
+    ...(workstation.onFailure ?? []),
+  ];
 }
 
 function addNode(
@@ -368,6 +398,8 @@ function toPositionedEdges(
 export function dashboardWorkstationFromFactory(
   workstation: FactoryWorkstation,
 ): DashboardWorkstationNode {
+  const outputRoutes = dashboardWorkstationOutputRoutes(workstation);
+
   return {
     input_place_ids: (workstation.inputs ?? []).map((input) =>
       workStatePlaceId(input.workType, input.state),
@@ -379,17 +411,17 @@ export function dashboardWorkstationFromFactory(
       type_id: input.workType,
     })),
     node_id: workstation.id || workstation.name,
-    output_place_ids: (workstation.outputs ?? []).map((output) =>
+    output_place_ids: outputRoutes.map((output) =>
       workStatePlaceId(output.workType, output.state),
     ),
-    output_places: (workstation.outputs ?? []).map((output) => ({
+    output_places: outputRoutes.map((output) => ({
       kind: "work_state",
       place_id: workStatePlaceId(output.workType, output.state),
       state_value: output.state,
       type_id: output.workType,
     })),
     transition_id: workstation.id || workstation.name,
-    workstation_kind: workstation.type,
+    workstation_kind: dashboardWorkstationKind(workstation.behavior),
     workstation_name: workstation.name,
   };
 }
