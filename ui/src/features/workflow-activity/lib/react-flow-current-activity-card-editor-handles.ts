@@ -17,7 +17,7 @@ export interface CurrentActivityEditorState {
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
 }
 
-const EDITOR_HANDLE_IDS_BY_EDGE_KIND = {
+const SEMANTIC_HANDLE_IDS_BY_EDGE_KIND = {
   "worker-assignment": {
     sourceHandleId: "worker-assignment-source",
     targetHandleId: "worker-assignment-target",
@@ -55,10 +55,10 @@ const EDITOR_HANDLE_IDS_BY_EDGE_KIND = {
   { sourceHandleId: string; targetHandleId: string }
 >;
 
-export function supportedEditorHandleIdsForEdge(edge: PositionedEdge) {
+export function supportedSemanticHandleIdsForEdge(edge: PositionedEdge) {
   const edgeKind = edge.edgeId.split(":", 1)[0];
-  if (edgeKind in EDITOR_HANDLE_IDS_BY_EDGE_KIND) {
-    return EDITOR_HANDLE_IDS_BY_EDGE_KIND[
+  if (edgeKind in SEMANTIC_HANDLE_IDS_BY_EDGE_KIND) {
+    return SEMANTIC_HANDLE_IDS_BY_EDGE_KIND[
       edgeKind as FactoryGraphDraftEdgeChange["kind"]
     ];
   }
@@ -104,37 +104,45 @@ export function supportedEditorHandleIdsForEdge(edge: PositionedEdge) {
   };
 }
 
-export function buildEditorHandles(args: {
-  editor: CurrentActivityEditorState;
+export const supportedEditorHandleIdsForEdge =
+  supportedSemanticHandleIdsForEdge;
+
+export function buildSemanticGraphHandles(args: {
+  editor?: CurrentActivityEditorState;
   locale?: string | null;
   nodeId: string;
   nodeKind: FactoryGraphNodeKind;
 }) {
   const connectable =
-    args.editor.canInteractWithEditor && args.editor.activeTool === "connect";
+    args.editor?.editorMode === true &&
+    args.editor.canInteractWithEditor &&
+    args.editor.activeTool === "connect";
 
   return getLocalizedFactoryGraphConnectionAnchors(
     args.nodeKind,
     args.locale,
   ).map((anchor) => {
     const selected =
-      args.editor.pendingConnectionSource?.nodeId === args.nodeId &&
+      args.editor?.pendingConnectionSource?.nodeId === args.nodeId &&
       args.editor.pendingConnectionSource.anchorId === anchor.id;
     const validTarget =
       connectable &&
-      args.editor.pendingConnectionSource !== null &&
-      args.editor.pendingConnectionSource.nodeId !== args.nodeId &&
+      args.editor?.pendingConnectionSource !== null &&
+      args.editor?.pendingConnectionSource?.nodeId !== args.nodeId &&
       anchor.role === "target";
+    const visible = args.editor?.editorMode === true;
 
     return {
       buttonAriaLabel: anchor.description,
       buttonPressed: selected || undefined,
+      buttonDisabled: !visible || undefined,
       buttonTitle: anchor.description,
       connectable,
+      hidden: !visible || undefined,
       id: anchor.id,
       label: anchor.label,
       onButtonClick: () =>
-        args.editor.onConnectionAnchorClick({
+        args.editor?.onConnectionAnchorClick({
           anchorId: anchor.id,
           nodeId: args.nodeId,
         }),
@@ -144,3 +152,5 @@ export function buildEditorHandles(args: {
     } satisfies ActivityGraphNodeHandle;
   });
 }
+
+export const buildEditorHandles = buildSemanticGraphHandles;

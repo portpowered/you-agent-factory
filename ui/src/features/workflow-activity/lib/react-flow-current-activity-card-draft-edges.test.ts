@@ -1,5 +1,4 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: shared draft-edge coverage stays grouped around one projection seam and compact custom layouts.
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: this dedicated seam keeps related draft-edge coverage together without widening heavier React Flow suites.
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
@@ -49,9 +48,7 @@ describe("current activity graph draft edges", () => {
         },
         graphLayout,
       });
-    const handleAssignments = buildHandleAssignments(visibleGraphEdges, {
-      editorMode: true,
-    });
+    const handleAssignments = buildHandleAssignments(visibleGraphEdges);
     const edges = buildGraphEdges(
       buildActiveGraphHighlights([], visibleGraphEdges),
       handleAssignments,

@@ -33,9 +33,7 @@ describe("current activity graph editor handles", () => {
     const graphLayout =
       await buildCurrentActivityGraphLayoutFromFactory(factory);
     const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
-    const handleAssignments = buildHandleAssignments(visibleGraphEdges, {
-      editorMode: true,
-    });
+    const handleAssignments = buildHandleAssignments(visibleGraphEdges);
     const nodes = buildCurrentActivityNodes({
       activeExecutionsByWorkstationNodeID: {},
       activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
@@ -122,9 +120,7 @@ describe("current activity graph editor handles", () => {
       semanticWorkflowDashboardSnapshot.topology,
     );
     const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
-    const handleAssignments = buildHandleAssignments(visibleGraphEdges, {
-      editorMode: true,
-    });
+    const handleAssignments = buildHandleAssignments(visibleGraphEdges);
     const nodes = buildCurrentActivityNodes({
       activeExecutionsByWorkstationNodeID: {},
       activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
@@ -216,6 +212,71 @@ describe("current activity graph editor handles", () => {
       sourceHandle: "workstation-output-source",
       targetHandle: "workstation-output-target",
     });
+  });
+
+  it("uses hidden semantic handles for observer-mode graph edges", async () => {
+    const graphLayout = await buildGraphLayout(
+      semanticWorkflowDashboardSnapshot.topology,
+    );
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const handleAssignments = buildHandleAssignments(visibleGraphEdges);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights([], visibleGraphEdges),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      handleAssignments,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot: semanticWorkflowDashboardSnapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+    const edges = buildGraphEdges(
+      buildActiveGraphHighlights([], visibleGraphEdges),
+      handleAssignments,
+      new Set(),
+      visibleGraphEdges,
+    );
+
+    const outputEdge = edges.find(
+      (edge) =>
+        edge.source === "workstation:review" &&
+        edge.sourceHandle === "workstation-output-source" &&
+        edge.targetHandle === "workstation-output-target",
+    );
+    const workstationNode = nodes.find(
+      (node) => node.id === "workstation:review",
+    );
+    const stateNode = nodes.find((node) => node.id === outputEdge?.target);
+
+    expect(outputEdge).toBeTruthy();
+    expect(edges).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({ sourceHandle: "out-0" }),
+        expect.objectContaining({ targetHandle: "in-0" }),
+      ]),
+    );
+    expect(workstationNode?.data.handles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          hidden: true,
+          id: "workstation-output-source",
+          type: "source",
+        }),
+      ]),
+    );
+    expect(stateNode?.data.handles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          hidden: true,
+          id: "workstation-output-target",
+          type: "target",
+        }),
+      ]),
+    );
   });
 
   it("maps rejected and failed observer edges onto the supported shared handle ids", () => {

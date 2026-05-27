@@ -17,9 +17,9 @@ import type {
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 import { resolveFactoryGraphPlaceNode } from "./current-activity-factory-graph-node-ids";
 import {
-  buildEditorHandles,
+  buildSemanticGraphHandles,
   type CurrentActivityEditorState,
-  supportedEditorHandleIdsForEdge,
+  supportedSemanticHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
 
 export const EMPTY_GRAPH_LAYOUT: GraphLayout = {
@@ -76,7 +76,6 @@ function placeGraphNodeId(placeId: string): string {
 
 export function buildHandleAssignments(
   edges: PositionedEdge[],
-  options?: { editorMode?: boolean },
 ): HandleAssignments {
   const incomingHandleCounts = new Map<string, number>();
   const outgoingHandleCounts = new Map<string, number>();
@@ -86,10 +85,7 @@ export function buildHandleAssignments(
   for (const edge of edges) {
     const sourceIndex = outgoingHandleCounts.get(edge.fromNodeId) ?? 0;
     const targetIndex = incomingHandleCounts.get(edge.toNodeId) ?? 0;
-    const supportedHandles =
-      options?.editorMode === true
-        ? supportedEditorHandleIdsForEdge(edge)
-        : null;
+    const supportedHandles = supportedSemanticHandleIdsForEdge(edge);
 
     sourceHandlesByEdgeId.set(
       edge.edgeId,
@@ -282,15 +278,14 @@ function buildPlaceNode(
     ),
     activeItemLabels: input.activeItemLabelsByPlaceId.get(place.place_id) ?? [],
     factoryGraphNodeId: factoryGraphNode?.nodeId ?? positionedNode.nodeId,
-    handles:
-      input.editor?.editorMode && factoryGraphNode
-        ? buildEditorHandles({
-            editor: input.editor,
-            locale: input.locale,
-            nodeId: factoryGraphNode.nodeId,
-            nodeKind: factoryGraphNode.kind,
-          })
-        : undefined,
+    handles: factoryGraphNode
+      ? buildSemanticGraphHandles({
+          editor: input.editor,
+          locale: input.locale,
+          nodeId: factoryGraphNode.nodeId,
+          nodeKind: factoryGraphNode.kind,
+        })
+      : undefined,
     incomingHandleCount:
       input.handleAssignments.incomingHandleCounts.get(positionedNode.nodeId) ??
       1,
@@ -377,14 +372,12 @@ function buildWorkstationNode(
       ),
       executions,
       factoryGraphNodeId: positionedNode.nodeId,
-      handles: input.editor?.editorMode
-        ? buildEditorHandles({
-            editor: input.editor,
-            locale: input.locale,
-            nodeId: positionedNode.nodeId,
-            nodeKind: "workstation",
-          })
-        : undefined,
+      handles: buildSemanticGraphHandles({
+        editor: input.editor,
+        locale: input.locale,
+        nodeId: positionedNode.nodeId,
+        nodeKind: "workstation",
+      }),
       incomingHandleCount:
         input.handleAssignments.incomingHandleCounts.get(
           positionedNode.nodeId,

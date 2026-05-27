@@ -246,11 +246,8 @@ export function useCurrentActivityGraphViewModel({
     [editor.draftState.draft, graphLayout],
   );
   const handleAssignments = useMemo(
-    () =>
-      buildHandleAssignments(visibleGraphEdges, {
-        editorMode: editor.editorMode,
-      }),
-    [editor.editorMode, visibleGraphEdges],
+    () => buildHandleAssignments(visibleGraphEdges),
+    [visibleGraphEdges],
   );
   const activeGraphHighlights = useActiveGraphHighlights({
     activeExecutions,
