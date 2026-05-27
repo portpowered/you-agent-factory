@@ -63,76 +63,82 @@ vi.mock("@xyflow/react", async () => {
       }) => void;
       onEdgeClick?: (_event: unknown, edge: { id: string }) => void;
       onNodeClick?: (_event: unknown, node: { id: string }) => void;
-    }) => (
-      <div data-testid="mock-react-flow">
-        <ul aria-label="Rendered graph nodes">
-          {(nodes ?? []).map((node) => (
-            <li key={node.id}>
-              <button
-                data-factory-graph-node-id={String(
-                  node.data?.factoryGraphNodeId ?? "",
-                )}
-                onClick={() => onNodeClick?.(null, { id: node.id })}
-                type="button"
-              >
-                {node.id}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <ul aria-label="Rendered graph edges">
-          {(edges ?? []).map((edge) => (
-            <li key={edge.id}>
-              <button
-                data-source-handle={edge.sourceHandle ?? ""}
-                data-target-handle={edge.targetHandle ?? ""}
-                onClick={() => onEdgeClick?.(null, { id: edge.id })}
-                type="button"
-              >
-                {edge.id}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <output data-testid="valid-qa-output-connection">
-          {String(
-            isValidConnection?.({
-              source: "workstation:review",
-              sourceHandle: "workstation-output-source",
-              target: "place:story:qa",
-              targetHandle: "workstation-output-target",
-            }) ?? false,
-          )}
-        </output>
-        <button
-          onClick={() =>
-            onConnect?.({
-              source: "workstation:review",
-              sourceHandle: "workstation-output-source",
-              target: "place:story:qa",
-              targetHandle: "workstation-output-target",
-            })
-          }
-          type="button"
-        >
-          Mock connect review to QA
-        </button>
-        <button
-          onClick={() =>
-            onConnect?.({
-              source: "workstation:review",
-              sourceHandle: "workstation-output-source",
-              target: "place:story:qa",
-              targetHandle: "workstation-on-failure-target",
-            })
-          }
-          type="button"
-        >
-          Mock invalid review connection
-        </button>
-        {children}
-      </div>
-    ),
+    }) => {
+      const workstationNodeId =
+        nodes?.find((node) => node.id.startsWith("workstation:"))?.id ??
+        "workstation:review";
+
+      return (
+        <div data-testid="mock-react-flow">
+          <ul aria-label="Rendered graph nodes">
+            {(nodes ?? []).map((node) => (
+              <li key={node.id}>
+                <button
+                  data-factory-graph-node-id={String(
+                    node.data?.factoryGraphNodeId ?? "",
+                  )}
+                  onClick={() => onNodeClick?.(null, { id: node.id })}
+                  type="button"
+                >
+                  {node.id}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <ul aria-label="Rendered graph edges">
+            {(edges ?? []).map((edge) => (
+              <li key={edge.id}>
+                <button
+                  data-source-handle={edge.sourceHandle ?? ""}
+                  data-target-handle={edge.targetHandle ?? ""}
+                  onClick={() => onEdgeClick?.(null, { id: edge.id })}
+                  type="button"
+                >
+                  {edge.id}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <output data-testid="valid-qa-output-connection">
+            {String(
+              isValidConnection?.({
+                source: workstationNodeId,
+                sourceHandle: "workstation-output-source",
+                target: "place:story:qa",
+                targetHandle: "workstation-output-target",
+              }) ?? false,
+            )}
+          </output>
+          <button
+            onClick={() =>
+              onConnect?.({
+                source: workstationNodeId,
+                sourceHandle: "workstation-output-source",
+                target: "place:story:qa",
+                targetHandle: "workstation-output-target",
+              })
+            }
+            type="button"
+          >
+            Mock connect review to QA
+          </button>
+          <button
+            onClick={() =>
+              onConnect?.({
+                source: workstationNodeId,
+                sourceHandle: "workstation-output-source",
+                target: "place:story:qa",
+                targetHandle: "workstation-on-failure-target",
+              })
+            }
+            type="button"
+          >
+            Mock invalid review connection
+          </button>
+          {children}
+        </div>
+      );
+    },
   };
 });
 
@@ -217,31 +223,33 @@ const importController: CurrentActivityImportController = {
 };
 
 let restoreBrowserTestShims: (() => void) | null = null;
+let mutateAsync: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  window.localStorage.clear();
+  useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
+  restoreBrowserTestShims = installDashboardBrowserTestShims();
+  vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+    data: editableFactoryDocument,
+    error: null,
+    status: "success",
+  } as never);
+  mutateAsync = vi.fn().mockResolvedValue(editableFactoryDocument);
+  vi.mocked(useSaveCurrentFactory).mockReturnValue({
+    mutateAsync,
+    reset: vi.fn(),
+    status: "idle",
+  } as never);
+});
+
+afterEach(() => {
+  cleanup();
+  restoreBrowserTestShims?.();
+  restoreBrowserTestShims = null;
+  vi.clearAllMocks();
+});
 
 describe("ReactFlowCurrentActivityCard edit integration", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-    useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
-    restoreBrowserTestShims = installDashboardBrowserTestShims();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDocument,
-      error: null,
-      status: "success",
-    } as never);
-    vi.mocked(useSaveCurrentFactory).mockReturnValue({
-      mutateAsync: vi.fn().mockResolvedValue(editableFactoryDocument),
-      reset: vi.fn(),
-      status: "idle",
-    } as never);
-  });
-
-  afterEach(() => {
-    cleanup();
-    restoreBrowserTestShims?.();
-    restoreBrowserTestShims = null;
-    vi.clearAllMocks();
-  });
-
   it("renders newly added graph nodes after add-node interactions", async () => {
     renderCurrentActivity();
     enterEditorMode();
@@ -344,6 +352,86 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
   });
 });
 
+describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
+  it("keeps workstation editor connections stable when id differs from name", async () => {
+    const factoryDocumentWithDistinctWorkstationId = {
+      ...editableFactoryDocument,
+      workstations: [
+        {
+          ...editableFactoryDocument.workstations[0],
+          id: "canonical-review-id",
+          name: "review",
+        },
+      ],
+    } satisfies CurrentFactoryDocument;
+    mutateAsync.mockResolvedValue(factoryDocumentWithDistinctWorkstationId);
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: factoryDocumentWithDistinctWorkstationId,
+      error: null,
+      status: "success",
+    } as never);
+    renderCurrentActivity(
+      createSnapshot(factoryDocumentWithDistinctWorkstationId),
+    );
+    enterEditorMode();
+
+    expect(
+      await screen.findByRole("button", { name: "workstation:review" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "workstation:canonical-review-id" }),
+    ).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mock connect review to QA" }),
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: "workstation-output:workstation:review->place:story:qa",
+      }),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(
+        await screen.findByRole("region", {
+          name: "Factory graph editor tools",
+        }),
+      ).getByRole("button", { name: "Save changes" }),
+    );
+    fireEvent.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "Save factory graph changes?",
+        }),
+      ).getByRole("button", { name: "Save topology" }),
+    );
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({
+        baseVersion: factoryDocumentWithDistinctWorkstationId.version,
+        factoryDefinition: {
+          ...factoryDocumentWithDistinctWorkstationId,
+          resources: [],
+          workstations: [
+            {
+              ...factoryDocumentWithDistinctWorkstationId.workstations[0],
+              outputs: [
+                ...factoryDocumentWithDistinctWorkstationId.workstations[0]
+                  .outputs,
+                {
+                  state: "qa",
+                  workType: "story",
+                },
+              ],
+            },
+          ],
+        },
+      });
+    });
+  });
+});
+
 function renderCurrentActivity(snapshot = createSnapshot()) {
   renderWithQueryClient(
     <ReactFlowCurrentActivityCard
@@ -376,9 +464,11 @@ function renderWithQueryClient(view: ReactElement) {
   );
 }
 
-function createSnapshot(): DashboardSnapshot {
+function createSnapshot(
+  factoryDocument: CurrentFactoryDocument = editableFactoryDocument,
+): DashboardSnapshot {
   const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-  snapshot.factory = editableFactoryDocument;
+  snapshot.factory = factoryDocument;
   snapshot.runtime.in_flight_dispatch_count = 0;
   return snapshot;
 }

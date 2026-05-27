@@ -135,14 +135,14 @@ describe("useCurrentActivityGraphLayout", () => {
       "place:story:queued",
       "place:work-type:story",
       "place:worker:writer",
-      "workstation:draft",
+      "workstation:Draft",
     ]);
     expect(result.current.edges.map((edge) => edge.edgeId).sort()).toEqual([
-      "worker-assignment:place:worker:writer->workstation:draft",
+      "worker-assignment:place:worker:writer->workstation:Draft",
       "worker-resource:place:gpu:available->place:worker:writer",
-      "workstation-input:place:story:queued->workstation:draft",
-      "workstation-output:workstation:draft->place:story:done",
-      "workstation-resource:place:gpu:available->workstation:draft",
+      "workstation-input:place:story:queued->workstation:Draft",
+      "workstation-output:workstation:Draft->place:story:done",
+      "workstation-resource:place:gpu:available->workstation:Draft",
     ]);
   });
 });
@@ -199,10 +199,10 @@ describe("useCurrentActivityGraphLayout legacy routes", () => {
     });
 
     expect(result.current.edges.map((edge) => edge.edgeId).sort()).toContain(
-      "workstation-on-continue:workstation:draft->place:story:retry",
+      "workstation-on-continue:workstation:Draft->place:story:retry",
     );
     expect(result.current.edges.map((edge) => edge.edgeId).sort()).toContain(
-      "workstation-on-failure:workstation:draft->place:story:failed",
+      "workstation-on-failure:workstation:Draft->place:story:failed",
     );
   });
 });

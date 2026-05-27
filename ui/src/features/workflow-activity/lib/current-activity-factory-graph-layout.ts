@@ -55,7 +55,7 @@ type DashboardWorkstationKind = NonNullable<
 >;
 
 function workstationGraphNodeId(workstation: FactoryWorkstation): string {
-  return `workstation:${workstation.id || workstation.name}`;
+  return `workstation:${workstation.name}`;
 }
 
 function workStatePlaceId(workType: string, state: string): string {
