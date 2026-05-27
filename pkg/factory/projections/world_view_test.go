@@ -124,34 +124,62 @@ func TestBuildFactoryWorldView_ExposesCanonicalFactoryGraphFromStructureEvents(t
 	}
 	view := BuildFactoryWorldView(worldState)
 
+	assertCanonicalFactoryGraphPreserved(t, worldState, view, payload.Factory)
+	assertCanonicalFactoryWorkstationDetailsPreserved(t, *view.Factory, promptBody, maxRetries)
+}
+
+func assertCanonicalFactoryGraphPreserved(
+	t *testing.T,
+	worldState interfaces.FactoryWorldState,
+	view interfaces.FactoryWorldView,
+	want factoryapi.Factory,
+) {
+	t.Helper()
+
 	if worldState.Factory == nil {
 		t.Fatal("world state factory = nil, want canonical factory graph")
 	}
 	if view.Factory == nil {
 		t.Fatal("world view factory = nil, want canonical factory graph")
 	}
-	if !reflect.DeepEqual(*worldState.Factory, payload.Factory) {
+	if !reflect.DeepEqual(*worldState.Factory, want) {
 		t.Fatalf("world state factory = %#v, want canonical payload", *worldState.Factory)
 	}
-	if !reflect.DeepEqual(*view.Factory, payload.Factory) {
+	if !reflect.DeepEqual(*view.Factory, want) {
 		t.Fatalf("world view factory = %#v, want canonical payload", *view.Factory)
 	}
+}
 
-	workstation := (*view.Factory.Workstations)[0]
-	if len(*workstation.OnContinue) != 1 || (*workstation.OnContinue)[0].State != "continue" {
-		t.Fatalf("onContinue = %#v, want continue route", workstation.OnContinue)
-	}
-	if len(*workstation.OnRejection) != 1 || (*workstation.OnRejection)[0].State != "rejected" {
-		t.Fatalf("onRejection = %#v, want rejected route", workstation.OnRejection)
-	}
-	if len(*workstation.OnFailure) != 1 || (*workstation.OnFailure)[0].State != "failed" {
-		t.Fatalf("onFailure = %#v, want failed route", workstation.OnFailure)
-	}
+func assertCanonicalFactoryWorkstationDetailsPreserved(
+	t *testing.T,
+	factory factoryapi.Factory,
+	promptBody string,
+	maxRetries int,
+) {
+	t.Helper()
+
+	workstation := (*factory.Workstations)[0]
+	assertCanonicalFactoryRoutePreserved(t, workstation.OnContinue, "continue", "onContinue")
+	assertCanonicalFactoryRoutePreserved(t, workstation.OnRejection, "rejected", "onRejection")
+	assertCanonicalFactoryRoutePreserved(t, workstation.OnFailure, "failed", "onFailure")
 	if workstation.Body == nil || *workstation.Body != promptBody {
 		t.Fatalf("body = %#v, want prompt body preserved", workstation.Body)
 	}
 	if workstation.Limits == nil || workstation.Limits.MaxRetries == nil || *workstation.Limits.MaxRetries != maxRetries {
 		t.Fatalf("limits = %#v, want max retries preserved", workstation.Limits)
+	}
+}
+
+func assertCanonicalFactoryRoutePreserved(
+	t *testing.T,
+	routes *[]factoryapi.WorkstationIO,
+	wantState string,
+	label string,
+) {
+	t.Helper()
+
+	if routes == nil || len(*routes) != 1 || (*routes)[0].State != wantState {
+		t.Fatalf("%s = %#v, want %s route", label, routes, wantState)
 	}
 }
 
