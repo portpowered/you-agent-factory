@@ -14,6 +14,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service/hostedlinear"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -80,9 +81,9 @@ func TestRunHostedLinearPollCycle_SubmitsFilteredIssuesAndPersistsCheckpoint(t *
 	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
 
 	var submitted []interfaces.WorkRequest
-	result, err := runHostedLinearPollCycle(
+	result, err := hostedlinear.RunPollCycle(
 		context.Background(),
-		linearPollerClient{endpoint: server.URL, client: server.Client(), logger: zap.NewNop()},
+		hostedlinear.Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
 		nil,
 		workstation,
 		worker,
@@ -95,9 +96,9 @@ func TestRunHostedLinearPollCycle_SubmitsFilteredIssuesAndPersistsCheckpoint(t *
 		zap.NewNop(),
 	)
 	if err != nil {
-		t.Fatalf("runHostedLinearPollCycle: %v", err)
+		t.Fatalf("hostedlinear.RunPollCycle: %v", err)
 	}
-	if !result.foundNewer {
+	if !result.FoundNewer {
 		t.Fatal("expected hosted linear cycle to report newer issues")
 	}
 	if len(submitted) != 1 {
@@ -158,17 +159,15 @@ func TestRunHostedLinearPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testi
 	)
 	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
 	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
-	if err := saveLinearCheckpoint(checkpointPath, linearCheckpoint{
+	saveLinearCheckpoint(t, checkpointPath, hostedlinear.Checkpoint{
 		IssueID:   "issue-old",
 		UpdatedAt: "2026-05-22T07:00:00Z",
-	}); err != nil {
-		t.Fatalf("seed checkpoint: %v", err)
-	}
+	})
 
 	submitCalls := 0
-	first, err := runHostedLinearPollCycle(
+	first, err := hostedlinear.RunPollCycle(
 		context.Background(),
-		linearPollerClient{endpoint: server.URL, client: server.Client(), logger: zap.NewNop()},
+		hostedlinear.Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
 		nil,
 		workstation,
 		worker,
@@ -184,15 +183,15 @@ func TestRunHostedLinearPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testi
 		zap.NewNop(),
 	)
 	if err != nil {
-		t.Fatalf("first runHostedLinearPollCycle: %v", err)
+		t.Fatalf("first hostedlinear.RunPollCycle: %v", err)
 	}
-	if !first.foundNewer || submitCalls != 1 {
-		t.Fatalf("first cycle foundNewer=%t submitCalls=%d, want true and 1", first.foundNewer, submitCalls)
+	if !first.FoundNewer || submitCalls != 1 {
+		t.Fatalf("first cycle foundNewer=%t submitCalls=%d, want true and 1", first.FoundNewer, submitCalls)
 	}
 
-	second, err := runHostedLinearPollCycle(
+	second, err := hostedlinear.RunPollCycle(
 		context.Background(),
-		linearPollerClient{endpoint: server.URL, client: server.Client(), logger: zap.NewNop()},
+		hostedlinear.Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
 		nil,
 		workstation,
 		worker,
@@ -205,9 +204,9 @@ func TestRunHostedLinearPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testi
 		zap.NewNop(),
 	)
 	if err != nil {
-		t.Fatalf("second runHostedLinearPollCycle: %v", err)
+		t.Fatalf("second hostedlinear.RunPollCycle: %v", err)
 	}
-	if second.foundNewer {
+	if second.FoundNewer {
 		t.Fatal("expected second cycle to stop at checkpoint with no newer issues")
 	}
 }
@@ -260,17 +259,15 @@ func TestRunHostedLinearPollCycle_PushesFiltersIntoProviderQueryForBoundedResume
 	)
 	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
 	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
-	if err := saveLinearCheckpoint(checkpointPath, linearCheckpoint{
+	saveLinearCheckpoint(t, checkpointPath, hostedlinear.Checkpoint{
 		IssueID:   "issue-older-match",
 		UpdatedAt: "2026-05-22T07:00:00Z",
-	}); err != nil {
-		t.Fatalf("seed checkpoint: %v", err)
-	}
+	})
 
 	var submitted []interfaces.WorkRequest
-	result, err := runHostedLinearPollCycle(
+	result, err := hostedlinear.RunPollCycle(
 		context.Background(),
-		linearPollerClient{endpoint: server.URL, client: server.Client(), logger: zap.NewNop()},
+		hostedlinear.Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
 		nil,
 		workstation,
 		worker,
@@ -283,7 +280,7 @@ func TestRunHostedLinearPollCycle_PushesFiltersIntoProviderQueryForBoundedResume
 		zap.NewNop(),
 	)
 	if err != nil {
-		t.Fatalf("runHostedLinearPollCycle: %v", err)
+		t.Fatalf("hostedlinear.RunPollCycle: %v", err)
 	}
 	if !strings.Contains(capturedQuery, `team: { id: { in: ["team-match"] } }`) {
 		t.Fatalf("query = %q, want team filter pushed into provider request", capturedQuery)
@@ -291,7 +288,7 @@ func TestRunHostedLinearPollCycle_PushesFiltersIntoProviderQueryForBoundedResume
 	if !strings.Contains(capturedQuery, `state: { id: { in: ["state-match"] } }`) {
 		t.Fatalf("query = %q, want state filter pushed into provider request", capturedQuery)
 	}
-	if !result.foundNewer {
+	if !result.FoundNewer {
 		t.Fatal("expected hosted linear cycle to report newer filtered issues")
 	}
 	if len(submitted) != 1 {
@@ -361,7 +358,22 @@ func assertNormalizedHostedLinearIssues(t *testing.T, normalized []interfaces.Su
 	}
 }
 
-func readLinearCheckpointForTest(t *testing.T, checkpointPath string) linearCheckpoint {
+func saveLinearCheckpoint(t *testing.T, checkpointPath string, checkpoint hostedlinear.Checkpoint) {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(checkpointPath), 0o755); err != nil {
+		t.Fatalf("create checkpoint dir: %v", err)
+	}
+	data, err := json.Marshal(checkpoint)
+	if err != nil {
+		t.Fatalf("marshal checkpoint: %v", err)
+	}
+	if err := os.WriteFile(checkpointPath, data, 0o600); err != nil {
+		t.Fatalf("write checkpoint: %v", err)
+	}
+}
+
+func readLinearCheckpointForTest(t *testing.T, checkpointPath string) hostedlinear.Checkpoint {
 	t.Helper()
 
 	checkpointData, err := os.ReadFile(checkpointPath)
@@ -369,7 +381,7 @@ func readLinearCheckpointForTest(t *testing.T, checkpointPath string) linearChec
 		t.Fatalf("read checkpoint: %v", err)
 	}
 
-	var checkpoint linearCheckpoint
+	var checkpoint hostedlinear.Checkpoint
 	if err := json.Unmarshal(checkpointData, &checkpoint); err != nil {
 		t.Fatalf("decode checkpoint: %v", err)
 	}
@@ -564,23 +576,23 @@ func TestResolveHostedSecretRef_PrefersEnvThenRuntimeFile(t *testing.T) {
 	}
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, factoryDir, &interfaces.FactoryConfig{}, nil, nil)
 
-	envName := hostedSecretEnvName("secrets/linear-api-key")
+	envName := hostedlinear.SecretEnvName("secrets/linear-api-key")
 	if envName == "" || !strings.Contains(envName, "SECRETS_LINEAR_API_KEY") {
-		t.Fatalf("hostedSecretEnvName = %q, want normalized name", envName)
+		t.Fatalf("hostedlinear.SecretEnvName = %q, want normalized name", envName)
 	}
 	t.Setenv(envName, "env-secret")
-	got, err := resolveHostedSecretRef(context.Background(), runtimeCfg, "secrets/linear-api-key")
+	got, err := hostedlinear.ResolveSecretRef(context.Background(), runtimeCfg, "secrets/linear-api-key")
 	if err != nil {
-		t.Fatalf("resolveHostedSecretRef env: %v", err)
+		t.Fatalf("hostedlinear.ResolveSecretRef env: %v", err)
 	}
 	if got != "env-secret" {
 		t.Fatalf("resolved env secret = %q, want env-secret", got)
 	}
 
 	t.Setenv(envName, "")
-	got, err = resolveHostedSecretRef(context.Background(), runtimeCfg, "secrets/linear-api-key")
+	got, err = hostedlinear.ResolveSecretRef(context.Background(), runtimeCfg, "secrets/linear-api-key")
 	if err != nil {
-		t.Fatalf("resolveHostedSecretRef file: %v", err)
+		t.Fatalf("hostedlinear.ResolveSecretRef file: %v", err)
 	}
 	if got != "file-secret" {
 		t.Fatalf("resolved file secret = %q, want file-secret", got)

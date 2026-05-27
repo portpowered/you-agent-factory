@@ -23,19 +23,6 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-type recordingDiagnosticsProvider struct{}
-
-func (recordingDiagnosticsProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{
-		Content: "Done. COMPLETE",
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Provider: &interfaces.ProviderDiagnostic{
-				ResponseMetadata: map[string]string{"request_id": "provider-request-1"},
-			},
-		},
-	}, nil
-}
-
 func TestBuildFactoryService_ReplayModeLoadsEmbeddedConfigWithoutFactoryFiles(t *testing.T) {
 	sourceDir := t.TempDir()
 	writeFactoryJSON(t, sourceDir, minimalFactoryConfig())
@@ -540,90 +527,6 @@ func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, resu
 	}
 }
 
-func serviceReplayWorkRequestEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []serviceReplayWorkRequestRecord {
-	t.Helper()
-	var out []serviceReplayWorkRequestRecord
-	for _, event := range artifact.Events {
-		if event.Type != factoryapi.FactoryEventTypeWorkRequest {
-			continue
-		}
-		payload, err := event.Payload.AsWorkRequestEventPayload()
-		if err != nil {
-			t.Fatalf("decode work request event %q: %v", event.Id, err)
-		}
-		out = append(out, serviceReplayWorkRequestRecord{Event: event, Payload: payload})
-	}
-	return out
-}
-
-type serviceReplayWorkRequestRecord struct {
-	Event   factoryapi.FactoryEvent
-	Payload factoryapi.WorkRequestEventPayload
-}
-
-func serviceReplayDispatchCreatedEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []serviceReplayDispatchCreatedRecord {
-	t.Helper()
-	var out []serviceReplayDispatchCreatedRecord
-	for _, event := range artifact.Events {
-		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
-			continue
-		}
-		payload, err := event.Payload.AsDispatchRequestEventPayload()
-		if err != nil {
-			t.Fatalf("decode dispatch created event %q: %v", event.Id, err)
-		}
-		out = append(out, serviceReplayDispatchCreatedRecord{Event: event, Payload: payload})
-	}
-	return out
-}
-
-type serviceReplayDispatchCreatedRecord struct {
-	Event   factoryapi.FactoryEvent
-	Payload factoryapi.DispatchRequestEventPayload
-}
-
-func serviceReplayDispatchCompletedEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []serviceReplayDispatchCompletedRecord {
-	t.Helper()
-	var out []serviceReplayDispatchCompletedRecord
-	for _, event := range artifact.Events {
-		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
-			continue
-		}
-		payload, err := event.Payload.AsDispatchResponseEventPayload()
-		if err != nil {
-			t.Fatalf("decode dispatch completed event %q: %v", event.Id, err)
-		}
-		out = append(out, serviceReplayDispatchCompletedRecord{Event: event, Payload: payload})
-	}
-	return out
-}
-
-type serviceReplayDispatchCompletedRecord struct {
-	Event   factoryapi.FactoryEvent
-	Payload factoryapi.DispatchResponseEventPayload
-}
-
-func serviceReplayInferenceResponseEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []serviceReplayInferenceResponseRecord {
-	t.Helper()
-	var out []serviceReplayInferenceResponseRecord
-	for _, event := range artifact.Events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
-			continue
-		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
-		if err != nil {
-			t.Fatalf("decode inference response event %q: %v", event.Id, err)
-		}
-		out = append(out, serviceReplayInferenceResponseRecord{Event: event, Payload: payload})
-	}
-	return out
-}
-
-type serviceReplayInferenceResponseRecord struct {
-	Event   factoryapi.FactoryEvent
-	Payload factoryapi.InferenceResponseEventPayload
-}
-
 func serviceReplayWorksFromDispatch(dispatch interfaces.WorkDispatch) []factoryapi.Work {
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	works := make([]factoryapi.Work, 0, len(tokens))
@@ -729,18 +632,6 @@ func serviceStringValue(value *string) string {
 	return *value
 }
 
-func serviceFirstStringValue(values *[]string) string {
-	if values == nil {
-		return ""
-	}
-	for _, value := range *values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func serviceUniqueNonEmpty(values []string) []string {
 	seen := make(map[string]struct{}, len(values))
 	out := make([]string, 0, len(values))
@@ -758,13 +649,6 @@ func serviceUniqueNonEmpty(values []string) []string {
 }
 
 func serviceStringPtr(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
-}
-
-func serviceEnumPtr[T ~string](value T) *T {
 	if value == "" {
 		return nil
 	}
@@ -830,27 +714,6 @@ func serviceSlicePtr[T any](values []T) *[]T {
 	}
 	out := append([]T(nil), values...)
 	return &out
-}
-
-func assertServiceFactoryEventsContainTypes(t *testing.T, events []factoryapi.FactoryEvent, wantTypes []factoryapi.FactoryEventType) {
-	t.Helper()
-	seen := make(map[factoryapi.FactoryEventType]bool, len(events))
-	for _, event := range events {
-		seen[event.Type] = true
-	}
-	for _, wantType := range wantTypes {
-		if !seen[wantType] {
-			t.Fatalf("factory event types = %v, want %s", serviceFactoryEventTypes(events), wantType)
-		}
-	}
-}
-
-func serviceFactoryEventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {
-	types := make([]factoryapi.FactoryEventType, 0, len(events))
-	for _, event := range events {
-		types = append(types, event.Type)
-	}
-	return types
 }
 
 func minimalFactoryConfig() map[string]any {

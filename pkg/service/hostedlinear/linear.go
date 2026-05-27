@@ -1,4 +1,4 @@
-package service
+package hostedlinear
 
 import (
 	"bytes"
@@ -15,21 +15,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"go.uber.org/zap"
 )
 
 const (
-	defaultHostedLinearEndpoint     = "https://api.linear.app/graphql"
-	defaultHostedLinearPollInterval = 1 * time.Minute
-	hostedLinearPageSize            = 25
-	hostedLinearMaxPagesPerCycle    = 10
-	hostedLinearRequestTimeout      = 30 * time.Second
+	DefaultEndpoint              = "https://api.linear.app/graphql"
+	DefaultPollInterval          = 1 * time.Minute
+	DefaultRequestTimeout        = 30 * time.Second
+	hostedLinearPageSize         = 25
+	hostedLinearMaxPagesPerCycle = 10
 )
 
-type linearCheckpoint struct {
+type Checkpoint struct {
 	IssueID   string `json:"issueId"`
 	UpdatedAt string `json:"updatedAt"`
 }
@@ -64,10 +63,10 @@ type linearIssueAssignee struct {
 	Email string `json:"email"`
 }
 
-type linearPollCycleResult struct {
-	submissions []interfaces.SubmitRequest
-	checkpoint  linearCheckpoint
-	foundNewer  bool
+type CycleResult struct {
+	Submissions []interfaces.SubmitRequest
+	Checkpoint  Checkpoint
+	FoundNewer  bool
 }
 
 type linearIssuePage struct {
@@ -76,10 +75,10 @@ type linearIssuePage struct {
 	More   bool
 }
 
-type linearPollerClient struct {
-	endpoint string
-	client   *http.Client
-	logger   *zap.Logger
+type Client struct {
+	Endpoint   string
+	HTTPClient *http.Client
+	Logger     *zap.Logger
 }
 
 type linearIssueFilter struct {
@@ -87,197 +86,71 @@ type linearIssueFilter struct {
 	StateIDs []string
 }
 
-func (fs *FactoryService) hostedPollerHTTPClient() *http.Client {
-	if fs != nil && fs.cfg != nil && fs.cfg.HostedPollerHTTPClient != nil {
-		return fs.cfg.HostedPollerHTTPClient
-	}
-	return &http.Client{Timeout: hostedLinearRequestTimeout}
-}
+type Submitter func(context.Context, interfaces.WorkRequest) error
 
-func (fs *FactoryService) hostedPollerSecretResolver() secretResolver {
-	if fs != nil && fs.cfg != nil && fs.cfg.HostedPollerSecretResolver != nil {
-		return fs.cfg.HostedPollerSecretResolver
-	}
-	return resolveHostedSecretRef
-}
-
-func (fs *FactoryService) hostedLinearEndpoint() string {
-	if fs != nil && fs.cfg != nil && strings.TrimSpace(fs.cfg.HostedLinearEndpoint) != "" {
-		return strings.TrimSpace(fs.cfg.HostedLinearEndpoint)
-	}
-	return defaultHostedLinearEndpoint
-}
-
-func (fs *FactoryService) superviseHostedLinearPoller(
+func RunPollCycle(
 	ctx context.Context,
+	client Client,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
 	workerDef *interfaces.WorkerConfig,
-	submitter workRequestSubmitter,
-) {
-	logger := fs.pollerLogger(workstation, workerDef).With(zap.String("provider", interfaces.HostedWorkerProviderLinear))
-	backoffClock := fs.pollerSupervisorClock()
-	attempt := 0
-	logger.Info("hosted linear poller started")
-	defer func() {
-		logger.Info("hosted linear poller stopped", zap.String("reason", pollerStopReason(ctx.Err())))
-	}()
-
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-
-		attempt++
-		runErr := fs.runHostedLinearPoller(ctx, runtimeCfg, workstation, workerDef, submitter, logger, backoffClock)
-		if ctx.Err() != nil {
-			return
-		}
-
-		backoff := pollerRestartBackoff(attempt)
-		logger.Warn("hosted linear poller restarting",
-			zap.Int("attempt", attempt),
-			zap.Duration("backoff", backoff),
-			zap.Error(runErr),
-		)
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-backoffClock.After(backoff):
-		}
-	}
-}
-
-func (fs *FactoryService) runHostedLinearPoller(
-	ctx context.Context,
-	runtimeCfg interfaces.RuntimeConfigLookup,
-	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
-	submitter workRequestSubmitter,
-	logger *zap.Logger,
-	clock clockwork.Clock,
-) error {
-	if runtimeCfg == nil {
-		return fmt.Errorf("runtime config is required")
-	}
-	if workerDef == nil {
-		return fmt.Errorf("hosted linear poller worker is required")
-	}
-	if workerDef.Auth == nil || strings.TrimSpace(workerDef.Auth.SecretRef) == "" {
-		return fmt.Errorf("hosted linear poller worker %q is missing auth.secretRef", workerDef.Name)
-	}
-	if workerDef.Linear == nil {
-		return fmt.Errorf("hosted linear poller worker %q is missing linear config", workerDef.Name)
-	}
-	if submitter == nil {
-		return fmt.Errorf("hosted linear poller submitter is required")
-	}
-	interval, err := hostedLinearPollInterval(workerDef.Linear)
-	if err != nil {
-		return err
-	}
-
-	resolver := fs.hostedPollerSecretResolver()
-	apiKey, err := resolver(ctx, runtimeCfg, workerDef.Auth.SecretRef)
-	if err != nil {
-		return fmt.Errorf("resolve hosted linear auth %q: %w", workerDef.Auth.SecretRef, err)
-	}
-
-	pollerClient := linearPollerClient{
-		endpoint: fs.hostedLinearEndpoint(),
-		client:   fs.hostedPollerHTTPClient(),
-		logger:   logger,
-	}
-	checkpointPath := hostedLinearCheckpointPath(runtimeCfg, workstation, workerDef)
-
-	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		result, err := runHostedLinearPollCycle(ctx, pollerClient, runtimeCfg, workstation, workerDef, submitter, checkpointPath, apiKey, logger)
-		if err != nil {
-			return err
-		}
-		if result.foundNewer {
-			logger.Info("hosted linear poller cycle completed",
-				zap.Int("submissions", len(result.submissions)),
-				zap.String("checkpoint_issue_id", result.checkpoint.IssueID),
-				zap.String("checkpoint_updated_at", result.checkpoint.UpdatedAt),
-			)
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-clock.After(interval):
-		}
-	}
-}
-
-func runHostedLinearPollCycle(
-	ctx context.Context,
-	client linearPollerClient,
-	runtimeCfg interfaces.RuntimeConfigLookup,
-	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
-	submitter workRequestSubmitter,
+	submitter Submitter,
 	checkpointPath string,
 	apiKey string,
 	logger *zap.Logger,
-) (linearPollCycleResult, error) {
+) (CycleResult, error) {
 	checkpoint, err := loadLinearCheckpoint(checkpointPath)
 	if err != nil {
-		return linearPollCycleResult{}, err
+		return CycleResult{}, err
 	}
 
 	issues, nextCheckpoint, err := collectHostedLinearIssues(ctx, client, workerDef, checkpoint, apiKey, logger)
 	if err != nil {
-		return linearPollCycleResult{}, err
+		return CycleResult{}, err
 	}
 	foundNewer := nextCheckpoint != checkpoint && nextCheckpoint.IssueID != ""
 	if !foundNewer {
-		return linearPollCycleResult{}, nil
+		return CycleResult{}, nil
 	}
 
 	submissions, err := hostedLinearSubmissions(workstation, workerDef, issues)
 	if err != nil {
-		return linearPollCycleResult{}, err
+		return CycleResult{}, err
 	}
 	if len(submissions) > 0 {
 		request := requests.WorkRequestFromSubmitRequests(submissions)
 		if err := submitter(ctx, request); err != nil {
-			return linearPollCycleResult{}, err
+			return CycleResult{}, err
 		}
 	}
 	if err := saveLinearCheckpoint(checkpointPath, nextCheckpoint); err != nil {
-		return linearPollCycleResult{}, err
+		return CycleResult{}, err
 	}
-	return linearPollCycleResult{
-		submissions: submissions,
-		checkpoint:  nextCheckpoint,
-		foundNewer:  true,
+	return CycleResult{
+		Submissions: submissions,
+		Checkpoint:  nextCheckpoint,
+		FoundNewer:  true,
 	}, nil
 }
 
 func collectHostedLinearIssues(
 	ctx context.Context,
-	client linearPollerClient,
+	client Client,
 	workerDef *interfaces.WorkerConfig,
-	checkpoint linearCheckpoint,
+	checkpoint Checkpoint,
 	apiKey string,
 	logger *zap.Logger,
-) ([]linearIssue, linearCheckpoint, error) {
+) ([]linearIssue, Checkpoint, error) {
 	var collected []linearIssue
 	cursor := ""
 	pages := 0
 	foundCheckpoint := false
-	nextCheckpoint := linearCheckpoint{}
+	nextCheckpoint := Checkpoint{}
 
 	for pages < hostedLinearMaxPagesPerCycle {
 		page, err := client.fetchIssuesPage(ctx, apiKey, cursor, hostedLinearIssueFilterFromConfig(workerDef.Linear))
 		if err != nil {
-			return nil, linearCheckpoint{}, err
+			return nil, Checkpoint{}, err
 		}
 		pages++
 		nextCheckpoint = advanceLinearCheckpoint(nextCheckpoint, page.Issues)
@@ -308,11 +181,11 @@ func collectHostedLinearIssues(
 	return collected, nextCheckpoint, nil
 }
 
-func advanceLinearCheckpoint(current linearCheckpoint, issues []linearIssue) linearCheckpoint {
+func advanceLinearCheckpoint(current Checkpoint, issues []linearIssue) Checkpoint {
 	if current.IssueID != "" || len(issues) == 0 {
 		return current
 	}
-	return linearCheckpoint{
+	return Checkpoint{
 		IssueID:   issues[0].ID,
 		UpdatedAt: issues[0].UpdatedAt,
 	}
@@ -320,7 +193,7 @@ func advanceLinearCheckpoint(current linearCheckpoint, issues []linearIssue) lin
 
 func collectNewHostedLinearPageIssues(
 	issues []linearIssue,
-	checkpoint linearCheckpoint,
+	checkpoint Checkpoint,
 	cfg *interfaces.HostedLinearWorkerConfig,
 ) ([]linearIssue, bool) {
 	collected := make([]linearIssue, 0, len(issues))
@@ -335,7 +208,7 @@ func collectNewHostedLinearPageIssues(
 	return collected, false
 }
 
-func issueMatchesLinearCheckpoint(issue linearIssue, checkpoint linearCheckpoint) bool {
+func issueMatchesLinearCheckpoint(issue linearIssue, checkpoint Checkpoint) bool {
 	return checkpoint.IssueID != "" && issue.ID == checkpoint.IssueID && issue.UpdatedAt == checkpoint.UpdatedAt
 }
 
@@ -453,9 +326,9 @@ func hostedLinearBatchRequestID(workstationName string, issues []linearIssue) st
 	return "linear-batch-" + hex.EncodeToString(h.Sum(nil)[:12])
 }
 
-func hostedLinearPollInterval(cfg *interfaces.HostedLinearWorkerConfig) (time.Duration, error) {
+func PollInterval(cfg *interfaces.HostedLinearWorkerConfig) (time.Duration, error) {
 	if cfg == nil || strings.TrimSpace(cfg.PollInterval) == "" {
-		return defaultHostedLinearPollInterval, nil
+		return DefaultPollInterval, nil
 	}
 	interval, err := time.ParseDuration(strings.TrimSpace(cfg.PollInterval))
 	if err != nil {
@@ -467,7 +340,7 @@ func hostedLinearPollInterval(cfg *interfaces.HostedLinearWorkerConfig) (time.Du
 	return interval, nil
 }
 
-func hostedLinearCheckpointPath(
+func CheckpointPath(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
 	workerDef *interfaces.WorkerConfig,
@@ -482,25 +355,25 @@ func hostedLinearCheckpointPath(
 	return filepath.Join(baseDir, ".infinite-you", "poller-checkpoints", sanitizePathSegment(workstation.Name+"--"+workerDef.Name)+"--linear.json")
 }
 
-func loadLinearCheckpoint(path string) (linearCheckpoint, error) {
+func loadLinearCheckpoint(path string) (Checkpoint, error) {
 	if strings.TrimSpace(path) == "" {
-		return linearCheckpoint{}, nil
+		return Checkpoint{}, nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return linearCheckpoint{}, nil
+			return Checkpoint{}, nil
 		}
-		return linearCheckpoint{}, fmt.Errorf("read hosted linear checkpoint: %w", err)
+		return Checkpoint{}, fmt.Errorf("read hosted linear checkpoint: %w", err)
 	}
-	var checkpoint linearCheckpoint
+	var checkpoint Checkpoint
 	if err := json.Unmarshal(data, &checkpoint); err != nil {
-		return linearCheckpoint{}, fmt.Errorf("decode hosted linear checkpoint: %w", err)
+		return Checkpoint{}, fmt.Errorf("decode hosted linear checkpoint: %w", err)
 	}
 	return checkpoint, nil
 }
 
-func saveLinearCheckpoint(path string, checkpoint linearCheckpoint) error {
+func saveLinearCheckpoint(path string, checkpoint Checkpoint) error {
 	if strings.TrimSpace(path) == "" || checkpoint.IssueID == "" || checkpoint.UpdatedAt == "" {
 		return nil
 	}
@@ -521,13 +394,13 @@ func saveLinearCheckpoint(path string, checkpoint linearCheckpoint) error {
 	return nil
 }
 
-func resolveHostedSecretRef(_ context.Context, runtimeCfg interfaces.RuntimeConfigLookup, secretRef string) (string, error) {
+func ResolveSecretRef(_ context.Context, runtimeCfg interfaces.RuntimeConfigLookup, secretRef string) (string, error) {
 	ref := strings.TrimSpace(secretRef)
 	if ref == "" {
 		return "", fmt.Errorf("secret ref is required")
 	}
 
-	if value := strings.TrimSpace(os.Getenv(hostedSecretEnvName(ref))); value != "" {
+	if value := strings.TrimSpace(os.Getenv(SecretEnvName(ref))); value != "" {
 		return value, nil
 	}
 
@@ -557,7 +430,7 @@ func resolveHostedSecretRef(_ context.Context, runtimeCfg interfaces.RuntimeConf
 	return value, nil
 }
 
-func hostedSecretEnvName(secretRef string) string {
+func SecretEnvName(secretRef string) string {
 	var builder strings.Builder
 	builder.WriteString("INFINITE_YOU_SECRET_")
 	for _, r := range strings.ToUpper(strings.TrimSpace(secretRef)) {
@@ -643,7 +516,13 @@ func hostedLinearGraphQLStringList(values []string) string {
 	return string(data)
 }
 
-func (c linearPollerClient) fetchIssuesPage(ctx context.Context, apiKey, cursor string, filter linearIssueFilter) (linearIssuePage, error) {
+func (c Client) fetchIssuesPage(ctx context.Context, apiKey, cursor string, filter linearIssueFilter) (linearIssuePage, error) {
+	if c.HTTPClient == nil {
+		c.HTTPClient = &http.Client{Timeout: DefaultRequestTimeout}
+	}
+	if strings.TrimSpace(c.Endpoint) == "" {
+		c.Endpoint = DefaultEndpoint
+	}
 	filterClause := hostedLinearIssueFilterClause(filter)
 	body := map[string]any{
 		"query": fmt.Sprintf(`query HostedLinearPollerIssues($first: Int!, $after: String) {
@@ -687,14 +566,14 @@ func (c linearPollerClient) fetchIssuesPage(ctx context.Context, apiKey, cursor 
 		return linearIssuePage{}, fmt.Errorf("encode hosted linear graphql request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return linearIssuePage{}, fmt.Errorf("build hosted linear graphql request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", apiKey)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return linearIssuePage{}, fmt.Errorf("hosted linear graphql request failed: %w", err)
 	}
@@ -705,6 +584,10 @@ func (c linearPollerClient) fetchIssuesPage(ctx context.Context, apiKey, cursor 
 		return linearIssuePage{}, fmt.Errorf("read hosted linear graphql response: %w", err)
 	}
 
+	return decodeIssuesPageResponse(resp.StatusCode, data)
+}
+
+func decodeIssuesPageResponse(statusCode int, data []byte) (linearIssuePage, error) {
 	var decoded struct {
 		Data struct {
 			Issues struct {
@@ -733,8 +616,8 @@ func (c linearPollerClient) fetchIssuesPage(ctx context.Context, apiKey, cursor 
 		}
 		return linearIssuePage{}, fmt.Errorf("hosted linear graphql error: %s", msg)
 	}
-	if resp.StatusCode >= 400 {
-		return linearIssuePage{}, fmt.Errorf("hosted linear graphql returned status %d", resp.StatusCode)
+	if statusCode >= 400 {
+		return linearIssuePage{}, fmt.Errorf("hosted linear graphql returned status %d", statusCode)
 	}
 	return linearIssuePage{
 		Issues: decoded.Data.Issues.Nodes,
