@@ -1,4 +1,4 @@
-package projections
+package projections_test
 
 import (
 	"bufio"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -408,4 +409,34 @@ func assertLineageTextContent(t *testing.T, item interfaces.FactoryWorkItem, wan
 	if len(item.Content) != 1 || item.Content[0].Type != interfaces.WorkContentPartTypeText || item.Content[0].Text != want {
 		t.Fatalf("work item content = %#v, want one text part %q", item.Content, want)
 	}
+}
+
+func workContentPtrForProjectionTest(t *testing.T, parts ...factoryapi.WorkContentPart) *factoryapi.WorkContent {
+	t.Helper()
+	content := factoryapi.WorkContent(parts)
+	return &content
+}
+
+func workTextContentPartForProjectionTest(t *testing.T, text string) factoryapi.WorkContentPart {
+	t.Helper()
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: text,
+	}); err != nil {
+		t.Fatalf("build text part: %v", err)
+	}
+	return part
+}
+
+func workImageContentPartForProjectionTest(t *testing.T, file string) factoryapi.WorkContentPart {
+	t.Helper()
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
+		Type: factoryapi.WorkContentPartTypeImage,
+		File: file,
+	}); err != nil {
+		t.Fatalf("build image part: %v", err)
+	}
+	return part
 }

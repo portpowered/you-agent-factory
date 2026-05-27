@@ -1,4 +1,4 @@
-package projections
+package projections_test
 
 import (
 	"testing"
