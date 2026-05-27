@@ -266,13 +266,14 @@ Recommended structure:
 Review expectations:
 
 - Adding a new feature **SHOULD** add or extend a feature-local message catalog.
-- New user-facing UI copy in `ui/src/` **SHOULD** be authored through a feature-owned message catalog, and reviewers **SHOULD** treat new hardcoded production JSX copy or accessibility labels as a blocking issue unless the documented hardcoded-copy baseline is intentionally updated for a justified exception.
+- New user-facing UI copy in `ui/src/` **SHOULD** be authored through a feature-owned message catalog, and reviewers **SHOULD** treat new hardcoded production JSX copy, textual component props, or accessibility labels as a blocking issue unless the literal is a documented non-product diagnostic exception.
+- Legitimate non-product diagnostic literals **MUST** use the inline `hardcoded-ui-copy-exception: non-product-diagnostic` marker near the literal instead of adding product copy back to `ui/scripts/hardcoded-ui-copy-baseline.txt`.
 - Renaming a feature or domain **SHOULD NOT** force broad key churn outside that ownership boundary.
 - Reviewers **SHOULD** reject concatenated translated fragments when a full localized message should be authored instead.
 
 Verification:
 
-- `cd ui && bun run check:localized-copy` **SHOULD** pass. That check intentionally excludes tests, stories, generated API code, fixtures, developer-testing seams, and feature message catalogs, while keeping a reviewed baseline for current intentional exceptions in production `ui/src/`.
+- `cd ui && bun run check:localized-copy` **SHOULD** pass. That check intentionally excludes tests, stories, generated API code, fixtures, developer-testing seams, and feature message catalogs while enforcing that the hardcoded-copy baseline stays empty for product UI copy.
 - Tests **SHOULD** cover at least one non-default locale path for formatting-sensitive UI.
 - Snapshot-heavy testing **SHOULD NOT** be the only localization evidence.
 
