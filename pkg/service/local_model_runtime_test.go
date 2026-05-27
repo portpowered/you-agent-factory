@@ -9,6 +9,8 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -16,6 +18,26 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/localmodel"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
+
+type staticModelAssetPuller struct {
+	pullResult apisurface.ModelPullResult
+	pullErr    error
+	ensureErr  error
+	cache      localModelCacheLayout
+	cacheErr   error
+}
+
+func (s staticModelAssetPuller) PullModel(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ string) (apisurface.ModelPullResult, error) {
+	return s.pullResult, s.pullErr
+}
+
+func (s staticModelAssetPuller) EnsureModelAvailable(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) error {
+	return s.ensureErr
+}
+
+func (s staticModelAssetPuller) ResolveModelCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) (localModelCacheLayout, error) {
+	return s.cache, s.cacheErr
+}
 
 type fakeLocalModelRuntime struct {
 	mu          sync.Mutex
@@ -616,6 +638,23 @@ func mustMarshalAudioContentResponse(t *testing.T, audioPath string) string {
 		t.Fatalf("marshal audio content response: %v", err)
 	}
 	return string(data)
+}
+
+func mustGeneratedServiceTextPart(t *testing.T, text string) factoryapi.WorkContentPart {
+	t.Helper()
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeTextUpper,
+		Text: text,
+		Slot: stringPtr("text"),
+	}); err != nil {
+		t.Fatalf("build text content part: %v", err)
+	}
+	return part
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 func localModelDispatch() interfaces.WorkDispatch {
