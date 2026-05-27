@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/service/modelassets"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
@@ -48,6 +50,76 @@ func (fs *FactoryService) GetModel(_ context.Context, modelName string) (factory
 		return factoryapi.ModelDetail{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
 	}
 	return entry.detail, nil
+}
+
+type modelAssetPuller interface {
+	PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error)
+	EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error
+	ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (localModelCacheLayout, error)
+}
+
+type modelAssetPullerAdapter struct {
+	inner *modelassets.Puller
+}
+
+func newModelAssetPuller(cacheDir string) modelAssetPuller {
+	return modelAssetPullerAdapter{inner: modelassets.NewPuller(cacheDir, runtime.GOOS, runtime.GOARCH)}
+}
+
+func (p modelAssetPullerAdapter) PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error) {
+	return p.inner.PullModel(ctx, runtimeCfg, modelName)
+}
+
+func (p modelAssetPullerAdapter) EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error {
+	return p.inner.EnsureModelAvailable(ctx, runtimeCfg, worker)
+}
+
+func (p modelAssetPullerAdapter) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (localModelCacheLayout, error) {
+	layout, err := p.inner.ResolveModelCache(ctx, runtimeCfg, worker)
+	if err != nil {
+		return localModelCacheLayout{}, err
+	}
+	return localModelCacheLayout{
+		ModelName: layout.ModelName,
+		CachePath: layout.CachePath,
+		Revision:  layout.Revision,
+		Files:     layout.Files,
+	}, nil
+}
+
+func (fs *FactoryService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
+	runtimeCfg := fs.currentRuntimeConfig()
+	if runtimeCfg == nil {
+		return apisurface.ModelPullResult{}, fmt.Errorf("factory service runtime is not available")
+	}
+	models := buildModelCatalog(runtimeCfg)
+	key := canonicalModelName(modelName)
+	if key == "" {
+		return apisurface.ModelPullResult{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)
+	}
+	entry, ok := models[key]
+	if !ok {
+		return apisurface.ModelPullResult{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
+	}
+	if entry.summary.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
+		return apisurface.ModelPullResult{}, fmt.Errorf("%w: model %q is not a local model", apisurface.ErrModelPullUnsupported, modelName)
+	}
+	return fs.modelAssetPuller().PullModel(ctx, runtimeCfg, modelName)
+}
+
+func (fs *FactoryService) modelAssetPuller() modelAssetPuller {
+	if fs != nil && fs.modelAssets != nil {
+		return fs.modelAssets
+	}
+	cacheDir := ""
+	if fs != nil && fs.cfg != nil {
+		cacheDir = strings.TrimSpace(fs.cfg.ModelCacheDir)
+	}
+	puller := newModelAssetPuller(cacheDir)
+	if fs != nil {
+		fs.modelAssets = puller
+	}
+	return puller
 }
 
 type discoveredModelCatalogEntry struct {

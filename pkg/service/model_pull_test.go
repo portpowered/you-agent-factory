@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service/modelassets"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -43,10 +45,8 @@ func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
 	}))
 	defer server.Close()
 
-	puller := newHuggingFaceModelAssetPuller(t.TempDir())
-	puller.baseURL = server.URL
-	puller.apiBaseURL = server.URL + "/api"
-	puller.client = server.Client()
+	puller := newModelAssetPullerForTest(t.TempDir())
+	puller.SetEndpointsForTest(server.URL, server.URL+"/api", server.Client())
 
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
 		Resources: []interfaces.ResourceConfig{{
@@ -63,14 +63,14 @@ func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PullModel: %v", err)
 	}
-	if result.Outcome != modelPullOutcomePulled || result.Revision != "rev-test" {
+	if result.Outcome != modelassets.PullOutcomePulled || result.Revision != "rev-test" {
 		t.Fatalf("result = %#v, want pulled rev-test", result)
 	}
 	for _, path := range []string{
 		filepath.Join(result.CachePath, "omnivoice-base-Q4_K_M.gguf"),
 		filepath.Join(result.CachePath, "omnivoice-tokenizer-Q4_K_M.gguf"),
 	} {
-		if _, err := fileSHA256(path); err != nil {
+		if _, err := testFileSHA256(path); err != nil {
 			t.Fatalf("expected cached file %q: %v", path, err)
 		}
 	}
@@ -89,6 +89,10 @@ func mustLoadedFactoryConfigForModelPullTest(t *testing.T, cfg *interfaces.Facto
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 	return loaded
+}
+
+func newModelAssetPullerForTest(cacheDir string) *modelassets.Puller {
+	return modelassets.NewPuller(cacheDir, runtime.GOOS, runtime.GOARCH)
 }
 
 func TestPullModel_ResolveModelCacheUsesPersistedMetadataOffline(t *testing.T) {
@@ -112,10 +116,8 @@ func TestPullModel_ResolveModelCacheUsesPersistedMetadataOffline(t *testing.T) {
 	}))
 
 	cacheDir := t.TempDir()
-	puller := newHuggingFaceModelAssetPuller(cacheDir)
-	puller.baseURL = server.URL
-	puller.apiBaseURL = server.URL + "/api"
-	puller.client = server.Client()
+	puller := newModelAssetPullerForTest(cacheDir)
+	puller.SetEndpointsForTest(server.URL, server.URL+"/api", server.Client())
 
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
 		Resources: []interfaces.ResourceConfig{{
@@ -172,14 +174,12 @@ func TestPullModel_RetriesManifestLookupAfterDNSError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	puller := newHuggingFaceModelAssetPuller(t.TempDir())
-	puller.baseURL = server.URL
-	puller.apiBaseURL = server.URL + "/api"
-	puller.client = &http.Client{
+	puller := newModelAssetPullerForTest(t.TempDir())
+	puller.SetEndpointsForTest(server.URL, server.URL+"/api", &http.Client{
 		Transport: &manifestRetryRoundTripper{
 			base: server.Client().Transport,
 		},
-	}
+	})
 
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
 		Resources: []interfaces.ResourceConfig{{
@@ -202,7 +202,7 @@ func TestPullModel_RetriesManifestLookupAfterDNSError(t *testing.T) {
 }
 
 func TestPullModel_ReturnsUnsupportedWhenRuntimeHasNoMatchingModelResource(t *testing.T) {
-	puller := newHuggingFaceModelAssetPuller(t.TempDir())
+	puller := newModelAssetPullerForTest(t.TempDir())
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{})
 	_, err := puller.PullModel(context.Background(), runtimeCfg, "OMNIVOICE_Q4_K_M")
 	if err == nil || !strings.Contains(err.Error(), apisurface.ErrModelPullUnsupported.Error()) {
@@ -211,7 +211,7 @@ func TestPullModel_ReturnsUnsupportedWhenRuntimeHasNoMatchingModelResource(t *te
 }
 
 func TestInvokeModel_ReturnsModelNotAvailableWhenManagedCacheIsMissing(t *testing.T) {
-	puller := newHuggingFaceModelAssetPuller(t.TempDir())
+	puller := newModelAssetPullerForTest(t.TempDir())
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/models/Serveurperso/OmniVoice-GGUF" {
 			http.NotFound(w, r)
@@ -220,9 +220,7 @@ func TestInvokeModel_ReturnsModelNotAvailableWhenManagedCacheIsMissing(t *testin
 		_, _ = io.WriteString(w, `{"sha":"rev-test","siblings":[{"rfilename":"omnivoice-base-Q4_K_M.gguf","size":10,"lfs":{"oid":"abc","size":10}},{"rfilename":"omnivoice-tokenizer-Q4_K_M.gguf","size":10,"lfs":{"oid":"def","size":10}}]}`)
 	}))
 	defer server.Close()
-	puller.baseURL = server.URL
-	puller.apiBaseURL = server.URL + "/api"
-	puller.client = server.Client()
+	puller.SetEndpointsForTest(server.URL, server.URL+"/api", server.Client())
 
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{
 		Resources: []interfaces.ResourceConfig{{
@@ -258,7 +256,7 @@ func TestInvokeModel_ReturnsModelNotAvailableWhenManagedCacheIsMissing(t *testin
 	svc := &FactoryService{
 		runtimeCfg:  runtimeCfg,
 		cfg:         &FactoryServiceConfig{},
-		modelAssets: puller,
+		modelAssets: modelAssetPullerAdapter{inner: puller},
 	}
 	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
 		Operation: "TTS",
@@ -274,6 +272,19 @@ func TestInvokeModel_ReturnsModelNotAvailableWhenManagedCacheIsMissing(t *testin
 func sha256HexString(input []byte) string {
 	sum := sha256.Sum256(input)
 	return hex.EncodeToString(sum[:])
+}
+
+func testFileSHA256(path string) (string, error) {
+	input, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer input.Close()
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, input); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 type manifestRetryRoundTripper struct {

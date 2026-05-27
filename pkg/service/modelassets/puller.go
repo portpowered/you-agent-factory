@@ -1,4 +1,4 @@
-package service
+package modelassets
 
 import (
 	"context"
@@ -13,34 +13,33 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const (
-	modelPullOutcomePulled         = "PULLED"
-	modelPullOutcomeAlreadyPresent = "ALREADY_PRESENT"
-	defaultModelAssetBaseURL       = "https://huggingface.co"
-	defaultModelAssetAPIBaseURL    = "https://huggingface.co/api"
-	modelAssetMetadataFileName     = ".managed-cache.json"
-	modelAssetRequestTimeout       = 45 * time.Second
-	modelAssetMaxAttempts          = 3
+	PullOutcomePulled           = "PULLED"
+	PullOutcomeAlreadyPresent   = "ALREADY_PRESENT"
+	defaultModelAssetBaseURL    = "https://huggingface.co"
+	defaultModelAssetAPIBaseURL = "https://huggingface.co/api"
+	modelAssetMetadataFileName  = ".managed-cache.json"
+	modelAssetRequestTimeout    = 45 * time.Second
+	modelAssetMaxAttempts       = 3
 )
 
-type modelAssetPuller interface {
-	PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error)
-	EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error
-	ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (localModelCacheLayout, error)
+type CacheLayout struct {
+	ModelName string
+	CachePath string
+	Revision  string
+	Files     []string
 }
 
-type huggingFaceModelAssetPuller struct {
+type Puller struct {
 	cacheDir   string
 	baseURL    string
 	apiBaseURL string
@@ -97,53 +96,24 @@ type huggingFaceModelLFS struct {
 	Size int64  `json:"size"`
 }
 
-func (fs *FactoryService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
-	runtimeCfg := fs.currentRuntimeConfig()
-	if runtimeCfg == nil {
-		return apisurface.ModelPullResult{}, fmt.Errorf("factory service runtime is not available")
-	}
-	models := buildModelCatalog(runtimeCfg)
-	key := canonicalModelName(modelName)
-	if key == "" {
-		return apisurface.ModelPullResult{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)
-	}
-	entry, ok := models[key]
-	if !ok {
-		return apisurface.ModelPullResult{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
-	}
-	if entry.summary.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
-		return apisurface.ModelPullResult{}, fmt.Errorf("%w: model %q is not a local model", apisurface.ErrModelPullUnsupported, modelName)
-	}
-	return fs.modelAssetPuller().PullModel(ctx, runtimeCfg, modelName)
-}
-
-func (fs *FactoryService) modelAssetPuller() modelAssetPuller {
-	if fs != nil && fs.modelAssets != nil {
-		return fs.modelAssets
-	}
-	cacheDir := ""
-	if fs != nil && fs.cfg != nil {
-		cacheDir = strings.TrimSpace(fs.cfg.ModelCacheDir)
-	}
-	puller := newHuggingFaceModelAssetPuller(cacheDir)
-	if fs != nil {
-		fs.modelAssets = puller
-	}
-	return puller
-}
-
-func newHuggingFaceModelAssetPuller(cacheDir string) *huggingFaceModelAssetPuller {
-	return &huggingFaceModelAssetPuller{
+func NewPuller(cacheDir string, goos string, goarch string) *Puller {
+	return &Puller{
 		cacheDir:   strings.TrimSpace(cacheDir),
 		baseURL:    defaultModelAssetBaseURL,
 		apiBaseURL: defaultModelAssetAPIBaseURL,
 		client:     &http.Client{Timeout: modelAssetRequestTimeout},
-		goos:       runtime.GOOS,
-		goarch:     runtime.GOARCH,
+		goos:       strings.TrimSpace(goos),
+		goarch:     strings.TrimSpace(goarch),
 	}
 }
 
-func (p *huggingFaceModelAssetPuller) PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error) {
+func (p *Puller) SetEndpointsForTest(baseURL string, apiBaseURL string, client *http.Client) {
+	p.baseURL = strings.TrimSpace(baseURL)
+	p.apiBaseURL = strings.TrimSpace(apiBaseURL)
+	p.client = client
+}
+
+func (p *Puller) PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error) {
 	spec, err := p.resolveSpec(runtimeCfg, modelName)
 	if err != nil {
 		return apisurface.ModelPullResult{}, err
@@ -160,15 +130,15 @@ func (p *huggingFaceModelAssetPuller) PullModel(ctx context.Context, runtimeCfg 
 		return apisurface.ModelPullResult{}, fmt.Errorf("prepare model cache %q: %w", cachePath, err)
 	}
 
-	outcome := modelPullOutcomeAlreadyPresent
+	outcome := PullOutcomeAlreadyPresent
 	downloaded := make([]apisurface.ModelPullDownloadedFile, 0, len(manifest.Files))
 	for _, file := range manifest.Files {
 		current, fileOutcome, err := p.ensureCachedFile(ctx, cachePath, file)
 		if err != nil {
 			return apisurface.ModelPullResult{}, err
 		}
-		if fileOutcome == modelPullOutcomePulled {
-			outcome = modelPullOutcomePulled
+		if fileOutcome == PullOutcomePulled {
+			outcome = PullOutcomePulled
 		}
 		downloaded = append(downloaded, current)
 	}
@@ -189,33 +159,33 @@ func (p *huggingFaceModelAssetPuller) PullModel(ctx context.Context, runtimeCfg 
 	}, nil
 }
 
-func (p *huggingFaceModelAssetPuller) EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error {
+func (p *Puller) EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error {
 	_, err := p.resolveModelCacheLayout(ctx, runtimeCfg, worker)
 	return err
 }
 
-func (p *huggingFaceModelAssetPuller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (localModelCacheLayout, error) {
+func (p *Puller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error) {
 	return p.resolveModelCacheLayout(ctx, runtimeCfg, worker)
 }
 
-func (p *huggingFaceModelAssetPuller) resolveModelCacheLayout(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (localModelCacheLayout, error) {
+func (p *Puller) resolveModelCacheLayout(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error) {
 	if worker == nil || strings.TrimSpace(worker.ModelLocality) != interfaces.ModelLocalityLocal {
-		return localModelCacheLayout{}, nil
+		return CacheLayout{}, nil
 	}
 	spec, err := p.resolveSpec(runtimeCfg, worker.Model)
 	if err != nil {
 		if errors.Is(err, apisurface.ErrModelPullUnsupported) {
-			return localModelCacheLayout{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotAvailable, strings.TrimSpace(worker.Model))
+			return CacheLayout{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotAvailable, strings.TrimSpace(worker.Model))
 		}
-		return localModelCacheLayout{}, err
+		return CacheLayout{}, err
 	}
 	manifest, err := p.resolveManifest(ctx, spec)
 	if err != nil {
-		return localModelCacheLayout{}, fmt.Errorf("%w: %v", apisurface.ErrModelNotAvailable, err)
+		return CacheLayout{}, fmt.Errorf("%w: %v", apisurface.ErrModelNotAvailable, err)
 	}
 	cachePath, err := p.cachePath(spec, manifest.Revision)
 	if err != nil {
-		return localModelCacheLayout{}, err
+		return CacheLayout{}, err
 	}
 	files := make([]string, 0, len(manifest.Files))
 	missing := make([]string, 0)
@@ -228,15 +198,15 @@ func (p *huggingFaceModelAssetPuller) resolveModelCacheLayout(ctx context.Contex
 		case errors.Is(statErr, os.ErrNotExist):
 			missing = append(missing, file.Path)
 		case statErr != nil:
-			return localModelCacheLayout{}, fmt.Errorf("inspect local model cache %q: %w", target, statErr)
+			return CacheLayout{}, fmt.Errorf("inspect local model cache %q: %w", target, statErr)
 		default:
 			missing = append(missing, file.Path)
 		}
 	}
 	if len(missing) > 0 {
-		return localModelCacheLayout{}, fmt.Errorf("%w: required assets missing in managed cache %q (%s)", apisurface.ErrModelNotAvailable, cachePath, strings.Join(missing, ", "))
+		return CacheLayout{}, fmt.Errorf("%w: required assets missing in managed cache %q (%s)", apisurface.ErrModelNotAvailable, cachePath, strings.Join(missing, ", "))
 	}
-	return localModelCacheLayout{
+	return CacheLayout{
 		ModelName: spec.ModelName,
 		CachePath: cachePath,
 		Revision:  manifest.Revision,
@@ -244,7 +214,7 @@ func (p *huggingFaceModelAssetPuller) resolveModelCacheLayout(ctx context.Contex
 	}, nil
 }
 
-func (p *huggingFaceModelAssetPuller) resolveManifest(ctx context.Context, spec modelAssetSpec) (modelAssetManifest, error) {
+func (p *Puller) resolveManifest(ctx context.Context, spec modelAssetSpec) (modelAssetManifest, error) {
 	if manifest, ok, err := p.readLocalMetadata(spec); err != nil {
 		return modelAssetManifest{}, err
 	} else if ok {
@@ -258,7 +228,7 @@ func (p *huggingFaceModelAssetPuller) resolveManifest(ctx context.Context, spec 
 	return p.fetchManifest(ctx, spec)
 }
 
-func (p *huggingFaceModelAssetPuller) resolveSpec(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (modelAssetSpec, error) {
+func (p *Puller) resolveSpec(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (modelAssetSpec, error) {
 	key := canonicalModelName(modelName)
 	spec, ok := builtInModelAssetSpecs()[key]
 	if !ok {
@@ -303,7 +273,11 @@ func builtInModelAssetSpecs() map[string]modelAssetSpec {
 	}
 }
 
-func (p *huggingFaceModelAssetPuller) fetchManifest(ctx context.Context, spec modelAssetSpec) (modelAssetManifest, error) {
+func canonicalModelName(model string) string {
+	return strings.ToUpper(strings.TrimSpace(model))
+}
+
+func (p *Puller) fetchManifest(ctx context.Context, spec modelAssetSpec) (modelAssetManifest, error) {
 	apiURL := strings.TrimRight(p.apiBaseURL, "/") + "/models/" + spec.Repository
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -359,7 +333,7 @@ func (p *huggingFaceModelAssetPuller) fetchManifest(ctx context.Context, spec mo
 	return modelAssetManifest{Revision: revision, Files: files}, nil
 }
 
-func (p *huggingFaceModelAssetPuller) cachePath(spec modelAssetSpec, revision string) (string, error) {
+func (p *Puller) cachePath(spec modelAssetSpec, revision string) (string, error) {
 	root, err := p.modelCacheRoot(spec)
 	if err != nil {
 		return "", err
@@ -367,7 +341,7 @@ func (p *huggingFaceModelAssetPuller) cachePath(spec modelAssetSpec, revision st
 	return filepath.Join(root, revision), nil
 }
 
-func (p *huggingFaceModelAssetPuller) modelCacheRoot(spec modelAssetSpec) (string, error) {
+func (p *Puller) modelCacheRoot(spec modelAssetSpec) (string, error) {
 	root := strings.TrimSpace(p.cacheDir)
 	if root == "" {
 		homeDir, err := os.UserHomeDir()
@@ -379,7 +353,7 @@ func (p *huggingFaceModelAssetPuller) modelCacheRoot(spec modelAssetSpec) (strin
 	return filepath.Join(root, spec.ModelName), nil
 }
 
-func (p *huggingFaceModelAssetPuller) metadataPath(spec modelAssetSpec) (string, error) {
+func (p *Puller) metadataPath(spec modelAssetSpec) (string, error) {
 	root, err := p.modelCacheRoot(spec)
 	if err != nil {
 		return "", err
@@ -387,7 +361,7 @@ func (p *huggingFaceModelAssetPuller) metadataPath(spec modelAssetSpec) (string,
 	return filepath.Join(root, modelAssetMetadataFileName), nil
 }
 
-func (p *huggingFaceModelAssetPuller) writeLocalMetadata(spec modelAssetSpec, manifest modelAssetManifest) error {
+func (p *Puller) writeLocalMetadata(spec modelAssetSpec, manifest modelAssetManifest) error {
 	metadataPath, err := p.metadataPath(spec)
 	if err != nil {
 		return err
@@ -422,7 +396,7 @@ func (p *huggingFaceModelAssetPuller) writeLocalMetadata(spec modelAssetSpec, ma
 	return nil
 }
 
-func (p *huggingFaceModelAssetPuller) readLocalMetadata(spec modelAssetSpec) (modelAssetManifest, bool, error) {
+func (p *Puller) readLocalMetadata(spec modelAssetSpec) (modelAssetManifest, bool, error) {
 	metadataPath, err := p.metadataPath(spec)
 	if err != nil {
 		return modelAssetManifest{}, false, err
@@ -458,7 +432,7 @@ func (p *huggingFaceModelAssetPuller) readLocalMetadata(spec modelAssetSpec) (mo
 	return manifest, true, nil
 }
 
-func (p *huggingFaceModelAssetPuller) discoverLocalManifest(spec modelAssetSpec) (modelAssetManifest, bool, error) {
+func (p *Puller) discoverLocalManifest(spec modelAssetSpec) (modelAssetManifest, bool, error) {
 	root, err := p.modelCacheRoot(spec)
 	if err != nil {
 		return modelAssetManifest{}, false, err
@@ -518,18 +492,18 @@ func manifestMatchesRequiredFiles(manifest modelAssetManifest, required []string
 	return true
 }
 
-func (p *huggingFaceModelAssetPuller) ensureCachedFile(ctx context.Context, cachePath string, remote modelAssetRemoteFile) (apisurface.ModelPullDownloadedFile, string, error) {
+func (p *Puller) ensureCachedFile(ctx context.Context, cachePath string, remote modelAssetRemoteFile) (apisurface.ModelPullDownloadedFile, string, error) {
 	targetPath := filepath.Join(cachePath, filepath.FromSlash(remote.Path))
 	if info, err := os.Stat(targetPath); err == nil && !info.IsDir() {
 		if remote.SHA256 == "" {
-			return apisurface.ModelPullDownloadedFile{Path: remote.Path, Bytes: info.Size()}, modelPullOutcomeAlreadyPresent, nil
+			return apisurface.ModelPullDownloadedFile{Path: remote.Path, Bytes: info.Size()}, PullOutcomeAlreadyPresent, nil
 		}
 		existingSHA, shaErr := fileSHA256(targetPath)
 		if shaErr != nil {
 			return apisurface.ModelPullDownloadedFile{}, "", fmt.Errorf("checksum cached model file %q: %w", targetPath, shaErr)
 		}
 		if existingSHA == remote.SHA256 {
-			return apisurface.ModelPullDownloadedFile{Path: remote.Path, Bytes: info.Size(), SHA256: existingSHA}, modelPullOutcomeAlreadyPresent, nil
+			return apisurface.ModelPullDownloadedFile{Path: remote.Path, Bytes: info.Size(), SHA256: existingSHA}, PullOutcomeAlreadyPresent, nil
 		}
 		if removeErr := os.Remove(targetPath); removeErr != nil {
 			return apisurface.ModelPullDownloadedFile{}, "", fmt.Errorf("remove stale cached model file %q: %w", targetPath, removeErr)
@@ -548,10 +522,10 @@ func (p *huggingFaceModelAssetPuller) ensureCachedFile(ctx context.Context, cach
 	if err != nil {
 		return apisurface.ModelPullDownloadedFile{}, "", fmt.Errorf("stat downloaded model file %q: %w", targetPath, err)
 	}
-	return apisurface.ModelPullDownloadedFile{Path: remote.Path, Bytes: info.Size(), SHA256: remote.SHA256}, modelPullOutcomePulled, nil
+	return apisurface.ModelPullDownloadedFile{Path: remote.Path, Bytes: info.Size(), SHA256: remote.SHA256}, PullOutcomePulled, nil
 }
 
-func (p *huggingFaceModelAssetPuller) downloadFile(ctx context.Context, remote modelAssetRemoteFile, targetPath string) error {
+func (p *Puller) downloadFile(ctx context.Context, remote modelAssetRemoteFile, targetPath string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, remote.URL, nil)
 	if err != nil {
 		return fmt.Errorf("build model download request for %q: %w", remote.Path, err)
@@ -595,7 +569,7 @@ func (p *huggingFaceModelAssetPuller) downloadFile(ctx context.Context, remote m
 	return nil
 }
 
-func (p *huggingFaceModelAssetPuller) doWithRetry(req *http.Request, shouldRetryResponse func(*http.Response) bool) (*http.Response, error) {
+func (p *Puller) doWithRetry(req *http.Request, shouldRetryResponse func(*http.Response) bool) (*http.Response, error) {
 	if p == nil || p.client == nil {
 		return nil, fmt.Errorf("model asset HTTP client is not configured")
 	}

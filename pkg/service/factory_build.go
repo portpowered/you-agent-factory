@@ -269,7 +269,7 @@ func buildRuntimeBundle(
 
 func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) (*localModelResourceLimiter, modelAssetPuller, *managedLocalModelManager) {
 	modelResources := newLocalModelResourceLimiter()
-	modelAssets := newHuggingFaceModelAssetPuller(strings.TrimSpace(cfg.ModelCacheDir))
+	modelAssets := newModelAssetPuller(strings.TrimSpace(cfg.ModelCacheDir))
 	localModelRuntime := cfg.LocalModelRuntimeOverride
 	if localModelRuntime == nil {
 		localModelRuntime = newOmniVoiceLocalRuntime(nil)
