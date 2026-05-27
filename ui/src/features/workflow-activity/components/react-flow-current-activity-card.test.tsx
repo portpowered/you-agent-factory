@@ -1518,25 +1518,25 @@ function registerCurrentActivityCardTestLifecycle(): void {
       }),
     ).not.toHaveLength(0);
     expect(
-      screen.queryByRole("button", {
+      screen.queryAllByRole("button", {
         name: "Assign this worker to a workstation.",
       }),
-    ).toBeNull();
+    ).toHaveLength(0);
     expect(
-      screen.queryByRole("button", {
+      screen.getAllByRole("button", {
         name: "Accept a worker assignment for this workstation.",
       }),
-    ).toBeNull();
+    ).not.toHaveLength(0);
     expect(
-      screen.queryByRole("button", {
+      screen.getAllByRole("button", {
         name: "Accept a resource requirement for this workstation.",
       }),
-    ).toBeNull();
+    ).not.toHaveLength(0);
     expect(
-      screen.queryByRole("button", {
+      screen.getAllByRole("button", {
         name: "Provide this resource to a workstation.",
       }),
-    ).toBeNull();
+    ).not.toHaveLength(0);
   });
 
   it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {

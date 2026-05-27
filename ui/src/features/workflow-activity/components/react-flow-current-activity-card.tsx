@@ -30,7 +30,8 @@ import {
   useActiveExecutions,
 } from "../hooks/react-flow-current-activity-card-active-executions";
 import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
-import { useCurrentActivityGraphLayout } from "../hooks/react-flow-current-activity-card-graph-layout";
+import { useCurrentActivityGraphLayoutForFactory } from "../hooks/react-flow-current-activity-card-graph-layout";
+import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
 import {
   buildGraphEdges,
   initialFocusNodes,
@@ -42,7 +43,6 @@ import {
   buildHandleAssignments,
   EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
-import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
@@ -54,6 +54,7 @@ export {
   currentActivityGraphKey,
   currentActivityTopologyKey,
 } from "../lib/react-flow-current-activity-card-keys";
+
 const CURRENT_ACTIVITY_CARD_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
   "relative flex h-full min-h-0 min-w-0 flex-col",
@@ -219,7 +220,7 @@ export function useCurrentActivityGraphViewModel({
     () => groupActiveExecutionsByWorkstationNodeID(activeExecutions),
     [activeExecutions],
   );
-  const graphLayout = useCurrentActivityGraphLayout(snapshot);
+  const graphLayout = useEditorCurrentActivityGraphLayout(snapshot, editor);
   const graphKey = useMemo(
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],
@@ -326,6 +327,36 @@ export function useCurrentActivityGraphViewModel({
   };
 }
 
+function useEditorCurrentActivityGraphLayout(
+  snapshot: DashboardSnapshot,
+  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
+) {
+  return useCurrentActivityGraphLayoutForFactory(
+    snapshot,
+    editor.editorMode && hasPendingGraphEntityShapeChanges(editor)
+      ? (editor.draftState.pendingFactoryDefinition ?? undefined)
+      : undefined,
+  );
+}
+
+function hasPendingGraphEntityShapeChanges(
+  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
+) {
+  const { additions, removals } = editor.draftState.draft;
+  return (
+    additions.resources.length > 0 ||
+    additions.workers.length > 0 ||
+    additions.workStates.length > 0 ||
+    additions.workTypes.length > 0 ||
+    additions.workstations.length > 0 ||
+    removals.resources.length > 0 ||
+    removals.workers.length > 0 ||
+    removals.workStates.length > 0 ||
+    removals.workTypes.length > 0 ||
+    removals.workstations.length > 0
+  );
+}
+
 export function ReactFlowCurrentActivityCard(
   props: ReactFlowCurrentActivityCardProps,
 ) {
@@ -386,7 +417,10 @@ export function ReactFlowCurrentActivityCardView(
         </div>
       ) : null}
       {showHeaderActions ? (
-        <CurrentActivityCardHeading headingID={headingID} locale={props.locale} />
+        <CurrentActivityCardHeading
+          headingID={headingID}
+          locale={props.locale}
+        />
       ) : (
         <CurrentActivityCardHeading
           headingID={headingID}

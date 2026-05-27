@@ -13,12 +13,20 @@ import {
 const GRAPH_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<GraphLayout>();
 
 export function useCurrentActivityGraphLayout(snapshot: DashboardSnapshot) {
+  return useCurrentActivityGraphLayoutForFactory(snapshot);
+}
+
+export function useCurrentActivityGraphLayoutForFactory(
+  snapshot: DashboardSnapshot,
+  factoryOverride?: DashboardSnapshot["factory"],
+) {
+  const factory = factoryOverride ?? snapshot.factory;
   const layoutSource = useMemo(
     () =>
-      snapshot.factory
+      factory
         ? {
-            factory: snapshot.factory,
-            key: currentActivityFactoryKey(snapshot.factory),
+            factory,
+            key: currentActivityFactoryKey(factory),
             kind: "factory" as const,
           }
         : {
@@ -26,7 +34,7 @@ export function useCurrentActivityGraphLayout(snapshot: DashboardSnapshot) {
             kind: "topology" as const,
             topology: snapshot.topology,
           },
-    [snapshot.factory, snapshot.topology],
+    [factory, snapshot.topology],
   );
 
   return useWorkflowTopologyAsyncCache({
