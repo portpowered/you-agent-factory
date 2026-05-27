@@ -89,6 +89,9 @@ Canonical model and projection rules:
 - UI-specific shapes for third-party libraries, visualizations, tables, canvases, graphs, and drag surfaces **SHOULD** be treated as projections from feature state, not as the source of truth for domain behavior.
 - A projection **MUST** be disposable and reproducible from canonical state plus explicit UI state. If a projection cannot be rebuilt without losing editable domain data, the architecture needs a clearer source-of-truth boundary.
 - A feature **MUST NOT** reconstruct editable state from a lossy presentation or read-model projection unless the lossiness is documented, covered by tests, and blocked from save/edit paths until complete data is available.
+- Graph projections that use third-party libraries such as React Flow **MUST** derive node handles and edge endpoints from the same canonical semantic model. Handle ids are part of the graph projection contract: every rendered edge endpoint **MUST** reference a handle id rendered by the corresponding node in that same graph mode.
+- Graph surfaces **MUST NOT** introduce mode-specific compatibility paths that use different handle vocabularies for the same canonical relationship, such as semantic node handles in one mode and generic `in` / `out` edge endpoints in another, unless the difference is explicitly documented, bounded to a migration or adapter path, and covered by direct behavior tests.
+- Third-party graph library error paths that can otherwise produce blank or partially rendered output **MUST** have focused behavioral coverage at the projection or component boundary. Tests **SHOULD** prove either the expected visible graph output or the fatal error path for invalid node, handle, or edge endpoint projections, rather than only asserting helper names or registration details.
 
 Complex interactive surfaces:
 
