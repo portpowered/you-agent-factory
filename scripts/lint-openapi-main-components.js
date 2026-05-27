@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 const fs = require('node:fs');
-const YAML = require('yaml');
+const path = require('node:path');
+const YAML = requireYaml();
 
 const REUSABLE_COMPONENT_SECTIONS = [
   'schemas',
@@ -12,6 +13,25 @@ const REUSABLE_COMPONENT_SECTIONS = [
   'requestBodies',
   'securitySchemes',
 ];
+
+function requireYaml() {
+  try {
+    return require('yaml');
+  } catch (error) {
+    if (error && error.code !== 'MODULE_NOT_FOUND') {
+      throw error;
+    }
+  }
+
+  try {
+    return require(path.join(__dirname, '..', 'ui', 'node_modules', 'yaml'));
+  } catch (error) {
+    if (error && error.code !== 'MODULE_NOT_FOUND') {
+      throw error;
+    }
+    throw new Error('Cannot find the yaml package. Run `make ui-deps` before API validation.');
+  }
+}
 
 function refValue(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
