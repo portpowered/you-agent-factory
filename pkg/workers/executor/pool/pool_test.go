@@ -1,4 +1,4 @@
-package executor
+package pool_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 // mockExecutor implements WorkerExecutor for testing.
@@ -19,7 +20,7 @@ func (m *mockExecutor) Execute(ctx context.Context, dispatch interfaces.WorkDisp
 }
 
 func TestWorkerPool_DispatchAndResult(t *testing.T) {
-	pool := NewWorkerPool(nil)
+	pool := executor.NewWorkerPool(nil)
 
 	executor := &mockExecutor{
 		fn: func(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
@@ -56,7 +57,7 @@ func TestWorkerPool_DispatchAndResult(t *testing.T) {
 }
 
 func TestWorkerPool_DispatchPreservesExecutionMetadataForExecutor(t *testing.T) {
-	pool := NewWorkerPool(nil)
+	pool := executor.NewWorkerPool(nil)
 	seen := make(chan interfaces.ExecutionMetadata, 1)
 
 	executor := &mockExecutor{
@@ -104,7 +105,7 @@ func TestWorkerPool_DispatchPreservesExecutionMetadataForExecutor(t *testing.T) 
 }
 
 func TestWorkerPool_DispatchUnknownType(t *testing.T) {
-	pool := NewWorkerPool(nil)
+	pool := executor.NewWorkerPool(nil)
 
 	ok := pool.Dispatch("nonexistent", interfaces.WorkDispatch{TransitionID: "tr-1"})
 	if ok {
@@ -113,7 +114,7 @@ func TestWorkerPool_DispatchUnknownType(t *testing.T) {
 }
 
 func TestWorkerRunner_ExecutorError(t *testing.T) {
-	pool := NewWorkerPool(nil)
+	pool := executor.NewWorkerPool(nil)
 
 	executor := &mockExecutor{
 		fn: func(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
@@ -143,7 +144,7 @@ func TestWorkerRunner_ExecutorError(t *testing.T) {
 }
 
 func TestWorkerRunner_ExecutorPanic(t *testing.T) {
-	pool := NewWorkerPool(nil)
+	pool := executor.NewWorkerPool(nil)
 
 	executor := &mockExecutor{
 		fn: func(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
@@ -176,8 +177,26 @@ func TestWorkerRunner_ExecutorPanic(t *testing.T) {
 	}
 }
 
+func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMetadata) {
+	t.Helper()
+	if want.RequestID != got.RequestID {
+		t.Fatalf("RequestID = %q, want %q", got.RequestID, want.RequestID)
+	}
+	if want.TraceID != got.TraceID {
+		t.Fatalf("TraceID = %q, want %q", got.TraceID, want.TraceID)
+	}
+	if len(want.WorkIDs) != len(got.WorkIDs) {
+		t.Fatalf("WorkIDs length = %d, want %d", len(got.WorkIDs), len(want.WorkIDs))
+	}
+	for i := range want.WorkIDs {
+		if want.WorkIDs[i] != got.WorkIDs[i] {
+			t.Fatalf("WorkIDs[%d] = %q, want %q", i, got.WorkIDs[i], want.WorkIDs[i])
+		}
+	}
+}
+
 func TestWorkerPool_MultipleWorkerTypes(t *testing.T) {
-	pool := NewWorkerPool(nil)
+	pool := executor.NewWorkerPool(nil)
 
 	makeExecutor := func(suffix string) *mockExecutor {
 		return &mockExecutor{

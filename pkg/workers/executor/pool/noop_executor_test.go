@@ -1,14 +1,15 @@
-package executor
+package pool_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 func TestNoopExecutor_ReturnsAccepted(t *testing.T) {
-	result, err := (&NoopExecutor{}).Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := (&executor.NoopExecutor{}).Execute(context.Background(), interfaces.WorkDispatch{
 		DispatchID:   "d-1",
 		TransitionID: "t1",
 	})
