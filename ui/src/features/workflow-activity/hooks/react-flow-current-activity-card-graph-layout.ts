@@ -58,6 +58,9 @@ function identityGraphLayout(layout: GraphLayout) {
 function currentActivityFactoryKey(
   factory: NonNullable<DashboardSnapshot["factory"]>,
 ): string {
+  const legacyFactory = factory as typeof factory & {
+    work_types?: typeof factory.workTypes;
+  };
   return JSON.stringify({
     resources: (factory.resources ?? [])
       .map((resource) => resource.name)
@@ -70,7 +73,7 @@ function currentActivityFactoryKey(
           .sort(),
       }))
       .sort((left, right) => left.name.localeCompare(right.name)),
-    workTypes: (factory.workTypes ?? [])
+    workTypes: (factory.workTypes ?? legacyFactory.work_types ?? [])
       .map((workType) => ({
         name: workType.name,
         states: workType.states.map((state) => ({
@@ -84,9 +87,21 @@ function currentActivityFactoryKey(
         id: workstation.id ?? "",
         inputs: workstation.inputs ?? [],
         name: workstation.name,
-        onContinue: workstation.onContinue ?? [],
-        onFailure: workstation.onFailure ?? [],
-        onRejection: workstation.onRejection ?? [],
+        onContinue:
+          workstation.onContinue ??
+          (workstation as typeof workstation & { on_continue?: unknown })
+            .on_continue ??
+          [],
+        onFailure:
+          workstation.onFailure ??
+          (workstation as typeof workstation & { on_failure?: unknown })
+            .on_failure ??
+          [],
+        onRejection:
+          workstation.onRejection ??
+          (workstation as typeof workstation & { on_rejection?: unknown })
+            .on_rejection ??
+          [],
         outputs: workstation.outputs ?? [],
         resources: workstation.resources ?? [],
         type: workstation.type ?? "",
