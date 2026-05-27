@@ -16,6 +16,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -43,7 +44,7 @@ func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
 	puller.apiBaseURL = server.URL + "/api"
 	puller.client = server.Client()
 
-	runtimeCfg := mustLoadedFactoryConfigForModelCatalogTest(t, &interfaces.FactoryConfig{
+	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
 		Resources: []interfaces.ResourceConfig{{
 			Name:       "omnivoice-cache",
 			Type:       interfaces.ResourceTypeModel,
@@ -77,6 +78,15 @@ func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
 	}
 }
 
+func mustLoadedFactoryConfigForModelPullTest(t *testing.T, cfg *interfaces.FactoryConfig) *factoryconfig.LoadedFactoryConfig {
+	t.Helper()
+	loaded, err := factoryconfig.NewLoadedFactoryConfig("factory-dir", cfg, nil)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+	return loaded
+}
+
 func TestPullModel_ResolveModelCacheUsesPersistedMetadataOffline(t *testing.T) {
 	baseBytes := []byte("base-gguf")
 	tokenizerBytes := []byte("tokenizer-gguf")
@@ -103,7 +113,7 @@ func TestPullModel_ResolveModelCacheUsesPersistedMetadataOffline(t *testing.T) {
 	puller.apiBaseURL = server.URL + "/api"
 	puller.client = server.Client()
 
-	runtimeCfg := mustLoadedFactoryConfigForModelCatalogTest(t, &interfaces.FactoryConfig{
+	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
 		Resources: []interfaces.ResourceConfig{{
 			Name:       "omnivoice-cache",
 			Type:       interfaces.ResourceTypeModel,
@@ -167,7 +177,7 @@ func TestPullModel_RetriesManifestLookupAfterDNSError(t *testing.T) {
 		},
 	}
 
-	runtimeCfg := mustLoadedFactoryConfigForModelCatalogTest(t, &interfaces.FactoryConfig{
+	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
 		Resources: []interfaces.ResourceConfig{{
 			Name:       "omnivoice-cache",
 			Type:       interfaces.ResourceTypeModel,
@@ -189,7 +199,7 @@ func TestPullModel_RetriesManifestLookupAfterDNSError(t *testing.T) {
 
 func TestPullModel_ReturnsUnsupportedWhenRuntimeHasNoMatchingModelResource(t *testing.T) {
 	puller := newHuggingFaceModelAssetPuller(t.TempDir())
-	runtimeCfg := mustLoadedFactoryConfigForModelCatalogTest(t, &interfaces.FactoryConfig{})
+	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{})
 	_, err := puller.PullModel(context.Background(), runtimeCfg, "OMNIVOICE_Q4_K_M")
 	if err == nil || !strings.Contains(err.Error(), apisurface.ErrModelPullUnsupported.Error()) {
 		t.Fatalf("PullModel error = %v, want unsupported", err)
