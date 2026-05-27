@@ -53,3 +53,4 @@ please read the appropriate standards when performing the appropriate operation
 1. docs/internal/standards/code/code-review-standards.md for when reviewing changes
 2. docs/internal/standards/code/general-backend-standards.md for when modifying the backend
 3. docs/internal/standards/code/general-website-standards.md for when modifying the frontend
+4. docs/internal/standards/code/planning-standards.md for writing plans. 

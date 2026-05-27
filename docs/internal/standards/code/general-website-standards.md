@@ -2,13 +2,13 @@
 
 ---
 author: andreas abdi
-last modified: 2026, may, 1
+last modified: 2026, may, 27
 doc-id: STD-016
 ---
 
 This document defines the baseline standards for websites built in this repository. It is intended to be broad enough for most product surfaces while still being concrete enough to review against.
 
-For this repository, these standards apply directly to the React and Vite UI under `ui/`, which currently uses Tailwind CSS v4, React Query, Zustand, Storybook, Vitest, and Playwright-compatible tooling.
+For this repository, these standards apply directly to the React and Vite UI under `ui/`, which currently uses Bun, TypeScript, Tailwind CSS v4, React Query, Zustand, Storybook, Vitest, Biome, generated OpenAPI types, and Playwright-compatible tooling.
 
 ## Usage
 
@@ -18,6 +18,9 @@ Every contributor who changes website UI, frontend state, styling, interaction f
 
 - Build pages from reusable UI and feature components instead of bespoke page-only markup.
 - Route all network access through typed API modules and stateful hooks; do not scatter direct `fetch` calls throughout components.
+- Preserve canonical API or domain models as the editable source of truth when they exist; use view models and projections for UI-specific shapes.
+- Keep third-party UI library state, such as graph nodes or table rows, as a projection instead of the durable source of domain behavior.
+- Prefer concise icon-led actions and established shared controls over text-heavy toolbars, instructional clutter, or bespoke button variants.
 - Represent loading, empty, error, and success states explicitly for every network-backed surface.
 - Use shared design tokens and Tailwind utility patterns; avoid one-off colors, spacing, and typography values when a shared token can express the same intent.
 - Ship accessible semantics, keyboard support, visible focus, and sufficient color contrast by default.
@@ -32,9 +35,11 @@ Every contributor who changes website UI, frontend state, styling, interaction f
 Before approval, reviewers **SHOULD** confirm:
 
 - The page or component uses the shared architecture layers correctly.
+- Complex interactive surfaces have a clear canonical model, operation layer, projection adapter, and component wiring layer.
 - Data loading, mutations, retries, and caching are handled by approved stateful abstractions.
 - Empty, loading, error, and success states are present and intentional.
 - Styling uses shared tokens, utilities, and existing patterns instead of custom ad hoc values.
+- Actions use the shared button/action vocabulary unless a new reusable primitive is justified.
 - The UI remains usable on small, medium, and large viewports.
 - Accessibility semantics and keyboard interaction are present for all interactive elements.
 - Localizable copy is externalized correctly and resource boundaries remain maintainable.
@@ -50,19 +55,48 @@ Website code **MUST** be organized around reusable layers with clear dependency 
 
 Preferred structure:
 
-- `ui/src/components/` for shared presentational or primitive building blocks
-- `ui/src/features/` for feature-specific UI, hooks, view models, and orchestration
-- `ui/src/hooks/` for cross-feature hooks when they do not belong to one feature
-- `ui/src/state/` for app-level client state
-- `ui/src/api/` for transport, API bindings, and request/response typing
+- `ui/src/api/` for transport, handwritten API wrappers, request/response normalization, generated OpenAPI types, and API-focused tests
+- `ui/src/components/` for shared presentational, dashboard, and primitive UI building blocks
+- `ui/src/features/` for feature-specific UI, hooks, view models, state, messages, selectors, and orchestration
+- `ui/src/features/<feature>/public/` for the feature's intentional import boundary
+- `ui/src/features/<feature>/components/` for feature-owned React components
+- `ui/src/features/<feature>/hooks/` for feature-owned stateful React hooks
+- `ui/src/features/<feature>/lib/` for feature-owned pure logic, projections, operations, parsers, and helpers
+- `ui/src/features/<feature>/messages/` for feature-owned locale/message catalogs
+- `ui/src/features/<feature>/state/` for feature-owned Zustand stores, reducers, selectors, and state models
+- `ui/src/i18n/` for locale infrastructure, shared formatters, and fallback behavior
+- `ui/src/lib/` for cross-feature pure utilities and framework glue
+- `ui/src/testing/` for reusable test helpers, fixtures, and render harnesses
+- `ui/src/types/` for shared TypeScript types that do not belong to a generated API contract or one feature
+- `ui/.storybook/` for Storybook configuration
+- `ui/integration/` for integration-oriented frontend tests and fixtures
+- `ui/scripts/` for repository-owned frontend checks, generation, and build tooling
 
 Rules:
 
 - Page- or screen-level composition **SHOULD** be thin and delegate behavior to feature modules.
 - Shared UI primitives **MUST NOT** depend on feature-specific modules.
-- Feature modules **MAY** depend on shared components, hooks, state, and API modules.
+- Feature modules **MAY** depend on shared components, shared utilities, testing helpers in tests, and API modules.
+- Feature root directories under `ui/src/features/<feature>/` **MUST** contain subdirectories only. New feature files belong under an approved subdirectory such as `public/`, `components/`, `hooks/`, `messages/`, `state/`, `selectors/`, `lib/`, or a more specific domain folder.
+- Cross-feature imports **SHOULD** go through another feature's `public/` boundary unless a narrower local exception is already established and documented by existing code.
+- Feature-local state and hooks **SHOULD** remain inside the owning feature. Create cross-feature `ui/src/lib/` or shared component utilities only when there is a real cross-feature owner and reuse case.
 - Network transport, parsing, and server contract details **MUST NOT** live inline inside rendering components.
 - Generated API clients **MUST** remain generated artifacts; handwritten wrappers belong alongside them rather than inside them.
+
+Canonical model and projection rules:
+
+- When a feature has a canonical API or domain model, editable feature state **SHOULD** preserve and operate on that model rather than inventing a second durable internal schema.
+- UI-specific shapes for third-party libraries, visualizations, tables, canvases, graphs, and drag surfaces **SHOULD** be treated as projections from feature state, not as the source of truth for domain behavior.
+- A projection **MUST** be disposable and reproducible from canonical state plus explicit UI state. If a projection cannot be rebuilt without losing editable domain data, the architecture needs a clearer source-of-truth boundary.
+- A feature **MUST NOT** reconstruct editable state from a lossy presentation or read-model projection unless the lossiness is documented, covered by tests, and blocked from save/edit paths until complete data is available.
+
+Complex interactive surfaces:
+
+- Editors, builders, graph tools, workflow canvases, multi-step forms with domain rules, and similar complex surfaces **SHOULD** expose pure feature operations or a small service layer for behaviors such as add, remove, connect, disconnect, reorder, validate, and save.
+- Components and hooks **MAY** orchestrate those operations, but they **SHOULD NOT** encode domain mutations inline when the rules are shared, stateful, or independently testable.
+- Reviewers **SHOULD** be able to point to the canonical model, the operation or service layer, the projection adapter, and the component wiring layer. When those layers are blended into one large component or hook, the change should be treated as an architecture risk.
+- If callbacks and state slices are passed through multiple component levels for one feature workflow, authors **SHOULD** introduce a feature view model, controller hook, context, or compact action interface rather than extending prop drilling.
+- Compatibility adapters introduced during migration **SHOULD** have an explicit replacement goal or removal condition. New canonical paths **SHOULD NOT** become permanent parallel implementations beside old presentation-specific paths.
 
 ### 2. Network and State Management
 
@@ -95,6 +129,21 @@ Rules:
 - Large components **SHOULD** be split when they mix layout, data access, formatting, and interaction logic in one file.
 - Feature components **SHOULD** receive prepared data from hooks or view-model helpers rather than performing dense transformation logic inline.
 - Interactive components **MUST** expose disabled, loading, and error-friendly behavior where applicable.
+- Components for complex interactive surfaces **SHOULD** receive compact action/view-model props rather than many low-level callbacks that expose internal state machinery.
+
+Action and copy density:
+
+- Toolbars, graph controls, dashboard card headers, dense panels, and repeated item actions **SHOULD** prefer icon-only or icon-plus-short-label controls with accessible names and tooltips when the action is not self-evident.
+- Inline explanatory copy **SHOULD** be reserved for empty states, error recovery, destructive confirmations, onboarding moments, and genuinely ambiguous decisions. Do not add visible instructions for controls that can be made clear through standard placement, icons, labels, disabled states, or tooltips.
+- Button labels **SHOULD** be short commands such as `Save`, `Discard`, `Connect`, `Retry`, or `Export`. Long rationale, state explanation, and keyboard guidance belong in contextual help, status text, or dialogs only when needed.
+- A section or component **SHOULD NOT** repeat the same concept in a heading, paragraph, button label, tooltip, and status pill unless each copy surface adds distinct value.
+
+Shared controls:
+
+- Feature code **SHOULD** use existing shared controls from `ui/src/components/ui/` before creating a bespoke action component. Current shared controls include `Button`, `DashboardActionButton`, `DashboardIconButtonShell`, `DashboardActionRow`, `DashboardStatusPill`, `Dialog`, `Popover`, `Input`, `Select`, `Textarea`, table/data-table primitives, and dashboard shell/typography helpers.
+- New bespoke buttons, pills, toggles, segmented controls, dialogs, or toolbar shells **SHOULD NOT** be introduced inside a feature when an existing shared primitive can express the interaction with props or a small reusable extension.
+- If a new action/control pattern is needed in more than one place, authors **SHOULD** promote it to a shared component with tests and, where useful, a Storybook story instead of copying Tailwind class clusters across features.
+- New button tones or accent treatments **SHOULD NOT** be invented ad hoc. Use existing shared tones and reserve high-emphasis/default or accent styling for the primary action in a local region. Routine actions should generally use outline, secondary, or ghost treatments; destructive tone is only for destructive operations.
 
 Required UI state coverage for network-backed surfaces:
 
@@ -119,6 +168,7 @@ Rules:
 - Tailwind utility classes are the default styling mechanism for shared UI and feature layers.
 - Colors, spacing, typography, radius, elevation, and motion **SHOULD** come from shared tokens or named utility conventions.
 - Direct raw values **SHOULD NOT** be introduced when an existing semantic token can represent the intent.
+- Handwritten feature components **SHOULD NOT** create one-off accent button, pill, badge, toolbar, or panel treatments when shared UI primitives and semantic tokens already cover the interaction.
 - Ordinary layout spacing **MUST** use the approved Tailwind spacing scale instead of arbitrary bracket values when styling padding, margin, gap, inset, width or height spacing, border radius, scroll margin or padding, and layout rhythm.
 - Responsive layout changes **MUST** use the approved breakpoint variants instead of custom bracket variants for ordinary mobile, tablet, and desktop behavior.
 - Shared typography, card, button, field, and panel patterns **SHOULD** be centralized and reused.
@@ -284,8 +334,9 @@ The expected testing layers are:
 
 - unit tests for pure logic, formatting helpers, selectors, parsers, and reducers
 - component tests for rendered behavior of isolated components and hooks
-- functional tests for end-to-end product flows with mocked backend behavior
-- integration tests for real UI plus backend integration paths
+- app-level functional tests for product flows with mocked backend behavior
+- integration tests under `ui/integration/` for broader frontend behavior and fixtures
+- Storybook stories and Storybook test-runner coverage for reusable UI states when applicable
 - performance tests for load, memory, or sustained interaction risks
 
 Rules:
@@ -295,6 +346,16 @@ Rules:
 - Integration tests **SHOULD** focus on contract confidence and regression-prone seams.
 - Performance tests **SHOULD** exist for surfaces known to handle high event volume, large datasets, or long-lived sessions.
 - Storybook stories **SHOULD** represent meaningful states, not only the happy path.
+- Complex interactive surfaces **SHOULD** test domain operations and projection adapters directly, in addition to rendered component behavior.
+- Third-party UI library integrations **SHOULD** have a small number of focused component or functional tests proving that user interactions dispatch the intended feature operations and that projected state visibly changes.
+
+Expected evidence for complex interactive surfaces:
+
+- operation tests for pure feature behaviors such as add, remove, connect, disconnect, reorder, validate, and save preparation
+- projection tests that map canonical feature state plus UI state into third-party library state or rendered view models
+- hook or mutation tests for networked save behavior, cache invalidation, stale data handling, and recoverable failures
+- focused component tests for toolbar, dialog, and control wiring
+- functional or integration tests for the highest-risk user interactions that depend on browser or third-party library behavior
 
 Minimum expectations for non-trivial UI changes:
 
@@ -303,6 +364,16 @@ Minimum expectations for non-trivial UI changes:
 - User-visible flows have functional coverage or a documented reason they do not.
 - Critical responsive, accessibility, localization, and browser-compatibility behavior has direct verification where relevant.
 - Critical regressions are reproducible in CI.
+
+Repository test and check commands:
+
+- `cd ui && bun run check` runs Biome, semantic color checks, Tailwind spacing-token checks, and feature-root file checks.
+- `cd ui && bun run tsc` runs TypeScript project checking.
+- `cd ui && bun run test:unit` runs Vitest unit and component tests outside `ui/integration/`.
+- `cd ui && bun run test:integration` runs integration tests under `ui/integration/`.
+- `cd ui && bun run test` runs the standard frontend unit and integration suites.
+- `cd ui && bun run test-storybook` and `cd ui && bun run storybook:test-runner:ci` cover Storybook-driven UI behavior when a change touches reusable or story-covered components.
+- `cd ui && bun run generate-api` regenerates `ui/src/api/generated/openapi.ts` from `api/openapi.yaml`; generated output should not be hand-edited.
 
 ### 11. Observability and Diagnostics
 
@@ -319,7 +390,11 @@ Rules:
 
 Before merge, authors **SHOULD** confirm:
 
-- Architecture follows `api`, `state`, `hooks`, `components`, and `features` boundaries.
+- Architecture follows the current `api`, `components`, `features`, `i18n`, `lib`, `testing`, and `types` boundaries, with feature-local `hooks/` and `state/` where applicable.
+- Feature files live under approved feature subdirectories, and intentional cross-feature imports use `public/` boundaries.
+- Complex interactive surfaces keep canonical state, feature operations, projections, and component wiring separated.
+- UI actions use shared primitives such as `Button`, `DashboardActionButton`, `DashboardIconButtonShell`, and `DashboardActionRow` before adding feature-specific button or toolbar components.
+- Dense surfaces avoid unnecessary explanatory copy and use concise icon-led actions with accessible names/tooltips where appropriate.
 - Network access is centralized and typed.
 - Loading, empty, error, and success states are implemented.
 - Styling uses shared Tailwind patterns and semantic tokens.
@@ -328,15 +403,20 @@ Before merge, authors **SHOULD** confirm:
 - Localizable copy is externalized and packaged at sensible feature boundaries.
 - Critical browser support and graceful degradation were checked.
 - Appropriate tests pass at the right layers.
+- Operation and projection tests exist for complex editors, builders, graphs, canvases, and similar stateful UI surfaces.
+- `cd ui && bun run check` and relevant `bun run test:*` commands pass or have documented scope-specific exceptions.
 - Performance, resilience, and observability concerns were considered for the affected surface.
 
 ## Notes for This Repository
 
 These standards are intentionally general, but the current repository stack suggests the following defaults:
 
+- Use Bun scripts from `ui/package.json` for frontend development, checking, build, API generation, and tests.
 - Use React Query for server-backed state.
-- Use Zustand only for client-side application state that does not belong in React Query.
+- Use Zustand only for client-side application state that does not belong in React Query, and prefer feature-local `state/` folders for feature-owned stores.
 - Keep generated OpenAPI clients under `ui/src/api/generated/` and wrap them with handwritten API modules as needed.
-- Use Storybook and Vitest to cover component states, including loading and failure cases.
-- Use functional or integration coverage for dashboard flows, event streams, and other async behavior that is hard to trust through unit tests alone.
-- When i18n is introduced, keep locale infrastructure centralized and keep message catalogs owned by the features that render them.
+- Keep API access modules under `ui/src/api/<domain>/` and route all component data access through typed feature hooks or API wrappers.
+- Keep feature root directories file-free; add implementation files under feature subdirectories such as `components/`, `hooks/`, `lib/`, `messages/`, `public/`, and `state/`.
+- Use Storybook, Vitest, and Testing Library to cover component states, including loading and failure cases.
+- Use functional or integration coverage for dashboard flows, event streams, React Flow behavior, and other async or third-party-library behavior that is hard to trust through unit tests alone.
+- Keep locale infrastructure under `ui/src/i18n/` and keep message catalogs owned by the features that render them.
