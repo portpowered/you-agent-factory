@@ -27,16 +27,13 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
   const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] = useState(false);
   const [isConfirmingSave, setIsConfirmingSave] = useState(false);
-  const currentFactoryQuery = useCurrentFactoryDocument(editorMode);
+  const { currentFactoryQuery, editableGraph, saveEditableDefinition } =
+    useCurrentActivityEditableGraph({
+      editorMode,
+      projectedTopology,
+      snapshot,
+    });
   const editableDefinitionQuery = currentFactoryQuery;
-  const saveEditableDefinition = useSaveCurrentFactory();
-  const editableGraph = useEditableFactoryGraph({
-    activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
-    currentFactoryDocument: currentFactoryQuery.data,
-    projectedFactory: snapshot.factory,
-    projectedTopology,
-    saveFactoryDefinition: saveEditableDefinition.mutateAsync,
-  });
   const draftState = editableGraph.draftState;
   const {
     addMenuActions,
@@ -59,13 +56,14 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
   });
   const addEntityController = useFactoryGraphAddEntityController({
     currentFactoryDefinition,
-    draftState,
+    editableGraph,
     setActiveTool,
   });
   const controllers = useFactoryGraphEditorControllers({
     activeTool,
     canInteractWithEditor,
     draftState,
+    editableGraph,
     saveEditableDefinition,
   });
   const {
@@ -133,26 +131,56 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
   });
 }
 
+function useCurrentActivityEditableGraph({
+  editorMode,
+  projectedTopology,
+  snapshot,
+}: {
+  editorMode: boolean;
+  projectedTopology: DashboardSnapshot["topology"];
+  snapshot: DashboardSnapshot;
+}) {
+  const currentFactoryQuery = useCurrentFactoryDocument(editorMode);
+  const saveEditableDefinition = useSaveCurrentFactory();
+  const editableGraph = useEditableFactoryGraph({
+    activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
+    currentFactoryDocument: currentFactoryQuery.data,
+    projectedFactory: snapshot.factory,
+    projectedTopology,
+    saveFactoryDefinition: saveEditableDefinition.mutateAsync,
+  });
+
+  return {
+    currentFactoryQuery,
+    editableGraph,
+    saveEditableDefinition,
+  };
+}
+
 function useFactoryGraphEditorControllers({
   activeTool,
   canInteractWithEditor,
   draftState,
+  editableGraph,
   saveEditableDefinition,
 }: {
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
   draftState: EditableFactoryGraphViewModel["draftState"];
+  editableGraph: EditableFactoryGraphViewModel;
   saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
 }) {
   const connectionController = useFactoryGraphConnectionController({
     activeTool,
     canInteractWithEditor,
     draftState,
+    editableGraph,
   });
   const removalController = useFactoryGraphRemovalController({
     activeTool,
     canInteractWithEditor,
     draftState,
+    editableGraph,
     saveEditableDefinition,
   });
 

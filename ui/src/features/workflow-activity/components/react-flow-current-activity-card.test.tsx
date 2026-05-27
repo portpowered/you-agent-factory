@@ -34,7 +34,16 @@ import {
   useCurrentFactoryDocument,
   useSaveCurrentFactory,
 } from "../../current-factory-definition/public";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/public";
+import {
+  addFactoryGraphNode,
+  connectFactoryGraphNodes,
+  disconnectFactoryGraphEdge,
+  removeFactoryGraphNode,
+} from "../../factory-graph-editor/lib/factory-graph-operations";
+import {
+  useEditableFactoryGraph,
+  useFactoryGraphDraftState,
+} from "../../factory-graph-editor/public";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
@@ -74,6 +83,7 @@ vi.mock("../../factory-graph-editor/public", async () => {
 
   return {
     ...actual,
+    useEditableFactoryGraph: vi.fn(),
     useFactoryGraphDraftState: vi.fn(),
   };
 });
@@ -423,6 +433,168 @@ function renderWithQueryClient(view: ReactElement) {
   return render(
     <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
   );
+}
+
+function createEditableGraphTestViewModel(
+  options: Parameters<typeof useEditableFactoryGraph>[0],
+): ReturnType<typeof useEditableFactoryGraph> {
+  const draftState = vi.mocked(useFactoryGraphDraftState)();
+  const baseFactoryDefinition =
+    draftState.latestDocument ?? draftState.baseDocument ?? null;
+  const activeWorkCount = options.activeWorkCount ?? 0;
+  const isStale =
+    draftState.hasChanges &&
+    draftState.baseDocument?.version !== undefined &&
+    draftState.latestDocument?.version !== undefined &&
+    (draftState.baseDocument.version.logical !==
+      draftState.latestDocument.version.logical ||
+      draftState.baseDocument.version.physical !==
+        draftState.latestDocument.version.physical);
+
+  return {
+    actions: {
+      addNode: (node) => {
+        const result = baseFactoryDefinition
+          ? addFactoryGraphNode({
+              baseFactoryDefinition,
+              draft: draftState.draft,
+              node,
+            })
+          : {
+              message: "Load the current factory before editing graph nodes.",
+              ok: false as const,
+              reason: "INVALID_FIELD" as const,
+            };
+        if (result.ok) {
+          draftState.replaceDraft(result.value);
+        }
+        return result;
+      },
+      connectNodes: (connection) => {
+        const result = baseFactoryDefinition
+          ? connectFactoryGraphNodes({
+              baseFactoryDefinition,
+              draft: draftState.draft,
+              ...connection,
+            })
+          : {
+              message:
+                "Load the current factory before connecting graph nodes.",
+              ok: false as const,
+              reason: "INVALID_CONNECTION" as const,
+            };
+        if (result.ok) {
+          draftState.replaceDraft(result.value);
+        }
+        return result;
+      },
+      discard: draftState.resetDraft,
+      disconnectEdge: (edgeId) => {
+        const result = baseFactoryDefinition
+          ? disconnectFactoryGraphEdge({
+              baseFactoryDefinition,
+              draft: draftState.draft,
+              edgeId,
+            })
+          : {
+              message:
+                "Load the current factory before disconnecting graph edges.",
+              ok: false as const,
+              reason: "UNKNOWN_EDGE" as const,
+            };
+        if (result.ok) {
+          draftState.replaceDraft(result.value);
+        }
+        return result;
+      },
+      removeNode: (nodeId) => {
+        const result = baseFactoryDefinition
+          ? removeFactoryGraphNode({
+              baseFactoryDefinition,
+              draft: draftState.draft,
+              nodeId,
+            })
+          : {
+              message: "Load the current factory before removing graph nodes.",
+              ok: false as const,
+              reason: "NODE_NOT_FOUND" as const,
+            };
+        if (result.ok) {
+          draftState.replaceDraft(result.value);
+        }
+        return result;
+      },
+      save: async () => {
+        if (
+          !options.saveFactoryDefinition ||
+          !draftState.hasChanges ||
+          !draftState.pendingFactoryDefinition ||
+          !draftState.latestDocument ||
+          activeWorkCount > 0
+        ) {
+          return false;
+        }
+        await options.saveFactoryDefinition({
+          baseVersion: draftState.latestDocument.version,
+          factoryDefinition: draftState.pendingFactoryDefinition,
+        });
+        draftState.replaceDraft({
+          additions: {
+            resources: [],
+            workers: [],
+            workStates: [],
+            workTypes: [],
+            workstations: [],
+          },
+          edgeChanges: {
+            additions: [],
+            removals: [],
+          },
+          removals: {
+            resources: [],
+            workers: [],
+            workStates: [],
+            workTypes: [],
+            workstations: [],
+          },
+        });
+        return true;
+      },
+      updateNodeField: () => ({
+        message: "Field editing is not exercised by this component test.",
+        ok: false,
+        reason: "INVALID_FIELD",
+      }),
+    },
+    blockedOperation: null,
+    draftState,
+    graphState: null,
+    pendingState: {
+      hasChanges: draftState.hasChanges,
+      pendingFactoryDefinition: draftState.pendingFactoryDefinition,
+    },
+    projection: {
+      edges: [],
+      nodes: [],
+    },
+    saveState: {
+      canSave:
+        Boolean(options.saveFactoryDefinition) &&
+        draftState.hasChanges &&
+        draftState.pendingFactoryDefinition !== null &&
+        draftState.latestDocument !== null &&
+        activeWorkCount === 0 &&
+        !isStale,
+      isSaving: false,
+      isStale,
+      lastError: null,
+      lastSuccess: false,
+    },
+    validationState: {
+      errors: draftState.validationErrors,
+      isValid: draftState.validationErrors.length === 0,
+    },
+  };
 }
 
 function createFactoryImportValue(): FactoryPngImportValue {
@@ -804,6 +976,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
     vi.mocked(useFactoryGraphDraftState).mockReturnValue(
       defaultDraftState as never,
     );
+    vi.mocked(useEditableFactoryGraph).mockImplementation((options) =>
+      createEditableGraphTestViewModel(options as never),
+    );
   });
 
   afterEach(() => {
@@ -887,7 +1062,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("lists the supported add-entity options and validates duplicate worker names before mutating the draft", async () => {
-    const updateDraft = vi.fn();
+    const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -895,7 +1070,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
-      updateDraft,
+      replaceDraft,
     } as never);
 
     renderCurrentActivity({
@@ -924,11 +1099,11 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(
       screen.getByText('A worker named "writer" already exists in the draft.'),
     ).toBeTruthy();
-    expect(updateDraft).not.toHaveBeenCalled();
+    expect(replaceDraft).not.toHaveBeenCalled();
   });
 
   it("submits valid add-entity forms into the pending graph draft", async () => {
-    const updateDraft = vi.fn();
+    const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -936,7 +1111,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
-      updateDraft,
+      replaceDraft,
     } as never);
 
     renderCurrentActivity({
@@ -958,10 +1133,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
     });
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
-    expect(updateDraft).toHaveBeenCalledTimes(1);
-    const updater = updateDraft.mock
-      .calls[0]?.[0] as typeof defaultDraftState.updateDraft;
-    const nextDraft = updater(defaultDraftState.draft);
+    expect(replaceDraft).toHaveBeenCalledTimes(1);
+    const nextDraft = replaceDraft.mock.calls[0]?.[0];
     expect(nextDraft.additions.workTypes).toEqual([
       {
         name: "essay",
@@ -976,7 +1149,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("distinguishes work-state creation from work-type creation and blocks missing work-type association", async () => {
-    const updateDraft = vi.fn();
+    const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -984,7 +1157,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
-      updateDraft,
+      replaceDraft,
     } as never);
 
     renderCurrentActivity({
@@ -1026,11 +1199,11 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(
       screen.getByText("Choose a work type before adding a work state."),
     ).toBeTruthy();
-    expect(updateDraft).not.toHaveBeenCalled();
+    expect(replaceDraft).not.toHaveBeenCalled();
   });
 
   it("submits valid work-state add-entity forms into the pending graph draft", async () => {
-    const updateDraft = vi.fn();
+    const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -1038,7 +1211,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
       ...defaultDraftState,
-      updateDraft,
+      replaceDraft,
     } as never);
 
     renderCurrentActivity({
@@ -1060,10 +1233,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
     });
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
-    expect(updateDraft).toHaveBeenCalledTimes(1);
-    const updater = updateDraft.mock
-      .calls[0]?.[0] as typeof defaultDraftState.updateDraft;
-    const nextDraft = updater(defaultDraftState.draft);
+    expect(replaceDraft).toHaveBeenCalledTimes(1);
+    const nextDraft = replaceDraft.mock.calls[0]?.[0];
 
     expect(nextDraft.additions.workStates).toEqual([
       {
@@ -1270,7 +1441,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {
-    const updateDraft = vi.fn();
+    const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
       error: null,
@@ -1304,7 +1475,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
           },
         ],
       },
-      updateDraft,
+      replaceDraft,
     } as never);
 
     renderCurrentActivity({
@@ -1334,10 +1505,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
       }),
     );
 
-    expect(updateDraft).toHaveBeenCalledTimes(1);
-    const updater = updateDraft.mock
-      .calls[0]?.[0] as typeof defaultDraftState.updateDraft;
-    const nextDraft = updater(defaultDraftState.draft);
+    expect(replaceDraft).toHaveBeenCalledTimes(1);
+    const nextDraft = replaceDraft.mock.calls[0]?.[0];
     expect(nextDraft.removals.workstations).toEqual(["review"]);
   });
 

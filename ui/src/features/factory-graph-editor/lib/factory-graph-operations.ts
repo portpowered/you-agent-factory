@@ -16,11 +16,13 @@ import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
 import {
   applyFactoryGraphAddEntityDraft,
   type FactoryGraphAddEntityDraft,
+  type FactoryGraphAddEntityFieldErrors,
   validateFactoryGraphAddEntityDraft,
 } from "./factory-graph-editor-additions";
 import {
   applyFactoryGraphEdgeAddition,
   applyFactoryGraphEdgeRemoval,
+  buildFactoryGraphConnectionNotice,
   buildFactoryGraphEdgeChangeFromConnection,
 } from "./factory-graph-editor-connections";
 import {
@@ -48,6 +50,7 @@ export type FactoryGraphOperationResult<T> =
       message: string;
       ok: false;
       reason: FactoryGraphOperationReason;
+      fieldErrors?: FactoryGraphAddEntityFieldErrors;
       validationErrors?: FactoryGraphDraftValidationError[];
     };
 
@@ -134,6 +137,7 @@ export function addFactoryGraphNode(options: {
     return {
       message: firstFieldError,
       ok: false,
+      fieldErrors,
       reason:
         fieldErrors.name !== undefined
           ? "DUPLICATE_IDENTIFIER"
@@ -195,8 +199,23 @@ export function connectFactoryGraphNodes(options: {
   });
 
   if (!edgeChange) {
+    const sourceNode = state.graph.nodes.find(
+      (node) => node.id === options.sourceNodeId,
+    );
+    const targetNode = state.graph.nodes.find(
+      (node) => node.id === options.targetNodeId,
+    );
+
     return {
-      message: "Choose compatible graph connection handles.",
+      message:
+        sourceNode && targetNode
+          ? buildFactoryGraphConnectionNotice({
+              sourceAnchorId: options.sourceAnchorId,
+              sourceNode,
+              targetAnchorId: options.targetAnchorId,
+              targetNode,
+            })
+          : "Choose compatible graph connection handles.",
       ok: false,
       reason: "INVALID_CONNECTION",
     };
