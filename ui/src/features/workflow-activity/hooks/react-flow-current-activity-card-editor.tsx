@@ -9,8 +9,8 @@ import type { FactoryGraphEditorTool } from "../../factory-graph-editor/componen
 import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
 import {
-  createEmptyFactoryGraphDraft,
-  useFactoryGraphDraftState,
+  type EditableFactoryGraphViewModel,
+  useEditableFactoryGraph,
 } from "../../factory-graph-editor/public";
 import { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import {
@@ -29,12 +29,15 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
   const [isConfirmingSave, setIsConfirmingSave] = useState(false);
   const currentFactoryQuery = useCurrentFactoryDocument(editorMode);
   const editableDefinitionQuery = currentFactoryQuery;
-  const draftState = useFactoryGraphDraftState({
+  const saveEditableDefinition = useSaveCurrentFactory();
+  const editableGraph = useEditableFactoryGraph({
+    activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
     currentFactoryDocument: currentFactoryQuery.data,
     projectedFactory: snapshot.factory,
     projectedTopology,
+    saveFactoryDefinition: saveEditableDefinition.mutateAsync,
   });
-  const saveEditableDefinition = useSaveCurrentFactory();
+  const draftState = editableGraph.draftState;
   const {
     addMenuActions,
     canInteractWithEditor,
@@ -48,6 +51,7 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
   } = useFactoryGraphEditorSessionState({
     activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
     draftState,
+    editableGraph,
     editorMode,
     editableDefinitionQuery: currentFactoryQuery,
     projectedTopology,
@@ -74,6 +78,7 @@ export function useCurrentActivityGraphEditor(snapshot: DashboardSnapshot) {
     addEntityController,
     canSaveDraft,
     draftState,
+    editableGraph,
     editorUnavailableClassifierWorkstationName,
     editorMode,
     saveEditableDefinition,
@@ -136,7 +141,7 @@ function useFactoryGraphEditorControllers({
 }: {
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
-  draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  draftState: EditableFactoryGraphViewModel["draftState"];
   saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
 }) {
   const connectionController = useFactoryGraphConnectionController({
@@ -160,13 +165,15 @@ function useFactoryGraphEditorControllers({
 function useFactoryGraphEditorSessionState({
   activeWorkCount,
   draftState,
+  editableGraph,
   editorMode,
   editableDefinitionQuery,
   projectedTopology,
   saveEditableDefinition,
 }: {
   activeWorkCount: number;
-  draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  draftState: EditableFactoryGraphViewModel["draftState"];
+  editableGraph: EditableFactoryGraphViewModel;
   editorMode: boolean;
   editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
   projectedTopology: DashboardSnapshot["topology"];
@@ -192,27 +199,16 @@ function useFactoryGraphEditorSessionState({
           draftState.baseDocument ??
           null,
       ));
-  const isStaleDraft =
-    draftState.hasChanges &&
-    draftState.baseDocument !== null &&
-    draftState.latestDocument !== null &&
-    (draftState.baseDocument.version.logical !==
-      draftState.latestDocument.version.logical ||
-      draftState.baseDocument.version.physical !==
-        draftState.latestDocument.version.physical);
+  const isStaleDraft = editableGraph.saveState.isStale;
   const canInteractWithEditor =
     editorMode &&
     editableDefinitionQuery.status === "success" &&
     editorUnavailableClassifierWorkstationName === undefined &&
     saveEditableDefinition.status !== "pending";
   const canSaveDraft =
-    draftState.hasChanges &&
-    draftState.pendingFactoryDefinition !== null &&
-    draftState.validationErrors.length === 0 &&
-    draftState.latestDocument !== null &&
+    editableGraph.saveState.canSave &&
     editorUnavailableClassifierWorkstationName === undefined &&
-    !hasActiveWork &&
-    !isStaleDraft;
+    !hasActiveWork;
   const currentFactoryDefinition =
     draftState.pendingFactoryDefinition ??
     draftState.latestDocument ??
@@ -243,6 +239,7 @@ function useFactoryGraphEditorLeaveHandlers({
   addEntityController,
   canSaveDraft,
   draftState,
+  editableGraph,
   editorUnavailableClassifierWorkstationName,
   editorMode,
   saveEditableDefinition,
@@ -256,7 +253,8 @@ function useFactoryGraphEditorLeaveHandlers({
 }: {
   addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
   canSaveDraft: boolean;
-  draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  draftState: EditableFactoryGraphViewModel["draftState"];
+  editableGraph: EditableFactoryGraphViewModel;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
   saveEditableDefinition: ReturnType<typeof useSaveCurrentFactory>;
@@ -314,25 +312,25 @@ function useFactoryGraphEditorLeaveHandlers({
     setIsConfirmingLeaveEditor,
   ]);
   const handleDiscardPendingChanges = useCallback(() => {
-    draftState.resetDraft();
+    editableGraph.actions.discard();
     resetTransientEditorState();
-  }, [draftState, resetTransientEditorState]);
+  }, [editableGraph.actions, resetTransientEditorState]);
   const handleDiscardEditorChanges = useCallback(() => {
     handleDiscardPendingChanges();
     leaveEditor();
   }, [handleDiscardPendingChanges, leaveEditor]);
   const saveDraft = useCallback(
     async ({ leaveAfterSave }: { leaveAfterSave: boolean }) => {
-      if (!canSaveDraft || draftState.pendingFactoryDefinition == null) {
+      if (!canSaveDraft) {
         return false;
       }
 
       try {
-        await saveEditableDefinition.mutateAsync({
-          baseVersion: draftState.latestDocument?.version,
-          factoryDefinition: draftState.pendingFactoryDefinition,
-        });
-        draftState.replaceDraft(createEmptyFactoryGraphDraft());
+        const didSave = await editableGraph.actions.save();
+        if (!didSave) {
+          setIsConfirmingSave(false);
+          return false;
+        }
         setIsConfirmingSave(false);
         setIsConfirmingLeaveEditor(false);
         if (leaveAfterSave) {
@@ -346,9 +344,8 @@ function useFactoryGraphEditorLeaveHandlers({
     },
     [
       canSaveDraft,
-      draftState,
+      editableGraph.actions,
       leaveEditor,
-      saveEditableDefinition,
       setIsConfirmingLeaveEditor,
       setIsConfirmingSave,
     ],

@@ -1,4 +1,6 @@
 export * from "../hooks/factory-graph-draft-hook";
+export * from "../hooks/use-editable-factory-graph";
+export * from "../hooks/use-editable-factory-graph-types";
 export * from "../lib/factory-graph-draft-apply";
 export * from "../lib/factory-graph-draft-graph";
 export * from "../lib/factory-graph-draft-types";
