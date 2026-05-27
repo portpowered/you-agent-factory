@@ -8,3 +8,5 @@ export * from "../lib/factory-graph-editor-connections";
 export * from "../lib/factory-graph-editor-removals";
 export * from "../lib/factory-graph-editor-runtime";
 export * from "../lib/factory-graph-editor-save-summary";
+export * from "../lib/factory-graph-field-operations";
+export * from "../lib/factory-graph-operations";
