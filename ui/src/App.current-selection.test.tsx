@@ -293,15 +293,8 @@ function getActiveStorySelectionButton(): HTMLElement {
 }
 
 async function findReviewWorkstationSelectionButton(): Promise<HTMLElement> {
-  const localizedButton = screen.queryByRole("button", {
-    name: "选择 Review 工作站",
-  });
-  if (localizedButton instanceof HTMLElement) {
-    return localizedButton;
-  }
-
   return screen.findByRole("button", {
-    name: "Select Review workstation",
+    name: /^(选择 Review 工作站|Select Review workstation)$/,
   });
 }
 

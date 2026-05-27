@@ -1,5 +1,8 @@
 import { normalizeFactoryDefinition } from "../../../api/factory-definition";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import { getFactoryPngImportMessages } from "../messages/factory-png-import";
+
+type FactoryPngImportMessages = ReturnType<typeof getFactoryPngImportMessages>;
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const PNG_TEXT_CHUNK = "tEXt";
@@ -37,6 +40,7 @@ export interface ReadFactoryImportPngError {
 export interface ReadFactoryImportPngOptions {
   createPreviewImageSrc?: (file: Blob) => string;
   file: Blob;
+  locale?: string | null;
   revokePreviewImageSrc?: (previewImageSrc: string) => void;
   validatePreviewImage?: (file: Blob) => Promise<void>;
 }
@@ -67,20 +71,22 @@ type ImportStepResult<T> = ReadFactoryImportPngFailure | { ok: true; value: T };
 export async function readFactoryImportPng({
   createPreviewImageSrc = createPreviewImageSrcInBrowser,
   file,
+  locale,
   revokePreviewImageSrc = revokePreviewImageSrcInBrowser,
   validatePreviewImage = validatePreviewImageInBrowser,
 }: ReadFactoryImportPngOptions): Promise<ReadFactoryImportPngResult> {
-  const pngBytes = await readPngBytes(file);
+  const messages = getFactoryPngImportMessages(locale);
+  const pngBytes = await readPngBytes(file, messages);
   if (!pngBytes.ok) {
     return pngBytes;
   }
 
-  const metadataText = readFactoryMetadataText(pngBytes.value);
+  const metadataText = readFactoryMetadataText(pngBytes.value, messages);
   if (!metadataText.ok) {
     return metadataText;
   }
 
-  const metadata = parseFactoryMetadata(metadataText.value);
+  const metadata = parseFactoryMetadata(metadataText.value, messages);
   if (!metadata.ok) {
     return metadata;
   }
@@ -92,7 +98,7 @@ export async function readFactoryImportPng({
       error: {
         cause: error,
         code: "IMAGE_DECODE_FAILED",
-        message: "The selected image could not be decoded for preview.",
+        message: messages.imageDecodeFailed,
       },
       ok: false,
     };
@@ -106,7 +112,7 @@ export async function readFactoryImportPng({
       error: {
         cause: error,
         code: "PREVIEW_UNAVAILABLE",
-        message: "The browser could not create a preview for the selected image.",
+        message: messages.previewUnavailable,
       },
       ok: false,
     };
@@ -125,7 +131,7 @@ export async function readFactoryImportPng({
   };
 }
 
-async function readPngBytes(file: Blob): Promise<ImportStepResult<Uint8Array>> {
+async function readPngBytes(file: Blob, messages: FactoryPngImportMessages): Promise<ImportStepResult<Uint8Array>> {
   let pngBytes: Uint8Array;
   try {
     pngBytes = await readBlobToUint8Array(file);
@@ -134,7 +140,7 @@ async function readPngBytes(file: Blob): Promise<ImportStepResult<Uint8Array>> {
       error: {
         cause: error,
         code: "FILE_READ_FAILED",
-        message: "The selected image could not be read.",
+        message: messages.fileReadFailed,
       },
       ok: false,
     };
@@ -144,7 +150,7 @@ async function readPngBytes(file: Blob): Promise<ImportStepResult<Uint8Array>> {
     return {
       error: {
         code: "NOT_PNG_FILE",
-        message: "The selected file is not a PNG image.",
+        message: messages.notPngFile,
       },
       ok: false,
     };
@@ -156,7 +162,7 @@ async function readPngBytes(file: Blob): Promise<ImportStepResult<Uint8Array>> {
   };
 }
 
-function readFactoryMetadataText(pngBytes: Uint8Array): ImportStepResult<string> {
+function readFactoryMetadataText(pngBytes: Uint8Array, messages: FactoryPngImportMessages): ImportStepResult<string> {
   try {
     let offset = PNG_SIGNATURE.length;
 
@@ -183,7 +189,7 @@ function readFactoryMetadataText(pngBytes: Uint8Array): ImportStepResult<string>
       error: {
         cause: error,
         code: "PNG_INVALID",
-        message: "The selected PNG image is invalid or truncated.",
+        message: messages.pngInvalid,
       },
       ok: false,
     };
@@ -192,13 +198,13 @@ function readFactoryMetadataText(pngBytes: Uint8Array): ImportStepResult<string>
   return {
     error: {
       code: "PNG_METADATA_MISSING",
-      message: "The selected PNG does not contain you-agent-factory factory metadata.",
+      message: messages.factoryMetadataMissing,
     },
     ok: false,
   };
 }
 
-function parseFactoryMetadata(metadataText: string): ImportStepResult<FactoryPngMetadata> {
+function parseFactoryMetadata(metadataText: string, messages: FactoryPngImportMessages): ImportStepResult<FactoryPngMetadata> {
   let parsedMetadata: unknown;
   try {
     parsedMetadata = JSON.parse(metadataText);
@@ -207,7 +213,7 @@ function parseFactoryMetadata(metadataText: string): ImportStepResult<FactoryPng
       error: {
         cause: error,
         code: "PNG_METADATA_INVALID",
-        message: "The you-agent-factory factory metadata is not valid JSON.",
+        message: messages.factoryMetadataInvalidJson,
       },
       ok: false,
     };
@@ -217,7 +223,7 @@ function parseFactoryMetadata(metadataText: string): ImportStepResult<FactoryPng
     return {
       error: {
         code: "PNG_METADATA_INVALID",
-        message: "The you-agent-factory factory metadata must be an object.",
+        message: messages.factoryMetadataMustBeObject,
       },
       ok: false,
     };
@@ -227,7 +233,7 @@ function parseFactoryMetadata(metadataText: string): ImportStepResult<FactoryPng
     return {
       error: {
         code: "PNG_METADATA_INVALID",
-        message: "The you-agent-factory factory metadata is missing the schema version.",
+        message: messages.factoryMetadataMissingSchemaVersion,
       },
       ok: false,
     };
@@ -240,13 +246,13 @@ function parseFactoryMetadata(metadataText: string): ImportStepResult<FactoryPng
         details: {
           schemaVersion: parsedMetadata.schemaVersion,
         },
-        message: "The selected PNG uses an unsupported you-agent-factory factory metadata version.",
+        message: messages.unsupportedSchemaVersion,
       },
       ok: false,
     };
   }
 
-  const normalizedMetadata = normalizeFactoryMetadata(parsedMetadata);
+  const normalizedMetadata = normalizeFactoryMetadata(parsedMetadata, messages);
   if (!normalizedMetadata.ok) {
     return normalizedMetadata;
   }
@@ -257,9 +263,7 @@ function parseFactoryMetadata(metadataText: string): ImportStepResult<FactoryPng
   };
 }
 
-function normalizeFactoryMetadata(
-  parsedMetadata: Record<string, unknown>,
-): ImportStepResult<FactoryPngMetadata> {
+function normalizeFactoryMetadata(parsedMetadata: Record<string, unknown>, messages: FactoryPngImportMessages): ImportStepResult<FactoryPngMetadata> {
   let normalizedFactory: CanonicalFactoryDefinition;
   try {
     normalizedFactory = normalizeFactoryPayload(parsedMetadata);
@@ -267,13 +271,13 @@ function normalizeFactoryMetadata(
     return {
       error: {
         code: "FACTORY_PAYLOAD_INVALID",
-        message: "The you-agent-factory factory metadata does not contain a valid factory payload.",
+        message: messages.factoryMetadataInvalidPayload,
       },
       ok: false,
     };
   }
 
-  const normalizedFactoryName = readFactoryMetadataName(parsedMetadata);
+  const normalizedFactoryName = readFactoryMetadataName(parsedMetadata, messages);
   if (!normalizedFactoryName.ok) {
     return normalizedFactoryName;
   }
@@ -294,7 +298,7 @@ function normalizeFactoryPayload(
   return normalizeFactoryDefinition(factoryPayload);
 }
 
-function readFactoryMetadataName(parsedMetadata: Record<string, unknown>): ImportStepResult<string> {
+function readFactoryMetadataName(parsedMetadata: Record<string, unknown>, messages: FactoryPngImportMessages): ImportStepResult<string> {
   const canonicalFactoryName = readCanonicalFactoryMetadataName(parsedMetadata);
   if (canonicalFactoryName !== null) {
     return {
@@ -306,7 +310,7 @@ function readFactoryMetadataName(parsedMetadata: Record<string, unknown>): Impor
   return {
     error: {
       code: "PNG_METADATA_INVALID",
-      message: "The you-agent-factory factory metadata is missing the factory name.",
+      message: messages.factoryMetadataMissingName,
     },
     ok: false,
   };

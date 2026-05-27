@@ -223,6 +223,41 @@ describe("readFactoryImportPng", () => {
     });
   });
 
+  it("returns localized import PNG failures", async () => {
+    const notPngResult = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: new File(["not-a-png"], "factory.txt", { type: "text/plain" }),
+      locale: "zh-CN",
+      validatePreviewImage: async () => {},
+    });
+    const metadataResult = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: createFactoryPngFileWithMetadataText("{not valid json"),
+      locale: "zh-CN",
+      validatePreviewImage: async () => {},
+    });
+
+    expect(notPngResult).toEqual({
+      error: {
+        code: "NOT_PNG_FILE",
+        message: "所选文件不是 PNG 图片。",
+      },
+      ok: false,
+    });
+    expect(metadataResult).toEqual({
+      error: {
+        cause: expect.any(SyntaxError),
+        code: "PNG_METADATA_INVALID",
+        message: "you-agent-factory 工厂元数据不是有效的 JSON。",
+      },
+      ok: false,
+    });
+  });
+
   it("rejects truncated PNG payloads before metadata parsing", async () => {
     const result = await readFactoryImportPng({
       createPreviewImageSrc: () => {

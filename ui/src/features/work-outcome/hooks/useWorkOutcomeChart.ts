@@ -46,10 +46,12 @@ interface WorkOutcomeTimelineState {
 }
 
 export function useWorkOutcomeChart({
+  locale,
   selectedTimelineTick,
   timelineEvents,
   worldViewCache,
 }: {
+  locale?: string | null;
   selectedTimelineTick: number;
   timelineEvents: FactoryEvent[];
   worldViewCache: Record<number, WorldState | DashboardSnapshot | unknown>;
@@ -76,8 +78,9 @@ export function useWorkOutcomeChart({
         workOutcomeSamples,
         WORK_OUTCOME_RANGE_ID,
         SESSION_WORK_CHART_NOW,
+        locale,
       ),
-    [workOutcomeSamples],
+    [locale, workOutcomeSamples],
   );
 }
 

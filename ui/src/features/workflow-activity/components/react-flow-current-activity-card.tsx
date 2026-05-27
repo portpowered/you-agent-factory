@@ -359,6 +359,7 @@ export function ReactFlowCurrentActivityCardView(
   const graph = useCurrentActivityGraphViewModel({ ...props, editor });
   const fallbackImportController = useCurrentActivityImportController({
     activateFactory: props.activateFactory,
+    locale: props.locale,
     onFactoryActivated: props.onFactoryActivated,
     onFactoryImportReady: props.onFactoryImportReady,
     readFactoryImportFile: props.readFactoryImportFile,

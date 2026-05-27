@@ -146,4 +146,36 @@ describe("buildWorkChartModel", () => {
     expect(first.series.every((series) => series.unit === "count")).toBe(true);
     expect(first).toEqual(second);
   });
+
+  it("localizes work chart series, tick labels, and failure groups", () => {
+    const model = buildWorkChartModel([
+      ...sessionSamples,
+      {
+        completedCount: 4,
+        dispatchedCount: 6,
+        failedByWorkType: { task: 1 },
+        failedCount: 1,
+        failedWorkLabels: ["task validation failed"],
+        inFlightCount: 0,
+        observedAt: 11_000,
+        queuedCount: 0,
+        tick: 11,
+      },
+    ], "session", 11_000, "zh-CN");
+
+    expect(model.rangeLabel).toBe("会话");
+    expect(model.points.map((point) => point.label)).toEqual([
+      "刻度 1",
+      "刻度 10",
+      "刻度 11",
+    ]);
+    expect(model.series.map((series) => series.label)).toEqual([
+      "排队中",
+      "进行中",
+      "已完成",
+      "失败/重试",
+    ]);
+    expect(model.series[0]?.points[0]?.label).toBe("排队中：3");
+    expect(model.failureGroups).toEqual([{ count: 1, label: "工作类型：task" }]);
+  });
 });

@@ -108,6 +108,14 @@ describe("dashboard trend cards", () => {
     );
   });
 
+  it("renders localized retry and rework point titles", () => {
+    render(<ReworkTrendCard locale="zh-CN" model={reworkTrend} />);
+
+    const chart = screen.getByRole("img", { name: /重试与返工趋势/ });
+
+    expect(within(chart).getByText("Review：1 个重试或返工事件")).toBeTruthy();
+  });
+
   it("renders timing trend summaries with formatted durations", () => {
     const timingChartStyle = getDashboardChartSemanticStyle("timingTrend");
     render(<TimingTrendCard model={timingTrend} />);

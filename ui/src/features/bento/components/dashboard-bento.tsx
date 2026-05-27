@@ -108,6 +108,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     workstationRequestsByDispatchID,
   });
   const importController = useCurrentActivityImportController({
+    locale: resolvedLocale,
     onFactoryActivated: incrementRefreshToken,
   });
 
@@ -131,6 +132,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
         snapshot.runtime.workstation_requests_by_dispatch_id,
     });
   const workChartModel = useWorkOutcomeChart({
+    locale: resolvedLocale,
     selectedTimelineTick,
     timelineEvents,
     worldViewCache,
