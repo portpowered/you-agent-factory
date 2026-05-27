@@ -11,8 +11,33 @@ func TestBuildPromptTemplateContract_ListsSelectedInputVariablesAndUnavailablePa
 	if contract.InputCount != 1 {
 		t.Fatalf("InputCount = %d, want 1", contract.InputCount)
 	}
-	if !hasVariablePath(contract.AvailableVariables, ".Inputs[0].Payload") {
-		t.Fatalf("available variables = %#v, want .Inputs[0].Payload", contract.AvailableVariables)
+	for _, want := range []string{
+		".Inputs[0].Name",
+		".Inputs[0].WorkID",
+		".Inputs[0].WorkTypeID",
+		".Inputs[0].DataType",
+		".Inputs[0].TraceID",
+		".Inputs[0].ParentID",
+		".Inputs[0].Project",
+		".Inputs[0].Payload",
+		".Inputs[0].Content",
+		".Inputs[0].Tags[\"KEY\"]",
+		".Inputs[0].Relations",
+		".Inputs[0].Relations[0].Type",
+		".Inputs[0].Relations[0].TargetWorkID",
+		".Inputs[0].Relations[0].RequiredState",
+		".Inputs[0].PreviousOutput",
+		".Inputs[0].RejectionFeedback",
+		".Inputs[0].History",
+		".Inputs[0].History.AttemptNumber",
+		".Inputs[0].History.TotalVisits",
+		".Inputs[0].History.FailureCount",
+		".Inputs[0].History.LastError",
+		".Inputs[0].History.FailureLog",
+	} {
+		if !hasVariablePath(contract.AvailableVariables, want) {
+			t.Fatalf("available variables missing %q from %#v", want, contract.AvailableVariables)
+		}
 	}
 	if !hasVariablePath(contract.AvailableVariables, ".Context.Project") {
 		t.Fatalf("available variables = %#v, want .Context.Project", contract.AvailableVariables)
@@ -24,7 +49,11 @@ func TestBuildPromptTemplateContract_ListsSelectedInputVariablesAndUnavailablePa
 
 func TestValidatePromptTemplate_AcceptsSupportedInputAndContextReferences(t *testing.T) {
 	result := ValidatePromptTemplate(`Project: {{ .Context.Project }}
-Work: {{ (index .Inputs 0).Payload }}
+Work: {{ (index .Inputs 0).Name }} {{ (index .Inputs 0).WorkID }} {{ (index .Inputs 0).WorkTypeID }} {{ (index .Inputs 0).DataType }} {{ (index .Inputs 0).TraceID }} {{ (index .Inputs 0).ParentID }} {{ (index .Inputs 0).Payload }} {{ (index .Inputs 0).Content }} {{ (index .Inputs 0).Project }}
+Tags: {{ index (index .Inputs 0).Tags "branch" }}
+Relations: {{ (index .Inputs 0).Relations }} {{ (index (index .Inputs 0).Relations 0).Type }} {{ (index (index .Inputs 0).Relations 0).TargetWorkID }} {{ (index (index .Inputs 0).Relations 0).RequiredState }}
+Retry: {{ (index .Inputs 0).PreviousOutput }} {{ (index .Inputs 0).RejectionFeedback }}
+History: {{ (index .Inputs 0).History }} {{ (index .Inputs 0).History.AttemptNumber }} {{ (index .Inputs 0).History.TotalVisits }} {{ (index .Inputs 0).History.FailureCount }} {{ (index .Inputs 0).History.LastError }} {{ (index .Inputs 0).History.FailureLog }}
 {{ range $i, $input := .Inputs }}{{ $input.WorkID }}{{ end }}`, 1)
 
 	if !result.Valid {

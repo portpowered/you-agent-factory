@@ -1,0 +1,22 @@
+{
+  "mockWorkers": [
+    {
+      "id": "reviewer-rejects-first-pass",
+      "workerName": "reviewer",
+      "workstationName": "review-story",
+      "workInputs": [
+        {
+          "workType": "story",
+          "state": "in-review",
+          "inputName": "work"
+        }
+      ],
+      "runType": "reject",
+      "rejectConfig": {
+        "stdout": "needs changes",
+        "stderr": "missing acceptance criteria",
+        "exitCode": 42
+      }
+    }
+  ]
+}

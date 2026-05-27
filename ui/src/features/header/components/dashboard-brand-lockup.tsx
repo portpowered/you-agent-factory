@@ -7,7 +7,7 @@ interface DashboardBrandLockupProps {
 }
 
 const BRAND_MARK_CLASS =
-  "inline-flex h-12 items-center justify-center gap-1 rounded-full border border-af-accent-border bg-af-accent-surface px-3 text-sm font-black uppercase leading-none tracking-[0.18em] text-af-accent";
+  "inline-flex h-12 items-center justify-center gap-1 rounded-sm mt-1 border border-af-accent-border bg-af-accent-surface px-3 text-sm font-black uppercase leading-none tracking-[0.18em] text-af-accent";
 
 export function DashboardBrandLockup({
   className = "",

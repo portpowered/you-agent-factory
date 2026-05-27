@@ -4,10 +4,20 @@ import type {
 } from "monaco-editor";
 
 import type { PromptTemplateContract } from "../../../api/current-factory-prompt-template";
-import type { EditableWorkstationPromptDiagnostic } from "./detail-card-types";
-import type { EditableWorkstationPromptHelpState } from "./detail-card-types";
+import type {
+  EditableWorkstationPromptDiagnostic,
+  EditableWorkstationPromptHelpState,
+} from "./detail-card-types";
+import {
+  WORKSTATION_PROMPT_MONARCH_LANGUAGE,
+  WORKSTATION_PROMPT_THEME,
+} from "./workstation-prompt-monaco-language";
 
 type MonacoModule = typeof import("monaco-editor");
+type CompletionInsertMode =
+  | "replaceCurrentWord"
+  | "insertAtCursor"
+  | "replaceExpression";
 
 export const WORKSTATION_PROMPT_LANGUAGE_ID = "workstation-prompt-template";
 export const WORKSTATION_PROMPT_THEME_ID = "workstation-prompt-template-theme";
@@ -63,21 +73,25 @@ export function registerWorkstationPromptCompletionProvider(
           monaco,
           _context.triggerKind,
         );
-        const isInsideTemplateExpression = isInsideTemplate(prompt, cursorOffset);
+        const isInsideTemplateExpression = isInsideTemplate(
+          prompt,
+          cursorOffset,
+        );
 
         if (!isInsideTemplateExpression && !isManualTrigger) {
           return { suggestions: [] };
         }
 
-        const currentTemplateExpression = isInsideTemplateExpression
-          ? getCurrentTemplateExpression(prompt, cursorOffset)
+        const currentTemplateExpressionContext = isInsideTemplateExpression
+          ? getCurrentTemplateExpressionContext(prompt, cursorOffset)
           : undefined;
 
         return {
           suggestions: buildWorkstationPromptCompletionItems(
             promptHelpState.contract,
             {
-              currentTemplateExpression,
+              currentTemplateExpression:
+                currentTemplateExpressionContext?.expression,
               currentWordText: model.getValueInRange(range),
               insideTemplateExpression: isInsideTemplateExpression,
             },
@@ -90,7 +104,13 @@ export function registerWorkstationPromptCompletionProvider(
             insertText: suggestion.insertText,
             kind: monaco.languages.CompletionItemKind.Variable,
             label: suggestion.label,
-            range,
+            range: resolveCompletionRange(
+              model,
+              cursorOffset,
+              range,
+              suggestion.insertMode,
+              currentTemplateExpressionContext?.startOffset,
+            ),
             sortText: `${index.toString().padStart(3, "0")}:${suggestion.label}`,
           })),
         };
@@ -108,26 +128,39 @@ export function buildWorkstationPromptCompletionItems(
     insideTemplateExpression: boolean;
   },
 ) {
-  return contract.availableVariables.map((variable) => {
-    const fullTemplateExpression = extractTemplateExpression(variable.example).trim();
+  return contract.availableVariables.flatMap((variable) => {
+    const fullTemplateExpression = extractTemplateExpression(
+      variable.example,
+    ).trim();
     const contextualSuggestion = options.insideTemplateExpression
       ? toContextualTemplateSuggestion(
           fullTemplateExpression,
           variable.path,
           options.currentTemplateExpression,
-          options.currentWordText,
         )
       : null;
+    if (
+      options.insideTemplateExpression &&
+      hasTemplateExpressionPrefix(options.currentTemplateExpression) &&
+      !contextualSuggestion
+    ) {
+      return [];
+    }
 
-    return {
-      detail: `${variable.category} - ${variable.description}`,
-      documentation: variable.example,
-      filterText: contextualSuggestion?.filterText ?? fullTemplateExpression,
-      insertText: options.insideTemplateExpression
-        ? (contextualSuggestion?.insertText ?? fullTemplateExpression)
-        : variable.example,
-      label: contextualSuggestion?.label ?? variable.path,
-    };
+    return [
+      {
+        detail: `${variable.category} - ${variable.description}`,
+        documentation: variable.example,
+        filterText: contextualSuggestion?.filterText ?? fullTemplateExpression,
+        insertText: options.insideTemplateExpression
+          ? (contextualSuggestion?.insertText ?? fullTemplateExpression)
+          : variable.example,
+        label: contextualSuggestion?.label ?? variable.path,
+        insertMode:
+          contextualSuggestion?.insertMode ??
+          ("replaceCurrentWord" as CompletionInsertMode),
+      },
+    ];
   });
 }
 
@@ -154,45 +187,139 @@ export function extractTemplateExpression(example: string) {
   return templateMatch?.[1] ?? example;
 }
 
-export function getCurrentTemplateExpression(prompt: string, cursorOffset: number) {
+export function getCurrentTemplateExpression(
+  prompt: string,
+  cursorOffset: number,
+) {
+  return getCurrentTemplateExpressionContext(prompt, cursorOffset).expression;
+}
+
+function getCurrentTemplateExpressionContext(
+  prompt: string,
+  cursorOffset: number,
+) {
   const contentBeforeCursor = prompt.slice(0, cursorOffset);
   const lastOpenIndex = contentBeforeCursor.lastIndexOf("{{");
   const lastCloseIndex = contentBeforeCursor.lastIndexOf("}}");
   if (lastOpenIndex < 0 || lastOpenIndex < lastCloseIndex) {
-    return "";
+    return { expression: "", startOffset: cursorOffset };
   }
 
-  return contentBeforeCursor.slice(lastOpenIndex + 2).trimStart();
+  const rawExpression = contentBeforeCursor.slice(lastOpenIndex + 2);
+  const leadingWhitespaceLength =
+    rawExpression.length - rawExpression.trimStart().length;
+
+  return {
+    expression: rawExpression.trimStart(),
+    startOffset: lastOpenIndex + 2 + leadingWhitespaceLength,
+  };
 }
 
 function toContextualTemplateSuggestion(
   fullTemplateExpression: string,
   path: string,
   currentTemplateExpression?: string,
-  currentWordText?: string,
 ) {
-  const normalizedCurrentExpression = currentTemplateExpression?.trimStart() ?? "";
+  const normalizedCurrentExpression =
+    currentTemplateExpression?.trimStart() ?? "";
   if (normalizedCurrentExpression.length === 0) {
     return null;
   }
 
-  const normalizedCurrentWord = currentWordText?.trim() ?? "";
-  const expressionBase =
-    normalizedCurrentWord.length > 0 &&
-    normalizedCurrentExpression.endsWith(normalizedCurrentWord)
-      ? normalizedCurrentExpression.slice(0, -normalizedCurrentWord.length)
-      : normalizedCurrentExpression;
+  if (fullTemplateExpression.startsWith(normalizedCurrentExpression)) {
+    const relativeInsertText = fullTemplateExpression.slice(
+      normalizedCurrentExpression.length,
+    );
 
-  if (!fullTemplateExpression.startsWith(expressionBase)) {
-    return null;
+    return {
+      filterText: fullTemplateExpression,
+      insertMode: "insertAtCursor" as const,
+      insertText: relativeInsertText,
+      label: resolveContextualCompletionLabel(
+        normalizedCurrentExpression,
+        relativeInsertText,
+        path,
+      ),
+    };
   }
 
-  const relativeInsertText = fullTemplateExpression.slice(expressionBase.length);
+  const mapAccessTargetExpression = getMapAccessTargetExpression(path);
+  const normalizedMapPrefix = normalizedCurrentExpression.replace(/\.$/, "");
+  if (
+    mapAccessTargetExpression &&
+    (mapAccessTargetExpression.startsWith(normalizedMapPrefix) ||
+      normalizedMapPrefix.startsWith(mapAccessTargetExpression))
+  ) {
+    return {
+      filterText: `${mapAccessTargetExpression} ${fullTemplateExpression}`,
+      insertMode: "replaceExpression" as const,
+      insertText: fullTemplateExpression,
+      label: fullTemplateExpression,
+    };
+  }
 
+  return null;
+}
+
+function resolveContextualCompletionLabel(
+  currentExpression: string,
+  relativeInsertText: string,
+  path: string,
+) {
+  if (relativeInsertText.length === 0) {
+    return path;
+  }
+
+  const currentWordMatch = currentExpression.match(/([A-Za-z_]\w*)$/);
+
+  return `${currentWordMatch?.[1] ?? ""}${relativeInsertText}`;
+}
+
+function hasTemplateExpressionPrefix(currentTemplateExpression?: string) {
+  return (currentTemplateExpression?.trimStart() ?? "").length > 0;
+}
+
+function getMapAccessTargetExpression(path: string) {
+  if (path === '.Context.Env["KEY"]') {
+    return ".Context.Env";
+  }
+
+  const inputTagsMatch = path.match(/^\.Inputs\[(\d+)\]\.Tags\["KEY"\]$/);
+  if (inputTagsMatch?.[1]) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
+    return `(index .Inputs ${inputTagsMatch[1]}).Tags`;
+  }
+
+  return null;
+}
+
+function resolveCompletionRange(
+  model: MonacoEditorAPI.ITextModel,
+  cursorOffset: number,
+  currentWordRange: MonacoLanguagesAPI.CompletionItem["range"],
+  insertMode: CompletionInsertMode,
+  expressionStartOffset?: number,
+) {
+  if (insertMode === "replaceCurrentWord") {
+    return currentWordRange;
+  }
+
+  const cursorPosition = model.getPositionAt(cursorOffset);
+  if (insertMode === "insertAtCursor" || expressionStartOffset === undefined) {
+    return {
+      endColumn: cursorPosition.column,
+      endLineNumber: cursorPosition.lineNumber,
+      startColumn: cursorPosition.column,
+      startLineNumber: cursorPosition.lineNumber,
+    };
+  }
+
+  const expressionStartPosition = model.getPositionAt(expressionStartOffset);
   return {
-    filterText: fullTemplateExpression,
-    insertText: relativeInsertText,
-    label: relativeInsertText.length > 0 ? relativeInsertText : path,
+    endColumn: cursorPosition.column,
+    endLineNumber: cursorPosition.lineNumber,
+    startColumn: expressionStartPosition.column,
+    startLineNumber: expressionStartPosition.lineNumber,
   };
 }
 
@@ -204,8 +331,12 @@ export function buildWorkstationPromptMarkers(
 
   for (const [index, diagnostic] of diagnostics.entries()) {
     const range =
-      resolveWorkstationPromptDiagnosticRange(prompt, diagnostics, diagnostic, index) ??
-      fallbackWorkstationPromptDiagnosticRange(prompt);
+      resolveWorkstationPromptDiagnosticRange(
+        prompt,
+        diagnostics,
+        diagnostic,
+        index,
+      ) ?? fallbackWorkstationPromptDiagnosticRange(prompt);
     if (!range) {
       continue;
     }
@@ -259,7 +390,9 @@ function resolveWorkstationPromptDiagnosticRange(
   if (diagnostic.sourceText) {
     const sourceTextOccurrence = diagnostics
       .slice(0, diagnosticIndex)
-      .filter((candidate) => candidate.sourceText === diagnostic.sourceText).length;
+      .filter(
+        (candidate) => candidate.sourceText === diagnostic.sourceText,
+      ).length;
     const sourceTextIndex = nthIndexOf(
       prompt,
       diagnostic.sourceText,
@@ -291,7 +424,10 @@ function nthIndexOf(text: string, query: string, occurrence: number) {
   return matchIndex;
 }
 
-function utf8ByteOffsetToCodeUnitIndex(text: string, oneBasedByteOffset: number) {
+function utf8ByteOffsetToCodeUnitIndex(
+  text: string,
+  oneBasedByteOffset: number,
+) {
   if (oneBasedByteOffset <= 1) {
     return 0;
   }
@@ -307,7 +443,13 @@ function utf8ByteOffsetToCodeUnitIndex(text: string, oneBasedByteOffset: number)
 
     const codeUnitWidth = codePoint > 0xffff ? 2 : 1;
     const byteWidth =
-      codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+      codePoint <= 0x7f
+        ? 1
+        : codePoint <= 0x7ff
+          ? 2
+          : codePoint <= 0xffff
+            ? 3
+            : 4;
     if (bytesSeen >= targetByteCount) {
       return index;
     }
@@ -340,67 +482,3 @@ function codeUnitIndexToPosition(text: string, targetIndex: number) {
 
   return { column, lineNumber };
 }
-
-const WORKSTATION_PROMPT_MONARCH_LANGUAGE: MonacoLanguagesAPI.IMonarchLanguage = {
-  defaultToken: "text",
-  ignoreCase: false,
-  tokenizer: {
-    root: [
-      [/\{\{/, { next: "@template", token: "delimiter.template" }],
-      [/[^{}]+/, "text"],
-      [/[{}]/, "text"],
-    ],
-    template: [
-      [/\}\}/, { next: "@pop", token: "delimiter.template" }],
-      [/\b(?:if|else|end|range|with|template|block|define)\b/, "keyword.template"],
-      [
-        /\b(?:and|call|eq|ge|gt|html|index|js|le|len|lt|ne|not|or|print|printf|println|slice|urlquery)\b/,
-        "keyword.function.template",
-      ],
-      [/\$[A-Za-z_]\w*/, "variable.local"],
-      [/\.[A-Za-z_]\w*/, "variable.root"],
-      [/\d+/, "number.template"],
-      [/"([^"\\]|\\.)*"/, "string.template"],
-      [/'([^'\\]|\\.)*'/, "string.template"],
-      [/[|()[\],:=]/, "delimiter.template"],
-      [/\s+/, "white"],
-      [/[A-Za-z_]\w*/, "identifier.template"],
-      [/./, "identifier.template"],
-    ],
-  },
-};
-
-const WORKSTATION_PROMPT_THEME: MonacoEditorAPI.IStandaloneThemeData = {
-  base: "vs-dark",
-  colors: {
-    "editor.background": "#091117",
-    "editor.foreground": "#F7F2E8",
-    "editor.lineHighlightBackground": "#101C23",
-    "editor.selectionBackground": "#21414A",
-    "editor.inactiveSelectionBackground": "#173039",
-    "editorCursor.foreground": "#F5C76F",
-    "editorWhitespace.foreground": "#FFFFFF24",
-    "editorIndentGuide.background1": "#FFFFFF14",
-    "editorIndentGuide.activeBackground1": "#FFFFFF2E",
-    "editorWidget.background": "#091117",
-    "editorWidget.border": "#FFFFFF1F",
-    "editorSuggestWidget.background": "#091117",
-    "editorSuggestWidget.foreground": "#F7F2E8",
-    "editorSuggestWidget.selectedBackground": "#132C37",
-    "editorSuggestWidget.highlightForeground": "#F5C76F",
-    "editorHoverWidget.background": "#091117",
-    "editorHoverWidget.border": "#FFFFFF1F",
-  },
-  inherit: true,
-  rules: [
-    { foreground: "F7F2E8", token: "text" },
-    { fontStyle: "bold", foreground: "F5C76F", token: "delimiter.template" },
-    { foreground: "7DD3FC", token: "keyword.template" },
-    { foreground: "B5EDF4", token: "keyword.function.template" },
-    { foreground: "F7F2E8", token: "identifier.template" },
-    { foreground: "A7F0C4", token: "string.template" },
-    { foreground: "F5C76F", token: "number.template" },
-    { foreground: "FFB2B2", token: "variable.local" },
-    { foreground: "5CCADD", token: "variable.root" },
-  ],
-};

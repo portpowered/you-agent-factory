@@ -1981,6 +1981,9 @@ components:
         encrypted:
           type: boolean
           description: Whether the reasoning entry only exposed encrypted content.
+        encryptedContent:
+          type: string
+          description: Compact encrypted reasoning payload when the provider exposes it.
     CodexSessionTokenUsage:
       type: object
       additionalProperties: false
@@ -4609,6 +4612,9 @@ components:
         encrypted:
           type: boolean
           description: Whether the entry only exposed encrypted content instead of plaintext.
+        encryptedContent:
+          type: string
+          description: Compact encrypted reasoning payload when the provider exposes it.
     HostedWorkerProvider:
       type: string
       description: Built-in repository-owned hosted worker providers supported by the public factory-config contract.

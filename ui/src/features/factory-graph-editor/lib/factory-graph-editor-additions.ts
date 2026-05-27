@@ -3,7 +3,7 @@ import {
   type EditableWorkstationBehavior,
   resolveEditableWorkstationBehaviorOptions,
   workerSupportsPollerBehavior,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/lib/workstation-behavior";
 import type { FactoryGraphEditorMenuAction } from "../components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import type {

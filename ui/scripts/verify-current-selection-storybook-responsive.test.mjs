@@ -8,9 +8,13 @@ import {
 function createVisibleLocator(label, overrides = {}) {
   return {
     count: vi.fn().mockResolvedValue(1),
+    click: vi.fn().mockResolvedValue(undefined),
     evaluate: vi.fn().mockResolvedValue(undefined),
     fill: vi.fn().mockResolvedValue(undefined),
     first: vi.fn(function first() {
+      return this;
+    }),
+    filter: vi.fn(function filter() {
       return this;
     }),
     last: vi.fn(function last() {
@@ -57,7 +61,10 @@ function createSaveFlowHarness() {
   });
   const currentSelection = {
     getByRole: vi.fn((role, options) => {
-      if (role === "button" && options?.name === "Expand editable configuration") {
+      if (
+        role === "button" &&
+        options?.name === "Expand editable configuration"
+      ) {
         return expandButton;
       }
       if (role === "textbox" && options?.name === "Prompt") {
@@ -89,9 +96,7 @@ function createSaveFlowHarness() {
     waitFor: vi.fn().mockResolvedValue(undefined),
   };
   const page = {
-    evaluate: vi
-      .fn()
-      .mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
+    evaluate: vi.fn().mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
     getByRole: vi.fn((role, options) => {
       if (role === "article" && options?.name === "Current selection") {
         return currentSelection;
@@ -131,7 +136,9 @@ function createPromptHintFixture() {
     "Select Implement workstation",
   );
   implementWorkstationButton.click = vi.fn().mockResolvedValue(undefined);
-  const reviewWorkstationButton = createVisibleLocator("Select Review workstation");
+  const reviewWorkstationButton = createVisibleLocator(
+    "Select Review workstation",
+  );
   reviewWorkstationButton.click = vi.fn().mockResolvedValue(undefined);
   const expandEditableConfigurationButton = createVisibleLocator(
     "Expand editable configuration",
@@ -147,6 +154,8 @@ function createPromptHintFixture() {
   });
   const promptField = createVisibleLocator("Prompt textbox");
   promptField.click = vi.fn().mockResolvedValue(undefined);
+  const suggestionWidget = createVisibleLocator("Prompt suggestion widget");
+  const completedPromptLine = createVisibleLocator("Completed prompt line");
   const saveButton = createVisibleLocator("Save changes button", {
     isDisabled: vi.fn().mockResolvedValue(true),
   });
@@ -165,7 +174,10 @@ function createPromptHintFixture() {
       if (role === "button" && options?.name === "Save changes") {
         return saveButton;
       }
-      if (role === "button" && String(options?.name).includes("prompt variable help")) {
+      if (
+        role === "button" &&
+        String(options?.name).includes("prompt variable help")
+      ) {
         return removedHelpButton;
       }
       return createVisibleLocator(`${role}:${options?.name}`);
@@ -210,6 +222,15 @@ function createPromptHintFixture() {
       press: vi.fn().mockResolvedValue(undefined),
       type: vi.fn().mockResolvedValue(undefined),
     },
+    locator: vi.fn((selector) => {
+      if (selector === ".suggest-widget.visible") {
+        return suggestionWidget;
+      }
+      if (selector === '[data-monaco-editor="workstation-prompt"] .view-line') {
+        return completedPromptLine;
+      }
+      return createVisibleLocator(`page-locator:${selector}`);
+    }),
   };
 
   return {
@@ -227,6 +248,8 @@ function createPromptHintFixture() {
     removedHelpPanel,
     reviewWorkstationButton,
     saveButton,
+    completedPromptLine,
+    suggestionWidget,
   };
 }
 
@@ -247,13 +270,15 @@ describe("verifyCurrentSelectionPromptHint", () => {
       removedHelpPanel,
       reviewWorkstationButton,
       saveButton,
+      completedPromptLine,
+      suggestionWidget,
     } = createPromptHintFixture();
 
     await verifyCurrentSelectionPromptHint({
       expectNoHorizontalOverflow,
       expectVisible,
       page,
-      viewport: { height: 844, label: "mobile", width: 390 },
+      viewport: { height: 900, label: "desktop", width: 1440 },
     });
 
     expect(currentSelection.getByRole).not.toHaveBeenCalledWith("button", {
@@ -267,19 +292,34 @@ describe("verifyCurrentSelectionPromptHint", () => {
     expect(reviewWorkstationButton.focus).toHaveBeenCalled();
     expect(expandEditableConfigurationButton.focus).toHaveBeenCalled();
     expect(page.keyboard.press).toHaveBeenCalledWith("Enter");
-    expect(promptField.click).toHaveBeenCalledWith({ force: true });
+    expect(page.locator).toHaveBeenCalledWith(
+      '[data-monaco-editor="workstation-prompt"] .native-edit-context',
+    );
+    expect(expectVisible).toHaveBeenCalledWith(
+      suggestionWidget,
+      "Prompt autocomplete expanded input-field suggestion",
+    );
+    expect(expectVisible).toHaveBeenCalledWith(
+      suggestionWidget,
+      "Prompt autocomplete prefix-based input-field suggestion",
+    );
+    expect(expectVisible).toHaveBeenCalledWith(
+      completedPromptLine,
+      "Prompt editor accepted prefix-based input-field completion",
+    );
     expect(page.keyboard.press).toHaveBeenCalledWith("ControlOrMeta+A");
+    expect(page.keyboard.type).toHaveBeenCalledWith(
+      "Use {{ (index .Inputs 0).",
+    );
     expect(page.keyboard.type).toHaveBeenCalledWith(
       "Use {{ (index .Inputs 1).Payload }}.",
     );
+    expect(suggestionWidget.click).toHaveBeenCalled();
     expect(saveButton.isDisabled).toHaveBeenCalled();
-    expect(expectVisible).toHaveBeenCalledWith(
-      promptField,
-      "Prompt field",
-    );
+    expect(expectVisible).toHaveBeenCalledWith(promptField, "Prompt field");
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
-      "Current selection prompt hinting at mobile",
+      "Current selection prompt hinting at desktop",
     );
     expect(calls).toContainEqual([
       "text",

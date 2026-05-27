@@ -11,7 +11,7 @@ complete customer-facing contract.
 
 | Topic | Packaged scope | Canonical or broader customer guide |
 |-------|----------------|--------------------------------------|
-| `config` | Split layout and `factory.json` placement | [Factory JSON and work configuration](work.md) |
+| `config` | Split layout and `factory.json` placement | [Factory JSON and work configuration](work.md) and [Author factories](authoring-factories.md) |
 | `workstation` | Workstation quick reference | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Factory JSON and work configuration](work.md) |
@@ -46,7 +46,8 @@ Use these canonical concept owners when you need the current contract.
 - [Templates](templates.md) explains the supported Go-template surfaces, the
   full variable inventory, and the JSON-versus-Markdown quoting rules.
 - [Author factories](authoring-factories.md) keeps factory sequencing,
-  examples, and run commands.
+  mock-worker checks, replay recording guidance, reusable
+  [`docs/examples/`](../examples/README.md) inputs, and run commands.
 - [Author AGENTS.md](authoring-agents-md.md) keeps split-file shape, prompt
   placement, and prompt-authoring examples.
 

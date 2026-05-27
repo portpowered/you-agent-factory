@@ -1,4 +1,3 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: existing provider-session detail panel remains oversized while this story localizes enum-backed labels without a broader panel split.
 import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
@@ -16,10 +15,7 @@ import { PROVIDER_SESSION_CARD_CLASS } from "../../current-selection/components/
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
-import {
-  EncryptedReasoningNotice,
-  TranscriptSection,
-} from "./provider-session-transcript";
+import { TranscriptSection } from "./provider-session-transcript";
 
 export interface ProviderSessionDetailPanelProps {
   locale?: string;
@@ -89,7 +85,11 @@ function LoadedProviderSessionDetailPanel({
           {messages.localizedTimezoneContext}
         </LocalizedTimezoneNote>
         <div className="grid gap-3">
-          <DetailMetric label={messages.sessionLabel} value={sessionLabel} code />
+          <DetailMetric
+            label={messages.sessionLabel}
+            value={sessionLabel}
+            code
+          />
           <DetailMetric
             label={messages.sessionStatusLabel}
             value={getSessionStatusText(detailState.status, messages)}
@@ -167,8 +167,6 @@ function LoadedProviderSessionDetailPanel({
                 <ParseOverview detail={detail} locale={locale} />
                 <TokenUsageSection detail={detail} locale={locale} />
                 <TurnsSection detail={detail} locale={locale} />
-                <FunctionCallsSection detail={detail} locale={locale} />
-                <ReasoningSection detail={detail} locale={locale} />
               </SecondarySection>
               <ParseDiagnosticsSection detail={detail} locale={locale} />
             </>
@@ -190,7 +188,9 @@ function SourceFileSection({
 
   return (
     <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.sourceHeading}</h5>
+      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.sourceHeading}
+      </h5>
       <div className="grid gap-3">
         <DetailMetric
           label={messages.relativePathLabel}
@@ -273,7 +273,9 @@ function ParseOverview({
 
   return (
     <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.parseSummaryHeading}</h5>
+      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.parseSummaryHeading}
+      </h5>
       <div className="grid gap-3">
         <DetailMetric
           label={messages.eventCountLabel}
@@ -313,7 +315,10 @@ function TokenUsageSection({
       </h5>
       {tokenUsage ? (
         <div className="grid gap-3">
-          <DetailMetric label={messages.inputLabel} value={tokenUsage.inputTokens ?? 0} />
+          <DetailMetric
+            label={messages.inputLabel}
+            value={tokenUsage.inputTokens ?? 0}
+          />
           <DetailMetric
             label={messages.cachedInputLabel}
             value={tokenUsage.cachedInputTokens ?? 0}
@@ -372,7 +377,10 @@ function TurnsSection({
                 </div>
               </div>
               <div className="mt-2 grid gap-3">
-                <DetailMetric label={messages.eventsLabel} value={turn.eventCount} />
+                <DetailMetric
+                  label={messages.eventsLabel}
+                  value={turn.eventCount}
+                />
                 <DetailMetric
                   label={messages.responseItemsLabel}
                   value={turn.responseItemCount}
@@ -391,118 +399,6 @@ function TurnsSection({
         </div>
       ) : (
         <p className={DETAIL_COPY_CLASS}>{messages.turnsUnavailable}</p>
-      )}
-    </section>
-  );
-}
-
-function FunctionCallsSection({
-  detail,
-  locale,
-}: {
-  detail: SessionDetail;
-  locale?: string;
-}) {
-  const messages = getProviderSessionDetailMessages(locale);
-
-  return (
-    <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.functionCallsHeading}
-      </h5>
-      {detail.parse.functionCalls.length > 0 ? (
-        <div className="grid gap-3">
-          {detail.parse.functionCalls.map((call) => (
-            <article
-              className={PROVIDER_SESSION_CARD_CLASS}
-              key={`${call.order}-${call.callId ?? call.name ?? call.type}`}
-            >
-              <div className="grid gap-1">
-                <div className="grid gap-1">
-                  <strong>{call.name ?? call.type}</strong>
-                  <p
-                    className={cn(
-                      "m-0 text-af-text-subtle",
-                      DASHBOARD_SUPPORTING_TEXT_CLASS,
-                    )}
-                  >
-                    {messages.orderLabel({
-                      order: call.order,
-                      turnIndex: call.turnIndex,
-                    })}
-                  </p>
-                </div>
-                {call.status ? (
-                  <span
-                    className={cn(
-                      "inline-flex w-fit rounded-full border border-af-border bg-af-surface-raised px-2 py-0.5 text-af-text-subtle",
-                      DASHBOARD_SUPPORTING_TEXT_CLASS,
-                    )}
-                  >
-                    {call.status}
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-2 grid gap-3">
-                <DetailMetric label={messages.typeLabel} value={call.type} />
-                <DetailMetric
-                  label={messages.callIdLabel}
-                  value={call.callId ?? messages.unavailableValue}
-                />
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.functionCallsUnavailable}</p>
-      )}
-    </section>
-  );
-}
-
-function ReasoningSection({
-  detail,
-  locale,
-}: {
-  detail: SessionDetail;
-  locale?: string;
-}) {
-  const messages = getProviderSessionDetailMessages(locale);
-
-  return (
-    <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.reasoningHeading}
-      </h5>
-      {detail.parse.reasoning.length > 0 ? (
-        <div className="grid gap-3">
-          {detail.parse.reasoning.map((entry) => (
-            <article
-              className={PROVIDER_SESSION_CARD_CLASS}
-              key={`${entry.order}-${entry.sourceType}`}
-            >
-              <div className="grid gap-1">
-                <strong>{entry.sourceType}</strong>
-                <p
-                  className={cn(
-                    "m-0 text-af-text-subtle",
-                    DASHBOARD_SUPPORTING_TEXT_CLASS,
-                  )}
-                >
-                  {messages.orderLabel({
-                    order: entry.order,
-                    turnIndex: entry.turnIndex,
-                  })}
-                </p>
-              </div>
-              {entry.encrypted ? (
-                <EncryptedReasoningNotice className="mt-2" locale={locale} />
-              ) : null}
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.reasoningUnavailable}</p>
       )}
     </section>
   );

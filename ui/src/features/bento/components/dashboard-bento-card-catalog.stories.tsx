@@ -1,16 +1,14 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: Keeps the PRD-required top-level bento card catalog in one Storybook sidebar group.
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import type {
-  DashboardSnapshot,
   DashboardProviderSessionAttempt,
+  DashboardSnapshot,
   DashboardTrace,
 } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import {
-  semanticWorkflowDashboardSnapshot,
-} from "../../../components/dashboard/test-fixtures";
+import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type {
   AgentBentoLayoutCard,
   AgentBentoLayoutItem,
@@ -22,20 +20,21 @@ import {
   useCurrentSelectionDetails,
   useSelectedProviderSessionState,
 } from "../../current-selection/public";
+import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
-import { SubmitWorkWidget } from "../../submit-work/public";
 import {
   SubmitWorkCard,
   type SubmitWorkDraft,
   type SubmitWorkStatus,
 } from "../../submit-work/components/submit-work-card";
+import { SubmitWorkWidget } from "../../submit-work/public";
 import { TerminalWorkWidget } from "../../terminal-work/public";
 import {
   TraceDrilldownWidget,
   type useTraceDrilldown,
 } from "../../trace-drilldown/public";
-import { WorkOutcomeWidget } from "../../work-outcome/public";
 import type { WorkChartModel } from "../../work-outcome/lib/trends";
+import { WorkOutcomeWidget } from "../../work-outcome/public";
 import { WorkTotalsWidget } from "../../work-totals/public";
 import {
   useCurrentActivityImportController,
@@ -46,12 +45,11 @@ import {
   DEFAULT_DASHBOARD_LAYOUT,
 } from "../hooks/dashboardLayoutSchema";
 import {
-  getDashboardWidgetPickerAvailability,
   type DashboardWidgetPickerWidgetType,
+  getDashboardWidgetPickerAvailability,
 } from "../lib/dashboard-widget-picker";
 import { AgentBentoLayout } from "./agent-bento";
 import { DashboardWidgetRemoveButton } from "./dashboard-widget-remove-button";
-import { InlineAddWidgetCard } from "./inline-add-widget-card";
 
 const STORY_NOW = Date.parse("2026-04-08T12:05:00Z");
 const providerSessionID = "sess-bento-card-catalog";
@@ -415,7 +413,9 @@ function renderCardFrame({
   layout: AgentBentoLayoutItem;
 }) {
   return (
-    <div style={{ maxWidth: `${initialWidth}px`, padding: "1rem", width: "100%" }}>
+    <div
+      style={{ maxWidth: `${initialWidth}px`, padding: "1rem", width: "100%" }}
+    >
       <AgentBentoLayout
         cards={[
           {
@@ -499,7 +499,9 @@ function CurrentSelectionCardStory() {
             .failed_work_details_by_work_id
         }
         now={STORY_NOW}
-        onSelectProviderSession={providerSessionState.setSelectedProviderSession}
+        onSelectProviderSession={
+          providerSessionState.setSelectedProviderSession
+        }
         onSelectTraceID={() => undefined}
         selectedProviderSessionKey={
           providerSessionState.selectedProviderSessionKey
@@ -709,7 +711,10 @@ function renderTraceStateCard(
 ) {
   return renderCardFrame({
     children: (
-      <TraceDrilldownWidget state={state} widgetId={`trace-${state.status}::story`} />
+      <TraceDrilldownWidget
+        state={state}
+        widgetId={`trace-${state.status}::story`}
+      />
     ),
     layout: layoutFor(DASHBOARD_WIDGET_IDS.trace, {
       h: 8,
@@ -724,7 +729,11 @@ function renderWorkOutcomeStateCard({
   model,
   storyID,
 }: {
-  chartState?: { message?: string; status: "error" | "loading"; title?: string };
+  chartState?: {
+    message?: string;
+    status: "error" | "loading";
+    title?: string;
+  };
   model: WorkChartModel;
   storyID: string;
 }) {
@@ -794,7 +803,8 @@ function renderSubmitWorkStatusCard({
               : isError
                 ? {
                     kind: "error",
-                    message: "Submission failed because the factory rejected the request.",
+                    message:
+                      "Submission failed because the factory rejected the request.",
                   }
                 : {
                     kind: "guidance",
@@ -901,7 +911,9 @@ interface ResponsiveCatalogContext {
 function responsiveCatalogMetricCards(): AgentBentoLayoutCard[] {
   return [
     {
-      children: <WorkTotalsWidget snapshot={semanticWorkflowDashboardSnapshot} />,
+      children: (
+        <WorkTotalsWidget snapshot={semanticWorkflowDashboardSnapshot} />
+      ),
       id: "work-totals::responsive",
       widgetType: DASHBOARD_WIDGET_IDS.workTotals,
     },
@@ -1113,7 +1125,9 @@ export default {
 export const WorkTotals = {
   render: () =>
     renderCardFrame({
-      children: <WorkTotalsWidget snapshot={semanticWorkflowDashboardSnapshot} />,
+      children: (
+        <WorkTotalsWidget snapshot={semanticWorkflowDashboardSnapshot} />
+      ),
       layout: layoutFor(DASHBOARD_WIDGET_IDS.workTotals, {
         h: 2,
         id: "work-totals::story",
@@ -1477,7 +1491,9 @@ export const SubmitWork = {
     renderCardFrame({
       children: (
         <SubmitWorkWidget
-          submitWorkTypes={semanticWorkflowDashboardSnapshot.topology.submit_work_types}
+          submitWorkTypes={
+            semanticWorkflowDashboardSnapshot.topology.submit_work_types
+          }
         />
       ),
       layout: layoutFor(DASHBOARD_WIDGET_IDS.submitWork, {
@@ -1544,7 +1560,9 @@ export const SubmitWorkEmpty = {
     const card = await canvas.findByRole("article", { name: "Submit work" });
 
     await expect(
-      within(card).getByText("No work types are available to submit right now."),
+      within(card).getByText(
+        "No work types are available to submit right now.",
+      ),
     ).toBeVisible();
     await expect(
       within(card).getByRole("button", { name: "Submit work" }),
@@ -1634,9 +1652,7 @@ export const TraceDrilldownInteractive = {
       name: "Trace drill-down",
     });
 
-    await userEvent.click(
-      within(card).getByRole("button", { name: "Expand" }),
-    );
+    await userEvent.click(within(card).getByRole("button", { name: "Expand" }));
     await userEvent.click(
       within(card).getAllByRole("button", { name: /Active Story/ })[0],
     );
@@ -1661,7 +1677,9 @@ export const TraceDrilldownLoading = {
 
     await expect(within(card).getByText("Loading trace")).toBeVisible();
     await expect(
-      within(card).getByText("Reconstructing dispatch history for work-loading-story."),
+      within(card).getByText(
+        "Reconstructing dispatch history for work-loading-story.",
+      ),
     ).toBeVisible();
   },
 };

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 
 import type { DashboardProviderSessionAttempt } from "../../../api/dashboard/types";
-import { getTerminalWorkMessages } from "../messages";
+import { getTerminalWorkMessages } from "../messages/terminal-work";
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,

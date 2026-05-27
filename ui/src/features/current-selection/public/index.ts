@@ -1,4 +1,3 @@
-export * from "../components/current-selection-cards";
 export * from "../components/current-selection-widget";
 export * from "../state/selection-types";
 export * from "../hooks/useCurrentSelection";

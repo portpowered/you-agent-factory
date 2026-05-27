@@ -1,5 +1,5 @@
 import { formatList } from "../../../components/ui/formatters";
-import type { EditableWorkstationDraft } from "../../current-factory-definition/public";
+import type { EditableWorkstationDraft } from "../../current-factory-definition/lib/workstation-editable-values";
 import type { EditableWorkstationOverwriteField } from "../components/detail-card-types";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 

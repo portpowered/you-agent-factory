@@ -83,7 +83,11 @@ function buildReadyEditableConfigurationState(overrides?: {
         };
         status: "ready";
       };
-  validationErrors?: { behavior?: string; prompt?: string; workerName?: string };
+  validationErrors?: {
+    behavior?: string;
+    prompt?: string;
+    workerName?: string;
+  };
   workerName?: string;
   workerOptionsState?:
     | { status: "ready"; options: string[] }
@@ -119,7 +123,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     },
     isDirty: Boolean(
       overrides?.behavior ||
-      overrides?.validationErrors?.prompt ||
+        overrides?.validationErrors?.prompt ||
         overrides?.validationErrors?.behavior ||
         overrides?.validationErrors?.workerName ||
         overrides?.prompt,
@@ -213,7 +217,9 @@ describe("WorkstationDetailCard editable configuration", () => {
     const configurationHeading = screen.getByRole("heading", {
       name: "Configuration",
     });
-    const activeWorkHeading = screen.getByRole("heading", { name: "Active work" });
+    const activeWorkHeading = screen.getByRole("heading", {
+      name: "Active work",
+    });
 
     expectHeadingBefore(summaryHeading, configurationHeading);
     expectHeadingBefore(configurationHeading, activeWorkHeading);
@@ -222,7 +228,9 @@ describe("WorkstationDetailCard editable configuration", () => {
         name: "Expand editable configuration",
       }),
     ).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Request history" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Request history" }),
+    ).toBeNull();
   });
 
   it("supports keyboard disclosure toggling for the editable configuration section", async () => {
@@ -293,6 +301,11 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(
       screen.getByLabelText("Prompt").getAttribute("data-monaco-editor"),
     ).toBe("workstation-prompt");
+    expect(
+      screen.getByText(
+        "Autocomplete is ready with 2 variables for 1 authored input.",
+      ),
+    ).toBeTruthy();
     expect(
       screen.getByDisplayValue(
         "Review the latest story changes before approval.",
@@ -717,6 +730,56 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeTruthy();
   });
 
+  it("links prompt editor accessibility metadata to validation and diagnostic feedback", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt: "Use {{ .Prompt }} now.",
+          promptDiagnostics: [
+            {
+              kind: "INVALID_VARIABLE",
+              message: "Prompt root is invalid.",
+              sourceText: "{{ .Prompt }}",
+            },
+          ],
+          validationErrors: {
+            prompt:
+              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    const promptEditor = screen.getByLabelText("Prompt");
+    const promptEditorWrapper = promptEditor.parentElement;
+
+    expect(promptEditorWrapper?.getAttribute("aria-invalid")).toBe("true");
+    expect(promptEditorWrapper?.getAttribute("aria-describedby")).toBe(
+      "editable-workstation-prompt-error editable-workstation-prompt-diagnostics",
+    );
+    expect(
+      document.getElementById("editable-workstation-prompt-error")?.textContent,
+    ).toBe(
+      "Resolve the highlighted prompt diagnostics before saving this workstation.",
+    );
+    expect(
+      document.getElementById("editable-workstation-prompt-diagnostics"),
+    ).toBeTruthy();
+  });
+
   it("merges overlapping diagnostic ranges into one visible squiggle", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
@@ -766,7 +829,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
     expect(editor?.getAttribute("data-monaco-marker-count")).toBe("2");
     expect(editor?.getAttribute("data-monaco-marker-ranges")).toContain(
-      "\"startColumn\":5",
+      '"startColumn":5',
     );
   });
 
@@ -810,7 +873,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       "[data-monaco-editor='workstation-prompt']",
     );
     expect(editor?.getAttribute("data-monaco-marker-ranges")).toContain(
-      "\"startColumn\":4",
+      '"startColumn":4',
     );
   });
 
@@ -853,7 +916,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       "[data-monaco-editor='workstation-prompt']",
     );
     expect(editor?.getAttribute("data-monaco-marker-ranges")).toContain(
-      "\"endColumn\":7",
+      '"endColumn":7',
     );
   });
 
@@ -1063,11 +1126,9 @@ describe("WorkstationDetailCard editable configuration", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen
-        .getByText(
-          "Loading the current factory definition for this workstation.",
-        )
-        .className,
+      screen.getByText(
+        "Loading the current factory definition for this workstation.",
+      ).className,
     ).toContain("text-af-text-muted");
 
     rerender(
@@ -1090,11 +1151,9 @@ describe("WorkstationDetailCard editable configuration", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen
-        .getByText(
-          "Editable configuration unavailable. The current factory API rejected the request.",
-        )
-        .className,
+      screen.getByText(
+        "Editable configuration unavailable. The current factory API rejected the request.",
+      ).className,
     ).toContain("text-af-danger-text");
 
     rerender(
@@ -1117,11 +1176,9 @@ describe("WorkstationDetailCard editable configuration", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen
-        .getByText(
-          "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
-        )
-        .className,
+      screen.getByText(
+        "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
+      ).className,
     ).toContain("text-af-text-muted");
   });
 
@@ -1220,11 +1277,14 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     expect(
       screen
-        .getByText("Autocomplete is ready with 2 variables for 1 authored input.")
+        .getByText(
+          "Autocomplete is ready with 2 variables for 1 authored input.",
+        )
         .closest("div")?.className,
     ).toContain("border-af-border");
     expect(
-      screen.getByText("Prompt diagnostics").closest("[role='alert']")?.className,
+      screen.getByText("Prompt diagnostics").closest("[role='alert']")
+        ?.className,
     ).toContain("border-af-danger-border");
     expect(screen.getByText(".Inputs[1]").className).toContain(
       "text-af-text-muted",

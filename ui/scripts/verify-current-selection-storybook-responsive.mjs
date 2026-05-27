@@ -19,16 +19,19 @@ export async function verifyCurrentSelectionPromptHint({
   const saveButton = currentSelection.getByRole("button", {
     name: "Save changes",
   });
-  const expandEditableConfigurationButton = currentSelection.getByRole("button", {
-    name: "Expand editable configuration",
-  });
+  const expandEditableConfigurationButton = currentSelection.getByRole(
+    "button",
+    {
+      name: "Expand editable configuration",
+    },
+  );
   await expandEditableConfigurationButton.focus();
   await page.keyboard.press("Enter");
 
   await expectVisible(promptField, "Prompt field");
   await expectVisible(
     currentSelection.getByText(
-      "Autocomplete is ready with 2 variables for 1 authored input.",
+      "Autocomplete is ready with 15 variables for 1 authored input.",
     ),
     "Prompt autocomplete contract summary",
   );
@@ -38,6 +41,12 @@ export async function verifyCurrentSelectionPromptHint({
     ),
     "Prompt autocomplete inline guidance",
   );
+  if (viewport.label === "desktop") {
+    await verifyPromptEditorAutocompleteCompletion({
+      expectVisible,
+      page,
+    });
+  }
 
   const removedHelpButtonCount = await currentSelection
     .getByRole("button", { name: /prompt variable help/i })
@@ -60,13 +69,10 @@ export async function verifyCurrentSelectionPromptHint({
     throw new Error("Legacy prompt squiggle overlay should be removed.");
   }
 
-  await promptField.click({ force: true });
+  await focusPromptEditor(page);
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type("Use {{ (index .Inputs 1).Payload }}.");
-  await expectVisible(
-    promptField,
-    "Prompt field after invalid prompt entry",
-  );
+  await expectVisible(promptField, "Prompt field after invalid prompt entry");
   await expectVisible(
     currentSelection.getByRole("heading", { name: "Prompt diagnostics" }),
     "Prompt diagnostics summary",
@@ -88,13 +94,54 @@ export async function verifyCurrentSelectionPromptHint({
 
   const saveButtonDisabled = await saveButton.isDisabled();
   if (!saveButtonDisabled) {
-    throw new Error("Save changes should stay disabled while diagnostics remain.");
+    throw new Error(
+      "Save changes should stay disabled while diagnostics remain.",
+    );
   }
 
   await expectNoHorizontalOverflow(
     page,
     `Current selection prompt hinting at ${viewport.label}`,
   );
+}
+
+async function verifyPromptEditorAutocompleteCompletion({
+  expectVisible,
+  page,
+}) {
+  await focusPromptEditor(page);
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type("Use {{ (index .Inputs 0).");
+  await page.keyboard.press("Control+Space");
+
+  const suggestionWidget = page.locator(".suggest-widget.visible");
+  await expectVisible(
+    suggestionWidget.locator(".monaco-list-row").filter({ hasText: "Payload" }),
+    "Prompt autocomplete expanded input-field suggestion",
+  );
+
+  const nameSuggestion = suggestionWidget
+    .locator(".monaco-list-row")
+    .filter({ hasText: "Name" });
+  await expectVisible(
+    nameSuggestion,
+    "Prompt autocomplete prefix-based input-field suggestion",
+  );
+  await nameSuggestion.click();
+  await expectVisible(
+    page
+      .locator('[data-monaco-editor="workstation-prompt"] .view-line')
+      .filter({ hasText: "(index .Inputs 0).Name" }),
+    "Prompt editor accepted prefix-based input-field completion",
+  );
+}
+
+async function focusPromptEditor(page) {
+  await page
+    .locator('[data-monaco-editor="workstation-prompt"] .native-edit-context')
+    .evaluate((element) => {
+      element.focus();
+    });
 }
 
 function expectHeadingBeforePosition(firstRect, secondRect, label) {
@@ -155,9 +202,11 @@ export async function verifyCurrentSelectionWorkstationDetailOrder({
     "Workstation summary activity-count label",
   );
   await expectVisible(
-    currentSelection.getByRole("button", {
-      name: "Select work item Active Story",
-    }).first(),
+    currentSelection
+      .getByRole("button", {
+        name: "Select work item Active Story",
+      })
+      .first(),
     "Active work selection button",
   );
 
@@ -206,7 +255,9 @@ export async function verifyCurrentSelectionSaveFlow({
   });
   await currentSelection.waitFor({ state: "visible" });
   const promptField = currentSelection.getByRole("textbox", { name: "Prompt" });
-  const workerField = currentSelection.getByRole("combobox", { name: "Worker" });
+  const workerField = currentSelection.getByRole("combobox", {
+    name: "Worker",
+  });
   const saveButton = currentSelection.getByRole("button", {
     name: "Save changes",
   });
@@ -247,12 +298,16 @@ export async function verifyCurrentSelectionSaveFlow({
     })
     .count();
   if (overwriteDialogCount > 0) {
-    throw new Error("Save confirmation dialog should close after a successful save.");
+    throw new Error(
+      "Save confirmation dialog should close after a successful save.",
+    );
   }
 
   const saveButtonDisabled = await saveButton.isDisabled();
   if (!saveButtonDisabled) {
-    throw new Error("Save changes should disable after the saved draft is refreshed.");
+    throw new Error(
+      "Save changes should disable after the saved draft is refreshed.",
+    );
   }
 
   await expectNoHorizontalOverflow(

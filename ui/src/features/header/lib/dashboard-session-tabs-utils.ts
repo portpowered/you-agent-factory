@@ -1,10 +1,12 @@
 import {
-  type FactorySessionTarget,
-  type FactorySessionsAPIErrorTarget,
   type FactorySessionSummary,
   FactorySessionsAPIError,
+  type FactorySessionsAPIErrorTarget,
+  type FactorySessionTarget,
 } from "../../../api/factory-sessions";
 import type { getHeaderControlsMessages } from "../messages/header-controls";
+
+export const SESSION_TAB_PATH_MAX_LENGTH = 48;
 
 export type FolderValidationState =
   | { status: "idle" }
@@ -22,7 +24,8 @@ export type FolderValidationErrorReason =
   | "unknown";
 
 export function sessionTabLabel(session: FactorySessionSummary): string {
-  const namedTarget = session.target.kind === "named" ? session.target.name : "";
+  const namedTarget =
+    session.target.kind === "named" ? session.target.name : "";
   return (
     normalizeSessionLabelPart(namedTarget) ||
     normalizeSessionLabelPart(basename(session.factoryDir)) ||
@@ -30,6 +33,24 @@ export function sessionTabLabel(session: FactorySessionSummary): string {
     normalizeSessionLabelPart(session.project) ||
     "factory"
   );
+}
+
+export function sessionTabSecondaryPath(
+  path: string,
+  maxLength = SESSION_TAB_PATH_MAX_LENGTH,
+): string {
+  const normalizedPath = path.trim();
+  if (normalizedPath.length <= maxLength) {
+    return normalizedPath;
+  }
+  if (maxLength <= 0) {
+    return "";
+  }
+  if (maxLength <= 3) {
+    return normalizedPath.slice(-maxLength);
+  }
+
+  return `...${normalizedPath.slice(-(maxLength - 3))}`;
 }
 
 export function sessionCloseLabel(
@@ -59,11 +80,16 @@ export function sessionTabID(sessionTabsID: string, sessionID: string): string {
   return `${sessionTabsID}-tab-${sessionDOMIDFragment(sessionID)}`;
 }
 
-export function sessionPanelID(sessionTabsID: string, sessionID: string): string {
+export function sessionPanelID(
+  sessionTabsID: string,
+  sessionID: string,
+): string {
   return `${sessionTabsID}-panel-${sessionDOMIDFragment(sessionID)}`;
 }
 
-export function normalizeFactorySessionsError(error: unknown): FactorySessionsAPIError {
+export function normalizeFactorySessionsError(
+  error: unknown,
+): FactorySessionsAPIError {
   if (error instanceof FactorySessionsAPIError) {
     return error;
   }
@@ -97,14 +123,19 @@ export function folderValidationStatusMessage(
 export function classifyFactorySessionFolderValidationError(
   error: FactorySessionsAPIError,
 ): FolderValidationErrorReason {
-  const targetedReason = classifyFactorySessionFolderValidationTarget(error.targets);
+  const targetedReason = classifyFactorySessionFolderValidationTarget(
+    error.targets,
+  );
   if (targetedReason !== null) {
     return targetedReason;
   }
 
   const message = error.message.trim();
 
-  if (message === "folderPath is required" || message === "factory session folder is required") {
+  if (
+    message === "folderPath is required" ||
+    message === "factory session folder is required"
+  ) {
     return "required";
   }
   if (
@@ -140,7 +171,9 @@ function classifyFactorySessionFolderValidationTarget(
   targets: FactorySessionsAPIErrorTarget[] | undefined,
 ): FolderValidationErrorReason | null {
   const validationTarget = targets?.find(
-    (target) => target.kind === "factory-session-validation" && typeof target.id === "string",
+    (target) =>
+      target.kind === "factory-session-validation" &&
+      typeof target.id === "string",
   );
   if (!validationTarget?.id) {
     return null;
@@ -176,7 +209,8 @@ export function selectedFactorySessionTarget(
 ): FactorySessionTarget | null {
   return (
     targets.find(
-      (target) => factorySessionTargetOptionValue(target) === selectedTargetValue,
+      (target) =>
+        factorySessionTargetOptionValue(target) === selectedTargetValue,
     ) ?? null
   );
 }

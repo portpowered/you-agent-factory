@@ -499,26 +499,29 @@ func (p *codexSessionParser) attachFunctionOutput(itemType string, payload map[s
 func (p *codexSessionParser) appendReasoning(sourceType string, payload map[string]any, timestamp *time.Time, lineNumber int, turn *factoryapi.CodexSessionTurnSummary) {
 	turn.ReasoningCount++
 	order := len(p.summary.Reasoning) + 1
-	encrypted := firstStringField(payload, "encrypted_content", "encryptedContent") != ""
+	encryptedContent := firstCompactField(payload, "encrypted_content", "encryptedContent")
+	encrypted := encryptedContent != ""
 	reasoning := factoryapi.CodexSessionReasoningSummary{
-		Order:      order,
-		TurnIndex:  intPtr(turn.Index),
-		SourceType: sourceType,
-		Text:       stringPtrIfNotEmpty(firstReasoningText(payload)),
-		Summary:    stringPtrIfNotEmpty(firstCompactField(payload, "summary")),
-		Encrypted:  &encrypted,
+		Order:            order,
+		TurnIndex:        intPtr(turn.Index),
+		SourceType:       sourceType,
+		Text:             stringPtrIfNotEmpty(firstReasoningText(payload)),
+		Summary:          stringPtrIfNotEmpty(firstCompactField(payload, "summary")),
+		Encrypted:        &encrypted,
+		EncryptedContent: stringPtrIfNotEmpty(encryptedContent),
 	}
 	p.summary.Reasoning = append(p.summary.Reasoning, reasoning)
 	p.transcript = append(p.transcript, factoryapi.CodexSessionTranscriptEntry{
-		Encrypted:  reasoning.Encrypted,
-		LineNumber: intPtr(lineNumber),
-		Order:      len(p.transcript) + 1,
-		SourceType: stringPtrIfNotEmpty(sourceType),
-		Summary:    reasoning.Summary,
-		Text:       reasoning.Text,
-		Timestamp:  timestamp,
-		TurnIndex:  reasoning.TurnIndex,
-		Type:       factoryapi.CodexSessionTranscriptEntryType("reasoning"),
+		Encrypted:        reasoning.Encrypted,
+		EncryptedContent: reasoning.EncryptedContent,
+		LineNumber:       intPtr(lineNumber),
+		Order:            len(p.transcript) + 1,
+		SourceType:       stringPtrIfNotEmpty(sourceType),
+		Summary:          reasoning.Summary,
+		Text:             reasoning.Text,
+		Timestamp:        timestamp,
+		TurnIndex:        reasoning.TurnIndex,
+		Type:             factoryapi.CodexSessionTranscriptEntryType("reasoning"),
 	})
 }
 

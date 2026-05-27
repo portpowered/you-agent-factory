@@ -21,8 +21,10 @@ import type {
 } from "../../../api/dashboard/types";
 import type {
   EditableWorkstationBehavior,
+} from "../../current-factory-definition/lib/workstation-behavior";
+import type {
   EditableWorkstationValues,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/lib/workstation-editable-values";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
 import type { RunnerID } from "../editing/runner-metadata";
 import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";

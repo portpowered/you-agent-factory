@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { getTerminalWorkMessages } from "../messages";
+import { getTerminalWorkMessages } from "../messages/terminal-work";
 import { TerminalWorkWidget } from "./terminal-work-widget";
 
 describe("TerminalWorkWidget", () => {
