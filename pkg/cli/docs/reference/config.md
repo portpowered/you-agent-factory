@@ -62,6 +62,11 @@ factory/
 workstation runtime content such as system prompts, prompt templates, timeout
 limits, and executor settings.
 
+For an end-to-end run walkthrough, including `--with-mock-workers`,
+`--record`, `--replay`, `--no-record`, and reusable files under
+`docs/examples/`, use
+[`docs/reference/authoring-factories.md`](../../../docs/reference/authoring-factories.md).
+
 ## Core Fields
 
 | Field | Description |

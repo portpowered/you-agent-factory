@@ -256,12 +256,39 @@ Use these controls when you need to override the default behavior:
 - Pass `--replay <path>` to replay an existing artifact instead of starting a
   live run.
 
+For an explicit recording path, run:
+
+```bash
+you run --dir ./factory --record ./docs/examples/sample-run.replay.json
+```
+
+To replay that artifact later, run:
+
+```bash
+you run --dir ./factory --replay ./docs/examples/sample-run.replay.json
+```
+
+To run without writing the default recording, run:
+
+```bash
+you run --dir ./factory --no-record
+```
+
+Record mode starts a live run and writes the observed runtime history to a
+replay artifact. Replay mode reads an existing artifact and uses the recorded
+runtime history instead of dispatching live workers again. `--record` and
+`--replay` cannot be used together for the same invocation.
+
 The CLI reports the resolved generated path during shutdown with
 `Recording saved: ...` so the artifact is easy to find after a failure or an
 unexpected run. Replay artifacts are sensitive because they can contain
 prompts, payloads, stdout, stderr, and diagnostic metadata. The first version
 does not delete old artifacts automatically, so manage retention in your own
 home directory or CI workspace.
+
+Maintainers who need the internal event-log and fixture workflow can use
+[`docs/internal/development/record-replay.md`](../internal/development/record-replay.md);
+customer runs only need the CLI flags above.
 
 ### 4. Submit work
 
@@ -286,11 +313,20 @@ Create a startup or watched-file request:
 Run it at startup:
 
 ```bash
-you run --dir ./factory --with-mock-workers --work ./fixtures/story-001.json
+you run --dir ./factory --with-mock-workers --work ./docs/examples/startup-work.json
 ```
 
 Or drop the file under `factory/inputs/story/default/` while the factory is
 already running.
+
+The reusable startup work file
+[`docs/examples/startup-work.json`](../examples/startup-work.json) uses the
+same `FACTORY_REQUEST_BATCH` request shape with one `story` work item in the
+`init` state and a concrete payload. The companion
+[`docs/examples/README.md`](../examples/README.md) shows how to combine that
+startup work, the mock-worker config, and replay commands with the checked-in
+[`examples/write-code-review`](../../examples/write-code-review/factory.json)
+factory.
 
 ## Author A Model-Operation TTS Factory
 
@@ -641,10 +677,12 @@ That is equivalent to this config:
 To target specific dispatches, pass a config path:
 
 ```bash
-you run --dir ./factory --with-mock-workers ./mock-workers.json
+you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json
 ```
 
-Example:
+The reusable example in
+[`docs/examples/mock-workers.json`](../examples/mock-workers.json) matches a
+review dispatch and returns a deterministic rejection:
 
 ```json
 {
@@ -679,7 +717,16 @@ Selection fields combine as filters:
 | `workstationName` | Workstation currently executing |
 | `workInputs` | Consumed token fields such as `workType`, `state`, `inputName`, `traceId`, or `payloadHash` |
 
+Use `workerName` for the worker declared in `workers[].name`,
+`workstationName` for the workstation currently executing, `workInputs` for
+the consumed work filters, `runType` for the outcome, and the matching
+run-type config such as `rejectConfig` or `scriptConfig` for outcome details.
 If no entry matches, mock-worker mode returns the default accepted result.
+
+The checked-in
+[`examples/write-code-review/factory.json`](../../examples/write-code-review/factory.json)
+factory is a concrete starting point for adapting this command to a
+review-loop workflow.
 
 ## Authoring Checklist
 

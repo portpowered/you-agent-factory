@@ -1,11 +1,14 @@
 package mockworkertests
 
 import (
-	. "github.com/portpowered/infinite-you/pkg/config"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/internal/testpath"
+	. "github.com/portpowered/infinite-you/pkg/config"
 )
 
 func TestParseMockWorkersConfig_ValidConfigPreservesSelectorsAndRunTypeOptions(t *testing.T) {
@@ -157,6 +160,39 @@ func TestLoadMockWorkersConfig_LoadsConfigFromPath(t *testing.T) {
 	}
 	if cfg.MockWorkers[0].ID != "accepted" || cfg.MockWorkers[0].RunType != MockWorkerRunTypeAccept {
 		t.Fatalf("mock worker = %#v, want loaded accept entry", cfg.MockWorkers[0])
+	}
+}
+
+func TestDocsExampleMockWorkersConfig_ParsesAsSupportedConfig(t *testing.T) {
+	path := testpath.MustRepoPathFromCaller(t, 0, "docs", "examples", "mock-workers.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read docs example mock workers config: %v", err)
+	}
+	if !json.Valid(data) {
+		t.Fatalf("%s is not valid JSON", path)
+	}
+
+	cfg, err := ParseMockWorkersConfig(data)
+	if err != nil {
+		t.Fatalf("ParseMockWorkersConfig(%s): %v", path, err)
+	}
+	if len(cfg.MockWorkers) != 1 {
+		t.Fatalf("mock worker count = %d, want 1", len(cfg.MockWorkers))
+	}
+
+	worker := cfg.MockWorkers[0]
+	if worker.WorkerName != "reviewer" ||
+		worker.WorkstationName != "review-story" ||
+		worker.RunType != MockWorkerRunTypeReject ||
+		len(worker.WorkInputs) != 1 ||
+		worker.WorkInputs[0].WorkType != "story" ||
+		worker.WorkInputs[0].State != "in-review" ||
+		worker.WorkInputs[0].InputName != "work" {
+		t.Fatalf("docs example worker = %#v, want targeted reject entry", worker)
+	}
+	if worker.RejectConfig == nil || worker.RejectConfig.ExitCode == nil || *worker.RejectConfig.ExitCode != 42 {
+		t.Fatalf("docs example rejectConfig = %#v, want exit code 42", worker.RejectConfig)
 	}
 }
 
