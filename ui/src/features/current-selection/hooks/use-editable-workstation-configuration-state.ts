@@ -7,12 +7,12 @@ import {
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/lib/workstation-editable-values";
 import {
   workstationBehaviorRequiresPrompt,
   workerSupportsPollerBehavior,
   type EditableWorkstationBehavior,
-} from "../../current-factory-definition/public";
+} from "../../current-factory-definition/lib/workstation-behavior";
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationPromptHelpState,

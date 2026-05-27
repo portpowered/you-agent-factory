@@ -5,12 +5,12 @@ import {
   type FactoryImportActivationState,
   type FactoryImportPreviewState,
   type FactoryPngDropState,
-  type FactoryPngImportValue,
   type ReadFactoryImportFile,
   useFactoryImportActivation,
   useFactoryImportPreview,
   useFactoryPngDrop,
 } from "../../import/public";
+import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 
 export interface CurrentActivityImportController {
   activateImport: (value: FactoryPngImportValue) => Promise<void>;
