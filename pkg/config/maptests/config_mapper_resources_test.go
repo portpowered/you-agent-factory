@@ -1,8 +1,9 @@
-package config
+package maptests
 
 import (
 	"context"
 	"fmt"
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"

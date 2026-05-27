@@ -1,7 +1,8 @@
-package config
+package maptests
 
 import (
 	"context"
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"strings"
 	"testing"
 	"time"

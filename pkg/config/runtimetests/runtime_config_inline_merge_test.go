@@ -1,6 +1,7 @@
-package config
+package runtimetests
 
 import (
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"os"
 	"path/filepath"
@@ -52,7 +53,7 @@ promptFile: prompt.md
 		t.Fatalf("write prompt file: %v", err)
 	}
 
-	factoryCfg, err := loadFactoryConfig(factoryDir)
+	factoryCfg, err := loadRuntimeFactoryConfig(factoryDir)
 	if err != nil {
 		t.Fatalf("loadFactoryConfig: %v", err)
 	}
@@ -124,15 +125,13 @@ Fallback body.
 		t.Fatalf("write prompt file: %v", err)
 	}
 
-	factoryCfg, err := loadFactoryConfig(factoryDir)
+	factoryCfg, err := loadRuntimeFactoryConfig(factoryDir)
 	if err != nil {
 		t.Fatalf("loadFactoryConfig: %v", err)
 	}
-	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(factoryDir, factoryCfg, InlineRuntimeDefinitionOptions{
-		RequireSplitDefinitions: true,
-	})
+	runtimeDefs, err := LoadRuntimeConfig(factoryDir, nil)
 	if err != nil {
-		t.Fatalf("loadRuntimeDefinitionLookupMapsFromFactoryConfig: %v", err)
+		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
 
 	inlined, err := InlineRuntimeDefinitions(factoryDir, factoryCfg, InlineRuntimeDefinitionOptions{
@@ -158,7 +157,7 @@ func TestFactoryConfigWithRuntimeDefinitions_MergesWorkstationStopWordsAndDetach
 			StopWords: []string{"CANONICAL", "SHARED"},
 		}},
 	}
-	runtimeDefs := &runtimeDefinitionLookupMaps{
+	runtimeDefs := testRuntimeDefinitionLookup{
 		workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"execute-story": {
 				Name:             "execute-story",
@@ -354,4 +353,12 @@ func assertLoadedInlineScriptRuntime(t *testing.T, loaded *LoadedFactoryConfig) 
 	if loadedWorkstation.Env["SCRIPT_MODE"] != "portable" {
 		t.Fatalf("loaded workstation env = %#v", loadedWorkstation.Env)
 	}
+}
+
+func loadRuntimeFactoryConfig(factoryDir string) (*interfaces.FactoryConfig, error) {
+	data, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		return nil, err
+	}
+	return FactoryConfigFromOpenAPIJSON(data)
 }

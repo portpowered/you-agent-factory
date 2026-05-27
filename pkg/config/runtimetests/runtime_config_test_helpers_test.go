@@ -1,7 +1,8 @@
-package config
+package runtimetests
 
 import (
 	"encoding/json"
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+const generatedFactoryBoundaryErrorPrefix = "decode factory generated-schema boundary"
 
 func assertCanonicalRuntimeConfigLookupFactoryDir(t *testing.T, lookup interfaces.RuntimeConfigLookup, want string) {
 	t.Helper()
@@ -71,7 +74,10 @@ func canonicalMergeFactoryConfig() *interfaces.FactoryConfig {
 }
 
 func canonicalMergeRuntimeDefinitions() interfaces.RuntimeDefinitionLookup {
-	runtimeDefs := newRuntimeDefinitionLookupMaps(1, 1)
+	runtimeDefs := testRuntimeDefinitionLookup{
+		workers:      map[string]*interfaces.WorkerConfig{},
+		workstations: map[string]*interfaces.FactoryWorkstationConfig{},
+	}
 	runtimeDefs.workers["executor"] = &interfaces.WorkerConfig{
 		Type:        interfaces.WorkerTypeScript,
 		Command:     "go",
@@ -91,6 +97,28 @@ func canonicalMergeRuntimeDefinitions() interfaces.RuntimeDefinitionLookup {
 		Env:            map[string]string{"SHARED": "runtime", "RUNTIME_ONLY": "true"},
 	}
 	return runtimeDefs
+}
+
+func emptyRuntimeDefinitionLookup() interfaces.RuntimeDefinitionLookup {
+	return testRuntimeDefinitionLookup{
+		workers:      map[string]*interfaces.WorkerConfig{},
+		workstations: map[string]*interfaces.FactoryWorkstationConfig{},
+	}
+}
+
+type testRuntimeDefinitionLookup struct {
+	workers      map[string]*interfaces.WorkerConfig
+	workstations map[string]*interfaces.FactoryWorkstationConfig
+}
+
+func (lookup testRuntimeDefinitionLookup) Worker(name string) (*interfaces.WorkerConfig, bool) {
+	worker, ok := lookup.workers[name]
+	return worker, ok
+}
+
+func (lookup testRuntimeDefinitionLookup) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+	workstation, ok := lookup.workstations[name]
+	return workstation, ok
 }
 
 func canonicalMergeWorkstation() interfaces.FactoryWorkstationConfig {

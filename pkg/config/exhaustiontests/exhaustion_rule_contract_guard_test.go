@@ -1,4 +1,4 @@
-package config
+package exhaustiontests
 
 import (
 	"fmt"
@@ -98,7 +98,7 @@ var ExhaustionRules = struct{}{}
 }
 
 func walkProductionPkgFiles(visit func(path, rel string, file *ast.File, fset *token.FileSet) error) error {
-	return walkProductionPkgFilesAtRoot(filepath.Clean(".."), visit)
+	return walkProductionPkgFilesAtRoot(filepath.Clean("../.."), visit)
 }
 
 func walkProductionPkgFilesAtRoot(pkgRoot string, visit func(path, rel string, file *ast.File, fset *token.FileSet) error) error {

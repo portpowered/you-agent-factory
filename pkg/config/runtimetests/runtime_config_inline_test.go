@@ -1,7 +1,8 @@
-package config
+package runtimetests
 
 import (
 	"context"
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -834,7 +835,10 @@ func TestFactoryConfigWithRuntimeDefinitions_PreservesCanonicalWorkstationKindFo
 			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "approved"}},
 		}},
 	}
-	runtimeDefs := newRuntimeDefinitionLookupMaps(0, 1)
+	runtimeDefs := testRuntimeDefinitionLookup{
+		workers:      map[string]*interfaces.WorkerConfig{},
+		workstations: map[string]*interfaces.FactoryWorkstationConfig{},
+	}
 	runtimeDefs.workstations["review"] = &interfaces.FactoryWorkstationConfig{
 		Type:           interfaces.WorkstationTypeModel,
 		WorkerTypeName: "executor",
@@ -870,7 +874,7 @@ func TestFactoryConfigWithRuntimeDefinitions_PreservesCanonicalWorkstationKindFo
 }
 
 func TestFactoryConfigWithRuntimeDefinitions_UsesCanonicalDefinitionsWhenRuntimeDefinitionsAreMissing(t *testing.T) {
-	inlined, err := FactoryConfigWithRuntimeDefinitions(canonicalMergeFactoryConfig(), newRuntimeDefinitionLookupMaps(0, 0))
+	inlined, err := FactoryConfigWithRuntimeDefinitions(canonicalMergeFactoryConfig(), emptyRuntimeDefinitionLookup())
 	if err != nil {
 		t.Fatalf("FactoryConfigWithRuntimeDefinitions: %v", err)
 	}
@@ -880,7 +884,7 @@ func TestFactoryConfigWithRuntimeDefinitions_UsesCanonicalDefinitionsWhenRuntime
 }
 
 func TestNewLoadedFactoryConfig_UsesCanonicalDefinitionsWhenRuntimeDefinitionsAreMissing(t *testing.T) {
-	loaded, err := NewLoadedFactoryConfig("factory-dir", canonicalMergeFactoryConfig(), newRuntimeDefinitionLookupMaps(0, 0))
+	loaded, err := NewLoadedFactoryConfig("factory-dir", canonicalMergeFactoryConfig(), emptyRuntimeDefinitionLookup())
 	if err != nil {
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}

@@ -1,7 +1,8 @@
-package config
+package mappingtests
 
 import (
 	"encoding/json"
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"strings"
 	"testing"

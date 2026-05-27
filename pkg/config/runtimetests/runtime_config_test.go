@@ -1,7 +1,8 @@
-package config
+package runtimetests
 
 import (
 	"encoding/json"
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"os"
 	"path/filepath"
@@ -161,12 +162,7 @@ Process.
 func TestLoadRuntimeConfig_DetachesInlineWorkerMutableNestedFields(t *testing.T) {
 	source := inlineWorkerDetachmentSourceConfig()
 
-	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(t.TempDir(), source, InlineRuntimeDefinitionOptions{})
-	if err != nil {
-		t.Fatalf("loadRuntimeDefinitionLookupMapsFromFactoryConfig: %v", err)
-	}
-
-	loaded, err := NewLoadedFactoryConfig("factory-dir", source, runtimeDefs)
+	loaded, err := NewLoadedFactoryConfig("factory-dir", source, nil)
 	if err != nil {
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}

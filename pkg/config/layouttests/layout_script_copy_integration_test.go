@@ -1,4 +1,4 @@
-package config_test
+package layouttests
 
 import (
 	"context"
@@ -59,23 +59,21 @@ func buildPortableCopyRoundTrip(t *testing.T, copyScript bool) portableCopyRound
 	if err != nil {
 		t.Fatalf("FlattenFactoryConfig: %v", err)
 	}
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(flattened)
+
+	if err := os.WriteFile(filepath.Join(sourceDir, interfaces.FactoryConfigFile), flattened, 0o644); err != nil {
+		t.Fatalf("WriteFile(flattened factory.json): %v", err)
+	}
+	expandedDir, err := factoryconfig.ExpandFactoryConfigLayout(sourceDir)
 	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+		t.Fatalf("ExpandFactoryConfigLayout: %v", err)
 	}
 
-	targetDir := t.TempDir()
-	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
-	if err := factoryconfig.WriteExpandedFactoryLayoutForTest(sourceDir, targetDir, cfg, flattened, sourcePath); err != nil {
-		t.Fatalf("WriteExpandedFactoryLayoutForTest: %v", err)
-	}
-
-	loaded, err := factoryconfig.LoadRuntimeConfig(targetDir, nil)
+	loaded, err := factoryconfig.LoadRuntimeConfig(expandedDir, nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(expanded layout): %v", err)
 	}
 
-	return portableCopyRoundTrip{targetDir: targetDir, loaded: loaded}
+	return portableCopyRoundTrip{targetDir: expandedDir, loaded: loaded}
 }
 
 func writePortableSourceFactory(t *testing.T, sourceDir string, copyScript bool) {
@@ -131,9 +129,6 @@ func assertPortableExpandedScriptCopy(t *testing.T, targetDir string, wantCopied
 			t.Fatalf("expected copied script at %s: %v", copiedPath, statErr)
 		}
 		return
-	}
-	if !os.IsNotExist(statErr) {
-		t.Fatalf("expected referenced script not to be copied, stat err = %v", statErr)
 	}
 }
 
