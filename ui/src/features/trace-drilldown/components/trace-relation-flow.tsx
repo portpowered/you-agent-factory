@@ -29,11 +29,14 @@ import {
   layoutTraceGraphWithElk,
   traceGraphLayoutKey,
 } from "../lib/trace-elk-layout";
+import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
+import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
-// tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
-  "h-[22rem] min-h-[18rem] border-transparent bg-af-surface-subtle";
+  "max-w-full min-w-80 resize overflow-hidden border-transparent bg-af-surface-subtle";
+const GRAPH_SHELL_STYLE = { height: 352, minHeight: 288 };
+const GRAPH_VIEWPORT_STYLE = { height: "100%", width: "100%" };
 const RELATION_NODE_CLASS =
   "flex h-full min-w-0 w-full flex-col gap-2 overflow-hidden rounded-lg border px-3 py-3 text-left text-af-text shadow-af-card transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const RELATION_NODE_ACTIVE_CLASS =
@@ -69,9 +72,7 @@ interface RelationFlowNodeData extends Record<string, unknown> {
 
 type RelationFlowNode = Node<RelationFlowNodeData, "relation-work">;
 
-const RELATION_NODE_TYPES = {
-  "relation-work": RelationWorkNode,
-};
+const RELATION_NODE_TYPES = { "relation-work": RelationWorkNode };
 
 export interface TraceRelationFlowProps {
   locale?: string;
@@ -84,7 +85,6 @@ export function TraceRelationFlow({
   onSelectWorkID,
   relations,
 }: TraceRelationFlowProps) {
-  const messages = getTraceDrilldownMessages(locale);
   const graph = useMemo(
     () => buildRelationGraph(relations, locale),
     [locale, relations],
@@ -153,16 +153,7 @@ export function TraceRelationFlow({
   const [nodes, setNodes] = useState<RelationFlowNode[]>(baseNodes);
 
   useEffect(() => {
-    setNodes((currentNodes) => {
-      const currentPositions = new Map(
-        currentNodes.map((node) => [node.id, node.position]),
-      );
-
-      return baseNodes.map((node) => ({
-        ...node,
-        position: currentPositions.get(node.id) ?? node.position,
-      }));
-    });
+    setNodes(baseNodes);
   }, [baseNodes]);
 
   const handleNodesChange = useCallback(
@@ -171,40 +162,52 @@ export function TraceRelationFlow({
     },
     [],
   );
+  const { graphViewportReady, graphViewportRef } =
+    useMeasuredTraceGraphViewport();
 
   if (relations.length === 0) {
-    return <span>{messages.noBatchRelations}</span>;
+    return <span>{getTraceDrilldownMessages(locale).noBatchRelations}</span>;
   }
 
   return (
     <DashboardGraphFrame
-      aria-label={messages.batchRelationGraphLabel}
+      aria-label={getTraceDrilldownMessages(locale).batchRelationGraphLabel}
       className={GRAPH_SHELL_CLASS}
       data-trace-relation-flow
-      style={{ overflowX: "hidden", overflowY: "hidden" }}
+      style={GRAPH_SHELL_STYLE}
     >
-      <ReactFlow
-        defaultEdgeOptions={{
-          animated: false,
-          type: "smoothstep",
-        }}
-        edges={graph.edges}
-        fitView
-        fitViewOptions={GRAPH_FIT_VIEW_OPTIONS}
-        key={layoutKey}
-        maxZoom={2}
-        minZoom={0.35}
-        nodes={nodes}
-        nodesDraggable={true}
-        nodeTypes={RELATION_NODE_TYPES}
-        onNodesChange={handleNodesChange}
-        panOnDrag
-        proOptions={{ hideAttribution: true }}
-        zoomOnScroll
+      <div
+        className="h-full min-w-0 w-full"
+        data-trace-graph-viewport
+        ref={graphViewportRef}
+        style={GRAPH_VIEWPORT_STYLE}
       >
-        <DashboardGraphBackground />
-        <DashboardGraphControls fitViewOptions={GRAPH_FIT_VIEW_OPTIONS} />
-      </ReactFlow>
+        {graphViewportReady ? (
+          <ReactFlow
+            defaultEdgeOptions={{
+              animated: false,
+              type: "smoothstep",
+            }}
+            edges={graph.edges}
+            fitView
+            fitViewOptions={GRAPH_FIT_VIEW_OPTIONS}
+            key={layoutKey}
+            maxZoom={2}
+            minZoom={0.35}
+            nodes={nodes}
+            nodesDraggable={true}
+            nodeTypes={RELATION_NODE_TYPES}
+            onNodesChange={handleNodesChange}
+            onError={failOnTraceReactFlowError}
+            panOnDrag
+            proOptions={{ hideAttribution: true }}
+            zoomOnScroll
+          >
+            <DashboardGraphBackground />
+            <DashboardGraphControls fitViewOptions={GRAPH_FIT_VIEW_OPTIONS} />
+          </ReactFlow>
+        ) : null}
+      </div>
     </DashboardGraphFrame>
   );
 }

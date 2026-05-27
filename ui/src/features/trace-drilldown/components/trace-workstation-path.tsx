@@ -2,18 +2,20 @@ import "@xyflow/react/dist/style.css";
 
 import {
   applyNodeChanges,
+  type Edge,
   Handle,
   MarkerType,
-  Position,
-  ReactFlow,
-  type Edge,
   type Node,
   type NodeChange,
   type NodeProps,
+  Position,
+  ReactFlow,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
-import { cn } from "../../../lib/cn";
+import type {
+  DashboardTraceDispatch,
+  DashboardWorkItemRef,
+} from "../../../api/dashboard/types";
 import {
   DashboardGraphBackground,
   DashboardGraphControls,
@@ -27,20 +29,20 @@ import {
   formatTraceOutcome,
   formatTypedWorkItemLabel,
 } from "../../../components/ui/formatters";
-import type {
-  DashboardTraceDispatch,
-  DashboardWorkItemRef,
-} from "../../../api/dashboard/types";
-import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
+import { cn } from "../../../lib/cn";
 import {
   getCachedTraceGraphLayout,
   layoutTraceGraphWithElk,
   traceGraphLayoutKey,
 } from "../lib/trace-elk-layout";
+import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
+import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
+import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
-// tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
-  "h-[20rem] min-h-[16rem] border-transparent bg-af-surface-subtle";
+  "max-w-full min-w-80 resize overflow-hidden border-transparent bg-af-surface-subtle";
+const GRAPH_SHELL_STYLE = { height: 320, minHeight: 256 };
+const GRAPH_VIEWPORT_STYLE = { height: "100%", width: "100%" };
 const PATH_NODE_CLASS =
   "flex h-full min-w-0 w-full flex-col gap-1.5 overflow-hidden rounded-lg border px-3 py-3 text-left text-af-text shadow-af-card";
 const DISPATCH_NODE_WIDTH = 240;
@@ -80,11 +82,16 @@ export function TraceWorkstationPath({
   );
   const graphDimensions = useMemo(
     () =>
-      new Map(graph.nodes.map((node) => [node.id, {
-        height: DISPATCH_NODE_HEIGHT,
-        id: node.id,
-        width: DISPATCH_NODE_WIDTH,
-      }])),
+      new Map(
+        graph.nodes.map((node) => [
+          node.id,
+          {
+            height: DISPATCH_NODE_HEIGHT,
+            id: node.id,
+            width: DISPATCH_NODE_WIDTH,
+          },
+        ]),
+      ),
     [graph.nodes],
   );
   const layoutKey = useMemo(
@@ -96,7 +103,9 @@ export function TraceWorkstationPath({
   );
 
   useEffect(() => {
-    setLayoutedNodes(getCachedTraceGraphLayout(layoutKey, graph.nodes) ?? graph.nodes);
+    setLayoutedNodes(
+      getCachedTraceGraphLayout(layoutKey, graph.nodes) ?? graph.nodes,
+    );
   }, [graph.nodes, layoutKey]);
 
   useEffect(() => {
@@ -142,9 +151,14 @@ export function TraceWorkstationPath({
     });
   }, [baseNodes]);
 
-  const handleNodesChange = useCallback((changes: NodeChange<WorkstationPathNode>[]) => {
-    setNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
-  }, []);
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<WorkstationPathNode>[]) => {
+      setNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
+    },
+    [],
+  );
+  const { graphViewportReady, graphViewportRef } =
+    useMeasuredTraceGraphViewport();
 
   if (graph.nodes.length === 0) {
     return <span>{messages.dispatchPathEmpty}</span>;
@@ -155,47 +169,78 @@ export function TraceWorkstationPath({
       aria-label={messages.dispatchPathGraphLabel}
       className={GRAPH_SHELL_CLASS}
       data-trace-workstation-path
-      style={{ overflowX: "hidden", overflowY: "hidden" }}
+      style={GRAPH_SHELL_STYLE}
     >
-      <ReactFlow
-        defaultEdgeOptions={{
-          animated: false,
-          markerEnd: {
-            color: "var(--color-af-edge-muted)",
-            type: MarkerType.ArrowClosed,
-          },
-          style: { stroke: "var(--color-af-edge-muted)", strokeWidth: 1.7 },
-          type: "smoothstep",
-        }}
-        edges={graph.edges}
-        fitView
-        fitViewOptions={TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS}
-        maxZoom={1.8}
-        minZoom={0.35}
-        nodes={nodes}
-        nodesDraggable={true}
-        nodeTypes={PATH_NODE_TYPES}
-        onNodesChange={handleNodesChange}
-        panOnDrag
-        proOptions={{ hideAttribution: true }}
-        zoomOnScroll
+      <div
+        className="h-full min-w-0 w-full"
+        data-trace-graph-viewport
+        ref={graphViewportRef}
+        style={GRAPH_VIEWPORT_STYLE}
       >
-        <DashboardGraphBackground />
-        <DashboardGraphControls
-          fitViewOptions={TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS}
-        />
-      </ReactFlow>
+        {graphViewportReady ? (
+          <TraceWorkstationReactFlow
+            edges={graph.edges}
+            nodes={nodes}
+            onNodesChange={handleNodesChange}
+          />
+        ) : null}
+      </div>
     </DashboardGraphFrame>
   );
 }
 
-function WorkstationPathGraphNode({
-  data,
-}: NodeProps<WorkstationPathNode>) {
+function TraceWorkstationReactFlow({
+  edges,
+  nodes,
+  onNodesChange,
+}: {
+  edges: Edge[];
+  nodes: WorkstationPathNode[];
+  onNodesChange: (changes: NodeChange<WorkstationPathNode>[]) => void;
+}) {
+  return (
+    <ReactFlow
+      defaultEdgeOptions={{
+        animated: false,
+        markerEnd: {
+          color: "var(--color-af-edge-muted)",
+          type: MarkerType.ArrowClosed,
+        },
+        style: {
+          stroke: "var(--color-af-edge-muted)",
+          strokeWidth: 1.7,
+        },
+        type: "smoothstep",
+      }}
+      edges={edges}
+      fitView
+      fitViewOptions={TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS}
+      maxZoom={1.8}
+      minZoom={0.35}
+      nodes={nodes}
+      nodesDraggable={true}
+      nodeTypes={PATH_NODE_TYPES}
+      onNodesChange={onNodesChange}
+      onError={failOnTraceReactFlowError}
+      panOnDrag
+      proOptions={{ hideAttribution: true }}
+      zoomOnScroll
+    >
+      <DashboardGraphBackground />
+      <DashboardGraphControls
+        fitViewOptions={TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS}
+      />
+    </ReactFlow>
+  );
+}
+
+function WorkstationPathGraphNode({ data }: NodeProps<WorkstationPathNode>) {
   const messages = getTraceDrilldownMessages(data.locale);
 
   return (
-    <article className={cn(PATH_NODE_CLASS, outcomeToneClassName(data.outcome))}>
+    <article
+      className={cn(PATH_NODE_CLASS, outcomeToneClassName(data.outcome))}
+    >
       <Handle className="opacity-0" position={Position.Left} type="target" />
       <Handle className="opacity-0" position={Position.Right} type="source" />
       <div className="flex items-center justify-between gap-3">
@@ -219,7 +264,10 @@ function WorkstationPathGraphNode({
         </span>
       </div>
       <strong
-        className={cn("text-sm text-af-text [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn(
+          "text-sm text-af-text [overflow-wrap:anywhere]",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
       >
         {data.label}
       </strong>
@@ -277,14 +325,21 @@ function dispatchDependencyGraph(
   const nodes = dispatches.map((dispatch) => ({
     id: dispatch.dispatch_id,
     inputSummary: summarizeWorkItems(dispatch.input_items, locale),
-    label: dispatch.workstation_name || dispatch.transition_id || "Unknown workstation",
+    label:
+      dispatch.workstation_name ||
+      dispatch.transition_id ||
+      "Unknown workstation",
     outcome: dispatch.outcome,
     outputSummary: summarizeWorkItems(dispatch.output_items, locale),
   }));
   const edgeKeys = new Set<string>();
   const latestDispatchIDByChainingTraceID = new Map<string, string>();
 
-  for (let currentIndex = 0; currentIndex < dispatches.length; currentIndex += 1) {
+  for (
+    let currentIndex = 0;
+    currentIndex < dispatches.length;
+    currentIndex += 1
+  ) {
     const currentDispatch = dispatches[currentIndex];
     const predecessorDispatchIDs =
       resolveExplicitPredecessorDispatchIDs(
@@ -302,8 +357,13 @@ function dispatchDependencyGraph(
       edgeKeys.add(`${producerDispatchID}->${currentDispatch.dispatch_id}`);
     }
 
-    for (const chainingTraceID of collectCurrentChainingTraceIDs(currentDispatch)) {
-      latestDispatchIDByChainingTraceID.set(chainingTraceID, currentDispatch.dispatch_id);
+    for (const chainingTraceID of collectCurrentChainingTraceIDs(
+      currentDispatch,
+    )) {
+      latestDispatchIDByChainingTraceID.set(
+        chainingTraceID,
+        currentDispatch.dispatch_id,
+      );
     }
   }
 
@@ -344,7 +404,11 @@ function resolveWorkItemProducerDispatchIDs(
   const producerDispatchIDs = new Set<string>();
 
   for (const inputItem of currentDispatch.input_items ?? []) {
-    for (let producerIndex = 0; producerIndex < currentIndex; producerIndex += 1) {
+    for (
+      let producerIndex = 0;
+      producerIndex < currentIndex;
+      producerIndex += 1
+    ) {
       const producerDispatch = dispatches[producerIndex];
       const matchingOutput = producerDispatch.output_items?.find(
         (outputItem) => outputItem.work_id === inputItem.work_id,
@@ -368,19 +432,27 @@ function resolveSequentialPredecessorDispatchIDs(
   return currentIndex > 0 ? [dispatches[currentIndex - 1].dispatch_id] : null;
 }
 
-function collectCurrentChainingTraceIDs(dispatch: DashboardTraceDispatch): string[] {
+function collectCurrentChainingTraceIDs(
+  dispatch: DashboardTraceDispatch,
+): string[] {
   const chainingTraceIDs = [
     dispatch.current_chaining_trace_id,
-    ...(dispatch.output_items ?? []).map((item) => item.current_chaining_trace_id),
+    ...(dispatch.output_items ?? []).map(
+      (item) => item.current_chaining_trace_id,
+    ),
   ];
 
   return uniqueNonEmptyStrings(chainingTraceIDs);
 }
 
-function collectPreviousChainingTraceIDs(dispatch: DashboardTraceDispatch): string[] {
+function collectPreviousChainingTraceIDs(
+  dispatch: DashboardTraceDispatch,
+): string[] {
   return uniqueNonEmptyStrings([
     ...(dispatch.previous_chaining_trace_ids ?? []),
-    ...(dispatch.input_items ?? []).flatMap((item) => item.previous_chaining_trace_ids ?? []),
+    ...(dispatch.input_items ?? []).flatMap(
+      (item) => item.previous_chaining_trace_ids ?? [],
+    ),
   ]);
 }
 
@@ -414,7 +486,9 @@ function summarizeWorkItems(
   return `${labels.slice(0, 2).join(", ")} +${labels.length - 2}`;
 }
 
-function dedupeWorkItems(workItems: DashboardWorkItemRef[]): DashboardWorkItemRef[] {
+function dedupeWorkItems(
+  workItems: DashboardWorkItemRef[],
+): DashboardWorkItemRef[] {
   const itemsByID = new Map<string, DashboardWorkItemRef>();
 
   for (const workItem of workItems) {
@@ -431,7 +505,10 @@ function outcomeToneClassName(outcome?: string): string {
     return "border-af-border bg-af-surface";
   }
 
-  if (outcome.toUpperCase() === "FAILED" || outcome.toUpperCase() === "REJECTED") {
+  if (
+    outcome.toUpperCase() === "FAILED" ||
+    outcome.toUpperCase() === "REJECTED"
+  ) {
     return "border-af-danger-border bg-af-danger-surface";
   }
 

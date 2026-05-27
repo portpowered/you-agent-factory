@@ -150,7 +150,7 @@ export function formatTypedWorkItemLabel(workItem: DashboardWorkItemRef): string
     return `"${name}"`;
   }
 
-  return `${workType}:"${name}"`;
+  return `(${workType}):${name}`;
 }
 
 export function formatTraceOutcome(outcome: string): string {
