@@ -52,7 +52,6 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/submit-work/components/submit-work-card.tsx#FORM_CLASS",
   "src/features/submit-work/components/submit-work-card.tsx#FORM_FIELDS_CLASS",
   "src/features/submit-work/components/submit-work-card.tsx#ACTION_ROW_CLASS",
-  "src/features/submit-work/components/submit-work-card.tsx#ITEM_SHELL_CLASS",
   "src/features/terminal-work/components/terminal-work-card.tsx#TERMINAL_ROWS_CLASS",
   "src/features/terminal-work/components/terminal-work-card.tsx#TERMINAL_ROW_HEADER_CLASS",
   "src/features/terminal-work/components/terminal-work-card.tsx#TERMINAL_ROW_TITLE_CLASS",

@@ -57,10 +57,10 @@ describe("SubmitWorkWidget form behavior", () => {
       within(card).getByRole("textbox", { name: "Text item 1" }),
     ).toBeTruthy();
     expect(
-      within(card).getByText(
+      within(card).queryByText(
         "Choose a work type and enter a request name to continue.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       within(card).queryByText(
         "Optional: describe what you want this request to accomplish.",
@@ -76,6 +76,50 @@ describe("SubmitWorkWidget form behavior", () => {
     expect(form?.className).toContain("gap-3");
     expect(submitButton.className).toContain("w-full");
     expect(submitButton.className).toContain("justify-center");
+  });
+
+  it("orders submit-work header tools before the dashboard move control", () => {
+    render(
+      <SubmitWorkCard
+        draft={{
+          items: [{ id: "submission-item-1", text: "", type: "text" }],
+          requestName: "",
+          workTypeName: "",
+        }}
+        headerAction={
+          <button type="button">Remove Submit work widget from dashboard</button>
+        }
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItems={() => {}}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{
+          kind: "guidance",
+          message: getSubmitWorkMessages().statusMessages.emptyGuidance,
+        }}
+        submitWorkTypeNames={["story", "task"]}
+      />,
+    );
+
+    const workType = screen.getByRole("combobox", { name: "Work type" });
+    const addInput = screen.getByRole("button", { name: "Add input" });
+    const remove = screen.getByRole("button", {
+      name: "Remove Submit work widget from dashboard",
+    });
+    const move = screen.getByRole("button", { name: "Move Submit work" });
+
+    expect(workType.compareDocumentPosition(addInput)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(addInput.compareDocumentPosition(remove)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(remove.compareDocumentPosition(move)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it("enables submission only after a configured work type and non-blank request name are present", () => {
@@ -103,10 +147,10 @@ describe("SubmitWorkWidget form behavior", () => {
 
     expect(submitButton.disabled).toBe(true);
     expect(
-      screen.getByText(
+      screen.queryByText(
         "Choose a work type and enter a request name to continue.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
 
     fireEvent.change(workType, { target: { value: "story" } });
     expect(submitButton.disabled).toBe(true);
@@ -123,7 +167,7 @@ describe("SubmitWorkWidget form behavior", () => {
     });
 
     expect(submitButton.disabled).toBe(false);
-    expect(screen.getByText("Ready to submit.")).toBeTruthy();
+    expect(screen.queryByText("Ready to submit.")).toBeNull();
     expect(
       screen.queryByText("Ready to submit. Request details are optional."),
     ).toBeNull();
@@ -188,7 +232,7 @@ describe("SubmitWorkWidget form behavior", () => {
       screen.getByRole("button", {
         name: "Add input",
       }).className,
-    ).toContain("min-h-9");
+    ).toContain("h-10");
   });
 
   it("adds typed items from the shared add-input control and renders their type cues", () => {
@@ -1171,8 +1215,15 @@ describe("SubmitWorkWidget submission behavior", () => {
     expect(requestName.getAttribute("aria-invalid")).toBe("true");
   });
 
-  it("blocks obviously empty submissions before the network request", async () => {
-    const fetchMock = vi.fn();
+  it("submits a request-name-only draft with an empty items payload", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 201,
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     renderSubmitWorkWidget(
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
@@ -1191,12 +1242,14 @@ describe("SubmitWorkWidget submission behavior", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
 
-    expect(
-      await screen.findAllByText(
-        "Add at least one non-empty text item or one staged file before submitting.",
-      ),
-    ).toHaveLength(2);
-    expect(fetchMock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      items: [],
+      name: "Empty payload request",
+      workTypeName: "story",
+    });
   });
 
   it("preserves authored text-item order in the structured submit request", async () => {
@@ -1409,8 +1462,8 @@ describe("SubmitWorkWidget submission behavior", () => {
     expect(within(card).getByRole("list", { name: "提交项" })).toBeTruthy();
     expect(within(card).getByRole("textbox", { name: "文本项 1" })).toBeTruthy();
     expect(
-      within(card).getByText("先选择工作类型并填写请求名称，然后即可继续。"),
-    ).toBeTruthy();
+      within(card).queryByText("先选择工作类型并填写请求名称，然后即可继续。"),
+    ).toBeNull();
     expect(within(card).getByRole("button", { name: "提交工作" })).toBeTruthy();
   });
 });
