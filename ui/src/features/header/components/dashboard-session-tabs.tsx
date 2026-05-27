@@ -8,22 +8,23 @@ import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { Button, Dialog } from "../../../components/ui";
-import { cn } from "../../../lib/cn";
 import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
+import { cn } from "../../../lib/cn";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
-import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
+import {
+  type DashboardSessionTabsState,
+  useDashboardSessionTabsState,
+} from "../hooks/use-dashboard-session-tabs-state";
 import {
   normalizeFactorySessionsError,
   sessionCloseLabel,
   sessionPanelID,
   sessionTabID,
   sessionTabLabel,
+  sessionTabSecondaryPath,
 } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
-import {
-  type DashboardSessionTabsState,
-  useDashboardSessionTabsState,
-} from "../hooks/use-dashboard-session-tabs-state";
+import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
 
 const SESSION_TABS_SHELL_CLASS = "grid min-w-0 max-w-full flex-1 gap-2";
 const SESSION_TABS_ROW_CLASS =
@@ -47,7 +48,7 @@ const SESSION_TAB_ACTIVE_CLASS = cn(
   "after:pointer-events-none after:absolute after:-right-4 after:-bottom-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_top_right,transparent_1rem,var(--color-af-surface-subtle)_1rem)]",
 );
 const SESSION_TAB_INACTIVE_CLASS =
-  "rounded-t-xl rounded-b-none bg-af-surface-subtle-muted text-af-text-muted hover:bg-af-overlay hover:text-af-text";
+  "rounded-t-xl rounded-b-none text-af-text-muted hover:bg-af-overlay hover:text-af-text";
 const SESSION_TAB_ACTIVE_BUTTON_CLASS =
   "flex min-w-0 flex-1 flex-col items-start rounded-tl-xl px-3 py-2";
 const SESSION_TAB_INACTIVE_BUTTON_CLASS =
@@ -131,7 +132,9 @@ function DashboardSessionTabsView({
           <SessionTabsContent
             activeSession={activeSession}
             closingSessionID={
-              closeSessionMutation.isPending ? closeSessionMutation.variables : null
+              closeSessionMutation.isPending
+                ? closeSessionMutation.variables
+                : null
             }
             error={sessionsQuery.isError ? sessionsQuery.error : null}
             isPending={sessionsQuery.isPending}
@@ -197,11 +200,14 @@ function OpenSessionButton({
       onClick={onClick}
       type="button"
     >
-        <span aria-hidden="true" className="text-lg leading-none">+</span>
+      <span aria-hidden="true" className="text-lg leading-none">
+        +
+      </span>
     </button>
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: existing session tab orchestration stays intact; this change only adjusts the status indicator styling.
 function SessionTabsContent({
   activeSession,
   closingSessionID,
@@ -232,7 +238,9 @@ function SessionTabsContent({
 
   if (isPending) {
     return (
-      <p className={cn("text-sm text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p
+        className={cn("text-sm text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+      >
         {messages.loadingSessionsLabel}
       </p>
     );
@@ -270,7 +278,8 @@ function SessionTabsContent({
   }
 
   function moveSessionFocus(currentIndex: number, offset: number) {
-    const nextIndex = (currentIndex + offset + sessions.length) % sessions.length;
+    const nextIndex =
+      (currentIndex + offset + sessions.length) % sessions.length;
     const nextSession = sessions[nextIndex];
     if (!nextSession) {
       return;
@@ -281,7 +290,10 @@ function SessionTabsContent({
 
   return (
     <>
-      <nav aria-label={messages.sessionTabsLabel} className="min-w-0 overflow-visible">
+      <nav
+        aria-label={messages.sessionTabsLabel}
+        className="min-w-0 overflow-visible"
+      >
         <div
           aria-orientation="horizontal"
           className={SESSION_TAB_LIST_CLASS}
@@ -402,6 +414,7 @@ function SessionTabButton({
   tabID: string;
 }) {
   const label = sessionTabLabel(session);
+  const secondaryPath = sessionTabSecondaryPath(session.folderPath);
   return (
     <div
       className={cn(
@@ -416,7 +429,9 @@ function SessionTabButton({
         aria-selected={active}
         className={cn(
           SESSION_TAB_BUTTON_CLASS,
-          active ? SESSION_TAB_ACTIVE_BUTTON_CLASS : SESSION_TAB_INACTIVE_BUTTON_CLASS,
+          active
+            ? SESSION_TAB_ACTIVE_BUTTON_CLASS
+            : SESSION_TAB_INACTIVE_BUTTON_CLASS,
         )}
         id={tabID}
         onClick={onClick}
@@ -430,8 +445,11 @@ function SessionTabButton({
           <SessionTabStatusIndicator status={streamStatus} />
           <span className="truncate text-sm font-semibold">{label}</span>
         </span>
-        <span className="block truncate text-[11px] text-af-text-subtle">
-          {session.project || session.folderPath}
+        <span
+          className="block truncate text-[11px] text-af-text-subtle"
+          title={session.folderPath}
+        >
+          {secondaryPath}
         </span>
       </button>
       <button
@@ -458,18 +476,24 @@ function SessionTabStatusIndicator({
   status: DashboardStreamState["status"];
 }) {
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "relative inline-flex size-2.5 shrink-0 rounded-full",
-        status === "live" && "bg-af-success",
-        status === "connecting" && "bg-af-accent",
-        status === "offline" && "bg-af-danger",
-      )}
-    >
+    <span aria-hidden="true" className="relative inline-flex size-2.5 shrink-0">
       {status === "live" ? (
-        <span className="absolute inset-0 animate-ping rounded-full bg-af-success-surface" />
+        <span
+          className={cn(
+            "absolute -inset-1 animate-ping rounded-full",
+            "bg-[var(--color-af-session-live-ping)]",
+          )}
+          data-testid="dashboard-session-live-ping"
+        />
       ) : null}
+      <span
+        className={cn(
+          "absolute inset-0 rounded-full",
+          status === "live" && "bg-af-success",
+          status === "connecting" && "bg-af-accent",
+          status === "offline" && "bg-af-danger",
+        )}
+      />
     </span>
   );
 }

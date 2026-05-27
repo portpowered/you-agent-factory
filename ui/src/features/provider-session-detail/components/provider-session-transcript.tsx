@@ -1,38 +1,29 @@
+import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import {
-  DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import { cn } from "../../../lib/cn";
 import { formatDateTime } from "../../../i18n/formatters";
+import { cn } from "../../../lib/cn";
 import {
   AuthoredBodyText,
   PROVIDER_SESSION_CARD_CLASS,
 } from "../../current-selection/components/detail-card-shared";
+import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 import { FriendlyExecCommandOutput } from "./exec-command-output";
 import { CodePanel, ExpandableCodeBlock } from "./transcript-code-block";
-import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 
 type SessionDetail = ProviderSessionDetailResponse;
 type TranscriptEntry = SessionDetail["transcript"][number];
 
 const TRANSCRIPT_ENTRY_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
-  assistant_message: "border-af-border bg-af-surface-subtle",
-  reasoning: "border-af-info-border bg-af-info-surface",
-  system_event: "border-af-border bg-af-surface-raised",
-  tool_call: "border-af-warning-border bg-af-warning-surface",
-  tool_output: "border-af-success-border bg-af-success-surface",
-  user_message: "border-af-accent-border bg-af-accent-surface",
-};
-const TRANSCRIPT_BADGE_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
-  assistant_message: "border-af-border bg-af-surface-raised text-af-text-muted",
-  reasoning: "border-af-info-border bg-af-info-surface text-af-info-text",
-  system_event: "border-af-border bg-af-surface-raised text-af-text-subtle",
-  tool_call: "border-af-warning-border bg-af-warning-surface text-af-warning-text",
-  tool_output: "border-af-success-border bg-af-success-surface text-af-success-text",
-  user_message: "border-af-accent-border bg-af-accent-surface text-af-text",
+  assistant_message: "border-af-border",
+  reasoning: "border-af-border",
+  system_event: "border-af-border",
+  tool_call: "border-af-border",
+  tool_output: "border-af-border",
+  user_message: "border-af-border",
 };
 
 export function TranscriptSection({
@@ -47,16 +38,17 @@ export function TranscriptSection({
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section
-      className={cn(
-        "grid gap-3 rounded-xl border border-af-accent-border bg-af-accent-surface p-4",
-        className,
-      )}
-    >
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.transcriptHeading}</h5>
+    <section className={cn("grid gap-3 rounded-xl border p-4", className)}>
+      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.transcriptHeading}
+      </h5>
       <div className="grid gap-3">
         {detail.transcript.map((entry) => (
-          <TranscriptEntryCard entry={entry} key={entry.order} locale={locale} />
+          <TranscriptEntryCard
+            entry={entry}
+            key={entry.order}
+            locale={locale}
+          />
         ))}
       </div>
     </section>
@@ -123,15 +115,6 @@ function TranscriptEntryCard({
       )}
     >
       <div className="grid gap-2">
-        <span
-          className={cn(
-            "inline-flex w-fit rounded-full border px-2 py-0.5",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-            getTranscriptBadgeClassName(entry.type),
-          )}
-        >
-          {entryLabel}
-        </span>
         <div className="grid gap-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <strong>{getTranscriptEntryTitle(entry, entryLabel)}</strong>
@@ -163,13 +146,6 @@ function TranscriptEntryCard({
                   </span>
                 ) : null}
               </div>
-              {timestampState.rawTimestamp ? (
-                <TimestampDetails
-                  locale={locale}
-                  timestamp={timestampState.rawTimestamp}
-                  title={timestampState.label}
-                />
-              ) : null}
             </div>
           ) : null}
         </div>
@@ -179,7 +155,10 @@ function TranscriptEntryCard({
   );
 }
 
-function getTranscriptTimestampState(timestamp: string | undefined, locale?: string) {
+function getTranscriptTimestampState(
+  timestamp: string | undefined,
+  locale?: string,
+) {
   const messages = getProviderSessionDetailMessages(locale);
   const normalizedTimestamp = normalizeValidTimestamp(timestamp);
   if (!timestamp?.trim()) {
@@ -210,41 +189,9 @@ function normalizeValidTimestamp(timestamp: string | undefined): string | null {
     return null;
   }
 
-  return Number.isNaN(Date.parse(normalizedTimestamp)) ? null : normalizedTimestamp;
-}
-
-function TimestampDetails({
-  locale,
-  timestamp,
-  title,
-}: {
-  locale?: string;
-  timestamp: string;
-  title: string | null;
-}) {
-  const messages = getProviderSessionDetailMessages(locale);
-
-  return (
-    <details className="grid gap-1">
-      <summary
-        className={cn(
-          "w-fit cursor-pointer text-af-text-subtle underline decoration-dotted underline-offset-2",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        <span title={timestamp}>{messages.rawTimestampDetailsLabel}</span>
-      </summary>
-      <code
-        className={cn(
-          "w-fit rounded-md border border-af-border bg-af-surface-subtle px-2 py-1",
-          DASHBOARD_BODY_CODE_CLASS,
-        )}
-        title={title ?? timestamp}
-      >
-        {timestamp}
-      </code>
-    </details>
-  );
+  return Number.isNaN(Date.parse(normalizedTimestamp))
+    ? null
+    : normalizedTimestamp;
 }
 
 function TranscriptEntryBody({
@@ -255,6 +202,8 @@ function TranscriptEntryBody({
   locale?: string;
 }) {
   const messages = getProviderSessionDetailMessages(locale);
+  const encryptedContent =
+    entry.type === "reasoning" ? entry.encryptedContent?.trim() : undefined;
 
   switch (entry.type) {
     case "user_message":
@@ -267,11 +216,25 @@ function TranscriptEntryBody({
             <EncryptedReasoningNotice locale={locale} />
           ) : null}
           {entry.summary ? (
-            <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{entry.summary}</p>
+            <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>
+              {entry.summary}
+            </p>
           ) : null}
           {entry.text ? <CodePanel value={entry.text} /> : null}
-          {entry.encrypted && !entry.text ? (
-            <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          {encryptedContent ? (
+            <ExpandableCodeBlock
+              label={messages.encryptedReasoningStateLabel}
+              locale={locale}
+              value={encryptedContent}
+            />
+          ) : null}
+          {entry.encrypted && !entry.text && !encryptedContent ? (
+            <p
+              className={cn(
+                "m-0 text-af-text-subtle",
+                DASHBOARD_SUPPORTING_TEXT_CLASS,
+              )}
+            >
               {messages.encryptedReasoningOnly}
             </p>
           ) : null}
@@ -280,7 +243,9 @@ function TranscriptEntryBody({
     case "tool_call":
       return (
         <div className="grid gap-3">
-          {entry.text ? <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{entry.text}</p> : null}
+          {entry.text ? (
+            <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{entry.text}</p>
+          ) : null}
           {entry.arguments ? (
             <ExpandableCodeBlock
               label={messages.argumentsLabel}
@@ -304,7 +269,9 @@ function TranscriptEntryBody({
 
       return (
         <div className="grid gap-3">
-          {entry.text ? <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{entry.text}</p> : null}
+          {entry.text ? (
+            <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{entry.text}</p>
+          ) : null}
           {entry.output ? (
             <ExpandableCodeBlock
               label={messages.outputLabel}
@@ -318,7 +285,9 @@ function TranscriptEntryBody({
       return (
         <div className="grid gap-2">
           {entry.summary ? (
-            <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{entry.summary}</p>
+            <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>
+              {entry.summary}
+            </p>
           ) : null}
           {entry.text ? <CodePanel value={entry.text} /> : null}
         </div>
@@ -361,8 +330,4 @@ function getTranscriptEntryTitle(entry: TranscriptEntry, defaultLabel: string) {
 
 function getTranscriptEntryClassName(entryType: TranscriptEntry["type"]) {
   return TRANSCRIPT_ENTRY_CLASS_NAMES[entryType];
-}
-
-function getTranscriptBadgeClassName(entryType: TranscriptEntry["type"]) {
-  return TRANSCRIPT_BADGE_CLASS_NAMES[entryType];
 }

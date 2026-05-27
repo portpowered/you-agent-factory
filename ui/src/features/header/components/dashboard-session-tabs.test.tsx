@@ -1,19 +1,14 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
-import { DashboardSessionTabs } from "./dashboard-session-tabs";
-import { getHeaderControlsMessages } from "../messages/header-controls";
 import { sessionCloseLabel } from "../lib/dashboard-session-tabs-utils";
+import { getHeaderControlsMessages } from "../messages/header-controls";
+import { DashboardSessionTabs } from "./dashboard-session-tabs";
 
 const listFactorySessions = vi.fn();
 const openFactorySession = vi.fn();
@@ -184,7 +179,9 @@ describe("DashboardSessionTabs", () => {
       expect(rootTab.getAttribute("aria-selected")).toBe("true");
     });
     expect(document.activeElement).toBe(rootTab);
-    expect(useDashboardSessionStore.getState().selectedSessionID).toBe("~default");
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      "~default",
+    );
   });
 
   it("shows the offline state and allows session refetch", async () => {
@@ -285,7 +282,9 @@ describe("DashboardSessionTabs", () => {
     fireEvent.click(
       screen.getByRole("button", { name: messages.openSessionButtonLabel }),
     );
-    expect(screen.getByText(messages.openSessionDialogDescription)).toBeTruthy();
+    expect(
+      screen.getByText(messages.openSessionDialogDescription),
+    ).toBeTruthy();
     const folderField = screen.getByRole("textbox", {
       name: messages.sessionFolderFieldLabel,
     });
@@ -303,9 +302,7 @@ describe("DashboardSessionTabs", () => {
       },
     );
     expect(inspectFolderButton.getAttribute("disabled")).toBeNull();
-    fireEvent.submit(
-      inspectFolderButton.closest("form") as HTMLFormElement,
-    );
+    fireEvent.submit(inspectFolderButton.closest("form") as HTMLFormElement);
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
@@ -313,7 +310,9 @@ describe("DashboardSessionTabs", () => {
         validateOnly: true,
       });
     });
-    expect(screen.queryByText(messages.openSessionLaunchReadySingleTarget)).toBeNull();
+    expect(
+      screen.queryByText(messages.openSessionLaunchReadySingleTarget),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: messages.openSessionSubmitLabel }),
     ).toBeNull();
@@ -507,9 +506,12 @@ describe("DashboardSessionTabs", () => {
     fireEvent.click(
       screen.getByRole("button", { name: messages.openSessionButtonLabel }),
     );
-    fireEvent.change(screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder), {
-      target: { value: "/workspace/fleet" },
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: "/workspace/fleet" },
+      },
+    );
     fireEvent.submit(
       screen
         .getByRole("button", { name: messages.openSessionSubmitLabel })
@@ -522,7 +524,9 @@ describe("DashboardSessionTabs", () => {
         validateOnly: true,
       });
     });
-    expect(screen.queryByText(messages.openSessionLaunchReadyMultipleTargets)).toBeNull();
+    expect(
+      screen.queryByText(messages.openSessionLaunchReadyMultipleTargets),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: messages.openSessionSubmitLabel }),
     ).toBeNull();
@@ -665,7 +669,9 @@ describe("DashboardSessionTabs", () => {
       ).toBeTruthy();
     });
     expect(openFactorySession).toHaveBeenCalledTimes(4);
-    expect(screen.queryByRole("region", { name: messages.targetPickerTitle })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: messages.targetPickerTitle }),
+    ).toBeNull();
   });
 
   it("closes the active session tab and selects the remaining session deterministically", async () => {
@@ -725,9 +731,7 @@ describe("DashboardSessionTabs", () => {
     });
     await waitFor(() => {
       expect(
-        screen.getByRole("tab", { name: "beta" }).getAttribute(
-          "aria-selected",
-        ),
+        screen.getByRole("tab", { name: "beta" }).getAttribute("aria-selected"),
       ).toBe("true");
     });
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
@@ -772,8 +776,12 @@ describe("DashboardSessionTabs", () => {
         screen.getByRole("button", { name: "Close root session" }),
       ),
     ).toBe(true);
-    expect(activeTab.parentElement?.contains(activeCluster as HTMLElement)).toBe(true);
-    expect(screen.getByRole("button", { name: "Close beta session" })).toBeTruthy();
+    expect(
+      activeTab.parentElement?.contains(activeCluster as HTMLElement),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Close beta session" }),
+    ).toBeTruthy();
   });
 
   it("keeps inactive-tab close buttons quiet by default and directly operable", async () => {
@@ -844,8 +852,12 @@ describe("DashboardSessionTabs", () => {
     });
 
     expect(betaCloseButton.className).toContain("text-af-text-disabled");
-    expect(betaCloseButton.className).toContain("group-hover:text-af-text-muted");
-    expect(betaCloseButton.className).toContain("focus-visible:ring-af-focus-ring");
+    expect(betaCloseButton.className).toContain(
+      "group-hover:text-af-text-muted",
+    );
+    expect(betaCloseButton.className).toContain(
+      "focus-visible:ring-af-focus-ring",
+    );
 
     betaCloseButton.focus();
     expect(document.activeElement).toBe(betaCloseButton);
@@ -950,15 +962,16 @@ describe("DashboardSessionTabs", () => {
       name: sessionCloseLabel(rootSession, messages),
     });
 
-    expect(
-      (pendingCloseButton as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect((pendingCloseButton as HTMLButtonElement).disabled).toBe(true);
     expect(pendingCloseButton.textContent?.trim()).toBe(
       messages.closingSessionButtonLabel,
     );
   });
 
   it("uses short factory-first tab labels while preserving visible supporting context", async () => {
+    const longFolderPath =
+      "/workspace/customers/northwind/agent-factory/examples/catalog";
+
     listFactorySessions.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
@@ -972,7 +985,7 @@ describe("DashboardSessionTabs", () => {
       },
       {
         factoryDir: "/workspace/catalog/review",
-        folderPath: "/workspace/catalog",
+        folderPath: longFolderPath,
         id: "session-review",
         isDefault: false,
         project: "catalog",
@@ -994,10 +1007,14 @@ describe("DashboardSessionTabs", () => {
 
     expect(rootTab.getAttribute("aria-label")).toBe("root");
     expect(reviewTab.getAttribute("aria-label")).toBe("review");
-    expect(rootTab.textContent).toBe("rootworkspace root");
-    expect(reviewTab.textContent).toBe("reviewcatalog");
-    expect(screen.getByText("workspace root")).toBeTruthy();
-    expect(screen.getByText("catalog")).toBeTruthy();
+    expect(rootTab.textContent).toBe("root/workspace/root");
+    expect(reviewTab.textContent).toBe(
+      "review...mers/northwind/agent-factory/examples/catalog",
+    );
+    expect(screen.getByText("/workspace/root")).toBeTruthy();
+    expect(screen.getByTitle(longFolderPath).textContent).toBe(
+      "...mers/northwind/agent-factory/examples/catalog",
+    );
   });
 });
 

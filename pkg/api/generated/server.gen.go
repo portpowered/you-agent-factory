@@ -498,6 +498,9 @@ type CodexSessionReasoningSummary struct {
 	// Encrypted Whether the reasoning entry only exposed encrypted content.
 	Encrypted *bool `json:"encrypted,omitempty"`
 
+	// EncryptedContent Compact encrypted reasoning payload when the provider exposes it.
+	EncryptedContent *string `json:"encryptedContent,omitempty"`
+
 	// Order Chronological order of the reasoning entry in the session stream.
 	Order int `json:"order"`
 
@@ -533,6 +536,9 @@ type CodexSessionTranscriptEntry struct {
 
 	// Encrypted Whether the entry only exposed encrypted content instead of plaintext.
 	Encrypted *bool `json:"encrypted,omitempty"`
+
+	// EncryptedContent Compact encrypted reasoning payload when the provider exposes it.
+	EncryptedContent *string `json:"encryptedContent,omitempty"`
 
 	// LineNumber One-based JSONL line number that produced this transcript entry when applicable.
 	LineNumber *int `json:"lineNumber,omitempty"`
