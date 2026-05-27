@@ -153,6 +153,28 @@ func ValidatePromptTemplate(tmpl string, inputCount int) PromptTemplateValidatio
 }
 
 func inputVariableReferences(inputIndex int) []PromptTemplateVariableReference {
+	references := inputDirectVariableReferences(inputIndex)
+	references = append(references, inputRelationVariableReferences(inputIndex)...)
+	references = append(references,
+		PromptTemplateVariableReference{
+			Category:    PromptTemplateVariableCategoryInput,
+			Description: fmt.Sprintf("Previous output captured for input %d retries.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).PreviousOutput }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].PreviousOutput", inputIndex),
+		},
+		PromptTemplateVariableReference{
+			Category:    PromptTemplateVariableCategoryInput,
+			Description: fmt.Sprintf("Reviewer or rejection feedback recorded for input %d.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).RejectionFeedback }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].RejectionFeedback", inputIndex),
+		},
+	)
+	references = append(references, inputHistoryVariableReferences(inputIndex)...)
+
+	return references
+}
+
+func inputDirectVariableReferences(inputIndex int) []PromptTemplateVariableReference {
 	return []PromptTemplateVariableReference{
 		{
 			Category:    PromptTemplateVariableCategoryInput,
@@ -214,6 +236,11 @@ func inputVariableReferences(inputIndex int) []PromptTemplateVariableReference {
 			Example:     fmt.Sprintf("{{ index (index .Inputs %d).Tags \"branch\" }}", inputIndex),
 			Path:        fmt.Sprintf(".Inputs[%d].Tags[\"KEY\"]", inputIndex),
 		},
+	}
+}
+
+func inputRelationVariableReferences(inputIndex int) []PromptTemplateVariableReference {
+	return []PromptTemplateVariableReference{
 		{
 			Category:    PromptTemplateVariableCategoryInput,
 			Description: fmt.Sprintf("Relation records attached to input %d.", inputIndex),
@@ -238,18 +265,11 @@ func inputVariableReferences(inputIndex int) []PromptTemplateVariableReference {
 			Example:     fmt.Sprintf("{{ (index (index .Inputs %d).Relations 0).RequiredState }}", inputIndex),
 			Path:        fmt.Sprintf(".Inputs[%d].Relations[0].RequiredState", inputIndex),
 		},
-		{
-			Category:    PromptTemplateVariableCategoryInput,
-			Description: fmt.Sprintf("Previous output captured for input %d retries.", inputIndex),
-			Example:     fmt.Sprintf("{{ (index .Inputs %d).PreviousOutput }}", inputIndex),
-			Path:        fmt.Sprintf(".Inputs[%d].PreviousOutput", inputIndex),
-		},
-		{
-			Category:    PromptTemplateVariableCategoryInput,
-			Description: fmt.Sprintf("Reviewer or rejection feedback recorded for input %d.", inputIndex),
-			Example:     fmt.Sprintf("{{ (index .Inputs %d).RejectionFeedback }}", inputIndex),
-			Path:        fmt.Sprintf(".Inputs[%d].RejectionFeedback", inputIndex),
-		},
+	}
+}
+
+func inputHistoryVariableReferences(inputIndex int) []PromptTemplateVariableReference {
+	return []PromptTemplateVariableReference{
 		{
 			Category:    PromptTemplateVariableCategoryHistory,
 			Description: fmt.Sprintf("Retry and failure history for input %d.", inputIndex),
