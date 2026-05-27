@@ -48,7 +48,7 @@ public replacement surface.
 | Identifier | Format | Producer | Consumer | Validation evidence |
 | --- | --- | --- | --- | --- |
 | `exhaustion_rules` | top-level JSON/OpenAPI field name | legacy config authors and old fixtures | `FactoryConfigMapper.Expand` boundary rejection only | `pkg/config/factory_config_mapping.go`, `pkg/config/runtime_config_test.go` |
-| `type: LOGICAL_MOVE` | workstation runtime type string | config authors and generated public clients | config mapper, runtime executor wiring, replay conversion | `api/openapi.yaml`, `pkg/config/openapi_factory_test.go`, `pkg/replay/effective_config_test.go` |
+| `type: LOGICAL_MOVE` | workstation runtime type string | config authors and generated public clients | config mapper, runtime executor wiring, replay conversion | `api/openapi.yaml`, `pkg/config/openapi_factory_test.go`, `pkg/replay/configtests/effective_config_test.go` |
 | `guards[].type: visit_count` | workstation guard enum value | config authors and generated public clients | config validator, config mapper, topology projection | `api/openapi.yaml`, `pkg/config/config_mapper_test.go`, `pkg/factory/projections/topology_projection.go` |
 | `guards[].workstation` | workstation name string | config authors and generated public clients | visit-count guard validator and runtime scheduler eligibility | `pkg/config/config_validator.go`, `pkg/config/config_mapper_test.go` |
 

@@ -21,7 +21,7 @@ func TestCheckedInReplayEventFixturesUseSafeFactoryEvents(t *testing.T) {
 }
 
 func TestCheckedInReplayInferenceFixtureDocumentsPromptExposure(t *testing.T) {
-	fixture := filepath.FromSlash("testdata/inference-events.replay.json")
+	fixture := testpath.MustRepoPathFromCaller(t, 0, "pkg", "replay", "testdata", "inference-events.replay.json")
 	artifact := loadRawReplayFixture(t, fixture)
 	requests := make(map[string]map[string]any)
 	responses := make(map[string]map[string]any)
@@ -93,7 +93,7 @@ func replayFixturePaths(t *testing.T) []string {
 	t.Helper()
 
 	return existingFiles([]string{
-		filepath.FromSlash("testdata/inference-events.replay.json"),
+		testpath.MustRepoPathFromCaller(t, 0, "pkg", "replay", "testdata", "inference-events.replay.json"),
 		testpath.MustRepoPathFromCaller(t, 0, "tests", "adhoc", "factory-recording-04-11-02.json"),
 		testpath.MustRepoPathFromCaller(t, 0, "tests", "functional_test", "testdata", "adhoc-recording-batch-event-log.json"),
 	})

@@ -35,7 +35,7 @@ These structs should stay internal after decoding, but they still overlap heavil
 - `libraries/agent-factory/pkg/config/factory_config_mapping.go:FactoryConfigMapper.Expand` is the canonical public decode step for `factory.json`, `config flatten`, and `config expand`.
 - `libraries/agent-factory/pkg/config/runtime_config.go:loadFactoryConfig` is the file-loading entrypoint that all normal runtime startup paths use before worker and workstation AGENTS.md merging.
 - `libraries/agent-factory/pkg/service/factory.go:loadFactoryConfigForMode` is the service-level fork between on-disk config loading and replay-embedded generated config loading.
-- `libraries/agent-factory/pkg/replay/generated_factory_runtime.go:RuntimeConfigFromGeneratedFactory` is the transport-side entrypoint for generated config carried through replay artifacts and `RUN_REQUEST` payloads.
+- `libraries/agent-factory/pkg/replay/generated_factory.go:RuntimeConfigFromGeneratedFactory` is the transport-side entrypoint for generated config carried through replay artifacts and `RUN_REQUEST` payloads.
 
 ## Inventory Conclusions
 
