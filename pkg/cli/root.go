@@ -53,6 +53,9 @@ func NewRootCommand() *cobra.Command {
 			"it prepares ./factory when needed, keeps the runtime alive in continuous mode, " +
 			"watches factory/inputs/task/default for Markdown or JSON task files, and reports " +
 			"the local dashboard at the first available port, preferring http://localhost:7437/dashboard/ui.\n\n" +
+			"Default command output is customer-facing. Verbose and debug diagnostics are for troubleshooting, " +
+			"use the diagnostics stream so JSON stdout remains parseable, and must not include full prompts, " +
+			"full work payloads, access tokens, full model input text, full successful response bodies, or sensitive generated content.\n\n" +
 			"Packaged reference topics are also available through " + cliBinaryName + " docs <topic>. " +
 			"Supported docs topics: " + supportedDocsTopicsHelpText() + ".",
 		Example: "  # Start the default Codex-backed factory in the current project.\n" +
