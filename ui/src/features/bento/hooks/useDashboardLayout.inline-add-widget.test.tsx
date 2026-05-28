@@ -96,10 +96,14 @@ describe("useDashboardLayout inline add-widget persistence", () => {
     }>;
 
     expect(
-      storedLayout.filter((item) => item.widgetType === DASHBOARD_WIDGET_IDS.addWidget),
+      storedLayout.filter(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.addWidget,
+      ),
     ).toHaveLength(1);
     expect(
-      storedLayout.find((item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID),
+      storedLayout.find(
+        (item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+      ),
     ).toMatchObject({
       h: 5,
       id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
