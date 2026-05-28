@@ -263,7 +263,7 @@ describe("CurrentSelectionWidget workstation localization", () => {
       data: {
         name: "Current Factory",
         version: {
-          logical: 7,
+          logical: "7",
           physical: "2026-05-23T15:52:00Z",
         },
         workers: [

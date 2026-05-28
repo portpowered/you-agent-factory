@@ -35,7 +35,7 @@ export const exportCoverImagePath = path.resolve(
   "dashboard.png",
 );
 export const initialEditableFactoryDefinitionVersion = {
-  logical: 1,
+  logical: "1",
   physical: "2026-05-19T00:00:00Z",
 };
 

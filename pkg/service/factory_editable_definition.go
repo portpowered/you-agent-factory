@@ -10,12 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"go.uber.org/zap"
 )
 
 // GetCurrentFactory returns the canonical current factory definition together
@@ -33,6 +35,9 @@ func (fs *FactoryService) SaveCurrentFactory(ctx context.Context, request factor
 	current, sanitized, err := fs.validateEditableFactorySave(ctx, request)
 	if err != nil {
 		return factoryapi.Factory{}, err
+	}
+	if current.Name == apisurface.DefaultCurrentFactoryName {
+		return fs.saveDefaultCurrentFactory(ctx, current, request, sanitized)
 	}
 
 	fs.activationMu.Lock()
@@ -186,14 +191,13 @@ func (fs *FactoryService) prepareEditableFactoryDefinitionSave(
 	current factoryapi.Factory,
 	request factoryapi.Factory,
 ) (string, factoryapi.Factory, error) {
-	if current.Name == apisurface.DefaultCurrentFactoryName {
-		return "", factoryapi.Factory{}, ErrCurrentFactoryNotFound
-	}
 	if request.Name != current.Name {
 		return "", factoryapi.Factory{}, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
 	}
-	if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
-		return "", factoryapi.Factory{}, err
+	if current.Name != apisurface.DefaultCurrentFactoryName {
+		if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
+			return "", factoryapi.Factory{}, err
+		}
 	}
 	sanitized := request
 	sanitized.Version = nil
@@ -201,6 +205,136 @@ func (fs *FactoryService) prepareEditableFactoryDefinitionSave(
 		return "", factoryapi.Factory{}, err
 	}
 	return sessionRootDir, sanitized, nil
+}
+
+func (fs *FactoryService) saveDefaultCurrentFactory(
+	ctx context.Context,
+	current factoryapi.Factory,
+	request factoryapi.Factory,
+	sanitized factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	fs.activationMu.Lock()
+	defer fs.activationMu.Unlock()
+
+	if err := fs.requireIdleRuntime(ctx); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	rootDir := fs.factoryRootDir
+	if rootDir == "" && fs.cfg != nil {
+		rootDir = fs.cfg.Dir
+	}
+	if err := fs.requireFreshEditableFactoryVersionAtRoot(request.Version, rootDir, current.Name); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	nextVersion := nextEditableFactoryVersion(current.Version, factory.EnsureClock(fs.clock).Now().UTC())
+	payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	restore, err := replaceDefaultFactoryDefinition(rootDir, payload)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+
+	replacement, err := fs.buildEditableFactoryReplacement(ctx, rootDir, rootDir)
+	if err != nil {
+		restore()
+		return factoryapi.Factory{}, fmt.Errorf("%w: build replacement default factory: %w", ErrInvalidNamedFactory, err)
+	}
+	if err := fs.requireIdleRuntime(ctx); err != nil {
+		restore()
+		return factoryapi.Factory{}, err
+	}
+	if err := fs.activateDefaultReplacementRuntime(ctx, replacement); err != nil {
+		restore()
+		return factoryapi.Factory{}, err
+	}
+
+	return fs.GetCurrentFactory(ctx)
+}
+
+func (fs *FactoryService) saveDefaultCurrentFactoryForSession(
+	ctx context.Context,
+	sessionID string,
+	session *liveFactorySession,
+	sessionRootDir string,
+	current factoryapi.Factory,
+	request factoryapi.Factory,
+	sanitized factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	fs.activationMu.Lock()
+	defer fs.activationMu.Unlock()
+
+	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	if err := fs.requireFreshEditableFactoryVersionAtRoot(request.Version, sessionRootDir, current.Name); err != nil {
+		return factoryapi.Factory{}, err
+	}
+	nextVersion := nextEditableFactoryVersion(current.Version, factory.EnsureClock(fs.clock).Now().UTC())
+	payload, err := marshalPersistedFactoryPayload(sanitized, nextVersion)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	restore, err := replaceDefaultFactoryDefinition(sessionRootDir, payload)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+
+	replacement, err := fs.buildSessionEditableFactoryReplacement(ctx, sessionRootDir, sessionRootDir, sessionID, current.Name)
+	if err != nil {
+		restore()
+		return factoryapi.Factory{}, err
+	}
+	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
+		restore()
+		return factoryapi.Factory{}, err
+	}
+	if err := fs.replaceSessionRuntime(ctx, session, string(current.Name), replacement); err != nil {
+		restore()
+		return factoryapi.Factory{}, err
+	}
+
+	return fs.GetCurrentFactoryForSession(ctx, sessionID)
+}
+
+func (fs *FactoryService) activateDefaultReplacementRuntime(
+	ctx context.Context,
+	replacement *replacementFactoryRuntime,
+) error {
+	runState := fs.currentRunState()
+	if runState == nil || runState.runtime == nil || runState.ctx == nil {
+		fs.swapActiveRuntime(replacement)
+		return nil
+	}
+
+	restoreCurrentSidecars := false
+	serviceMode := fs.cfg != nil && runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService
+	if serviceMode {
+		fs.stopLiveRuntimeSidecars(runState.runtime)
+		restoreCurrentSidecars = true
+		defer func() {
+			if restoreCurrentSidecars {
+				fs.restoreLiveRuntimeSidecars(runState)
+			}
+		}()
+	}
+	if err := fs.requireIdleRuntime(ctx); err != nil {
+		return err
+	}
+
+	replacementHandle, err := fs.startReplacementRuntime(ctx, runState.ctx, replacement, serviceMode)
+	if err != nil {
+		return err
+	}
+	fs.publishFactoryChangeEvent(ctx, runState.runtime, replacement)
+	restoreCurrentSidecars = false
+	fs.registerLiveSession(runState.sessionID, replacementHandle, true)
+	fs.setRunState(runState.ctx, runState.sessionID, replacementHandle)
+	if err := fs.stopLiveRuntime(runState.runtime); err != nil && !errors.Is(err, context.Canceled) {
+		fs.logger.Warn("prior default runtime shutdown failed", zap.Error(err))
+	}
+	return nil
 }
 
 func (fs *FactoryService) replaceEditableFactoryDefinition(
@@ -216,6 +350,50 @@ func (fs *FactoryService) replaceEditableFactoryDefinition(
 		return "", fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 	}
 	return "", err
+}
+
+func replaceDefaultFactoryDefinition(rootDir string, payload []byte) (func(), error) {
+	path := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	previous, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read default factory definition %s: %w", path, err)
+	}
+	if err := writeFactoryDefinitionFile(path, payload); err != nil {
+		return nil, err
+	}
+	return func() {
+		_ = writeFactoryDefinitionFile(path, previous)
+	}, nil
+}
+
+func writeFactoryDefinitionFile(path string, payload []byte) error {
+	staged, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".staging-")
+	if err != nil {
+		return fmt.Errorf("stage factory definition %s: %w", path, err)
+	}
+	stagedPath := staged.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.Remove(stagedPath)
+		}
+	}()
+	if _, err := staged.Write(payload); err != nil {
+		_ = staged.Close()
+		return fmt.Errorf("write staged factory definition %s: %w", stagedPath, err)
+	}
+	if err := staged.Chmod(0o644); err != nil {
+		_ = staged.Close()
+		return fmt.Errorf("chmod staged factory definition %s: %w", stagedPath, err)
+	}
+	if err := staged.Close(); err != nil {
+		return fmt.Errorf("close staged factory definition %s: %w", stagedPath, err)
+	}
+	if err := os.Rename(stagedPath, path); err != nil {
+		return fmt.Errorf("replace factory definition %s: %w", path, err)
+	}
+	committed = true
+	return nil
 }
 
 func (fs *FactoryService) buildSessionEditableFactoryReplacement(
@@ -242,14 +420,14 @@ func (fs *FactoryService) requireFreshEditableFactoryVersion(baseVersion *factor
 
 func (fs *FactoryService) requireFreshEditableFactoryVersionAtRoot(baseVersion *factoryapi.HybridLogicalTimestamp, rootDir string, name factoryapi.FactoryName) error {
 	if baseVersion == nil {
-		return nil
+		return fmt.Errorf("%w: save request must include an advanced factory version", apisurface.ErrFactoryVersionStale)
 	}
 	currentVersion, err := fs.currentFactoryDefinitionVersionAtRoot(rootDir, name)
 	if err != nil {
 		return err
 	}
-	if compareEditableFactoryVersions(*baseVersion, currentVersion) < 0 {
-		return fmt.Errorf("%w: base version logical=%d physical=%s current logical=%d physical=%s",
+	if !isEditableFactoryVersionAdvanced(*baseVersion, currentVersion) {
+		return fmt.Errorf("%w: submitted version logical=%d physical=%s must advance current logical=%d physical=%s",
 			apisurface.ErrFactoryVersionStale,
 			baseVersion.Logical,
 			baseVersion.Physical.UTC().Format(time.RFC3339Nano),
@@ -267,13 +445,13 @@ func nextEditableFactoryVersion(
 	physical := now.UTC()
 	logical := int64(1)
 	if current != nil {
-		logical = current.Logical + 1
+		logical = current.Logical.Int64() + 1
 		if !physical.After(current.Physical.UTC()) {
 			physical = current.Physical.UTC().Add(time.Nanosecond)
 		}
 	}
 	return factoryapi.HybridLogicalTimestamp{
-		Logical:  logical,
+		Logical:  apitypes.Int64String(logical),
 		Physical: physical,
 	}
 }
@@ -291,23 +469,8 @@ func marshalPersistedFactoryPayload(
 	return payload, nil
 }
 
-func compareEditableFactoryVersions(left, right factoryapi.HybridLogicalTimestamp) int {
-	if left.Logical < right.Logical {
-		return -1
-	}
-	if left.Logical > right.Logical {
-		return 1
-	}
-	leftPhysical := left.Physical.UTC()
-	rightPhysical := right.Physical.UTC()
-	switch {
-	case leftPhysical.Before(rightPhysical):
-		return -1
-	case leftPhysical.After(rightPhysical):
-		return 1
-	default:
-		return 0
-	}
+func isEditableFactoryVersionAdvanced(candidate, current factoryapi.HybridLogicalTimestamp) bool {
+	return candidate.Logical > current.Logical && candidate.Physical.UTC().After(current.Physical.UTC())
 }
 
 func validateEditableFactoryTopology(submitted factoryapi.Factory) error {
@@ -318,6 +481,7 @@ func validateEditableFactoryTopology(submitted factoryapi.Factory) error {
 	targets = append(targets, duplicateNameTargets("workstations", workstationNames(submitted.Workstations), "node")...)
 	targets = append(targets, duplicateWorkStateTargets(submitted.WorkTypes)...)
 	targets = append(targets, danglingFactoryReferenceTargets(submitted)...)
+	targets = append(targets, typeCountCollisionTargets(submitted)...)
 	if len(targets) == 0 {
 		return nil
 	}
@@ -414,6 +578,66 @@ func danglingIOTargets(workstation string, ios []factoryapi.WorkstationIO, workS
 		id := workstation + "->" + io.WorkType + ":" + io.State
 		if !workStates[io.WorkType+":"+io.State] {
 			targets = append(targets, editableFactoryErrorTarget("edge", id, fmt.Sprintf("%s[%d]", fieldPrefix, index)))
+		}
+	}
+	return targets
+}
+
+func typeCountCollisionTargets(factory factoryapi.Factory) []factoryapi.ErrorTarget {
+	if factory.Workstations == nil {
+		return nil
+	}
+	var targets []factoryapi.ErrorTarget
+	for workstationIndex, workstation := range *factory.Workstations {
+		inputCounts := ioWorkTypeCounts(workstation.Inputs)
+		if len(inputCounts) == 0 {
+			continue
+		}
+		if workstation.Outputs != nil {
+			targets = append(targets, typeCountRouteCollisionTargets(workstation.Name, inputCounts, *workstation.Outputs, fmt.Sprintf("%s.workstations[%d].outputs", canonicalFactoryValidationRoot, workstationIndex))...)
+		}
+		if workstation.OnContinue != nil {
+			targets = append(targets, typeCountRouteCollisionTargets(workstation.Name, inputCounts, *workstation.OnContinue, fmt.Sprintf("%s.workstations[%d].onContinue", canonicalFactoryValidationRoot, workstationIndex))...)
+		}
+		if workstation.OnRejection != nil {
+			targets = append(targets, typeCountRouteCollisionTargets(workstation.Name, inputCounts, *workstation.OnRejection, fmt.Sprintf("%s.workstations[%d].onRejection", canonicalFactoryValidationRoot, workstationIndex))...)
+		}
+		if workstation.OnFailure != nil {
+			targets = append(targets, typeCountRouteCollisionTargets(workstation.Name, inputCounts, *workstation.OnFailure, fmt.Sprintf("%s.workstations[%d].onFailure", canonicalFactoryValidationRoot, workstationIndex))...)
+		}
+	}
+	return targets
+}
+
+func ioWorkTypeCounts(ios []factoryapi.WorkstationIO) map[string]int {
+	counts := make(map[string]int)
+	for _, io := range ios {
+		if strings.TrimSpace(io.WorkType) == "" {
+			continue
+		}
+		counts[io.WorkType]++
+	}
+	return counts
+}
+
+func typeCountRouteCollisionTargets(
+	workstation string,
+	inputCounts map[string]int,
+	routes []factoryapi.WorkstationIO,
+	fieldPrefix string,
+) []factoryapi.ErrorTarget {
+	routeCounts := ioWorkTypeCounts(routes)
+	var targets []factoryapi.ErrorTarget
+	for workType, inputCount := range inputCounts {
+		routeCount := routeCounts[workType]
+		if routeCount == 0 || routeCount == inputCount {
+			continue
+		}
+		for routeIndex, route := range routes {
+			if route.WorkType != workType {
+				continue
+			}
+			targets = append(targets, editableFactoryErrorTarget("edge", workstation+"->"+route.WorkType+":"+route.State, fmt.Sprintf("%s[%d]", fieldPrefix, routeIndex)))
 		}
 	}
 	return targets
@@ -523,7 +747,7 @@ func (fs *FactoryService) currentFactoryDefinitionVersionAtRoot(rootDir string, 
 	if current.FactoryConfig().Version != nil {
 		version := current.FactoryConfig().Version
 		return factoryapi.HybridLogicalTimestamp{
-			Logical:  version.Logical,
+			Logical:  apitypes.Int64String(version.Logical),
 			Physical: version.Physical.UTC(),
 		}, nil
 	}
@@ -538,7 +762,7 @@ func (fs *FactoryService) currentFactoryDefinitionVersionAtRoot(rootDir string, 
 		logical = 0
 	}
 	return factoryapi.HybridLogicalTimestamp{
-		Logical:  logical,
+		Logical:  apitypes.Int64String(logical),
 		Physical: modified,
 	}, nil
 }

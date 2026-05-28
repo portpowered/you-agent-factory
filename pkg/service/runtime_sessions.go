@@ -300,6 +300,9 @@ func (fs *FactoryService) SaveCurrentFactoryForSession(
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
+	if current.Name == apisurface.DefaultCurrentFactoryName {
+		return fs.saveDefaultCurrentFactoryForSession(ctx, sessionID, session, sessionRootDir, current, request, sanitized)
+	}
 
 	fs.activationMu.Lock()
 	defer fs.activationMu.Unlock()
@@ -333,6 +336,7 @@ func (fs *FactoryService) SaveCurrentFactoryForSession(
 
 	return fs.GetCurrentFactoryForSession(ctx, sessionID)
 }
+
 func (fs *FactoryService) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {
 	if fs == nil || fs.sessions == nil {
 		return factoryapi.ListFactorySessionsResponse{}, nil

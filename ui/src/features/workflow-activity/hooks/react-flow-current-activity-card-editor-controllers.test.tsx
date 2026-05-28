@@ -72,7 +72,7 @@ const baseFactoryDefinition: CanonicalFactoryDefinition = {
 const editableDocument = {
   ...baseFactoryDefinition,
   version: {
-    logical: 4,
+    logical: "4",
     physical: "2026-05-20T03:45:00Z",
   },
 };

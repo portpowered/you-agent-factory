@@ -66,7 +66,7 @@ func TestPersistNamedFactory_PreservesVersionMetadataAcrossLoadRoundTrip(t *test
 	if !ok {
 		t.Fatalf("persisted version payload = %#v, want object", payload["version"])
 	}
-	if got := version["logical"]; got != float64(17) {
+	if got := version["logical"]; got != "17" {
 		t.Fatalf("persisted logical version = %#v, want 17", got)
 	}
 	if got := version["physical"]; got != versionTime.Format(time.RFC3339Nano) {

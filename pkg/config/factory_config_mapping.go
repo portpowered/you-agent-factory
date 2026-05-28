@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -246,7 +247,7 @@ func hybridLogicalTimestampPtr(version *interfaces.FactoryVersion) *factoryapi.H
 		return nil
 	}
 	return &factoryapi.HybridLogicalTimestamp{
-		Logical:  version.Logical,
+		Logical:  apitypes.Int64String(version.Logical),
 		Physical: version.Physical.UTC(),
 	}
 }

@@ -878,16 +878,25 @@ function readOptionalFactoryVersion(
   const record = expectObject(item, `${path}.${key}`);
   const logical = record.logical;
   const physical = record.physical;
-  if (typeof logical !== "number" || !Number.isFinite(logical)) {
-    throw new FactoryDefinitionAPIError(`${path}.${key}.logical must be a number.`);
+  if (!isFactoryVersionLogicalValue(logical)) {
+    throw new FactoryDefinitionAPIError(
+      `${path}.${key}.logical must be a decimal string.`,
+    );
   }
   if (typeof physical !== "string") {
     throw new FactoryDefinitionAPIError(`${path}.${key}.physical must be a string.`);
   }
   return {
-    logical,
+    logical: String(logical),
     physical,
   };
+}
+
+function isFactoryVersionLogicalValue(value: unknown): value is number | string {
+  if (typeof value === "string") {
+    return /^[0-9]+$/.test(value);
+  }
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function readRequiredEnum<T extends string>(

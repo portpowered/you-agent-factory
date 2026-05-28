@@ -57,7 +57,7 @@ const fixtureState = vi.hoisted(() => {
     editableDocument: {
       ...baseFactoryDefinition,
       version: {
-        logical: 4,
+        logical: "4",
         physical: "2026-05-25T00:00:00Z",
       },
     },

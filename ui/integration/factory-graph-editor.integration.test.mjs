@@ -628,7 +628,10 @@ describe.sequential("factory graph editor browser integration", () => {
           {
             body: {
               ...editableGraphFactoryDefinition,
-              version: initialEditableFactoryDefinitionVersion,
+              version: {
+                logical: "2",
+                physical: "2026-05-19T00:00:00.001Z",
+              },
               workstations: [
                 {
                   ...editableGraphFactoryDefinition.workstations[0],

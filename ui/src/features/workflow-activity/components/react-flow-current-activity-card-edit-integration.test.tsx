@@ -203,7 +203,7 @@ const editableFactoryDocument: CurrentFactoryDocument = {
     },
   ],
   version: {
-    logical: 8,
+    logical: "8",
     physical: "2026-05-18T15:32:00Z",
   },
 };

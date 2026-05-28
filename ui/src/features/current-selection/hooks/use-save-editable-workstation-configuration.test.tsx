@@ -47,7 +47,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
     });
     expect(mutateAsync).toHaveBeenCalledWith({
       baseVersion: {
-        logical: 7,
+        logical: "7",
         physical: "2026-05-23T15:52:00Z",
       },
       factoryDefinition: {
@@ -82,7 +82,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
         JSON.stringify({
           name: "Current Factory",
           version: {
-            logical: 7,
+            logical: "7",
             physical: "2026-05-23T15:52:00Z",
           },
           workers: [],
@@ -127,8 +127,8 @@ describe("useSaveEditableWorkstationConfiguration", () => {
             workers: [],
             workstations: [],
             version: {
-              logical: 7,
-              physical: "2026-05-23T15:52:00Z",
+              logical: "8",
+              physical: "2026-05-23T15:52:00.001Z",
             },
           }),
           headers: {
@@ -175,7 +175,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
     deferredSave.resolve({
       name: "Current Factory",
       version: {
-        logical: 7,
+        logical: "7",
         physical: "2026-05-23T15:52:00Z",
       },
       workers: [],
@@ -235,7 +235,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     isDirty: true,
     markChangesSaved: overrides?.markChangesSaved ?? vi.fn(),
     baseVersion: {
-      logical: 7,
+      logical: "7",
       physical: "2026-05-23T15:52:00Z",
     },
     onBehaviorChange: vi.fn(),

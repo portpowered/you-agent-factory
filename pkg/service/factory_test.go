@@ -1369,6 +1369,10 @@ func TestFactoryService_SaveCurrentFactory_ReplacesCurrentDefinition(t *testing.
 	}
 
 	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
+	replacement.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  initialVersion.Logical + 1,
+		Physical: initialVersion.Physical.Add(time.Second),
+	}
 	saved, err := svc.SaveCurrentFactory(context.Background(), replacement)
 	if err != nil {
 		t.Fatalf("SaveCurrentFactory: %v", err)
@@ -1463,8 +1467,12 @@ func TestFactoryService_SaveCurrentFactory_RejectsStaleBaseVersion(t *testing.T)
 
 func TestFactoryService_SaveCurrentFactory_RejectsDuplicateAndDanglingTopology(t *testing.T) {
 	rootDir := t.TempDir()
+	initialVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  11,
+		Physical: time.Date(2026, 5, 23, 15, 0, 0, 0, time.UTC),
+	}
 
-	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayloadWithVersion(t, "alpha", initialVersion)); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
 	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
@@ -1479,8 +1487,19 @@ func TestFactoryService_SaveCurrentFactory_RejectsDuplicateAndDanglingTopology(t
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
+	currentBeforeInvalidSave, err := svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory before rejected save: %v", err)
+	}
+	if currentBeforeInvalidSave.Version == nil {
+		t.Fatal("expected current factory version metadata")
+	}
 
 	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
+	replacement.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  currentBeforeInvalidSave.Version.Logical + 1,
+		Physical: currentBeforeInvalidSave.Version.Physical.Add(time.Second),
+	}
 	if replacement.Workers == nil || replacement.Workstations == nil {
 		t.Fatal("expected fixture workers and workstations")
 	}

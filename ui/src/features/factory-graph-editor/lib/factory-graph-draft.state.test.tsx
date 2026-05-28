@@ -154,15 +154,15 @@ it("keeps a dirty draft while newer editable-definition versions arrive", () => 
     {
       ...baseFactoryDefinition,
       version: {
-        logical: 6,
+        logical: "6",
         physical: "2026-05-18T15:05:00Z",
       },
     },
   );
 
   expect(synced.draft.additions.workers).toEqual(dirtyDraft.additions.workers);
-  expect(synced.sessionStartDocument.version.logical).toBe(5);
-  expect(synced.latestDocument.version.logical).toBe(6);
+  expect(synced.sessionStartDocument.version.logical).toBe("5");
+  expect(synced.latestDocument.version.logical).toBe("6");
 });
 
 it("resets a dirty draft back to the latest server-backed document", () => {
@@ -198,6 +198,6 @@ it("resets a dirty draft back to the latest server-backed document", () => {
   });
 
   expect(result.current.hasChanges).toBe(false);
-  expect(result.current.baseDocument?.version.logical).toBe(5);
-  expect(result.current.latestDocument?.version.logical).toBe(5);
+  expect(result.current.baseDocument?.version.logical).toBe("5");
+  expect(result.current.latestDocument?.version.logical).toBe("5");
 });

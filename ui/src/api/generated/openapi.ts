@@ -800,9 +800,9 @@ export interface components {
         HybridLogicalTimestamp: {
             /**
              * Format: int64
-             * @description Monotonic Lamport-style logical component derived from the persisted factory definition version.
+             * @description Monotonic Lamport-style logical component derived from the persisted factory definition version. Serialized as a decimal string so JavaScript clients can round-trip the 64-bit value without precision loss.
              */
-            logical: number;
+            logical: string;
             /**
              * Format: date-time
              * @description UTC physical timestamp component for the persisted factory definition version.

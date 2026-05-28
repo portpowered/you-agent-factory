@@ -91,7 +91,7 @@ describe("useEditableFactoryGraph", () => {
     hookState.draftState.latestDocument = {
       ...currentFactoryDocument,
       version: {
-        logical: 6,
+        logical: "6",
         physical: "2026-05-18T16:00:00Z",
       },
     };

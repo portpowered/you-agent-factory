@@ -344,7 +344,7 @@ it("uses the projected canonical factory until the editable definition is availa
   });
 
   expect(result.current.source).toBe("current-factory");
-  expect(result.current.baseDocument?.version.logical).toBe(5);
+  expect(result.current.baseDocument?.version.logical).toBe("5");
 });
 
 it("returns an empty projection when no canonical factory is available", () => {
