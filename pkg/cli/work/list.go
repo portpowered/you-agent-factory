@@ -13,6 +13,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
@@ -44,15 +45,30 @@ func List(cfg ListConfig) error {
 	}
 
 	endpoint := listEndpoint(cfg)
+	clidiag.Printf(
+		cfg.Diagnostics,
+		cfg.Verbose,
+		"work list request endpointPath=%s endpoint=%s port=%d session=%s filters=%s maxResults=%d nextTokenPresent=%t",
+		endpoint.Path,
+		endpoint.String(),
+		cfg.Port,
+		clidiag.SessionLabel(cfg.SessionID),
+		listFilterSummary(cfg),
+		cfg.MaxResults,
+		cfg.NextToken != "",
+	)
 
 	client := &http.Client{Timeout: listRequestTimeout}
+	started := time.Now()
 	resp, err := client.Get(endpoint.String())
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, time.Since(started).Milliseconds())
 		return fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds())
 		var errResp factoryapi.ErrorResponse
 		if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
 			return fmt.Errorf("list work failed (%d): %s", resp.StatusCode, errResp.Message)
@@ -64,6 +80,16 @@ func List(cfg ListConfig) error {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("parse response: %w", err)
 	}
+	clidiag.Printf(
+		cfg.Diagnostics,
+		cfg.Verbose,
+		"work list response endpointPath=%s status=%d durationMillis=%d resultCount=%d nextTokenPresent=%t",
+		endpoint.Path,
+		resp.StatusCode,
+		time.Since(started).Milliseconds(),
+		len(result.Results),
+		result.PaginationContext != nil && result.PaginationContext.NextToken != nil && *result.PaginationContext.NextToken != "",
+	)
 	if cfg.JSON {
 		encoder := json.NewEncoder(cfg.Output)
 		return encoder.Encode(result)
@@ -79,6 +105,23 @@ func validateListConfig(cfg ListConfig) error {
 		return fmt.Errorf("--sort-by must be state.type")
 	}
 	return nil
+}
+
+func listFilterSummary(cfg ListConfig) string {
+	parts := make([]string, 0, 3)
+	if cfg.StateName != "" {
+		parts = append(parts, "state.name")
+	}
+	if cfg.StateType != "" {
+		parts = append(parts, "state.type")
+	}
+	if cfg.SortBy != "" {
+		parts = append(parts, "sortBy")
+	}
+	if len(parts) == 0 {
+		return "none"
+	}
+	return strings.Join(parts, ",")
 }
 
 func listEndpoint(cfg ListConfig) url.URL {

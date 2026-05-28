@@ -1,6 +1,7 @@
 package submit
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -20,6 +22,97 @@ func TestSubmit_MissingWorkTypeName(t *testing.T) {
 	}
 	if err.Error() != "--work-type-name is required" {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestSubmit_VerboseLogsRequestAndResponseMetadataWithoutPayloadContent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "trace-verbose"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	payloadPath := filepath.Join(t.TempDir(), "request.md")
+	if err := os.WriteFile(payloadPath, []byte("# Secret prompt\n\nDo not log this body."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var diagnostics bytes.Buffer
+	err := Submit(SubmitConfig{
+		Name:         "verbose-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Port:         mustServerPort(t, srv.URL),
+		SessionID:    "session-alpha",
+		Verbose:      true,
+		Diagnostics:  &diagnostics,
+	})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	got := diagnostics.String()
+	for _, want := range []string{
+		"submit request",
+		"endpointPath=/factory-sessions/session-alpha/work",
+		"port=",
+		"session=session-alpha",
+		"payloadPath=" + payloadPath,
+		"payloadType=markdown",
+		"payloadBytes=38",
+		`requestName="verbose-submit"`,
+		`workTypeName="task"`,
+		"submit response",
+		"status=201",
+		"traceId=trace-verbose",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostics missing %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{"Secret prompt", "Do not log this body"} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("diagnostics leaked payload content %q:\n%s", forbidden, got)
+		}
+	}
+}
+
+func TestSubmit_VerboseLogsFailureStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "workTypeName is required", Code: "BAD_REQUEST"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	payloadPath := filepath.Join(t.TempDir(), "work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"test task"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var diagnostics bytes.Buffer
+	err := Submit(SubmitConfig{
+		Name:         "task-submit",
+		WorkTypeName: "task",
+		Payload:      payloadPath,
+		Port:         mustServerPort(t, srv.URL),
+		Verbose:      true,
+		Diagnostics:  &diagnostics,
+	})
+	if err == nil {
+		t.Fatal("expected submit failure")
+	}
+	got := diagnostics.String()
+	if !strings.Contains(got, "submit response") || !strings.Contains(got, "status=400") {
+		t.Fatalf("diagnostics missing failure status:\n%s", got)
+	}
+	if strings.Contains(got, "test task") {
+		t.Fatalf("diagnostics leaked payload content:\n%s", got)
 	}
 }
 
