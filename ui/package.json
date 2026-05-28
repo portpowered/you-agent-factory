@@ -53,6 +53,7 @@
     "react-grid-layout": "^2.2.3",
     "react-resizable-panels": "^4.10.0",
     "recharts": "^3.8.1",
+    "sonner": "^2.0.7",
     "zustand": "^4.5.7"
   },
   "devDependencies": {

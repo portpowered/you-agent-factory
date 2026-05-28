@@ -46,6 +46,7 @@ import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
+import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
 export {
@@ -124,8 +125,8 @@ function useCurrentActivityBaseNodes({
   activeGraphHighlights,
   activeItemLabelsByPlaceId,
   editor,
+  factoryDefinition,
   graphLayout,
-  handleAssignments,
   locale,
   now,
   onSelectStateNode,
@@ -151,8 +152,8 @@ function useCurrentActivityBaseNodes({
   activeGraphHighlights: ReturnType<typeof buildActiveGraphHighlights>;
   activeItemLabelsByPlaceId: ReturnType<typeof buildActiveItemLabelsByPlaceId>;
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
+  factoryDefinition?: DashboardSnapshot["factory"];
   graphLayout: GraphLayout;
-  handleAssignments: ReturnType<typeof buildHandleAssignments>;
   storedNodePositions: typeof EMPTY_NODE_POSITIONS;
 }) {
   return useMemo<CurrentActivityNode[]>(
@@ -168,8 +169,8 @@ function useCurrentActivityBaseNodes({
           onConnectionAnchorClick: editor.handleConnectionAnchorClick,
           pendingConnectionSource: editor.pendingConnectionSource,
         },
+        factoryDefinition,
         graphLayout,
-        handleAssignments,
         locale,
         now,
         onSelectStateNode,
@@ -184,8 +185,8 @@ function useCurrentActivityBaseNodes({
       activeGraphHighlights,
       activeItemLabelsByPlaceId,
       editor,
+      factoryDefinition,
       graphLayout,
-      handleAssignments,
       locale,
       now,
       onSelectStateNode,
@@ -244,8 +245,8 @@ export function useCurrentActivityGraphViewModel({
     [editor.draftState.draft, graphLayout],
   );
   const handleAssignments = useMemo(
-    () => buildHandleAssignments(visibleGraphEdges),
-    [visibleGraphEdges],
+    () => buildHandleAssignments(visibleGraphEdges, graphLayout.nodes),
+    [graphLayout.nodes, visibleGraphEdges],
   );
   const activeGraphHighlights = useActiveGraphHighlights({
     activeExecutions,
@@ -261,8 +262,11 @@ export function useCurrentActivityGraphViewModel({
     activeGraphHighlights,
     activeItemLabelsByPlaceId,
     editor,
+    factoryDefinition:
+      editor.editorMode && hasPendingGraphEntityShapeChanges(editor)
+        ? (editor.draftState.pendingFactoryDefinition ?? undefined)
+        : snapshot.factory,
     graphLayout,
-    handleAssignments,
     locale,
     now,
     onSelectStateNode,
@@ -459,6 +463,10 @@ export function ReactFlowCurrentActivityCardView(
         imports={imports}
         locale={props.locale}
         snapshot={props.snapshot}
+      />
+      <CurrentActivityGraphSaveNotifications
+        editor={editor}
+        locale={props.locale}
       />
       <CurrentActivityGraphEditorDialogs
         editor={editor}

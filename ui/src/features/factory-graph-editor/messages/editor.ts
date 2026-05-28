@@ -332,7 +332,7 @@ function describeEnglishConnectionAnchor(anchorId: string) {
         description: "Provide this resource to a workstation.",
         label: "Station",
       };
-    case "worker-resource-target":
+    case "worker-input-target":
       return {
         description: "Accept a resource required by this worker.",
         label: "Resource",
@@ -352,40 +352,29 @@ function describeEnglishConnectionAnchor(anchorId: string) {
         label: "Input",
       };
     case "workstation-output-source":
-    case "workstation-output-target":
       return {
-        description:
-          anchorId === "workstation-output-source"
-            ? "Route successful output from this workstation."
-            : "Receive a successful workstation output.",
+        description: "Route successful output from this workstation.",
         label: "Success",
       };
     case "workstation-on-continue-source":
-    case "workstation-on-continue-target":
       return {
-        description:
-          anchorId === "workstation-on-continue-source"
-            ? "Route a continue transition from this workstation."
-            : "Receive a workstation continue transition.",
+        description: "Route a continue transition from this workstation.",
         label: "Continue",
       };
     case "workstation-on-failure-source":
-    case "workstation-on-failure-target":
       return {
-        description:
-          anchorId === "workstation-on-failure-source"
-            ? "Route a failure transition from this workstation."
-            : "Receive a workstation failure transition.",
+        description: "Route a failure transition from this workstation.",
         label: "Failure",
       };
     case "workstation-on-rejection-source":
-    case "workstation-on-rejection-target":
       return {
-        description:
-          anchorId === "workstation-on-rejection-source"
-            ? "Route a rejection transition from this workstation."
-            : "Receive a workstation rejection transition.",
+        description: "Route a rejection transition from this workstation.",
         label: "Reject",
+      };
+    case "work-state-input-target":
+      return {
+        description: "Receive workstation output into this work state.",
+        label: "Input",
       };
     case "worker-assignment-target":
       return {
@@ -698,7 +687,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "将此资源提供给工作者。";
           case "workstation-resource-source":
             return "将此资源提供给工作站。";
-          case "worker-resource-target":
+          case "worker-input-target":
             return "接收此工作者所需的资源。";
           case "worker-assignment-source":
             return "将此工作者分配给工作站。";
@@ -706,14 +695,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "将此工作状态路由到工作站输入。";
           case "workstation-input-target":
             return "接收此工作站的输入工作状态。";
-          case "workstation-output-target":
-            return "接收工作站的成功输出。";
-          case "workstation-on-continue-target":
-            return "接收工作站的继续转换。";
-          case "workstation-on-failure-target":
-            return "接收工作站的失败转换。";
-          case "workstation-on-rejection-target":
-            return "接收工作站的拒绝转换。";
+          case "work-state-input-target":
+            return "接收工作站输出到此工作状态。";
           case "worker-assignment-target":
             return "接收此工作站的工作者分配。";
           case "workstation-resource-target":
@@ -737,7 +720,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "工作者";
           case "workstation-resource-source":
             return "工作站";
-          case "worker-resource-target":
+          case "worker-input-target":
           case "workstation-resource-target":
             return "资源";
           case "worker-assignment-source":
@@ -746,17 +729,15 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
           case "workstation-input-target":
             return "输入";
           case "workstation-output-source":
-          case "workstation-output-target":
             return "成功";
           case "workstation-on-continue-source":
-          case "workstation-on-continue-target":
             return "继续";
           case "workstation-on-failure-source":
-          case "workstation-on-failure-target":
             return "失败";
           case "workstation-on-rejection-source":
-          case "workstation-on-rejection-target":
             return "拒绝";
+          case "work-state-input-target":
+            return "输入";
           default:
             return "";
         }

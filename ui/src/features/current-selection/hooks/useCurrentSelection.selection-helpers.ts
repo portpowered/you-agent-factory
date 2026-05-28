@@ -10,14 +10,15 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
-import {
-  findWorkItemReference,
-  findWorkstationNodeIDForPlace,
-} from "../state/dashboardSelection";
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
 } from "../../terminal-work/public";
+import {
+  findWorkItemReference,
+  findWorkstationNodeIDForPlace,
+} from "../state/dashboardSelection";
+import { findDashboardStatePlace } from "../state/dashboardStatePlaces";
 import type {
   DashboardSelection,
   StatePositionWorkItem,
@@ -105,22 +106,7 @@ function terminalWorkstationName(
 }
 
 export function findStatePlace(snapshot: DashboardSnapshot, placeId: string): DashboardPlaceRef | null {
-  const placesById = new Map<string, DashboardPlaceRef>();
-
-  for (const nodeId of snapshot.topology.workstation_node_ids) {
-    const workstation = snapshot.topology.workstation_nodes_by_id[nodeId];
-    if (!workstation) {
-      continue;
-    }
-
-    for (const place of [...(workstation.input_places ?? []), ...(workstation.output_places ?? [])]) {
-      if (place.kind === "work_state") {
-        placesById.set(place.place_id, place);
-      }
-    }
-  }
-
-  return placesById.get(placeId) ?? null;
+  return findDashboardStatePlace(snapshot, placeId);
 }
 
 export function currentWorkItemsForPlace(

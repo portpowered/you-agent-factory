@@ -1,15 +1,16 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing factory-graph connection coverage stayed intact during feature-root migration.
-import {
-  applyFactoryGraphEdgeRemoval,
-  applyFactoryGraphEdgeAddition,
-  buildFactoryGraphConnectionNotice,
-  buildFactoryGraphEdgeChangeFromConnection,
-  getLocalizedFactoryGraphConnectionAnchors,
-} from "./factory-graph-editor-connections";
+
 import type {
   FactoryGraphDraft,
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
+import {
+  applyFactoryGraphEdgeAddition,
+  applyFactoryGraphEdgeRemoval,
+  buildFactoryGraphConnectionNotice,
+  buildFactoryGraphEdgeChangeFromConnection,
+  getLocalizedFactoryGraphConnectionAnchors,
+} from "./factory-graph-editor-connections";
 
 const baseDraft: FactoryGraphDraft = {
   additions: {
@@ -86,7 +87,7 @@ describe("factory graph editor connections", () => {
       {
         sourceAnchorId: "workstation-on-failure-source",
         sourceNodeId: "workstation:review",
-        targetAnchorId: "workstation-on-failure-target",
+        targetAnchorId: "work-state-input-target",
         targetNodeId: "work-state:story:queued",
       },
     );
@@ -131,8 +132,8 @@ describe("factory graph editor connections", () => {
       buildFactoryGraphEdgeChangeFromConnection(connectableTopology, {
         sourceAnchorId: "workstation-on-failure-source",
         sourceNodeId: "workstation:review",
-        targetAnchorId: "workstation-on-continue-target",
-        targetNodeId: "work-state:story:queued",
+        targetAnchorId: "workstation-input-target",
+        targetNodeId: "workstation:review",
       }),
     ).toBeNull();
 
@@ -141,12 +142,12 @@ describe("factory graph editor connections", () => {
         sourceAnchorId: "workstation-on-failure-source",
         sourceNode: connectableTopology
           .nodes[1] as FactoryGraphTopology["nodes"][number],
-        targetAnchorId: "workstation-on-continue-target",
+        targetAnchorId: "workstation-input-target",
         targetNode: connectableTopology
-          .nodes[0] as FactoryGraphTopology["nodes"][number],
+          .nodes[1] as FactoryGraphTopology["nodes"][number],
       }),
     ).toBe(
-      "Failure connections from review cannot connect to Continue on story:queued.",
+      "Failure connections from review cannot connect to Input on review.",
     );
 
     expect(
@@ -155,11 +156,11 @@ describe("factory graph editor connections", () => {
         sourceAnchorId: "workstation-on-failure-source",
         sourceNode: connectableTopology
           .nodes[1] as FactoryGraphTopology["nodes"][number],
-        targetAnchorId: "workstation-on-continue-target",
+        targetAnchorId: "workstation-input-target",
         targetNode: connectableTopology
-          .nodes[0] as FactoryGraphTopology["nodes"][number],
+          .nodes[1] as FactoryGraphTopology["nodes"][number],
       }),
-    ).toBe("review 的失败连接不能连接到 story:queued 上的继续。");
+    ).toBe("review 的失败连接不能连接到 review 上的输入。");
   });
 
   it("records existing edge removals in the draft", () => {

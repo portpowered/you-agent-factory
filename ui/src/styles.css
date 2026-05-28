@@ -27,6 +27,8 @@
   --color-af-foundation-danger: #f05f5f;
   --color-af-foundation-danger-bright: #ff8a8a;
   --color-af-foundation-danger-ink: #ffb2b2;
+  --color-af-foundation-worker: #b68cff;
+  --color-af-foundation-worker-ink: #dfccff;
   --color-af-background: var(--color-af-foundation-background);
   --color-af-surface: var(--color-af-foundation-surface);
   --color-af-surface-subtle: rgb(from var(--color-af-foundation-overlay) r g b / 0.04);
@@ -77,6 +79,10 @@
   --color-af-info-border: rgb(from var(--color-af-foundation-info) r g b / 0.28);
   --color-af-info-text: var(--color-af-foundation-info-ink);
   --color-af-on-info: var(--color-af-text-inverse);
+  --color-af-worker: var(--color-af-foundation-worker);
+  --color-af-worker-surface: rgb(from var(--color-af-foundation-worker) r g b / 0.13);
+  --color-af-worker-border: rgb(from var(--color-af-foundation-worker) r g b / 0.3);
+  --color-af-worker-text: var(--color-af-foundation-worker-ink);
   --color-af-bg: var(--color-af-foundation-background);
   --color-af-bg-start: var(--color-af-foundation-background-start);
   --color-af-bg-mid: var(--color-af-foundation-background-mid);

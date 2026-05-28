@@ -3,8 +3,10 @@ import type {
   DashboardSessionRuntime,
   DashboardSnapshot,
   DashboardTopology,
+  DashboardWorkstationNode,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
+import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 
 import { mediumBranchingDashboardTopology } from "./topologies";
 
@@ -66,6 +68,171 @@ function appendProviderSession(
       ...runtime.session,
       provider_sessions: [...(runtime.session.provider_sessions ?? []), attempt],
     },
+  };
+}
+
+function workstationBehaviorFromTopology(
+  workstationKind: DashboardWorkstationNode["workstation_kind"],
+): NonNullable<
+  NonNullable<CanonicalFactoryDefinition["workstations"]>[number]["behavior"]
+> {
+  switch (workstationKind?.toUpperCase()) {
+    case "CRON":
+      return "CRON";
+    case "POLLER":
+      return "POLLER";
+    case "REPEATER":
+      return "REPEATER";
+    default:
+      return "STANDARD";
+  }
+}
+
+export function factoryFromDashboardTopology(
+  topology: DashboardTopology,
+): CanonicalFactoryDefinition {
+  const resources = new Map<
+    string,
+    NonNullable<CanonicalFactoryDefinition["resources"]>[number]
+  >();
+  const workers = new Map<
+    string,
+    NonNullable<CanonicalFactoryDefinition["workers"]>[number]
+  >();
+  const workTypes = new Map<
+    string,
+    NonNullable<CanonicalFactoryDefinition["workTypes"]>[number]
+  >();
+
+  function appendWorkState(
+    place: NonNullable<DashboardWorkstationNode["input_places"]>[number],
+  ) {
+    if (
+      place.kind !== "work_state" ||
+      !place.type_id ||
+      !place.state_value
+    ) {
+      return;
+    }
+
+    const workType:
+      NonNullable<CanonicalFactoryDefinition["workTypes"]>[number] =
+      workTypes.get(place.type_id) ?? {
+      name: place.type_id,
+      states: [],
+    };
+    if (!workType.states.some((state) => state.name === place.state_value)) {
+      workType.states.push({
+        name: place.state_value,
+        type: place.state_category ?? "PROCESSING",
+      });
+    }
+    workTypes.set(place.type_id, workType);
+  }
+
+  function appendResource(
+    place: NonNullable<DashboardWorkstationNode["input_places"]>[number],
+  ) {
+    if (
+      place.kind !== "resource" ||
+      !place.type_id ||
+      resources.has(place.type_id)
+    ) {
+      return;
+    }
+
+    resources.set(place.type_id, {
+      capacity: 1,
+      name: place.type_id,
+    });
+  }
+
+  const workstations = topology.workstation_node_ids.map((nodeId) => {
+    const workstation = topology.workstation_nodes_by_id[nodeId];
+    if (!workstation) {
+      throw new Error(`Missing topology workstation fixture node ${nodeId}.`);
+    }
+    const inputPlaces = workstation.input_places ?? [];
+    const outputPlaces = workstation.output_places ?? [];
+
+    for (const place of [...inputPlaces, ...outputPlaces]) {
+      appendWorkState(place);
+      appendResource(place);
+    }
+
+    if (workstation.worker_type && !workers.has(workstation.worker_type)) {
+      workers.set(workstation.worker_type, {
+        model: "gpt-5-mini",
+        name: workstation.worker_type,
+        type: "MODEL_WORKER",
+      });
+    }
+
+    const inputs = inputPlaces.flatMap((place) => {
+      if (
+        place.kind !== "work_state" ||
+        !place.type_id ||
+        !place.state_value
+      ) {
+        return [];
+      }
+      return {
+        state: place.state_value,
+        workType: place.type_id,
+      };
+    });
+    const outputs = outputPlaces.flatMap((place) => {
+      if (
+        place.kind !== "work_state" ||
+        !place.type_id ||
+        !place.state_value ||
+        place.state_category === "FAILED"
+      ) {
+        return [];
+      }
+      return {
+        state: place.state_value,
+        workType: place.type_id,
+      };
+    });
+    const onFailure = outputPlaces.flatMap((place) => {
+      if (
+        place.kind !== "work_state" ||
+        !place.type_id ||
+        !place.state_value ||
+        place.state_category !== "FAILED"
+      ) {
+        return [];
+      }
+      return {
+        state: place.state_value,
+        workType: place.type_id,
+      };
+    });
+
+    return {
+      behavior: workstationBehaviorFromTopology(workstation.workstation_kind),
+      id: workstation.node_id,
+      inputs,
+      name: workstation.workstation_name ?? workstation.transition_id,
+      onFailure,
+      outputs,
+      resources: inputPlaces.flatMap((place) =>
+        place.kind === "resource" && place.type_id
+          ? [{ capacity: 1, name: place.type_id }]
+          : [],
+      ),
+      type: "MODEL_WORKSTATION" as const,
+      worker: workstation.worker_type ?? "",
+    };
+  });
+
+  return {
+    name: "dashboard-fixture",
+    resources: [...resources.values()],
+    workers: [...workers.values()],
+    workTypes: [...workTypes.values()],
+    workstations,
   };
 }
 
@@ -239,6 +406,7 @@ export function buildDashboardSnapshotFixture(
   overlays: DashboardRuntimeOverlay[] = [],
 ): DashboardSnapshot {
   return {
+    factory: factoryFromDashboardTopology(topology),
     factory_state: overlays.length > 0 ? "RUNNING" : "IDLE",
     uptime_seconds: 61,
     tick_count: 42,
@@ -264,4 +432,3 @@ export const dashboardSemanticSnapshotFixtures = {
     rejectedOutcomeRuntimeOverlay,
   ]),
 } satisfies Record<string, DashboardSnapshot>;
-

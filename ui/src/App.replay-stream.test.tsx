@@ -69,7 +69,9 @@ function expectRenderedResourceCountMatchesBackendWorldView(
       resourceCountAvailablePlaceID
     ] ?? 0;
 
-  expect(screen.getByLabelText(resourceCountAvailablePlaceID)).toBeTruthy();
+  const resourceNodeLabel = resourceCountAvailablePlaceID.split(":")[0];
+
+  expect(screen.getByLabelText(resourceNodeLabel)).toBeTruthy();
   expect(
     screen
       .getByLabelText(`${expectedCount} resource tokens`)

@@ -9,8 +9,8 @@ import {
 } from "../../../components/ui/place-labels";
 import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { getActivityGraphMessages } from "../messages/activity-graph";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+import { getActivityGraphMessages } from "../messages/activity-graph";
 import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
 import {
   type ActivityGraphNodeHandle,
@@ -24,23 +24,17 @@ export interface BasePlaceNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   activeItemLabels: string[];
   factoryGraphNodeId?: string;
-  handles?: ActivityGraphNodeHandle[];
-  incomingHandleCount: number;
+  handles: ActivityGraphNodeHandle[];
   kind?: FactoryGraphNodeKind;
   locale?: string;
   muted: boolean;
   onSelectStateNode?: (placeId: string) => void;
-  outgoingHandleCount: number;
   place: DashboardPlaceRef;
   selectedStateNode: boolean;
   tokenCount: number;
 }
 
 export interface StatePositionNodeData extends BasePlaceNodeData {
-  place: DashboardPlaceRef;
-}
-
-export interface ResourceNodeData extends BasePlaceNodeData {
   place: DashboardPlaceRef;
 }
 
@@ -52,14 +46,12 @@ export type CurrentActivityStatePositionNode = Node<
   StatePositionNodeData,
   "statePosition"
 >;
-export type CurrentActivityResourceNode = Node<ResourceNodeData, "resource">;
 export type CurrentActivityConstraintNode = Node<
   ConstraintNodeData,
   "constraint"
 >;
 export type CurrentActivityPlaceNode =
   | CurrentActivityConstraintNode
-  | CurrentActivityResourceNode
   | CurrentActivityStatePositionNode;
 
 const STATE_NODE_DOT_LIMIT = 10;
@@ -70,12 +62,6 @@ const RESOURCE_CONTENT_CONTAINER_CLASSNAME =
 
 export function StatePositionNodeView(
   props: NodeProps<CurrentActivityStatePositionNode>,
-) {
-  return <PlaceNodeView {...props} />;
-}
-
-export function ResourceNodeView(
-  props: NodeProps<CurrentActivityResourceNode>,
 ) {
   return <PlaceNodeView {...props} />;
 }
@@ -112,9 +98,7 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
     <ActivityGraphNodeShell
       className={cn("justify-center text-left", nodeClassName)}
       handles={data.handles}
-      incomingHandleCount={data.incomingHandleCount}
       nodeType={nodeType}
-      outgoingHandleCount={data.outgoingHandleCount}
     >
       {selectable ? (
         <GraphNodeButton

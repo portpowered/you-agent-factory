@@ -82,28 +82,28 @@ describe("current activity graph editor controllers", () => {
     {
       edgeKind: "workstation-output",
       sourceAnchorId: "workstation-output-source",
-      targetAnchorId: "workstation-output-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:done",
       targetStateName: "done",
     },
     {
       edgeKind: "workstation-on-continue",
       sourceAnchorId: "workstation-on-continue-source",
-      targetAnchorId: "workstation-on-continue-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:queued",
       targetStateName: "queued",
     },
     {
       edgeKind: "workstation-on-failure",
       sourceAnchorId: "workstation-on-failure-source",
-      targetAnchorId: "workstation-on-failure-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:queued",
       targetStateName: "queued",
     },
     {
       edgeKind: "workstation-on-rejection",
       sourceAnchorId: "workstation-on-rejection-source",
-      targetAnchorId: "workstation-on-rejection-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:done",
       targetStateName: "done",
     },
@@ -182,7 +182,7 @@ describe("current activity graph editor controllers", () => {
 
     act(() => {
       result.current.handleConnectionAnchorClick({
-        anchorId: "workstation-output-target",
+        anchorId: "work-state-input-target",
         nodeId: "work-state:story:done",
       });
     });
@@ -196,7 +196,7 @@ describe("current activity graph editor controllers", () => {
         source: "workstation:review",
         sourceHandle: "workstation-on-failure-source",
         target: "work-state:story:done",
-        targetHandle: "workstation-on-continue-target",
+        targetHandle: "work-state-input-target",
       });
     });
 
@@ -206,7 +206,19 @@ describe("current activity graph editor controllers", () => {
     expect(editableGraph.actions.connectNodes).toHaveBeenCalledTimes(1);
   });
 
-  it("opens removable edge confirmations and applies confirmed edge removals", () => {
+  it.each([
+    {
+      edgeId: "workstation-output:workstation:review->work-state:story:done",
+    },
+    {
+      edgeId: "workstation-resource:resource:gpu->workstation:review",
+    },
+    {
+      edgeId: "worker-assignment:worker:writer->workstation:review",
+    },
+  ])("immediately applies removable $edgeId draft edge removals", ({
+    edgeId,
+  }) => {
     const reset = vi.fn();
     const draftState = createDraftState();
     const editableGraph = createEditableGraph();
@@ -225,24 +237,11 @@ describe("current activity graph editor controllers", () => {
     );
 
     act(() => {
-      result.current.handleEditorEdgeDelete(
-        "workstation-output:workstation:review->work-state:story:done",
-      );
+      result.current.handleEditorEdgeDelete(edgeId);
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(result.current.pendingRemovalIntent).toMatchObject({
-      confirmLabel: "Remove review success route",
-      title: "Remove review success route?",
-    });
-
-    act(() => {
-      result.current.handleConfirmRemoval();
-    });
-
-    expect(editableGraph.actions.disconnectEdge).toHaveBeenCalledWith(
-      "workstation-output:workstation:review->work-state:story:done",
-    );
+    expect(editableGraph.actions.disconnectEdge).toHaveBeenCalledWith(edgeId);
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
@@ -284,24 +283,84 @@ describe("current activity graph editor controllers", () => {
     );
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
+
+  it.each([
+    {
+      nodeId: "resource:cache",
+    },
+    {
+      nodeId: "worker:editor",
+    },
+  ])("immediately applies removable $nodeId draft node removals", ({
+    nodeId,
+  }) => {
+    const reset = vi.fn();
+    const unassignedDefinition: CanonicalFactoryDefinition = {
+      ...baseFactoryDefinition,
+      resources: [
+        ...(baseFactoryDefinition.resources ?? []),
+        { capacity: 1, name: "cache" },
+      ],
+      workers: [
+        ...(baseFactoryDefinition.workers ?? []),
+        {
+          model: "gpt-5",
+          name: "editor",
+          type: "MODEL_WORKER",
+        },
+      ],
+    };
+    const draftState = createDraftState({
+      baseFactoryDefinition: unassignedDefinition,
+    });
+    const editableGraph = createEditableGraph();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "delete",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        saveEditableDefinition: {
+          reset,
+          status: "idle",
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorNodeDelete(nodeId);
+    });
+
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(nodeId);
+    expect(result.current.pendingRemovalIntent).toBeNull();
+  });
 });
 
 function createDraftState({
+  baseFactoryDefinition: factoryDefinition = baseFactoryDefinition,
   draft = createEmptyFactoryGraphDraft(),
-  graph = buildFactoryGraphTopologyFromDefinition(baseFactoryDefinition),
+  graph = buildFactoryGraphTopologyFromDefinition(factoryDefinition),
   updateDraft = vi.fn(),
 }: {
+  baseFactoryDefinition?: CanonicalFactoryDefinition;
   draft?: FactoryGraphDraft;
   graph?: FactoryGraphTopology;
   updateDraft?: ReturnType<typeof vi.fn>;
 } = {}) {
+  const document = {
+    ...factoryDefinition,
+    version: editableDocument.version,
+  };
+
   return {
-    baseDocument: editableDocument,
+    baseDocument: document,
     draft,
     graph,
     hasChanges: false,
-    latestDocument: editableDocument,
-    pendingFactoryDefinition: baseFactoryDefinition,
+    latestDocument: document,
+    pendingFactoryDefinition: factoryDefinition,
     replaceDraft: vi.fn(),
     resetDraft: vi.fn(),
     source: "current-factory" as const,

@@ -1,4 +1,5 @@
 import { DashboardScreen } from "./features/dashboard/public";
+import { AppNotificationToaster } from "./features/notifications/public";
 import { AppLocaleProvider } from "./i18n";
 
 export interface AppProps {
@@ -22,6 +23,7 @@ export function App({
       locationSearch={locationSearch}
     >
       <DashboardScreen />
+      <AppNotificationToaster />
     </AppLocaleProvider>
   );
 }

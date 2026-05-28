@@ -2,15 +2,10 @@
 # Entries are path|line|column|kind|text.
 src/features/factory-graph-editor/lib/factory-graph-field-operations.ts|150|16|string-literal|Graph node " " was not found.
 src/features/factory-graph-editor/lib/factory-graph-field-operations.ts|171|14|string-literal|Graph node " " was not found.
-src/features/workflow-activity/lib/current-activity-factory-graph-layout.ts|69|10|string-literal|workstation:
-src/features/workflow-activity/lib/current-activity-factory-graph-layout.ts|77|10|string-literal|place:
-src/features/workflow-activity/lib/current-activity-factory-graph-node-ids.ts|59|12|string-literal|workstation:
-src/features/workflow-activity/lib/current-activity-factory-graph-node-ids.ts|62|12|string-literal|place: :available
-src/features/workflow-activity/lib/current-activity-factory-graph-node-ids.ts|65|12|string-literal|place: :
-src/features/workflow-activity/lib/current-activity-factory-graph-node-ids.ts|68|12|string-literal|place: :
-src/features/workflow-activity/lib/current-activity-factory-graph-node-ids.ts|71|10|string-literal|place:
 src/features/workflow-activity/lib/react-flow-current-activity-card-draft-edges.ts|14|12|string-literal|workstation:
 src/features/workflow-activity/lib/react-flow-current-activity-card-draft-edges.ts|17|12|string-literal|place: :
 src/features/workflow-activity/lib/react-flow-current-activity-card-draft-edges.ts|20|10|string-literal|place:
-src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|70|10|string-literal|workstation:
-src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|74|10|string-literal|place:
+src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|76|12|string-literal|resource:
+src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|81|12|string-literal|resource:
+src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|128|10|string-literal|workstation:
+src/features/workflow-activity/lib/react-flow-current-activity-card-graph.ts|132|10|string-literal|place:

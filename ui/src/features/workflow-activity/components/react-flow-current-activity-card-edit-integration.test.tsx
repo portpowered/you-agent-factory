@@ -1,3 +1,7 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: integration flows share one mocked React Flow harness.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
@@ -104,8 +108,8 @@ vi.mock("@xyflow/react", async () => {
               isValidConnection?.({
                 source: workstationNodeId,
                 sourceHandle: "workstation-output-source",
-                target: "place:story:qa",
-                targetHandle: "workstation-output-target",
+                target: "work-state:story:qa",
+                targetHandle: "work-state-input-target",
               }) ?? false,
             )}
           </output>
@@ -114,8 +118,8 @@ vi.mock("@xyflow/react", async () => {
               onConnect?.({
                 source: workstationNodeId,
                 sourceHandle: "workstation-output-source",
-                target: "place:story:qa",
-                targetHandle: "workstation-output-target",
+                target: "work-state:story:qa",
+                targetHandle: "work-state-input-target",
               })
             }
             type="button"
@@ -127,8 +131,8 @@ vi.mock("@xyflow/react", async () => {
               onConnect?.({
                 source: workstationNodeId,
                 sourceHandle: "workstation-output-source",
-                target: "place:story:qa",
-                targetHandle: "workstation-on-failure-target",
+                target: "work-state:story:qa",
+                targetHandle: "workstation-input-target",
               })
             }
             type="button"
@@ -208,6 +212,24 @@ const editableFactoryDocument: CurrentFactoryDocument = {
   },
 };
 
+function loadSampleFactoryDocument(): CurrentFactoryDocument {
+  return {
+    ...JSON.parse(
+      readFileSync(
+        resolve(
+          process.cwd(),
+          "src/features/workflow-activity/lib/current-activity-sample-factory.fixture.json",
+        ),
+        "utf-8",
+      ),
+    ),
+    version: {
+      logical: "sample",
+      physical: "2026-05-28T00:00:00Z",
+    },
+  } as CurrentFactoryDocument;
+}
+
 const importController: CurrentActivityImportController = {
   activateImport: vi.fn().mockResolvedValue(undefined),
   activationState: { status: "idle" },
@@ -254,14 +276,14 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     renderCurrentActivity();
 
     const edge = await screen.findByRole("button", {
-      name: "workstation-output:workstation:review->place:story:done",
+      name: "workstation-output:workstation:review->work-state:story:done",
     });
 
     expect(edge.getAttribute("data-source-handle")).toBe(
       "workstation-output-source",
     );
     expect(edge.getAttribute("data-target-handle")).toBe(
-      "workstation-output-target",
+      "work-state-input-target",
     );
     expect(edge.getAttribute("data-source-handle")).not.toMatch(/^out-/);
     expect(edge.getAttribute("data-target-handle")).not.toMatch(/^in-/);
@@ -284,14 +306,82 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
     expect(
-      await screen.findByRole("button", { name: "place:essay:queued" }),
+      await screen.findByRole("button", { name: "work-state:essay:queued" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "place:work-type:essay" }),
+      screen.getByRole("button", { name: "work-type:essay" }),
     ).toBeTruthy();
   });
 
-  it("removes a graph node from the rendered graph after delete confirmation", async () => {
+  it.each([
+    {
+      expectedNodeNames: ["resource:sandbox-slot"],
+      fields: [{ label: "Identifier", value: "sandbox-slot" }],
+      menuAction: "Resource",
+    },
+    {
+      expectedNodeNames: ["worker:analyst"],
+      fields: [
+        { label: "Identifier", value: "analyst" },
+        { label: "Model", value: "gpt-5.1" },
+      ],
+      menuAction: "Worker",
+    },
+    {
+      expectedNodeNames: ["work-type:incident", "work-state:incident:open"],
+      fields: [
+        { label: "Identifier", value: "incident" },
+        { label: "First state", value: "open" },
+      ],
+      menuAction: "Work type",
+    },
+    {
+      expectedNodeNames: ["work-state:task:blocked"],
+      fields: [{ label: "Identifier", value: "blocked" }],
+      menuAction: "Work state",
+    },
+    {
+      expectedNodeNames: ["workstation:summarize"],
+      fields: [
+        { label: "Identifier", value: "summarize" },
+        { label: "Prompt body", value: "Summarize the task state." },
+      ],
+      menuAction: "Workstation",
+    },
+  ])("renders newly added $menuAction nodes from the sample factory toolbar flow", async ({
+    expectedNodeNames,
+    fields,
+    menuAction,
+  }) => {
+    const sampleFactoryDocument = loadSampleFactoryDocument();
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: sampleFactoryDocument,
+      error: null,
+      status: "success",
+    } as never);
+
+    renderCurrentActivity(createSnapshot(sampleFactoryDocument));
+    enterEditorMode();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open add entity menu" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: menuAction }));
+    for (const field of fields) {
+      fireEvent.change(screen.getByRole("textbox", { name: field.label }), {
+        target: { value: field.value },
+      });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
+
+    for (const expectedNodeName of expectedNodeNames) {
+      expect(
+        await screen.findByRole("button", { name: expectedNodeName }),
+      ).toBeTruthy();
+    }
+  });
+
+  it("removes a graph node from the rendered graph without delete confirmation", async () => {
     renderCurrentActivity();
     enterEditorMode();
     expect(
@@ -300,13 +390,11 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "workstation:review" }));
-    fireEvent.click(
-      within(
-        await screen.findByRole("dialog", {
-          name: "Remove review workstation?",
-        }),
-      ).getByRole("button", { name: "Delete review workstation" }),
-    );
+    expect(
+      screen.queryByRole("dialog", {
+        name: "Remove review workstation?",
+      }),
+    ).toBeNull();
 
     await waitFor(() => {
       expect(
@@ -319,7 +407,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     renderCurrentActivity();
     enterEditorMode();
 
-    await screen.findByRole("button", { name: "place:story:qa" });
+    await screen.findByRole("button", { name: "work-state:story:qa" });
     fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
 
     expect(screen.getByTestId("valid-qa-output-connection").textContent).toBe(
@@ -330,13 +418,13 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     );
 
     const edge = await screen.findByRole("button", {
-      name: "workstation-output:workstation:review->place:story:qa",
+      name: "workstation-output:workstation:review->work-state:story:qa",
     });
     expect(edge.getAttribute("data-source-handle")).toBe(
       "workstation-output-source",
     );
     expect(edge.getAttribute("data-target-handle")).toBe(
-      "workstation-output-target",
+      "work-state-input-target",
     );
   });
 
@@ -347,7 +435,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
 
     expect(
       screen.queryByRole("button", {
-        name: "workstation-output:workstation:review->place:story:qa",
+        name: "workstation-output:workstation:review->work-state:story:qa",
       }),
     ).toBeNull();
 
@@ -358,12 +446,12 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     expect(await screen.findByText("Connection blocked")).toBeTruthy();
     expect(
       screen.getByText(
-        "Success connections from review cannot connect to Failure on story:qa.",
+        "Choose a compatible source and target anchor before creating a connection.",
       ),
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", {
-        name: "workstation-output:workstation:review->place:story:qa",
+        name: "workstation-output:workstation:review->work-state:story:qa",
       }),
     ).toBeNull();
   });
@@ -405,7 +493,7 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
 
     expect(
       await screen.findByRole("button", {
-        name: "workstation-output:workstation:review->place:story:qa",
+        name: "workstation-output:workstation:review->work-state:story:qa",
       }),
     ).toBeTruthy();
 

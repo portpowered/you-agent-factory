@@ -136,9 +136,9 @@ describe("factory graph operations", () => {
     const invalidConnection = connectFactoryGraphNodes({
       baseFactoryDefinition,
       draft: createEmptyFactoryGraphDraft(),
-      sourceAnchorId: "workstation-on-failure-source",
+      sourceAnchorId: "workstation-input-target",
       sourceNodeId: "workstation:draft",
-      targetAnchorId: "workstation-on-continue-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:done",
     });
     expect(invalidConnection).toMatchObject({
@@ -163,7 +163,7 @@ describe("factory graph operations", () => {
       draft: createEmptyFactoryGraphDraft(),
       sourceAnchorId: "workstation-on-failure-source",
       sourceNodeId: "workstation:draft",
-      targetAnchorId: "workstation-on-failure-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:done",
     });
 
@@ -226,6 +226,102 @@ describe("factory graph operations", () => {
       ok: false,
       reason: "NODE_NOT_FOUND",
     });
+  });
+
+  it("updates every editable canonical graph field and reports missing nodes", () => {
+    const withResourceCapacity = updateFactoryGraphNodeField({
+      baseFactoryDefinition,
+      update: {
+        field: "capacity",
+        kind: "resource",
+        name: "gpu",
+        value: "4",
+      },
+    });
+    const withWorkerModel = updateFactoryGraphNodeField({
+      baseFactoryDefinition,
+      update: {
+        field: "model",
+        kind: "worker",
+        name: "writer",
+        value: "gpt-5.1",
+      },
+    });
+    const withWorkStateType = updateFactoryGraphNodeField({
+      baseFactoryDefinition,
+      update: {
+        field: "type",
+        kind: "work-state",
+        stateName: "queued",
+        value: "PROCESSING",
+        workTypeName: "story",
+      },
+    });
+    const withWorkstationBehavior = updateFactoryGraphNodeField({
+      baseFactoryDefinition,
+      update: {
+        field: "behavior",
+        kind: "workstation",
+        name: "draft",
+        value: "REPEATER",
+      },
+    });
+    const withWorkstationWorker = updateFactoryGraphNodeField({
+      baseFactoryDefinition,
+      update: {
+        field: "worker",
+        kind: "workstation",
+        name: "draft",
+        value: "reviewer",
+      },
+    });
+
+    expect(expectOk(withResourceCapacity).resources?.[0]?.capacity).toBe("4");
+    expect(expectOk(withWorkerModel).workers?.[0]?.model).toBe("gpt-5.1");
+    expect(expectOk(withWorkStateType).workTypes?.[0]?.states[0]?.type).toBe(
+      "PROCESSING",
+    );
+    expect(expectOk(withWorkstationBehavior).workstations?.[0]?.behavior).toBe(
+      "REPEATER",
+    );
+    expect(expectOk(withWorkstationWorker).workstations?.[0]?.worker).toBe(
+      "reviewer",
+    );
+
+    for (const result of [
+      updateFactoryGraphNodeField({
+        baseFactoryDefinition,
+        update: {
+          field: "capacity",
+          kind: "resource",
+          name: "missing-resource",
+          value: "1",
+        },
+      }),
+      updateFactoryGraphNodeField({
+        baseFactoryDefinition,
+        update: {
+          field: "model",
+          kind: "worker",
+          name: "missing-worker",
+          value: "gpt-5",
+        },
+      }),
+      updateFactoryGraphNodeField({
+        baseFactoryDefinition,
+        update: {
+          field: "worker",
+          kind: "workstation",
+          name: "missing-workstation",
+          value: "writer",
+        },
+      }),
+    ]) {
+      expect(result).toMatchObject({
+        ok: false,
+        reason: "NODE_NOT_FOUND",
+      });
+    }
   });
 
   it("builds graph state, React Flow projection, and save input from pending edits", () => {

@@ -131,7 +131,7 @@ vi.mock("@xyflow/react", async () => {
               source: "workstation:review",
               sourceHandle: "workstation-output-source",
               target: "work-state:story:done",
-              targetHandle: "workstation-output-target",
+              targetHandle: "work-state-input-target",
             }) ?? false,
           )}
         </output>
@@ -151,7 +151,7 @@ vi.mock("@xyflow/react", async () => {
               source: "workstation:review",
               sourceHandle: "workstation-output-source",
               target: "work-state:story:done",
-              targetHandle: "workstation-output-target",
+              targetHandle: "work-state-input-target",
             })
           }
           type="button"
@@ -323,6 +323,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
   it("renders the empty topology fallback when no workstation nodes exist", () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    snapshot.factory = undefined;
     snapshot.topology.workstation_node_ids = [];
 
     renderWithQueryClient(
@@ -343,9 +344,9 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(screen.queryByTestId("mock-react-flow")).toBeNull();
   });
 
-  it("falls back to the empty graph outcome when a replacement current-activity layout fails", async () => {
-    const loadedSnapshot = structuredClone(singleNodeDashboardSnapshot);
-    const rejectedSnapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  it("returns an empty graph outcome when no canonical factory is available", async () => {
+    const snapshot = structuredClone(singleNodeDashboardSnapshot);
+    snapshot.factory = undefined;
     const onSelectStateNode = vi.fn();
     const onSelectWorkID = vi.fn();
     const onSelectWorkstation = vi.fn();
@@ -357,57 +358,17 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       handleConnectionAnchorClick: vi.fn(),
       pendingConnectionSource: null,
     };
-    const loadedLayout: GraphLayout = {
-      edges: [],
-      height: 196,
-      nodes: [
-        {
-          column: 0,
-          height: 196,
-          nodeId: "workstation:intake",
-          nodeKind: "workstation",
-          row: 0,
-          width: 156,
-          workstationNodeId: "intake",
-          x: 0,
-          y: 0,
-        },
-      ],
-      width: 156,
-    };
-
-    mockBuildGraphLayout.mockImplementation(async (topology) => {
-      if (topology === rejectedSnapshot.topology) {
-        throw new Error("layout failed");
-      }
-      return loadedLayout;
-    });
-
-    const { result, rerender } = renderHook(
-      ({ snapshot }) =>
-        useCurrentActivityGraphViewModel({
-          editor: editor as never,
-          now: Date.parse("2026-04-08T12:00:00Z"),
-          onSelectStateNode,
-          onSelectWorkID,
-          onSelectWorkstation,
-          selection: null,
-          snapshot,
-        }),
-      {
-        initialProps: {
-          snapshot: loadedSnapshot,
-        },
-      },
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphViewModel({
+        editor: editor as never,
+        now: Date.parse("2026-04-08T12:00:00Z"),
+        onSelectStateNode,
+        onSelectWorkID,
+        onSelectWorkstation,
+        selection: null,
+        snapshot,
+      }),
     );
-
-    await waitFor(() => {
-      expect(result.current.nodes.length).toBeGreaterThan(0);
-    });
-
-    await act(async () => {
-      rerender({ snapshot: rejectedSnapshot });
-    });
 
     await waitFor(() => {
       expect(result.current.nodes).toHaveLength(0);
@@ -541,7 +502,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       source: "workstation:review",
       sourceHandle: "workstation-output-source",
       target: "work-state:story:done",
-      targetHandle: "workstation-output-target",
+      targetHandle: "work-state-input-target",
     });
     expect(onEditorEdgeClick).toHaveBeenCalledWith("edge-review-done");
     expect(onEditorNodeClick).toHaveBeenCalledWith("workstation:review");
@@ -637,14 +598,14 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         source: "workstation:review",
         sourceHandle: "workstation-output-source",
         target: "work-state:story:done",
-        targetHandle: "workstation-output-target",
+        targetHandle: "work-state-input-target",
       });
     });
 
     expect(connectNodes).toHaveBeenCalledWith({
       sourceAnchorId: "workstation-output-source",
       sourceNodeId: "workstation:review",
-      targetAnchorId: "workstation-output-target",
+      targetAnchorId: "work-state-input-target",
       targetNodeId: "work-state:story:done",
     });
     expect(result.current.connectionNotice).toBeNull();
@@ -680,7 +641,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         source: "workstation:review",
         sourceHandle: "workstation-output-source",
         target: "work-state:story:done",
-        targetHandle: "workstation-output-target",
+        targetHandle: "work-state-input-target",
       });
     });
     expect(connectNodes).not.toHaveBeenCalled();
@@ -688,7 +649,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     rerender({ activeTool: "connect", canInteractWithEditor: true });
     act(() => {
       result.current.handleConnectionAnchorClick({
-        anchorId: "workstation-output-target",
+        anchorId: "work-state-input-target",
         nodeId: "work-state:story:done",
       });
     });
@@ -710,7 +671,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
     act(() => {
       result.current.handleConnectionAnchorClick({
-        anchorId: "workstation-on-failure-target",
+        anchorId: "work-state-input-target",
         nodeId: "work-state:story:done",
       });
     });

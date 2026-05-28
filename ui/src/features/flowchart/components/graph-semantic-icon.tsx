@@ -9,6 +9,8 @@ export const GRAPH_SEMANTIC_ICON_KINDS = [
   "terminal",
   "failed",
   "resource",
+  "worker",
+  "work-type",
   "constraint",
   "limit",
   "workstation",
@@ -135,6 +137,25 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
       </>
     ),
   },
+  worker: {
+    paths: (
+      <>
+        <circle cx="12" cy="7" r="3.2" />
+        <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+        <path d="M8.5 14.5 12 18l3.5-3.5" />
+      </>
+    ),
+  },
+  "work-type": {
+    paths: (
+      <>
+        <rect height="14" rx="2.5" width="12" x="6" y="5" />
+        <path d="M9 9h6" />
+        <path d="M9 12h6" />
+        <path d="M9 15h4" />
+      </>
+    ),
+  },
   terminal: {
     paths: (
       <>
@@ -170,11 +191,10 @@ export function graphSemanticIconLabel(
 ): string {
   const messages = getActivityGraphMessages(locale);
 
-  return (
-    GRAPH_SEMANTIC_ICON_DEFINITIONS[kind as GraphSemanticIconKind] !== undefined
-      ? messages.graphSemanticIconLabel(kind as GraphSemanticIconKind)
-      : messages.unknownGraphSemanticIconLabel
-  );
+  return GRAPH_SEMANTIC_ICON_DEFINITIONS[kind as GraphSemanticIconKind] !==
+    undefined
+    ? messages.graphSemanticIconLabel(kind as GraphSemanticIconKind)
+    : messages.unknownGraphSemanticIconLabel;
 }
 
 export function GraphSemanticIcon({
@@ -183,7 +203,8 @@ export function GraphSemanticIcon({
   label,
   locale,
 }: GraphSemanticIconProps) {
-  const definition = GRAPH_SEMANTIC_ICON_DEFINITIONS[kind as GraphSemanticIconKind];
+  const definition =
+    GRAPH_SEMANTIC_ICON_DEFINITIONS[kind as GraphSemanticIconKind];
   const accessibleLabel = label ?? graphSemanticIconLabel(kind, locale);
 
   return (

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: workstation-kind regression matrix stays grouped around one metadata fixture.
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import {
   CRON_WORKSTATION_KIND,
@@ -56,7 +57,9 @@ describe("workstationIconMetadata", () => {
   it("maps canonical workstation kinds to one shared semantic icon contract", () => {
     expect(
       workstationIconMetadata(
-        dashboardWorkstationNode({ workstation_kind: STANDARD_WORKSTATION_KIND }),
+        dashboardWorkstationNode({
+          workstation_kind: STANDARD_WORKSTATION_KIND,
+        }),
       ),
     ).toEqual({
       className: "text-af-text-subtle",
@@ -66,7 +69,9 @@ describe("workstationIconMetadata", () => {
     });
     expect(
       workstationIconMetadata(
-        dashboardWorkstationNode({ workstation_kind: REPEATER_WORKSTATION_KIND }),
+        dashboardWorkstationNode({
+          workstation_kind: REPEATER_WORKSTATION_KIND,
+        }),
       ),
     ).toEqual({
       className: "text-af-info",
@@ -96,6 +101,19 @@ describe("workstationIconMetadata", () => {
     });
   });
 
+  it("normalizes legacy lowercase workstation kinds to the API enum icon contract", () => {
+    expect(
+      workstationIconMetadata(
+        dashboardWorkstationNode({ workstation_kind: "repeater" }),
+      ),
+    ).toEqual({
+      className: "text-af-info",
+      iconKind: "repeater",
+      label: "Repeater workstation",
+      semanticKind: REPEATER_WORKSTATION_KIND,
+    });
+  });
+
   it("preserves the exhaustion-rule special case ahead of workstation-kind fallback", () => {
     const explicitExhaustion = dashboardWorkstationNode({
       workstation_kind: EXHAUSTION_WORKSTATION_KIND,
@@ -106,8 +124,12 @@ describe("workstationIconMetadata", () => {
       worker_type: "",
     });
 
-    expect(workstationSemanticKind(explicitExhaustion)).toBe(EXHAUSTION_WORKSTATION_KIND);
-    expect(workstationSemanticKind(emptyFallbackExhaustion)).toBe(EXHAUSTION_WORKSTATION_KIND);
+    expect(workstationSemanticKind(explicitExhaustion)).toBe(
+      EXHAUSTION_WORKSTATION_KIND,
+    );
+    expect(workstationSemanticKind(emptyFallbackExhaustion)).toBe(
+      EXHAUSTION_WORKSTATION_KIND,
+    );
     expect(workstationIconMetadata(explicitExhaustion)).toEqual({
       className: "text-af-danger",
       iconKind: "exhaustion",
@@ -118,7 +140,9 @@ describe("workstationIconMetadata", () => {
 
   it("treats unknown workstation kinds as the standard workstation icon", () => {
     expect(
-      workstationIconMetadata(dashboardWorkstationNode({ workstation_kind: "future-kind" })),
+      workstationIconMetadata(
+        dashboardWorkstationNode({ workstation_kind: "future-kind" }),
+      ),
     ).toEqual({
       className: "text-af-text-subtle",
       iconKind: "workstation",
@@ -130,7 +154,9 @@ describe("workstationIconMetadata", () => {
   it("localizes workstation semantic labels without changing icon contracts", () => {
     expect(
       workstationIconMetadata(
-        dashboardWorkstationNode({ workstation_kind: REPEATER_WORKSTATION_KIND }),
+        dashboardWorkstationNode({
+          workstation_kind: REPEATER_WORKSTATION_KIND,
+        }),
         "zh-CN",
       ),
     ).toEqual({

@@ -1523,6 +1523,64 @@ func TestFactoryService_SaveCurrentFactory_RejectsDuplicateAndDanglingTopology(t
 	}
 }
 
+func TestFactoryService_SaveCurrentFactory_RejectsMissingOutcomeRoutes(t *testing.T) {
+	rootDir := t.TempDir()
+	initialVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  11,
+		Physical: time.Date(2026, 5, 23, 15, 0, 0, 0, time.UTC),
+	}
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayloadWithVersion(t, "alpha", initialVersion)); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	current, err := svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory before rejected save: %v", err)
+	}
+	if current.Version == nil {
+		t.Fatal("expected current factory version metadata")
+	}
+
+	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "task")
+	replacement.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  current.Version.Logical + 1,
+		Physical: current.Version.Physical.Add(time.Second),
+	}
+	if replacement.WorkTypes == nil || replacement.Workstations == nil {
+		t.Fatal("expected fixture work types and workstations")
+	}
+	(*replacement.WorkTypes)[0].States = []factoryapi.WorkState{
+		{Name: "in-review", Type: factoryapi.WorkStateTypePROCESSING},
+		{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+	}
+	repeater := factoryapi.WorkstationKindRepeater
+	(*replacement.Workstations)[0].Behavior = &repeater
+	(*replacement.Workstations)[0].Inputs = []factoryapi.WorkstationIO{}
+	(*replacement.Workstations)[0].Outputs = &[]factoryapi.WorkstationIO{{WorkType: "task", State: "in-review"}}
+	(*replacement.Workstations)[0].OnFailure = nil
+	(*replacement.Workstations)[0].OnRejection = nil
+
+	_, err = svc.SaveCurrentFactory(context.Background(), replacement)
+	var topologyErr *apisurface.TopologyValidationError
+	if !errors.As(err, &topologyErr) {
+		t.Fatalf("SaveCurrentFactory error = %v, want topology validation error", err)
+	}
+	assertHasServiceErrorField(t, topologyErr.Targets, "factory.workstations[0].onFailure", "missing failure route target")
+	assertHasServiceErrorField(t, topologyErr.Targets, "factory.workstations[0].onRejection", "missing rejection route target")
+}
+
 func assertCanonicalTopologyTargets(t *testing.T, targets []factoryapi.ErrorTarget) {
 	t.Helper()
 

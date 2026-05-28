@@ -119,11 +119,24 @@ function buildCurrentActivityIsValidConnection({
   };
 }
 
-function factoryGraphNodeIdForConnectionNode(nodes: Node[], nodeId: string) {
+function factoryGraphNodeIdForRenderedNode(nodes: Node[], nodeId: string) {
   const node = nodes.find((entry) => entry.id === nodeId);
   return (
-    (node?.data as { factoryGraphNodeId?: string }).factoryGraphNodeId ?? nodeId
+    (node?.data as { factoryGraphNodeId?: string } | undefined)
+      ?.factoryGraphNodeId ?? nodeId
   );
+}
+
+function factoryGraphEdgeIdForRenderedEdge(nodes: Node[], edge: Edge) {
+  const edgeKind = edge.id.split(":")[0];
+  if (!edgeKind || !edge.source || !edge.target) {
+    return edge.id;
+  }
+
+  return `${edgeKind}:${factoryGraphNodeIdForRenderedNode(
+    nodes,
+    edge.source,
+  )}->${factoryGraphNodeIdForRenderedNode(nodes, edge.target)}`;
 }
 
 export function CurrentActivityGraphViewport({
@@ -202,10 +215,10 @@ export function CurrentActivityGraphViewport({
       onConnect?.({
         ...connection,
         source: connection.source
-          ? factoryGraphNodeIdForConnectionNode(nodes, connection.source)
+          ? factoryGraphNodeIdForRenderedNode(nodes, connection.source)
           : connection.source,
         target: connection.target
-          ? factoryGraphNodeIdForConnectionNode(nodes, connection.target)
+          ? factoryGraphNodeIdForRenderedNode(nodes, connection.target)
           : connection.target,
       });
     },
@@ -213,7 +226,7 @@ export function CurrentActivityGraphViewport({
   );
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className="relative min-h-96 flex-1">
       <DashboardFlowAxisLegend
         className={CURRENT_ACTIVITY_LEGEND_CLASS}
         defaultExpanded={false}
@@ -225,7 +238,7 @@ export function CurrentActivityGraphViewport({
         aria-describedby={headingID}
         aria-label={editorMessages.viewportLabel}
         className={cn(
-          "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",
+          "relative h-full min-h-96 overflow-hidden rounded-3xl border transition-colors",
           (imports.dropState.status === "drag-active" ||
             imports.dropState.status === "reading") &&
             "border-af-accent-border bg-af-accent-surface",
@@ -263,13 +276,17 @@ export function CurrentActivityGraphViewport({
           onError={handleCurrentActivityReactFlowError}
           onEdgeClick={(_, edge) => {
             if (editorMode) {
-              onEditorEdgeClick?.(edge.id);
+              onEditorEdgeClick?.(
+                factoryGraphEdgeIdForRenderedEdge(nodes, edge),
+              );
             }
           }}
           nodesDraggable={true}
           onNodeClick={(_, node) => {
             if (editorMode) {
-              onEditorNodeClick?.(node.id);
+              onEditorNodeClick?.(
+                factoryGraphNodeIdForRenderedNode(nodes, node.id),
+              );
             }
           }}
           onNodeDragStop={(_, node) => {

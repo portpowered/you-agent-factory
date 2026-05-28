@@ -482,6 +482,7 @@ func validateEditableFactoryTopology(submitted factoryapi.Factory) error {
 	targets = append(targets, duplicateWorkStateTargets(submitted.WorkTypes)...)
 	targets = append(targets, danglingFactoryReferenceTargets(submitted)...)
 	targets = append(targets, typeCountCollisionTargets(submitted)...)
+	targets = append(targets, missingOutcomeRouteTargets(submitted)...)
 	if len(targets) == 0 {
 		return nil
 	}
@@ -607,6 +608,99 @@ func typeCountCollisionTargets(factory factoryapi.Factory) []factoryapi.ErrorTar
 		}
 	}
 	return targets
+}
+
+func missingOutcomeRouteTargets(factory factoryapi.Factory) []factoryapi.ErrorTarget {
+	if factory.Workstations == nil {
+		return nil
+	}
+
+	failedWorkTypes := failedWorkTypeSet(factory.WorkTypes)
+	var targets []factoryapi.ErrorTarget
+	for workstationIndex, workstation := range *factory.Workstations {
+		hasFailureRoute := workstationHasExplicitRoutes(workstation.OnFailure) ||
+			workstationCanDefaultFailureRoute(workstation, failedWorkTypes)
+		if !hasFailureRoute {
+			targets = append(targets, editableFactoryErrorTarget(
+				"field",
+				workstation.Name,
+				fmt.Sprintf("%s.workstations[%d].onFailure", canonicalFactoryValidationRoot, workstationIndex),
+			))
+		}
+
+		if !workstationNeedsExplicitRejectionRoute(workstation) {
+			continue
+		}
+		targets = append(targets, editableFactoryErrorTarget(
+			"field",
+			workstation.Name,
+			fmt.Sprintf("%s.workstations[%d].onRejection", canonicalFactoryValidationRoot, workstationIndex),
+		))
+	}
+	return targets
+}
+
+func workstationNeedsExplicitRejectionRoute(workstation factoryapi.Workstation) bool {
+	if workstationHasExplicitRoutes(workstation.OnRejection) {
+		return false
+	}
+	return workstation.Behavior != nil &&
+		*workstation.Behavior == factoryapi.WorkstationKindRepeater &&
+		len(workstation.Inputs) == 0
+}
+
+func workstationCanDefaultFailureRoute(
+	workstation factoryapi.Workstation,
+	failedWorkTypes map[string]bool,
+) bool {
+	for _, input := range workstation.Inputs {
+		if failedWorkTypes[input.WorkType] {
+			return true
+		}
+	}
+	if workstation.Outputs != nil && workstationIOsContainFailedWorkType(*workstation.Outputs, failedWorkTypes) {
+		return true
+	}
+	if workstation.ClassificationRoutes != nil {
+		for _, route := range *workstation.ClassificationRoutes {
+			if workstationIOsContainFailedWorkType(route.Outputs, failedWorkTypes) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func workstationHasExplicitRoutes(routes *[]factoryapi.WorkstationIO) bool {
+	return routes != nil && len(*routes) > 0
+}
+
+func workstationIOsContainFailedWorkType(
+	ios []factoryapi.WorkstationIO,
+	failedWorkTypes map[string]bool,
+) bool {
+	for _, io := range ios {
+		if failedWorkTypes[io.WorkType] {
+			return true
+		}
+	}
+	return false
+}
+
+func failedWorkTypeSet(workTypes *[]factoryapi.WorkType) map[string]bool {
+	failed := make(map[string]bool)
+	if workTypes == nil {
+		return failed
+	}
+	for _, workType := range *workTypes {
+		for _, state := range workType.States {
+			if state.Type == factoryapi.WorkStateTypeFAILED {
+				failed[workType.Name] = true
+				break
+			}
+		}
+	}
+	return failed
 }
 
 func ioWorkTypeCounts(ios []factoryapi.WorkstationIO) map[string]int {

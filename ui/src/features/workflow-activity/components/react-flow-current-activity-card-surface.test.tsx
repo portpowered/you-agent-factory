@@ -3,22 +3,25 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
-vi.mock("../../factory-graph-editor/components/factory-graph-editor-controls", () => ({
-  FactoryGraphEditorNotice: ({
-    children,
-    title,
-    tone,
-  }: {
-    children: React.ReactNode;
-    title: string;
-    tone: string;
-  }) => (
-    <section data-testid={`notice-${tone}`}>
-      <h3>{title}</h3>
-      <div>{children}</div>
-    </section>
-  ),
-}));
+vi.mock(
+  "../../factory-graph-editor/components/factory-graph-editor-controls",
+  () => ({
+    FactoryGraphEditorNotice: ({
+      children,
+      title,
+      tone,
+    }: {
+      children: React.ReactNode;
+      title: string;
+      tone: string;
+    }) => (
+      <section data-testid={`notice-${tone}`}>
+        <h3>{title}</h3>
+        <div>{children}</div>
+      </section>
+    ),
+  }),
+);
 
 vi.mock("./react-flow-current-activity-card-viewport", () => ({
   CurrentActivityGraphViewport: ({
@@ -42,7 +45,10 @@ vi.mock("./react-flow-current-activity-card-viewport", () => ({
     onSelectTool: (tool: string) => void;
     saveDisabledReason: string | null;
   }) => (
-    <div data-disabled-reason={saveDisabledReason ?? ""} data-testid="graph-viewport">
+    <div
+      data-disabled-reason={saveDisabledReason ?? ""}
+      data-testid="graph-viewport"
+    >
       <button onClick={handleSaveDraft} type="button">
         Trigger save confirm
       </button>
@@ -86,7 +92,8 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     activeTool: "connect",
     addMenuActions: [],
     addMenuOpen: false,
-    blockedRemovalReason: "Delete the pending route from the connected state instead.",
+    blockedRemovalReason:
+      "Delete the pending route from the connected state instead.",
     canInteractWithEditor: true,
     canSaveDraft: true,
     connectionNotice: "Only workstation-to-work-state routes are supported.",
@@ -123,9 +130,11 @@ function createGraphStub() {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: surface coverage keeps the shared editor chrome fixtures together.
 describe("CurrentActivityGraphSurface", () => {
   it("renders the empty state when no topology is loaded outside editor mode", () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    snapshot.factory = undefined;
     snapshot.topology.workstation_node_ids = [];
 
     render(
@@ -183,18 +192,26 @@ describe("CurrentActivityGraphSurface", () => {
         "Refresh or discard the current draft before saving so you do not overwrite a newer topology version.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("Topology save failed")).toBeTruthy();
-    expect(screen.getByText("Save failed")).toBeTruthy();
+    expect(screen.queryByText("Topology save failed")).toBeNull();
+    expect(screen.queryByText("Save failed")).toBeNull();
     expect(screen.queryByText("Topology saved")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Trigger save confirm" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Trigger save confirm" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Trigger discard" }));
     fireEvent.click(screen.getByRole("button", { name: "Trigger add action" }));
     fireEvent.click(screen.getByRole("button", { name: "Trigger add menu" }));
     fireEvent.click(screen.getByRole("button", { name: "Trigger connect" }));
-    fireEvent.click(screen.getByRole("button", { name: "Trigger edge delete" }));
-    fireEvent.click(screen.getByRole("button", { name: "Trigger node delete" }));
-    fireEvent.click(screen.getByRole("button", { name: "Trigger tool select" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Trigger edge delete" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Trigger node delete" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Trigger tool select" }),
+    );
 
     expect(editor.setIsConfirmingSave).toHaveBeenCalledWith(true);
     expect(editor.handleDiscardPendingChanges).toHaveBeenCalledTimes(1);
@@ -206,7 +223,7 @@ describe("CurrentActivityGraphSurface", () => {
     expect(editor.setActiveTool).toHaveBeenCalledWith("connect");
   });
 
-  it("renders the shared success notice once a draft save completes cleanly", () => {
+  it("does not render save success inside the graph card", () => {
     render(
       <CurrentActivityGraphSurface
         editor={
@@ -228,11 +245,11 @@ describe("CurrentActivityGraphSurface", () => {
       />,
     );
 
-    expect(screen.getByText("Topology saved")).toBeTruthy();
+    expect(screen.queryByText("Topology saved")).toBeNull();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "The draft has been cleared and the graph is waiting for the latest factory-change event refresh.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 });

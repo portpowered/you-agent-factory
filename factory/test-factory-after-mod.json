@@ -1,0 +1,190 @@
+{
+  "factoryDirectory": "factory",
+  "metadata": {
+    "factory_hash": "sha256:a38c0fa64e7b6bb92693d5eca7d5ec8abc7e4b0e43297719f538729e7f6bd46b",
+    "runtime_config_hash": "sha256:bf495815e8e04345dfbf556b6bd9acb1fcf28ee87c0224bee85ca32607d9b692",
+    "source_format": "agent-factory.replay.v1",
+    "workers_hash": "sha256:938d749e833b1c7049b1f1f93fa4903c135caf850d4dcf289daaab6127389ca9",
+    "workstations_hash": "sha256:71af3685f3591189ce8cc9016d4466c641f81d2cd92e7e8cd3ef530671471985"
+  },
+  "name": "UNDEFINED",
+  "resources": [
+    {
+      "capacity": 10,
+      "name": "executor-slot"
+    }
+  ],
+  "sourceDirectory": "factory",
+  "supportingFiles": {
+    "bundledFiles": [
+      {
+        "content": {
+          "encoding": "utf-8",
+          "inline": "asda"
+        },
+        "targetPath": "Makefile",
+        "type": "ROOT_HELPER"
+      },
+      {
+        "content": {
+          "encoding": "utf-8",
+          "inline": "#!/usr/bin/env python3\n\"\"\"setup-workspace.py — Create or reuse a git worktree for a PRD.\n\nUsage: python scripts/agents/setup-workspace.py <prd-name>\n\"\"\"\n\nimport json\n\nimport shutil\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef main():\n    print(\"Setting up workspace...\", file=sys.stderr)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        },
+        "targetPath": "factory/scripts/setup-workspace.py",
+        "type": "SCRIPT"
+      }
+    ]
+  },
+  "version": {
+    "logical": "1779949810610261687",
+    "physical": "2026-05-28T06:32:01.611651Z"
+  },
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "in-review",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "to-complete",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "name": "review",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "in-review",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "to-complete",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "body": "Use `<COMPLETE>` only when the current workstation is ready to advance through\nits accepted route.",
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "CODEX",
+      "name": "processor",
+      "skipPermissions": true,
+      "stopToken": "<COMPLETE>",
+      "type": "MODEL_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "behavior": "REPEATER",
+      "body": "You are an autonomous coding agent working on a software project. \n\n## Your Task",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "process",
+      "onContinue": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        }
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "executor-slot"
+        }
+      ],
+      "type": "MODEL_WORKSTATION",
+      "worker": "processor"
+    },
+    {
+      "body": "You are a code reviewer agent.\n\n## Your Task\n\nYou are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .Inputs 0).WorkTypeID }} that is r",
+      "inputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        }
+      ],
+      "name": "review",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "to-complete",
+          "workType": "task"
+        },
+        {
+          "state": "init",
+          "workType": "review"
+        }
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "executor-slot"
+        }
+      ],
+      "type": "MODEL_WORKSTATION",
+      "worker": "processor"
+    }
+  ]
+}

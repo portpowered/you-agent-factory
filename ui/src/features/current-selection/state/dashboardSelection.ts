@@ -5,6 +5,7 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../api/dashboard";
+import { hasDashboardStatePlace } from "./dashboardStatePlaces";
 
 export interface DashboardNodeSelection {
   kind: "node";
@@ -69,7 +70,7 @@ export function resolveDashboardSelection({
   }
 
   if (selection.kind === "state-node") {
-    return hasStatePlace(snapshot, selection.placeId)
+    return hasDashboardStatePlace(snapshot, selection.placeId)
       ? selection
       : selectDefaultSelection(snapshot);
   }
@@ -87,26 +88,6 @@ export function resolveDashboardSelection({
     selection,
     workstationRequestsByDispatchID,
   );
-}
-
-function hasStatePlace(snapshot: DashboardSnapshot, placeId: string): boolean {
-  for (const nodeId of snapshot.topology.workstation_node_ids) {
-    const workstation = snapshot.topology.workstation_nodes_by_id[nodeId];
-    if (!workstation) {
-      continue;
-    }
-
-    for (const place of [
-      ...(workstation.input_places ?? []),
-      ...(workstation.output_places ?? []),
-    ]) {
-      if (place.kind === "work_state" && place.place_id === placeId) {
-        return true;
-      }
-    }
-  }
-
-  return false;
 }
 
 function resolveWorkItemSelection(
