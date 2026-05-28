@@ -137,9 +137,15 @@ function useFactoryGraphDeleteTargetHandlers({
         return;
       }
 
+      const result = editableGraph.actions.removeNode(nodeId);
+      if (!result.ok) {
+        setBlockedRemovalReason(result.message);
+        saveEditableDefinition.reset();
+        return;
+      }
       setBlockedRemovalReason(null);
       setPendingRemovalEdgeId(null);
-      setPendingRemovalNodeId(nodeId);
+      setPendingRemovalNodeId(null);
       saveEditableDefinition.reset();
     },
     [
@@ -181,9 +187,15 @@ function useFactoryGraphDeleteTargetHandlers({
         return;
       }
 
+      const result = editableGraph.actions.disconnectEdge(edgeId);
+      if (!result.ok) {
+        setBlockedRemovalReason(result.message);
+        saveEditableDefinition.reset();
+        return;
+      }
       setBlockedRemovalReason(null);
       setPendingRemovalNodeId(null);
-      setPendingRemovalEdgeId(edgeId);
+      setPendingRemovalEdgeId(null);
       saveEditableDefinition.reset();
     },
     [

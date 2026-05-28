@@ -46,6 +46,7 @@ import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
+import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
 export {
@@ -459,6 +460,10 @@ export function ReactFlowCurrentActivityCardView(
         imports={imports}
         locale={props.locale}
         snapshot={props.snapshot}
+      />
+      <CurrentActivityGraphSaveNotifications
+        editor={editor}
+        locale={props.locale}
       />
       <CurrentActivityGraphEditorDialogs
         editor={editor}

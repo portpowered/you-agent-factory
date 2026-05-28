@@ -79,27 +79,6 @@ export function CurrentActivityGraphEditorDialogs({
         }}
         title={messages.saveConfirmTitle}
       />
-      <FactoryGraphEditorConfirmationDialog
-        cancelLabel={messages.leaveDialogKeepEditing}
-        confirmLabel={
-          editor.pendingRemovalIntent?.confirmLabel ??
-          messages.removalFallbackConfirmLabel
-        }
-        confirmTone="destructive"
-        description={
-          editor.pendingRemovalIntent?.confirmDescription ??
-          messages.removalFallbackConfirmDescription
-        }
-        isOpen={editor.pendingRemovalIntent !== null}
-        onCancel={() => {
-          editor.setPendingRemovalEdgeId(null);
-          editor.setPendingRemovalNodeId(null);
-        }}
-        onConfirm={editor.handleConfirmRemoval}
-        title={
-          editor.pendingRemovalIntent?.title ?? messages.removalFallbackTitle
-        }
-      />
       <FactoryGraphEditorAddEntityDialog
         currentFactoryDefinition={editor.currentFactoryDefinition}
         draft={editor.addEntityDraft}

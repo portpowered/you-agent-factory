@@ -2,85 +2,94 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 
-vi.mock("../../factory-graph-editor/components/factory-graph-editor-add-dialog", () => ({
-  FactoryGraphEditorAddEntityDialog: ({
-    isOpen,
-    onChange,
-    onClose,
-    onSubmit,
-  }: {
-    isOpen: boolean;
-    onChange: (draft: { kind: string }) => void;
-    onClose: () => void;
-    onSubmit: () => void;
-  }) => (
-    <div data-open={String(isOpen)} data-testid="add-entity-dialog">
-      <button
-        onClick={() => {
-          onChange({ kind: "resource" });
-        }}
-        type="button"
-      >
-        Trigger add change
-      </button>
-      <button onClick={onClose} type="button">
-        Trigger add close
-      </button>
-      <button onClick={onSubmit} type="button">
-        Trigger add submit
-      </button>
-    </div>
-  ),
-}));
+vi.mock(
+  "../../factory-graph-editor/components/factory-graph-editor-add-dialog",
+  () => ({
+    FactoryGraphEditorAddEntityDialog: ({
+      isOpen,
+      onChange,
+      onClose,
+      onSubmit,
+    }: {
+      isOpen: boolean;
+      onChange: (draft: { kind: string }) => void;
+      onClose: () => void;
+      onSubmit: () => void;
+    }) => (
+      <div data-open={String(isOpen)} data-testid="add-entity-dialog">
+        <button
+          onClick={() => {
+            onChange({ kind: "resource" });
+          }}
+          type="button"
+        >
+          Trigger add change
+        </button>
+        <button onClick={onClose} type="button">
+          Trigger add close
+        </button>
+        <button onClick={onSubmit} type="button">
+          Trigger add submit
+        </button>
+      </div>
+    ),
+  }),
+);
 
-vi.mock("../../factory-graph-editor/components/factory-graph-editor-controls", () => ({
-  FactoryGraphEditorConfirmationDialog: ({
-    isOpen,
-    onCancel,
-    onConfirm,
-    title,
-  }: {
-    isOpen: boolean;
-    onCancel: () => void;
-    onConfirm: () => void;
-    title: string;
-  }) => (
-    <div data-open={String(isOpen)} data-testid={`confirmation-${title}`}>
-      <button onClick={onCancel} type="button">
-        {title} cancel
-      </button>
-      <button onClick={onConfirm} type="button">
-        {title} confirm
-      </button>
-    </div>
-  ),
-}));
+vi.mock(
+  "../../factory-graph-editor/components/factory-graph-editor-controls",
+  () => ({
+    FactoryGraphEditorConfirmationDialog: ({
+      isOpen,
+      onCancel,
+      onConfirm,
+      title,
+    }: {
+      isOpen: boolean;
+      onCancel: () => void;
+      onConfirm: () => void;
+      title: string;
+    }) => (
+      <div data-open={String(isOpen)} data-testid={`confirmation-${title}`}>
+        <button onClick={onCancel} type="button">
+          {title} cancel
+        </button>
+        <button onClick={onConfirm} type="button">
+          {title} confirm
+        </button>
+      </div>
+    ),
+  }),
+);
 
-vi.mock("../../factory-graph-editor/components/factory-graph-editor-leave-dialog", () => ({
-  FactoryGraphEditorLeaveDialog: ({
-    isOpen,
-    onCancel,
-    onDiscard,
-    onSave,
-  }: {
-    isOpen: boolean;
-    onCancel: () => void;
-    onDiscard: () => void;
-    onSave: () => void;
-  }) => (
-    <div data-open={String(isOpen)} data-testid="leave-dialog">
-      <button onClick={onCancel} type="button">
-        Trigger leave cancel
-      </button>
-      <button onClick={onDiscard} type="button">
-        Trigger leave discard
-      </button>
-      <button onClick={onSave} type="button">
-        Trigger leave save
-      </button>
-    </div>
-  ),
-}));
+vi.mock(
+  "../../factory-graph-editor/components/factory-graph-editor-leave-dialog",
+  () => ({
+    FactoryGraphEditorLeaveDialog: ({
+      isOpen,
+      onCancel,
+      onDiscard,
+      onSave,
+    }: {
+      isOpen: boolean;
+      onCancel: () => void;
+      onDiscard: () => void;
+      onSave: () => void;
+    }) => (
+      <div data-open={String(isOpen)} data-testid="leave-dialog">
+        <button onClick={onCancel} type="button">
+          Trigger leave cancel
+        </button>
+        <button onClick={onDiscard} type="button">
+          Trigger leave discard
+        </button>
+        <button onClick={onSave} type="button">
+          Trigger leave save
+        </button>
+      </div>
+    ),
+  }),
+);
 
 vi.mock("../../import/public", () => ({
   FactoryImportPreviewDialog: ({
@@ -92,10 +101,7 @@ vi.mock("../../import/public", () => ({
     onConfirm: () => void;
     previewState: { status: string };
   }) => (
-    <div
-      data-status={previewState.status}
-      data-testid="import-preview-dialog"
-    >
+    <div data-status={previewState.status} data-testid="import-preview-dialog">
       <button onClick={onCancel} type="button">
         Trigger import cancel
       </button>
@@ -129,25 +135,18 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     canSaveDraft: true,
     currentFactoryDefinition: null,
     handleAddEntitySubmit: vi.fn(),
-    handleConfirmRemoval: vi.fn(),
     handleDiscardEditorChanges: vi.fn(),
     handleSaveBeforeLeavingEditor: vi.fn(),
     handleSaveDraft: vi.fn(),
     isConfirmingSave: true,
     leaveDialogOpen: true,
-    pendingRemovalIntent: {
-      confirmDescription: "Remove this route from the draft.",
-      confirmLabel: "Delete route",
-      title: "Remove route?",
-    },
+    pendingRemovalIntent: null,
     saveEditableDefinition: { status: "idle" as const },
     saveSummary: { description: "Save pending route changes." },
     setAddEntityDraft: vi.fn(),
     setAddEntityErrors: vi.fn(),
     setIsConfirmingLeaveEditor: vi.fn(),
     setIsConfirmingSave: vi.fn(),
-    setPendingRemovalEdgeId: vi.fn(),
-    setPendingRemovalNodeId: vi.fn(),
     ...overrides,
   };
 }
@@ -170,7 +169,7 @@ function createImportsStub(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CurrentActivityGraphEditorDialogs", () => {
-  it("wires import, save, discard, removal, and add-entity dialog actions on the shared editor surface", () => {
+  it("wires import, save, discard, and add-entity dialog actions on the shared editor surface", () => {
     const editor = createEditorStub();
     const imports = createImportsStub();
 
@@ -183,7 +182,9 @@ describe("CurrentActivityGraphEditorDialogs", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Trigger import cancel" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Trigger import cancel" }),
+    );
     expect(imports.clearActivationError).toHaveBeenCalledTimes(1);
     expect(imports.closeImportPreview).toHaveBeenCalledTimes(1);
 
@@ -199,31 +200,34 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     );
     expect(imports.clearError).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Trigger leave cancel" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Trigger leave cancel" }),
+    );
     expect(editor.setIsConfirmingLeaveEditor).toHaveBeenCalledWith(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "Trigger leave discard" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Trigger leave discard" }),
+    );
     expect(editor.handleDiscardEditorChanges).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger leave save" }));
     expect(editor.handleSaveBeforeLeavingEditor).toHaveBeenCalledTimes(1);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Save factory graph changes\? cancel/i }),
+      screen.getByRole("button", {
+        name: /Save factory graph changes\? cancel/i,
+      }),
     );
     expect(editor.setIsConfirmingSave).toHaveBeenCalledWith(false);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Save factory graph changes\? confirm/i }),
+      screen.getByRole("button", {
+        name: /Save factory graph changes\? confirm/i,
+      }),
     );
     expect(editor.handleSaveDraft).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove route? cancel" }));
-    expect(editor.setPendingRemovalEdgeId).toHaveBeenCalledWith(null);
-    expect(editor.setPendingRemovalNodeId).toHaveBeenCalledWith(null);
-
-    fireEvent.click(screen.getByRole("button", { name: "Remove route? confirm" }));
-    expect(editor.handleConfirmRemoval).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Remove route? confirm")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger add change" }));
     expect(editor.setAddEntityDraft).toHaveBeenCalledWith({ kind: "resource" });
@@ -258,9 +262,13 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     expect(screen.queryByTestId("import-preview-dialog")).toBeNull();
     expect(screen.queryByTestId("graph-import-error-panel")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Trigger leave cancel" }));
     fireEvent.click(
-      screen.getByRole("button", { name: /Save factory graph changes\? cancel/i }),
+      screen.getByRole("button", { name: "Trigger leave cancel" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Save factory graph changes\? cancel/i,
+      }),
     );
 
     expect(editor.setIsConfirmingLeaveEditor).not.toHaveBeenCalled();

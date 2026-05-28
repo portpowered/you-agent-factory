@@ -208,24 +208,16 @@ describe("current activity graph editor controllers", () => {
 
   it.each([
     {
-      confirmLabel: "Remove review success route",
       edgeId: "workstation-output:workstation:review->work-state:story:done",
-      title: "Remove review success route?",
     },
     {
-      confirmLabel: "Remove gpu resource link",
       edgeId: "workstation-resource:resource:gpu->workstation:review",
-      title: "Remove gpu resource link?",
     },
     {
-      confirmLabel: "Remove writer assignment",
       edgeId: "worker-assignment:worker:writer->workstation:review",
-      title: "Remove writer assignment?",
     },
-  ])("opens removable $edgeId confirmations and applies confirmed edge removals", ({
-    confirmLabel,
+  ])("immediately applies removable $edgeId draft edge removals", ({
     edgeId,
-    title,
   }) => {
     const reset = vi.fn();
     const draftState = createDraftState();
@@ -249,15 +241,6 @@ describe("current activity graph editor controllers", () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(result.current.pendingRemovalIntent).toMatchObject({
-      confirmLabel,
-      title,
-    });
-
-    act(() => {
-      result.current.handleConfirmRemoval();
-    });
-
     expect(editableGraph.actions.disconnectEdge).toHaveBeenCalledWith(edgeId);
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
@@ -303,19 +286,13 @@ describe("current activity graph editor controllers", () => {
 
   it.each([
     {
-      confirmLabel: "Delete cache resource",
       nodeId: "resource:cache",
-      title: "Remove cache resource?",
     },
     {
-      confirmLabel: "Delete editor worker",
       nodeId: "worker:editor",
-      title: "Remove editor worker?",
     },
-  ])("opens removable $nodeId confirmations and applies confirmed node removals", ({
-    confirmLabel,
+  ])("immediately applies removable $nodeId draft node removals", ({
     nodeId,
-    title,
   }) => {
     const reset = vi.fn();
     const unassignedDefinition: CanonicalFactoryDefinition = {
@@ -356,15 +333,6 @@ describe("current activity graph editor controllers", () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(result.current.pendingRemovalIntent).toMatchObject({
-      confirmLabel,
-      title,
-    });
-
-    act(() => {
-      result.current.handleConfirmRemoval();
-    });
-
     expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(nodeId);
     expect(result.current.pendingRemovalIntent).toBeNull();
   });

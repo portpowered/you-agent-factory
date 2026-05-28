@@ -61,23 +61,6 @@ export function CurrentActivityGraphSurface({
           {messages.noticeStaleDescription}
         </FactoryGraphEditorNotice>
       ) : null}
-      {editor.saveEditableDefinition.error ? (
-        <FactoryGraphEditorNotice
-          title={messages.noticeSaveFailedTitle}
-          tone="danger"
-        >
-          {editor.saveEditableDefinition.error.message}
-        </FactoryGraphEditorNotice>
-      ) : null}
-      {editor.saveEditableDefinition.status === "success" &&
-      !editor.draftState.hasChanges ? (
-        <FactoryGraphEditorNotice
-          title={messages.noticeSaveSuccessTitle}
-          tone="neutral"
-        >
-          {messages.noticeSaveSuccessDescription}
-        </FactoryGraphEditorNotice>
-      ) : null}
       <CurrentActivityGraphViewport
         activeTool={editor.activeTool}
         addMenuActions={editor.addMenuActions}

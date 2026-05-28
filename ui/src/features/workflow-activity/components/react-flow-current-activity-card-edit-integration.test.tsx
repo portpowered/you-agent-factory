@@ -291,7 +291,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     ).toBeTruthy();
   });
 
-  it("removes a graph node from the rendered graph after delete confirmation", async () => {
+  it("removes a graph node from the rendered graph without delete confirmation", async () => {
     renderCurrentActivity();
     enterEditorMode();
     expect(
@@ -300,13 +300,11 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "workstation:review" }));
-    fireEvent.click(
-      within(
-        await screen.findByRole("dialog", {
-          name: "Remove review workstation?",
-        }),
-      ).getByRole("button", { name: "Delete review workstation" }),
-    );
+    expect(
+      screen.queryByRole("dialog", {
+        name: "Remove review workstation?",
+      }),
+    ).toBeNull();
 
     await waitFor(() => {
       expect(

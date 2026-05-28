@@ -49,8 +49,8 @@ import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../../flowchart/public";
-import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
+import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import type { ReadFactoryImportFile } from "../../import/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
@@ -1552,7 +1552,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     ).not.toHaveLength(0);
   });
 
-  it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {
+  it("removes a workstation from delete mode without opening a confirmation", async () => {
     const replaceDraft = vi.fn();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
@@ -1604,20 +1604,12 @@ function registerCurrentActivityCardTestLifecycle(): void {
       }),
     );
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Remove review workstation?",
-    });
-    expect(
-      within(dialog).getByText("This will remove 3 graph edges."),
-    ).toBeTruthy();
-
-    fireEvent.click(
-      within(dialog).getByRole("button", {
-        name: "Delete review workstation",
-      }),
-    );
-
     expect(replaceDraft).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("dialog", {
+        name: "Remove review workstation?",
+      }),
+    ).toBeNull();
     const nextDraft = replaceDraft.mock.calls[0]?.[0];
     expect(nextDraft.removals.workstations).toEqual(["review"]);
   });
@@ -2642,9 +2634,9 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         await screen.findByRole("region", { name: "Work graph viewport" }),
       ).toBeTruthy();
       await waitFor(() => {
-        expect(document.querySelectorAll(".react-flow__edge").length).toBeGreaterThan(
-          0,
-        );
+        expect(
+          document.querySelectorAll(".react-flow__edge").length,
+        ).toBeGreaterThan(0);
       });
       expect(document.querySelectorAll(".react-flow__edge-path")).toHaveLength(
         document.querySelectorAll(".react-flow__edge").length,
