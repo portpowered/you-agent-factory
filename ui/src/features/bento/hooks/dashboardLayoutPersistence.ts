@@ -1,4 +1,4 @@
-import type { AgentBentoLayoutItem } from "../../../components/ui";
+import type { AgentBentoLayoutItem } from "../components/agent-bento";
 import {
   DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
   DASHBOARD_LAYOUT_STORAGE_KEY,
@@ -23,14 +23,18 @@ export function mergeDashboardLayout(
     mergeDashboardLayoutItem(itemsByID.get(baseItem.id), baseItem),
   );
   const baseIDs = new Set(normalizedBaseLayout.map((item) => item.id));
-  const additionalItems = normalizedLayout.filter((item) => !baseIDs.has(item.id));
+  const additionalItems = normalizedLayout.filter(
+    (item) => !baseIDs.has(item.id),
+  );
 
   return [...mergedBaseLayout, ...additionalItems];
 }
 
 export function readStoredDashboardLayout(): AgentBentoLayoutItem[] {
   try {
-    const storedLayout = window.localStorage.getItem(DASHBOARD_LAYOUT_STORAGE_KEY);
+    const storedLayout = window.localStorage.getItem(
+      DASHBOARD_LAYOUT_STORAGE_KEY,
+    );
     if (!storedLayout) {
       return DEFAULT_DASHBOARD_LAYOUT;
     }
@@ -46,9 +50,14 @@ export function readStoredDashboardLayout(): AgentBentoLayoutItem[] {
   }
 }
 
-export function writeStoredDashboardLayout(layout: AgentBentoLayoutItem[]): void {
+export function writeStoredDashboardLayout(
+  layout: AgentBentoLayoutItem[],
+): void {
   try {
-    window.localStorage.setItem(DASHBOARD_LAYOUT_STORAGE_KEY, JSON.stringify(layout));
+    window.localStorage.setItem(
+      DASHBOARD_LAYOUT_STORAGE_KEY,
+      JSON.stringify(layout),
+    );
   } catch {
     // Layout persistence is a convenience; dashboard interaction should keep working without it.
   }
@@ -58,12 +67,16 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function normalizeDashboardLayoutItem(value: unknown): AgentBentoLayoutItem | null {
+function normalizeDashboardLayoutItem(
+  value: unknown,
+): AgentBentoLayoutItem | null {
   if (!value || typeof value !== "object") {
     return null;
   }
 
-  const candidate = value as Partial<AgentBentoLayoutItem> & { widgetType?: unknown };
+  const candidate = value as Partial<AgentBentoLayoutItem> & {
+    widgetType?: unknown;
+  };
   const widgetType = resolveStoredWidgetType(candidate);
   if (!widgetType) {
     return null;
@@ -140,8 +153,8 @@ function resolveStoredWidgetType(
     return DASHBOARD_WIDGET_IDS.addWidget;
   }
 
-  const supportedWidgetID = Object.values(DASHBOARD_WIDGET_IDS).find((widgetID) =>
-    itemID.startsWith(`${widgetID}::`),
+  const supportedWidgetID = Object.values(DASHBOARD_WIDGET_IDS).find(
+    (widgetID) => itemID.startsWith(`${widgetID}::`),
   );
   return supportedWidgetID ?? null;
 }
@@ -164,7 +177,9 @@ function mergeDashboardLayoutItem(
   };
 }
 
-function migrateDashboardLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {
+function migrateDashboardLayout(
+  layout: AgentBentoLayoutItem[],
+): AgentBentoLayoutItem[] {
   const normalizedLayout = layout
     .map((item) => normalizeDashboardLayoutItem(item))
     .filter((item): item is AgentBentoLayoutItem => item !== null);
@@ -237,7 +252,9 @@ function migrateProviderSessionLayout(
   layout: AgentBentoLayoutItem[],
 ): AgentBentoLayoutItem[] {
   if (
-    layout.some((item) => item.widgetType === DASHBOARD_WIDGET_IDS.providerSession)
+    layout.some(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.providerSession,
+    )
   ) {
     return layout;
   }
@@ -252,7 +269,9 @@ function migrateProviderSessionLayout(
   return [...layout, { ...providerSessionItem }];
 }
 
-function migrateTraceLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {
+function migrateTraceLayout(
+  layout: AgentBentoLayoutItem[],
+): AgentBentoLayoutItem[] {
   return layout.map((item) => {
     if (item.widgetType === DASHBOARD_WIDGET_IDS.trace) {
       if (item.x === 0 && item.y === 18 && item.w === 4 && item.h === 7) {
@@ -302,11 +321,15 @@ function normalizeInlineAddWidgetLayout(
   };
 
   return [
-    ...layout.filter((item) => item.widgetType !== DASHBOARD_WIDGET_IDS.addWidget),
+    ...layout.filter(
+      (item) => item.widgetType !== DASHBOARD_WIDGET_IDS.addWidget,
+    ),
     normalizedInlineAddWidget,
   ];
 }
 
-function migrateWorkOutcomeLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {
+function migrateWorkOutcomeLayout(
+  layout: AgentBentoLayoutItem[],
+): AgentBentoLayoutItem[] {
   return layout;
 }

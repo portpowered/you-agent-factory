@@ -1,4 +1,4 @@
-import type { AgentBentoLayoutItem } from "../../../components/ui";
+import type { AgentBentoLayoutItem } from "../components/agent-bento";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 
 export const DASHBOARD_WIDGET_PICKER_WIDGET_TYPES = [
@@ -31,9 +31,9 @@ export interface DashboardWidgetPickerAvailability {
 export function isDuplicateCapableDashboardWidgetType(
   widgetType: string,
 ): boolean {
-  return (DUPLICATE_CAPABLE_DASHBOARD_WIDGET_TYPES as readonly string[]).includes(
-    widgetType,
-  );
+  return (
+    DUPLICATE_CAPABLE_DASHBOARD_WIDGET_TYPES as readonly string[]
+  ).includes(widgetType);
 }
 
 export function canAddDashboardWidgetType(

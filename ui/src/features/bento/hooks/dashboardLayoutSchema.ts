@@ -1,4 +1,4 @@
-import type { AgentBentoLayoutItem } from "../../../components/ui";
+import type { AgentBentoLayoutItem } from "../components/agent-bento";
 
 const PRIMARY_WIDGET_INSTANCE_SLOT = "primary";
 const INLINE_ADD_WIDGET_INSTANCE_SLOT = "inline-add";
@@ -63,10 +63,11 @@ export const DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS = {
   ),
 } as const;
 
-export const DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID = createDashboardWidgetInstanceID(
-  DASHBOARD_WIDGET_IDS.addWidget,
-  INLINE_ADD_WIDGET_INSTANCE_SLOT,
-);
+export const DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID =
+  createDashboardWidgetInstanceID(
+    DASHBOARD_WIDGET_IDS.addWidget,
+    INLINE_ADD_WIDGET_INSTANCE_SLOT,
+  );
 
 const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
   dashboardLayoutItem({
@@ -161,9 +162,11 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
   }),
 ] as const satisfies readonly AgentBentoLayoutItem[];
 
-export const DEFAULT_DASHBOARD_LAYOUT = DEFAULT_DASHBOARD_LAYOUT_ITEMS.map((item) => ({
-  ...item,
-}));
+export const DEFAULT_DASHBOARD_LAYOUT = DEFAULT_DASHBOARD_LAYOUT_ITEMS.map(
+  (item) => ({
+    ...item,
+  }),
+);
 
 export function createDashboardWidgetInstanceID(
   widgetType: string,
@@ -196,7 +199,9 @@ export function getDefaultInlineAddWidgetLayout(): AgentBentoLayoutItem {
 export function getDefaultWidgetLayoutByType(
   widgetType: string,
 ): AgentBentoLayoutItem | undefined {
-  return DEFAULT_DASHBOARD_LAYOUT.find((item) => item.widgetType === widgetType);
+  return DEFAULT_DASHBOARD_LAYOUT.find(
+    (item) => item.widgetType === widgetType,
+  );
 }
 
 export function getPrimaryInstanceIDForWidgetType(widgetType: string): string {
@@ -220,7 +225,10 @@ export function getPrimaryInstanceIDForWidgetType(widgetType: string): string {
     case DASHBOARD_WIDGET_IDS.addWidget:
       return DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID;
     default:
-      return createDashboardWidgetInstanceID(widgetType, PRIMARY_WIDGET_INSTANCE_SLOT);
+      return createDashboardWidgetInstanceID(
+        widgetType,
+        PRIMARY_WIDGET_INSTANCE_SLOT,
+      );
   }
 }
 

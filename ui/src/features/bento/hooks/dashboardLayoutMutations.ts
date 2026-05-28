@@ -1,4 +1,4 @@
-import type { AgentBentoLayoutItem } from "../../../components/ui";
+import type { AgentBentoLayoutItem } from "../components/agent-bento";
 import {
   canAddDashboardWidgetType,
   type DashboardWidgetPickerWidgetType,
@@ -23,8 +23,9 @@ export function addDashboardWidgetToLayout(
   }
 
   const addWidgetLayout =
-    layout.find((item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID) ??
-    getDefaultInlineAddWidgetLayout();
+    layout.find(
+      (item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+    ) ?? getDefaultInlineAddWidgetLayout();
   const widgetDefaultLayout = getDefaultWidgetLayoutByType(widgetType);
   if (!widgetDefaultLayout) {
     return layout;
@@ -59,7 +60,11 @@ export function addDashboardWidgetToLayout(
     ),
   };
 
-  return [...retainedItems, positionedWidgetLayout, repositionedAddWidgetLayout];
+  return [
+    ...retainedItems,
+    positionedWidgetLayout,
+    repositionedAddWidgetLayout,
+  ];
 }
 
 export function removeDashboardWidgetFromLayout(
@@ -75,7 +80,9 @@ export function removeDashboardWidgetFromLayout(
     return layout;
   }
 
-  const primaryInstanceID = getPrimaryInstanceIDForWidgetType(removedItem.widgetType);
+  const primaryInstanceID = getPrimaryInstanceIDForWidgetType(
+    removedItem.widgetType,
+  );
   if (widgetInstanceID === primaryInstanceID) {
     return layout.map((item) =>
       item.id === widgetInstanceID ? { ...item, hidden: true } : item,
@@ -139,12 +146,19 @@ function findNextOpenDashboardPosition(
   for (let y = preferredY; y <= layoutBottom; y += 1) {
     const xCandidates =
       y === preferredY
-        ? [preferredX, ...getGridColumnCandidates(maxX).filter((x) => x !== preferredX)]
+        ? [
+            preferredX,
+            ...getGridColumnCandidates(maxX).filter((x) => x !== preferredX),
+          ]
         : getGridColumnCandidates(maxX);
 
     for (const x of xCandidates) {
       const candidate = { h: item.h, w: item.w, x, y };
-      if (!layout.some((layoutItem) => dashboardLayoutItemsOverlap(layoutItem, candidate))) {
+      if (
+        !layout.some((layoutItem) =>
+          dashboardLayoutItemsOverlap(layoutItem, candidate),
+        )
+      ) {
         return { x, y };
       }
     }
