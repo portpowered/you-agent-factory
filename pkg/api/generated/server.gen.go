@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/oapi-codegen/runtime"
+	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 )
 
 // Defines values for BundledFileType.
@@ -1148,8 +1149,8 @@ type HostedWorkerProvider string
 
 // HybridLogicalTimestamp defines model for HybridLogicalTimestamp.
 type HybridLogicalTimestamp struct {
-	// Logical Monotonic Lamport-style logical component derived from the persisted factory definition version.
-	Logical int64 `json:"logical"`
+	// Logical Monotonic Lamport-style logical component derived from the persisted factory definition version. Serialized as a decimal string so JavaScript clients can round-trip the 64-bit value without precision loss.
+	Logical apitypes.Int64String `json:"logical"`
 
 	// Physical UTC physical timestamp component for the persisted factory definition version.
 	Physical time.Time `json:"physical"`

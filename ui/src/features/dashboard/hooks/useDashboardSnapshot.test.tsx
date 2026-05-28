@@ -646,7 +646,7 @@ describe("useDashboardSnapshot", () => {
       workstations: [],
       workTypes: [],
       version: {
-        logical: 7,
+        logical: "7",
         physical: "2026-05-17T14:59:00Z",
       },
     });

@@ -366,7 +366,10 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 	}
 
 	replacement := serviceNamedFactoryContractWithWorkType(t, "beta", "story")
-	replacement.Version = current.Version
+	replacement.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  current.Version.Logical + 1,
+		Physical: current.Version.Physical.Add(time.Second),
+	}
 	saved, err := harness.svc.SaveCurrentFactoryForSession(context.Background(), betaSessionID, replacement)
 	if err != nil {
 		t.Fatalf("SaveCurrentFactoryForSession(beta): %v", err)

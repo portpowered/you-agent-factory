@@ -130,7 +130,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     ),
     markChangesSaved: vi.fn(),
     baseVersion: {
-      logical: 7,
+      logical: "7",
       physical: "2026-05-23T15:52:00Z",
     },
     onBehaviorChange: vi.fn(),

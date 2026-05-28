@@ -574,7 +574,7 @@ function buildEditableFactoryDefinition(overrides?: {
     name: "Current Factory",
     runner: "codex",
     version: {
-      logical: 7,
+      logical: "7",
       physical: "2026-05-23T15:52:00Z",
     },
     workers: (overrides?.workerOptions ?? [
@@ -612,7 +612,7 @@ function buildMultiWorkstationEditableFactoryDefinition(): CurrentFactoryDocumen
     name: "Current Factory",
     runner: "codex",
     version: {
-      logical: 7,
+      logical: "7",
       physical: "2026-05-23T15:52:00Z",
     },
     workers: [

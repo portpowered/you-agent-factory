@@ -67,7 +67,7 @@ export const baseFactoryDefinition: CanonicalFactoryDefinition = {
 export const currentFactoryDocument: CurrentFactoryDocument = {
   ...baseFactoryDefinition,
   version: {
-    logical: 5,
+    logical: "5",
     physical: "2026-05-18T15:00:00Z",
   },
 };

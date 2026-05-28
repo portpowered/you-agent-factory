@@ -1085,7 +1085,7 @@ function buildEditableFactoryDefinition(overrides?: {
   return {
     name: "Current Factory",
     version: {
-      logical: 7,
+      logical: "7",
       physical: "2026-05-23T16:22:24Z",
     },
     workers: (overrides?.workerOptions ?? ["reviewer", "planner"]).map(

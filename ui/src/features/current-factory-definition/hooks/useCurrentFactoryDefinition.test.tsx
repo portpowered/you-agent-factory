@@ -151,7 +151,7 @@ describe("useCurrentFactoryDefinition", () => {
     const editableFactoryDefinitionDocument: CurrentFactoryDocument = {
       ...editableFactoryDefinition,
       version: {
-        logical: 4,
+        logical: "4",
         physical: "2026-05-18T14:48:00Z",
       },
     };
@@ -178,7 +178,7 @@ describe("useCurrentFactoryDefinition", () => {
     vi.mocked(getCurrentFactoryDocument).mockResolvedValue({
       ...editableFactoryDefinition,
       version: {
-        logical: 5,
+        logical: "5",
         physical: "2026-05-18T14:49:00Z",
       },
     });
@@ -211,7 +211,7 @@ describe("useSaveCurrentFactory", () => {
         owner: "graph-editor",
       },
       version: {
-        logical: 8,
+        logical: "8",
         physical: "2026-05-27T08:00:00Z",
       },
     };
@@ -231,7 +231,7 @@ describe("useSaveCurrentFactory", () => {
 
     await result.current.save.mutateAsync({
       baseVersion: {
-        logical: 7,
+        logical: "7",
         physical: "2026-05-27T07:59:00Z",
       },
       factoryDefinition: editableFactoryDefinition,
@@ -240,7 +240,7 @@ describe("useSaveCurrentFactory", () => {
     expect(saveCurrentFactoryDocument).toHaveBeenCalledWith(
       {
         baseVersion: {
-          logical: 7,
+          logical: "7",
           physical: "2026-05-27T07:59:00Z",
         },
         factoryDefinition: editableFactoryDefinition,
@@ -272,7 +272,7 @@ describe("useSaveCurrentFactory", () => {
     await expect(
       result.current.mutateAsync({
         baseVersion: {
-          logical: 7,
+          logical: "7",
           physical: "2026-05-27T07:59:00Z",
         },
         factoryDefinition: editableFactoryDefinition,

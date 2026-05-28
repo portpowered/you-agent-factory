@@ -118,7 +118,7 @@ export async function saveCurrentFactoryDocument(
 ): Promise<CurrentFactoryDocument> {
   const requestBody: CanonicalFactory = {
     ...input.factoryDefinition,
-    version: input.baseVersion,
+    version: incrementCurrentFactoryVersion(input.baseVersion),
   };
 
   return requestCurrentFactoryDocument({
@@ -250,8 +250,7 @@ function normalizeCurrentFactoryVersion(
   const record = isAPIRecord(value) ? value : null;
   if (
     !record ||
-    typeof record.logical !== "number" ||
-    !Number.isFinite(record.logical) ||
+    !isCurrentFactoryVersionLogicalValue(record.logical) ||
     typeof record.physical !== "string"
   ) {
     throw new CurrentFactoryDefinitionError(
@@ -264,9 +263,37 @@ function normalizeCurrentFactoryVersion(
   }
 
   return {
-    logical: record.logical,
+    logical: String(record.logical),
     physical: record.physical,
   };
+}
+
+function incrementCurrentFactoryVersion(
+  version: CurrentFactoryVersion | undefined,
+): CurrentFactoryVersion | undefined {
+  if (!version) {
+    return undefined;
+  }
+
+  return {
+    logical: (BigInt(version.logical) + 1n).toString(),
+    physical: incrementCurrentFactoryVersionPhysical(version.physical),
+  };
+}
+
+function incrementCurrentFactoryVersionPhysical(physical: string): string {
+  const parsed = Date.parse(physical);
+  if (!Number.isFinite(parsed)) {
+    return physical;
+  }
+  return new Date(parsed + 1).toISOString();
+}
+
+function isCurrentFactoryVersionLogicalValue(value: unknown): value is number | string {
+  if (typeof value === "string") {
+    return /^[0-9]+$/.test(value);
+  }
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function normalizeCurrentFactoryDefinitionErrorCode(

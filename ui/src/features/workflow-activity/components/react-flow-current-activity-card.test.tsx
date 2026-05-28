@@ -168,7 +168,7 @@ const editableFactoryDefinition: CanonicalFactoryDefinition = {
 const editableFactoryDefinitionDocument: CurrentFactoryDocument = {
   ...editableFactoryDefinition,
   version: {
-    logical: 8,
+    logical: "8",
     physical: "2026-05-18T15:32:00Z",
   },
 };
@@ -257,7 +257,7 @@ const workerDenseFactoryDefinitionDocument: CurrentFactoryDocument = {
     },
   ],
   version: {
-    logical: 9,
+    logical: "9",
     physical: "2026-05-19T01:12:00Z",
   },
 };
@@ -1940,7 +1940,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
       latestDocument: {
         ...editableFactoryDefinitionDocument,
         version: {
-          logical: 9,
+          logical: "9",
           physical: "2026-05-19T01:45:00Z",
         },
       },

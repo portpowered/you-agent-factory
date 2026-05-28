@@ -148,7 +148,7 @@ func assertPersistedFactoryWorkType(t *testing.T, workTypes []interfaces.WorkTyp
 
 func assertPersistedFactoryVersionMatchesAPI(t *testing.T, got *interfaces.FactoryVersion, want *factoryapi.HybridLogicalTimestamp, label string) {
 	t.Helper()
-	if got == nil || want == nil || got.Logical != want.Logical || !got.Physical.Equal(want.Physical) {
+	if got == nil || want == nil || got.Logical != want.Logical.Int64() || !got.Physical.Equal(want.Physical) {
 		t.Fatalf("%s = %#v, want %#v", label, got, want)
 	}
 }

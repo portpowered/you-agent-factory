@@ -46,7 +46,7 @@ describe("getCurrentFactoryDefinition", () => {
           ],
           workTypes: [],
           version: {
-            logical: 7,
+            logical: "7",
             physical: "2026-05-18T14:22:00Z",
           },
         }),
@@ -68,7 +68,7 @@ describe("getCurrentFactoryDefinition", () => {
       id: "factory-current",
       name: "Current Factory",
       version: {
-        logical: 7,
+        logical: "7",
         physical: "2026-05-18T14:22:00Z",
       },
       workers: [
@@ -119,7 +119,7 @@ describe("getCurrentFactoryDefinition", () => {
             workstations: [],
             workTypes: [],
             version: {
-              logical: 9,
+              logical: "9",
               physical: "2026-05-18T14:25:00Z",
             },
           }),
@@ -140,7 +140,7 @@ describe("getCurrentFactoryDefinition", () => {
       workstations: [],
       workTypes: [],
       version: {
-        logical: 9,
+        logical: "9",
         physical: "2026-05-18T14:25:00Z",
       },
     });
@@ -155,7 +155,7 @@ describe("getCurrentFactoryDefinition", () => {
           workstations: [],
           workTypes: [],
           version: {
-            logical: 3,
+            logical: "3",
             physical: "2026-05-18T14:24:00Z",
           },
         }),
@@ -295,7 +295,7 @@ describe("getCurrentFactoryDefinition", () => {
           new Response(
             JSON.stringify({
               version: {
-                logical: 12,
+                logical: "12",
                 physical: "2026-05-18T14:30:00Z",
               },
             }),
@@ -315,7 +315,7 @@ describe("getCurrentFactoryDefinition", () => {
       name: "CurrentFactoryDefinitionError",
       responseBody: {
         version: {
-          logical: 12,
+          logical: "12",
           physical: "2026-05-18T14:30:00Z",
         },
       },
@@ -343,7 +343,7 @@ describe("getCurrentFactoryDefinition", () => {
               workstations: [],
               workTypes: [],
               version: {
-                logical: 12,
+                logical: "12",
                 physical: "2026-05-18T14:30:00Z",
               },
             }),
@@ -378,7 +378,7 @@ describe("getCurrentFactoryDefinition", () => {
         workstations: [],
         workTypes: [],
         version: {
-          logical: 12,
+          logical: "12",
           physical: "2026-05-18T14:30:00Z",
         },
       },
@@ -418,7 +418,7 @@ describe("getCurrentFactoryDefinition", () => {
               },
             ],
             version: {
-              logical: 12,
+              logical: "12",
               physical: "2026-05-18T14:30:00Z",
             },
           }),
@@ -462,7 +462,7 @@ describe("getCurrentFactoryDefinition", () => {
         },
       ],
       version: {
-        logical: 12,
+        logical: "12",
         physical: "2026-05-18T14:30:00Z",
       },
     });
@@ -503,7 +503,7 @@ describe("getCurrentFactoryDefinition", () => {
                 },
               ],
               version: {
-                logical: 12,
+                logical: "12",
                 physical: "2026-05-18T14:30:00Z",
               },
             }),
@@ -536,7 +536,7 @@ describe("getCurrentFactoryDefinition", () => {
           workstations: [],
           workTypes: [],
           version: {
-            logical: 10,
+            logical: "10",
             physical: "2026-05-18T14:40:00Z",
           },
         }),
@@ -553,7 +553,7 @@ describe("getCurrentFactoryDefinition", () => {
     const document = await saveCurrentFactoryDocument(
       {
         baseVersion: {
-          logical: 9,
+          logical: "9",
           physical: "2026-05-18T14:25:00Z",
         },
         factoryDefinition: {
@@ -575,8 +575,8 @@ describe("getCurrentFactoryDefinition", () => {
           workstations: [],
           workTypes: [],
           version: {
-            logical: 9,
-            physical: "2026-05-18T14:25:00Z",
+            logical: "10",
+            physical: "2026-05-18T14:25:00.001Z",
           },
         }),
         headers: {
@@ -585,7 +585,62 @@ describe("getCurrentFactoryDefinition", () => {
         method: "PUT",
       }),
     );
-    expect(document.version.logical).toBe(10);
+    expect(document.version.logical).toBe("10");
+  });
+
+  it("increments large logical version strings without losing precision before save", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "1779941481569583434",
+            physical: "2026-05-28T04:11:21.569583434Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveCurrentFactoryDocument(
+      {
+        baseVersion: {
+          logical: "1779941481569583433",
+          physical: "2026-05-28T04:11:21.569583433Z",
+        },
+        factoryDefinition: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+      },
+      { fetch },
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({
+        body: expect.stringContaining('"logical":"1779941481569583434"'),
+      }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "/factory-sessions/~default/factory",
+      expect.objectContaining({
+        body: expect.stringContaining(
+          '"physical":"2026-05-28T04:11:21.570Z"',
+        ),
+      }),
+    );
   });
 
   it("saves through the session-scoped editable-definition route for non-default sessions", async () => {
@@ -597,7 +652,7 @@ describe("getCurrentFactoryDefinition", () => {
           workstations: [],
           workTypes: [],
           version: {
-            logical: 11,
+            logical: "11",
             physical: "2026-05-18T14:41:00Z",
           },
         }),
@@ -639,7 +694,7 @@ describe("getCurrentFactoryDefinition", () => {
       saveCurrentFactoryDocument(
         {
           baseVersion: {
-            logical: 9,
+            logical: "9",
             physical: "2026-05-18T14:25:00Z",
           },
           factoryDefinition: {
@@ -690,7 +745,7 @@ describe("getCurrentFactoryDefinition", () => {
       saveCurrentFactoryDocument(
         {
           baseVersion: {
-            logical: 9,
+            logical: "9",
             physical: "2026-05-18T14:25:00Z",
           },
           factoryDefinition: {
@@ -742,7 +797,7 @@ describe("getCurrentFactoryDefinition", () => {
       saveCurrentFactoryDocument(
         {
           baseVersion: {
-            logical: 9,
+            logical: "9",
             physical: "2026-05-18T14:25:00Z",
           },
           factoryDefinition: {
@@ -868,7 +923,7 @@ describe("getCurrentFactoryDefinition", () => {
                 workstations: [],
                 workTypes: [],
                 version: {
-                  logical: 12,
+                  logical: "12",
                   physical: "2026-05-18T14:30:00Z",
                 },
               }),
@@ -900,7 +955,7 @@ describe("getCurrentFactoryDefinition", () => {
         workstations: [],
         workTypes: [],
         version: {
-          logical: 12,
+          logical: "12",
           physical: "2026-05-18T14:30:00Z",
         },
       },

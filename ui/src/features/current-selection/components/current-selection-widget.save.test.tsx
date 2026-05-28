@@ -176,12 +176,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
         expect.objectContaining({
           baseVersion: {
-            logical: 7,
+            logical: "7",
             physical: "2026-05-23T15:52:00Z",
           },
           factoryDefinition: expect.objectContaining({
             version: {
-              logical: 7,
+              logical: "7",
               physical: "2026-05-23T15:52:00Z",
             },
             workstations: [
@@ -316,12 +316,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
         expect.objectContaining({
           baseVersion: {
-            logical: 7,
+            logical: "7",
             physical: "2026-05-23T15:52:00Z",
           },
           factoryDefinition: expect.objectContaining({
             version: {
-              logical: 7,
+              logical: "7",
               physical: "2026-05-23T15:52:00Z",
             },
             workstations: [
@@ -454,12 +454,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
         expect.objectContaining({
           baseVersion: {
-            logical: 7,
+            logical: "7",
             physical: "2026-05-23T15:52:00Z",
           },
           factoryDefinition: expect.objectContaining({
             version: {
-              logical: 7,
+              logical: "7",
               physical: "2026-05-23T15:52:00Z",
             },
             workers: [
@@ -1201,7 +1201,7 @@ function buildEditableFactoryDefinition(overrides?: {
   return {
     name: "Current Factory",
     version: {
-      logical: 7,
+      logical: "7",
       physical: "2026-05-23T15:52:00Z",
     },
     workers: (overrides?.workerOptions ?? ["reviewer", "planner"]).map(
@@ -1236,7 +1236,7 @@ function buildMultiWorkstationEditableFactoryDefinition(overrides?: {
   return {
     name: "Current Factory",
     version: {
-      logical: 7,
+      logical: "7",
       physical: "2026-05-23T15:52:00Z",
     },
     workers: [
@@ -1283,7 +1283,7 @@ function buildSharedWorkerFactoryDefinition(
   return {
     name: "Current Factory",
     version: {
-      logical: 7,
+      logical: "7",
       physical: "2026-05-23T15:52:00Z",
     },
     workers: [

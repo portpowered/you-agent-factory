@@ -177,7 +177,7 @@ function buildEditableConfigurationDocument(
   return {
     ...factoryDefinition,
     version: {
-      logical: 7,
+      logical: "7",
       physical: "2026-05-20T10:00:00Z",
     },
   };

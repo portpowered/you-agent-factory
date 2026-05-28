@@ -15,7 +15,7 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 	}
 	if apiCfg.Version != nil {
 		cfg.Version = &interfaces.FactoryVersion{
-			Logical:  apiCfg.Version.Logical,
+			Logical:  apiCfg.Version.Logical.Int64(),
 			Physical: apiCfg.Version.Physical.UTC(),
 		}
 	}
