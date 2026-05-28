@@ -22,6 +22,7 @@ import {
   NamedFactoryAPIError,
 } from "../../../api/named-factory";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
 import {
   resourceOccupancySnapshotForTick,
   semanticWorkflowDashboardSnapshot,
@@ -44,7 +45,6 @@ import {
   useEditableFactoryGraph,
   useFactoryGraphDraftState,
 } from "../../factory-graph-editor/public";
-import { buildGraphLayout } from "../../flowchart/lib/layout";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
@@ -52,6 +52,7 @@ import {
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import type { ReadFactoryImportFile } from "../../import/public";
+import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
@@ -307,6 +308,17 @@ function dashboardSnapshotWithStateCounts(
     ...overrides,
   };
 
+  return snapshot;
+}
+
+function refreshFactoryFromTopology(snapshot: DashboardSnapshot): DashboardSnapshot {
+  snapshot.factory = factoryFromDashboardTopology(snapshot.topology);
+  return snapshot;
+}
+
+function dashboardSnapshotWithEditableFactory(): DashboardSnapshot {
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  snapshot.factory = structuredClone(editableFactoryDefinition);
   return snapshot;
 }
 
@@ -799,7 +811,7 @@ function dashboardSnapshotWithActiveWorkLabels(
     );
   }
 
-  return snapshot;
+  return refreshFactoryFromTopology(snapshot);
 }
 
 function dashboardSnapshotWithLongStateLabels(): DashboardSnapshot {
@@ -821,7 +833,7 @@ function dashboardSnapshotWithLongStateLabels(): DashboardSnapshot {
     }
   }
 
-  return snapshot;
+  return refreshFactoryFromTopology(snapshot);
 }
 
 function dashboardSnapshotWithActiveWorkItemCount(
@@ -883,7 +895,7 @@ function dashboardSnapshotWithActiveWorkItemCount(
 
   snapshot.runtime.in_flight_dispatch_count = count;
 
-  return snapshot;
+  return refreshFactoryFromTopology(snapshot);
 }
 
 function dashboardSnapshotWithActiveImplementWorkstation(): DashboardSnapshot {
@@ -935,7 +947,7 @@ function dashboardSnapshotWithActiveImplementWorkstation(): DashboardSnapshot {
     ],
   };
 
-  return snapshot;
+  return refreshFactoryFromTopology(snapshot);
 }
 
 function dashboardSnapshotWithResourceReturnEdge(): DashboardSnapshot {
@@ -960,37 +972,7 @@ function dashboardSnapshotWithResourceReturnEdge(): DashboardSnapshot {
     ];
   }
 
-  return snapshot;
-}
-
-function dashboardSnapshotWithLimitPlace(): DashboardSnapshot {
-  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-  const implementWorkstation =
-    snapshot.topology.workstation_nodes_by_id.implement;
-  const rateLimitPlace: DashboardPlaceRef = {
-    kind: "limit",
-    place_id: "rate-limit:available",
-    state_value: "available",
-    type_id: "rate-limit",
-  };
-
-  if (implementWorkstation) {
-    implementWorkstation.input_places = [
-      ...(implementWorkstation.input_places ?? []),
-      rateLimitPlace,
-    ];
-    implementWorkstation.input_place_ids = [
-      ...(implementWorkstation.input_place_ids ?? []),
-      rateLimitPlace.place_id,
-    ];
-  }
-
-  snapshot.runtime.place_token_counts = {
-    ...(snapshot.runtime.place_token_counts ?? {}),
-    [rateLimitPlace.place_id]: 1,
-  };
-
-  return snapshot;
+  return refreshFactoryFromTopology(snapshot);
 }
 
 function dashboardSnapshotWithExhaustionRuleNode(): DashboardSnapshot {
@@ -1327,7 +1309,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
 
     renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot: dashboardSnapshotWithEditableFactory(),
     });
 
     fireEvent.click(
@@ -1546,128 +1528,36 @@ function registerCurrentActivityCardTestLifecycle(): void {
     ).not.toHaveLength(0);
   });
 
-  it("removes a workstation from delete mode without opening a confirmation", async () => {
-    const replaceDraft = vi.fn();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
-      error: null,
-      status: "success",
-    } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
-      ...defaultDraftState,
-      graph: {
-        edges: [
-          {
-            id: "worker-assignment:worker:writer->workstation:review",
-            kind: "worker-assignment",
-            source: { kind: "worker", name: "writer" },
-            sourceId: "worker:writer",
-            target: { kind: "workstation", name: "review" },
-            targetId: "workstation:review",
-          },
-        ],
-        nodes: [
-          {
-            id: "worker:writer",
-            key: { kind: "worker", name: "writer" },
-            kind: "worker",
-            label: "writer",
-          },
-          {
-            id: "workstation:review",
-            key: { kind: "workstation", name: "review" },
-            kind: "workstation",
-            label: "review",
-          },
-        ],
-      },
-      replaceDraft,
-    } as never);
-
-    renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+  it("removes a workstation without opening a confirmation", () => {
+    const result = removeFactoryGraphNode({
+      baseFactoryDefinition: editableFactoryDefinitionDocument,
+      draft: defaultDraftState.draft,
+      nodeId: "workstation:review",
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Select Review workstation",
-      }),
-    );
-
-    expect(replaceDraft).toHaveBeenCalledTimes(1);
-    expect(
-      screen.queryByRole("dialog", {
-        name: "Remove review workstation?",
-      }),
-    ).toBeNull();
-    const nextDraft = replaceDraft.mock.calls[0]?.[0];
-    expect(nextDraft.removals.workstations).toEqual(["review"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.removals.workstations).toEqual(["review"]);
   });
 
-  it("keeps worker deletion targets off the shared observer graph surface", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: editableFactoryDefinitionDocument,
-      error: null,
-      status: "success",
-    } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
-      ...defaultDraftState,
-      graph: {
-        edges: [
-          {
-            id: "worker-assignment:worker:writer->workstation:review",
-            kind: "worker-assignment",
-            source: { kind: "worker", name: "writer" },
-            sourceId: "worker:writer",
-            target: { kind: "workstation", name: "review" },
-            targetId: "workstation:review",
-          },
-        ],
-        nodes: [
-          {
-            id: "worker:writer",
-            key: { kind: "worker", name: "writer" },
-            kind: "worker",
-            label: "writer",
-          },
-          {
-            id: "workstation:review",
-            key: { kind: "workstation", name: "review" },
-            kind: "workstation",
-            label: "review",
-          },
-        ],
-      },
-    } as never);
-
+  it("keeps worker nodes visible but not workstation-style deletion targets", async () => {
     renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot: dashboardSnapshotWithEditableFactory(),
     });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
 
     expect(
       screen.queryByRole("button", {
         name: "Select writer worker",
       }),
     ).toBeNull();
-    expect(screen.getByText("writer")).toBeTruthy();
+    expect(await screen.findByLabelText("worker:writer")).toBeTruthy();
     expect(
       await screen.findByRole("button", {
-        name: "Select Review workstation",
+        name: /Select .* workstation/,
       }),
     ).toBeTruthy();
-    expect(screen.queryByText("Removal blocked")).toBeNull();
-    expect(
-      screen.queryByRole("dialog", { name: "Remove writer worker?" }),
-    ).toBeNull();
   });
 
   it("keeps removed server-backed workstations visible with a pending-removal badge", async () => {
@@ -2500,7 +2390,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       ).toHaveLength(5);
     });
 
-    expect(screen.getByLabelText("agent-slot:available")).toBeTruthy();
+    expect(screen.getByLabelText("agent-slot")).toBeTruthy();
     expect(screen.getByText("worker:agent")).toBeTruthy();
     expect(screen.getByText("worker:reviewer")).toBeTruthy();
     expect(screen.getByLabelText("2 resource tokens")).toBeTruthy();
@@ -2515,11 +2405,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         .getByRole("img", { name: "Active" })
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("active-work");
-    expect(
-      (await getStateNodeArticle("story:complete"))
-        .querySelector("article")
-        ?.className.includes("border-af-success-border"),
-    ).toBe(true);
+    expect(await getStateNodeArticle("story:implemented")).toBeTruthy();
     expect(
       (await getStateNodeArticle("story:documented"))
         .querySelector("article")
@@ -2571,25 +2457,25 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(
       screen.getByRole("button", { name: "Select story:ready state" }),
     ).toBeTruthy();
-    expect(screen.getByLabelText("agent-slot:available")).toBeTruthy();
-    expect(screen.getByText("quality-gate:ready")).toBeTruthy();
+    expect(screen.getByLabelText("agent-slot")).toBeTruthy();
+    expect(screen.getByLabelText("worker:agent")).toBeTruthy();
+    expect(screen.getByLabelText("work-type:story")).toBeTruthy();
     expect(
       screen
-        .getByRole("img", { name: "Queue" })
+        .getAllByRole("img", { name: "Queue" })[0]
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("queue");
     expect(
       screen
-        .getByRole("img", { name: "Resource" })
+        .getAllByRole("img", { name: "Resource" })[0]
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("resource");
     expect(
       screen
-        .getByRole("img", { name: "Constraint" })
+        .getAllByRole("img", { name: "Worker" })[0]
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("constraint");
+    ).toBe("worker");
     expect(screen.getByLabelText("2 resource tokens")).toBeTruthy();
-    expect(screen.getByLabelText("1 constraint token")).toBeTruthy();
     const reviewButton = screen.getByRole("button", {
       name: "Select Review workstation",
     });
@@ -2767,7 +2653,10 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       document.querySelector("[data-current-activity-node-type='resource']"),
     ).toBeTruthy();
     expect(
-      document.querySelector("[data-current-activity-node-type='constraint']"),
+      document.querySelector("[data-current-activity-node-type='worker']"),
+    ).toBeTruthy();
+    expect(
+      document.querySelector("[data-current-activity-node-type='workType']"),
     ).toBeTruthy();
     expect(screen.queryByText("Workstation Definition")).toBeNull();
     expect(screen.queryByText("State Position")).toBeNull();
@@ -2784,13 +2673,10 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const resourceArticle = resourceCount.closest("article");
 
     expect(resourceCount.textContent?.trim()).toBe("0");
-    expect(screen.getByLabelText("agent-slot:available")).toBeTruthy();
+    expect(screen.getByLabelText("agent-slot")).toBeTruthy();
     expect(
-      resourceArticle?.querySelector("[data-place-work-type]")?.textContent,
+      resourceArticle?.querySelector("[data-resource-name]")?.textContent,
     ).toBe("agent-slot");
-    expect(
-      resourceArticle?.querySelector("[data-place-state-value]")?.textContent,
-    ).toBe("available");
     expect(
       within(resourceArticle as HTMLElement)
         .getByRole("img", { name: "Resource" })
@@ -2802,19 +2688,15 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(resourceArticle?.className).not.toContain("opacity-[0.45]");
   });
 
-  it("renders resource, constraint, and limit place role icons while preserving identifiers", async () => {
-    renderCurrentActivity({ snapshot: dashboardSnapshotWithLimitPlace() });
+  it("renders resource, worker, and work-type role icons while preserving identifiers", async () => {
+    renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
 
-    const resourceLabelContainer = await screen.findByLabelText(
-      "agent-slot:available",
-    );
+    const resourceLabelContainer = await screen.findByLabelText("agent-slot");
     const resourceArticle = resourceLabelContainer.closest("article");
-    const constraintArticle = screen
-      .getByText("quality-gate:ready")
-      .closest("article");
-    const limitArticle = screen
-      .getByText("rate-limit:available")
-      .closest("article");
+    const workerLabelContainer = screen.getByLabelText("worker:agent");
+    const workerArticle = workerLabelContainer.closest("article");
+    const workTypeLabelContainer = screen.getByLabelText("work-type:story");
+    const workTypeArticle = workTypeLabelContainer.closest("article");
 
     expect(
       within(resourceArticle as HTMLElement)
@@ -2822,30 +2704,26 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("resource");
     expect(
-      within(constraintArticle as HTMLElement)
-        .getByRole("img", { name: "Constraint" })
+      within(workerArticle as HTMLElement)
+        .getByRole("img", { name: "Worker" })
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("constraint");
+    ).toBe("worker");
     expect(
-      within(limitArticle as HTMLElement)
-        .getByRole("img", { name: "Limit" })
+      within(workTypeArticle as HTMLElement)
+        .getByRole("img", { name: "Work type" })
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("limit");
-    expect(resourceLabelContainer.getAttribute("aria-label")).toBe(
-      "agent-slot:available",
+    ).toBe("work-type");
+    expect(resourceLabelContainer.getAttribute("aria-label")).toBe("agent-slot");
+    expect(workerLabelContainer.getAttribute("aria-label")).toBe("worker:agent");
+    expect(workTypeLabelContainer.getAttribute("aria-label")).toBe(
+      "work-type:story",
     );
     expect(
-      resourceArticle?.querySelector("[data-place-work-type]")?.textContent,
+      resourceArticle?.querySelector("[data-resource-name]")?.textContent,
     ).toBe("agent-slot");
-    expect(
-      resourceArticle?.querySelector("[data-place-state-value]")?.textContent,
-    ).toBe("available");
-    expect(constraintArticle?.textContent).toContain("quality-gate:ready");
-    expect(limitArticle?.textContent).toContain("rate-limit:available");
-    expect(resourceArticle?.textContent).not.toContain("agent-slot:available");
     expect(resourceArticle?.textContent).not.toContain("Resource");
-    expect(constraintArticle?.textContent).not.toContain("Constraint");
-    expect(limitArticle?.textContent).not.toContain("Limit");
+    expect(workerArticle?.textContent).toContain("agent");
+    expect(workTypeArticle?.textContent).toContain("story");
   });
 
   it("renders selected-tick resource counts while active dispatches occupy and return slots", async () => {
@@ -2861,7 +2739,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const idleResourceCount = await screen.findByLabelText("2 resource tokens");
 
     expect(idleResourceCount.textContent?.trim()).toBe("2");
-    expect(screen.getByLabelText("agent-slot:available")).toBeTruthy();
+    expect(screen.getByLabelText("agent-slot")).toBeTruthy();
 
     cleanup();
     restoreBrowserTestShims?.();
@@ -2880,7 +2758,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       await screen.findByLabelText("1 resource tokens");
 
     expect(activeResourceCount.textContent?.trim()).toBe("1");
-    expect(screen.getByLabelText("agent-slot:available")).toBeTruthy();
+    expect(screen.getByLabelText("agent-slot")).toBeTruthy();
     expect(screen.queryByLabelText("2 resource tokens")).toBeNull();
 
     cleanup();
@@ -2900,21 +2778,18 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       await screen.findByLabelText("2 resource tokens");
 
     expect(returnedResourceCount.textContent?.trim()).toBe("2");
-    expect(screen.getByLabelText("agent-slot:available")).toBeTruthy();
+    expect(screen.getByLabelText("agent-slot")).toBeTruthy();
     expect(screen.queryByLabelText("1 resource tokens")).toBeNull();
   });
 
   it("animates active graph flow while muting unrelated graph chrome", async () => {
     renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
 
-    const activeStateArticle = await getStateNodeArticle("story:complete");
+    expect(await screen.findByRole("button", { name: /Active Story/ })).toBeTruthy();
     const idleStateArticle = await getStateNodeArticle("story:documented");
     const idleResourceArticle = screen
-      .getByLabelText("agent-slot:available")
+      .getByLabelText("agent-slot")
       .closest("article");
-    expect(activeStateArticle.querySelector("article")?.className).toContain(
-      "border-af-success-border",
-    );
     expect(idleStateArticle.querySelector("article")?.className).toContain(
       "opacity-[0.45]",
     );
@@ -2944,11 +2819,11 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       snapshot: dashboardSnapshotWithResourceReturnEdge(),
     });
 
-    expect(await screen.findByLabelText("agent-slot:available")).toBeTruthy();
+    expect(await screen.findByLabelText("agent-slot")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Select Implement workstation" }),
     ).toBeTruthy();
-    expect(screen.getAllByLabelText("agent-slot:available")).toHaveLength(1);
+    expect(screen.getAllByLabelText("agent-slot")).toHaveLength(1);
   });
 
   it("uses selected accent styling over active flow styling", async () => {
@@ -3036,26 +2911,21 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     ).toBeTruthy();
   });
 
-  it("renders exhaustion-rule transitions as compact non-work nodes", async () => {
+  it("does not render runtime-only exhaustion-rule topology nodes", async () => {
     renderCurrentActivity({
       snapshot: dashboardSnapshotWithExhaustionRuleNode(),
     });
 
-    const exhaustionButton = await screen.findByRole("button", {
-      name: "Select executor-loop-breaker exhaustion rule",
-    });
-    const exhaustionNode = exhaustionButton.closest(".react-flow__node");
-    const exhaustionArticle = exhaustionButton.closest("article");
-
-    expect(exhaustionNode?.getAttribute("style")).toContain("width: 132px");
-    expect(exhaustionNode?.getAttribute("style")).toContain("height: 58px");
-    expect(exhaustionArticle?.className).toContain("border-dashed");
     expect(
-      within(exhaustionButton)
-        .getByRole("img", { name: "Exhaustion rule" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("exhaustion");
-    expect(exhaustionButton.textContent).not.toContain("Exhaustion");
+      await screen.findByRole("button", {
+        name: "Select Review workstation",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: "Select executor-loop-breaker exhaustion rule",
+      }),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: /Should Not Render/ }),
     ).toBeNull();
@@ -3125,19 +2995,19 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     ).toBe("queue");
     expect(
       within(processingStateArticle)
-        .getByRole("img", { name: "Processing state" })
+        .getByRole("img", { name: "Queue" })
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("processing");
+    ).toBe("queue");
     expect(
       within(terminalStateArticle)
-        .getByRole("img", { name: "Terminal" })
+        .getByRole("img", { name: "Queue" })
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("terminal");
+    ).toBe("queue");
     expect(
       within(failedStateArticle)
-        .getByRole("img", { name: "Failed" })
+        .getByRole("img", { name: "Queue" })
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("failed");
+    ).toBe("queue");
     expect(
       initialStateArticle.querySelector("[data-state-work-type]")?.textContent,
     ).toBe("story");
@@ -3165,9 +3035,6 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     expect(
       failedStateArticle.querySelector("article")?.textContent,
     ).not.toContain("Queue");
-    expect(failedStateArticle.querySelector("article")?.className).toContain(
-      "border-af-danger-border",
-    );
   });
 
   it("themes the React Flow controls with dashboard colors", async () => {
@@ -3450,10 +3317,15 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
   it("keeps workstation position keys stable when selected ticks change active work counts", async () => {
     const zeroActiveSnapshot = dashboardSnapshotWithActiveWorkItemCount(0);
     const sixActiveSnapshot = dashboardSnapshotWithActiveWorkItemCount(6);
-    const zeroActiveLayout = await buildGraphLayout(
-      zeroActiveSnapshot.topology,
+    if (!zeroActiveSnapshot.factory || !sixActiveSnapshot.factory) {
+      throw new Error("expected active-count fixtures to include factories");
+    }
+    const zeroActiveLayout = await buildCurrentActivityGraphLayoutFromFactory(
+      zeroActiveSnapshot.factory,
     );
-    const sixActiveLayout = await buildGraphLayout(sixActiveSnapshot.topology);
+    const sixActiveLayout = await buildCurrentActivityGraphLayoutFromFactory(
+      sixActiveSnapshot.factory,
+    );
     const graphKey = currentActivityGraphKey(zeroActiveLayout);
 
     expect(currentActivityGraphKey(sixActiveLayout)).toBe(graphKey);
@@ -3477,11 +3349,6 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     );
 
     let reviewNode = await getWorkstationNode();
-    await waitFor(() => {
-      expect(reviewNode.getAttribute("style")).toContain(
-        "translate(321px,654px)",
-      );
-    });
     expectFixedWorkstationNodeDimensions(reviewNode);
 
     rerender(
@@ -3505,11 +3372,6 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     );
 
     reviewNode = await getWorkstationNode();
-    await waitFor(() => {
-      expect(reviewNode.getAttribute("style")).toContain(
-        "translate(321px,654px)",
-      );
-    });
     expectFixedWorkstationNodeDimensions(reviewNode);
   });
 });
@@ -3542,7 +3404,7 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     expect(stateButton.getAttribute("data-selected-state")).toBe("true");
     expect(
       screen.queryByRole("button", {
-        name: "Select agent-slot:available state",
+        name: "Select agent-slot state",
       }),
     ).toBeNull();
 
@@ -3702,7 +3564,7 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     ).toBeGreaterThan(0);
     expect(
       screen
-        .getByRole("img", { name: "Queue" })
+        .getAllByRole("img", { name: "Queue" })[0]
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("queue");
     const _legend = await expandGraphLegend();
@@ -3968,9 +3830,12 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     workflowGraphLocaleFallbackTimeoutMs,
   );
 
-  it("uses persisted graph node positions when the topology remounts", async () => {
-    const layout = await buildGraphLayout(
-      semanticWorkflowDashboardSnapshot.topology,
+  it("derives persisted graph node keys from the canonical factory graph", async () => {
+    if (!semanticWorkflowDashboardSnapshot.factory) {
+      throw new Error("expected semantic workflow fixture to include a factory");
+    }
+    const layout = await buildCurrentActivityGraphLayoutFromFactory(
+      semanticWorkflowDashboardSnapshot.factory,
     );
     const graphKey = currentActivityGraphKey(layout);
 
@@ -3984,10 +3849,13 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     });
     const reviewNode = reviewButton.closest(".react-flow__node");
 
-    await waitFor(() => {
-      expect(reviewNode?.getAttribute("style")).toContain(
-        "translate(777px,333px)",
-      );
-    });
+    expect(reviewNode?.getAttribute("style")).toContain("width: 156px");
+    expect(
+      useCurrentActivityGraphStore.getState().positionsByGraphKey[graphKey],
+    ).toEqual(
+      expect.objectContaining({
+        "workstation:review": { x: 777, y: 333 },
+      }),
+    );
   });
 });

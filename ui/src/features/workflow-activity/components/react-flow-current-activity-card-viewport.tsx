@@ -226,7 +226,7 @@ export function CurrentActivityGraphViewport({
   );
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className="relative min-h-96 flex-1">
       <DashboardFlowAxisLegend
         className={CURRENT_ACTIVITY_LEGEND_CLASS}
         defaultExpanded={false}
@@ -238,7 +238,7 @@ export function CurrentActivityGraphViewport({
         aria-describedby={headingID}
         aria-label={editorMessages.viewportLabel}
         className={cn(
-          "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",
+          "relative h-full min-h-96 overflow-hidden rounded-3xl border transition-colors",
           (imports.dropState.status === "drag-active" ||
             imports.dropState.status === "reading") &&
             "border-af-accent-border bg-af-accent-surface",

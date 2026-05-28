@@ -536,7 +536,7 @@ export function findFactoryWorkstationByNodeId(
   nodeId: string,
 ): DashboardWorkstationNode | null {
   const workstation = (factory?.workstations ?? []).find(
-    (candidate) => (candidate.id || candidate.name) === nodeId,
+    (candidate) => candidate.id === nodeId || candidate.name === nodeId,
   );
 
   return workstation ? dashboardWorkstationFromFactory(workstation) : null;

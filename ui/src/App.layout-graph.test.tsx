@@ -241,16 +241,18 @@ describe("App graph behavior", () => {
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: /Select .* workstation/ })).toHaveLength(5);
     });
-    expect(screen.getByLabelText("agent-slot:available")).toBeTruthy();
+    expect(screen.getByLabelText("agent-slot")).toBeTruthy();
     expect(screen.getByLabelText("2 resource tokens")).toBeTruthy();
-    expect(screen.getByText("quality-gate:ready")).toBeTruthy();
-    expect(screen.getByLabelText("1 constraint token")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "worker:reviewer" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "work-type:story" })).toBeTruthy();
     expect(
       screen.getByRole("img", { name: "Resource" }).getAttribute("data-graph-semantic-icon"),
     ).toBe("resource");
     expect(
-      screen.getByRole("img", { name: "Constraint" }).getAttribute("data-graph-semantic-icon"),
-    ).toBe("constraint");
+      screen
+        .getAllByRole("img", { name: "Worker" })[0]
+        ?.getAttribute("data-graph-semantic-icon"),
+    ).toBe("worker");
     expect(screen.queryByText("Active Work")).toBeNull();
     expectStateNodeDotCount("story:ready", 3);
     expect(getStateNodeByLabel("story:blocked")).toBeTruthy();

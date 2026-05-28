@@ -120,7 +120,7 @@ function NodeHandleBadge({
         aria-label={handle.buttonAriaLabel}
         aria-pressed={handle.buttonPressed}
         className={cn(
-          "pointer-events-auto -m-1 grid h-5 w-5 place-items-center rounded-full transition focus-visible:outline-2 focus-visible:outline-af-focus-ring disabled:cursor-not-allowed disabled:opacity-45",
+          "pointer-events-auto -m-1 grid h-5 w-5 place-items-center rounded-full transition focus-visible:outline-2 focus-visible:outline-af-focus-ring disabled:cursor-not-allowed disabled:bg-af-surface-subtle disabled:text-af-text-disabled",
         )}
         disabled={handle.buttonDisabled}
         onClick={handle.onButtonClick}

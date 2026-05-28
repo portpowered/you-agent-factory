@@ -5,6 +5,7 @@
       "name": "executor-slot"
     }
   ],
+  "name": "simple-factory",
   "workTypes": [
     {
       "name": "task",
@@ -106,6 +107,10 @@
         }
       ],
       "outputs": [
+        {
+            "state": "to-complete",
+            "workType": "task"
+        }
       ],
       "resources": [
         {

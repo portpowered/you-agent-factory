@@ -134,6 +134,7 @@ function createGraphStub() {
 describe("CurrentActivityGraphSurface", () => {
   it("renders the empty state when no topology is loaded outside editor mode", () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    snapshot.factory = undefined;
     snapshot.topology.workstation_node_ids = [];
 
     render(

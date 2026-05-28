@@ -6,6 +6,7 @@ import {
   activeWorkRuntimeOverlay,
   buildDashboardSnapshotFixture,
   buildEmptyDashboardRuntimeFixture,
+  factoryFromDashboardTopology,
   failedOutcomeRuntimeOverlay,
   rejectedOutcomeRuntimeOverlay,
   retryAttemptRuntimeOverlay,
@@ -40,6 +41,7 @@ export const semanticWorkflowDashboardSnapshot: DashboardSnapshot =
   ]);
 
 export const workstationKindParityDashboardSnapshot: DashboardSnapshot = {
+  factory: factoryFromDashboardTopology(workstationKindParityDashboardTopology),
   factory_state: "IDLE",
   tick_count: 42,
   topology: workstationKindParityDashboardTopology,
@@ -80,4 +82,3 @@ export const twentyNodeDashboardTopology = twentyNodeDashboardSnapshot.topology;
 export function resourceOccupancySnapshotForTick(tick: number): DashboardSnapshot {
   return buildFactoryTimelineSnapshot(resourceCountTimelineEvents, tick);
 }
-

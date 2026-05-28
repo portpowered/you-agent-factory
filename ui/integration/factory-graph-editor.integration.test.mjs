@@ -581,9 +581,9 @@ describe.sequential("factory graph editor browser integration", () => {
           })
           .click();
         await browserPage.page
-          .getByTestId("rf__node-place:story:queued")
+          .getByTestId("rf__node-work-state:story:queued")
           .getByRole("button", {
-            name: "Receive a workstation failure transition.",
+            name: "Receive workstation output into this work state.",
           })
           .click();
 

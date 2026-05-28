@@ -28,7 +28,13 @@ import {
 
 function loadSampleFactoryDefinition(): CanonicalFactoryDefinition {
   return JSON.parse(
-    readFileSync(resolve(process.cwd(), "../factory/factory.json"), "utf-8"),
+    readFileSync(
+      resolve(
+        process.cwd(),
+        "src/features/workflow-activity/lib/current-activity-sample-factory.fixture.json",
+      ),
+      "utf-8",
+    ),
   ) as CanonicalFactoryDefinition;
 }
 

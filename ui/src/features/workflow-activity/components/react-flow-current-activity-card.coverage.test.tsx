@@ -323,6 +323,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
   it("renders the empty topology fallback when no workstation nodes exist", () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    snapshot.factory = undefined;
     snapshot.topology.workstation_node_ids = [];
 
     renderWithQueryClient(

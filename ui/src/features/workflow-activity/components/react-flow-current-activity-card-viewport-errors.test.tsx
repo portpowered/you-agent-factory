@@ -182,7 +182,13 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
 
   it("renders the sample factory graph with relationship-specific endpoint handles", async () => {
     const sampleFactory = JSON.parse(
-      readFileSync(resolve(process.cwd(), "../factory/factory.json"), "utf-8"),
+      readFileSync(
+        resolve(
+          process.cwd(),
+          "src/features/workflow-activity/lib/current-activity-sample-factory.fixture.json",
+        ),
+        "utf-8",
+      ),
     ) as CanonicalFactoryDefinition;
     const graphLayout =
       await buildCurrentActivityGraphLayoutFromFactory(sampleFactory);
